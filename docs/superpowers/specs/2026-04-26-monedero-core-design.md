@@ -156,6 +156,25 @@ Category(
 - Gastos: Comida, Transporte, Salud, Educación, Entretenimiento, Servicios, Vivienda, Ropa, Tecnología, Otros
 - Ingresos: Salario, Freelance, Arriendo, Inversiones, Otros
 
+### FinancialProfile
+```kotlin
+FinancialProfile(
+  userId: UUID,
+  riskTolerance: CONSERVATIVE | MODERATE | AGGRESSIVE,
+  liquidityPreference: HIGH | MEDIUM | LOW,
+  creditAttitude: AVOID | STRATEGIC | OPEN,
+  preferredCreditTypes: List<LIBRE_INVERSION | HIPOTECARIO | VEHICULO | TARJETA>,
+  investmentKnowledge: NONE | BEGINNER | INTERMEDIATE | ADVANCED,
+  investmentInterest: Boolean,
+  savingStyle: SAVE_FIRST | SAVE_WHATS_LEFT,
+  primaryGoal: EMERGENCY_FUND | DEBT_FREE | WEALTH_BUILDING | MAJOR_PURCHASE | RETIREMENT,
+  notes: String?,   // texto libre: "solo CDTs y fondos de bajo riesgo"
+  updatedAt: Long,
+)
+```
+
+Se captura en onboarding (paso 6, opcional) y editable en **Settings → Perfil Financiero**. Es el contexto que personaliza todas las respuestas de IA — sin él Claude da consejos genéricos.
+
 ### RecurringRule
 ```kotlin
 RecurringRule(
@@ -377,7 +396,13 @@ Generadas server-side cuando hay cambio significativo vs patrón histórico. Má
 "¿Cuánto me falta para mi meta de vacaciones?"
 "¿Cuánto me cuesta el crédito del carro en total?"
 ```
-El servidor construye un resumen financiero agregado del usuario y lo envía como contexto a Claude. No se envían datos sensibles crudos.
+El servidor construye un resumen financiero agregado del usuario **más su `FinancialProfile`** y lo envía como contexto a Claude. Ejemplo de contexto enviado:
+```
+"Usuario conservador, prefiere liquidez alta, evita tarjetas de crédito,
+ interesado en invertir pero nivel principiante, meta: fondo de emergencia.
+ Resumen: ingresos $X/mes, gastos $Y/mes, flujo libre $Z..."
+```
+No se envían datos sensibles crudos — solo montos, categorías, patrones y el perfil.
 
 ---
 
@@ -414,6 +439,8 @@ Paso 2 → Agregar cuentas (bancos, efectivo, inversiones, créditos)
 Paso 3 → Subir primer extracto para poblar historial
 Paso 4 → Autorizar lectura de SMS bancarios (Android)
 Paso 5 → Definir presupuestos base por categoría
+Paso 6 → Completar perfil financiero (opcional)
+          riesgo, liquidez, actitud crédito, nivel inversiones, meta principal
 ```
 
 Cada paso es opcional y saltable. El usuario puede completar el onboarding después desde Settings.
