@@ -1,5 +1,7 @@
 rootProject.name = "monedero"
+include(":shared")
 include(":composeApp")
+include(":server")
 
 pluginManagement {
     repositories {
