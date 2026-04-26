@@ -1,0 +1,55 @@
+gradle/libs.versions.toml
+  dadf0a8fe4934ca3 14,24-25,29,32-43,47,56-57
+shared/src/commonMain/kotlin/com/jvillada/monedero/shared/model/Wallet.kt
+  dadf0a8fe4934ca3 1-24
+server/src/main/kotlin/com/jvillada/monedero/server/plugins/CORS.kt
+  dadf0a8fe4934ca3 1-20
+server/src/main/kotlin/com/jvillada/monedero/server/plugins/Monitoring.kt
+  dadf0a8fe4934ca3 1-12
+shared/src/commonMain/kotlin/com/jvillada/monedero/shared/repository/WalletRepository.kt
+  dadf0a8fe4934ca3 1-11
+server/src/main/kotlin/com/jvillada/monedero/server/Application.kt
+  dadf0a8fe4934ca3 1-20
+composeApp/src/wasmJsMain/resources/index.html
+  dadf0a8fe4934ca3 1-17
+server/src/main/kotlin/com/jvillada/monedero/server/plugins/Routing.kt
+  dadf0a8fe4934ca3 1-14
+server/src/main/resources/logback.xml
+  dadf0a8fe4934ca3 1-10
+composeApp/build.gradle.kts
+  dadf0a8fe4934ca3 3,15,18,25-35,45,61-65,83,86
+settings.gradle.kts
+  dadf0a8fe4934ca3 2,4
+server/src/main/kotlin/com/jvillada/monedero/server/plugins/Serialization.kt
+  dadf0a8fe4934ca3 1-17
+server/src/main/kotlin/com/jvillada/monedero/server/routes/WalletRoutes.kt
+  dadf0a8fe4934ca3 1-53
+composeApp/src/wasmJsMain/kotlin/com/jvillada/monedero/main.kt
+  dadf0a8fe4934ca3 1-11
+server/build.gradle.kts
+  dadf0a8fe4934ca3 1-27
+shared/build.gradle.kts
+  dadf0a8fe4934ca3 1-44
+shared/src/commonMain/kotlin/com/jvillada/monedero/shared/repository/WalletRepositoryImpl.kt
+  dadf0a8fe4934ca3 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f49a93fdf73b6402101cf0d73180a1ea3451439b",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Juan Camilo Villada Ramirez",
+      "messages": [],
+      "total_additions": 355,
+      "total_deletions": 23,
+      "accepted_lines": 355,
+      "overriden_lines": 0
+    }
+  }
+}
