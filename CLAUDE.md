@@ -4,6 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+### Backend & Web
 ```bash
 # Run Ktor server (port 8080)
 ./gradlew :server:run
@@ -11,21 +12,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run web app in browser (Compose/Wasm)
 ./gradlew :composeApp:wasmJsBrowserDevelopmentRun
 
-# Build all modules
-./gradlew build
-
 # Build server fat JAR
 ./gradlew :server:buildFatJar
 
-# Run all tests
-./gradlew test
+# Build all modules
+./gradlew build
 
-# Run tests for a specific module
+# Run tests
+./gradlew test
 ./gradlew :shared:test
 ./gradlew :server:test
+```
 
-# Compile-check without running
-./gradlew assemble
+### Android (from terminal, no Android Studio)
+```bash
+# List available AVDs
+emulator -list-avds
+# Available: Pixel_8_Pro, Pixel_8_Pro_Clean
+
+# Boot emulator in background
+emulator -avd Pixel_8_Pro -no-snapshot-load &
+adb wait-for-device shell getprop sys.boot_completed
+
+# Build, install and launch
+./gradlew :composeApp:installDebug
+adb shell am start -n com.jvillada.monedero/.MainActivity
+
+# View logs
+adb logcat -s "monedero"
+```
+
+### iOS (from terminal, no Xcode)
+```bash
+# Step 1 — build the Kotlin framework (required before every Xcode build)
+./gradlew :composeApp:assembleDebugXCFramework
+# Output: composeApp/build/XCFrameworks/debug/ComposeApp.xcframework
+
+# Step 2 — build the iOS app for simulator
+xcodebuild \
+  -project iosApp/iosApp.xcodeproj \
+  -scheme iosApp \
+  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -configuration Debug \
+  -derivedDataPath build/ios \
+  build
+
+# Step 3 — boot simulator (if not already running)
+xcrun simctl boot "iPhone 16"
+open -a Simulator
+
+# Step 4 — install and launch
+xcrun simctl install booted build/ios/Build/Products/Debug-iphonesimulator/iosApp.app
+xcrun simctl launch booted com.jvillada.monedero
+
+# List available simulators
+xcrun simctl list devices available
+# Available iPhone 16 Pro, iPhone 16, iPhone 15 Pro, iPhone SE (3rd gen), etc.
+
+# View logs
+xcrun simctl spawn booted log stream --predicate 'subsystem contains "monedero"'
 ```
 
 ## Architecture
@@ -84,4 +129,4 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
 - **New REST endpoints** go in `server/src/main/kotlin/.../routes/` as extension functions on `Route`, then registered in `plugins/Routing.kt`.
 - **New shared models** go in `shared/src/commonMain/.../shared/model/` and must be annotated with `@Serializable`.
 - **Platform-specific Ktor engine wiring** belongs in each `composeApp` source set's dependency block, not in `commonMain`.
-- The iOS Xcode project (`iosApp/`) references the `ComposeApp` framework built by Gradle — always build the framework before opening Xcode: `./gradlew :composeApp:assembleReleaseXCFramework`.
+- The iOS Xcode project (`iosApp/iosApp.xcodeproj`) references the `ComposeApp` XCFramework at `composeApp/build/XCFrameworks/debug/ComposeApp.xcframework`. Always run `./gradlew :composeApp:assembleDebugXCFramework` before building the iOS app — the Xcode build will fail if the framework is missing.
