@@ -1,0 +1,14 @@
+.gradle
+.idea
+*.iml
+.DS_Store
+/local.properties
+/.idea
+/build
+/captures
+/composeApp/build
+/iosApp/Pods
+/iosApp/build
+xcuserdata/
+*.xcworkspace
+Podfile.lock
