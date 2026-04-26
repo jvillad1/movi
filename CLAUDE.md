@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## App
+
+**Movi** — personal and family finance management app (previously scaffolded as "monedero"). Package: `com.jvillada.monedero` (rename to `com.jvillada.movi` during implementation). Full design spec: `docs/superpowers/specs/2026-04-26-monedero-core-design.md`.
+
 ## Commands
 
 ### Backend & Web

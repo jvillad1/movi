@@ -1,4 +1,4 @@
-# Monedero — Core Design Spec
+# Movi — Core Design Spec
 **Date:** 2026-04-26
 **Sub-project:** 1 of 5 — Core (foundation)
 **Status:** Approved
@@ -7,7 +7,7 @@
 
 ## Overview
 
-Monedero es una app de gestión de finanzas personales y familiares. Este documento cubre el sub-proyecto 1 (Core), que es la fundación sobre la que se construyen los demás sub-proyectos.
+**Movi** es una app de gestión de finanzas personales y familiares. Este documento cubre el sub-proyecto 1 (Core), que es la fundación sobre la que se construyen los demás sub-proyectos.
 
 **Sub-proyectos planificados:**
 1. **Core** ← este documento
