@@ -1,0 +1,107 @@
+composeApp/src/androidMain/kotlin/com/jvillada/movi/MainActivity.kt
+  dadf0a8fe4934ca3 1,3,6,15-18
+CLAUDE.md
+  dadf0a8fe4934ca3 7,43,46,70,77,85,113
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/Navigation.kt
+  dadf0a8fe4934ca3 1-18
+composeApp/src/commonMain/kotlin/com/jvillada/movi/data/FakeData.kt
+  dadf0a8fe4934ca3 1-93
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/ScopeToggle.kt
+  dadf0a8fe4934ca3 1-64
+composeApp/src/commonMain/kotlin/com/jvillada/movi/theme/Theme.kt
+  dadf0a8fe4934ca3 1-33
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/credits/CreditosScreen.kt
+  dadf0a8fe4934ca3 1-149
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/sms/SMSScreens.kt
+  dadf0a8fe4934ca3 1-273
+composeApp/src/iosMain/kotlin/com/jvillada/movi/BackHandler.ios.kt
+  dadf0a8fe4934ca3 1-8
+build.gradle.kts
+  dadf0a8fe4934ca3 7-8
+composeApp/src/iosMain/kotlin/com/jvillada/movi/MainViewController.kt
+  dadf0a8fe4934ca3 1
+composeApp/src/wasmJsMain/kotlin/com/jvillada/movi/main.kt
+  dadf0a8fe4934ca3 1,8
+server/src/main/kotlin/com/jvillada/movi/server/plugins/CORS.kt
+  dadf0a8fe4934ca3 1
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Monitoring.kt
+  dadf0a8fe4934ca3 1
+server/build.gradle.kts
+  dadf0a8fe4934ca3 9-10
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/MinComponents.kt
+  dadf0a8fe4934ca3 1-184
+composeApp/build.gradle.kts
+  dadf0a8fe4934ca3 73,76
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepositoryImpl.kt
+  dadf0a8fe4934ca3 1,3-4
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/profile/PerfilScreen.kt
+  dadf0a8fe4934ca3 1-204
+composeApp/src/commonMain/kotlin/com/jvillada/movi/BackHandler.kt
+  dadf0a8fe4934ca3 1-6
+settings.gradle.kts
+  dadf0a8fe4934ca3 1
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/onboarding/OnboardingScreens.kt
+  dadf0a8fe4934ca3 1-346
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/MinBottomNav.kt
+  dadf0a8fe4934ca3 1-119
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/ocr/OCRScreens.kt
+  dadf0a8fe4934ca3 1-232
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepository.kt
+  dadf0a8fe4934ca3 1,3-4
+composeApp/src/androidMain/kotlin/com/jvillada/movi/BackHandler.android.kt
+  dadf0a8fe4934ca3 1,3,7-8
+composeApp/src/wasmJsMain/kotlin/com/jvillada/movi/BackHandler.wasmjs.kt
+  dadf0a8fe4934ca3 1-8
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/dashboard/DashboardScreen.kt
+  dadf0a8fe4934ca3 1-349
+shared/build.gradle.kts
+  dadf0a8fe4934ca3 37
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/goals/MetasScreen.kt
+  dadf0a8fe4934ca3 1-163
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/quickadd/QuickAddScreen.kt
+  dadf0a8fe4934ca3 1-208
+server/src/main/kotlin/com/jvillada/movi/server/Application.kt
+  dadf0a8fe4934ca3 1,3-6
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Serialization.kt
+  dadf0a8fe4934ca3 1
+server/src/main/kotlin/com/jvillada/movi/server/routes/WalletRoutes.kt
+  dadf0a8fe4934ca3 1,3-5
+composeApp/src/commonMain/kotlin/com/jvillada/movi/theme/Color.kt
+  dadf0a8fe4934ca3 1-30
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/model/Wallet.kt
+  dadf0a8fe4934ca3 1
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/transactions/TransactionsScreen.kt
+  dadf0a8fe4934ca3 1-210
+composeApp/src/commonMain/kotlin/com/jvillada/movi/App.kt
+  dadf0a8fe4934ca3 1-69
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/ai/AIChatScreen.kt
+  dadf0a8fe4934ca3 1-220
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/investments/InversionesScreen.kt
+  dadf0a8fe4934ca3 1-170
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Routing.kt
+  dadf0a8fe4934ca3 1,3
+iosApp/iosApp.xcodeproj/project.pbxproj
+  dadf0a8fe4934ca3 213,238
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/Sparkline.kt
+  dadf0a8fe4934ca3 1-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c15aa624b2bf650558ca2b66f1b0fad0e700558a",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 3517,
+      "total_deletions": 264,
+      "accepted_lines": 3531,
+      "overriden_lines": 0
+    }
+  }
+}
