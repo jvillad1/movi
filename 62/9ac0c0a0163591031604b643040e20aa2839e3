@@ -1,0 +1,25 @@
+composeApp/build.gradle.kts
+  dadf0a8fe4934ca3 3,19,24
+composeApp/src/iosMain/kotlin/com/jvillada/movi/MainViewController.kt
+  dadf0a8fe4934ca3 5-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "629ac0c0a0163591031604b643040e20aa2839e3",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 3,
+      "accepted_lines": 254,
+      "overriden_lines": 0
+    }
+  }
+}
