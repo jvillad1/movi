@@ -6,8 +6,8 @@ plugins {
 }
 
 application {
-    mainClass.set("com.jvillada.monedero.server.ApplicationKt")
-    applicationDefaultJvmArgs = listOf("-Dio.ktor.development=${extra["development"] ?: "false"}")
+    mainClass.set("com.jvillada.movi.server.ApplicationKt")
+    applicationDefaultJvmArgs = listOf("-Dio.ktor.development=${project.findProperty("development") ?: "false"}")
 }
 
 dependencies {

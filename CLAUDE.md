@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## App
 
-**Movi** — personal and family finance management app (previously scaffolded as "monedero"). Package: `com.jvillada.monedero` (rename to `com.jvillada.movi` during implementation). Full design spec: `docs/superpowers/specs/2026-04-26-monedero-core-design.md`.
+**Movi** — personal and family finance management app. Package: `com.jvillada.movi`. Full design spec: `docs/superpowers/specs/2026-04-26-monedero-core-design.md`.
 
 ## Commands
 
@@ -40,10 +40,10 @@ adb wait-for-device shell getprop sys.boot_completed
 
 # Build, install and launch
 ./gradlew :composeApp:installDebug
-adb shell am start -n com.jvillada.monedero/.MainActivity
+adb shell am start -n com.jvillada.movi/.MainActivity
 
 # View logs
-adb logcat -s "monedero"
+adb logcat -s "movi"
 ```
 
 ### iOS (from terminal, no Xcode)
@@ -67,14 +67,14 @@ open -a Simulator
 
 # Step 4 — install and launch
 xcrun simctl install booted build/ios/Build/Products/Debug-iphonesimulator/iosApp.app
-xcrun simctl launch booted com.jvillada.monedero
+xcrun simctl launch booted com.jvillada.movi
 
 # List available simulators
 xcrun simctl list devices available
 # Available iPhone 16 Pro, iPhone 16, iPhone 15 Pro, iPhone SE (3rd gen), etc.
 
 # View logs
-xcrun simctl spawn booted log stream --predicate 'subsystem contains "monedero"'
+xcrun simctl spawn booted log stream --predicate 'subsystem contains "movi"'
 ```
 
 ## Architecture
@@ -82,7 +82,7 @@ xcrun simctl spawn booted log stream --predicate 'subsystem contains "monedero"'
 This is a full-stack Kotlin project — one language, one codebase, four targets.
 
 ```
-monedero/
+movi/
 ├── shared/       Pure Kotlin multiplatform — models + repository layer
 ├── composeApp/   Compose Multiplatform UI — Android, iOS, Web (wasmJs)
 ├── server/       Ktor JVM backend
@@ -110,7 +110,7 @@ Source sets:
 - `commonMain` — all Compose UI screens and `App.kt` entry point. Uses `:shared` for data types.
 - `androidMain` — `MainActivity` wraps `App()` with `setContent`.
 - `iosMain` — `MainViewController()` bridges to `ComposeUIViewController`.
-- `wasmJsMain` — `main()` calls `CanvasBasedWindow("Monedero") { App() }`. The HTML shell is at `wasmJsMain/resources/index.html`.
+- `wasmJsMain` — `main()` calls `CanvasBasedWindow("Movi") { App() }`. The HTML shell is at `wasmJsMain/resources/index.html`.
 
 Ktor HTTP engine is platform-specific: `ktor-client-android` for Android, `ktor-client-darwin` for iOS, `ktor-client-js` for wasmJs.
 

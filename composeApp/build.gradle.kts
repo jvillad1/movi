@@ -70,10 +70,10 @@ kotlin {
 }
 
 android {
-    namespace = "com.jvillada.monedero"
+    namespace = "com.jvillada.movi"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
-        applicationId = "com.jvillada.monedero"
+        applicationId = "com.jvillada.movi"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

@@ -1,0 +1,69 @@
+package com.jvillada.movi
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import com.jvillada.movi.theme.MinBg
+import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.ai.AIChatScreen
+import com.jvillada.movi.ui.credits.CreditosScreen
+import com.jvillada.movi.ui.dashboard.DashboardScreen
+import com.jvillada.movi.ui.goals.MetasScreen
+import com.jvillada.movi.ui.investments.InversionesScreen
+import com.jvillada.movi.ui.ocr.OCRCaptureScreen
+import com.jvillada.movi.ui.ocr.OCRConfirmScreen
+import com.jvillada.movi.ui.onboarding.OnboardingProfileScreen
+import com.jvillada.movi.ui.onboarding.WelcomeScreen
+import com.jvillada.movi.ui.profile.PerfilScreen
+import com.jvillada.movi.ui.quickadd.QuickAddScreen
+import com.jvillada.movi.ui.sms.SMSInboxScreen
+import com.jvillada.movi.ui.sms.SMSReconcileScreen
+import com.jvillada.movi.ui.transactions.TransactionsScreen
+
+@Composable
+fun App() {
+    MoviTheme {
+        val baseDensity = LocalDensity.current
+        CompositionLocalProvider(
+            LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f)
+        ) {
+            val backStack = remember { mutableStateListOf<Screen>(Screen.OnboardingWelcome) }
+            val currentScreen = backStack.last()
+
+            val navigate: (Screen) -> Unit = { screen ->
+                if (backStack.last() != screen) backStack.add(screen)
+            }
+            val goBack: () -> Unit = {
+                if (backStack.size > 1) backStack.removeLast()
+            }
+
+            BackHandlerEffect(enabled = backStack.size > 1, onBack = goBack)
+
+            Box(modifier = Modifier.fillMaxSize().background(MinBg).statusBarsPadding()) {
+                when (currentScreen) {
+                    Screen.OnboardingWelcome -> WelcomeScreen(navigate)
+                    Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
+                    Screen.Dashboard         -> DashboardScreen(navigate)
+                    Screen.Transactions      -> TransactionsScreen(navigate)
+                    Screen.QuickAdd          -> QuickAddScreen(onDismiss = goBack, onNavigate = navigate)
+                    Screen.Profile           -> PerfilScreen(navigate)
+                    Screen.AIChat            -> AIChatScreen(navigate)
+                    Screen.Investments       -> InversionesScreen(navigate)
+                    Screen.Credits           -> CreditosScreen(navigate)
+                    Screen.Goals             -> MetasScreen(navigate)
+                    Screen.OCRCapture        -> OCRCaptureScreen(navigate)
+                    Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
+                    Screen.SMSInbox          -> SMSInboxScreen(navigate)
+                    Screen.SMSReconcile      -> SMSReconcileScreen(navigate)
+                }
+            }
+        }
+    }
+}
