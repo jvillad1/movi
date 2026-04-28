@@ -1,4 +1,4 @@
-rootProject.name = "monedero"
+rootProject.name = "movi"
 include(":shared")
 include(":composeApp")
 include(":server")

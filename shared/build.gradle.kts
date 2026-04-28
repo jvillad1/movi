@@ -34,7 +34,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.jvillada.monedero.shared"
+    namespace = "com.jvillada.movi.shared"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig { minSdk = libs.versions.android.minSdk.get().toInt() }
     compileOptions {
