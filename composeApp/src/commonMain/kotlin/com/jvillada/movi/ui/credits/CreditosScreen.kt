@@ -7,6 +7,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -14,14 +19,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.data.FakeData
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
-    val credits = FakeData.credits
+    var credits by remember { mutableStateOf<List<Credit>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getCredits() }
+            .onSuccess { credits = it }
+    }
     Column(
         modifier = Modifier.fillMaxSize().background(MinBg)
     ) {

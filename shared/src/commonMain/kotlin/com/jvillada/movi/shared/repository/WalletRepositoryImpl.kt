@@ -1,5 +1,9 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.Goal
+import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.Wallet
@@ -33,4 +37,16 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(transaction)
         }.body()
+
+    override suspend fun getHoldings(): List<Holding> =
+        client.get("$baseUrl/api/holdings").body()
+
+    override suspend fun getCredits(): List<Credit> =
+        client.get("$baseUrl/api/credits").body()
+
+    override suspend fun getGoals(): List<Goal> =
+        client.get("$baseUrl/api/goals").body()
+
+    override suspend fun getSmsMessages(): List<SmsMessage> =
+        client.get("$baseUrl/api/sms").body()
 }
