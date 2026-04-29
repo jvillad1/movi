@@ -146,8 +146,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             when (tab) {
                 NavTab.HOME -> onNavigate(Screen.Dashboard)
                 NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
                 NavTab.PROFILE -> onNavigate(Screen.Profile)
-                else -> {}
             }
         })
         NavPill()

@@ -8,6 +8,7 @@ sealed class Screen {
     data object QuickAdd : Screen()
     data object Profile : Screen()
     data object AIChat : Screen()
+    data object Analisis : Screen()
     data object Investments : Screen()
     data object Credits : Screen()
     data object Goals : Screen()

@@ -210,7 +210,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             onTabSelected = { tab ->
                 when (tab) {
                     NavTab.HOME -> onNavigate(Screen.Dashboard)
-                    NavTab.ANALYSIS -> onNavigate(Screen.Investments)
+                    NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
                     NavTab.PROFILE -> onNavigate(Screen.Profile)
                     else -> {}
                 }
