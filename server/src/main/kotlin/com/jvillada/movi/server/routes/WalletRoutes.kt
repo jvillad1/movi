@@ -13,8 +13,8 @@ import io.ktor.server.routing.route
 
 // In-memory store — replace with a real DB later
 private val wallets = mutableListOf(
-    Wallet("1", "Efectivo", 1500.0, "MXN"),
-    Wallet("2", "Débito BBVA", 8200.0, "MXN"),
+    Wallet("1", "Efectivo", 580_000.0, "COP"),
+    Wallet("2", "Bancolombia Ahorros", 1_260_000.0, "COP"),
 )
 private val transactions = mutableListOf<Transaction>()
 
