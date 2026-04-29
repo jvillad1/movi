@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
@@ -54,4 +55,7 @@ class WalletRepositoryImpl(
 
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
         client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
+
+    override suspend fun getBudgets(): List<Budget> =
+        client.get("$baseUrl/api/budgets").body()
 }

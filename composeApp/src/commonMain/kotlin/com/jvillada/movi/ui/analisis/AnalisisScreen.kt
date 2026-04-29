@@ -151,6 +151,27 @@ fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
+            // Presupuestos shortcut
+            item {
+                Spacer(Modifier.height(20.dp))
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    MinSectionHeader(title = "Presupuestos")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        CardRow(
+                            left = { Text("Ver presupuestos", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                            sub = "Control mensual por categoría",
+                            showChevron = true,
+                            isLast = true,
+                            onClick = { onNavigate(Screen.Budgets) },
+                        )
+                    }
+                }
+            }
+
             // Patrimonio
             item {
                 Spacer(Modifier.height(20.dp))
