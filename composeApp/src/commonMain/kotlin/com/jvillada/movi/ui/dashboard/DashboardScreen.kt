@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -26,7 +27,13 @@ fun DashboardScreen(
     var scope by remember { mutableStateOf(Scope.SELF) }
     val isFamily = scope == Scope.FAMILY
 
-    val balance   = if (isFamily) 4_870_000L else 1_840_000L
+    var liveBalance by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getWallets() }
+            .onSuccess { list -> liveBalance = list.sumOf { it.balance }.toLong() }
+    }
+
+    val balance   = liveBalance ?: if (isFamily) 4_870_000L else 1_840_000L
     val ingresos  = if (isFamily) 9_200_000L else 4_500_000L
     val egresos   = if (isFamily) 4_330_000L else 2_660_000L
 
