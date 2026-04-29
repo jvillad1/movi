@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.Transaction
+import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.Wallet
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -23,6 +24,9 @@ class WalletRepositoryImpl(
 
     override suspend fun getTransactions(walletId: String): List<Transaction> =
         client.get("$baseUrl/api/wallets/$walletId/transactions").body()
+
+    override suspend fun getTransactionsByDay(): List<TransactionDay> =
+        client.get("$baseUrl/api/transactions/by-day").body()
 
     override suspend fun addTransaction(transaction: Transaction): Transaction =
         client.post("$baseUrl/api/wallets/${transaction.walletId}/transactions") {

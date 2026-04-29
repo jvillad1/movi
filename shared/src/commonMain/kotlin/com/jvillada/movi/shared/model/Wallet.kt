@@ -14,11 +14,24 @@ data class Wallet(
 data class Transaction(
     val id: String,
     val walletId: String,
+    val name: String,
     val amount: Double,
-    val description: String,
+    val category: String,
     val type: TransactionType,
+    val source: TransactionSource,
+    val pending: Boolean = false,
     val timestamp: Long,
 )
 
 @Serializable
-enum class TransactionType { INCOME, EXPENSE, TRANSFER }
+enum class TransactionType { INCOME, EXPENSE }
+
+@Serializable
+enum class TransactionSource { SMS, OCR, MANUAL }
+
+@Serializable
+data class TransactionDay(
+    val date: String,
+    val total: Double,
+    val items: List<Transaction>,
+)
