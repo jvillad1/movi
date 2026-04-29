@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
@@ -38,6 +39,14 @@ private val smsMessages = listOf(
     SmsMessage("ayer", "Bancolombia", "Nómina recibida \$4.500.000", "auto", "Globant · +\$4.500.000"),
 )
 
+private val budgets = listOf(
+    Budget("Mercado", 350_000),
+    Budget("Salud", 200_000),
+    Budget("Restaurantes", 50_000),
+    Budget("Suscripción", 35_000),
+    Budget("Transporte", 25_000),
+)
+
 private val summaries = mapOf(
     Scope.SELF to FinanceSummary(Scope.SELF, balance = 1_840_000, ingresos = 4_500_000, egresos = 2_660_000),
     Scope.FAMILY to FinanceSummary(Scope.FAMILY, balance = 4_870_000, ingresos = 9_200_000, egresos = 4_330_000),
@@ -48,6 +57,7 @@ fun Route.financeRoutes() {
     get("/api/credits") { call.respond(credits) }
     get("/api/goals") { call.respond(goals) }
     get("/api/sms") { call.respond(smsMessages) }
+    get("/api/budgets") { call.respond(budgets) }
     get("/api/finance-summary") {
         val raw = call.request.queryParameters["scope"] ?: "SELF"
         val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()

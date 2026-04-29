@@ -14,6 +14,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.analisis.AnalisisScreen
+import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.goals.MetasScreen
@@ -60,6 +61,7 @@ fun App() {
                     Screen.Investments       -> InversionesScreen(navigate)
                     Screen.Credits           -> CreditosScreen(navigate)
                     Screen.Goals             -> MetasScreen(navigate)
+                    Screen.Budgets           -> PresupuestosScreen(navigate)
                     Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                     Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                     Screen.SMSInbox          -> SMSInboxScreen(navigate)

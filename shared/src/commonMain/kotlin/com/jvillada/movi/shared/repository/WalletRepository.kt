@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
@@ -21,4 +22,5 @@ interface WalletRepository {
     suspend fun getGoals(): List<Goal>
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
+    suspend fun getBudgets(): List<Budget>
 }

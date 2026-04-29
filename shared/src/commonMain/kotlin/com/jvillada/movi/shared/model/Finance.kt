@@ -42,6 +42,12 @@ data class Goal(
 )
 
 @Serializable
+data class Budget(
+    val category: String,
+    val monthlyLimit: Long,
+)
+
+@Serializable
 data class SmsMessage(
     val time: String,
     val bank: String,
