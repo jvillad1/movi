@@ -16,6 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.FinanceSummary
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -27,16 +29,16 @@ fun DashboardScreen(
     var scope by remember { mutableStateOf(Scope.SELF) }
     val isFamily = scope == Scope.FAMILY
 
-    var liveBalance by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(Unit) {
-        runCatching { Repositories.wallets.getWallets() }
-            .onSuccess { list -> liveBalance = list.sumOf { it.balance }.toLong() }
+    var summary by remember { mutableStateOf<FinanceSummary?>(null) }
+    LaunchedEffect(scope) {
+        runCatching { Repositories.wallets.getFinanceSummary(scope) }
+            .onSuccess { summary = it }
     }
 
-    val balance   = liveBalance ?: if (isFamily) 4_870_000L else 1_840_000L
-    val ingresos  = if (isFamily) 9_200_000L else 4_500_000L
-    val egresos   = if (isFamily) 4_330_000L else 2_660_000L
-    val flujo     = ingresos - egresos
+    val balance  = summary?.balance  ?: if (isFamily) 4_870_000L else 1_840_000L
+    val ingresos = summary?.ingresos ?: if (isFamily) 9_200_000L else 4_500_000L
+    val egresos  = summary?.egresos  ?: if (isFamily) 4_330_000L else 2_660_000L
+    val flujo    = ingresos - egresos
 
     Box(
         modifier = Modifier

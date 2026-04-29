@@ -1,9 +1,12 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -35,9 +38,20 @@ private val smsMessages = listOf(
     SmsMessage("ayer", "Bancolombia", "Nómina recibida \$4.500.000", "auto", "Globant · +\$4.500.000"),
 )
 
+private val summaries = mapOf(
+    Scope.SELF to FinanceSummary(Scope.SELF, balance = 1_840_000, ingresos = 4_500_000, egresos = 2_660_000),
+    Scope.FAMILY to FinanceSummary(Scope.FAMILY, balance = 4_870_000, ingresos = 9_200_000, egresos = 4_330_000),
+)
+
 fun Route.financeRoutes() {
     get("/api/holdings") { call.respond(holdings) }
     get("/api/credits") { call.respond(credits) }
     get("/api/goals") { call.respond(goals) }
     get("/api/sms") { call.respond(smsMessages) }
+    get("/api/finance-summary") {
+        val raw = call.request.queryParameters["scope"] ?: "SELF"
+        val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()
+            ?: return@get call.respond(HttpStatusCode.BadRequest, "Unknown scope: $raw")
+        call.respond(summaries.getValue(scope))
+    }
 }

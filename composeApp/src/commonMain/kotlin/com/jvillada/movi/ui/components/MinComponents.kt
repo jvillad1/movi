@@ -176,9 +176,9 @@ fun formatCOP(amount: Long): String {
 
 fun formatMillions(amount: Long): String {
     val abs = kotlin.math.abs(amount)
-    val millions = abs / 1_000_000.0
-    val intPart = millions.toLong()
-    val fracPart = ((millions - intPart) * 100).toLong()
-    val frac = fracPart.toString().padStart(2, '0')
-    return "$$intPart,$frac" + "M"
+    // Round to nearest 0.01M without floating-point error.
+    val hundredths = (abs + 5_000) / 10_000
+    val intPart = hundredths / 100
+    val frac = (hundredths % 100).toString().padStart(2, '0')
+    return "$$intPart,${frac}M"
 }

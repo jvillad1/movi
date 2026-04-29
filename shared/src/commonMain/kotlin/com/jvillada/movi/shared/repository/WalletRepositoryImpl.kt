@@ -1,8 +1,10 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
@@ -49,4 +51,7 @@ class WalletRepositoryImpl(
 
     override suspend fun getSmsMessages(): List<SmsMessage> =
         client.get("$baseUrl/api/sms").body()
+
+    override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
+        client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
 }
