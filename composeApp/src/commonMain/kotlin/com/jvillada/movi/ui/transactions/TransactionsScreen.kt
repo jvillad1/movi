@@ -20,7 +20,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.data.FakeData
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.TransactionDay
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -30,16 +32,25 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var activeFilter by remember { mutableStateOf(0) }
     val filters = listOf("Todo", "Egresos", "Ingresos", "Pendientes")
 
-    val visibleDays = remember(activeFilter) {
-        FakeData.txDays.mapNotNull { day ->
+    var allDays by remember { mutableStateOf<List<TransactionDay>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getTransactionsByDay() }
+            .onSuccess { allDays = it }
+    }
+
+    fun signedAmount(tx: com.jvillada.movi.shared.model.Transaction): Double =
+        if (tx.type == TransactionType.EXPENSE) -tx.amount else tx.amount
+
+    val visibleDays = remember(activeFilter, allDays) {
+        allDays.mapNotNull { day ->
             val filtered = when (activeFilter) {
-                1 -> day.items.filter { it.amount < 0 && !it.pending }
-                2 -> day.items.filter { it.amount > 0 }
+                1 -> day.items.filter { it.type == TransactionType.EXPENSE && !it.pending }
+                2 -> day.items.filter { it.type == TransactionType.INCOME }
                 3 -> day.items.filter { it.pending }
                 else -> day.items
             }
             if (filtered.isEmpty()) null
-            else day.copy(items = filtered, total = filtered.sumOf { it.amount })
+            else day.copy(items = filtered, total = filtered.sumOf { signedAmount(it) })
         }
     }
 
@@ -123,7 +134,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                 letterSpacing = 0.4.sp,
                             )
                             Text(
-                                text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
+                                text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total.toLong())}",
                                 fontSize = 11.sp,
                                 color = MinTextMute,
                                 fontFamily = FontFamily.Monospace,
@@ -135,7 +146,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
                             day.items.forEachIndexed { i, tx ->
-                                val isIncome = tx.amount > 0
+                                val isIncome = tx.type == TransactionType.INCOME
                                 Column {
                                     Row(
                                         modifier = Modifier
@@ -168,7 +179,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                                 Text(tx.category, fontSize = 12.sp, color = MinTextMute)
                                                 StatusDot(MinTextFaint, 2.dp)
                                                 Text(
-                                                    text = tx.source.uppercase(),
+                                                    text = tx.source.name,
                                                     fontSize = 11.sp,
                                                     fontFamily = FontFamily.Monospace,
                                                     color = MinTextMute,
@@ -177,7 +188,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                             }
                                         }
                                         Text(
-                                            text = "${if (isIncome) "+" else "−"}${formatCOP(tx.amount)}",
+                                            text = "${if (isIncome) "+" else "−"}${formatCOP(tx.amount.toLong())}",
                                             fontSize = 14.5.sp,
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Medium,

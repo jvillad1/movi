@@ -1,19 +1,5 @@
 package com.jvillada.movi.data
 
-data class TxItem(
-    val name: String,
-    val category: String,
-    val amount: Long,
-    val source: String,
-    val pending: Boolean = false,
-)
-
-data class TxDay(
-    val date: String,
-    val total: Long,
-    val items: List<TxItem>,
-)
-
 data class Holding(
     val name: String,
     val sub: String,
@@ -48,22 +34,6 @@ data class SMSItem(
 )
 
 object FakeData {
-    val txDays = listOf(
-        TxDay("Hoy · 28 abr", -70_800L, listOf(
-            TxItem("Crepes & Waffles", "Restaurantes", -42_300, "SMS"),
-            TxItem("Uber", "Transporte", -28_500, "SMS", pending = true),
-        )),
-        TxDay("Ayer · 27 abr", -232_400L, listOf(
-            TxItem("Éxito Country", "Mercado", -312_400, "OCR"),
-            TxItem("Daviplata", "Transferencia", 80_000, "SMS"),
-        )),
-        TxDay("26 abr", 4_423_900L, listOf(
-            TxItem("Globant", "Nómina", 4_500_000, "SMS"),
-            TxItem("Netflix", "Suscripción", -28_900, "Manual"),
-            TxItem("Drogas La Rebaja", "Salud", -47_200, "OCR", pending = true),
-        )),
-    )
-
     val holdings = listOf(
         Holding("CDT Bancolombia", "12 meses · 11,8% E.A.", 5_000_000, 0.0),
         Holding("Acciones Globales", "Renta variable · Skandia", 4_280_000, 12.4),
