@@ -3,6 +3,17 @@ package com.jvillada.movi.shared.model
 import kotlinx.serialization.Serializable
 
 @Serializable
+enum class Scope { SELF, FAMILY }
+
+@Serializable
+data class FinanceSummary(
+    val scope: Scope,
+    val balance: Long,
+    val ingresos: Long,
+    val egresos: Long,
+)
+
+@Serializable
 data class Holding(
     val name: String,
     val sub: String,
