@@ -165,7 +165,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit) {
                 when (tab) {
                     NavTab.HOME -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ANALYSIS -> onNavigate(Screen.Investments)
+                    NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
                     else -> {}
                 }
             },

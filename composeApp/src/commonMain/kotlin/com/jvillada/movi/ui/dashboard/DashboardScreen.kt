@@ -333,7 +333,7 @@ fun DashboardScreen(
                 onTabSelected = { tab ->
                     when (tab) {
                         NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                        NavTab.ANALYSIS -> onNavigate(Screen.Investments)
+                        NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
                         NavTab.PROFILE -> onNavigate(Screen.Profile)
                         else -> {}
                     }

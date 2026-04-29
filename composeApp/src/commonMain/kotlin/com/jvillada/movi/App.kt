@@ -13,6 +13,7 @@ import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.ai.AIChatScreen
+import com.jvillada.movi.ui.analisis.AnalisisScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.goals.MetasScreen
@@ -55,6 +56,7 @@ fun App() {
                     Screen.QuickAdd          -> QuickAddScreen(onDismiss = goBack, onNavigate = navigate)
                     Screen.Profile           -> PerfilScreen(navigate)
                     Screen.AIChat            -> AIChatScreen(navigate)
+                    Screen.Analisis          -> AnalisisScreen(navigate)
                     Screen.Investments       -> InversionesScreen(navigate)
                     Screen.Credits           -> CreditosScreen(navigate)
                     Screen.Goals             -> MetasScreen(navigate)
