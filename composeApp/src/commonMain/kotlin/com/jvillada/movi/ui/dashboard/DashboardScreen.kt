@@ -36,6 +36,7 @@ fun DashboardScreen(
     val balance   = liveBalance ?: if (isFamily) 4_870_000L else 1_840_000L
     val ingresos  = if (isFamily) 9_200_000L else 4_500_000L
     val egresos   = if (isFamily) 4_330_000L else 2_660_000L
+    val flujo     = ingresos - egresos
 
     Box(
         modifier = Modifier
@@ -150,7 +151,7 @@ fun DashboardScreen(
                             listOf(
                                 Triple("Ingresos", formatMillions(ingresos), "+8,1%"),
                                 Triple("Egresos",  formatMillions(egresos),  "−2,4%"),
-                                Triple("Flujo",    formatMillions(balance),  "+24,8%"),
+                                Triple("Flujo",    formatMillions(flujo),    "+24,8%"),
                             ).forEach { (label, value, delta) ->
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
