@@ -9,6 +9,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -17,14 +22,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.data.FakeData
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
-    val smsItems = FakeData.smsItems
+    var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getSmsMessages() }
+            .onSuccess { smsItems = it }
+    }
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
