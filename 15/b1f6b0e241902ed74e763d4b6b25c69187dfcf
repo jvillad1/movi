@@ -1,0 +1,41 @@
+server/src/main/kotlin/com/jvillada/movi/server/routes/AiRoutes.kt
+  dadf0a8fe4934ca3 1-144
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/ai/AIChatScreen.kt
+  dadf0a8fe4934ca3 7-8,11,13,17-18,23-26,30,34-65,67,71-76,78-81,83-90,99,102-106,109-110,114,120-122,124-150,153-156,199-201
+composeApp/src/iosMain/kotlin/com/jvillada/movi/data/Platform.ios.kt
+  dadf0a8fe4934ca3 5,14-17
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/model/Finance.kt
+  dadf0a8fe4934ca3 68-82
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepository.kt
+  dadf0a8fe4934ca3 3-4,33
+server/build.gradle.kts
+  dadf0a8fe4934ca3 25
+composeApp/src/androidMain/kotlin/com/jvillada/movi/data/Platform.android.kt
+  dadf0a8fe4934ca3 5,14-17
+gradle/libs.versions.toml
+  dadf0a8fe4934ca3 15,50-52
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepositoryImpl.kt
+  dadf0a8fe4934ca3 3-4,85-90
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Routing.kt
+  dadf0a8fe4934ca3 3,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "15b1f6b0e241902ed74e763d4b6b25c69187dfcf",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 303,
+      "total_deletions": 131,
+      "accepted_lines": 454,
+      "overriden_lines": 0
+    }
+  }
+}
