@@ -1,0 +1,27 @@
+server/src/main/kotlin/com/jvillada/movi/server/routes/FinanceRoutes.kt
+  dadf0a8fe4934ca3 3,21,58,65-68,82,85,92,98
+.gitignore
+  dadf0a8fe4934ca3 18
+server/src/main/kotlin/com/jvillada/movi/server/storage/BudgetStorage.kt
+  dadf0a8fe4934ca3 1-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d842ff542323c970b24c0fa08188883e2279bc87",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 65,
+      "total_deletions": 31,
+      "accepted_lines": 217,
+      "overriden_lines": 0
+    }
+  }
+}
