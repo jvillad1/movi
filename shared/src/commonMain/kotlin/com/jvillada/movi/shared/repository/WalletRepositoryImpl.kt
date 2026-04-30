@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
@@ -58,4 +59,7 @@ class WalletRepositoryImpl(
 
     override suspend fun getBudgets(): List<Budget> =
         client.get("$baseUrl/api/budgets").body()
+
+    override suspend fun getRecurringRules(): List<RecurringRule> =
+        client.get("$baseUrl/api/recurring-rules").body()
 }

@@ -42,6 +42,16 @@ data class Goal(
 )
 
 @Serializable
+data class RecurringRule(
+    val id: String,
+    val name: String,
+    val category: String,
+    val amount: Long,
+    val dayOfMonth: Int,
+    val type: TransactionType,
+)
+
+@Serializable
 data class Budget(
     val category: String,
     val monthlyLimit: Long,

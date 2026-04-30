@@ -5,7 +5,9 @@ import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.SmsMessage
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
@@ -39,6 +41,14 @@ private val smsMessages = listOf(
     SmsMessage("ayer", "Bancolombia", "Nómina recibida \$4.500.000", "auto", "Globant · +\$4.500.000"),
 )
 
+private val recurringRules = listOf(
+    RecurringRule("r1", "Salario Globant", "Nómina", 4_500_000, 25, TransactionType.INCOME),
+    RecurringRule("r2", "Netflix", "Suscripción", 28_900, 1, TransactionType.EXPENSE),
+    RecurringRule("r3", "Arriendo apartamento", "Servicios", 1_500_000, 5, TransactionType.EXPENSE),
+    RecurringRule("r4", "Internet Claro", "Servicios", 89_000, 10, TransactionType.EXPENSE),
+    RecurringRule("r5", "Spotify Family", "Suscripción", 19_900, 15, TransactionType.EXPENSE),
+)
+
 private val budgets = listOf(
     Budget("Mercado", 350_000),
     Budget("Salud", 200_000),
@@ -58,6 +68,7 @@ fun Route.financeRoutes() {
     get("/api/goals") { call.respond(goals) }
     get("/api/sms") { call.respond(smsMessages) }
     get("/api/budgets") { call.respond(budgets) }
+    get("/api/recurring-rules") { call.respond(recurringRules) }
     get("/api/finance-summary") {
         val raw = call.request.queryParameters["scope"] ?: "SELF"
         val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()

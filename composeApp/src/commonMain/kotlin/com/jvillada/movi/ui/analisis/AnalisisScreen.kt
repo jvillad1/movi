@@ -165,8 +165,14 @@ fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
                             left = { Text("Ver presupuestos", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                             sub = "Control mensual por categoría",
                             showChevron = true,
-                            isLast = true,
                             onClick = { onNavigate(Screen.Budgets) },
+                        )
+                        CardRow(
+                            left = { Text("Recurrentes y flujo libre", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                            sub = "Ingresos y egresos fijos del mes",
+                            showChevron = true,
+                            isLast = true,
+                            onClick = { onNavigate(Screen.Recurrentes) },
                         )
                     }
                 }
