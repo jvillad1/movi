@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.AiChatRequest
+import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -28,4 +30,5 @@ interface WalletRepository {
     suspend fun updateBudget(category: String, budget: Budget): Budget
     suspend fun deleteBudget(category: String)
     suspend fun getRecurringRules(): List<RecurringRule>
+    suspend fun chatAi(request: AiChatRequest): AiChatResponse
 }

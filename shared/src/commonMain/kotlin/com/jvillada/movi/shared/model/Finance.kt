@@ -65,3 +65,18 @@ data class SmsMessage(
     val state: String,
     val det: String,
 )
+
+@Serializable
+enum class ChatRole { USER, ASSISTANT }
+
+@Serializable
+data class ChatMessage(
+    val role: ChatRole,
+    val content: String,
+)
+
+@Serializable
+data class AiChatRequest(val messages: List<ChatMessage>)
+
+@Serializable
+data class AiChatResponse(val text: String)

@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.ktor)
     implementation(libs.logback)
+    implementation(libs.anthropic.java)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.kotlin.test)
 }

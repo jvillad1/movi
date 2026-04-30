@@ -1,49 +1,93 @@
 package com.jvillada.movi.ui.ai
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.AiChatRequest
+import com.jvillada.movi.shared.model.ChatMessage
+import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun AIChatScreen(onNavigate: (Screen) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MinBg)
-    ) {
-        // Header
+    val coroutine = rememberCoroutineScope()
+    val messages = remember {
+        mutableStateListOf<ChatMessage>(
+            ChatMessage(ChatRole.ASSISTANT, "¡Hola Camilo! Pregúntame lo que quieras sobre tu plata."),
+        )
+    }
+    var input by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    fun send() {
+        val text = input.trim()
+        if (text.isEmpty() || loading) return
+        messages.add(ChatMessage(ChatRole.USER, text))
+        input = ""
+        loading = true
+        coroutine.launch {
+            val history = messages.filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }
+            val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
+            val replyText = reply.getOrNull()?.text
+                ?: "No pude conectarme con el AI. ${reply.exceptionOrNull()?.message ?: ""}"
+            messages.add(ChatMessage(ChatRole.ASSISTANT, replyText))
+            loading = false
+        }
+    }
+
+    LaunchedEffect(messages.size, loading) {
+        val target = messages.size + if (loading) 1 else 0
+        if (target > 0) listState.animateScrollToItem(target - 1)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 8.dp, bottom = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText,
-                modifier = Modifier.clickableSimple { onNavigate(Screen.Dashboard) })
+            Text(
+                "‹",
+                fontSize = 22.sp,
+                color = MinText,
+                modifier = Modifier.clickable { onNavigate(Screen.Dashboard) },
+            )
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text("Movi AI", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
-                    Text("BETA", fontSize = 9.sp, fontWeight = FontWeight.Medium, color = MinTextMute,
-                        fontFamily = FontFamily.Monospace, letterSpacing = 0.6.sp)
+                    Text(
+                        "BETA",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinTextMute,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.6.sp,
+                    )
                 }
                 Text("Conoce tus finanzas", fontSize = 11.sp, color = MinTextMute)
             }
@@ -52,89 +96,65 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
 
         LazyColumn(
             modifier = Modifier.weight(1f),
+            state = listState,
             contentPadding = PaddingValues(18.dp),
         ) {
-            item { AIMsgAI("¡Hola Camilo! Pregúntame lo que quieras sobre tu plata.") }
-            item { Spacer(Modifier.height(0.dp)) }
-            item { AIMsgUser("¿Puedo comprarme un iPhone 17 de \$5.800.000 sin reventarme?") }
-            item {
-                AIMsgAI {
-                    Text(
-                        text = "Mirando tu mes sí puedes, pero te lo plantearía así:",
-                        fontSize = 13.5.sp,
-                        color = MinText,
-                        lineHeight = 20.sp,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.High,
-                        padding = PaddingValues(16.dp),
-                    ) {
-                        BreakdownRow("Flujo libre del mes", "+\$1.840.000", MinIncome)
-                        Hairline()
-                        BreakdownRow("Meta apartamento", "−\$800.000", MinText)
-                        Hairline()
-                        BreakdownRow("Disponible real", "\$1.040.000", MinText, bold = true)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "Si lo pagas en 6 cuotas de \$966.000 sin interés, te queda margen. De contado tendrías que pausar 4 meses tu meta.",
-                        fontSize = 13.sp,
-                        color = MinText,
-                        lineHeight = 19.sp,
-                    )
+            items(messages) { msg ->
+                if (msg.role == ChatRole.USER) {
+                    AIMsgUser(msg.content)
+                } else {
+                    AIMsgAI(msg.content)
                 }
             }
-            item {
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    listOf("Ver opciones de pago", "Cómo afecta mi meta", "Compáralo con Samsung").forEach { s ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .border(1.dp, MinBorderStrong, RoundedCornerShape(999.dp))
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                        ) {
-                            Text(s, fontSize = 12.sp, color = MinText)
-                        }
-                    }
-                }
+            if (loading) {
+                item { AIMsgAI("…") }
             }
         }
 
-        // Input bar
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MinSurface)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Box(modifier = Modifier.weight(1f)) {
+                BasicTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    enabled = !loading,
+                    cursorBrush = SolidColor(MinText),
+                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                    decorationBox = { inner ->
+                        if (input.isEmpty()) {
+                            Text(
+                                "Pregúntale a Movi…",
+                                fontSize = 13.5.sp,
+                                color = MinTextMute,
+                            )
+                        }
+                        inner()
+                    },
+                )
+            }
+            val canSend = input.trim().isNotEmpty() && !loading
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (canSend) MinText else MinSurfaceContainerHigh)
+                    .clickable(enabled = canSend) { send() },
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Pregúntale a Movi…",
-                    fontSize = 13.5.sp,
-                    color = MinTextMute,
-                    modifier = Modifier.weight(1f),
+                    text = if (loading) "…" else "›",
+                    fontSize = 20.sp,
+                    color = if (canSend) MinBg else MinTextMute,
+                    fontWeight = FontWeight.Bold,
                 )
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MinText),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("›", fontSize = 20.sp, color = MinBg, fontWeight = FontWeight.Bold)
-                }
             }
         }
         NavPill()
@@ -161,11 +181,6 @@ private fun AIMsgUser(text: String) {
 
 @Composable
 private fun AIMsgAI(text: String) {
-    AIMsgAI { Text(text = text, fontSize = 13.5.sp, color = MinText, lineHeight = 20.sp) }
-}
-
-@Composable
-private fun AIMsgAI(content: @Composable ColumnScope.() -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.Start,
@@ -181,40 +196,8 @@ private fun AIMsgAI(content: @Composable ColumnScope.() -> Unit) {
             Text("✦", fontSize = 11.sp, color = MinText)
         }
         Spacer(Modifier.width(10.dp))
-        Column(
-            modifier = Modifier.widthIn(max = 290.dp),
-            content = content,
-        )
+        Box(modifier = Modifier.widthIn(max = 290.dp)) {
+            Text(text = text, fontSize = 13.5.sp, color = MinText, lineHeight = 20.sp)
+        }
     }
 }
-
-@Composable
-private fun BreakdownRow(label: String, value: String, valueColor: androidx.compose.ui.graphics.Color, bold: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            color = if (bold) MinText else MinTextMute,
-            fontWeight = if (bold) FontWeight.Medium else FontWeight.Normal,
-        )
-        Text(
-            text = value,
-            fontSize = 13.sp,
-            fontFamily = FontFamily.Monospace,
-            color = valueColor,
-            fontWeight = if (bold) FontWeight.Medium else FontWeight.Normal,
-        )
-    }
-}
-
-// Simple clickable extension for non-interactive elements
-private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(
-    Modifier.clickable(
-        interactionSource = null,
-        indication = null,
-        onClick = onClick,
-    )
-)
