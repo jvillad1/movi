@@ -78,7 +78,13 @@ fun Route.walletRoutes() {
 
         post("/{id}/transactions") {
             val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-            val tx = call.receive<Transaction>()
+            val raw = call.receive<Transaction>()
+            val now = System.currentTimeMillis()
+            val tx = raw.copy(
+                walletId = id,
+                id = raw.id.ifBlank { "m-$now" },
+                timestamp = if (raw.timestamp == 0L) now else raw.timestamp,
+            )
             val notFound = walletStore.mutate { wallets ->
                 val idx = wallets.indexOfFirst { it.id == id }
                 if (idx == -1) return@mutate true
