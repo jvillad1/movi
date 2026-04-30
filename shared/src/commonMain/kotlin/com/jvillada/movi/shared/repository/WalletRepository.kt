@@ -24,5 +24,8 @@ interface WalletRepository {
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     suspend fun getBudgets(): List<Budget>
+    suspend fun createBudget(budget: Budget): Budget
+    suspend fun updateBudget(category: String, budget: Budget): Budget
+    suspend fun deleteBudget(category: String)
     suspend fun getRecurringRules(): List<RecurringRule>
 }

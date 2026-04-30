@@ -13,8 +13,10 @@ import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.Wallet
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -59,6 +61,22 @@ class WalletRepositoryImpl(
 
     override suspend fun getBudgets(): List<Budget> =
         client.get("$baseUrl/api/budgets").body()
+
+    override suspend fun createBudget(budget: Budget): Budget =
+        client.post("$baseUrl/api/budgets") {
+            contentType(ContentType.Application.Json)
+            setBody(budget)
+        }.body()
+
+    override suspend fun updateBudget(category: String, budget: Budget): Budget =
+        client.put("$baseUrl/api/budgets/$category") {
+            contentType(ContentType.Application.Json)
+            setBody(budget)
+        }.body()
+
+    override suspend fun deleteBudget(category: String) {
+        client.delete("$baseUrl/api/budgets/$category")
+    }
 
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()
