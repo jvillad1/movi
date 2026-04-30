@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.storage.JsonListStore
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.TransactionSource
@@ -12,29 +13,22 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import java.io.File
 
-// In-memory store — replace with a real DB later
-private val wallets = mutableListOf(
+private val walletSeed = listOf(
     Wallet("1", "Efectivo", 580_000.0, "COP"),
     Wallet("2", "Bancolombia Ahorros", 1_260_000.0, "COP"),
 )
 
-// Seed transactions: 3 days mirroring the original FakeData ordering.
-// timestamp values are illustrative — they preserve order within and across days.
-private val transactions = mutableListOf(
-    // Hoy · 28 abr
+private val transactionSeed = listOf(
     Transaction("t1", "2", "Crepes & Waffles", 42_300.0, "Restaurantes",
         TransactionType.EXPENSE, TransactionSource.SMS, false, 1_745_870_400_000L),
     Transaction("t2", "2", "Uber", 28_500.0, "Transporte",
         TransactionType.EXPENSE, TransactionSource.SMS, true, 1_745_866_800_000L),
-
-    // Ayer · 27 abr
     Transaction("t3", "2", "Éxito Country", 312_400.0, "Mercado",
         TransactionType.EXPENSE, TransactionSource.OCR, false, 1_745_784_000_000L),
     Transaction("t4", "2", "Daviplata", 80_000.0, "Transferencia",
         TransactionType.INCOME, TransactionSource.SMS, false, 1_745_780_400_000L),
-
-    // 26 abr
     Transaction("t5", "2", "Globant", 4_500_000.0, "Nómina",
         TransactionType.INCOME, TransactionSource.SMS, false, 1_745_697_600_000L),
     Transaction("t6", "2", "Netflix", 28_900.0, "Suscripción",
@@ -43,9 +37,18 @@ private val transactions = mutableListOf(
         TransactionType.EXPENSE, TransactionSource.OCR, true, 1_745_690_400_000L),
 )
 
-// Day labels keyed by the calendar day each timestamp falls on.
-// Hard-coded for the seed dataset — when real data lands this becomes a
-// proper date format.
+private val walletStore = JsonListStore(
+    file = File("movi-data/wallets.json"),
+    elementSerializer = Wallet.serializer(),
+    seed = walletSeed,
+)
+
+private val transactionStore = JsonListStore(
+    file = File("movi-data/transactions.json"),
+    elementSerializer = Transaction.serializer(),
+    seed = transactionSeed,
+)
+
 private val dayLabelByTimestamp: (Long) -> String = { ts ->
     when {
         ts >= 1_745_812_800_000L -> "Hoy · 28 abr"
@@ -59,39 +62,39 @@ private fun signedAmount(tx: Transaction): Double =
 
 fun Route.walletRoutes() {
     route("/api/wallets") {
-        get {
-            call.respond(wallets)
-        }
+        get { call.respond(walletStore.snapshot()) }
 
         get("/{id}") {
             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-            val wallet = wallets.find { it.id == id }
+            val wallet = walletStore.snapshot().find { it.id == id }
                 ?: return@get call.respond(HttpStatusCode.NotFound)
             call.respond(wallet)
         }
 
         get("/{id}/transactions") {
             val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-            call.respond(transactions.filter { it.walletId == id })
+            call.respond(transactionStore.snapshot().filter { it.walletId == id })
         }
 
         post("/{id}/transactions") {
             val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val tx = call.receive<Transaction>()
-            val wallet = wallets.find { it.id == id }
-                ?: return@post call.respond(HttpStatusCode.NotFound)
-
-            val updated = wallet.copy(balance = wallet.balance + signedAmount(tx))
-            wallets[wallets.indexOf(wallet)] = updated
-
-            transactions.add(tx)
+            val notFound = walletStore.mutate { wallets ->
+                val idx = wallets.indexOfFirst { it.id == id }
+                if (idx == -1) return@mutate true
+                val w = wallets[idx]
+                wallets[idx] = w.copy(balance = w.balance + signedAmount(tx))
+                false
+            }
+            if (notFound) return@post call.respond(HttpStatusCode.NotFound)
+            transactionStore.mutate { it.add(tx) }
             call.respond(HttpStatusCode.Created, tx)
         }
     }
 
     route("/api/transactions") {
         get("/by-day") {
-            val grouped = transactions
+            val grouped = transactionStore.snapshot()
                 .sortedByDescending { it.timestamp }
                 .groupBy { dayLabelByTimestamp(it.timestamp) }
                 .map { (date, items) ->

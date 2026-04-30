@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.storage.BudgetStorage
+import com.jvillada.movi.server.storage.JsonListStore
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -8,8 +9,8 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
-import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -27,13 +28,13 @@ private val holdings = listOf(
     Holding("Bitcoin", "Cripto · Binance", 1_100_000, -8.6),
 )
 
-private val credits = listOf(
+private val creditSeed = listOf(
     Credit("Crédito de vivienda", "Bancolombia", 240_000_000, 86_400_000, "11,2% E.A.", "30 abr", "\$1.860.000"),
     Credit("Tarjeta Falabella", "CMR", 4_320_000, 2_680_000, "24,5% E.A.", "5 may", "\$580.000"),
     Credit("Libre inversión", "Davivienda", 12_000_000, 7_200_000, "18,9% E.A.", "15 may", "\$420.000"),
 )
 
-private val goals = listOf(
+private val goalSeed = listOf(
     Goal("Viaje a Cartagena", 5_000_000, 3_400_000, "Junio 2026", 320_000),
     Goal("Cuota inicial apto", 30_000_000, 8_600_000, "Diciembre 2027", 1_200_000),
     Goal("Fondo de emergencia", 12_000_000, 12_000_000, "Completado", 0),
@@ -47,7 +48,7 @@ private val smsMessages = listOf(
     SmsMessage("ayer", "Bancolombia", "Nómina recibida \$4.500.000", "auto", "Globant · +\$4.500.000"),
 )
 
-private val recurringRules = listOf(
+private val recurringSeed = listOf(
     RecurringRule("r1", "Salario Globant", "Nómina", 4_500_000, 25, TransactionType.INCOME),
     RecurringRule("r2", "Netflix", "Suscripción", 28_900, 1, TransactionType.EXPENSE),
     RecurringRule("r3", "Arriendo apartamento", "Servicios", 1_500_000, 5, TransactionType.EXPENSE),
@@ -62,9 +63,28 @@ private val budgetSeed = listOf(
     Budget("Suscripción", 35_000),
     Budget("Transporte", 25_000),
 )
+
 private val budgetStorage = BudgetStorage(
     file = File("movi-data/budgets.json"),
     seed = budgetSeed,
+)
+
+private val creditStore = JsonListStore(
+    file = File("movi-data/credits.json"),
+    elementSerializer = Credit.serializer(),
+    seed = creditSeed,
+)
+
+private val goalStore = JsonListStore(
+    file = File("movi-data/goals.json"),
+    elementSerializer = Goal.serializer(),
+    seed = goalSeed,
+)
+
+private val recurringStore = JsonListStore(
+    file = File("movi-data/recurring.json"),
+    elementSerializer = RecurringRule.serializer(),
+    seed = recurringSeed,
 )
 
 private val summaries = mapOf(
@@ -74,10 +94,10 @@ private val summaries = mapOf(
 
 fun Route.financeRoutes() {
     get("/api/holdings") { call.respond(holdings) }
-    get("/api/credits") { call.respond(credits) }
-    get("/api/goals") { call.respond(goals) }
+    get("/api/credits") { call.respond(creditStore.snapshot()) }
+    get("/api/goals") { call.respond(goalStore.snapshot()) }
     get("/api/sms") { call.respond(smsMessages) }
-    get("/api/recurring-rules") { call.respond(recurringRules) }
+    get("/api/recurring-rules") { call.respond(recurringStore.snapshot()) }
 
     get("/api/budgets") { call.respond(budgetStorage.list()) }
     post("/api/budgets") {
