@@ -1,0 +1,29 @@
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepository.kt
+  dadf0a8fe4934ca3 27-29
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/budgets/PresupuestosScreen.kt
+  dadf0a8fe4934ca3 4,9,11,16-17,29-30,48-52,57-58,60,62-65,83-109,111-148,154-161,166-178,181-225,245,260,317-514
+server/src/main/kotlin/com/jvillada/movi/server/routes/FinanceRoutes.kt
+  dadf0a8fe4934ca3 13,16,18-21,58-59,78-116
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepositoryImpl.kt
+  dadf0a8fe4934ca3 16,19,65-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "22e0ea448160d204642b2d243c69d4d07d344b44",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 421,
+      "total_deletions": 88,
+      "accepted_lines": 575,
+      "overriden_lines": 0
+    }
+  }
+}
