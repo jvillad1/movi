@@ -1,0 +1,27 @@
+server/src/main/kotlin/com/jvillada/movi/server/storage/JsonListStore.kt
+  dadf0a8fe4934ca3 1-37
+server/src/main/kotlin/com/jvillada/movi/server/routes/WalletRoutes.kt
+  dadf0a8fe4934ca3 3,16,18,23,40-51,65,69,76,82-90,97
+server/src/main/kotlin/com/jvillada/movi/server/routes/FinanceRoutes.kt
+  dadf0a8fe4934ca3 4,13,31,37,51,66,72-89,97-98,100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "21d058417d72dcafa3bcbcda34f50f197ab42c9e",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 122,
+      "total_deletions": 59,
+      "accepted_lines": 303,
+      "overriden_lines": 0
+    }
+  }
+}
