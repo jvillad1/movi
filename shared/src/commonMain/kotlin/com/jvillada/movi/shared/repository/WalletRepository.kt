@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
@@ -23,4 +24,5 @@ interface WalletRepository {
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     suspend fun getBudgets(): List<Budget>
+    suspend fun getRecurringRules(): List<RecurringRule>
 }
