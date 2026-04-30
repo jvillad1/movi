@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.AiChatRequest
+import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -80,4 +82,10 @@ class WalletRepositoryImpl(
 
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()
+
+    override suspend fun chatAi(request: AiChatRequest): AiChatResponse =
+        client.post("$baseUrl/api/ai/chat") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
 }
