@@ -10,9 +10,15 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.SmsMessage
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.put
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private val holdings = listOf(
     Holding("CDT Bancolombia", "12 meses · 11,8% E.A.", 5_000_000, 0.0),
@@ -49,7 +55,8 @@ private val recurringRules = listOf(
     RecurringRule("r5", "Spotify Family", "Suscripción", 19_900, 15, TransactionType.EXPENSE),
 )
 
-private val budgets = listOf(
+private val budgetsLock = Mutex()
+private val budgets = mutableListOf(
     Budget("Mercado", 350_000),
     Budget("Salud", 200_000),
     Budget("Restaurantes", 50_000),
@@ -67,8 +74,46 @@ fun Route.financeRoutes() {
     get("/api/credits") { call.respond(credits) }
     get("/api/goals") { call.respond(goals) }
     get("/api/sms") { call.respond(smsMessages) }
-    get("/api/budgets") { call.respond(budgets) }
     get("/api/recurring-rules") { call.respond(recurringRules) }
+
+    get("/api/budgets") {
+        budgetsLock.withLock { call.respond(budgets.toList()) }
+    }
+    post("/api/budgets") {
+        val body = call.receive<Budget>()
+        val saved = budgetsLock.withLock {
+            if (budgets.any { it.category.equals(body.category, ignoreCase = true) }) {
+                null
+            } else {
+                budgets.add(body)
+                body
+            }
+        }
+        if (saved == null) call.respond(HttpStatusCode.Conflict, "Category exists: ${body.category}")
+        else call.respond(HttpStatusCode.Created, saved)
+    }
+    put("/api/budgets/{category}") {
+        val category = call.parameters["category"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+        val body = call.receive<Budget>()
+        val updated = budgetsLock.withLock {
+            val idx = budgets.indexOfFirst { it.category.equals(category, ignoreCase = true) }
+            if (idx == -1) null else {
+                budgets[idx] = body
+                body
+            }
+        }
+        if (updated == null) call.respond(HttpStatusCode.NotFound)
+        else call.respond(updated)
+    }
+    delete("/api/budgets/{category}") {
+        val category = call.parameters["category"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+        val removed = budgetsLock.withLock {
+            budgets.removeAll { it.category.equals(category, ignoreCase = true) }
+        }
+        if (removed) call.respond(HttpStatusCode.NoContent)
+        else call.respond(HttpStatusCode.NotFound)
+    }
+
     get("/api/finance-summary") {
         val raw = call.request.queryParameters["scope"] ?: "SELF"
         val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()
