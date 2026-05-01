@@ -1,0 +1,43 @@
+server/src/main/kotlin/com/jvillada/movi/server/storage/Stores.kt
+  dadf0a8fe4934ca3 1-82
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepositoryImpl.kt
+  dadf0a8fe4934ca3 12,62-77
+server/src/main/kotlin/com/jvillada/movi/server/routes/FinanceRoutes.kt
+  dadf0a8fe4934ca3 3,31-33,35,38,45,51
+server/src/main/kotlin/com/jvillada/movi/server/routes/WalletRoutes.kt
+  dadf0a8fe4934ca3 3,26-38,41,45,52,64,71
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/Navigation.kt
+  dadf0a8fe4934ca3 20
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/repository/WalletRepository.kt
+  dadf0a8fe4934ca3 12,28-31
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/sms/SMSScreens.kt
+  dadf0a8fe4934ca3 11,21,23-24,28,33-34,38,48,50-55,58-61,79,91,93,95-99,101,106,115-116,121,137-191,202-205,213-234,237,245-272,276,284-301,303-304,307-308,311,313-315,317,322-326,335-340,342-345,347-352,354-361,367-399,401
+server/src/main/kotlin/com/jvillada/movi/server/routes/SmsRoutes.kt
+  dadf0a8fe4934ca3 1-126
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Routing.kt
+  dadf0a8fe4934ca3 5,17
+composeApp/src/commonMain/kotlin/com/jvillada/movi/App.kt
+  dadf0a8fe4934ca3 70
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/model/Finance.kt
+  dadf0a8fe4934ca3 62,70-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "fbd490f7c484ae4c9e23cdd8d0d02a28e3f8a6ad",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 734,
+      "overriden_lines": 0
+    }
+  }
+}
