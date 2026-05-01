@@ -227,24 +227,44 @@ fun DashboardScreen(
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Alertas", count = 2)
+                        MinSectionHeader(title = "Alertas", count = if (isFamily) 3 else 2)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
-                            CardRow(
-                                left = { Text("Restaurantes al 80%", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = "$640.000 de $800.000 este mes",
-                                showChevron = true,
-                            )
-                            CardRow(
-                                left = { Text("Cuota Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = "Se descuenta el 30 de abril",
-                                right = { MonoText("$580.000", 14.5f) },
-                                showChevron = true,
-                                isLast = true,
-                            )
+                            if (isFamily) {
+                                CardRow(
+                                    left = { Text("Mercado familiar al 92%", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                    sub = "$1.290.000 de $1.400.000 este mes",
+                                    showChevron = true,
+                                )
+                                CardRow(
+                                    left = { Text("Cuota Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                    sub = "Se descuenta el 30 de abril",
+                                    right = { MonoText("$580.000", 14.5f) },
+                                    showChevron = true,
+                                )
+                                CardRow(
+                                    left = { Text("Cumpleaños Mateo en 14 días", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                    sub = "Falta $580.000 de la meta",
+                                    showChevron = true,
+                                    isLast = true,
+                                )
+                            } else {
+                                CardRow(
+                                    left = { Text("Restaurantes al 80%", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                    sub = "$640.000 de $800.000 este mes",
+                                    showChevron = true,
+                                )
+                                CardRow(
+                                    left = { Text("Cuota Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                    sub = "Se descuenta el 30 de abril",
+                                    right = { MonoText("$580.000", 14.5f) },
+                                    showChevron = true,
+                                    isLast = true,
+                                )
+                            }
                         }
                     }
                 }
@@ -253,7 +273,7 @@ fun DashboardScreen(
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Patrimonio", action = "Ver todo")
+                        MinSectionHeader(title = if (isFamily) "Patrimonio familiar" else "Patrimonio", action = "Ver todo")
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -261,22 +281,22 @@ fun DashboardScreen(
                         ) {
                             CardRow(
                                 left = { Text("Inversiones", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = "+8,4% YTD",
-                                right = { MonoText("$12.480.000", 14.5f) },
+                                sub = if (isFamily) "+9,1% YTD · 2 cuentas" else "+8,4% YTD",
+                                right = { MonoText(if (isFamily) "$24.860.000" else "$12.480.000", 14.5f) },
                                 showChevron = true,
                                 onClick = { onNavigate(Screen.Investments) },
                             )
                             CardRow(
-                                left = { Text("Crédito Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = "Cuota en 5 días",
-                                right = { MonoText("$4.320.000", 14.5f) },
+                                left = { Text(if (isFamily) "Créditos del hogar" else "Crédito Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                sub = if (isFamily) "3 productos · próxima cuota 30 abr" else "Cuota en 5 días",
+                                right = { MonoText(if (isFamily) "$159.040.000" else "$4.320.000", 14.5f) },
                                 showChevron = true,
                                 onClick = { onNavigate(Screen.Credits) },
                             )
                             CardRow(
-                                left = { Text("Meta · Cartagena", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = "68% completado",
-                                right = { MonoText("$3.400.000", 14.5f) },
+                                left = { Text(if (isFamily) "Metas compartidas" else "Meta · Cartagena", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                sub = if (isFamily) "Cartagena · Apto · Mateo · Emergencia" else "68% completado",
+                                right = { MonoText(if (isFamily) "$24.220.000" else "$3.400.000", 14.5f) },
                                 showChevron = true,
                                 isLast = true,
                                 onClick = { onNavigate(Screen.Goals) },
