@@ -59,11 +59,20 @@ data class Budget(
 
 @Serializable
 data class SmsMessage(
+    val id: String,
     val time: String,
     val bank: String,
     val text: String,
     val state: String,
     val det: String,
+)
+
+@Serializable
+data class ParsedSms(
+    val amount: Double,
+    val merchant: String,
+    val type: TransactionType,
+    val category: String,
 )
 
 @Serializable

@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
@@ -24,6 +25,10 @@ interface WalletRepository {
     suspend fun getCredits(): List<Credit>
     suspend fun getGoals(): List<Goal>
     suspend fun getSmsMessages(): List<SmsMessage>
+    suspend fun getSms(id: String): SmsMessage
+    suspend fun parseSms(id: String): ParsedSms
+    suspend fun confirmSms(id: String, category: String? = null, walletId: String? = null): Transaction
+    suspend fun ignoreSms(id: String)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     suspend fun getBudgets(): List<Budget>
     suspend fun createBudget(budget: Budget): Budget
