@@ -67,7 +67,7 @@ fun App() {
                     Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                     Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                     Screen.SMSInbox          -> SMSInboxScreen(navigate)
-                    Screen.SMSReconcile      -> SMSReconcileScreen(navigate)
+                    is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
                 }
             }
         }

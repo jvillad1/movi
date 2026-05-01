@@ -2,6 +2,7 @@ package com.jvillada.movi.server.plugins
 
 import com.jvillada.movi.server.routes.aiRoutes
 import com.jvillada.movi.server.routes.financeRoutes
+import com.jvillada.movi.server.routes.smsRoutes
 import com.jvillada.movi.server.routes.walletRoutes
 import io.ktor.server.application.Application
 import io.ktor.server.response.respondText
@@ -13,6 +14,7 @@ fun Application.configureRouting() {
         get("/health") { call.respondText("OK") }
         walletRoutes()
         financeRoutes()
+        smsRoutes()
         aiRoutes()
     }
 }

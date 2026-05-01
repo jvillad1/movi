@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
@@ -57,6 +58,22 @@ class WalletRepositoryImpl(
 
     override suspend fun getSmsMessages(): List<SmsMessage> =
         client.get("$baseUrl/api/sms").body()
+
+    override suspend fun getSms(id: String): SmsMessage =
+        client.get("$baseUrl/api/sms/$id").body()
+
+    override suspend fun parseSms(id: String): ParsedSms =
+        client.get("$baseUrl/api/sms/$id/parse").body()
+
+    override suspend fun confirmSms(id: String, category: String?, walletId: String?): Transaction =
+        client.post("$baseUrl/api/sms/$id/confirm") {
+            if (category != null) url.parameters.append("category", category)
+            if (walletId != null) url.parameters.append("walletId", walletId)
+        }.body()
+
+    override suspend fun ignoreSms(id: String) {
+        client.post("$baseUrl/api/sms/$id/ignore")
+    }
 
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
         client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
