@@ -16,3 +16,4 @@ xcuserdata/
 *.xcworkspace
 Podfile.lock
 movi-data/
+/server/.env
