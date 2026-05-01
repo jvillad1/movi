@@ -15,11 +15,25 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private fun resolveApiKey(): String? {
+    System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() && it != "x" }?.let { return it }
+    val envFile = File(System.getProperty("user.dir"), "server/.env")
+        .takeIf { it.exists() } ?: File(System.getProperty("user.dir"), ".env")
+    return envFile.takeIf { it.exists() }
+        ?.readLines()
+        ?.firstOrNull { it.startsWith("ANTHROPIC_API_KEY=") }
+        ?.substringAfter("=")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() && it != "x" }
+}
+
 private val anthropicClient: AnthropicClient? by lazy {
-    runCatching { AnthropicOkHttpClient.fromEnv() }.getOrNull()
+    val key = resolveApiKey() ?: return@lazy null
+    runCatching { AnthropicOkHttpClient.builder().apiKey(key).build() }.getOrNull()
 }
 
 private val PERSONA = """Sos Movi AI, un copiloto financiero personal y familiar para usuarios en Colombia.
