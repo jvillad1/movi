@@ -22,10 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.shared.model.Transaction
-import com.jvillada.movi.shared.model.TransactionSource
+import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.Wallet
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -51,17 +50,17 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(EXPENSE_CATEGORIES.first()) }
-    var wallets by remember { mutableStateOf<List<Wallet>>(emptyList()) }
-    var selectedWalletId by remember { mutableStateOf<String?>(null) }
+    var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
+    var selectedAccountId by remember { mutableStateOf<String?>(null) }
     var picker by remember { mutableStateOf<Picker>(Picker.None) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        runCatching { Repositories.wallets.getWallets() }
+        runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { list ->
-                wallets = list
-                if (selectedWalletId == null) selectedWalletId = list.firstOrNull()?.id
+                accounts = list
+                if (selectedAccountId == null) selectedAccountId = list.firstOrNull()?.id
             }
     }
 
@@ -79,27 +78,25 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
-    val canSave = parsedAmount > 0 && selectedWalletId != null && !saving
-    val selectedWallet = wallets.firstOrNull { it.id == selectedWalletId }
+    val canSave = parsedAmount > 0 && selectedAccountId != null && !saving
+    val selectedAccount = accounts.firstOrNull { it.id == selectedAccountId }
 
     fun save() {
         if (!canSave) return
-        val walletId = selectedWalletId ?: return
         saving = true
         error = null
         coroutine.launch {
-            val tx = Transaction(
+            val event = FinancialEvent(
                 id = "",
-                walletId = walletId,
-                name = note.ifBlank { category },
-                amount = parsedAmount,
-                category = category,
+                accountId = selectedAccountId ?: accounts.firstOrNull()?.id ?: "acc_1",
                 type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                source = TransactionSource.MANUAL,
-                pending = false,
-                timestamp = 0L,
+                amount = amount.toLongOrNull() ?: 0L,
+                category = category,
+                description = note.ifBlank { category },
+                source = EventSource.MANUAL,
+                timestamp = System.currentTimeMillis(),
             )
-            val result = runCatching { Repositories.wallets.addTransaction(tx) }
+            val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
             result.onSuccess { onDismiss() }
                 .onFailure { error = "No pude guardar: ${it.message ?: "error desconocido"}" }
@@ -140,9 +137,9 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
                     onClose = { picker = Picker.None },
                 )
                 Picker.Wallet -> WalletPicker(
-                    wallets = wallets,
-                    selectedId = selectedWalletId,
-                    onPick = { selectedWalletId = it; picker = Picker.None },
+                    accounts = accounts,
+                    selectedId = selectedAccountId,
+                    onPick = { selectedAccountId = it; picker = Picker.None },
                     onClose = { picker = Picker.None },
                 )
                 Picker.Note -> NoteEditor(
@@ -156,7 +153,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
                     amount = amount,
                     onKey = ::onKey,
                     category = category,
-                    walletLabel = selectedWallet?.name ?: "Seleccionar cuenta",
+                    walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
                     note = note,
                     onPickCategory = { picker = Picker.Category },
                     onPickWallet = { picker = Picker.Wallet },
@@ -402,39 +399,39 @@ private fun CategoryPicker(
 
 @Composable
 private fun WalletPicker(
-    wallets: List<Wallet>,
+    accounts: List<com.jvillada.movi.shared.model.Account>,
     selectedId: String?,
     onPick: (String) -> Unit,
     onClose: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         PickerHeader("Cuenta", onClose)
-        if (wallets.isEmpty()) {
+        if (accounts.isEmpty()) {
             Text("Cargando cuentas…", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
         } else {
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                items(wallets) { w ->
+                items(accounts) { account ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onPick(w.id) }
+                            .clickable { onPick(account.id) }
                             .padding(vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                w.name,
+                                account.name,
                                 fontSize = 15.sp,
                                 color = MinText,
-                                fontWeight = if (w.id == selectedId) FontWeight.Medium else FontWeight.Normal,
+                                fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                             )
                             Text(
-                                "$${w.balance.toLong()}",
+                                "$${account.balance}",
                                 fontSize = 12.sp,
                                 color = MinTextMute,
                             )
                         }
-                        if (w.id == selectedId) Text("✓", fontSize = 14.sp, color = MinText)
+                        if (account.id == selectedId) Text("✓", fontSize = 14.sp, color = MinText)
                     }
                 }
             }
