@@ -15,13 +15,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
-fun PerfilScreen(onNavigate: (Screen) -> Unit) {
+fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -169,10 +168,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit) {
                         .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(MinSurfaceContainer)
-                        .clickable {
-                            SessionManager.clear()
-                            onNavigate(Screen.Login)
-                        }
+                        .clickable { onLogout() }
                         .padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
