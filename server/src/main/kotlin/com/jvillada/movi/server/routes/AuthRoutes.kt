@@ -16,7 +16,7 @@ fun Route.authRoutes() {
     route("/api/auth") {
         post("/register") {
             val req = call.receive<RegisterRequest>()
-            if (req.email.isBlank() || req.password.length < 6) {
+            if (req.email.isBlank() || req.name.isBlank() || req.password.length < 6) {
                 return@post call.respond(HttpStatusCode.BadRequest, "Email required, password min 6 chars")
             }
             if (Stores.users.findByEmail(req.email) != null) {
