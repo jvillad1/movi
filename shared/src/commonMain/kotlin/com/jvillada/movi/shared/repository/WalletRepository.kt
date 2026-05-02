@@ -3,6 +3,7 @@ package com.jvillada.movi.shared.repository
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
+import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.EventDay
@@ -10,7 +11,9 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
@@ -47,4 +50,6 @@ interface WalletRepository {
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>
     suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
+    suspend fun register(request: RegisterRequest): AuthResponse
+    suspend fun login(request: LoginRequest): AuthResponse
 }
