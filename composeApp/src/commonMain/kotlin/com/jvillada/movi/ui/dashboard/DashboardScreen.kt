@@ -39,7 +39,6 @@ fun DashboardScreen(
     }
 
     val totalBalance = accounts.sumOf { it.balance }
-    val balance  = if (totalBalance > 0) totalBalance else summary?.balance  ?: if (isFamily) 4_870_000L else 1_840_000L
     val ingresos = summary?.ingresos ?: if (isFamily) 9_200_000L else 4_500_000L
     val egresos  = summary?.egresos  ?: if (isFamily) 4_330_000L else 2_660_000L
     val flujo    = ingresos - egresos
@@ -116,7 +115,7 @@ fun DashboardScreen(
                         )
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            text = formatCOP(balance),
+                            text = formatCOP(totalBalance),
                             fontSize = 44.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Normal,
