@@ -30,12 +30,16 @@ fun DashboardScreen(
     val isFamily = scope == Scope.FAMILY
 
     var summary by remember { mutableStateOf<FinanceSummary?>(null) }
+    var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     LaunchedEffect(scope) {
         runCatching { Repositories.wallets.getFinanceSummary(scope) }
             .onSuccess { summary = it }
+        runCatching { Repositories.wallets.getAccounts() }
+            .onSuccess { accounts = it }
     }
 
-    val balance  = summary?.balance  ?: if (isFamily) 4_870_000L else 1_840_000L
+    val totalBalance = accounts.sumOf { it.balance }
+    val balance  = if (totalBalance > 0) totalBalance else summary?.balance  ?: if (isFamily) 4_870_000L else 1_840_000L
     val ingresos = summary?.ingresos ?: if (isFamily) 9_200_000L else 4_500_000L
     val egresos  = summary?.egresos  ?: if (isFamily) 4_330_000L else 2_660_000L
     val flujo    = ingresos - egresos
