@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -14,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -155,6 +157,26 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit) {
                             isLast = true,
                         )
                     }
+                }
+            }
+
+            // Logout button
+            item {
+                Spacer(Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MinSurfaceContainer)
+                        .clickable {
+                            SessionManager.clear()
+                            onNavigate(Screen.Login)
+                        }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Cerrar sesión", fontSize = 14.sp, color = MinExpense, fontWeight = FontWeight.Medium)
                 }
             }
         }
