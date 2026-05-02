@@ -1,0 +1,41 @@
+CREATE TABLE financial_event (
+    id                      TEXT    NOT NULL PRIMARY KEY,
+    accountId               TEXT    NOT NULL,
+    type                    TEXT    NOT NULL,
+    amount                  INTEGER NOT NULL,
+    category                TEXT    NOT NULL,
+    description             TEXT    NOT NULL,
+    merchant                TEXT,
+    timestamp               INTEGER NOT NULL,
+    source                  TEXT    NOT NULL DEFAULT 'MANUAL',
+    rawPayload              TEXT,
+    reconciliationStatus    TEXT    NOT NULL DEFAULT 'UNCONFIRMED',
+    syncedAt                INTEGER,
+    userId                  TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX idx_event_account ON financial_event(accountId);
+CREATE INDEX idx_event_timestamp ON financial_event(timestamp DESC);
+CREATE INDEX idx_event_unsynced ON financial_event(syncedAt) WHERE syncedAt IS NULL;
+
+selectByAccount:
+SELECT * FROM financial_event
+WHERE accountId = :accountId AND userId = :userId
+ORDER BY timestamp DESC;
+
+selectAll:
+SELECT * FROM financial_event
+WHERE userId = :userId
+ORDER BY timestamp DESC;
+
+selectUnsynced:
+SELECT * FROM financial_event WHERE syncedAt IS NULL AND userId = :userId;
+
+insert:
+INSERT OR REPLACE INTO financial_event(
+    id, accountId, type, amount, category, description, merchant,
+    timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+markSynced:
+UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;
