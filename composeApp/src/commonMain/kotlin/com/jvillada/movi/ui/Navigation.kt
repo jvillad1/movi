@@ -1,6 +1,8 @@
 package com.jvillada.movi.ui
 
 sealed class Screen {
+    data object Login            : Screen()
+    data object Register         : Screen()
     data object OnboardingWelcome : Screen()
     data object OnboardingProfile : Screen()
     data object Dashboard : Screen()
