@@ -142,15 +142,15 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
-        MinBottomNav(active = NavTab.ANALYSIS, onTabSelected = { tab ->
+        MinBottomNav(active = NavTab.MORE) { tab ->
             when (tab) {
-                NavTab.HOME -> onNavigate(Screen.Dashboard)
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
                 NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
-                NavTab.PROFILE -> onNavigate(Screen.Profile)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
             }
-        })
-        NavPill()
+        }
     }
 }
 

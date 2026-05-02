@@ -188,7 +188,6 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
-        NavPill()
     }
 }
 
@@ -262,7 +261,6 @@ fun OnboardingProfileScreen(onNavigate: (Screen) -> Unit) {
         Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
             MinPrimaryButton("Crear mi perfil") { onNavigate(Screen.Dashboard) }
         }
-        NavPill()
     }
 }
 

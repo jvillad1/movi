@@ -31,15 +31,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Android (from terminal, no Android Studio)
 ```bash
 # List available AVDs
-emulator -list-avds
-# Available: Pixel_8_Pro, Pixel_8_Pro_Clean
+/Users/jvillada/Library/Android/sdk/emulator/emulator -list-avds
+# Available: Pixel_8_Pro, Pixel_9_Pro
 
-# Boot emulator in background
-emulator -avd Pixel_8_Pro -no-snapshot-load &
-adb wait-for-device shell getprop sys.boot_completed
+# Boot emulator in background (use native arm64 binary, NOT `emulator` in PATH which is x86_64)
+/Users/jvillada/Library/Android/sdk/emulator/emulator -avd Pixel_9_Pro -no-snapshot-load > /tmp/emulator.log 2>&1 &
+until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 3; done && echo "booted"
 
-# Build, install and launch
-./gradlew :composeApp:installDebug
+# Build APK and install via adb (installDebug Gradle task doesn't see the device reliably)
+./gradlew :composeApp:assembleDebug
+adb install -r composeApp/build/outputs/apk/debug/composeApp-debug.apk
 adb shell am start -n com.jvillada.movi/.MainActivity
 
 # View logs

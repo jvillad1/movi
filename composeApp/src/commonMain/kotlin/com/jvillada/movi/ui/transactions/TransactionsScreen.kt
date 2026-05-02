@@ -205,17 +205,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
-        MinBottomNav(
-            active = NavTab.TRANSACTIONS,
-            onTabSelected = { tab ->
-                when (tab) {
-                    NavTab.HOME -> onNavigate(Screen.Dashboard)
-                    NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
-                    NavTab.PROFILE -> onNavigate(Screen.Profile)
-                    else -> {}
-                }
-            },
-        )
-        NavPill()
+        MinBottomNav(active = NavTab.TRANSACTIONS) { tab ->
+            when (tab) {
+                NavTab.HOME    -> onNavigate(Screen.Dashboard)
+                NavTab.ADD     -> onNavigate(Screen.QuickAdd)
+                NavTab.BUDGETS -> onNavigate(Screen.Budgets)
+                NavTab.MORE    -> onNavigate(Screen.Mas)
+                else -> {}
+            }
+        }
     }
 }

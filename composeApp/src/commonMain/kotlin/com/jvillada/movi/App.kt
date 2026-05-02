@@ -19,6 +19,8 @@ import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.ui.investments.InversionesScreen
+import com.jvillada.movi.ui.extractos.ExtractosScreen
+import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.ocr.OCRCaptureScreen
 import com.jvillada.movi.ui.ocr.OCRConfirmScreen
 import com.jvillada.movi.ui.onboarding.OnboardingProfileScreen
@@ -68,6 +70,8 @@ fun App() {
                     Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                     Screen.SMSInbox          -> SMSInboxScreen(navigate)
                     is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
+                    Screen.Mas               -> MasScreen(navigate)
+                    Screen.Extractos         -> ExtractosScreen(navigate)
                 }
             }
         }
