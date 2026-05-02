@@ -117,7 +117,6 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
             )
             Text("☀", fontSize = 22.sp, color = Color.White.copy(alpha = 0.7f))
         }
-        NavPill()
     }
 }
 
@@ -223,7 +222,6 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Text("Guardar movimiento", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinBg) }
         }
-        NavPill()
     }
 }
 

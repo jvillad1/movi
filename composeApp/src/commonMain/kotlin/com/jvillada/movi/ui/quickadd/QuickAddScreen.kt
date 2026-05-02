@@ -170,7 +170,6 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
             }
 
             Spacer(Modifier.height(14.dp))
-            NavPill()
         }
     }
 }

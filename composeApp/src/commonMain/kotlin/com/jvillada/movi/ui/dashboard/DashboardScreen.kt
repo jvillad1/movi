@@ -348,32 +348,15 @@ fun DashboardScreen(
                 }
             }
 
-            MinBottomNav(
-                active = NavTab.HOME,
-                onTabSelected = { tab ->
-                    when (tab) {
-                        NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                        NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
-                        NavTab.PROFILE -> onNavigate(Screen.Profile)
-                        else -> {}
-                    }
-                },
-            )
-            NavPill()
-        }
-
-        // FAB
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 92.dp)
-                .size(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MinPrimaryContainer)
-                .clickable { onNavigate(Screen.QuickAdd) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("+", fontSize = 24.sp, color = MinOnPrimaryContainer, fontWeight = FontWeight.Light)
+            MinBottomNav(active = NavTab.HOME) { tab ->
+                when (tab) {
+                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                    NavTab.MORE         -> onNavigate(Screen.Mas)
+                    else -> {}
+                }
+            }
         }
     }
 }

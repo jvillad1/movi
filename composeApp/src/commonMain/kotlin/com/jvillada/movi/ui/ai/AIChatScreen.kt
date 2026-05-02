@@ -157,7 +157,6 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 )
             }
         }
-        NavPill()
     }
 }
 

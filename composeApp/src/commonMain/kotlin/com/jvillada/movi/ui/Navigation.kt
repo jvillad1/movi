@@ -18,4 +18,6 @@ sealed class Screen {
     data object OCRConfirm : Screen()
     data object SMSInbox : Screen()
     data class SMSReconcile(val smsId: String) : Screen()
+    data object Mas : Screen()
+    data object Extractos : Screen()
 }

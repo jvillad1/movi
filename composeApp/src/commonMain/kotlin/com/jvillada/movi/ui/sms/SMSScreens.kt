@@ -129,7 +129,6 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
-        NavPill()
     }
 }
 
@@ -360,7 +359,6 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 )
             }
         }
-        NavPill()
     }
 }
 

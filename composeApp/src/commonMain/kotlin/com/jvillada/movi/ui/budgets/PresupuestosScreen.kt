@@ -164,18 +164,15 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
-            MinBottomNav(
-                active = NavTab.ANALYSIS,
-                onTabSelected = { tab ->
-                    when (tab) {
-                        NavTab.HOME -> onNavigate(Screen.Dashboard)
-                        NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                        NavTab.ANALYSIS -> onNavigate(Screen.Analisis)
-                        NavTab.PROFILE -> onNavigate(Screen.Profile)
-                    }
-                },
-            )
-            NavPill()
+            MinBottomNav(active = NavTab.BUDGETS) { tab ->
+                when (tab) {
+                    NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.MORE         -> onNavigate(Screen.Mas)
+                    else -> {}
+                }
+            }
         }
 
         when (val s = sheet) {
@@ -511,7 +508,6 @@ private fun BudgetSheet(
             }
 
             Spacer(Modifier.height(14.dp))
-            NavPill()
         }
     }
 }
