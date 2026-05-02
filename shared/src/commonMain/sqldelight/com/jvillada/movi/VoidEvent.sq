@@ -1,0 +1,17 @@
+CREATE TABLE void_event (
+    id              TEXT    NOT NULL PRIMARY KEY,
+    originalEventId TEXT    NOT NULL,
+    reason          TEXT,
+    timestamp       INTEGER NOT NULL,
+    syncedAt        INTEGER
+);
+
+selectUnsynced:
+SELECT * FROM void_event WHERE syncedAt IS NULL;
+
+insert:
+INSERT OR IGNORE INTO void_event(id, originalEventId, reason, timestamp, syncedAt)
+VALUES (?, ?, ?, ?, ?);
+
+markSynced:
+UPDATE void_event SET syncedAt = :syncedAt WHERE id = :id;

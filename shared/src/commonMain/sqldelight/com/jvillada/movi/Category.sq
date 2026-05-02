@@ -1,0 +1,18 @@
+CREATE TABLE category (
+    id      TEXT NOT NULL PRIMARY KEY,
+    name    TEXT NOT NULL,
+    icon    TEXT NOT NULL,
+    color   TEXT NOT NULL,
+    type    TEXT NOT NULL,
+    scope   TEXT NOT NULL DEFAULT 'PREDEFINED'
+);
+
+selectAll:
+SELECT * FROM category;
+
+selectByType:
+SELECT * FROM category WHERE type = :type OR type = 'BOTH';
+
+insert:
+INSERT OR IGNORE INTO category(id, name, icon, color, type, scope)
+VALUES (?, ?, ?, ?, ?, ?);
