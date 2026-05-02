@@ -75,6 +75,8 @@ private val smsSeed = listOf(
 )
 
 object Stores {
+    val users        = UserStore(File(DATA_DIR, "users.json"))
+
     // New spec-aligned stores
     val accounts     = JsonListStore(File(DATA_DIR, "accounts.json"),     Account.serializer(),        accountSeed)
     val events       = JsonListStore(File(DATA_DIR, "events.json"),       FinancialEvent.serializer(), eventSeed)
