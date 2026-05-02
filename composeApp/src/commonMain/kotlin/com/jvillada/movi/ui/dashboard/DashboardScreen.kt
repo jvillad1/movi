@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.*
@@ -30,12 +31,13 @@ fun DashboardScreen(
     val isFamily = scope == Scope.FAMILY
 
     var summary by remember { mutableStateOf<FinanceSummary?>(null) }
-    var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
+    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     LaunchedEffect(scope) {
         runCatching { Repositories.wallets.getFinanceSummary(scope) }
             .onSuccess { summary = it }
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
+            .onFailure { it.printStackTrace() }
     }
 
     val totalBalance = accounts.sumOf { it.balance }
