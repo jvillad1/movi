@@ -76,6 +76,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                                     Repositories.wallets.login(LoginRequest(email.trim(), password))
                                 }.onSuccess { resp ->
                                     SessionManager.save(resp.token, resp.userId, resp.name, resp.email)
+                                    loading = false
                                     onNavigate(Screen.Dashboard)
                                 }.onFailure {
                                     error = "Correo o contraseña incorrectos"
