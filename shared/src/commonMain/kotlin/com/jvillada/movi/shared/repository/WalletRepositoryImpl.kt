@@ -1,10 +1,13 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RecurringRule
@@ -13,6 +16,7 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
+import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.Wallet
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -105,4 +109,37 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(request)
         }.body()
+
+    override suspend fun getAccounts(): List<Account> =
+        client.get("$baseUrl/api/accounts").body()
+
+    override suspend fun getAccount(id: String): Account =
+        client.get("$baseUrl/api/accounts/$id").body()
+
+    override suspend fun createAccount(account: Account): Account =
+        client.post("$baseUrl/api/accounts") {
+            contentType(ContentType.Application.Json)
+            setBody(account)
+        }.body()
+
+    override suspend fun postEvent(event: FinancialEvent): FinancialEvent =
+        client.post("$baseUrl/api/events") {
+            contentType(ContentType.Application.Json)
+            setBody(event)
+        }.body()
+
+    override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
+        val url = if (accountId != null) "$baseUrl/api/events?accountId=$accountId"
+                  else "$baseUrl/api/events"
+        return client.get(url).body()
+    }
+
+    override suspend fun getEventsByDay(): List<EventDay> =
+        client.get("$baseUrl/api/events/by-day").body()
+
+    override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
+        val url = if (reason != null) "$baseUrl/api/events/$id/void?reason=$reason"
+                  else "$baseUrl/api/events/$id/void"
+        return client.post(url).body()
+    }
 }
