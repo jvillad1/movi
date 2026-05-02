@@ -1,10 +1,13 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RecurringRule
@@ -13,6 +16,7 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
+import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.Wallet
 
 interface WalletRepository {
@@ -36,4 +40,11 @@ interface WalletRepository {
     suspend fun deleteBudget(category: String)
     suspend fun getRecurringRules(): List<RecurringRule>
     suspend fun chatAi(request: AiChatRequest): AiChatResponse
+    suspend fun getAccounts(): List<Account>
+    suspend fun getAccount(id: String): Account
+    suspend fun createAccount(account: Account): Account
+    suspend fun postEvent(event: FinancialEvent): FinancialEvent
+    suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
+    suspend fun getEventsByDay(): List<EventDay>
+    suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
 }
