@@ -9,9 +9,12 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.auth.LoginScreen
+import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.analisis.AnalisisScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
@@ -39,7 +42,9 @@ fun App() {
         CompositionLocalProvider(
             LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f)
         ) {
-            val backStack = remember { mutableStateListOf<Screen>(Screen.OnboardingWelcome) }
+            val backStack = remember {
+                mutableStateListOf<Screen>(if (SessionManager.isLoggedIn) Screen.Dashboard else Screen.Login)
+            }
             val currentScreen = backStack.last()
 
             val navigate: (Screen) -> Unit = { screen ->
@@ -53,6 +58,8 @@ fun App() {
 
             Box(modifier = Modifier.fillMaxSize().background(MinBg).statusBarsPadding()) {
                 when (currentScreen) {
+                    Screen.Login             -> LoginScreen(navigate)
+                    Screen.Register          -> RegisterScreen(navigate)
                     Screen.OnboardingWelcome -> WelcomeScreen(navigate)
                     Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
                     Screen.Dashboard         -> DashboardScreen(navigate)
