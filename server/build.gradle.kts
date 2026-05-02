@@ -23,6 +23,9 @@ dependencies {
     implementation(libs.koin.ktor)
     implementation(libs.logback)
     implementation(libs.anthropic.java)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.auth.jwt)
+    implementation(libs.bcrypt)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.kotlin.test)
 }

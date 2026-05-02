@@ -13,6 +13,8 @@ ktor = "3.0.3"
 koin = "4.0.0"
 logback = "1.5.12"
 anthropic = "2.17.0"
+bcrypt = "0.10.2"
+multiplatform-settings = "1.2.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -49,6 +51,13 @@ koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 
 # Anthropic
 anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
+
+# Auth / security
+ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
+ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
+bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt" }
+multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", version.ref = "multiplatform-settings" }
+multiplatform-settings-no-arg = { module = "com.russhwolf:multiplatform-settings-no-arg", version.ref = "multiplatform-settings" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
