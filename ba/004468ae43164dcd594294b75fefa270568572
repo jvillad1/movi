@@ -1,0 +1,28 @@
+shared/src/commonMain/kotlin/com/jvillada/movi/shared/model/FinancialEvent.kt
+  dadf0a8fe4934ca3 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ba004468ae43164dcd594294b75fefa270568572",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 5745,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_cdacf262c4c1fd": {
+      "author": "jvillad1"
+    }
+  }
+}
