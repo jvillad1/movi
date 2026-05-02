@@ -1,0 +1,31 @@
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Routing.kt
+  dadf0a8fe4934ca3 5,13-22
+server/src/main/kotlin/com/jvillada/movi/server/routes/AuthRoutes.kt
+  dadf0a8fe4934ca3 1-41
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Auth.kt
+  dadf0a8fe4934ca3 1-20
+server/src/main/kotlin/com/jvillada/movi/server/storage/Stores.kt
+  dadf0a8fe4934ca3 78-79
+server/src/main/kotlin/com/jvillada/movi/server/Application.kt
+  dadf0a8fe4934ca3 3,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3fcdb8b35d81f8d4595898532d27f557dde5a541",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 78,
+      "total_deletions": 8,
+      "accepted_lines": 76,
+      "overriden_lines": 0
+    }
+  }
+}
