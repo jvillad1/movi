@@ -1,5 +1,6 @@
 package com.jvillada.movi.server
 
+import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureCORS
 import com.jvillada.movi.server.plugins.configureMonitoring
 import com.jvillada.movi.server.plugins.configureRouting
@@ -16,5 +17,6 @@ fun Application.module() {
     configureCORS()
     configureSerialization()
     configureMonitoring()
+    configureAuth()
     configureRouting()
 }
