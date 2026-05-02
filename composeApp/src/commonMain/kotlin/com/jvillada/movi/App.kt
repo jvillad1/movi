@@ -65,7 +65,14 @@ fun App() {
                     Screen.Dashboard         -> DashboardScreen(navigate)
                     Screen.Transactions      -> TransactionsScreen(navigate)
                     Screen.QuickAdd          -> QuickAddScreen(onDismiss = goBack, onNavigate = navigate)
-                    Screen.Profile           -> PerfilScreen(navigate)
+                    Screen.Profile           -> PerfilScreen(
+                        onNavigate = navigate,
+                        onLogout = {
+                            SessionManager.clear()
+                            backStack.clear()
+                            backStack.add(Screen.Login)
+                        },
+                    )
                     Screen.AIChat            -> AIChatScreen(navigate)
                     Screen.Analisis          -> AnalisisScreen(navigate)
                     Screen.Investments       -> InversionesScreen(navigate)
