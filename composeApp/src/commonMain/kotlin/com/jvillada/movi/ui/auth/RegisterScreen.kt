@@ -76,6 +76,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                                     Repositories.wallets.register(RegisterRequest(email.trim(), name.trim(), password))
                                 }.onSuccess { resp ->
                                     SessionManager.save(resp.token, resp.userId, resp.name, resp.email)
+                                    loading = false
                                     onNavigate(Screen.Dashboard)
                                 }.onFailure {
                                     error = if (it.message?.contains("409") == true) "Ese correo ya está registrado"
