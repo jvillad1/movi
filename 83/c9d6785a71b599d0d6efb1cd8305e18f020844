@@ -1,0 +1,23 @@
+docs/superpowers/specs/2026-05-03-accounts-events-ui-design.md
+  dadf0a8fe4934ca3 1-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "83c9d6785a71b599d0d6efb1cd8305e18f020844",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 2952,
+      "total_deletions": 7,
+      "accepted_lines": 2945,
+      "overriden_lines": 0
+    }
+  }
+}
