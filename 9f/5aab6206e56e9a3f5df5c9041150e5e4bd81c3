@@ -1,0 +1,23 @@
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/accounts/CreateAccountSheet.kt
+  dadf0a8fe4934ca3 1-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "9f5aab6206e56e9a3f5df5c9041150e5e4bd81c3",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 240,
+      "total_deletions": 0,
+      "accepted_lines": 3012,
+      "overriden_lines": 0
+    }
+  }
+}
