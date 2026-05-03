@@ -1,0 +1,23 @@
+server/src/main/kotlin/com/jvillada/movi/server/db/Tables.kt
+  dadf0a8fe4934ca3 6,14-15,24-26,41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "952525cb854fd5a84ff7526efa1697fe7fc92e9b",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 9,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    }
+  }
+}
