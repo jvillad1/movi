@@ -25,6 +25,13 @@ kotlin {
     wasmJs { browser() }
 
     sourceSets {
+        val nonWasmMain by creating {
+            dependsOn(commonMain.get())
+        }
+        androidMain.get().dependsOn(nonWasmMain)
+        iosMain.get().dependsOn(nonWasmMain)
+        jvmMain.get().dependsOn(nonWasmMain)
+
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
@@ -46,6 +53,14 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.sqldelight.sqlite.driver)
         }
+    }
+}
+
+// SQLDelight 2.0.2 has no wasmJs artifact. Exclude its group from every
+// wasmJs configuration so Gradle dependency resolution does not fail.
+configurations.configureEach {
+    if (name.startsWith("wasmJs")) {
+        exclude(group = "app.cash.sqldelight")
     }
 }
 
