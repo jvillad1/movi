@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: movi
       POSTGRES_USER: movi
@@ -9,6 +10,11 @@ services:
       - "5432:5432"
     volumes:
       - movi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U movi -d movi"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   movi_pgdata:
