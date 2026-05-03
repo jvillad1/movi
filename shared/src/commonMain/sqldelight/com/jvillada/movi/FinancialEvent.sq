@@ -23,6 +23,9 @@ SELECT * FROM financial_event
 WHERE accountId = :accountId AND userId = :userId
 ORDER BY timestamp DESC;
 
+selectById:
+SELECT * FROM financial_event WHERE id = :id AND userId = :userId;
+
 selectAll:
 SELECT * FROM financial_event
 WHERE userId = :userId
