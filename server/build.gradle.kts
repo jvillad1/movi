@@ -26,6 +26,10 @@ dependencies {
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.bcrypt)
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.jdbc)
+    implementation(libs.hikaricp)
+    implementation(libs.postgresql.driver)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.kotlin.test)
 }

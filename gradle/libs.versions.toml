@@ -17,6 +17,9 @@ bcrypt = "0.10.2"
 multiplatform-settings = "1.2.0"
 sqldelight = "2.0.2"
 kotlinx-datetime = "0.6.1"
+exposed = "0.55.0"
+hikaricp = "5.1.0"
+postgresql = "42.7.3"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -68,6 +71,12 @@ sqldelight-coroutines     = { module = "app.cash.sqldelight:coroutines-extension
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver",            version.ref = "sqldelight" }
 sqldelight-native-driver  = { module = "app.cash.sqldelight:native-driver",             version.ref = "sqldelight" }
 sqldelight-sqlite-driver  = { module = "app.cash.sqldelight:sqlite-driver",             version.ref = "sqldelight" }
+
+# Exposed & PostgreSQL
+exposed-core        = { module = "org.jetbrains.exposed:exposed-core",        version.ref = "exposed" }
+exposed-jdbc        = { module = "org.jetbrains.exposed:exposed-jdbc",        version.ref = "exposed" }
+hikaricp            = { module = "com.zaxxer:HikariCP",                       version.ref = "hikaricp" }
+postgresql-driver   = { module = "org.postgresql:postgresql",                 version.ref = "postgresql" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
