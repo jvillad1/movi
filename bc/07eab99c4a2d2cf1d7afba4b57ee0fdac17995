@@ -1,0 +1,29 @@
+server/build.gradle.kts
+  dadf0a8fe4934ca3 29-32
+docker-compose.yml
+  dadf0a8fe4934ca3 1-14
+server/.env
+  dadf0a8fe4934ca3 3-5
+gradle/libs.versions.toml
+  dadf0a8fe4934ca3 20-22,75-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "bc07eab99c4a2d2cf1d7afba4b57ee0fdac17995",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 30,
+      "total_deletions": 0,
+      "accepted_lines": 30,
+      "overriden_lines": 0
+    }
+  }
+}
