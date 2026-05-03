@@ -1,5 +1,6 @@
 package com.jvillada.movi.server
 
+import com.jvillada.movi.server.db.DatabaseFactory
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureCORS
 import com.jvillada.movi.server.plugins.configureMonitoring
@@ -14,6 +15,7 @@ fun main() {
 }
 
 fun Application.module() {
+    DatabaseFactory.init()
     configureCORS()
     configureSerialization()
     configureMonitoring()
