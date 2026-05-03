@@ -16,6 +16,7 @@ import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -28,7 +29,7 @@ fun Route.eventRoutes() {
             val uid = call.userId()
             val now = System.currentTimeMillis()
             val event = body.copy(
-                id        = body.id.ifBlank { "ev_$now" },
+                id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
                 timestamp = if (body.timestamp == 0L) now else body.timestamp,
             )
 
@@ -55,12 +56,9 @@ fun Route.eventRoutes() {
                     it[reconciliationStatus] = event.reconciliationStatus.name
                     it[syncedAt]             = event.syncedAt
                 }
-                val currentBalance = Accounts.selectAll()
-                    .where { (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }
-                    .first()[Accounts.balance]
                 val delta = if (event.type == TransactionType.INCOME) event.amount else -event.amount
                 Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
-                    it[balance] = currentBalance + delta
+                    it[balance] = Accounts.balance + delta
                 }
             }
             call.respond(HttpStatusCode.Created, event)
@@ -125,37 +123,35 @@ fun Route.eventRoutes() {
                     .firstOrNull()?.toEvent()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
 
-            val alreadyVoided = dbQuery {
-                VoidEvents.selectAll()
-                    .where { VoidEvents.originalEventId eq id }
+            val void: VoidEvent? = dbQuery {
+                val alreadyVoided = VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
                     .count() > 0
-            }
-            if (alreadyVoided) return@post call.respond(HttpStatusCode.Conflict, "Already voided")
-
-            val void = dbQuery {
-                val now = System.currentTimeMillis()
-                val voidId = "void_$now"
-                VoidEvents.insert {
-                    it[VoidEvents.id]              = voidId
-                    it[VoidEvents.userId]          = uid
-                    it[VoidEvents.originalEventId] = id
-                    it[VoidEvents.reason]          = reason
-                    it[VoidEvents.timestamp]       = now
+                if (alreadyVoided) {
+                    null
+                } else {
+                    val now = System.currentTimeMillis()
+                    val voidId = "void_${java.util.UUID.randomUUID()}"
+                    VoidEvents.insert {
+                        it[VoidEvents.id]              = voidId
+                        it[VoidEvents.userId]          = uid
+                        it[VoidEvents.originalEventId] = id
+                        it[VoidEvents.reason]          = reason
+                        it[VoidEvents.timestamp]       = now
+                    }
+                    val delta = if (event.type == TransactionType.INCOME) -event.amount else event.amount
+                    Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
+                        it[balance] = Accounts.balance + delta
+                    }
+                    VoidEvent(
+                        id              = voidId,
+                        originalEventId = id,
+                        reason          = reason,
+                        timestamp       = now,
+                    )
                 }
-                val currentBalance = Accounts.selectAll()
-                    .where { (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }
-                    .first()[Accounts.balance]
-                val delta = if (event.type == TransactionType.INCOME) -event.amount else event.amount
-                Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
-                    it[balance] = currentBalance + delta
-                }
-                VoidEvent(
-                    id              = voidId,
-                    originalEventId = id,
-                    reason          = reason,
-                    timestamp       = now,
-                )
             }
+            if (void == null) return@post call.respond(HttpStatusCode.Conflict, "Already voided")
             call.respond(HttpStatusCode.Created, void)
         }
     }
