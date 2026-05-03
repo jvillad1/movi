@@ -200,7 +200,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
             if (error != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = error,
+                    text = error!!,
                     fontSize = 12.sp,
                     color = MinExpense,
                 )
