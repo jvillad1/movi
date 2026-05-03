@@ -87,7 +87,7 @@ fun App() {
                     is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
                     Screen.Mas               -> MasScreen(navigate)
                     Screen.Extractos         -> ExtractosScreen(navigate)
-                    Screen.Accounts         -> AccountsScreen(onNavigate = navigate)
+                    Screen.Accounts         -> AccountsScreen(navigate)
                 }
             }
         }
