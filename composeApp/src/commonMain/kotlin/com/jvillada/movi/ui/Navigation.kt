@@ -22,4 +22,5 @@ sealed class Screen {
     data class SMSReconcile(val smsId: String) : Screen()
     data object Mas : Screen()
     data object Extractos : Screen()
+    data object Accounts : Screen()
 }

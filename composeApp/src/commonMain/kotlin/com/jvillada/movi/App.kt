@@ -34,6 +34,7 @@ import com.jvillada.movi.ui.recurrentes.RecurrentesScreen
 import com.jvillada.movi.ui.sms.SMSInboxScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
+import com.jvillada.movi.ui.accounts.AccountsScreen
 
 @Composable
 fun App() {
@@ -86,6 +87,7 @@ fun App() {
                     is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
                     Screen.Mas               -> MasScreen(navigate)
                     Screen.Extractos         -> ExtractosScreen(navigate)
+                    Screen.Accounts         -> AccountsScreen(onNavigate = navigate)
                 }
             }
         }
