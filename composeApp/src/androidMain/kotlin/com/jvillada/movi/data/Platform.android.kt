@@ -1,5 +1,10 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.SyncEngine
+import com.jvillada.movi.shared.db.createDatabase
+import com.jvillada.movi.shared.repository.LocalRepository
+import com.jvillada.movi.shared.repository.WalletRepository
+import com.jvillada.movi.shared.repository.WalletRepositoryImpl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.HttpTimeout
@@ -26,3 +31,11 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
 
 // 10.0.2.2 is the host loopback alias on Android emulator
 actual val apiBaseUrl: String = "http://10.0.2.2:8080"
+
+actual fun createRepository(): WalletRepository {
+    val remote = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
+    val db = createDatabase("movi.db")
+    val userId = { SessionManager.userId ?: "" }
+    SyncEngine(db, remote, userId).start()
+    return LocalRepository(db, remote, userId)
+}

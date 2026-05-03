@@ -1,5 +1,7 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.repository.WalletRepository
+import com.jvillada.movi.shared.repository.WalletRepositoryImpl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.js.Js
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -19,3 +21,5 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
 }
 
 actual val apiBaseUrl: String = "http://localhost:8080"
+
+actual fun createRepository(): WalletRepository = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
