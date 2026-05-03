@@ -44,4 +44,5 @@ object VoidEvents : Table("void_events") {
     val reason          = varchar("reason", 500).nullable()
     val timestamp       = long("timestamp")
     override val primaryKey = PrimaryKey(id)
+    init { uniqueIndex("uq_void_events_original_user", originalEventId, userId) }
 }
