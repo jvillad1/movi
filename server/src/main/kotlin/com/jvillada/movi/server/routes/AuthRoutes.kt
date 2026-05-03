@@ -1,7 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import at.favre.lib.crypto.bcrypt.BCrypt
 import com.jvillada.movi.server.auth.JwtConfig
-import com.jvillada.movi.server.storage.Stores
+import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RegisterRequest
@@ -11,31 +13,55 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 
 fun Route.authRoutes() {
     route("/api/auth") {
+
         post("/register") {
             val req = call.receive<RegisterRequest>()
             if (req.email.isBlank() || req.name.isBlank() || req.password.length < 6) {
                 return@post call.respond(HttpStatusCode.BadRequest, "Email required, password min 6 chars")
             }
-            if (Stores.users.findByEmail(req.email) != null) {
-                return@post call.respond(HttpStatusCode.Conflict, "Email already registered")
+
+            val emailTaken = dbQuery {
+                Users.selectAll().where { Users.email eq req.email.lowercase().trim() }.count() > 0
             }
-            val user = Stores.users.create(req.email, req.name, req.password)
-            val token = JwtConfig.makeToken(user.id, user.email)
-            call.respond(HttpStatusCode.Created, AuthResponse(token, user.id, user.name, user.email))
+            if (emailTaken) return@post call.respond(HttpStatusCode.Conflict, "Email already registered")
+
+            val userId  = "usr_${java.util.UUID.randomUUID()}"
+            val email   = req.email.lowercase().trim()
+            val name    = req.name.trim()
+            val hash    = BCrypt.withDefaults().hashToString(12, req.password.toCharArray())
+
+            dbQuery {
+                Users.insert {
+                    it[id]           = userId
+                    it[Users.email]  = email
+                    it[Users.name]   = name
+                    it[passwordHash] = hash
+                }
+            }
+
+            val token = JwtConfig.makeToken(userId, email)
+            call.respond(HttpStatusCode.Created, AuthResponse(token, userId, name, email))
         }
 
         post("/login") {
             val req = call.receive<LoginRequest>()
-            val user = Stores.users.findByEmail(req.email)
-                ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
-            if (!Stores.users.checkPassword(user, req.password)) {
-                return@post call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
-            }
-            val token = JwtConfig.makeToken(user.id, user.email)
-            call.respond(AuthResponse(token, user.id, user.name, user.email))
+            val row = dbQuery {
+                Users.selectAll()
+                    .where { Users.email eq req.email.lowercase().trim() }
+                    .firstOrNull()
+            } ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
+
+            val verified = BCrypt.verifyer()
+                .verify(req.password.toCharArray(), row[Users.passwordHash]).verified
+            if (!verified) return@post call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
+
+            val token = JwtConfig.makeToken(row[Users.id], row[Users.email])
+            call.respond(AuthResponse(token, row[Users.id], row[Users.name], row[Users.email]))
         }
     }
 }
