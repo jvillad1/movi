@@ -1,0 +1,23 @@
+docs/superpowers/plans/2026-05-02-server-postgresql.md
+  dadf0a8fe4934ca3 1-869
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0b92f45c8cd62e4bda0704eb8a272772c6899f7d",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 878,
+      "total_deletions": 9,
+      "accepted_lines": 872,
+      "overriden_lines": 0
+    }
+  }
+}
