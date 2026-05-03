@@ -3,7 +3,7 @@ package com.jvillada.movi.server.db
 import org.jetbrains.exposed.sql.Table
 
 object Users : Table("users") {
-    val id           = varchar("id", 36)
+    val id           = varchar("id", 50)
     val email        = varchar("email", 255).uniqueIndex()
     val name         = varchar("name", 100)
     val passwordHash = varchar("password_hash", 255)
@@ -11,8 +11,8 @@ object Users : Table("users") {
 }
 
 object Accounts : Table("accounts") {
-    val id       = varchar("id", 36)
-    val userId   = varchar("user_id", 36)
+    val id       = varchar("id", 50)
+    val userId   = varchar("user_id", 50)
     val name     = varchar("name", 100)
     val type     = varchar("type", 30)
     val balance  = long("balance").default(0)
@@ -21,9 +21,9 @@ object Accounts : Table("accounts") {
 }
 
 object Events : Table("financial_events") {
-    val id                   = varchar("id", 36)
-    val userId               = varchar("user_id", 36)
-    val accountId            = varchar("account_id", 36)
+    val id                   = varchar("id", 50)
+    val userId               = varchar("user_id", 50)
+    val accountId            = varchar("account_id", 50)
     val type                 = varchar("type", 20)
     val amount               = long("amount")
     val category             = varchar("category", 100)
@@ -38,9 +38,9 @@ object Events : Table("financial_events") {
 }
 
 object VoidEvents : Table("void_events") {
-    val id              = varchar("id", 36)
-    val userId          = varchar("user_id", 36)
-    val originalEventId = varchar("original_event_id", 36)
+    val id              = varchar("id", 50)
+    val userId          = varchar("user_id", 50)
+    val originalEventId = varchar("original_event_id", 50)
     val reason          = varchar("reason", 500).nullable()
     val timestamp       = long("timestamp")
     override val primaryKey = PrimaryKey(id)
