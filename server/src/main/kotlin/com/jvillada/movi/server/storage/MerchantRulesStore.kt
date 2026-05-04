@@ -9,7 +9,7 @@ class MerchantRulesStore {
     private val stores = ConcurrentHashMap<String, JsonListStore<MerchantRule>>()
 
     private fun storeFor(userId: String): JsonListStore<MerchantRule> =
-        stores.getOrPut(userId) {
+        stores.computeIfAbsent(userId) {
             JsonListStore(
                 file = File("movi-data", "merchant-rules-$userId.json"),
                 elementSerializer = MerchantRule.serializer(),

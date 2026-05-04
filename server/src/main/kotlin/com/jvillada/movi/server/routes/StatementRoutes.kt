@@ -18,7 +18,9 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
+import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
@@ -55,14 +57,17 @@ fun Route.statementRoutes() {
         val rules = Stores.merchantRules.getRules(uid)
         val parsed = ClaudeStatementParser.parse(text, rules)
 
-        val existing = dbQuery {
-            val voidedIds = VoidEvents.selectAll()
+        val voidedIds = dbQuery {
+            VoidEvents.selectAll()
                 .where { VoidEvents.userId eq uid }
                 .map { it[VoidEvents.originalEventId] }
-                .toSet()
+        }
+        val existing = dbQuery {
             Events.selectAll()
-                .where { Events.userId eq uid }
-                .filter { row -> row[Events.id] !in voidedIds }
+                .where {
+                    (Events.userId eq uid) and
+                    (if (voidedIds.isNotEmpty()) Events.id notInList voidedIds else Op.TRUE)
+                }
                 .map { row ->
                     FinancialEvent(
                         id = row[Events.id],
