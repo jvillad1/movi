@@ -1,0 +1,23 @@
+docs/superpowers/plans/2026-05-04-import-history.md
+  f8fc162813c70628 1-1200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1f198476e7ed67aa7727a00b6195abb73c5b211f",
+  "prompts": {
+    "f8fc162813c70628": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "<synthetic>"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 1202,
+      "total_deletions": 2,
+      "accepted_lines": 3162,
+      "overriden_lines": 0
+    }
+  }
+}
