@@ -27,7 +27,6 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 
 private data class BudgetProgress(
     val budget: Budget,
