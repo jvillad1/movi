@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -21,6 +22,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.TransactionType
@@ -143,6 +145,10 @@ class LocalRepository(
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = remote.chatAi(request)
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)
+    override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
+        remote.uploadStatement(fileName, bytes, mimeType)
+    override suspend fun importStatement(decision: ImportDecision) =
+        remote.importStatement(decision)
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

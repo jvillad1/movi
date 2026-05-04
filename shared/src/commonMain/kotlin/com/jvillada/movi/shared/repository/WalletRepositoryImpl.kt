@@ -11,12 +11,14 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.VoidEvent
@@ -28,7 +30,11 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 
 class WalletRepositoryImpl(
@@ -155,4 +161,21 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(request)
         }.body()
+
+    override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
+        client.post("$baseUrl/api/statements/upload") {
+            setBody(MultiPartFormDataContent(formData {
+                append("file", bytes, Headers.build {
+                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                    append(HttpHeaders.ContentType, mimeType)
+                })
+            }))
+        }.body()
+
+    override suspend fun importStatement(decision: ImportDecision) {
+        client.post("$baseUrl/api/statements/import") {
+            contentType(ContentType.Application.Json)
+            setBody(decision)
+        }
+    }
 }

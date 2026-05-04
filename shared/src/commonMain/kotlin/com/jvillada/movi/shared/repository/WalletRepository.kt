@@ -11,12 +11,14 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.VoidEvent
@@ -52,4 +54,6 @@ interface WalletRepository {
     suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
+    suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult
+    suspend fun importStatement(decision: ImportDecision)
 }
