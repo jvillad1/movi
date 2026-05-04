@@ -2,6 +2,7 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
@@ -17,8 +18,11 @@ import io.ktor.server.request.receiveMultipart
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
@@ -134,7 +138,6 @@ fun Route.statementRoutes() {
     post("/api/statements/import") {
         val uid = call.userId()
         val decision = call.receive<ImportDecision>()
-        var imported = 0
 
         val accountExists = dbQuery {
             Accounts.selectAll()
@@ -146,13 +149,15 @@ fun Route.statementRoutes() {
             return@post
         }
 
-        // Create events for new transactions
+        val importId = "si_${UUID.randomUUID()}"
+        var importedCount = 0
+        var reconciledCount = 0
+
         for (tx in decision.imports) {
-            createEventFromParsed(tx, decision.accountId, uid)
-            imported++
+            createEventFromParsed(tx, decision.accountId, uid, importId)
+            importedCount++
         }
 
-        // Process reconciliation decisions
         for (dec in decision.reconciliations) {
             if (dec.confirm) {
                 val existingEvent = dbQuery {
@@ -171,33 +176,97 @@ fun Route.statementRoutes() {
 
                     dbQuery {
                         Events.update({ (Events.id eq dec.existingEventId) and (Events.userId eq uid) }) {
-                            it[category]    = finalCategory
-                            it[description] = finalDescription
-                            it[merchant]    = finalMerchant
+                            it[category]          = finalCategory
+                            it[description]       = finalDescription
+                            it[merchant]          = finalMerchant
+                            it[statementImportId] = importId
                         }
                     }
 
-                    // Save merchant rule when category differed
                     if (dec.parsed.category != existCat) {
                         Stores.merchantRules.saveRule(uid, MerchantRule(
                             merchantPattern = dec.parsed.merchant.lowercase().trim(),
                             category = finalCategory,
                         ))
                     }
-                    imported++
+                    reconciledCount++
                 }
             } else {
-                // User said "not the same" — create new event from parsed
-                createEventFromParsed(dec.parsed, decision.accountId, uid)
-                imported++
+                createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
+                importedCount++
             }
         }
 
-        call.respond(HttpStatusCode.OK, mapOf("imported" to imported))
+        dbQuery {
+            StatementImports.insert {
+                it[id]             = importId
+                it[userId]         = uid
+                it[accountId]      = decision.accountId
+                it[bankName]       = decision.bankName
+                it[period]         = decision.period
+                it[importedAt]     = System.currentTimeMillis()
+                it[StatementImports.importedCount]   = importedCount
+                it[StatementImports.reconciledCount] = reconciledCount
+            }
+        }
+
+        call.respond(HttpStatusCode.OK, mapOf("imported" to importedCount + reconciledCount))
+    }
+
+    get("/api/statements/imports") {
+        val uid = call.userId()
+        val imports = dbQuery {
+            StatementImports.selectAll()
+                .where { StatementImports.userId eq uid }
+                .orderBy(StatementImports.importedAt, SortOrder.DESC)
+                .map { rowToStatementImport(it) }
+        }
+        call.respond(imports)
+    }
+
+    get("/api/statements/imports/{id}") {
+        val uid = call.userId()
+        val importId = call.parameters["id"] ?: run {
+            call.respond(HttpStatusCode.BadRequest, "Missing id")
+            return@get
+        }
+
+        val importRow = dbQuery {
+            StatementImports.selectAll()
+                .where { (StatementImports.id eq importId) and (StatementImports.userId eq uid) }
+                .firstOrNull()
+        }
+        if (importRow == null) {
+            call.respond(HttpStatusCode.NotFound, "Import not found")
+            return@get
+        }
+
+        val events = dbQuery {
+            Events.selectAll()
+                .where { Events.statementImportId eq importId }
+                .map { row ->
+                    FinancialEvent(
+                        id                   = row[Events.id],
+                        accountId            = row[Events.accountId],
+                        type                 = TransactionType.valueOf(row[Events.type]),
+                        amount               = row[Events.amount],
+                        category             = row[Events.category],
+                        description          = row[Events.description],
+                        merchant             = row[Events.merchant],
+                        timestamp            = row[Events.timestamp],
+                        source               = EventSource.valueOf(row[Events.eventSource]),
+                        rawPayload           = row[Events.rawPayload],
+                        reconciliationStatus = ReconciliationStatus.valueOf(row[Events.reconciliationStatus]),
+                        syncedAt             = row[Events.syncedAt],
+                    )
+                }
+        }
+
+        call.respond(StatementImportDetail(rowToStatementImport(importRow), events))
     }
 }
 
-private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String) {
+private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String, importId: String) {
     val eventId = "ev_${UUID.randomUUID()}"
     val ts = runCatching {
         LocalDate.parse(tx.date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
@@ -217,6 +286,7 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[rawPayload]           = tx.rawText.ifBlank { null }
             it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
             it[syncedAt]             = null
+            it[statementImportId]    = importId
         }
         val delta = if (tx.type == TransactionType.INCOME) tx.amount else -tx.amount
         Accounts.update({ (Accounts.id eq accountId) and (Accounts.userId eq uid) }) {
@@ -224,6 +294,16 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
         }
     }
 }
+
+private fun rowToStatementImport(row: ResultRow) = StatementImport(
+    id              = row[StatementImports.id],
+    accountId       = row[StatementImports.accountId],
+    bankName        = row[StatementImports.bankName],
+    period          = row[StatementImports.period],
+    importedAt      = row[StatementImports.importedAt],
+    importedCount   = row[StatementImports.importedCount],
+    reconciledCount = row[StatementImports.reconciledCount],
+)
 
 private fun monthName(month: Int) = listOf(
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",

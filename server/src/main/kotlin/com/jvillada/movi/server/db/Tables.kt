@@ -30,6 +30,7 @@ object StatementImports : Table("statement_imports") {
     val importedCount   = integer("imported_count")
     val reconciledCount = integer("reconciled_count")
     override val primaryKey = PrimaryKey(id)
+    init { index("idx_statement_imports_user_id", false, userId) }
 }
 
 object Events : Table("financial_events") {
