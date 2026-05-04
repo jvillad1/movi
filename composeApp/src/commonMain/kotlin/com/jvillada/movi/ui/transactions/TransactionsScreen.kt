@@ -10,6 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,9 +39,25 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     val filters = listOf("Todo", "Egresos", "Ingresos", "Pendientes")
 
     var allDays by remember { mutableStateOf<List<EventDay>>(emptyList()) }
-    LaunchedEffect(Unit) {
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(refreshKey) {
+        loading = true
+        error = null
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess { allDays = it }
+            .onFailure { e -> error = e.message ?: "Error al cargar movimientos" }
+        loading = false
+    }
+
+    LaunchedEffect(error) {
+        val msg = error ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
+        error = null
+        if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
     fun signedAmount(tx: FinancialEvent): Long =
@@ -56,11 +76,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MinBg)
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize()) {
         // Header
         Row(
             modifier = Modifier
@@ -117,10 +134,23 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
+        if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
+            if (!loading && visibleDays.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                    }
+                }
+            }
+
             visibleDays.forEach { day ->
                 item {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp)) {
@@ -216,5 +246,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                 else -> {}
             }
         }
+    }
+
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp),
+    )
     }
 }
