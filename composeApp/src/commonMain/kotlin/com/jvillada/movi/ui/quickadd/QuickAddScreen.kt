@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
@@ -55,12 +56,16 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
     var picker by remember { mutableStateOf<Picker>(Picker.None) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showCreateSheet by remember { mutableStateOf(false) }
+    var accountsRefreshKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(accountsRefreshKey) {
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { list ->
                 accounts = list
-                if (selectedAccountId == null) selectedAccountId = list.firstOrNull()?.id
+                if (selectedAccountId == null || list.none { it.id == selectedAccountId }) {
+                    selectedAccountId = list.firstOrNull()?.id
+                }
             }
     }
 
@@ -103,70 +108,81 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .clickable(onClick = onDismiss),
         ) {
-            Box(
+            Box(modifier = Modifier.weight(1f))
+
+            Column(
                 modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint),
-            )
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(MinSurfaceContainerHigh)
+                    .padding(horizontal = 20.dp)
+                    .clickable(enabled = false) {},
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(vertical = 12.dp)
+                        .width(32.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MinTextFaint),
+                )
 
-            when (picker) {
-                Picker.Category -> CategoryPicker(
-                    options = if (typeIndex == 0) EXPENSE_CATEGORIES else INCOME_CATEGORIES,
-                    selected = category,
-                    onPick = { category = it; picker = Picker.None },
-                    onClose = { picker = Picker.None },
-                )
-                Picker.Wallet -> WalletPicker(
-                    accounts = accounts,
-                    selectedId = selectedAccountId,
-                    onPick = { selectedAccountId = it; picker = Picker.None },
-                    onClose = { picker = Picker.None },
-                )
-                Picker.Note -> NoteEditor(
-                    initial = note,
-                    onSave = { note = it; picker = Picker.None },
-                    onClose = { picker = Picker.None },
-                )
-                Picker.None -> EditorBody(
-                    typeIndex = typeIndex,
-                    onTypeChange = { typeIndex = it },
-                    amount = amount,
-                    onKey = ::onKey,
-                    category = category,
-                    walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
-                    note = note,
-                    onPickCategory = { picker = Picker.Category },
-                    onPickWallet = { picker = Picker.Wallet },
-                    onEditNote = { picker = Picker.Note },
-                    onOcr = { onNavigate(Screen.OCRCapture) },
-                    canSave = canSave,
-                    saving = saving,
-                    error = error,
-                    onSave = ::save,
-                )
+                when (picker) {
+                    Picker.Category -> CategoryPicker(
+                        options = if (typeIndex == 0) EXPENSE_CATEGORIES else INCOME_CATEGORIES,
+                        selected = category,
+                        onPick = { category = it; picker = Picker.None },
+                        onClose = { picker = Picker.None },
+                    )
+                    Picker.Wallet -> WalletPicker(
+                        accounts = accounts,
+                        selectedId = selectedAccountId,
+                        onPick = { selectedAccountId = it; picker = Picker.None },
+                        onClose = { picker = Picker.None },
+                    )
+                    Picker.Note -> NoteEditor(
+                        initial = note,
+                        onSave = { note = it; picker = Picker.None },
+                        onClose = { picker = Picker.None },
+                    )
+                    Picker.None -> EditorBody(
+                        typeIndex = typeIndex,
+                        onTypeChange = { typeIndex = it },
+                        amount = amount,
+                        onKey = ::onKey,
+                        category = category,
+                        walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
+                        note = note,
+                        onPickCategory = { picker = Picker.Category },
+                        onPickWallet = { picker = Picker.Wallet },
+                        onEditNote = { picker = Picker.Note },
+                        onOcr = { onNavigate(Screen.OCRCapture) },
+                        canSave = canSave,
+                        saving = saving,
+                        error = error,
+                        onSave = ::save,
+                        hasNoAccounts = accounts.isEmpty(),
+                        onCreateAccount = { showCreateSheet = true },
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
             }
+        }
 
-            Spacer(Modifier.height(14.dp))
+        if (showCreateSheet) {
+            CreateAccountSheet(
+                onDismiss = { showCreateSheet = false },
+                onAccountCreated = { showCreateSheet = false; accountsRefreshKey++ },
+            )
         }
     }
 }
@@ -188,6 +204,8 @@ private fun EditorBody(
     saving: Boolean,
     error: String?,
     onSave: () -> Unit,
+    hasNoAccounts: Boolean = false,
+    onCreateAccount: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -310,35 +328,65 @@ private fun EditorBody(
 
     Spacer(Modifier.height(12.dp))
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp, 54.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, MinBorderStrong, RoundedCornerShape(16.dp))
-                .clickable { onOcr() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("📷", fontSize = 20.sp)
-        }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(54.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
-                .clickable(enabled = canSave) { onSave() },
-            contentAlignment = Alignment.Center,
+    if (hasNoAccounts) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = if (saving) "Guardando…" else "Guardar movimiento",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                "Primero creá una cuenta",
+                fontSize = 13.sp,
+                color = MinTextMute,
             )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MinPrimaryContainer)
+                    .clickable { onCreateAccount() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "+ Crear cuenta",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinOnPrimaryContainer,
+                )
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp, 54.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, MinBorderStrong, RoundedCornerShape(16.dp))
+                    .clickable { onOcr() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("📷", fontSize = 20.sp)
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                    .clickable(enabled = canSave) { onSave() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (saving) "Guardando…" else "Guardar movimiento",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                )
+            }
         }
     }
 }
