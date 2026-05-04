@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -50,6 +51,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     padding = PaddingValues(20.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        val displayName = SessionManager.userName ?: "Usuario"
+                        val initials = displayName.split(" ").take(2)
+                            .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
                         Box(
                             modifier = Modifier
                                 .size(56.dp)
@@ -57,11 +61,11 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                 .background(MinSurfaceContainerHigh),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("CR", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.5).sp)
+                            Text(initials.ifEmpty { "U" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.5).sp)
                         }
                         Column {
-                            Text("Camilo Restrepo", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                            Text("camilo.restrepo@gmail.com", fontSize = 12.5.sp, color = MinTextMute)
+                            Text(displayName, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+                            Text(SessionManager.userEmail ?: "", fontSize = 12.5.sp, color = MinTextMute)
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = "PREMIUM · FAMILIAR",

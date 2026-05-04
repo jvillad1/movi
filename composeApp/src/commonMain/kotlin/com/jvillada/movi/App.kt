@@ -57,6 +57,13 @@ fun App() {
 
             BackHandlerEffect(enabled = backStack.size > 1, onBack = goBack)
 
+            LaunchedEffect(SessionManager.loggedIn) {
+                if (!SessionManager.loggedIn) {
+                    backStack.clear()
+                    backStack.add(Screen.Login)
+                }
+            }
+
             Box(modifier = Modifier.fillMaxSize().background(MinBg).statusBarsPadding()) {
                 when (currentScreen) {
                     Screen.Login             -> LoginScreen(navigate)

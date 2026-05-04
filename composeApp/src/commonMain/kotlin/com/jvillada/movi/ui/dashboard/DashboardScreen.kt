@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
@@ -89,9 +90,9 @@ fun DashboardScreen(
                             .background(MinSurfaceContainerHigh),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("C", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MinText)
+                        Text(SessionManager.userName?.firstOrNull()?.uppercaseChar()?.toString() ?: "U", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MinText)
                     }
-                    Text("Camilo", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
+                    Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                 }
                 // Bell with dot
                 Box {

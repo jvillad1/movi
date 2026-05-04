@@ -1,10 +1,16 @@
 package com.jvillada.movi.data
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 
 object SessionManager {
     private val settings: Settings by lazy { Settings() }
+
+    var loggedIn: Boolean by mutableStateOf(!settings.getStringOrNull("auth_token").isNullOrBlank())
+        private set
 
     private const val KEY_TOKEN   = "auth_token"
     private const val KEY_USER_ID = "user_id"
@@ -34,6 +40,7 @@ object SessionManager {
         this.userId   = userId
         this.userName = name
         this.userEmail = email
+        loggedIn = true
     }
 
     fun clear() {
@@ -41,5 +48,6 @@ object SessionManager {
         settings.remove(KEY_USER_ID)
         settings.remove(KEY_NAME)
         settings.remove(KEY_EMAIL)
+        loggedIn = false
     }
 }
