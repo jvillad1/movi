@@ -2,6 +2,7 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.StatementParser
@@ -55,22 +56,29 @@ fun Route.statementRoutes() {
         val parsed = ClaudeStatementParser.parse(text, rules)
 
         val existing = dbQuery {
-            Events.selectAll().where { Events.userId eq uid }.map { row ->
-                FinancialEvent(
-                    id = row[Events.id],
-                    accountId = row[Events.accountId],
-                    type = TransactionType.valueOf(row[Events.type]),
-                    amount = row[Events.amount],
-                    category = row[Events.category],
-                    description = row[Events.description],
-                    merchant = row[Events.merchant],
-                    timestamp = row[Events.timestamp],
-                    source = EventSource.valueOf(row[Events.eventSource]),
-                    rawPayload = row[Events.rawPayload],
-                    reconciliationStatus = ReconciliationStatus.valueOf(row[Events.reconciliationStatus]),
-                    syncedAt = row[Events.syncedAt],
-                )
-            }
+            val voidedIds = VoidEvents.selectAll()
+                .where { VoidEvents.userId eq uid }
+                .map { it[VoidEvents.originalEventId] }
+                .toSet()
+            Events.selectAll()
+                .where { Events.userId eq uid }
+                .filter { row -> row[Events.id] !in voidedIds }
+                .map { row ->
+                    FinancialEvent(
+                        id = row[Events.id],
+                        accountId = row[Events.accountId],
+                        type = TransactionType.valueOf(row[Events.type]),
+                        amount = row[Events.amount],
+                        category = row[Events.category],
+                        description = row[Events.description],
+                        merchant = row[Events.merchant],
+                        timestamp = row[Events.timestamp],
+                        source = EventSource.valueOf(row[Events.eventSource]),
+                        rawPayload = row[Events.rawPayload],
+                        reconciliationStatus = ReconciliationStatus.valueOf(row[Events.reconciliationStatus]),
+                        syncedAt = row[Events.syncedAt],
+                    )
+                }
         }
 
         val matches = mutableListOf<ReconciliationMatch>()
@@ -123,6 +131,16 @@ fun Route.statementRoutes() {
         val decision = call.receive<ImportDecision>()
         var imported = 0
 
+        val accountExists = dbQuery {
+            Accounts.selectAll()
+                .where { (Accounts.id eq decision.accountId) and (Accounts.userId eq uid) }
+                .count() > 0
+        }
+        if (!accountExists) {
+            call.respond(HttpStatusCode.NotFound, "Account not found")
+            return@post
+        }
+
         // Create events for new transactions
         for (tx in decision.imports) {
             createEventFromParsed(tx, decision.accountId, uid)
@@ -161,8 +179,8 @@ fun Route.statementRoutes() {
                             category = finalCategory,
                         ))
                     }
+                    imported++
                 }
-                imported++
             } else {
                 // User said "not the same" — create new event from parsed
                 createEventFromParsed(dec.parsed, decision.accountId, uid)
