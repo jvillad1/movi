@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Budget
-import com.jvillada.movi.shared.model.TransactionDay
+import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -53,7 +53,7 @@ private sealed class Sheet {
 @Composable
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
-    var days by remember { mutableStateOf<List<TransactionDay>>(emptyList()) }
+    var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -63,14 +63,14 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(Unit) {
         reload()
-        runCatching { Repositories.wallets.getTransactionsByDay() }.onSuccess { days = it }
+        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess { days = it }
     }
 
     val progresses = remember(budgets, days) {
         val spentByCategory = days.flatMap { it.items }
             .filter { it.type == TransactionType.EXPENSE }
             .groupBy { it.category }
-            .mapValues { (_, txs) -> txs.sumOf { it.amount.toLong() } }
+            .mapValues { (_, txs) -> txs.sumOf { it.amount } }
         budgets.map { b -> BudgetProgress(b, spentByCategory[b.category] ?: 0L) }
             .sortedByDescending { it.pctRaw }
     }
