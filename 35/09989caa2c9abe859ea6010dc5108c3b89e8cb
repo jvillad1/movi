@@ -1,0 +1,23 @@
+docs/superpowers/specs/2026-05-04-import-history-design.md
+  f8fc162813c70628 1-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3509989caa2c9abe859ea6010dc5108c3b89e8cb",
+  "prompts": {
+    "f8fc162813c70628": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "<synthetic>"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 2181,
+      "total_deletions": 3,
+      "accepted_lines": 2178,
+      "overriden_lines": 0
+    }
+  }
+}
