@@ -22,7 +22,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
-import com.jvillada.movi.shared.model.TransactionDay
+import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -32,13 +32,13 @@ private data class CategoryTotal(val category: String, val total: Long)
 
 @Composable
 fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
-    var days by remember { mutableStateOf<List<TransactionDay>>(emptyList()) }
+    var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var holdings by remember { mutableStateOf<List<Holding>>(emptyList()) }
     var credits by remember { mutableStateOf<List<Credit>>(emptyList()) }
     var goals by remember { mutableStateOf<List<Goal>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        runCatching { Repositories.wallets.getTransactionsByDay() }.onSuccess { days = it }
+        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess { days = it }
         runCatching { Repositories.wallets.getHoldings() }.onSuccess { holdings = it }
         runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it }
         runCatching { Repositories.wallets.getGoals() }.onSuccess { goals = it }
@@ -48,7 +48,7 @@ fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
         days.flatMap { it.items }
             .filter { it.type == TransactionType.EXPENSE }
             .groupBy { it.category }
-            .map { (cat, txs) -> CategoryTotal(cat, txs.sumOf { it.amount.toLong() }) }
+            .map { (cat, txs) -> CategoryTotal(cat, txs.sumOf { it.amount }) }
             .sortedByDescending { it.total }
     }
     val totalEgresos = byCategory.sumOf { it.total }
