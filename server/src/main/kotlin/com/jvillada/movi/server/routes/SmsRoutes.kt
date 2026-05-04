@@ -73,13 +73,14 @@ fun Route.smsRoutes() {
 
     post("/api/sms/{id}/confirm") {
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        val exists = Stores.sms.snapshot().any { it.id == id }
-        if (!exists) return@post call.respond(HttpStatusCode.NotFound)
-        Stores.sms.mutate { list ->
+        val updated = Stores.sms.mutate { list ->
             val i = list.indexOfFirst { it.id == id }
-            if (i != -1) list[i] = list[i].copy(state = "confirmed")
+            if (i == -1) return@mutate false
+            list[i] = list[i].copy(state = "confirmed")
+            true
         }
-        call.respond(HttpStatusCode.OK)
+        if (!updated) call.respond(HttpStatusCode.NotFound)
+        else call.respond(HttpStatusCode.NoContent)
     }
 
     post("/api/sms/{id}/ignore") {
