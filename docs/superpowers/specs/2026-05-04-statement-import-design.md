@@ -20,7 +20,7 @@ Build a bank statement import pipeline that lets users upload PDF, CSV, or XLS e
 Android file picker
   → multipart POST /api/statements/upload
   → server: text extraction (PDFBox / Apache POI / CSV stdlib)
-  → server: load user merchant rules from DB
+  → server: load user merchant rules from MerchantRulesStore
   → server: Claude prompt = extracted text + merchant rules as few-shot context
   → Claude returns: List<ParsedTransaction>
   → server: fuzzy-match against existing FinancialEvents (amount + date ±2 days)
@@ -110,10 +110,9 @@ data class MerchantRule(
 ```kotlin
 implementation("org.apache.pdfbox:pdfbox:3.0.2")
 implementation("org.apache.poi:poi-ooxml:5.3.0")       // XLS + XLSX
-implementation("io.ktor:ktor-server-content-negotiation:$ktor_version")
 ```
 
-Multipart support is already present via `ktor-server-host-common`.
+Multipart support is already present via `ktor-server-host-common`. `ktor-server-content-negotiation` is already in the server (required by the Serialization plugin) — do not add it again.
 
 ### New files
 
@@ -165,14 +164,14 @@ Two endpoints, both JWT-authenticated:
 4. Call `ClaudeStatementParser.parse(text, merchantRules)`
 5. Fuzzy-match results against existing `FinancialEvent`s for `userId`:
    - Match condition: `abs(parsed.amount - existing.amount) == 0` AND `abs(parsedDateEpoch - existing.timestamp) <= 2 days`
-   - Assign `matchConfidence = 0.95` for exact amount+date, `0.7` for amount only
+   - Assign `matchConfidence = 0.95` when amount matches AND date is the same day, `0.7` when amount matches AND date is within ±2 days (but not the same day)
 6. Return `StatementParseResult`
 
 **`POST /api/statements/import`** — body: `ImportDecision`:
 1. For each `ParsedTransaction` in `imports`: call existing `postEvent()` logic
 2. For each `ReconciliationDecision` with `confirm = true`: update the existing `FinancialEvent` fields per `FieldSource` selection
 3. For each `ReconciliationDecision` with `confirm = false`: create new event from `parsed`
-4. For each correction where `parsed.category != existingEvent.category`: save `MerchantRule(merchantPattern = parsed.merchant.lowercase(), category = chosen category)`
+4. For each `ReconciliationDecision` where `categorySource == STATEMENT` and `parsed.category != existingEvent.category`: save `MerchantRule(merchantPattern = parsed.merchant.lowercase(), category = parsed.category)`. If `categorySource == MANUAL`, the existing event's category was preferred — save `MerchantRule(merchantPattern = parsed.merchant.lowercase(), category = existingEvent.category)`.
 5. Return `HttpStatusCode.OK` with count of imported events
 
 ### Modified files
