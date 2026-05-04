@@ -1,0 +1,23 @@
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/transactions/TransactionsScreen.kt
+  dadf0a8fe4934ca3 13-16,42-49,52-60,79-80,137-138,143-153,250-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "7266f7892495f3276796793df4a635973ae916a9",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 42,
+      "total_deletions": 6,
+      "accepted_lines": 2813,
+      "overriden_lines": 0
+    }
+  }
+}
