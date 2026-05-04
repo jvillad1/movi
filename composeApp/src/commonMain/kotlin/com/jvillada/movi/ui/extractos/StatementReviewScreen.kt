@@ -24,6 +24,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.formatCOP
 import kotlinx.coroutines.launch
 
 private val MinAmber = Color(0xFFE8A85C)
@@ -44,6 +45,7 @@ fun StatementReviewScreen(
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
+            .onFailure { error = "No pude cargar las cuentas: ${it.message ?: "error"}" }
     }
 
     val destinationAccount = remember(accounts, result.bankName) {
@@ -263,7 +265,7 @@ private fun NewTransactionRow(
         val amountColor = if (tx.type == TransactionType.INCOME) MinIncome else MinExpense
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
         Text(
-            "$prefix$${"%,d".format(tx.amount)}",
+            "$prefix${formatCOP(tx.amount)}",
             fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = amountColor,
         )
     }
@@ -306,7 +308,7 @@ private fun ReconciliationCard(
             val amtColor = if (match.parsed.type == TransactionType.INCOME) MinIncome else MinExpense
             val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
             Text(
-                "$prefix$${"%,d".format(match.parsed.amount)}",
+                "$prefix${formatCOP(match.parsed.amount)}",
                 fontSize = 12.sp, fontWeight = FontWeight.Bold, color = amtColor,
             )
         }
@@ -330,7 +332,8 @@ private fun ReconciliationCard(
             manualValue = match.existingEvent.merchant ?: match.existingEvent.description,
             statementValue = match.parsed.merchant,
             selected = merchantSource,
-            onToggle = { merchantSource = if (merchantSource == FieldSource.MANUAL) FieldSource.STATEMENT else FieldSource.MANUAL },
+            onSelectManual = { merchantSource = FieldSource.MANUAL },
+            onSelectStatement = { merchantSource = FieldSource.STATEMENT },
         )
 
         // Category row (only if different)
@@ -340,7 +343,8 @@ private fun ReconciliationCard(
                 manualValue = match.existingEvent.category,
                 statementValue = match.parsed.category,
                 selected = categorySource,
-                onToggle = { categorySource = if (categorySource == FieldSource.STATEMENT) FieldSource.MANUAL else FieldSource.STATEMENT },
+                onSelectManual = { categorySource = FieldSource.MANUAL },
+                onSelectStatement = { categorySource = FieldSource.STATEMENT },
             )
         }
 
@@ -353,7 +357,8 @@ private fun ReconciliationCard(
                 manualValue = existDesc.ifBlank { "—" },
                 statementValue = parsedDesc,
                 selected = descriptionSource,
-                onToggle = { descriptionSource = if (descriptionSource == FieldSource.STATEMENT) FieldSource.MANUAL else FieldSource.STATEMENT },
+                onSelectManual = { descriptionSource = FieldSource.MANUAL },
+                onSelectStatement = { descriptionSource = FieldSource.STATEMENT },
             )
         }
 
@@ -416,7 +421,8 @@ private fun FieldRow(
     manualValue: String,
     statementValue: String,
     selected: FieldSource,
-    onToggle: () -> Unit,
+    onSelectManual: () -> Unit,
+    onSelectStatement: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -426,13 +432,13 @@ private fun FieldRow(
         FieldCell(
             value = manualValue,
             active = selected == FieldSource.MANUAL,
-            onClick = onToggle,
+            onClick = onSelectManual,
             modifier = Modifier.weight(1f).padding(end = 4.dp),
         )
         FieldCell(
             value = statementValue,
             active = selected == FieldSource.STATEMENT,
-            onClick = onToggle,
+            onClick = onSelectStatement,
             modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
     }
