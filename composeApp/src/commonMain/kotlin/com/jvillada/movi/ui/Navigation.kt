@@ -23,4 +23,5 @@ sealed class Screen {
     data object Mas : Screen()
     data object Extractos : Screen()
     data object Accounts : Screen()
+    data class AccountDetail(val accountId: String) : Screen()
 }

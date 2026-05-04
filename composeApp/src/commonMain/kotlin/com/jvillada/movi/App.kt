@@ -95,6 +95,7 @@ fun App() {
                     Screen.Mas               -> MasScreen(navigate)
                     Screen.Extractos         -> ExtractosScreen(navigate)
                     Screen.Accounts         -> AccountsScreen(navigate)
+                    is Screen.AccountDetail -> { /* wired in Task 3 */ }
                 }
             }
         }
