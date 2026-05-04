@@ -18,10 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.Wallet
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -137,7 +140,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     val coroutine = rememberCoroutineScope()
     var sms by remember { mutableStateOf<SmsMessage?>(null) }
     var parsed by remember { mutableStateOf<ParsedSms?>(null) }
-    var wallets by remember { mutableStateOf<List<Wallet>>(emptyList()) }
+    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -148,12 +151,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         runCatching { Repositories.wallets.parseSms(smsId) }
             .onSuccess { parsed = it; selectedCategory = it.category }
             .onFailure { error = "No pude parsear el SMS" }
-        runCatching { Repositories.wallets.getWallets() }.onSuccess { wallets = it }
+        runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
     }
 
-    val resolvedWallet = wallets.firstOrNull { sms != null && it.name.contains(sms!!.bank, ignoreCase = true) }
-        ?: wallets.firstOrNull { it.id != "1" }
-        ?: wallets.firstOrNull()
+    val resolvedAccount = accounts.firstOrNull { sms != null && it.name.contains(sms!!.bank, ignoreCase = true) }
+        ?: accounts.firstOrNull { it.type != AccountType.CASH }
+        ?: accounts.firstOrNull()
 
     val categoryOptions: List<String> = run {
         val base = parsed?.category
@@ -167,13 +170,32 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
 
     fun confirm() {
         val cat = selectedCategory ?: parsed?.category ?: return
+        val acct = resolvedAccount ?: return
+        val p = parsed ?: return
         working = true
         error = null
         coroutine.launch {
-            val result = runCatching { Repositories.wallets.confirmSms(smsId, category = cat, walletId = resolvedWallet?.id) }
-            working = false
-            result.onSuccess { onNavigate(Screen.SMSInbox) }
-                .onFailure { error = "No pude confirmar: ${it.message ?: "error"}" }
+            runCatching {
+                val event = FinancialEvent(
+                    id = "",
+                    accountId = acct.id,
+                    type = p.type,
+                    amount = p.amount.toLong(),
+                    category = cat,
+                    description = p.merchant,
+                    merchant = p.merchant,
+                    source = EventSource.SMS,
+                    timestamp = System.currentTimeMillis(),
+                )
+                Repositories.wallets.postEvent(event)
+                Repositories.wallets.confirmSms(smsId)
+            }.onSuccess {
+                working = false
+                onNavigate(Screen.SMSInbox)
+            }.onFailure {
+                working = false
+                error = "No pude confirmar: ${it.message ?: "error"}"
+            }
         }
     }
 
@@ -253,7 +275,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(p.merchant, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                                 Text(
-                                    "${selectedCategory ?: p.category} · ${resolvedWallet?.name ?: "Sin cuenta"}",
+                                    "${selectedCategory ?: p.category} · ${resolvedAccount?.name ?: "Sin cuenta"}",
                                     fontSize = 12.sp,
                                     color = MinTextMute,
                                     modifier = Modifier.padding(top = 3.dp),
@@ -287,9 +309,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     )
                     Hairline()
                     Detail(
-                        ok = resolvedWallet != null,
+                        ok = resolvedAccount != null,
                         label = "Cuenta",
-                        value = resolvedWallet?.name ?: "Sin cuenta",
+                        value = resolvedAccount?.name ?: "Sin cuenta",
                     )
                     Hairline()
                     Detail(
@@ -341,7 +363,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             ) {
                 Text("Ignorar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
             }
-            val canConfirm = parsed != null && resolvedWallet != null && !working
+            val canConfirm = parsed != null && resolvedAccount != null && !working
             Box(
                 modifier = Modifier
                     .weight(1.7f)
