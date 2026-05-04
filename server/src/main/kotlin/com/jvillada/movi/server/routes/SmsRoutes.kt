@@ -2,8 +2,6 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.shared.model.ParsedSms
-import com.jvillada.movi.shared.model.Transaction
-import com.jvillada.movi.shared.model.TransactionSource
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
@@ -54,13 +52,6 @@ private fun categoryFor(merchant: String, type: TransactionType): String {
     }
 }
 
-private suspend fun walletIdForBank(bank: String): String? {
-    val list = Stores.wallets.snapshot()
-    return list.firstOrNull { it.name.contains(bank, ignoreCase = true) }?.id
-        ?: list.firstOrNull { it.id != "1" }?.id
-        ?: list.firstOrNull()?.id
-}
-
 fun Route.smsRoutes() {
     get("/api/sms") { call.respond(Stores.sms.snapshot()) }
 
@@ -82,34 +73,13 @@ fun Route.smsRoutes() {
 
     post("/api/sms/{id}/confirm") {
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        val sms = Stores.sms.snapshot().find { it.id == id }
-            ?: return@post call.respond(HttpStatusCode.NotFound)
-        val parsed = parseSms(sms.text)
-            ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, "No se pudo parsear")
-        val category = call.request.queryParameters["category"] ?: parsed.category
-        val walletId = call.request.queryParameters["walletId"]
-            ?: walletIdForBank(sms.bank)
-            ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, "No hay cuenta")
-
-        val now = System.currentTimeMillis()
-        val tx = Transaction(
-            id = "sms-$id-$now",
-            walletId = walletId,
-            name = parsed.merchant,
-            amount = parsed.amount,
-            category = category,
-            type = parsed.type,
-            source = TransactionSource.SMS,
-            pending = false,
-            timestamp = now,
-        )
-        if (!applyTransaction(tx)) return@post call.respond(HttpStatusCode.UnprocessableEntity, "Wallet no existe")
-
+        val exists = Stores.sms.snapshot().any { it.id == id }
+        if (!exists) return@post call.respond(HttpStatusCode.NotFound)
         Stores.sms.mutate { list ->
             val i = list.indexOfFirst { it.id == id }
-            if (i != -1) list[i] = list[i].copy(state = "auto")
+            if (i != -1) list[i] = list[i].copy(state = "confirmed")
         }
-        call.respond(HttpStatusCode.Created, tx)
+        call.respond(HttpStatusCode.OK)
     }
 
     post("/api/sms/{id}/ignore") {
