@@ -1,0 +1,25 @@
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/accounts/AccountDetailScreen.kt
+  dadf0a8fe4934ca3 1-317
+composeApp/src/commonMain/kotlin/com/jvillada/movi/App.kt
+  dadf0a8fe4934ca3 38,99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f2a5a2dbf5abbc78d0cb8eecacff61a8f5b70755",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 319,
+      "total_deletions": 1,
+      "accepted_lines": 3090,
+      "overriden_lines": 0
+    }
+  }
+}
