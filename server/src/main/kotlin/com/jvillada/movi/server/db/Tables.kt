@@ -20,6 +20,18 @@ object Accounts : Table("accounts") {
     override val primaryKey = PrimaryKey(id)
 }
 
+object StatementImports : Table("statement_imports") {
+    val id              = varchar("id", 50)
+    val userId          = varchar("user_id", 50)
+    val accountId       = varchar("account_id", 50)
+    val bankName        = varchar("bank_name", 100)
+    val period          = varchar("period", 50)
+    val importedAt      = long("imported_at")
+    val importedCount   = integer("imported_count")
+    val reconciledCount = integer("reconciled_count")
+    override val primaryKey = PrimaryKey(id)
+}
+
 object Events : Table("financial_events") {
     val id                   = varchar("id", 50)
     val userId               = varchar("user_id", 50)
@@ -34,6 +46,7 @@ object Events : Table("financial_events") {
     val rawPayload           = text("raw_payload").nullable()
     val reconciliationStatus = varchar("reconciliation_status", 20).default("UNCONFIRMED")
     val syncedAt             = long("synced_at").nullable()
+    val statementImportId    = varchar("statement_import_id", 50).nullable()
     override val primaryKey  = PrimaryKey(id)
 }
 
