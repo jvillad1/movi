@@ -19,6 +19,7 @@ fun Application.configureRouting() {
             financeRoutes()
             smsRoutes()
             aiRoutes()
+            statementRoutes()
         }
     }
 }
