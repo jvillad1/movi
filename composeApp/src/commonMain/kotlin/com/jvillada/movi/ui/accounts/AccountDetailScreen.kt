@@ -1,0 +1,317 @@
+package com.jvillada.movi.ui.accounts
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.*
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
+@Composable
+fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
+    var account by remember { mutableStateOf<Account?>(null) }
+    var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(refreshKey) {
+        loading = true
+        error = null
+        runCatching {
+            val acc = Repositories.wallets.getAccount(accountId)
+            val events = Repositories.wallets.getEvents(accountId)
+            val grouped = events
+                .groupBy { epochToDate(it.timestamp) }
+                .map { (date, items) ->
+                    EventDay(
+                        date  = date,
+                        total = items.sumOf {
+                            if (it.type == TransactionType.INCOME) it.amount else -it.amount
+                        },
+                        items = items.sortedByDescending { it.timestamp },
+                    )
+                }
+                .sortedByDescending { it.date }
+            acc to grouped
+        }.onSuccess { (acc, grouped) ->
+            account = acc
+            days = grouped
+        }.onFailure { e ->
+            error = e.message ?: "Error al cargar la cuenta"
+        }
+        loading = false
+    }
+
+    LaunchedEffect(error) {
+        val msg = error ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
+        error = null
+        if (result == SnackbarResult.ActionPerformed) refreshKey++
+    }
+
+    val totalEvents = days.sumOf { it.items.size }
+
+    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            // Header
+            val pair = account?.let { accountTypeIcon(it.type) } ?: ("" to "")
+            val typeIcon = pair.first
+            val typeLabel = pair.second
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "‹",
+                    fontSize = 22.sp,
+                    color = MinText,
+                    modifier = Modifier.clickable { onNavigate(Screen.Accounts) },
+                )
+                Text(
+                    text = account?.name ?: "",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.4).sp,
+                    modifier = Modifier.weight(1f),
+                )
+                if (typeIcon.isNotEmpty()) {
+                    Text(text = typeIcon, fontSize = 20.sp)
+                }
+            }
+
+            if (loading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MinPrimaryContainer,
+                    trackColor = MinSurfaceContainerHigh,
+                )
+            } else {
+                Spacer(Modifier.height(4.dp))
+            }
+
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(
+                    start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp,
+                ),
+            ) {
+                // Balance hero card
+                account?.let { acc ->
+                    item {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(20.dp),
+                        ) {
+                            Text(
+                                text = "SALDO ACTUAL",
+                                fontSize = 11.sp,
+                                color = MinTextMute,
+                                letterSpacing = 0.4.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            MonoText(
+                                text = formatCOP(acc.balance),
+                                fontSize = 28f,
+                                color = MinIncome,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            if (typeLabel.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "COP · $typeLabel",
+                                    fontSize = 11.sp,
+                                    color = MinTextMute,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(20.dp))
+                    }
+                }
+
+                // Section header
+                item {
+                    MinSectionHeader(title = "Movimientos", count = totalEvents.takeIf { it > 0 })
+                }
+
+                // Empty state
+                if (!loading && days.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillParentMaxWidth()
+                                .padding(top = 60.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                        }
+                    }
+                }
+
+                // Day groups
+                days.forEach { day ->
+                    item {
+                        Column(modifier = Modifier.padding(top = 20.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = day.date.uppercase(),
+                                    fontSize = 11.sp,
+                                    color = MinTextMute,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 0.4.sp,
+                                )
+                                Text(
+                                    text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
+                                    fontSize = 11.sp,
+                                    color = MinTextMute,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                            }
+                            MinCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = MinCardVariant.Elevated,
+                                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                            ) {
+                                day.items.forEachIndexed { i, event ->
+                                    val isIncome = event.type == TransactionType.INCOME
+                                    Column {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { selectedEvent = event }
+                                                .padding(vertical = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                ) {
+                                                    Text(
+                                                        text = event.description,
+                                                        fontSize = 14.5.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MinText,
+                                                        letterSpacing = (-0.1).sp,
+                                                    )
+                                                    if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
+                                                        StatusDot(MinWarn)
+                                                    }
+                                                }
+                                                Spacer(Modifier.height(2.dp))
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                ) {
+                                                    Text(event.category, fontSize = 12.sp, color = MinTextMute)
+                                                    StatusDot(MinTextFaint, 2.dp)
+                                                    Text(
+                                                        text = event.source.name,
+                                                        fontSize = 11.sp,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        color = MinTextMute,
+                                                        letterSpacing = 0.3.sp,
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                text = "${if (isIncome) "+" else "−"}${formatCOP(event.amount)}",
+                                                fontSize = 14.5.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Medium,
+                                                color = if (isIncome) MinIncome else MinText,
+                                                letterSpacing = (-0.3).sp,
+                                            )
+                                        }
+                                        if (i < day.items.size - 1) Hairline()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            MinBottomNav(active = NavTab.HOME) { tab ->
+                when (tab) {
+                    NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                    NavTab.MORE         -> onNavigate(Screen.Mas)
+                }
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp),
+        )
+
+        selectedEvent?.let { event ->
+            VoidEventSheet(
+                event = event,
+                onDismiss = { selectedEvent = null },
+                onVoided = {
+                    selectedEvent = null
+                    refreshKey++
+                },
+            )
+        }
+    }
+}
+
+private fun epochToDate(millis: Long): String =
+    Instant.fromEpochMilliseconds(millis)
+        .toLocalDateTime(TimeZone.currentSystemDefault())
+        .date
+        .toString()
+
+private fun accountTypeIcon(type: AccountType): Pair<String, String> = when (type) {
+    AccountType.CASH        -> "💵" to "Efectivo"
+    AccountType.SAVINGS     -> "🏦" to "Ahorros"
+    AccountType.CHECKING    -> "💳" to "Corriente"
+    AccountType.INVESTMENT  -> "📈" to "Inversión"
+    AccountType.CREDIT_CARD -> "💳" to "Crédito"
+}

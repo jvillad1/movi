@@ -35,6 +35,7 @@ import com.jvillada.movi.ui.sms.SMSInboxScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
+import com.jvillada.movi.ui.accounts.AccountDetailScreen
 
 @Composable
 fun App() {
@@ -95,7 +96,7 @@ fun App() {
                     Screen.Mas               -> MasScreen(navigate)
                     Screen.Extractos         -> ExtractosScreen(navigate)
                     Screen.Accounts         -> AccountsScreen(navigate)
-                    is Screen.AccountDetail -> { /* wired in Task 3 */ }
+                    is Screen.AccountDetail -> AccountDetailScreen(navigate, currentScreen.accountId)
                 }
             }
         }
