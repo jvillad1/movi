@@ -30,6 +30,8 @@ dependencies {
     implementation(libs.exposed.jdbc)
     implementation(libs.hikaricp)
     implementation(libs.postgresql.driver)
+    implementation(libs.pdfbox)
+    implementation(libs.poi.ooxml)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.kotlin.test)
 }
