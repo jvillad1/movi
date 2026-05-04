@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
@@ -40,13 +41,15 @@ fun VoidEventSheet(
         voiding = true
         error = null
         coroutine.launch {
-            runCatching {
+            try {
                 Repositories.wallets.voidEvent(event.id, reason.trim().ifBlank { null })
-            }.onSuccess { onVoided() }
-             .onFailure {
-                 error = it.message ?: "No se pudo anular"
-                 voiding = false
-             }
+                onVoided()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = e.message ?: "No se pudo anular"
+                voiding = false
+            }
         }
     }
 

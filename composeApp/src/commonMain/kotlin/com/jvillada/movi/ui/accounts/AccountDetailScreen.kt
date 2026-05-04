@@ -199,11 +199,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                     fontWeight = FontWeight.Medium,
                                     letterSpacing = 0.4.sp,
                                 )
-                                Text(
+                                MonoText(
                                     text = "${if (day.total >= 0) "+" else "−"}${formatCOP(day.total)}",
-                                    fontSize = 11.sp,
+                                    fontSize = 11f,
                                     color = MinTextMute,
-                                    fontFamily = FontFamily.Monospace,
                                 )
                             }
                             MinCard(
