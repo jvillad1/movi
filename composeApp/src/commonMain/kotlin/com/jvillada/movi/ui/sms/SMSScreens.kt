@@ -154,7 +154,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
     }
 
-    val resolvedAccount = accounts.firstOrNull { sms != null && it.name.contains(sms!!.bank, ignoreCase = true) }
+    val currentSms = sms
+    val resolvedAccount = accounts.firstOrNull { currentSms != null && it.name.contains(currentSms.bank, ignoreCase = true) }
         ?: accounts.firstOrNull { it.type != AccountType.CASH }
         ?: accounts.firstOrNull()
 
