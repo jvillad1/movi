@@ -36,6 +36,9 @@ import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
 import com.jvillada.movi.ui.accounts.AccountDetailScreen
+import com.jvillada.movi.ui.extractos.StatementReviewScreen
+import com.jvillada.movi.shared.model.StatementParseResult
+import kotlinx.serialization.json.Json
 
 @Composable
 fun App() {
@@ -97,6 +100,10 @@ fun App() {
                     Screen.Extractos         -> ExtractosScreen(navigate)
                     Screen.Accounts         -> AccountsScreen(navigate)
                     is Screen.AccountDetail -> AccountDetailScreen(navigate, currentScreen.accountId)
+                    is Screen.StatementReview -> StatementReviewScreen(
+                        onNavigate = navigate,
+                        result = Json.decodeFromString(currentScreen.resultJson),
+                    )
                 }
             }
         }
