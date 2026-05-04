@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +25,7 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 
 @Composable
@@ -32,12 +37,29 @@ fun DashboardScreen(
 
     var summary by remember { mutableStateOf<FinanceSummary?>(null) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
-    LaunchedEffect(scope) {
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var showCreateSheet by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(scope, refreshKey) {
+        loading = true
+        error = null
         runCatching { Repositories.wallets.getFinanceSummary(scope) }
             .onSuccess { summary = it }
+            .onFailure { e -> error = e.message ?: "Error al cargar" }
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
-            .onFailure { it.printStackTrace() }
+            .onFailure { e -> if (error == null) error = e.message ?: "Error al cargar cuentas" }
+        loading = false
+    }
+
+    LaunchedEffect(error) {
+        val msg = error ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
+        error = null
+        if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
     val totalBalance = accounts.sumOf { it.balance }
@@ -93,6 +115,8 @@ fun DashboardScreen(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 16.dp),
             )
+
+            if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
             LazyColumn(
                 modifier = Modifier
@@ -166,6 +190,75 @@ fun DashboardScreen(
                                     Text(value, fontSize = 14.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
                                     Spacer(Modifier.height(3.dp))
                                     Text(delta, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinIncome)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Mis cuentas section
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MinSectionHeader(
+                            title = "Mis cuentas",
+                            count = if (accounts.isNotEmpty()) accounts.size else null,
+                            action = if (accounts.isNotEmpty()) "Ver todas +" else null,
+                            onAction = if (accounts.isNotEmpty()) { { onNavigate(Screen.Accounts) } } else null,
+                        )
+                        if (accounts.isEmpty()) {
+                            MinCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = MinCardVariant.Elevated,
+                                padding = PaddingValues(18.dp),
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Text("Sin cuentas aún", fontSize = 14.sp, color = MinTextMute)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(MinPrimaryContainer)
+                                            .clickable { showCreateSheet = true },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            "+ Crear primera cuenta",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MinOnPrimaryContainer,
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            MinCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = MinCardVariant.Elevated,
+                                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                            ) {
+                                val typeLabel: (com.jvillada.movi.shared.model.AccountType) -> String = { type ->
+                                    when (type) {
+                                        com.jvillada.movi.shared.model.AccountType.CASH        -> "Efectivo"
+                                        com.jvillada.movi.shared.model.AccountType.SAVINGS     -> "Ahorros"
+                                        com.jvillada.movi.shared.model.AccountType.CHECKING    -> "Corriente"
+                                        com.jvillada.movi.shared.model.AccountType.INVESTMENT  -> "Inversión"
+                                        com.jvillada.movi.shared.model.AccountType.CREDIT_CARD -> "Crédito"
+                                    }
+                                }
+                                accounts.take(3).forEachIndexed { i, account ->
+                                    CardRow(
+                                        left = { Text(account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                        sub = typeLabel(account.type),
+                                        right = { MonoText(formatCOP(account.balance), 14.5f) },
+                                        isLast = i == minOf(accounts.size, 3) - 1,
+                                        onClick = { onNavigate(Screen.Accounts) },
+                                    )
                                 }
                             }
                         }
@@ -362,6 +455,18 @@ fun DashboardScreen(
                     else -> {}
                 }
             }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+        )
+
+        if (showCreateSheet) {
+            CreateAccountSheet(
+                onDismiss = { showCreateSheet = false },
+                onAccountCreated = { showCreateSheet = false; refreshKey++ },
+            )
         }
     }
 }
