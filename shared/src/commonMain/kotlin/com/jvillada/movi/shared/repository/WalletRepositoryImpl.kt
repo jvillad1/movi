@@ -72,11 +72,9 @@ class WalletRepositoryImpl(
     override suspend fun parseSms(id: String): ParsedSms =
         client.get("$baseUrl/api/sms/$id/parse").body()
 
-    override suspend fun confirmSms(id: String, category: String?, walletId: String?): Transaction =
-        client.post("$baseUrl/api/sms/$id/confirm") {
-            if (category != null) url.parameters.append("category", category)
-            if (walletId != null) url.parameters.append("walletId", walletId)
-        }.body()
+    override suspend fun confirmSms(id: String) {
+        client.post("$baseUrl/api/sms/$id/confirm")
+    }
 
     override suspend fun ignoreSms(id: String) {
         client.post("$baseUrl/api/sms/$id/ignore")

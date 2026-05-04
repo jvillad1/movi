@@ -14,7 +14,7 @@ class NoOpRepository : WalletRepository {
     override suspend fun getSmsMessages() = emptyList<SmsMessage>()
     override suspend fun getSms(id: String) = error("stub")
     override suspend fun parseSms(id: String) = error("stub")
-    override suspend fun confirmSms(id: String, category: String?, walletId: String?) = error("stub")
+    override suspend fun confirmSms(id: String) {}
     override suspend fun ignoreSms(id: String) {}
     override suspend fun getFinanceSummary(scope: Scope) = error("stub")
     override suspend fun getBudgets() = emptyList<Budget>()
