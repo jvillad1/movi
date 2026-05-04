@@ -90,4 +90,7 @@ object Stores {
     val recurring    = JsonListStore(File(DATA_DIR, "recurring.json"),    RecurringRule.serializer(),  recurringSeed)
     val sms          = JsonListStore(File(DATA_DIR, "sms.json"),          SmsMessage.serializer(),     smsSeed)
     val budgets      = BudgetStorage(File(DATA_DIR, "budgets.json"),      budgetSeed)
+
+    // Per-user stores
+    val merchantRules = MerchantRulesStore()
 }
