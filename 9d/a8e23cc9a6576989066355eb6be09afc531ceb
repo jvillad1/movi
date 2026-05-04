@@ -1,0 +1,36 @@
+docs/superpowers/specs/2026-05-04-analytics-sms-migration-design.md
+  f8fc162813c70628 1-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "9da8e23cc9a6576989066355eb6be09afc531ceb",
+  "prompts": {
+    "dadf0a8fe4934ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72fbf2b0-783c-4420-9399-00873d092396",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2771,
+      "overriden_lines": 0
+    },
+    "f8fc162813c70628": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "<synthetic>"
+      },
+      "human_author": "jvillad1",
+      "messages": [],
+      "total_additions": 138,
+      "total_deletions": 3,
+      "accepted_lines": 135,
+      "overriden_lines": 0
+    }
+  }
+}
