@@ -49,6 +49,8 @@ enum class FieldSource { MANUAL, STATEMENT }
 data class ImportDecision(
     val statementId: String,
     val accountId: String,
+    val bankName: String = "",
+    val period: String = "",
     val imports: List<ParsedTransaction>,
     val reconciliations: List<ReconciliationDecision>,
     val skipped: List<String>,
@@ -58,4 +60,21 @@ data class ImportDecision(
 data class MerchantRule(
     val merchantPattern: String,
     val category: String,
+)
+
+@Serializable
+data class StatementImport(
+    val id: String,
+    val accountId: String,
+    val bankName: String,
+    val period: String,
+    val importedAt: Long,
+    val importedCount: Int,
+    val reconciledCount: Int,
+)
+
+@Serializable
+data class StatementImportDetail(
+    val import: StatementImport,
+    val events: List<FinancialEvent>,
 )

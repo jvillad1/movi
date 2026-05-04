@@ -66,6 +66,8 @@ fun StatementReviewScreen(
                 val decision = ImportDecision(
                     statementId = result.statementId,
                     accountId = acct.id,
+                    bankName = result.bankName,
+                    period = result.period,
                     imports = result.newTransactions.filter { it.id in selectedIds },
                     reconciliations = reconciliations.values.toList(),
                     skipped = result.newTransactions.map { it.id }.filter { it !in selectedIds },
