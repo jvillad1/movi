@@ -36,14 +36,17 @@ fun VoidEventSheet(
     var error by remember { mutableStateOf<String?>(null) }
 
     fun doVoid() {
+        if (voiding) return
         voiding = true
         error = null
         coroutine.launch {
             runCatching {
                 Repositories.wallets.voidEvent(event.id, reason.trim().ifBlank { null })
             }.onSuccess { onVoided() }
-             .onFailure { error = it.message ?: "No se pudo anular" }
-            voiding = false
+             .onFailure {
+                 error = it.message ?: "No se pudo anular"
+                 voiding = false
+             }
         }
     }
 
