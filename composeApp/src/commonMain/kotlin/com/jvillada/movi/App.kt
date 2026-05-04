@@ -35,6 +35,7 @@ import com.jvillada.movi.ui.sms.SMSInboxScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
+import com.jvillada.movi.ui.accounts.AccountDetailScreen
 
 @Composable
 fun App() {
