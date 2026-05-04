@@ -26,6 +26,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -43,7 +44,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
     LaunchedEffect(refreshKey) {
         loading = true
         error = null
-        runCatching {
+        try {
             val acc = Repositories.wallets.getAccount(accountId)
             val events = Repositories.wallets.getEvents(accountId)
             val grouped = events
@@ -58,11 +59,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                     )
                 }
                 .sortedByDescending { it.date }
-            acc to grouped
-        }.onSuccess { (acc, grouped) ->
             account = acc
             days = grouped
-        }.onFailure { e ->
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             error = e.message ?: "Error al cargar la cuenta"
         }
         loading = false
@@ -129,7 +130,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
             ) {
                 // Balance hero card
                 account?.let { acc ->
-                    item {
+                    item(key = "balance-card") {
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -144,9 +145,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                             )
                             Spacer(Modifier.height(8.dp))
                             MonoText(
-                                text = formatCOP(acc.balance),
+                                text = "${if (acc.balance < 0) "−" else ""}${formatCOP(acc.balance)}",
                                 fontSize = 28f,
-                                color = MinIncome,
+                                color = if (acc.balance >= 0) MinIncome else MinExpense,
                                 fontWeight = FontWeight.Medium,
                             )
                             if (typeLabel.isNotEmpty()) {
@@ -163,13 +164,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 }
 
                 // Section header
-                item {
+                item(key = "section-header") {
                     MinSectionHeader(title = "Movimientos", count = totalEvents.takeIf { it > 0 })
                 }
 
                 // Empty state
                 if (!loading && days.isEmpty()) {
-                    item {
+                    item(key = "empty-state") {
                         Box(
                             modifier = Modifier
                                 .fillParentMaxWidth()
@@ -183,7 +184,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
 
                 // Day groups
                 days.forEach { day ->
-                    item {
+                    item(key = day.date) {
                         Column(modifier = Modifier.padding(top = 20.dp)) {
                             Row(
                                 modifier = Modifier
@@ -199,7 +200,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                     letterSpacing = 0.4.sp,
                                 )
                                 Text(
-                                    text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
+                                    text = "${if (day.total >= 0) "+" else "−"}${formatCOP(day.total)}",
                                     fontSize = 11.sp,
                                     color = MinTextMute,
                                     fontFamily = FontFamily.Monospace,
