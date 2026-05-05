@@ -243,7 +243,7 @@ fun Route.statementRoutes() {
 
         val events = dbQuery {
             Events.selectAll()
-                .where { Events.statementImportId eq importId }
+                .where { (Events.statementImportId eq importId) and (Events.userId eq uid) }
                 .map { row ->
                     FinancialEvent(
                         id                   = row[Events.id],

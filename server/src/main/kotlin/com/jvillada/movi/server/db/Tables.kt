@@ -49,6 +49,7 @@ object Events : Table("financial_events") {
     val syncedAt             = long("synced_at").nullable()
     val statementImportId    = varchar("statement_import_id", 50).nullable()
     override val primaryKey  = PrimaryKey(id)
+    init { index("idx_events_statement_import_id", false, statementImportId) }
 }
 
 object VoidEvents : Table("void_events") {
