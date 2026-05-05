@@ -37,6 +37,7 @@ import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
 import com.jvillada.movi.ui.accounts.AccountDetailScreen
 import com.jvillada.movi.ui.extractos.StatementReviewScreen
+import com.jvillada.movi.ui.extractos.ImportDetailScreen
 import com.jvillada.movi.shared.model.StatementParseResult
 import kotlinx.serialization.json.Json
 
@@ -103,6 +104,10 @@ fun App() {
                     is Screen.StatementReview -> StatementReviewScreen(
                         onNavigate = navigate,
                         result = Json.decodeFromString(currentScreen.resultJson),
+                    )
+                    is Screen.ImportDetail -> ImportDetailScreen(
+                        onNavigate = navigate,
+                        importId = currentScreen.importId,
                     )
                 }
             }
