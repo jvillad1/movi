@@ -80,7 +80,7 @@ fun Route.smsRoutes() {
             true
         }
         if (!updated) call.respond(HttpStatusCode.NotFound)
-        else call.respond(HttpStatusCode.NoContent)
+        else call.respond(HttpStatusCode.OK)
     }
 
     post("/api/sms/{id}/ignore") {
