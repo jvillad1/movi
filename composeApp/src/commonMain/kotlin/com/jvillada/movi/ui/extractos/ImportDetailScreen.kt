@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
@@ -59,7 +58,7 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
             Icon(
                 Icons.Rounded.ArrowBackIosNew, "Volver",
                 tint = MinTextDim,
-                modifier = Modifier.size(20.dp).clickable { onNavigate(Screen.Extractos) },
+                modifier = Modifier.clickable { onNavigate(Screen.Extractos) }.padding(12.dp).size(20.dp),
             )
             Spacer(Modifier.width(12.dp))
             Text("Detalle de importación", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MinText)
@@ -89,13 +88,13 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
         modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
+        item(key = "header") {
             Spacer(Modifier.height(4.dp))
             ImportSummaryHeader(imp)
         }
 
         if (detail.events.isEmpty()) {
-            item {
+            item(key = "empty") {
                 Text(
                     "No se encontraron movimientos",
                     fontSize = 13.sp, color = MinTextMute,
@@ -104,14 +103,14 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
                 )
             }
         } else {
-            item {
+            item(key = "section-label") {
                 Text(
                     "MOVIMIENTOS",
                     fontSize = 11.sp, color = MinTextDim,
                     letterSpacing = 0.8.sp,
                 )
             }
-            item {
+            item(key = "events-card") {
                 MinCard(
                     modifier = Modifier.fillMaxWidth(),
                     variant = MinCardVariant.Elevated,
@@ -125,7 +124,7 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
             }
         }
 
-        item { Spacer(Modifier.height(24.dp)) }
+        item(key = "bottom-spacer") { Spacer(Modifier.height(24.dp)) }
     }
 }
 
