@@ -192,7 +192,7 @@ private fun ImportEventRow(event: FinancialEvent) {
         MonoText(
             text = "${if (isIncome) "+" else "−"}${formatCOP(event.amount)}",
             fontSize = 14f,
-            color = if (isIncome) MinIncome else MinText,
+            color = if (isIncome) MinIncome else MinExpense,
         )
     }
 }
