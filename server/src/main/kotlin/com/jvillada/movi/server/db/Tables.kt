@@ -61,3 +61,10 @@ object VoidEvents : Table("void_events") {
     override val primaryKey = PrimaryKey(id)
     init { uniqueIndex("uq_void_events_original_user", originalEventId, userId) }
 }
+
+object Budgets : Table("budgets") {
+    val userId       = varchar("user_id", 50)
+    val category     = varchar("category", 100)
+    val monthlyLimit = long("monthly_limit")
+    override val primaryKey = PrimaryKey(userId, category)
+}
