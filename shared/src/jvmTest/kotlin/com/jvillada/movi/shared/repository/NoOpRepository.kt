@@ -2,6 +2,8 @@ package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.shared.model.ImportDecision
+import com.jvillada.movi.shared.model.StatementImport
+import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 
 class NoOpRepository : WalletRepository {
@@ -37,4 +39,7 @@ class NoOpRepository : WalletRepository {
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String) =
         StatementParseResult("", "", "", emptyList(), emptyList())
     override suspend fun importStatement(decision: ImportDecision) {}
+    override suspend fun getStatementImports() = emptyList<StatementImport>()
+    override suspend fun getStatementImportDetail(id: String) =
+        StatementImportDetail(StatementImport("", "", "", "", 0L, 0, 0), emptyList())
 }

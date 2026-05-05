@@ -18,6 +18,8 @@ import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.StatementImport
+import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
@@ -56,4 +58,6 @@ interface WalletRepository {
     suspend fun login(request: LoginRequest): AuthResponse
     suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult
     suspend fun importStatement(decision: ImportDecision)
+    suspend fun getStatementImports(): List<StatementImport>
+    suspend fun getStatementImportDetail(id: String): StatementImportDetail
 }

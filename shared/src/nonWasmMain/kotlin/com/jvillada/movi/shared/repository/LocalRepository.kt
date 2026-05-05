@@ -22,6 +22,8 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.StatementImport
+import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Transaction
 import com.jvillada.movi.shared.model.TransactionDay
@@ -149,6 +151,10 @@ class LocalRepository(
         remote.uploadStatement(fileName, bytes, mimeType)
     override suspend fun importStatement(decision: ImportDecision) =
         remote.importStatement(decision)
+    override suspend fun getStatementImports(): List<StatementImport> =
+        remote.getStatementImports()
+    override suspend fun getStatementImportDetail(id: String): StatementImportDetail =
+        remote.getStatementImportDetail(id)
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
