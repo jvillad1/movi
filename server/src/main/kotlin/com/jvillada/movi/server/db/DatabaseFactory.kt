@@ -12,7 +12,13 @@ import java.io.File
 
 object DatabaseFactory {
     fun init() {
-        val url  = readEnv("DATABASE_URL")  ?: error("DATABASE_URL not set — add it to server/.env")
+        val rawUrl = readEnv("DATABASE_URL") ?: error("DATABASE_URL not set — add it to server/.env")
+        // Railway supplies postgres:// or postgresql:// URLs; JDBC requires jdbc:postgresql://
+        val url = when {
+            rawUrl.startsWith("postgres://")   -> "jdbc:postgresql://" + rawUrl.removePrefix("postgres://")
+            rawUrl.startsWith("postgresql://") -> "jdbc:postgresql://" + rawUrl.removePrefix("postgresql://")
+            else                               -> rawUrl
+        }
         val user = readEnv("DATABASE_USER") ?: "movi"
         val pass = readEnv("DATABASE_PASSWORD") ?: "secret"
 
