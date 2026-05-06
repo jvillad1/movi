@@ -70,11 +70,6 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                         letterSpacing = (-1.4).sp,
                         lineHeight = 38.sp,
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("+\$960.000", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinIncome, fontWeight = FontWeight.Medium)
-                        Text("+8,4% YTD", fontSize = 13.sp, color = MinTextMute)
-                    }
                     Spacer(Modifier.height(18.dp))
                     InvestmentSparkline(modifier = Modifier.fillMaxWidth().height(56.dp))
                     Spacer(Modifier.height(12.dp))
@@ -101,7 +96,7 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Mis posiciones", count = 4)
+                    MinSectionHeader(title = "Mis posiciones", count = holdings.size)
                     MinCard(
                         modifier = Modifier.fillMaxWidth(),
                         variant = MinCardVariant.Elevated,
@@ -146,7 +141,7 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                             contentAlignment = Alignment.Center,
                         ) { Text("✦", fontSize = 13.sp, color = MinText) }
                         Text(
-                            text = "Tu portafolio se concentra en CDT (40%). Para tu perfil Constructor pragmático, te sugerimos diversificar con un fondo de renta mixta.",
+                            text = "Registra tus inversiones para recibir sugerencias de diversificación personalizadas.",
                             fontSize = 13.sp,
                             color = MinTextDim,
                             lineHeight = 19.sp,

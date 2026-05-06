@@ -135,7 +135,7 @@ fun DashboardScreen(
                         padding = PaddingValues(22.dp),
                     ) {
                         Text(
-                            text = "Balance · abril",
+                            text = "Balance",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = MinTextMute,
@@ -155,15 +155,6 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             family = isFamily,
                         )
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            listOf("1 abr", "8", "15", "22", "29").forEach { d ->
-                                Text(d, fontSize = 10.5.sp, color = MinTextFaint, fontFamily = FontFamily.Monospace)
-                            }
-                        }
                         Spacer(Modifier.height(20.dp))
                         Hairline()
                         Spacer(Modifier.height(18.dp))
@@ -252,61 +243,6 @@ fun DashboardScreen(
                     }
                 }
 
-                // Family aportes card
-                if (isFamily) {
-                    item {
-                        Spacer(Modifier.height(12.dp))
-                        MinCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(18.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("Aportes del mes", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MinText)
-                                Text("3 miembros", fontSize = 12.sp, color = MinTextMute)
-                            }
-                            Spacer(Modifier.height(14.dp))
-                            listOf(
-                                Triple("Camilo", 1_120_000L, 0.52f),
-                                Triple("Laura",    840_000L, 0.39f),
-                                Triple("Mateo",    210_000L, 0.09f),
-                            ).forEachIndexed { i, (name, amt, pct) ->
-                                if (i > 0) Hairline()
-                                Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Text(name, fontSize = 14.sp, color = MinText)
-                                        Text(formatCOP(amt), fontSize = 14.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-0.3).sp)
-                                    }
-                                    Spacer(Modifier.height(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(2.dp)
-                                            .clip(RoundedCornerShape(1.dp))
-                                            .background(MinHairline)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(pct)
-                                                .clip(RoundedCornerShape(1.dp))
-                                                .background(MinText.copy(alpha = 0.85f))
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
 
                 // Alertas
                 item {

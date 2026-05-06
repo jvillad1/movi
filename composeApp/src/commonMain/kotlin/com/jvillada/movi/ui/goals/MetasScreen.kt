@@ -47,6 +47,11 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             Text("+", fontSize = 22.sp, color = MinTextDim)
         }
 
+        val totalSaved  = goals.sumOf { it.saved }
+        val totalTarget = goals.sumOf { it.target }
+        val overallPct  = if (totalTarget > 0) (totalSaved.toFloat() / totalTarget.toFloat()).coerceAtMost(1f) else 0f
+        val pctLabel    = "${(overallPct * 100).toInt()}%"
+
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
                 MinCard(
@@ -73,20 +78,20 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                 drawArc(
                                     color = MinText,
                                     startAngle = -90f,
-                                    sweepAngle = 0.51f * 360f,
+                                    sweepAngle = overallPct * 360f,
                                     useCenter = false,
                                     style = Stroke(width = 6f, cap = StrokeCap.Round),
                                     topLeft = Offset(cx - r, cy - r),
                                     size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
                                 )
                             }
-                            Text("51%", fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                            Text(pctLabel, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Total ahorrado", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(6.dp))
-                            Text("\$24.220.000", fontSize = 22.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-0.7).sp)
-                            Text("de \$47.800.000 · 4 metas", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp))
+                            Text(formatCOP(totalSaved), fontSize = 22.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-0.7).sp)
+                            Text("de ${formatCOP(totalTarget)} · ${goals.size} metas", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
@@ -95,7 +100,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Metas activas", count = 4)
+                    MinSectionHeader(title = "Metas activas", count = goals.size)
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         goals.forEach { g ->
                             val pct = (g.saved.toFloat() / g.target.toFloat()).coerceAtMost(1f)

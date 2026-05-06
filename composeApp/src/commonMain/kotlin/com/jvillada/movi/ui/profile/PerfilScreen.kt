@@ -91,23 +91,14 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     ) {
                         Text("TU ARQUETIPO", fontSize = 11.sp, color = MinTextMute, letterSpacing = 1.4.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text("Constructor pragmático", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.7).sp)
+                        Text("Por definir", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = (-0.7).sp)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Equilibrio entre seguridad y crecimiento. Preparas el terreno antes de invertir.",
+                            "Completa el cuestionario financiero para descubrir tu arquetipo.",
                             fontSize = 13.sp,
                             color = MinTextDim,
                             lineHeight = 19.sp,
                         )
-                        Spacer(Modifier.height(20.dp))
-                        Hairline()
-                        ScaleRow("Tolerancia al riesgo", 3, "Moderada")
-                        Hairline()
-                        ScaleRow("Preferencia de liquidez", 4, "Alta")
-                        Hairline()
-                        ScaleRow("Actitud frente a créditos", 2, "Cautelosa")
-                        Hairline()
-                        ScaleRow("Conocimiento en inversiones", 3, "Intermedio")
                     }
                 }
             }
@@ -123,10 +114,10 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                     ) {
                         CardRow(
-                            left = { Text("Comprar apartamento", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                            sub = "Cuota inicial \$30M · 12 meses",
-                            right = { MonoText("\$8.6M / \$30M", 13f) },
+                            left = { Text("Sin meta definida", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinTextMute) },
+                            sub = "Ve a Metas para crear tu primera meta",
                             isLast = true,
+                            onClick = { onNavigate(Screen.Goals) },
                         )
                     }
                 }
@@ -144,7 +135,6 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     ) {
                         CardRow(
                             left = { Text("Familia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                            sub = "3 miembros · Restrepo López",
                             showChevron = true,
                         )
                         CardRow(

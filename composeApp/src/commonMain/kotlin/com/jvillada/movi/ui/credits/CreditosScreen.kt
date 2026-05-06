@@ -44,6 +44,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             Text("Créditos", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 
+        val totalDebt = credits.sumOf { it.total - it.paid }
+
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
                 MinCard(
@@ -53,24 +55,18 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 ) {
                     Text("Deuda total", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(10.dp))
-                    Text("\$160.040.000", fontSize = 36.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
-                    Spacer(Modifier.height(20.dp))
-                    Hairline()
-                    Spacer(Modifier.height(18.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Próximo pago", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
-                            Spacer(Modifier.height(6.dp))
-                            Text("\$1.860.000", fontSize = 15.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
-                            Text("en 2 días", fontSize = 11.5.sp, color = MinWarn)
-                        }
-                        Box(modifier = Modifier.width(1.dp).height(48.dp).background(MinHairline))
-                        Spacer(Modifier.width(18.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Pagado YTD", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
-                            Spacer(Modifier.height(6.dp))
-                            Text("\$96.280.000", fontSize = 15.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinIncome)
-                            Text("−37,5% deuda", fontSize = 11.5.sp, color = MinTextMute)
+                    Text(formatCOP(totalDebt), fontSize = 36.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
+                    if (credits.isNotEmpty()) {
+                        Spacer(Modifier.height(20.dp))
+                        Hairline()
+                        Spacer(Modifier.height(18.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Próxima cuota", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                                Spacer(Modifier.height(6.dp))
+                                Text(credits.firstOrNull()?.nextAmt ?: "—", fontSize = 15.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                                Text(credits.firstOrNull()?.nextDate ?: "", fontSize = 11.5.sp, color = MinTextMute)
+                            }
                         }
                     }
                 }
@@ -79,7 +75,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Mis créditos", count = 3)
+                    MinSectionHeader(title = "Mis créditos", count = credits.size)
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         credits.forEach { c ->
                             val pct = c.paid.toFloat() / c.total.toFloat()
