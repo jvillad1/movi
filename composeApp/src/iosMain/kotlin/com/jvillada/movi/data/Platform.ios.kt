@@ -36,7 +36,7 @@ actual fun createHttpClient(): HttpClient = HttpClient(Darwin) {
     }
 }
 
-actual val apiBaseUrl: String = "http://localhost:8080"
+actual val apiBaseUrl: String = "https://movi-api-production.up.railway.app"
 
 actual fun createRepository(): WalletRepository {
     val remote = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)

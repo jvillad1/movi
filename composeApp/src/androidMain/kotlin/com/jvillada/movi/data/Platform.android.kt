@@ -36,8 +36,7 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
     }
 }
 
-// 10.0.2.2 is the host loopback alias on Android emulator
-actual val apiBaseUrl: String = "http://10.0.2.2:8080"
+actual val apiBaseUrl: String = "https://movi-api-production.up.railway.app"
 
 actual fun createRepository(): WalletRepository {
     val remote = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
