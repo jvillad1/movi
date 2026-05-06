@@ -335,22 +335,18 @@ fun DashboardScreen(
                         ) {
                             CardRow(
                                 left = { Text("Inversiones", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = if (isFamily) "+9,1% YTD · 2 cuentas" else "+8,4% YTD",
-                                right = { MonoText(if (isFamily) "$24.860.000" else "$12.480.000", 14.5f) },
                                 showChevron = true,
+                                isLast = false,
                                 onClick = { onNavigate(Screen.Investments) },
                             )
                             CardRow(
-                                left = { Text(if (isFamily) "Créditos del hogar" else "Crédito Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = if (isFamily) "3 productos · próxima cuota 30 abr" else "Cuota en 5 días",
-                                right = { MonoText(if (isFamily) "$159.040.000" else "$4.320.000", 14.5f) },
+                                left = { Text("Créditos", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                                 showChevron = true,
+                                isLast = false,
                                 onClick = { onNavigate(Screen.Credits) },
                             )
                             CardRow(
-                                left = { Text(if (isFamily) "Metas compartidas" else "Meta · Cartagena", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = if (isFamily) "Cartagena · Apto · Mateo · Emergencia" else "68% completado",
-                                right = { MonoText(if (isFamily) "$24.220.000" else "$3.400.000", 14.5f) },
+                                left = { Text("Metas", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                                 showChevron = true,
                                 isLast = true,
                                 onClick = { onNavigate(Screen.Goals) },
