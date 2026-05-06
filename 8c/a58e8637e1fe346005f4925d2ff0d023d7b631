@@ -1,0 +1,32 @@
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/investments/InversionesScreen.kt
+  s_f8fc162813c706::t_9b3f215121adab 99-135
+  s_f8fc162813c706::t_189fdac896e49e 74
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/recurrentes/RecurrentesScreen.kt
+  s_f8fc162813c706::t_a401dfde95db7e 126-135
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/goals/MetasScreen.kt
+  s_f8fc162813c706::t_64703b43503d19 103-112
+server/src/main/kotlin/com/jvillada/movi/server/storage/Stores.kt
+  s_f8fc162813c706::t_c82210ccbb6c36 11-12,14-17
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/credits/CreditosScreen.kt
+  s_f8fc162813c706::t_291b6775be643e 78-87
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/Sparkline.kt
+  s_f8fc162813c706::t_9dda08b9b0cd89 90,99-108
+server/src/main/kotlin/com/jvillada/movi/server/routes/FinanceRoutes.kt
+  s_f8fc162813c706::t_d23dc7bac915cc 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "8ca58e8637e1fe346005f4925d2ff0d023d7b631",
+  "prompts": {},
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
