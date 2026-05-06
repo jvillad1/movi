@@ -45,12 +45,33 @@ Sos un parser de extractos bancarios colombianos. Tu trabajo es extraer todas la
 Reglas del usuario (aprendidas de correcciones anteriores):
 $rulesJson
 
-Devolvé ÚNICAMENTE un array JSON con este formato exacto, sin explicaciones:
+Devolvé ÚNICAMENTE un array JSON con este formato exacto, sin explicaciones ni texto adicional:
 [{"date":"YYYY-MM-DD","merchant":"nombre limpio","amount":123456,"type":"EXPENSE|INCOME","category":"categoría","description":"descripción corta","rawText":"línea original"}]
 
-- amount: entero en pesos colombianos (sin puntos ni comas), siempre positivo
-- type: EXPENSE para débitos/compras/pagos, INCOME para créditos/abonos/nómina
-- Aplicá las reglas del usuario cuando el merchant coincida
+MONTOS:
+- amount: entero positivo en pesos colombianos, sin separadores de miles ni decimales
+- El extracto puede usar formato colombiano ($ 46.489,00) o americano (46,489.00) — detectá cuál es según el documento
+- Descartá los centavos: redondeá al peso más cercano
+
+TIPO:
+- EXPENSE: débitos, compras, pagos a terceros, comisiones, impuestos, cargos, intereses cobrados
+- INCOME: créditos, abonos, nómina, transferencias recibidas, intereses a favor, reembolsos
+
+TARJETAS DE CRÉDITO (cuando el extracto tiene columnas "Número cuotas" y "Valor Cuota/Abono"):
+- Usá siempre la columna "Valor movimiento" (precio total de la compra), NUNCA "Valor Cuota/Abono"
+- Incluí cargos por INTERESES CORRIENTES y CUOTA DE MANEJO como EXPENSE
+- Excluí filas de PAGO ALTERNATIVO — son abonos a la tarjeta desde otra cuenta, no compras del titular
+
+FECHAS SIN AÑO:
+- Si las fechas no incluyen año (ej: "15/04", "1/01", "3 ene"), buscá el año en el encabezado del documento (campos DESDE, HASTA, FECHA DE CORTE, periodo facturado) y asignáselo a todas las transacciones
+- Si el extracto cubre varios meses, asigná el año correcto a cada fecha según el período del encabezado
+
+EXCLUIR (no son movimientos del titular):
+- Filas de saldo corriente (columna "Saldo" que muestra balance acumulado)
+- Filas de totales, subtotales y encabezados de tabla
+- PAGO ALTERNATIVO (abono a tarjeta desde cuenta propia)
+
+Aplicá las reglas del usuario cuando el merchant coincida.
 """.trimIndent()
     }
 

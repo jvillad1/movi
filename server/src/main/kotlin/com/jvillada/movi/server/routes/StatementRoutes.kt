@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
+import com.jvillada.movi.server.parsing.StatementDocumentType
 import com.jvillada.movi.server.parsing.StatementParser
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.storage.Stores
@@ -57,7 +58,21 @@ fun Route.statementRoutes() {
         }
 
         val text = StatementParser.extractText(bytes, fileName)
-        val bankName = StatementParser.detectBankName(fileName)
+
+        val docType = StatementParser.detectDocumentType(text)
+        if (docType != StatementDocumentType.TRANSACTION_STATEMENT) {
+            val msg = when (docType) {
+                StatementDocumentType.LOAN_SUMMARY ->
+                    "Este documento es un resumen de crédito, no un extracto de movimientos. No contiene transacciones importables."
+                StatementDocumentType.INVESTMENT_FUND ->
+                    "Este documento es un estado de fondo de inversión. No contiene transacciones importables."
+                else -> "Documento no reconocido como extracto de transacciones."
+            }
+            call.respond(HttpStatusCode.UnprocessableEntity, msg)
+            return@post
+        }
+
+        val bankName = StatementParser.detectBankName(fileName, text)
         val rules = Stores.merchantRules.getRules(uid)
         val parsed = ClaudeStatementParser.parse(text, rules)
 
