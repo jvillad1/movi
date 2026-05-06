@@ -123,8 +123,16 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Por día del mes", count = rules.size)
-                    MinCard(
+                    MinSectionHeader(title = "Por día del mes", count = if (rules.isNotEmpty()) rules.size else null)
+                    if (rules.isEmpty()) {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                        ) {
+                            Text("Sin reglas recurrentes", fontSize = 14.sp, color = MinTextMute)
+                        }
+                    } else MinCard(
                         modifier = Modifier.fillMaxWidth(),
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),

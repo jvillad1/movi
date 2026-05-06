@@ -25,15 +25,8 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
-private val holdings = listOf(
-    Holding("CDT Bancolombia", "12 meses · 11,8% E.A.", 5_000_000, 0.0),
-    Holding("Acciones Globales", "Renta variable · Skandia", 4_280_000, 12.4),
-    Holding("Renta Fija COL", "Bajo riesgo · Fiduciaria", 2_100_000, 4.2),
-    Holding("Bitcoin", "Cripto · Binance", 1_100_000, -8.6),
-)
-
 fun Route.financeRoutes() {
-    get("/api/holdings") { call.respond(holdings) }
+    get("/api/holdings") { call.respond(emptyList<Holding>()) }
     get("/api/credits") { call.respond(Stores.credits.snapshot()) }
     get("/api/goals") { call.respond(Stores.goals.snapshot()) }
     get("/api/recurring-rules") { call.respond(Stores.recurring.snapshot()) }

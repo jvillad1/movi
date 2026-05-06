@@ -75,7 +75,16 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Mis créditos", count = credits.size)
+                    MinSectionHeader(title = "Mis créditos", count = if (credits.isNotEmpty()) credits.size else null)
+                    if (credits.isEmpty()) {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                        ) {
+                            Text("Sin créditos registrados", fontSize = 14.sp, color = MinTextMute)
+                        }
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         credits.forEach { c ->
                             val pct = c.paid.toFloat() / c.total.toFloat()

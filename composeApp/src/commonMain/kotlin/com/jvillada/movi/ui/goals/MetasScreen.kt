@@ -100,7 +100,16 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Metas activas", count = goals.size)
+                    MinSectionHeader(title = "Metas activas", count = if (goals.isNotEmpty()) goals.size else null)
+                    if (goals.isEmpty()) {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                        ) {
+                            Text("Sin metas de ahorro aún", fontSize = 14.sp, color = MinTextMute)
+                        }
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         goals.forEach { g ->
                             val pct = (g.saved.toFloat() / g.target.toFloat()).coerceAtMost(1f)

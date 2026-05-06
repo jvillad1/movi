@@ -87,7 +87,7 @@ fun SimpleSparkline(
 }
 
 @Composable
-fun InvestmentSparkline(modifier: Modifier, color: Color = MinText) {
+fun InvestmentSparkline(modifier: Modifier, hasData: Boolean = true, color: Color = MinText) {
     val points = listOf(
         Offset(0f, 0.7f), Offset(0.12f, 0.68f), Offset(0.22f, 0.56f),
         Offset(0.31f, 0.62f), Offset(0.44f, 0.5f), Offset(0.56f, 0.39f),
@@ -96,6 +96,16 @@ fun InvestmentSparkline(modifier: Modifier, color: Color = MinText) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
+        if (!hasData) {
+            drawLine(
+                color = color.copy(alpha = 0.25f),
+                start = Offset(0f, h / 2),
+                end = Offset(w, h / 2),
+                strokeWidth = 2.8f,
+                cap = StrokeCap.Round,
+            )
+            return@Canvas
+        }
         val path = Path()
         points.forEachIndexed { i, pt ->
             val x = pt.x * w

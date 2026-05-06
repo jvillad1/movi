@@ -71,7 +71,7 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                         lineHeight = 38.sp,
                     )
                     Spacer(Modifier.height(18.dp))
-                    InvestmentSparkline(modifier = Modifier.fillMaxWidth().height(56.dp))
+                    InvestmentSparkline(modifier = Modifier.fillMaxWidth().height(56.dp), hasData = holdings.isNotEmpty())
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                         listOf("1M", "3M", "6M", "1A", "Todo").forEachIndexed { i, p ->
@@ -96,33 +96,43 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Mis posiciones", count = holdings.size)
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        holdings.forEachIndexed { i, h ->
-                            CardRow(
-                                left = { Text(h.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = h.sub,
-                                right = {
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(formatCOP(h.amount), fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                                        Text(
-                                            text = "${if (h.change > 0) "+" else ""}${formatOneDecimal(h.change)}%",
-                                            fontSize = 11.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = when {
-                                                h.change > 0 -> MinIncome
-                                                h.change < 0 -> MinExpense
-                                                else -> MinTextMute
-                                            },
-                                        )
-                                    }
-                                },
-                                isLast = i == holdings.size - 1,
-                            )
+                    MinSectionHeader(title = "Mis posiciones", count = if (holdings.isNotEmpty()) holdings.size else null)
+                    if (holdings.isEmpty()) {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                        ) {
+                            Text("Sin posiciones registradas", fontSize = 14.sp, color = MinTextMute)
+                        }
+                    } else {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                        ) {
+                            holdings.forEachIndexed { i, h ->
+                                CardRow(
+                                    left = { Text(h.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                    sub = h.sub,
+                                    right = {
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(formatCOP(h.amount), fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+                                            Text(
+                                                text = "${if (h.change > 0) "+" else ""}${formatOneDecimal(h.change)}%",
+                                                fontSize = 11.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = when {
+                                                    h.change > 0 -> MinIncome
+                                                    h.change < 0 -> MinExpense
+                                                    else -> MinTextMute
+                                                },
+                                            )
+                                        }
+                                    },
+                                    isLast = i == holdings.size - 1,
+                                )
+                            }
                         }
                     }
                 }
