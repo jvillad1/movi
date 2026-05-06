@@ -5,9 +5,7 @@ import com.jvillada.movi.shared.repository.WalletRepositoryImpl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.js.Js
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.HttpCallValidator
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
@@ -18,11 +16,6 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
     defaultRequest {
         SessionManager.token?.let { token ->
             headers.append("Authorization", "Bearer $token")
-        }
-    }
-    install(HttpCallValidator) {
-        validateResponse { response ->
-            if (response.status == HttpStatusCode.Unauthorized) SessionManager.clear()
         }
     }
 }

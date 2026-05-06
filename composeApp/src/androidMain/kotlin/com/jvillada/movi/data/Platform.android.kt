@@ -9,9 +9,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.HttpCallValidator
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
@@ -27,11 +25,6 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
     defaultRequest {
         SessionManager.token?.let { token ->
             headers.append("Authorization", "Bearer $token")
-        }
-    }
-    install(HttpCallValidator) {
-        validateResponse { response ->
-            if (response.status == HttpStatusCode.Unauthorized) SessionManager.clear()
         }
     }
 }
