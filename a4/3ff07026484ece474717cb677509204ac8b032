@@ -1,0 +1,21 @@
+Dockerfile
+  s_f8fc162813c706::t_149654aadf5bb7 4-12
+server/src/main/kotlin/com/jvillada/movi/server/plugins/Routing.kt
+  s_f8fc162813c706::t_6329dab86db0a2 4-9,25-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "a43ff07026484ece474717cb677509204ac8b032",
+  "prompts": {},
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
