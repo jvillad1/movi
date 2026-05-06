@@ -1,0 +1,91 @@
+<h2>Sección 3 — VoidEventSheet</h2>
+<p class="subtitle">Bottom sheet que aparece al tocar un evento. Misma estructura que CreateAccountSheet.</p>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
+
+  <!-- Phone mockup with sheet overlay -->
+  <div style="width:280px;position:relative;font-family:system-ui,sans-serif;color:#E6E1E9;flex-shrink:0;border-radius:24px;overflow:hidden;border:1px solid #ffffff18">
+
+    <!-- Background screen (dimmed) -->
+    <div style="background:#0F1115;padding:16px;padding-bottom:140px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;opacity:.35">
+        <span style="font-size:14px">‹</span>
+        <span style="font-size:14px;font-weight:600;flex:1">Bancolombia Ahorros</span>
+        <span>🏦</span>
+      </div>
+      <div style="background:#1D1F25;border-radius:12px;padding:12px;margin-bottom:10px;opacity:.35">
+        <div style="font-size:8px;opacity:.5;margin-bottom:4px">SALDO ACTUAL</div>
+        <div style="font-size:20px;font-weight:700;color:#7DDDB0">$4.820.000</div>
+      </div>
+      <div style="background:#1D1F25;border-radius:10px;padding:10px 12px;opacity:.35">
+        <div style="font-size:10px;opacity:.5;margin-bottom:6px">HOY</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid #ffffff12">
+          <span style="font-weight:500">Transferencia</span>
+          <span style="color:#7DDDB0">+$120.000</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0">
+          <span style="font-weight:500;color:#C7BCFF">Mercado Libre ←</span>
+          <span>−$45.000</span>
+        </div>
+      </div>
+      <!-- Scrim -->
+      <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55)"></div>
+    </div>
+
+    <!-- Sheet overlay -->
+    <div style="position:absolute;bottom:0;left:0;right:0;background:#22252B;border-radius:20px 20px 0 0;padding:0 18px 20px;border-top:1px solid #ffffff12">
+
+      <!-- Drag handle -->
+      <div style="display:flex;justify-content:center;padding:10px 0 14px">
+        <div style="width:28px;height:3px;background:#ffffff28;border-radius:2px"></div>
+      </div>
+
+      <!-- Event summary card -->
+      <div style="background:#1D1F25;border-radius:12px;padding:12px 14px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:14px;font-weight:600">Mercado Libre</div>
+            <div style="font-size:10px;opacity:.5;margin-top:3px">Compras · SMS · Hoy</div>
+          </div>
+          <div style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums">−$45.000</div>
+        </div>
+      </div>
+
+      <!-- Motivo label -->
+      <div style="font-size:9px;font-weight:500;opacity:.5;letter-spacing:.05em;margin-bottom:6px">MOTIVO (OPCIONAL)</div>
+
+      <!-- Text input -->
+      <div style="background:#191B20;border-radius:10px;border:1px solid #ffffff0f;padding:11px 12px;margin-bottom:16px">
+        <div style="font-size:13px;opacity:.35">Ej: Movimiento duplicado</div>
+      </div>
+
+      <!-- CTA — Anular -->
+      <div style="background:#FFB4AB1A;border-radius:999px;padding:14px;text-align:center;border:1px solid #FFB4AB33">
+        <span style="font-size:14px;font-weight:600;color:#FFB4AB">Anular movimiento</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes -->
+  <div style="max-width:260px">
+    <h3 style="margin-top:0">Notas de diseño</h3>
+    <ul style="opacity:.8;line-height:1.7;padding-left:18px">
+      <li><strong>Scrim negro 55%</strong> sobre AccountDetailScreen mientras el sheet está abierto</li>
+      <li><strong>Resumen del evento</strong> en card: descripción, monto, categoría, fuente, fecha</li>
+      <li><strong>Campo de motivo</strong> opcional — <code>BasicTextField</code>, misma UI que CreateAccountSheet</li>
+      <li><strong>CTA "Anular"</strong> en <code>MinExpense</code> con fondo <code>MinExpenseContainer</code></li>
+      <li><strong>Durante voiding:</strong> "Anulando…", botón deshabilitado</li>
+      <li><strong>Error inline</strong> debajo del CTA si falla</li>
+      <li>On success: <code>onVoided()</code> → <code>refreshKey++</code></li>
+    </ul>
+    <h3>Firma</h3>
+    <pre style="background:#1D1F25;border-radius:8px;padding:10px;font-size:11px;overflow:auto">fun VoidEventSheet(
+  event: FinancialEvent,
+  onDismiss: () -> Unit,
+  onVoided: () -> Unit,
+)</pre>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">¿Se ve bien el sheet? Decime en el chat.</p>

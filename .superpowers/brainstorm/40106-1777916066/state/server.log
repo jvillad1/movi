@@ -1,0 +1,4 @@
+{"type":"server-started","port":65138,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:65138","screen_dir":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/40106-1777916066/content","state_dir":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/40106-1777916066/state"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/40106-1777916066/content/review-flow.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/40106-1777916066/content/waiting-1.html"}
+{"type":"server-stopped","reason":"idle timeout"}

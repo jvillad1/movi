@@ -1,0 +1,143 @@
+<h2>Pantalla de reconciliación</h2>
+<p class="subtitle">Cuando el extracto detecta un posible match con un movimiento ya registrado, el usuario decide campo por campo qué dato conservar.</p>
+
+<div class="mockup">
+  <div class="mockup-header">SMSReconcileScreen → StatementReviewScreen · match detectado</div>
+  <div class="mockup-body" style="background:#0f0f0f;padding:0;font-family:system-ui;border-radius:0 0 8px 8px">
+
+    <!-- Header -->
+    <div style="padding:14px 16px 10px;border-bottom:1px solid #1e1e1e">
+      <div style="color:#888;font-size:10px;letter-spacing:1px;margin-bottom:4px">EXTRACTO BANCOLOMBIA · MAY 2025 · 3 DE 23</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="color:#fff;font-size:14px;font-weight:600">$312.400 · 28 mayo</div>
+        <div style="background:#e8a85c22;color:#e8a85c;font-size:9px;padding:3px 8px;border-radius:4px;border:1px solid #e8a85c44">
+          ⚠ POSIBLE DUPLICADO
+        </div>
+      </div>
+    </div>
+
+    <!-- Field comparison table -->
+    <div style="padding:12px 16px">
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:0;margin-bottom:2px">
+        <div></div>
+        <div style="color:#7c6fff;font-size:9px;letter-spacing:0.8px;font-weight:600;padding:0 8px 6px">INGRESO MANUAL</div>
+        <div style="color:#5cb8e8;font-size:9px;letter-spacing:0.8px;font-weight:600;padding:0 8px 6px">EXTRACTO</div>
+      </div>
+
+      <!-- Comercio row -->
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;border-top:1px solid #1e1e1e;padding:8px 0;align-items:center">
+        <div style="color:#666;font-size:10px">Comercio</div>
+        <div style="padding:0 8px">
+          <div style="background:#1a1a2e;border:1.5px solid #7c6fff;border-radius:6px;padding:6px 8px;color:#fff;font-size:10px">
+            Éxito Country
+          </div>
+        </div>
+        <div style="padding:0 8px">
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;padding:6px 8px;color:#888;font-size:10px">
+            EXITO COUNTRY CN15
+          </div>
+        </div>
+      </div>
+
+      <!-- Categoría row — extracto wins -->
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;border-top:1px solid #1e1e1e;padding:8px 0;align-items:center">
+        <div style="color:#666;font-size:10px">Categoría</div>
+        <div style="padding:0 8px">
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;padding:6px 8px;color:#888;font-size:10px">
+            Otro
+          </div>
+        </div>
+        <div style="padding:0 8px">
+          <div style="background:#0e2a1e;border:1.5px solid #5cb85c;border-radius:6px;padding:6px 8px;color:#fff;font-size:10px">
+            Mercado ✓
+          </div>
+        </div>
+      </div>
+
+      <!-- Monto row — both same -->
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;border-top:1px solid #1e1e1e;padding:8px 0;align-items:center">
+        <div style="color:#666;font-size:10px">Monto</div>
+        <div style="padding:0 8px">
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;padding:6px 8px;color:#888;font-size:10px">
+            $312.400
+          </div>
+        </div>
+        <div style="padding:0 8px">
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;padding:6px 8px;color:#888;font-size:10px">
+            $312.400
+          </div>
+        </div>
+      </div>
+
+      <!-- Descripción row — only in extracto -->
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;border-top:1px solid #1e1e1e;padding:8px 0;align-items:center">
+        <div style="color:#666;font-size:10px">Descripción</div>
+        <div style="padding:0 8px">
+          <div style="background:#1a1a1a;border:1px solid #1a1a1a;border-radius:6px;padding:6px 8px;color:#444;font-size:10px;font-style:italic">
+            —
+          </div>
+        </div>
+        <div style="padding:0 8px">
+          <div style="background:#0e1e2a;border:1.5px solid #5cb8e8;border-radius:6px;padding:6px 8px;color:#fff;font-size:10px">
+            COMPRA EN ESTABL.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div style="padding:0 16px 10px;display:flex;gap:12px">
+      <div style="display:flex;align-items:center;gap:4px">
+        <div style="width:8px;height:8px;border-radius:2px;background:#7c6fff"></div>
+        <span style="color:#888;font-size:9px">Fuente seleccionada</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <div style="width:8px;height:8px;border-radius:2px;border:1px solid #5cb85c;background:#0e2a1e"></div>
+        <span style="color:#888;font-size:9px">Claude sugiere este</span>
+      </div>
+    </div>
+
+    <!-- Tap to toggle hint -->
+    <div style="padding:0 16px 12px">
+      <div style="background:#1a1a1a;border-radius:6px;padding:8px 10px;color:#666;font-size:9px;text-align:center">
+        Toca cada campo para cambiar la fuente · Claude resalta su sugerencia
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="padding:0 16px 16px;display:flex;gap:8px">
+      <div style="flex:1;background:#1e1e1e;border-radius:8px;padding:10px;text-align:center">
+        <div style="color:#888;font-size:10px;font-weight:600">No son el mismo</div>
+        <div style="color:#555;font-size:9px;margin-top:2px">importar como nuevo</div>
+      </div>
+      <div style="flex:2;background:#7c6fff;border-radius:8px;padding:10px;text-align:center">
+        <div style="color:#fff;font-size:10px;font-weight:700">Confirmar reconciliación →</div>
+        <div style="color:#c4b8ff;font-size:9px;margin-top:2px">aplica selección de campos</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top:20px" class="section">
+  <h3>Sistema de aprendizaje</h3>
+  <p class="subtitle">Cada decisión del usuario alimenta el contexto de Claude</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+    <div style="background:#111;border-radius:8px;padding:14px;border:1px solid #222">
+      <div style="color:#7c6fff;font-size:20px;margin-bottom:8px">1</div>
+      <div style="color:#fff;font-size:11px;font-weight:600;margin-bottom:4px">Usuario corrige</div>
+      <div style="color:#888;font-size:10px;line-height:15px">"Rappi" → cambia de "Restaurantes" a "Domicilios"</div>
+    </div>
+    <div style="background:#111;border-radius:8px;padding:14px;border:1px solid #222">
+      <div style="color:#7c6fff;font-size:20px;margin-bottom:8px">2</div>
+      <div style="color:#fff;font-size:11px;font-weight:600;margin-bottom:4px">Se almacena</div>
+      <div style="color:#888;font-size:10px;line-height:15px">merchant_rules: {"rappi": "Domicilios", "uber eats": "Domicilios"}</div>
+    </div>
+    <div style="background:#111;border-radius:8px;padding:14px;border:1px solid #222">
+      <div style="color:#7c6fff;font-size:20px;margin-bottom:8px">3</div>
+      <div style="color:#fff;font-size:11px;font-weight:600;margin-bottom:4px">Próximo extracto</div>
+      <div style="color:#888;font-size:10px;line-height:15px">Claude recibe las reglas como contexto y categoriza Rappi correctamente desde el inicio</div>
+    </div>
+  </div>
+</div>

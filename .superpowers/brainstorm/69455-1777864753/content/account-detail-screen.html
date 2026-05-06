@@ -1,0 +1,106 @@
+<h2>Sección 2 — AccountDetailScreen</h2>
+<p class="subtitle">Pantalla completa al tocar una cuenta. Mostrá si el layout se ve bien.</p>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center">
+
+  <!-- Phone mockup -->
+  <div style="width:280px;background:#0F1115;border-radius:24px;padding:16px;font-family:system-ui,sans-serif;color:#E6E1E9;border:1px solid #ffffff18;flex-shrink:0">
+
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="font-size:18px;opacity:.5;cursor:pointer">‹</span>
+      <span style="font-size:17px;font-weight:600;flex:1;letter-spacing:-.3px">Bancolombia Ahorros</span>
+      <span style="font-size:16px">🏦</span>
+    </div>
+
+    <!-- Progress bar placeholder -->
+    <div style="height:3px;background:#C7BCFF33;border-radius:2px;margin-bottom:10px"></div>
+
+    <!-- Balance hero card -->
+    <div style="background:#1D1F25;border-radius:14px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:9px;opacity:.5;letter-spacing:.05em;font-weight:500;margin-bottom:6px">SALDO ACTUAL</div>
+      <div style="font-size:26px;font-weight:700;color:#7DDDB0;font-variant-numeric:tabular-nums;letter-spacing:-.5px">$4.820.000</div>
+      <div style="font-size:10px;opacity:.4;margin-top:4px">COP · Ahorros</div>
+    </div>
+
+    <!-- Section header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 10px;font-size:10px;font-weight:500;opacity:.5;letter-spacing:.05em">
+      <span>MOVIMIENTOS</span>
+      <span style="font-weight:400">· 4</span>
+    </div>
+
+    <!-- Day group 1: Hoy -->
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.4;letter-spacing:.04em;font-weight:500;padding:0 4px;margin-bottom:6px">
+        <span>HOY</span>
+        <span>+$75.000</span>
+      </div>
+      <div style="background:#1D1F25;border-radius:12px;padding:4px 14px">
+        <!-- Event row 1 — tappable -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #ffffff0f;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500">Transferencia recibida</div>
+            <div style="font-size:10px;opacity:.5;margin-top:2px">Ingresos · MANUAL</div>
+          </div>
+          <div style="font-size:12.5px;font-weight:500;color:#7DDDB0;font-variant-numeric:tabular-nums">+$120.000</div>
+        </div>
+        <!-- Event row 2 -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;cursor:pointer">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:13px;font-weight:500">Mercado Libre</span>
+              <span style="width:5px;height:5px;border-radius:50%;background:#FFD479;display:inline-block"></span>
+            </div>
+            <div style="font-size:10px;opacity:.5;margin-top:2px">Compras · SMS</div>
+          </div>
+          <div style="font-size:12.5px;font-weight:500;font-variant-numeric:tabular-nums">−$45.000</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day group 2: Ayer -->
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.4;letter-spacing:.04em;font-weight:500;padding:0 4px;margin-bottom:6px">
+        <span>2026-05-02</span>
+        <span>−$30.000</span>
+      </div>
+      <div style="background:#1D1F25;border-radius:12px;padding:4px 14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #ffffff0f;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500">Supermercado</div>
+            <div style="font-size:10px;opacity:.5;margin-top:2px">Mercado · MANUAL</div>
+          </div>
+          <div style="font-size:12.5px;font-weight:500;font-variant-numeric:tabular-nums">−$30.000</div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500">Nómina mayo</div>
+            <div style="font-size:10px;opacity:.5;margin-top:2px">Ingresos · MANUAL</div>
+          </div>
+          <div style="font-size:12.5px;font-weight:500;color:#7DDDB0;font-variant-numeric:tabular-nums">+$3.200.000</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom nav placeholder -->
+    <div style="height:32px;background:#1D1F25;border-radius:10px;opacity:.4"></div>
+  </div>
+
+  <!-- Notes -->
+  <div style="max-width:260px">
+    <h3 style="margin-top:0">Notas de diseño</h3>
+    <ul style="opacity:.8;line-height:1.7;padding-left:18px">
+      <li><strong>Back:</strong> ‹ navega a <code>Screen.Accounts</code></li>
+      <li><strong>Icono de tipo</strong> alineado a la derecha del nombre</li>
+      <li><strong>Saldo</strong> en verde <code>MinIncome</code> — mismo estilo que Total Activos en AccountsScreen</li>
+      <li><strong>Barra de carga</strong> debajo del header mientras <code>loading = true</code></li>
+      <li><strong>Cada fila</strong> es clickeable → abre VoidEventSheet</li>
+      <li><strong>Punto amarillo</strong> = <code>UNCONFIRMED</code> (igual que TransactionsScreen)</li>
+      <li><strong>Empty state</strong> si no hay eventos: "Sin movimientos aún" centrado</li>
+      <li><strong>Snackbar</strong> en bottom 80dp con "Reintentar"</li>
+    </ul>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">¿Se ve bien así? Decime en el chat.</p>

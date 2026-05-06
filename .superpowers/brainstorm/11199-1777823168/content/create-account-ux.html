@@ -1,0 +1,52 @@
+<h2>¿Cómo se crea una cuenta nueva?</h2>
+<p class="subtitle">El usuario toca "+" en el Dashboard o en AccountsScreen</p>
+
+<div class="split">
+
+  <div class="mockup" data-choice="a" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="mockup-header">A — Bottom Sheet modal</div>
+    <div class="mockup-body" style="background:#0F1115;padding:12px;border-radius:8px;min-height:240px;position:relative">
+      <!-- Background screen (dimmed) -->
+      <div style="opacity:0.3;font-size:10px;color:#E6E1E9;margin-bottom:8px">Dashboard...</div>
+      <!-- Bottom sheet -->
+      <div style="background:#1D1F25;border-radius:12px 12px 0 0;padding:12px;position:absolute;bottom:0;left:0;right:0">
+        <div style="width:32px;height:3px;background:#444;border-radius:2px;margin:0 auto 12px"></div>
+        <div style="color:#E6E1E9;font-size:12px;font-weight:bold;margin-bottom:10px">Nueva cuenta</div>
+        <div style="background:#22252B;border-radius:6px;padding:8px;font-size:10px;color:#8A8A8A;margin-bottom:6px">Nombre de la cuenta</div>
+        <div style="display:flex;gap:4px;margin-bottom:6px">
+          <div style="flex:1;background:#22252B;border-radius:6px;padding:6px;font-size:9px;color:#C7BCFF;text-align:center">💵 Efectivo</div>
+          <div style="flex:1;background:#15171C;border-radius:6px;padding:6px;font-size:9px;color:#888;text-align:center">🏦 Ahorro</div>
+          <div style="flex:1;background:#15171C;border-radius:6px;padding:6px;font-size:9px;color:#888;text-align:center">💳 Corriente</div>
+        </div>
+        <div style="background:#C7BCFF;border-radius:6px;padding:8px;font-size:10px;color:#0F1115;text-align:center;font-weight:bold">Crear cuenta</div>
+      </div>
+    </div>
+    <div style="padding:8px;font-size:11px;color:#A0A0A0">Aparece sobre el Dashboard sin navegar. Rápido y sin pérdida de contexto.</div>
+  </div>
+
+  <div class="mockup" data-choice="b" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="mockup-header">B — Pantalla dedicada</div>
+    <div class="mockup-body" style="background:#0F1115;padding:12px;border-radius:8px;min-height:240px">
+      <div style="display:flex;align-items:center;margin-bottom:12px">
+        <div style="color:#C7BCFF;font-size:12px;margin-right:8px">‹</div>
+        <div style="color:#E6E1E9;font-size:12px;font-weight:bold">Nueva cuenta</div>
+      </div>
+      <div style="color:#8A8A8A;font-size:9px;margin-bottom:4px">NOMBRE</div>
+      <div style="background:#1D1F25;border-radius:6px;padding:8px;font-size:10px;color:#8A8A8A;margin-bottom:10px">Ej: Bancolombia Ahorros</div>
+      <div style="color:#8A8A8A;font-size:9px;margin-bottom:4px">TIPO</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:10px">
+        <div style="background:#C7BCFF;border-radius:6px;padding:6px;font-size:9px;color:#0F1115;text-align:center">💵 Efectivo</div>
+        <div style="background:#1D1F25;border-radius:6px;padding:6px;font-size:9px;color:#888;text-align:center">🏦 Ahorro</div>
+        <div style="background:#1D1F25;border-radius:6px;padding:6px;font-size:9px;color:#888;text-align:center">💳 Corriente</div>
+        <div style="background:#1D1F25;border-radius:6px;padding:6px;font-size:9px;color:#888;text-align:center">📈 Inversión</div>
+      </div>
+      <div style="color:#8A8A8A;font-size:9px;margin-bottom:4px">SALDO INICIAL (opcional)</div>
+      <div style="background:#1D1F25;border-radius:6px;padding:8px;font-size:10px;color:#8A8A8A;margin-bottom:10px">$ 0</div>
+      <div style="background:#C7BCFF;border-radius:6px;padding:8px;font-size:10px;color:#0F1115;text-align:center;font-weight:bold">Crear cuenta</div>
+    </div>
+    <div style="padding:8px;font-size:11px;color:#A0A0A0">Más espacio para campos adicionales. Flujo más intencional.</div>
+  </div>
+
+</div>
+
+<p style="margin-top:16px;font-size:12px;color:#666;text-align:center">Tocá un mockup para seleccionarlo</p>

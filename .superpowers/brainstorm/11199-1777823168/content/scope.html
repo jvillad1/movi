@@ -1,0 +1,49 @@
+<h2>¿Cuál es el scope de las pantallas a construir?</h2>
+<p class="subtitle">El app ya tiene Dashboard y Transacciones. ¿Qué construimos?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1D1F25;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;color:#C7BCFF">
+      <div style="margin-bottom:8px;color:#7DDDB0;font-weight:bold">▶ Opción A — Actualizar pantallas existentes</div>
+      <div style="color:#E6E1E9">• Dashboard → muestra cuentas reales (PostgreSQL)</div>
+      <div style="color:#E6E1E9">• Transacciones → feed de eventos reales por día</div>
+      <div style="color:#E6E1E9">• QuickAdd → postEvent() con selector de cuenta</div>
+      <div style="margin-top:10px;color:#BC8CFF">+ Agregar pantalla "Mis Cuentas" para crear/ver cuentas</div>
+    </div>
+    <div class="card-body">
+      <h3>A — Actualizar + una pantalla nueva</h3>
+      <p>Conectar las pantallas existentes al nuevo backend. Agregar solo la pantalla de gestión de cuentas (crear, ver balance).</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1D1F25;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;color:#C7BCFF">
+      <div style="margin-bottom:8px;color:#7DDDB0;font-weight:bold">▶ Opción B — Solo nuevas pantallas</div>
+      <div style="color:#E6E1E9">• Nueva tab "Cuentas" en bottom nav</div>
+      <div style="color:#E6E1E9">• AccountsScreen — lista de cuentas + balances</div>
+      <div style="color:#E6E1E9">• AccountDetailScreen — eventos de una cuenta</div>
+      <div style="color:#E6E1E9">• (Dashboard queda igual por ahora)</div>
+    </div>
+    <div class="card-body">
+      <h3>B — Solo pantallas nuevas, no tocar existentes</h3>
+      <p>Agregar screens nuevas sin modificar Dashboard ni Transacciones. Menos riesgo de romper lo que funciona.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#1D1F25;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;color:#C7BCFF">
+      <div style="margin-bottom:8px;color:#7DDDB0;font-weight:bold">▶ Opción C — Todo junto (full rebuild)</div>
+      <div style="color:#E6E1E9">• Dashboard → resumen con cuentas reales</div>
+      <div style="color:#E6E1E9">• Transacciones → eventos reales por día + void</div>
+      <div style="color:#E6E1E9">• QuickAdd → postEvent() completo</div>
+      <div style="color:#E6E1E9">• AccountsScreen + AccountDetailScreen</div>
+      <div style="color:#E6E1E9">• Flujo de login/register conectado al backend</div>
+    </div>
+    <div class="card-body">
+      <h3>C — Todo conectado al nuevo backend</h3>
+      <p>Actualizar todas las pantallas core + agregar las de gestión de cuentas. Mayor alcance, resultado más completo.</p>
+    </div>
+  </div>
+
+</div>

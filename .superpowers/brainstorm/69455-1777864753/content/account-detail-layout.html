@@ -1,0 +1,94 @@
+<h2>AccountDetail — layout del historial de movimientos</h2>
+<p class="subtitle">Cuando el usuario toca una cuenta en AccountsScreen, ¿cómo se organiza el contenido?</p>
+
+<div class="split">
+  <div class="mockup" data-choice="a" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="mockup-header">A — Agrupado por día (como Movimientos)</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;background:#0F1115;color:#E6E1E9;border-radius:8px;padding:14px;line-height:1.8">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;opacity:.5">‹</span>
+        <span style="font-weight:600;font-size:14px">Bancolombia Ahorros</span>
+        <span style="font-size:10px;opacity:.4">🏦</span>
+      </div>
+      <div style="background:#1D1F25;border-radius:10px;padding:12px;margin:8px 0">
+        <div style="font-size:9px;opacity:.5;letter-spacing:.05em">SALDO ACTUAL</div>
+        <div style="font-size:20px;font-weight:700;color:#7DDDB0">$4.820.000</div>
+      </div>
+      <div style="font-size:9px;opacity:.4;letter-spacing:.05em;margin:10px 0 4px">HOY — +$120.000</div>
+      <div style="background:#1D1F25;border-radius:8px;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0">
+          <div>
+            <div style="font-weight:500">Transferencia</div>
+            <div style="font-size:9px;opacity:.5">Ingresos · MANUAL</div>
+          </div>
+          <div style="color:#7DDDB0">+$120.000</div>
+        </div>
+        <hr style="border-color:#ffffff18;margin:4px 0"/>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0">
+          <div>
+            <div style="font-weight:500">Mercado Libre</div>
+            <div style="font-size:9px;opacity:.5">Compras · SMS</div>
+          </div>
+          <div>−$45.000</div>
+        </div>
+      </div>
+      <div style="font-size:9px;opacity:.4;letter-spacing:.05em;margin:10px 0 4px">AYER — −$30.000</div>
+      <div style="background:#1D1F25;border-radius:8px;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0">
+          <div>
+            <div style="font-weight:500">Supermercado</div>
+            <div style="font-size:9px;opacity:.5">Mercado · MANUAL</div>
+          </div>
+          <div>−$30.000</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup" data-choice="b" onclick="toggleSelect(this)" style="cursor:pointer">
+    <div class="mockup-header">B — Lista plana (sin agrupar)</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;background:#0F1115;color:#E6E1E9;border-radius:8px;padding:14px;line-height:1.8">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;opacity:.5">‹</span>
+        <span style="font-weight:600;font-size:14px">Bancolombia Ahorros</span>
+        <span style="font-size:10px;opacity:.4">🏦</span>
+      </div>
+      <div style="background:#1D1F25;border-radius:10px;padding:12px;margin:8px 0">
+        <div style="font-size:9px;opacity:.5;letter-spacing:.05em">SALDO ACTUAL</div>
+        <div style="font-size:20px;font-weight:700;color:#7DDDB0">$4.820.000</div>
+      </div>
+      <div style="background:#1D1F25;border-radius:8px;padding:4px 12px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 0;border-bottom:1px solid #ffffff18">
+          <div>
+            <div style="font-weight:500">Transferencia</div>
+            <div style="font-size:9px;opacity:.5">Hoy · Ingresos</div>
+          </div>
+          <div style="color:#7DDDB0">+$120.000</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 0;border-bottom:1px solid #ffffff18">
+          <div>
+            <div style="font-weight:500">Mercado Libre</div>
+            <div style="font-size:9px;opacity:.5">Hoy · Compras</div>
+          </div>
+          <div>−$45.000</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 0;border-bottom:1px solid #ffffff18">
+          <div>
+            <div style="font-weight:500">Supermercado</div>
+            <div style="font-size:9px;opacity:.5">Ayer · Mercado</div>
+          </div>
+          <div>−$30.000</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;padding:7px 0">
+          <div>
+            <div style="font-weight:500">Nómina</div>
+            <div style="font-size:9px;opacity:.5">3 may · Ingresos</div>
+          </div>
+          <div style="color:#7DDDB0">+$3.200.000</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px">Hacé clic en la opción que preferís, o decime en el chat.</p>

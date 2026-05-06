@@ -1,0 +1,78 @@
+<h2>DashboardScreen — cambios propuestos</h2>
+<p class="subtitle">La pantalla ya llama a getFinanceSummary() y getAccounts(). Solo ajustamos el rendering.</p>
+
+<div class="split">
+
+  <div class="mockup">
+    <div class="mockup-header">Estado actual (datos mockeados / posible fallo silencioso)</div>
+    <div class="mockup-body" style="background:#0F1115;padding:12px;border-radius:8px;font-size:11px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="color:#E6E1E9;font-weight:bold">Buenos días, Juan</div>
+        <div style="background:#1D1F25;border-radius:12px;padding:4px 10px;font-size:10px;color:#888">SELF ▾</div>
+      </div>
+      <div style="background:#1D1F25;border-radius:8px;padding:12px;margin-bottom:10px;text-align:center">
+        <div style="color:#8A8A8A;font-size:10px">Balance total</div>
+        <div style="color:#E6E1E9;font-size:20px;font-weight:bold">$ 0</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="flex:1;text-align:center"><div style="color:#7DDDB0;font-size:10px">↑ Ingresos</div><div style="color:#E6E1E9;font-size:11px">$ 0</div></div>
+          <div style="flex:1;text-align:center"><div style="color:#FFB4AB;font-size:10px">↓ Egresos</div><div style="color:#E6E1E9;font-size:11px">$ 0</div></div>
+        </div>
+      </div>
+      <div style="color:#8A8A8A;font-size:10px;margin-bottom:6px">MIS CUENTAS</div>
+      <div style="color:#888;font-size:10px;text-align:center;padding:20px 0">(vacío o error silencioso)</div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Estado nuevo (2 variantes según datos)</div>
+    <div class="mockup-body" style="background:#0F1115;padding:12px;border-radius:8px;font-size:11px">
+
+      <!-- Con cuentas -->
+      <div style="margin-bottom:14px">
+        <div style="color:#7DDDB0;font-size:9px;margin-bottom:4px">▶ Con cuentas creadas:</div>
+        <div style="background:#1D1F25;border-radius:8px;padding:10px;margin-bottom:6px">
+          <div style="color:#8A8A8A;font-size:9px">Balance total</div>
+          <div style="color:#E6E1E9;font-size:16px;font-weight:bold">$ 1.250.000</div>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <div style="flex:1;text-align:center"><div style="color:#7DDDB0;font-size:9px">↑ $ 2.000.000</div></div>
+            <div style="flex:1;text-align:center"><div style="color:#FFB4AB;font-size:9px">↓ $ 750.000</div></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="color:#8A8A8A;font-size:9px">MIS CUENTAS</div>
+          <div style="color:#C7BCFF;font-size:9px">Ver todas +</div>
+        </div>
+        <div style="background:#1D1F25;border-radius:6px;padding:6px;margin-bottom:3px;display:flex;justify-content:space-between">
+          <div><div style="color:#E6E1E9;font-size:10px">Bancolombia</div><div style="color:#888;font-size:9px">Corriente</div></div>
+          <div style="color:#7DDDB0;font-size:10px;align-self:center">$ 800.000</div>
+        </div>
+        <div style="background:#1D1F25;border-radius:6px;padding:6px;display:flex;justify-content:space-between">
+          <div><div style="color:#E6E1E9;font-size:10px">Efectivo</div><div style="color:#888;font-size:9px">Cash</div></div>
+          <div style="color:#7DDDB0;font-size:10px;align-self:center">$ 450.000</div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div>
+        <div style="color:#FFD479;font-size:9px;margin-bottom:4px">▶ Sin cuentas (empty state):</div>
+        <div style="background:#1D1F25;border-radius:8px;padding:12px;text-align:center">
+          <div style="color:#8A8A8A;font-size:10px;margin-bottom:6px">Sin cuentas aún</div>
+          <div style="background:#C7BCFF;border-radius:6px;padding:6px;font-size:10px;color:#0F1115;font-weight:bold">+ Crear primera cuenta</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:16px">
+  <h3>Cambios concretos en DashboardScreen.kt</h3>
+  <ul style="font-size:13px;color:#A0A0A0;line-height:1.8">
+    <li>Empty state inline cuando <code>accounts.isEmpty()</code> — botón "Crear primera cuenta" abre bottom sheet</li>
+    <li>Header de sección "MIS CUENTAS" muestra link "Ver todas +" → navega a <code>Screen.Accounts</code></li>
+    <li>Cada <code>CardRow</code> de cuenta muestra nombre + tipo + balance (ya existe el componente)</li>
+    <li>Balance total y resumen de ingresos/egresos vienen de <code>getFinanceSummary()</code> (ya cableado)</li>
+    <li>Loading skeleton con <code>if (loading) LinearProgressIndicator()</code></li>
+  </ul>
+</div>

@@ -1,0 +1,103 @@
+<h2>AccountsScreen + CreateAccountSheet</h2>
+<p class="subtitle">Pantalla nueva — lista de cuentas + bottom sheet para crear</p>
+
+<div class="split">
+
+  <div class="mockup">
+    <div class="mockup-header">AccountsScreen</div>
+    <div class="mockup-body" style="background:#0F1115;padding:12px;border-radius:8px;font-size:11px">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="color:#C7BCFF;font-size:14px">‹</div>
+          <div style="color:#E6E1E9;font-size:13px;font-weight:bold">Mis cuentas</div>
+        </div>
+        <div style="background:#C7BCFF;border-radius:20px;padding:4px 12px;font-size:10px;color:#0F1115;font-weight:bold">+ Nueva</div>
+      </div>
+
+      <!-- Balance total -->
+      <div style="background:#1D1F25;border-radius:8px;padding:10px;margin-bottom:12px;text-align:center">
+        <div style="color:#8A8A8A;font-size:9px;margin-bottom:2px">TOTAL ACTIVOS</div>
+        <div style="color:#7DDDB0;font-size:18px;font-weight:bold">$ 1.250.000</div>
+      </div>
+
+      <!-- Account list -->
+      <div style="color:#8A8A8A;font-size:9px;margin-bottom:6px">CUENTAS (2)</div>
+      <div style="background:#1D1F25;border-radius:8px;overflow:hidden;margin-bottom:3px">
+        <div style="padding:10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#22252B;border-radius:6px;padding:6px;font-size:14px">🏦</div>
+            <div>
+              <div style="color:#E6E1E9;font-size:11px">Bancolombia</div>
+              <div style="color:#888;font-size:9px">Corriente</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:#7DDDB0;font-size:11px">$ 800.000</div>
+            <div style="color:#888;font-size:9px">COP</div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#1D1F25;border-radius:8px;overflow:hidden">
+        <div style="padding:10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#22252B;border-radius:6px;padding:6px;font-size:14px">💵</div>
+            <div>
+              <div style="color:#E6E1E9;font-size:11px">Efectivo</div>
+              <div style="color:#888;font-size:9px">Cash</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:#7DDDB0;font-size:11px">$ 450.000</div>
+            <div style="color:#888;font-size:9px">COP</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">CreateAccountSheet (bottom sheet)</div>
+    <div class="mockup-body" style="background:#0F1115;padding:12px;border-radius:8px;font-size:11px;position:relative;min-height:280px">
+      <!-- Dimmed background -->
+      <div style="opacity:0.2;color:#E6E1E9;font-size:10px;margin-bottom:60px">AccountsScreen...</div>
+
+      <!-- Sheet -->
+      <div style="background:#1D1F25;border-radius:12px 12px 0 0;padding:14px;position:absolute;bottom:0;left:0;right:0">
+        <div style="width:32px;height:3px;background:#444;border-radius:2px;margin:0 auto 12px"></div>
+        <div style="color:#E6E1E9;font-size:12px;font-weight:bold;margin-bottom:12px">Nueva cuenta</div>
+
+        <!-- Name field -->
+        <div style="color:#8A8A8A;font-size:9px;margin-bottom:4px">NOMBRE</div>
+        <div style="background:#22252B;border-radius:6px;padding:8px;font-size:10px;color:#888;margin-bottom:10px">Ej: Bancolombia Ahorros</div>
+
+        <!-- Type selector -->
+        <div style="color:#8A8A8A;font-size:9px;margin-bottom:4px">TIPO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:10px">
+          <div style="background:#C7BCFF;border-radius:6px;padding:7px;font-size:9px;color:#0F1115;text-align:center;font-weight:bold">💵 Efectivo</div>
+          <div style="background:#22252B;border-radius:6px;padding:7px;font-size:9px;color:#888;text-align:center">🏦 Ahorros</div>
+          <div style="background:#22252B;border-radius:6px;padding:7px;font-size:9px;color:#888;text-align:center">💳 Corriente</div>
+          <div style="background:#22252B;border-radius:6px;padding:7px;font-size:9px;color:#888;text-align:center">📈 Inversión</div>
+        </div>
+
+        <!-- Initial balance (optional) -->
+        <div style="color:#8A8A8A;font-size:9px;margin-bottom:4px">SALDO INICIAL <span style="color:#555">(opcional)</span></div>
+        <div style="background:#22252B;border-radius:6px;padding:8px;font-size:10px;color:#888;margin-bottom:10px">$ 0</div>
+
+        <div style="background:#C7BCFF;border-radius:8px;padding:10px;font-size:11px;color:#0F1115;text-align:center;font-weight:bold">Crear cuenta</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:16px">
+  <h3>Comportamiento</h3>
+  <ul style="font-size:13px;color:#A0A0A0;line-height:1.8">
+    <li><strong>AccountsScreen:</strong> lista de todas las cuentas + total activos en header. Botón "+ Nueva" abre el sheet.</li>
+    <li><strong>CreateAccountSheet:</strong> nombre (requerido), tipo (4 opciones: CASH, SAVINGS, CHECKING, INVESTMENT), saldo inicial opcional. Llama <code>createAccount()</code> → cierra sheet → recarga lista.</li>
+    <li><strong>Iconos por tipo:</strong> 💵 CASH · 🏦 SAVINGS · 💳 CHECKING · 📈 INVESTMENT</li>
+    <li><strong>Validación inline:</strong> botón "Crear" deshabilitado si el nombre está vacío.</li>
+    <li><strong>Error handling:</strong> toast/snackbar si falla el request.</li>
+  </ul>
+</div>

@@ -1,0 +1,197 @@
+<h2>Diseño completo — Extractos</h2>
+<p class="subtitle">Pipeline de upload → parsing → revisión → reconciliación → importación</p>
+
+<!-- Flow diagram -->
+<div class="section">
+  <h3>Flujo de datos</h3>
+  <div style="background:#111;border-radius:10px;padding:20px;font-family:system-ui;overflow-x:auto">
+    <div style="display:flex;align-items:flex-start;gap:0;min-width:700px">
+
+      <!-- Step 1 -->
+      <div style="text-align:center;flex:1">
+        <div style="background:#1a1a2e;border:1.5px solid #7c6fff;border-radius:8px;padding:10px;margin:0 4px">
+          <div style="font-size:11px;font-weight:700;color:#7c6fff;margin-bottom:4px">📱 ANDROID</div>
+          <div style="font-size:10px;color:#fff">File picker</div>
+          <div style="font-size:9px;color:#888;margin-top:3px">PDF / CSV / XLS</div>
+        </div>
+      </div>
+
+      <div style="color:#555;font-size:18px;margin-top:18px">→</div>
+
+      <!-- Step 2 -->
+      <div style="text-align:center;flex:1">
+        <div style="background:#1a1a1a;border:1.5px solid #333;border-radius:8px;padding:10px;margin:0 4px">
+          <div style="font-size:11px;font-weight:700;color:#5cb8e8;margin-bottom:4px">🖥 SERVER</div>
+          <div style="font-size:10px;color:#fff">Text extraction</div>
+          <div style="font-size:9px;color:#888;margin-top:3px">PDFBox / POI / CSV</div>
+        </div>
+      </div>
+
+      <div style="color:#555;font-size:18px;margin-top:18px">→</div>
+
+      <!-- Step 3 -->
+      <div style="text-align:center;flex:1">
+        <div style="background:#1a1a1a;border:1.5px solid #333;border-radius:8px;padding:10px;margin:0 4px">
+          <div style="font-size:11px;font-weight:700;color:#e85c9a;margin-bottom:4px">🤖 CLAUDE</div>
+          <div style="font-size:10px;color:#fff">Parsing + reglas</div>
+          <div style="font-size:9px;color:#888;margin-top:3px">merchant rules inyectadas</div>
+        </div>
+      </div>
+
+      <div style="color:#555;font-size:18px;margin-top:18px">→</div>
+
+      <!-- Step 4 -->
+      <div style="text-align:center;flex:1">
+        <div style="background:#1a1a1a;border:1.5px solid #333;border-radius:8px;padding:10px;margin:0 4px">
+          <div style="font-size:11px;font-weight:700;color:#5cb8e8;margin-bottom:4px">🖥 SERVER</div>
+          <div style="font-size:10px;color:#fff">Match detection</div>
+          <div style="font-size:9px;color:#888;margin-top:3px">monto + fecha ±2 días</div>
+        </div>
+      </div>
+
+      <div style="color:#555;font-size:18px;margin-top:18px">→</div>
+
+      <!-- Step 5 -->
+      <div style="text-align:center;flex:1">
+        <div style="background:#1a2a1a;border:1.5px solid #5cb85c;border-radius:8px;padding:10px;margin:0 4px">
+          <div style="font-size:11px;font-weight:700;color:#5cb85c;margin-bottom:4px">📱 CLIENTE</div>
+          <div style="font-size:10px;color:#fff">Revisión + reconciliar</div>
+          <div style="font-size:9px;color:#888;margin-top:3px">importar seleccionadas</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Screen flow -->
+<div class="section">
+  <h3>Pantallas</h3>
+  <div class="split">
+
+    <!-- ExtractosScreen updated -->
+    <div class="mockup">
+      <div class="mockup-header">ExtractosScreen (actualizada)</div>
+      <div class="mockup-body" style="background:#0f0f0f;padding:14px;font-family:system-ui">
+        <div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">Extractos</div>
+
+        <!-- Upload zone — active -->
+        <div style="border:1.5px dashed #7c6fff;border-radius:12px;padding:20px;text-align:center;background:#1a1a2e22;margin-bottom:14px">
+          <div style="font-size:24px;margin-bottom:6px">📄</div>
+          <div style="color:#fff;font-size:12px;font-weight:600;margin-bottom:4px">Subir extracto</div>
+          <div style="color:#888;font-size:10px">PDF · CSV · XLS</div>
+          <div style="margin-top:10px;background:#7c6fff;border-radius:6px;padding:7px;color:#fff;font-size:10px;font-weight:600">
+            Seleccionar archivo
+          </div>
+        </div>
+
+        <!-- Progress state (overlay) -->
+        <div style="background:#1a1a1a;border-radius:8px;padding:10px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <div style="color:#fff;font-size:10px">Bancolombia_Mayo2025.pdf</div>
+            <div style="color:#7c6fff;font-size:10px">Parseando…</div>
+          </div>
+          <div style="background:#2a2a2a;border-radius:4px;height:4px">
+            <div style="background:#7c6fff;width:65%;height:4px;border-radius:4px"></div>
+          </div>
+          <div style="color:#666;font-size:9px;margin-top:5px">Claude está leyendo el extracto</div>
+        </div>
+
+        <!-- History -->
+        <div style="color:#666;font-size:9px;letter-spacing:0.8px;margin-bottom:6px">IMPORTACIONES ANTERIORES</div>
+        <div style="background:#1a1a1a;border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="color:#fff;font-size:10px">Bancolombia · Abril 2025</div>
+            <div style="color:#666;font-size:9px">28 importadas · 3 reconciliadas</div>
+          </div>
+          <div style="color:#5cb85c;font-size:9px">✓ Listo</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Review screen -->
+    <div class="mockup">
+      <div class="mockup-header">StatementReviewScreen</div>
+      <div class="mockup-body" style="background:#0f0f0f;padding:14px;font-family:system-ui">
+        <div style="color:#888;font-size:9px;letter-spacing:1px;margin-bottom:4px">BANCOLOMBIA · MAYO 2025</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <div style="color:#fff;font-size:13px;font-weight:700">23 transacciones</div>
+          <div style="color:#888;font-size:10px">21 nuevas · <span style="color:#e8a85c">2 coincidencias</span></div>
+        </div>
+
+        <!-- Match item -->
+        <div style="background:#2a1a0a;border:1px solid #e8a85c44;border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="color:#e8a85c;font-size:9px;letter-spacing:0.5px">⚠ POSIBLE DUPLICADO</div>
+            <div style="color:#e8a85c;font-size:9px">Reconciliar →</div>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <div style="color:#fff;font-size:10px">Éxito Country</div>
+            <div style="color:#e85c5c;font-size:10px">−$312.400</div>
+          </div>
+          <div style="color:#666;font-size:9px">28 may · Mercado</div>
+        </div>
+
+        <!-- Normal items -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1e1e1e">
+          <div style="width:14px;height:14px;border:1.5px solid #7c6fff;border-radius:3px;background:#7c6fff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <span style="color:#fff;font-size:8px">✓</span>
+          </div>
+          <div style="flex:1">
+            <div style="color:#fff;font-size:10px">Rappi</div>
+            <div style="color:#666;font-size:9px">Restaurantes · 27 may</div>
+          </div>
+          <div style="color:#e85c5c;font-size:10px">−$48.900</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1e1e1e">
+          <div style="width:14px;height:14px;border:1.5px solid #7c6fff;border-radius:3px;background:#7c6fff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <span style="color:#fff;font-size:8px">✓</span>
+          </div>
+          <div style="flex:1">
+            <div style="color:#fff;font-size:10px">Salario Globant</div>
+            <div style="color:#666;font-size:9px">Nómina · 25 may</div>
+          </div>
+          <div style="color:#5cb85c;font-size:10px">+$4.500.000</div>
+        </div>
+        <div style="color:#888;font-size:9px;text-align:center;padding:6px 0">+ 18 más…</div>
+
+        <!-- Import button -->
+        <div style="margin-top:8px;background:#7c6fff;border-radius:8px;padding:10px;text-align:center">
+          <div style="color:#fff;font-size:11px;font-weight:700">Importar 21 seleccionadas</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scope -->
+<div class="section">
+  <h3>Scope de este plan</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="background:#0e2a1e;border:1px solid #5cb85c44;border-radius:8px;padding:14px">
+      <div style="color:#5cb85c;font-size:10px;font-weight:700;letter-spacing:0.8px;margin-bottom:8px">✓ INCLUIDO</div>
+      <ul style="color:#aaa;font-size:10px;line-height:18px;padding-left:14px;margin:0">
+        <li>File picker Android (PDF/CSV/XLS)</li>
+        <li>Endpoint multipart upload servidor</li>
+        <li>Extracción de texto (PDFBox + POI + CSV)</li>
+        <li>Claude parsing + categorización</li>
+        <li>Detección de duplicados (monto + fecha)</li>
+        <li>StatementReviewScreen — revisión en bloque</li>
+        <li>Reconciliación campo por campo</li>
+        <li>Importación: crear eventos nuevos + actualizar existentes</li>
+        <li>Merchant rules básicas (guardado de correcciones)</li>
+      </ul>
+    </div>
+    <div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:14px">
+      <div style="color:#666;font-size:10px;font-weight:700;letter-spacing:0.8px;margin-bottom:8px">⏭ PRÓXIMO PLAN</div>
+      <ul style="color:#666;font-size:10px;line-height:18px;padding-left:14px;margin:0">
+        <li>iOS file picker</li>
+        <li>Sistema de aprendizaje avanzado (reglas → Claude prompt)</li>
+        <li>Historial de importaciones</li>
+        <li>Re-parseo con feedback acumulado</li>
+        <li>Web upload</li>
+      </ul>
+    </div>
+  </div>
+</div>

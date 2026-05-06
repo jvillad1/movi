@@ -1,0 +1,10 @@
+{"type":"server-started","port":55431,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:55431","screen_dir":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content","state_dir":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/state"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/scope.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/waiting-1.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/navigation.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/waiting-2.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/create-account-ux.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/waiting-3.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/dashboard-design.html"}
+{"type":"screen-added","file":"/Users/jvillada/AndroidStudioProjects/movi/.superpowers/brainstorm/11199-1777823168/content/accounts-screen.html"}
+{"type":"server-stopped","reason":"idle timeout"}

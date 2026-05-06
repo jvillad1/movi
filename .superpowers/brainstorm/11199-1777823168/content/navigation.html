@@ -1,0 +1,56 @@
+<h2>¿Dónde vive AccountsScreen en la navegación?</h2>
+<p class="subtitle">Las pantallas existentes ya llaman a getAccounts() y getEventsByDay(). Solo falta la gestión de cuentas.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0F1115;padding:12px;border-radius:8px">
+      <!-- Mockup bottom nav -->
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#7DDDB0">🏠<br><span style="color:#E6E1E9;font-size:10px">Home</span></div>
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#E6E1E9">📋<br><span style="font-size:10px">Transacc.</span></div>
+        <div style="flex:1;background:#C7BCFF;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#0F1115">＋<br><span style="font-size:10px">Agregar</span></div>
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#E6E1E9">📊<br><span style="font-size:10px">Presupu.</span></div>
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#E6E1E9">⋯<br><span style="font-size:10px">Más</span></div>
+      </div>
+      <!-- Dashboard mockup -->
+      <div style="background:#15171C;border-radius:6px;padding:10px">
+        <div style="color:#BC8CFF;font-size:11px;font-weight:bold;margin-bottom:6px">DASHBOARD</div>
+        <div style="color:#7DDDB0;font-size:14px;font-weight:bold;margin-bottom:8px">$ 1.250.000</div>
+        <div style="color:#A0A0A0;font-size:10px;margin-bottom:4px">MIS CUENTAS</div>
+        <div style="background:#1D1F25;border-radius:4px;padding:6px;font-size:10px;color:#E6E1E9;margin-bottom:3px">Bancolombia · $ 800.000 <span style="float:right;color:#C7BCFF">›</span></div>
+        <div style="background:#1D1F25;border-radius:4px;padding:6px;font-size:10px;color:#E6E1E9;margin-bottom:3px">Efectivo · $ 450.000 <span style="float:right;color:#C7BCFF">›</span></div>
+        <div style="background:#22252B;border-radius:4px;padding:6px;font-size:10px;color:#C7BCFF;text-align:center">+ Nueva cuenta</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Cuentas desde el Dashboard</h3>
+      <p>AccountsScreen se abre al tocar "› Ver todas" o "+" en el Dashboard. Sin cambiar el bottom nav (5 tabs quedan igual).</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0F1115;padding:12px;border-radius:8px">
+      <!-- Bottom nav con tab Cuentas -->
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#E6E1E9">🏠<br><span style="font-size:10px">Home</span></div>
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#7DDDB0">💳<br><span style="font-size:10px">Cuentas</span></div>
+        <div style="flex:1;background:#C7BCFF;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#0F1115">＋<br><span style="font-size:10px">Agregar</span></div>
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#E6E1E9">📋<br><span style="font-size:10px">Transacc.</span></div>
+        <div style="flex:1;background:#1D1F25;border-radius:6px;padding:8px 4px;text-align:center;font-size:11px;color:#E6E1E9">⋯<br><span style="font-size:10px">Más</span></div>
+      </div>
+      <!-- Accounts screen mockup -->
+      <div style="background:#15171C;border-radius:6px;padding:10px">
+        <div style="color:#BC8CFF;font-size:11px;font-weight:bold;margin-bottom:6px">CUENTAS</div>
+        <div style="background:#1D1F25;border-radius:4px;padding:6px;font-size:10px;color:#E6E1E9;margin-bottom:3px">💳 Bancolombia · Corriente<br><span style="color:#7DDDB0">$ 800.000</span></div>
+        <div style="background:#1D1F25;border-radius:4px;padding:6px;font-size:10px;color:#E6E1E9;margin-bottom:3px">💵 Efectivo · Cash<br><span style="color:#7DDDB0">$ 450.000</span></div>
+        <div style="background:#22252B;border-radius:4px;padding:6px;font-size:10px;color:#C7BCFF;text-align:center">+ Nueva cuenta</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Tab dedicada "Cuentas" en el bottom nav</h3>
+      <p>Reemplaza "Transacciones" o "Presupuestos" en el bottom nav. Cuentas siempre a un tap de distancia.</p>
+    </div>
+  </div>
+
+</div>

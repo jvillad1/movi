@@ -1,0 +1,40 @@
+<h2>¿Cómo se anula un movimiento?</h2>
+<p class="subtitle">Cuando el usuario toca una fila de evento en AccountDetail, ¿qué pasa?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Bottom sheet con detalle + "Anular"</h3>
+      <p>Toca la fila → sube un sheet desde abajo con el detalle completo del evento (monto, categoría, fecha, fuente) y un botón "Anular este movimiento" en rojo. Si el usuario confirma, aparece un campo de motivo opcional y luego llama a <code>voidEvent()</code>. Patrón ya establecido con CreateAccountSheet.</p>
+      <div class="pros-cons" style="margin-top:8px">
+        <div class="pros"><h4>Pro</h4><ul><li>Consistente con CreateAccountSheet</li><li>Espacio para mostrar todos los campos del evento</li><li>Paso de confirmación natural</li></ul></div>
+        <div class="cons"><h4>Contra</h4><ul><li>Un tap extra para ver el detalle</li></ul></div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Expandir inline (acordeón)</h3>
+      <p>Toca la fila → se expande in-place mostrando detalles + botón "Anular" debajo. No sale de la lista, el resto de los eventos siguen visibles.</p>
+      <div class="pros-cons" style="margin-top:8px">
+        <div class="pros"><h4>Pro</h4><ul><li>Menos interrumpidor</li><li>Contexto de los demás eventos visible</li></ul></div>
+        <div class="cons"><h4>Contra</h4><ul><li>Poco espacio, IU apretada en mobile</li><li>Patrón no usado en ningún otro lugar</li></ul></div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Two-step: tap = detalle, luego "Anular"</h3>
+      <p>Primer tap → sheet de solo lectura con el detalle completo. Desde ahí, un botón secundario "Anular movimiento" abre una confirmación. Void nunca aparece accidentalmente.</p>
+      <div class="pros-cons" style="margin-top:8px">
+        <div class="pros"><h4>Pro</h4><ul><li>Máxima seguridad contra void accidental</li><li>El detalle del evento tiene valor propio</li></ul></div>
+        <div class="cons"><h4>Contra</h4><ul><li>Dos sheets anidados es complejo</li><li>Más pasos para una acción simple</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:12px">Recomendación: A. Seleccioná o respondé en el chat.</p>
