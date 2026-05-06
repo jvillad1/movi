@@ -35,11 +35,28 @@ object SessionManager {
 
     val isLoggedIn: Boolean get() = !token.isNullOrBlank()
 
+    private var consecutive401s = 0
+    private const val MAX_CONSECUTIVE_401S = 3
+
+    /** Call on every successful authenticated response to reset the 401 streak. */
+    fun onAuthSuccess() { consecutive401s = 0 }
+
+    /**
+     * Call on every 401 response. Clears the session only after [MAX_CONSECUTIVE_401S]
+     * consecutive failures — avoids logging out on a single transient background-sync 401.
+     * Network errors (no connectivity) must NOT call this.
+     */
+    fun onUnauthorized() {
+        consecutive401s++
+        if (consecutive401s >= MAX_CONSECUTIVE_401S) clear()
+    }
+
     fun save(token: String, userId: String, name: String, email: String) {
         this.token    = token
         this.userId   = userId
         this.userName = name
         this.userEmail = email
+        consecutive401s = 0
         loggedIn = true
     }
 
@@ -48,6 +65,7 @@ object SessionManager {
         settings.remove(KEY_USER_ID)
         settings.remove(KEY_NAME)
         settings.remove(KEY_EMAIL)
+        consecutive401s = 0
         loggedIn = false
     }
 }

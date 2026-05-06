@@ -7,11 +7,14 @@ import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.shared.repository.WalletRepositoryImpl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpCallValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import java.io.IOException
 
 actual fun createHttpClient(): HttpClient = HttpClient(Android) {
     install(ContentNegotiation) {
@@ -19,12 +22,24 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
     }
     install(HttpTimeout) {
         requestTimeoutMillis = 120_000
-        socketTimeoutMillis = 120_000
+        socketTimeoutMillis  = 120_000
         connectTimeoutMillis = 30_000
     }
     defaultRequest {
-        SessionManager.token?.let { token ->
-            headers.append("Authorization", "Bearer $token")
+        SessionManager.token?.let { headers.append("Authorization", "Bearer $it") }
+    }
+    install(HttpCallValidator) {
+        validateResponse { response ->
+            if (response.status == HttpStatusCode.Unauthorized) {
+                SessionManager.onUnauthorized()
+            } else if (response.status.value in 200..299) {
+                SessionManager.onAuthSuccess()
+            }
+        }
+        handleResponseExceptionWithRequest { cause, _ ->
+            // Network errors (no connectivity) — keep session alive, work offline
+            if (cause is IOException) return@handleResponseExceptionWithRequest
+            throw cause
         }
     }
 }
