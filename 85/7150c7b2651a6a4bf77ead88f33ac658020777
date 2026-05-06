@@ -1,0 +1,24 @@
+server/src/main/kotlin/com/jvillada/movi/server/routes/StatementRoutes.kt
+  s_f8fc162813c706::t_05e272c0a4ab79 9
+  s_f8fc162813c706::t_e94ba85ddc7f27 61-75
+server/src/main/kotlin/com/jvillada/movi/server/parsing/ClaudeStatementParser.kt
+  s_f8fc162813c706::t_afb4900b48b5f1 48,51-74
+server/src/main/kotlin/com/jvillada/movi/server/parsing/StatementParser.kt
+  s_f8fc162813c706::t_3a3c8f9f880795 8-9,12-16,27,30-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "857150c7b2651a6a4bf77ead88f33ac658020777",
+  "prompts": {},
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
