@@ -1,0 +1,21 @@
+.gitignore
+  s_f8fc162813c706::t_b41455ea1724b9 21
+.dockerignore
+  s_f8fc162813c706::t_a506f28ab48f94 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "9905e47881e4442c6edc80b740f1953bad937462",
+  "prompts": {},
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
