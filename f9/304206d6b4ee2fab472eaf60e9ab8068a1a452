@@ -1,0 +1,29 @@
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/Sparkline.kt
+  s_f8fc162813c706::t_36035d672b5a57 30,38-48
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/dashboard/DashboardScreen.kt
+  s_f8fc162813c706::t_b02acd0a2063d9 31
+  s_f8fc162813c706::t_d162bc9892ac11 87-91,104-108
+  s_f8fc162813c706::t_bd3792a01ec8e7 277-281
+  s_f8fc162813c706::t_73d5cf439cdb2b 47
+  s_f8fc162813c706::t_a4f8a4496e7bcf 167
+composeApp/src/commonMain/kotlin/com/jvillada/movi/App.kt
+  s_f8fc162813c706::t_ff076f9f0ca660 116
+  s_f8fc162813c706::t_df5b44b59998e9 73,75
+  s_f8fc162813c706::t_89d964fc299b9d 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "f9304206d6b4ee2fab472eaf60e9ab8068a1a452",
+  "prompts": {},
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
