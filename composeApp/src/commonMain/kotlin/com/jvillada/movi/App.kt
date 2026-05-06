@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -69,7 +70,9 @@ fun App() {
                 }
             }
 
+            val saveableStateHolder = rememberSaveableStateHolder()
             Box(modifier = Modifier.fillMaxSize().background(MinBg).statusBarsPadding()) {
+                saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 when (currentScreen) {
                     Screen.Login             -> LoginScreen(navigate)
                     Screen.Register          -> RegisterScreen(navigate)
@@ -110,6 +113,7 @@ fun App() {
                         importId = currentScreen.importId,
                     )
                 }
+                } // SaveableStateProvider
             }
         }
     }

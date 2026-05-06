@@ -28,6 +28,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun DashboardScreen(
@@ -43,6 +44,7 @@ fun DashboardScreen(
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutine = rememberCoroutineScope()
 
     LaunchedEffect(scope, refreshKey) {
         loading = true
@@ -82,7 +84,11 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.clickable { onNavigate(Screen.Profile) },
+                ) {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -95,7 +101,11 @@ fun DashboardScreen(
                     Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                 }
                 // Bell with dot
-                Box {
+                Box(
+                    modifier = Modifier.clickable {
+                        coroutine.launch { snackbarHostState.showSnackbar("Sin notificaciones por ahora") }
+                    },
+                ) {
                     Text("🔔", fontSize = 18.sp, color = MinTextDim)
                     Box(
                         modifier = Modifier
@@ -154,6 +164,7 @@ fun DashboardScreen(
                         Sparkline(
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             family = isFamily,
+                            hasData = totalBalance != 0L || ingresos != 0L || egresos != 0L,
                         )
                         Spacer(Modifier.height(20.dp))
                         Hairline()
@@ -263,7 +274,11 @@ fun DashboardScreen(
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = if (isFamily) "Patrimonio familiar" else "Patrimonio", action = "Ver todo")
+                        MinSectionHeader(
+                            title = if (isFamily) "Patrimonio familiar" else "Patrimonio",
+                            action = "Ver todo",
+                            onAction = { onNavigate(Screen.Mas) },
+                        )
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,

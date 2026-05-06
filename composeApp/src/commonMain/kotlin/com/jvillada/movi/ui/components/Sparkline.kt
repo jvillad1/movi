@@ -27,14 +27,25 @@ private val dataFamily = floatArrayOf(
 fun Sparkline(
     modifier: Modifier,
     family: Boolean = false,
+    hasData: Boolean = true,
     color: Color = MinText,
     strokeWidth: Float = 3f,
 ) {
-    val data = if (family) dataFamily else dataIndividual
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         val pad = 2f
+        if (!hasData) {
+            drawLine(
+                color = color.copy(alpha = 0.25f),
+                start = Offset(pad, h / 2),
+                end = Offset(w - pad, h / 2),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+            )
+            return@Canvas
+        }
+        val data = if (family) dataFamily else dataIndividual
         val max = data.max()
         val path = Path()
         data.forEachIndexed { i, v ->
