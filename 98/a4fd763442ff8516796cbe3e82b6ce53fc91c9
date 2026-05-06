@@ -1,0 +1,25 @@
+composeApp/src/iosMain/kotlin/com/jvillada/movi/data/Platform.ios.kt
+  s_f8fc162813c706::t_591148d3469f5f 10,14,24,28-42
+composeApp/src/wasmJsMain/kotlin/com/jvillada/movi/data/Platform.wasmjs.kt
+  s_f8fc162813c706::t_3498373be0bc74 7,10,19-27,29
+composeApp/src/commonMain/kotlin/com/jvillada/movi/data/SessionManager.kt
+  s_f8fc162813c706::t_09d54de4b7ccc3 38-53,59,68
+composeApp/src/androidMain/kotlin/com/jvillada/movi/data/Platform.android.kt
+  s_f8fc162813c706::t_7a33e15af05c9e 10,14,17,25,29-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "98a4fd763442ff8516796cbe3e82b6ce53fc91c9",
+  "prompts": {},
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
