@@ -1,11 +1,12 @@
 package com.jvillada.movi.server.plugins
 
 import com.jvillada.movi.server.routes.*
-import io.ktor.server.application.Application
-import io.ktor.server.auth.authenticate
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
-import io.ktor.server.routing.routing
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.http.content.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 
 fun Application.configureRouting() {
     routing {
@@ -20,6 +21,15 @@ fun Application.configureRouting() {
             smsRoutes()
             aiRoutes()
             statementRoutes()
+        }
+
+        // Serve wasmJs web app — must be last so API routes take priority
+        staticResources("/", "static") {
+            default("index.html")
+            // Ktor 3.x doesn't register application/wasm by default
+            contentType { url ->
+                if (url.path.endsWith(".wasm")) ContentType("application", "wasm") else null
+            }
         }
     }
 }
