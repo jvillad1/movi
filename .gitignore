@@ -18,3 +18,4 @@ Podfile.lock
 movi-data/
 /server/.env
 .worktrees/
+gradle/gradle-daemon-jvm.properties

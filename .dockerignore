@@ -1,0 +1,15 @@
+# Gradle daemon JVM config — IDE-generated, not needed in Docker build
+gradle/gradle-daemon-jvm.properties
+
+# Build outputs
+build/
+.gradle/
+**/build/
+
+# Local config
+local.properties
+*.local.properties
+
+# IDE
+.idea/
+*.iml
