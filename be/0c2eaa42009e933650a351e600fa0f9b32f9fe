@@ -1,0 +1,52 @@
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/extractos/StatementReviewScreen.kt
+  s_f8fc162813c706::t_0592b98d91d02a 27
+  s_f8fc162813c706::t_bfa0bb92a378d0 48,81
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/sms/SMSScreens.kt
+  s_f8fc162813c706::t_bfa0bb92a378d0 198,210
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/dashboard/DashboardScreen.kt
+  s_f8fc162813c706::t_fb7b8e2f78da4d 52,55
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/transactions/TransactionsScreen.kt
+  s_f8fc162813c706::t_fb7b8e2f78da4d 52
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/accounts/VoidEventSheet.kt
+  s_f8fc162813c706::t_fb7b8e2f78da4d 50
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/accounts/CreateAccountSheet.kt
+  s_f8fc162813c706::t_bfa0bb92a378d0 63
+  s_f8fc162813c706::t_d441b9ec84adbe 26
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/quickadd/QuickAddScreen.kt
+  s_f8fc162813c706::t_bfa0bb92a378d0 107
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/accounts/AccountsScreen.kt
+  s_f8fc162813c706::t_fb7b8e2f78da4d 42
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/accounts/AccountDetailScreen.kt
+  s_f8fc162813c706::t_fb7b8e2f78da4d 67
+composeApp/src/commonMain/kotlin/com/jvillada/movi/ui/components/ErrorMessages.kt
+  s_f8fc162813c706::t_7a81c256c5de36 1-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "be0c2eaa42009e933650a351e600fa0f9b32f9fe",
+  "prompts": {
+    "f8fc162813c70628": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "<synthetic>"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>",
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2821,
+      "overriden_lines": 0
+    }
+  },
+  "sessions": {
+    "s_f8fc162813c706": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e03b734-047d-4281-91a8-e63f54b9e6c1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "jvillad1 <juan.villada@mercadolibre.com.co>"
+    }
+  }
+}
