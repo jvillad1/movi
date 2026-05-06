@@ -39,7 +39,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         error = null
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
-            .onFailure { e -> error = e.message ?: "Error al cargar cuentas" }
+            .onFailure { e -> error = e.toUserMessage() }
         loading = false
     }
 

@@ -195,7 +195,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 onNavigate(Screen.SMSInbox)
             }.onFailure {
                 working = false
-                error = "No pude confirmar: ${it.message ?: "error"}"
+                error = it.toUserMessage()
             }
         }
     }
@@ -207,7 +207,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             val result = runCatching { Repositories.wallets.ignoreSms(smsId) }
             working = false
             result.onSuccess { onNavigate(Screen.SMSInbox) }
-                .onFailure { error = "No pude ignorar: ${it.message ?: "error"}" }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 

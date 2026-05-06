@@ -47,7 +47,7 @@ fun VoidEventSheet(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                error = e.message ?: "No se pudo anular"
+                error = e.toUserMessage()
                 voiding = false
             }
         }

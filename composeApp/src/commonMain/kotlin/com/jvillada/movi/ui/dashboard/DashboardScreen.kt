@@ -49,10 +49,10 @@ fun DashboardScreen(
         error = null
         runCatching { Repositories.wallets.getFinanceSummary(scope) }
             .onSuccess { summary = it }
-            .onFailure { e -> error = e.message ?: "Error al cargar" }
+            .onFailure { e -> error = e.toUserMessage() }
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
-            .onFailure { e -> if (error == null) error = e.message ?: "Error al cargar cuentas" }
+            .onFailure { e -> if (error == null) error = e.toUserMessage() }
         loading = false
     }
 

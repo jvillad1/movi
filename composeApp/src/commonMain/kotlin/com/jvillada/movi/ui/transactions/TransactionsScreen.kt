@@ -49,7 +49,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         error = null
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess { allDays = it }
-            .onFailure { e -> error = e.message ?: "Error al cargar movimientos" }
+            .onFailure { e -> error = e.toUserMessage() }
         loading = false
     }
 

@@ -104,7 +104,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
             result.onSuccess { onDismiss() }
-                .onFailure { error = "No pude guardar: ${it.message ?: "error desconocido"}" }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 

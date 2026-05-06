@@ -23,6 +23,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
 private data class TypeOption(val type: AccountType, val label: String)
@@ -59,7 +60,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
             val result = runCatching { Repositories.wallets.createAccount(account) }
             saving = false
             result.onSuccess { onAccountCreated() }
-                .onFailure { error = "No pude guardar: ${it.message ?: "error desconocido"}" }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 

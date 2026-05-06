@@ -24,7 +24,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
 private val MinAmber = Color(0xFFE8A85C)
@@ -45,7 +45,7 @@ fun StatementReviewScreen(
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
-            .onFailure { error = "No pude cargar las cuentas: ${it.message ?: "error"}" }
+            .onFailure { error = it.toUserMessage() }
     }
 
     val destinationAccount = remember(accounts, result.bankName) {
@@ -78,7 +78,7 @@ fun StatementReviewScreen(
                 onNavigate(Screen.Transactions)
             }.onFailure {
                 working = false
-                error = "No pude importar: ${it.message ?: "error"}"
+                error = it.toUserMessage()
             }
         }
     }

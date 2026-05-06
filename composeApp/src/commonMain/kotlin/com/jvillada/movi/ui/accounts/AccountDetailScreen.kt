@@ -64,7 +64,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "Error al cargar la cuenta"
+            error = e.toUserMessage()
         }
         loading = false
     }
