@@ -64,8 +64,8 @@ fun DashboardScreen(
     }
 
     val totalBalance = accounts.sumOf { it.balance }
-    val ingresos = summary?.ingresos ?: if (isFamily) 9_200_000L else 4_500_000L
-    val egresos  = summary?.egresos  ?: if (isFamily) 4_330_000L else 2_660_000L
+    val ingresos = summary?.ingresos ?: 0L
+    val egresos  = summary?.egresos  ?: 0L
     val flujo    = ingresos - egresos
 
     Box(
@@ -150,18 +150,6 @@ fun DashboardScreen(
                             letterSpacing = (-1.6).sp,
                             lineHeight = 44.sp,
                         )
-                        Spacer(Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("↑", fontSize = 13.sp, color = MinIncome, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = "+12,4%",
-                                fontSize = 13.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = MinIncome,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Text("vs. marzo", fontSize = 13.sp, color = MinTextMute)
-                        }
                         Spacer(Modifier.height(18.dp))
                         Sparkline(
                             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -181,16 +169,14 @@ fun DashboardScreen(
                         Spacer(Modifier.height(18.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
                             listOf(
-                                Triple("Ingresos", formatMillions(ingresos), "+8,1%"),
-                                Triple("Egresos",  formatMillions(egresos),  "−2,4%"),
-                                Triple("Flujo",    formatMillions(flujo),    "+24,8%"),
-                            ).forEach { (label, value, delta) ->
+                                Pair("Ingresos", formatMillions(ingresos)),
+                                Pair("Egresos",  formatMillions(egresos)),
+                                Pair("Flujo",    formatMillions(flujo)),
+                            ).forEach { (label, value) ->
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(6.dp))
                                     Text(value, fontSize = 14.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                                    Spacer(Modifier.height(3.dp))
-                                    Text(delta, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinIncome)
                                 }
                             }
                         }
@@ -326,44 +312,13 @@ fun DashboardScreen(
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Alertas", count = if (isFamily) 3 else 2)
+                        MinSectionHeader(title = "Alertas")
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
                         ) {
-                            if (isFamily) {
-                                CardRow(
-                                    left = { Text("Mercado familiar al 92%", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                    sub = "$1.290.000 de $1.400.000 este mes",
-                                    showChevron = true,
-                                )
-                                CardRow(
-                                    left = { Text("Cuota Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                    sub = "Se descuenta el 30 de abril",
-                                    right = { MonoText("$580.000", 14.5f) },
-                                    showChevron = true,
-                                )
-                                CardRow(
-                                    left = { Text("Cumpleaños Mateo en 14 días", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                    sub = "Falta $580.000 de la meta",
-                                    showChevron = true,
-                                    isLast = true,
-                                )
-                            } else {
-                                CardRow(
-                                    left = { Text("Restaurantes al 80%", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                    sub = "$640.000 de $800.000 este mes",
-                                    showChevron = true,
-                                )
-                                CardRow(
-                                    left = { Text("Cuota Bancolombia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                    sub = "Se descuenta el 30 de abril",
-                                    right = { MonoText("$580.000", 14.5f) },
-                                    showChevron = true,
-                                    isLast = true,
-                                )
-                            }
+                            Text("Sin alertas por ahora", fontSize = 14.sp, color = MinTextMute)
                         }
                     }
                 }
