@@ -31,11 +31,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Android (from terminal, no Android Studio)
 ```bash
 # List available AVDs
-/Users/jvillada/Library/Android/sdk/emulator/emulator -list-avds
+"$ANDROID_HOME/emulator/emulator" -list-avds
 # Available: Pixel_8_Pro, Pixel_9_Pro
 
-# Boot emulator in background (use native arm64 binary, NOT `emulator` in PATH which is x86_64)
-/Users/jvillada/Library/Android/sdk/emulator/emulator -avd Pixel_9_Pro -no-snapshot-load > /tmp/emulator.log 2>&1 &
+# Boot emulator in background (use the SDK binary at $ANDROID_HOME/emulator,
+# not a stray `emulator` on PATH — on Apple Silicon the native arm64 binary lives there)
+"$ANDROID_HOME/emulator/emulator" -avd Pixel_9_Pro -no-snapshot-load > /tmp/emulator.log 2>&1 &
 until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 3; done && echo "booted"
 
 # Build APK and install via adb (installDebug Gradle task doesn't see the device reliably)
