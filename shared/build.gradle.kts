@@ -65,6 +65,29 @@ configurations.configureEach {
     }
 }
 
+// SQLDelight generates its Kotlin under commonMain, so wasmJs (which inherits
+// from commonMain) tries to compile it and fails because the SQLDelight runtime
+// is excluded above. Move the generated dir from commonMain to nonWasmMain so
+// only android/ios/jvm see it. Provider-based srcDir keeps the task-dependency
+// wiring intact: nonWasm compile tasks transitively dependsOn the generate task.
+afterEvaluate {
+    val generateTask = tasks.named("generateCommonMainMoviDatabaseInterface")
+    val generatedDirProvider = generateTask.map {
+        layout.buildDirectory.dir("generated/sqldelight/code/MoviDatabase/commonMain").get()
+    }
+
+    val commonMain = kotlin.sourceSets.getByName("commonMain")
+    val nonWasmMain = kotlin.sourceSets.getByName("nonWasmMain")
+
+    // Detach generated SQLDelight dir from commonMain.
+    val toRemove = commonMain.kotlin.srcDirs.filter { it.path.contains("generated/sqldelight") }.toSet()
+    if (toRemove.isNotEmpty()) {
+        commonMain.kotlin.setSrcDirs(commonMain.kotlin.srcDirs - toRemove)
+    }
+    // Reattach to nonWasmMain — Provider preserves task dependency wiring.
+    nonWasmMain.kotlin.srcDir(generatedDirProvider)
+}
+
 android {
     namespace = "com.jvillada.movi.shared"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
