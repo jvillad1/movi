@@ -29,6 +29,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
@@ -186,7 +187,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     description = p.merchant,
                     merchant = p.merchant,
                     source = EventSource.SMS,
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = Clock.System.now().toEpochMilliseconds(),
                 )
                 Repositories.wallets.postEvent(event)
                 Repositories.wallets.confirmSms(smsId)

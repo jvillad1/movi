@@ -30,6 +30,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 private val EXPENSE_CATEGORIES = listOf(
     "Mercado", "Restaurantes", "Transporte", "Salud",
@@ -99,7 +100,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
                 category = category,
                 description = note.ifBlank { category },
                 source = EventSource.MANUAL,
-                timestamp = System.currentTimeMillis(),
+                timestamp = Clock.System.now().toEpochMilliseconds(),
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
