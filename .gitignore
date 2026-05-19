@@ -19,3 +19,9 @@ movi-data/
 /server/.env
 .worktrees/
 gradle/gradle-daemon-jvm.properties
+# Populated at build time by Dockerfile (wasmJs bundle copied here)
+/server/src/main/resources/static/
+# Local debug artifacts
+.playwright-mcp/
+/kotlin-js-store/
+/*.png

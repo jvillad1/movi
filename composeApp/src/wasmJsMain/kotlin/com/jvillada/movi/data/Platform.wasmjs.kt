@@ -9,6 +9,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.browser.window
 import kotlinx.serialization.json.Json
 
 actual fun createHttpClient(): HttpClient = HttpClient(Js) {
@@ -30,6 +31,6 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
     }
 }
 
-actual val apiBaseUrl: String = "https://movi-api-production.up.railway.app"
+actual val apiBaseUrl: String = window.location.origin
 
 actual fun createRepository(): WalletRepository = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
