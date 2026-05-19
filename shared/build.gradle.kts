@@ -24,14 +24,28 @@ kotlin {
     @OptIn(org.jetbrains.kotlin.gradle.targets.js.dsl.ExperimentalWasmDsl::class)
     wasmJs { browser() }
 
-    sourceSets {
-        val nonWasmMain by creating {
-            dependsOn(commonMain.get())
+    // SQLDelight has no wasmJs artifact. Insert a "nonWasm" intermediate
+    // between commonMain and every non-wasm target. Nesting the iOS group
+    // inside nonWasm makes iosMain (and androidMain, jvmMain) inherit from
+    // nonWasmMain — required by Kotlin 2.1.21 metadata resolution.
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("nonWasm") {
+                withAndroidTarget()
+                withJvm()
+                group("apple") {
+                    group("ios") {
+                        withIosArm64()
+                        withIosX64()
+                        withIosSimulatorArm64()
+                    }
+                }
+            }
         }
-        androidMain.get().dependsOn(nonWasmMain)
-        iosMain.get().dependsOn(nonWasmMain)
-        jvmMain.get().dependsOn(nonWasmMain)
+    }
 
+    sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)

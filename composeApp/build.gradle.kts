@@ -36,6 +36,24 @@ kotlin {
         binaries.executable()
     }
 
+    // Mirror :shared module's nested nonWasm hierarchy so consumer-side
+    // metadata resolution lines up with the producer.
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("nonWasm") {
+                withAndroidTarget()
+                group("apple") {
+                    group("ios") {
+                        withIosArm64()
+                        withIosX64()
+                        withIosSimulatorArm64()
+                    }
+                }
+            }
+        }
+    }
+
     sourceSets {
         androidMain.dependencies {
             implementation(compose.preview)
