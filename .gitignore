@@ -25,3 +25,4 @@ gradle/gradle-daemon-jvm.properties
 .playwright-mcp/
 /kotlin-js-store/
 /*.png
+/.snapshots/

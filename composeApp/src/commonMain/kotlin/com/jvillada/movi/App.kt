@@ -4,12 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
@@ -71,7 +74,15 @@ fun App() {
             }
 
             val saveableStateHolder = rememberSaveableStateHolder()
-            Box(modifier = Modifier.fillMaxSize().background(MinBg).statusBarsPadding()) {
+            // Outer Box paints the background full-bleed across desktop.
+            // Inner Box caps at 600dp so on web the app renders as a centered
+            // "phone column"; on mobile/iOS the cap is wider than the viewport
+            // and has no effect.
+            Box(
+                modifier = Modifier.fillMaxSize().background(MinBg),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Box(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 when (currentScreen) {
                     Screen.Login             -> LoginScreen(navigate)
@@ -114,6 +125,7 @@ fun App() {
                     )
                 }
                 } // SaveableStateProvider
+                } // inner Box (max-width container)
             }
         }
     }
