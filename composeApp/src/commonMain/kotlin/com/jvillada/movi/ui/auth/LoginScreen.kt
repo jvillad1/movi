@@ -44,7 +44,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         Text("Finanzas personales", fontSize = 14.sp, color = MinTextMute)
         Spacer(Modifier.height(40.dp))
 
-        MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
+        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
             Text("Correo", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(value = email, onChange = { email = it }, placeholder = "tu@correo.com")
             Spacer(Modifier.height(16.dp))

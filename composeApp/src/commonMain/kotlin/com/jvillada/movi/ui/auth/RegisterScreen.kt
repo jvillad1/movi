@@ -38,7 +38,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         Text("Ingresá tus datos para empezar", fontSize = 14.sp, color = MinTextMute)
         Spacer(Modifier.height(32.dp))
 
-        MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
+        MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
             Text("Nombre", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(value = name, onChange = { name = it }, placeholder = "Tu nombre")
             Spacer(Modifier.height(14.dp))
