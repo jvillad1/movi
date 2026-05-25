@@ -3,11 +3,11 @@ WORKDIR /app
 COPY . .
 
 # Build wasmJs production bundle
-RUN gradle :composeApp:wasmJsBrowserDistribution --no-daemon --quiet
+RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --quiet
 
 # Copy web app into server resources so it's bundled in the fat JAR
 RUN mkdir -p server/src/main/resources/static && \
-    cp -r composeApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
+    cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
 
 # Build server fat JAR (now includes the web app)
 RUN gradle :server:buildFatJar --no-daemon --quiet

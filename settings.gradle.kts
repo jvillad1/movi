@@ -1,6 +1,8 @@
 rootProject.name = "movi"
+include(":core")
 include(":shared")
-include(":composeApp")
+include(":androidApp")
+include(":webApp")
 include(":server")
 
 pluginManagement {
