@@ -3,7 +3,9 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.estimatedTotalCop
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.balance.openingEventFor
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
@@ -53,6 +55,7 @@ fun Route.accountRoutes() {
             val account = body.copy(
                 id = body.id.ifBlank { "acc_${System.currentTimeMillis()}" }
             )
+            val opening = openingEventFor(account, now = System.currentTimeMillis())
             dbQuery {
                 Accounts.insert {
                     it[id]       = account.id
@@ -61,6 +64,24 @@ fun Route.accountRoutes() {
                     it[type]     = account.type.name
                     it[balance]  = account.balance
                     it[currency] = account.currency
+                }
+                if (opening != null) {
+                    Events.insert {
+                        it[id]                   = opening.id
+                        it[userId]               = uid
+                        it[accountId]            = opening.accountId
+                        it[type]                 = opening.type.name
+                        it[amount]               = opening.amount
+                        it[Events.currency]      = opening.currency
+                        it[category]             = opening.category
+                        it[description]          = opening.description
+                        it[merchant]             = opening.merchant
+                        it[timestamp]            = opening.timestamp
+                        it[eventSource]          = opening.source.name
+                        it[rawPayload]           = opening.rawPayload
+                        it[reconciliationStatus] = opening.reconciliationStatus.name
+                        it[syncedAt]             = opening.syncedAt
+                    }
                 }
             }
             call.respond(HttpStatusCode.Created, account)
