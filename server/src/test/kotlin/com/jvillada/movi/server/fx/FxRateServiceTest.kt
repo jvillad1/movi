@@ -26,4 +26,11 @@ class FxRateServiceTest {
         assertNull(FxRateService.parseTrm("not json"))
         assertNull(FxRateService.parseTrm("[]"))
     }
+
+    @Test
+    fun `parseTrm rejects implausible rates so fallback can engage`() {
+        assertNull(FxRateService.parseTrm("""[{"valor":"0","vigenciadesde":"2026-06-08T00:00:00.000"}]"""))
+        assertNull(FxRateService.parseTrm("""[{"valor":"-5","vigenciadesde":"2026-06-08T00:00:00.000"}]"""))
+        assertNull(FxRateService.parseTrm("""[{"valor":"39505500","vigenciadesde":"2026-06-08T00:00:00.000"}]"""))
+    }
 }
