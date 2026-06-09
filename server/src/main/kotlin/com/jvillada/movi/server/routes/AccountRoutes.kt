@@ -9,6 +9,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.FinancialEvent
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -29,7 +30,8 @@ fun Route.accountRoutes() {
             val rows = dbQuery {
                 Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }
             }
-            val enriched = rows.map { enrich(uid, it, rate) }
+            val byAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+            val enriched = rows.map { enrichWith(it, byAccount[it.id] ?: emptyList(), rate) }
             call.respond(enriched)
         }
 
@@ -42,7 +44,7 @@ fun Route.accountRoutes() {
                     .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
                     .firstOrNull()?.toAccount()
             } ?: return@get call.respond(HttpStatusCode.NotFound)
-            call.respond(enrich(uid, base, FxRateService.usdToCop()))
+            call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
         }
 
         post {
@@ -66,8 +68,7 @@ fun Route.accountRoutes() {
     }
 }
 
-private suspend fun enrich(uid: String, base: Account, rate: Double): Account {
-    val events = loadNonVoidedEvents(uid, base.id)
+private fun enrichWith(base: Account, events: List<FinancialEvent>, rate: Double): Account {
     val balances = computeBalances(base.type, events)
     return base.copy(
         balance            = balances["COP"] ?: 0L,

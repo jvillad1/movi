@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -16,8 +17,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -65,47 +64,24 @@ fun Route.eventRoutes() {
         get {
             val uid = call.userId()
             val accountId = call.request.queryParameters["accountId"]
-            val result = dbQuery {
-                val voidedIds = VoidEvents.selectAll()
-                    .where { VoidEvents.userId eq uid }
-                    .map { it[VoidEvents.originalEventId] }
-                    .toSet()
-                val notVoided = if (voidedIds.isEmpty()) Op.TRUE
-                                else Events.id notInList voidedIds.toList()
-                val accountFilter = if (accountId != null) Events.accountId eq accountId else Op.TRUE
-                Events.selectAll()
-                    .where { (Events.userId eq uid) and accountFilter and notVoided }
-                    .orderBy(Events.timestamp, SortOrder.DESC)
-                    .map { it.toFinancialEvent() }
-            }
+            val result = loadNonVoidedEvents(uid, accountId).sortedByDescending { it.timestamp }
             call.respond(result)
         }
 
         get("/by-day") {
             val uid = call.userId()
-            val result = dbQuery {
-                val voidedIds = VoidEvents.selectAll()
-                    .where { VoidEvents.userId eq uid }
-                    .map { it[VoidEvents.originalEventId] }
-                    .toSet()
-                val notVoided = if (voidedIds.isEmpty()) Op.TRUE
-                                else Events.id notInList voidedIds.toList()
-                Events.selectAll()
-                    .where { (Events.userId eq uid) and notVoided }
-                    .orderBy(Events.timestamp, SortOrder.DESC)
-                    .map { it.toFinancialEvent() }
-                    .groupBy { epochToUtcDate(it.timestamp) }
-                    .map { (date, items) ->
-                        EventDay(
-                            date  = date,
-                            total = items.sumOf { e ->
-                                if (e.type == TransactionType.INCOME) e.amount else -e.amount
-                            },
-                            items = items,
-                        )
-                    }
-                    .sortedByDescending { it.date }
-            }
+            val result = loadNonVoidedEvents(uid)
+                .groupBy { epochToUtcDate(it.timestamp) }
+                .map { (date, items) ->
+                    EventDay(
+                        date  = date,
+                        total = items.filter { it.currency == "COP" }.sumOf { e ->
+                            if (e.type == TransactionType.INCOME) e.amount else -e.amount
+                        },
+                        items = items,
+                    )
+                }
+                .sortedByDescending { it.date }
             call.respond(result)
         }
 

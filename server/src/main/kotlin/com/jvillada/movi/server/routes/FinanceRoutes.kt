@@ -110,8 +110,9 @@ fun Route.financeRoutes() {
             Accounts.selectAll().where { Accounts.userId eq uid }
                 .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
         }
+        val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
         val derivedBalance = accountRows.sumOf { (accId, accType) ->
-            accountCopValue(accType, loadNonVoidedEvents(uid, accId), rate)
+            accountCopValue(accType, eventsByAccount[accId] ?: emptyList(), rate)
         }
 
         val summary = dbQuery {
@@ -127,10 +128,10 @@ fun Route.financeRoutes() {
             }.filterNot { it[Events.id] in voidedIds }
 
             val ingresos = monthEvents
-                .filter { it[Events.type] == TransactionType.INCOME.name }
+                .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
             val egresos = monthEvents
-                .filter { it[Events.type] == TransactionType.EXPENSE.name }
+                .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
 
             FinanceSummary(scope = scope, balance = derivedBalance, ingresos = ingresos, egresos = egresos)
