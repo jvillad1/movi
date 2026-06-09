@@ -1,10 +1,13 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.shared.model.AccountType
@@ -102,17 +105,13 @@ fun Route.financeRoutes() {
             .withHour(0).withMinute(0).withSecond(0).withNano(0)
             .toInstant().toEpochMilli()
 
-        val rate = com.jvillada.movi.server.fx.FxRateService.usdToCop()
+        val rate = FxRateService.usdToCop()
         val accountRows = dbQuery {
             Accounts.selectAll().where { Accounts.userId eq uid }
                 .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
         }
         val derivedBalance = accountRows.sumOf { (accId, accType) ->
-            com.jvillada.movi.server.balance.accountCopValue(
-                accType,
-                com.jvillada.movi.server.balance.loadNonVoidedEvents(uid, accId),
-                rate,
-            )
+            accountCopValue(accType, loadNonVoidedEvents(uid, accId), rate)
         }
 
         val summary = dbQuery {
