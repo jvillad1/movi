@@ -10,6 +10,8 @@ data class Account(
     val id: String,
     val name: String,
     val type: AccountType,
-    val balance: Long,      // in COP pesos (integer, no decimals)
+    val balance: Long,      // COP component (derived on read)
     val currency: String = "COP",
+    val balancesByCurrency: Map<String, Long> = emptyMap(),  // derived: per-currency balance
+    val estimatedTotalCop: Long? = null,                     // derived: COP + foreign × TRM
 )
