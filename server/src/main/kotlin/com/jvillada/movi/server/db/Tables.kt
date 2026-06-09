@@ -39,6 +39,7 @@ object Events : Table("financial_events") {
     val accountId            = varchar("account_id", 50)
     val type                 = varchar("type", 20)
     val amount               = long("amount")
+    val currency             = varchar("currency", 10).default("COP")
     val category             = varchar("category", 100)
     val description          = varchar("description", 255)
     val merchant             = varchar("merchant", 255).nullable()

@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.StatementDocumentType
 import com.jvillada.movi.server.parsing.StatementParser
@@ -87,22 +88,7 @@ fun Route.statementRoutes() {
                     (Events.userId eq uid) and
                     (if (voidedIds.isNotEmpty()) Events.id notInList voidedIds else Op.TRUE)
                 }
-                .map { row ->
-                    FinancialEvent(
-                        id = row[Events.id],
-                        accountId = row[Events.accountId],
-                        type = TransactionType.valueOf(row[Events.type]),
-                        amount = row[Events.amount],
-                        category = row[Events.category],
-                        description = row[Events.description],
-                        merchant = row[Events.merchant],
-                        timestamp = row[Events.timestamp],
-                        source = EventSource.valueOf(row[Events.eventSource]),
-                        rawPayload = row[Events.rawPayload],
-                        reconciliationStatus = ReconciliationStatus.valueOf(row[Events.reconciliationStatus]),
-                        syncedAt = row[Events.syncedAt],
-                    )
-                }
+                .map { it.toFinancialEvent() }
         }
 
         val matches = mutableListOf<ReconciliationMatch>()
@@ -259,22 +245,7 @@ fun Route.statementRoutes() {
         val events = dbQuery {
             Events.selectAll()
                 .where { (Events.statementImportId eq importId) and (Events.userId eq uid) }
-                .map { row ->
-                    FinancialEvent(
-                        id                   = row[Events.id],
-                        accountId            = row[Events.accountId],
-                        type                 = TransactionType.valueOf(row[Events.type]),
-                        amount               = row[Events.amount],
-                        category             = row[Events.category],
-                        description          = row[Events.description],
-                        merchant             = row[Events.merchant],
-                        timestamp            = row[Events.timestamp],
-                        source               = EventSource.valueOf(row[Events.eventSource]),
-                        rawPayload           = row[Events.rawPayload],
-                        reconciliationStatus = ReconciliationStatus.valueOf(row[Events.reconciliationStatus]),
-                        syncedAt             = row[Events.syncedAt],
-                    )
-                }
+                .map { it.toFinancialEvent() }
         }
 
         call.respond(StatementImportDetail(rowToStatementImport(importRow), events))
@@ -293,6 +264,7 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[Events.accountId]     = accountId
             it[type]                 = tx.type.name
             it[amount]               = tx.amount
+            it[Events.currency]      = tx.currency
             it[category]             = tx.category
             it[description]          = tx.description
             it[merchant]             = tx.merchant

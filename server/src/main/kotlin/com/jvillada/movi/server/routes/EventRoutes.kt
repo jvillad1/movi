@@ -4,6 +4,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.*
 import io.ktor.http.HttpStatusCode
@@ -47,6 +48,7 @@ fun Route.eventRoutes() {
                     it[accountId]            = event.accountId
                     it[type]                 = event.type.name
                     it[amount]               = event.amount
+                    it[Events.currency]      = event.currency
                     it[category]             = event.category
                     it[description]          = event.description
                     it[merchant]             = event.merchant
@@ -78,7 +80,7 @@ fun Route.eventRoutes() {
                 Events.selectAll()
                     .where { (Events.userId eq uid) and accountFilter and notVoided }
                     .orderBy(Events.timestamp, SortOrder.DESC)
-                    .map { it.toEvent() }
+                    .map { it.toFinancialEvent() }
             }
             call.respond(result)
         }
@@ -95,7 +97,7 @@ fun Route.eventRoutes() {
                 Events.selectAll()
                     .where { (Events.userId eq uid) and notVoided }
                     .orderBy(Events.timestamp, SortOrder.DESC)
-                    .map { it.toEvent() }
+                    .map { it.toFinancialEvent() }
                     .groupBy { epochToUtcDate(it.timestamp) }
                     .map { (date, items) ->
                         EventDay(
@@ -120,7 +122,7 @@ fun Route.eventRoutes() {
             val event = dbQuery {
                 Events.selectAll()
                     .where { (Events.id eq id) and (Events.userId eq uid) }
-                    .firstOrNull()?.toEvent()
+                    .firstOrNull()?.toFinancialEvent()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
 
             val void: VoidEvent? = dbQuery {
@@ -156,21 +158,6 @@ fun Route.eventRoutes() {
         }
     }
 }
-
-private fun ResultRow.toEvent() = FinancialEvent(
-    id                   = this[Events.id],
-    accountId            = this[Events.accountId],
-    type                 = TransactionType.valueOf(this[Events.type]),
-    amount               = this[Events.amount],
-    category             = this[Events.category],
-    description          = this[Events.description],
-    merchant             = this[Events.merchant],
-    timestamp            = this[Events.timestamp],
-    source               = EventSource.valueOf(this[Events.eventSource]),
-    rawPayload           = this[Events.rawPayload],
-    reconciliationStatus = ReconciliationStatus.valueOf(this[Events.reconciliationStatus]),
-    syncedAt             = this[Events.syncedAt],
-)
 
 private fun epochToUtcDate(millis: Long): String =
     Instant.ofEpochMilli(millis)
