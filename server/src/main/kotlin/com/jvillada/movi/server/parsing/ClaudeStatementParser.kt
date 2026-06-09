@@ -6,6 +6,7 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.jvillada.movi.shared.model.MerchantRule
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +40,22 @@ object ClaudeStatementParser {
     private fun buildSystemPrompt(rules: List<MerchantRule>): String {
         val rulesJson = if (rules.isEmpty()) "[]"
         else json.encodeToString(ListSerializer(MerchantRule.serializer()), rules)
+        val expenseCats = PREDEFINED_CATEGORIES
+            .filter { it.type == "EXPENSE" || it.type == "BOTH" }
+            .joinToString(", ") { it.name }
+        val incomeCats = PREDEFINED_CATEGORIES
+            .filter { it.type == "INCOME" || it.type == "BOTH" }
+            .joinToString(", ") { it.name }
         return """
 Sos un parser de extractos bancarios colombianos. Tu trabajo es extraer todas las transacciones de un extracto bancario y devolver JSON válido.
 
 Reglas del usuario (aprendidas de correcciones anteriores):
 $rulesJson
+
+CATEGORÍAS — asigná a cada transacción EXACTAMENTE uno de estos nombres (no inventes otros):
+- Si type es EXPENSE, elegí de: $expenseCats. Si ninguna aplica, usá "Otros".
+- Si type es INCOME, elegí de: $incomeCats. Si ninguna aplica, usá "Otros ingresos".
+- Traslados o transferencias entre cuentas propias no tienen categoría natural: usá "Otros" si es EXPENSE u "Otros ingresos" si es INCOME.
 
 Devolvé ÚNICAMENTE un array JSON con este formato exacto, sin explicaciones ni texto adicional:
 [{"date":"YYYY-MM-DD","merchant":"nombre limpio","amount":123456,"type":"EXPENSE|INCOME","category":"categoría","description":"descripción corta","rawText":"línea original"}]
