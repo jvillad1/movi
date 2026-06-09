@@ -118,7 +118,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
                         date = row.date,
                         merchant = row.merchant,
                         amount = row.amount,
-                        currency = row.currency,
+                        currency = row.currency.trim().uppercase().ifEmpty { "COP" },
                         type = runCatching { TransactionType.valueOf(row.type) }.getOrDefault(TransactionType.EXPENSE),
                         category = row.category,
                         description = row.description,

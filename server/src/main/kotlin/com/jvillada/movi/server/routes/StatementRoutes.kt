@@ -102,6 +102,7 @@ fun Route.statementRoutes() {
             val match = if (parsedEpoch != null) {
                 existing.firstOrNull { ev ->
                     ev.amount == tx.amount &&
+                        ev.currency == tx.currency &&
                         abs(parsedEpoch - ev.timestamp) <= 2 * 86_400_000L
                 }
             } else null
