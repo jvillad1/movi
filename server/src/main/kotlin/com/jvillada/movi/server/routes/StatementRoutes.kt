@@ -275,10 +275,6 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[syncedAt]             = null
             it[statementImportId]    = importId
         }
-        val delta = if (tx.type == TransactionType.INCOME) tx.amount else -tx.amount
-        Accounts.update({ (Accounts.id eq accountId) and (Accounts.userId eq uid) }) {
-            it[balance] = Accounts.balance + delta
-        }
     }
 }
 

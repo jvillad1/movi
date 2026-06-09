@@ -58,10 +58,6 @@ fun Route.eventRoutes() {
                     it[reconciliationStatus] = event.reconciliationStatus.name
                     it[syncedAt]             = event.syncedAt
                 }
-                val delta = if (event.type == TransactionType.INCOME) event.amount else -event.amount
-                Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
-                    it[balance] = Accounts.balance + delta
-                }
             }
             call.respond(HttpStatusCode.Created, event)
         }
@@ -140,10 +136,6 @@ fun Route.eventRoutes() {
                         it[VoidEvents.originalEventId] = id
                         it[VoidEvents.reason]          = reason
                         it[VoidEvents.timestamp]       = now
-                    }
-                    val delta = if (event.type == TransactionType.INCOME) -event.amount else event.amount
-                    Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
-                        it[balance] = Accounts.balance + delta
                     }
                     VoidEvent(
                         id              = voidId,
