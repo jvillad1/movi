@@ -1,12 +1,16 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.storage.Stores
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Holding
@@ -101,6 +105,16 @@ fun Route.financeRoutes() {
             .withHour(0).withMinute(0).withSecond(0).withNano(0)
             .toInstant().toEpochMilli()
 
+        val rate = FxRateService.usdToCop()
+        val accountRows = dbQuery {
+            Accounts.selectAll().where { Accounts.userId eq uid }
+                .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
+        }
+        val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+        val derivedBalance = accountRows.sumOf { (accId, accType) ->
+            accountCopValue(accType, eventsByAccount[accId] ?: emptyList(), rate)
+        }
+
         val summary = dbQuery {
             val voidedIds = VoidEvents.selectAll()
                 .where { VoidEvents.userId eq uid }
@@ -114,17 +128,13 @@ fun Route.financeRoutes() {
             }.filterNot { it[Events.id] in voidedIds }
 
             val ingresos = monthEvents
-                .filter { it[Events.type] == TransactionType.INCOME.name }
+                .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
             val egresos = monthEvents
-                .filter { it[Events.type] == TransactionType.EXPENSE.name }
+                .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
 
-            val balance = Accounts.selectAll()
-                .where { Accounts.userId eq uid }
-                .sumOf { it[Accounts.balance] }
-
-            FinanceSummary(scope = scope, balance = balance, ingresos = ingresos, egresos = egresos)
+            FinanceSummary(scope = scope, balance = derivedBalance, ingresos = ingresos, egresos = egresos)
         }
         call.respond(summary)
     }

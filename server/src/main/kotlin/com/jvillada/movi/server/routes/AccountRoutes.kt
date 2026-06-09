@@ -1,10 +1,17 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.computeBalances
+import com.jvillada.movi.server.balance.estimatedTotalCop
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.balance.openingEventFor
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.FinancialEvent
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -21,24 +28,25 @@ fun Route.accountRoutes() {
     route("/api/accounts") {
         get {
             val uid = call.userId()
-            val accounts = dbQuery {
-                Accounts.selectAll()
-                    .where { Accounts.userId eq uid }
-                    .map { it.toAccount() }
+            val rate = FxRateService.usdToCop()
+            val rows = dbQuery {
+                Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }
             }
-            call.respond(accounts)
+            val byAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+            val enriched = rows.map { enrichWith(it, byAccount[it.id] ?: emptyList(), rate) }
+            call.respond(enriched)
         }
 
         get("/{id}") {
             val id = call.parameters["id"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing id")
             val uid = call.userId()
-            val account = dbQuery {
+            val base = dbQuery {
                 Accounts.selectAll()
                     .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
                     .firstOrNull()?.toAccount()
             } ?: return@get call.respond(HttpStatusCode.NotFound)
-            call.respond(account)
+            call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
         }
 
         post {
@@ -47,6 +55,7 @@ fun Route.accountRoutes() {
             val account = body.copy(
                 id = body.id.ifBlank { "acc_${System.currentTimeMillis()}" }
             )
+            val opening = openingEventFor(account, now = System.currentTimeMillis())
             dbQuery {
                 Accounts.insert {
                     it[id]       = account.id
@@ -56,10 +65,37 @@ fun Route.accountRoutes() {
                     it[balance]  = account.balance
                     it[currency] = account.currency
                 }
+                if (opening != null) {
+                    Events.insert {
+                        it[id]                   = opening.id
+                        it[userId]               = uid
+                        it[accountId]            = opening.accountId
+                        it[type]                 = opening.type.name
+                        it[amount]               = opening.amount
+                        it[Events.currency]      = opening.currency
+                        it[category]             = opening.category
+                        it[description]          = opening.description
+                        it[merchant]             = opening.merchant
+                        it[timestamp]            = opening.timestamp
+                        it[eventSource]          = opening.source.name
+                        it[rawPayload]           = opening.rawPayload
+                        it[reconciliationStatus] = opening.reconciliationStatus.name
+                        it[syncedAt]             = opening.syncedAt
+                    }
+                }
             }
             call.respond(HttpStatusCode.Created, account)
         }
     }
+}
+
+private fun enrichWith(base: Account, events: List<FinancialEvent>, rate: Double): Account {
+    val balances = computeBalances(base.type, events)
+    return base.copy(
+        balance            = balances["COP"] ?: 0L,
+        balancesByCurrency = balances,
+        estimatedTotalCop  = estimatedTotalCop(balances, rate),
+    )
 }
 
 private fun ResultRow.toAccount() = Account(

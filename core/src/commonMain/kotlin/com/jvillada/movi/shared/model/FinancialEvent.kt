@@ -13,7 +13,8 @@ data class FinancialEvent(
     val id: String,
     val accountId: String,
     val type: TransactionType,          // INCOME | EXPENSE (reuse existing enum)
-    val amount: Long,                   // in COP pesos
+    val amount: Long,                   // in native currency units (see currency)
+    val currency: String = "COP",       // native currency of the amount (e.g. "COP", "USD")
     val category: String,
     val description: String,
     val merchant: String? = null,

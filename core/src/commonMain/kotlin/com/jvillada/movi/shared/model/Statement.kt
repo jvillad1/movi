@@ -7,7 +7,8 @@ data class ParsedTransaction(
     val id: String,           // UUID, session-scoped
     val date: String,         // "2025-05-28"
     val merchant: String,
-    val amount: Long,         // COP pesos, always positive
+    val amount: Long,         // native currency, always positive
+    val currency: String = "COP",
     val type: TransactionType,
     val category: String,
     val description: String,

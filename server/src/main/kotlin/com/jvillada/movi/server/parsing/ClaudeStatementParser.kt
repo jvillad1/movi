@@ -6,6 +6,7 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.jvillada.movi.shared.model.MerchantRule
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.coroutines.Dispatchers
@@ -39,19 +40,32 @@ object ClaudeStatementParser {
     private fun buildSystemPrompt(rules: List<MerchantRule>): String {
         val rulesJson = if (rules.isEmpty()) "[]"
         else json.encodeToString(ListSerializer(MerchantRule.serializer()), rules)
+        val expenseCats = PREDEFINED_CATEGORIES
+            .filter { it.type == "EXPENSE" || it.type == "BOTH" }
+            .joinToString(", ") { it.name }
+        val incomeCats = PREDEFINED_CATEGORIES
+            .filter { it.type == "INCOME" || it.type == "BOTH" }
+            .joinToString(", ") { it.name }
         return """
 Sos un parser de extractos bancarios colombianos. Tu trabajo es extraer todas las transacciones de un extracto bancario y devolver JSON válido.
 
 Reglas del usuario (aprendidas de correcciones anteriores):
 $rulesJson
 
-Devolvé ÚNICAMENTE un array JSON con este formato exacto, sin explicaciones ni texto adicional:
-[{"date":"YYYY-MM-DD","merchant":"nombre limpio","amount":123456,"type":"EXPENSE|INCOME","category":"categoría","description":"descripción corta","rawText":"línea original"}]
+CATEGORÍAS — asigná a cada transacción EXACTAMENTE uno de estos nombres (no inventes otros):
+- Si type es EXPENSE, elegí de: $expenseCats. Si ninguna aplica, usá "Otros".
+- Si type es INCOME, elegí de: $incomeCats. Si ninguna aplica, usá "Otros ingresos".
+- Traslados o transferencias entre cuentas propias no tienen categoría natural: usá "Otros" si es EXPENSE u "Otros ingresos" si es INCOME.
 
-MONTOS:
-- amount: entero positivo en pesos colombianos, sin separadores de miles ni decimales
-- El extracto puede usar formato colombiano ($ 46.489,00) o americano (46,489.00) — detectá cuál es según el documento
-- Descartá los centavos: redondeá al peso más cercano
+Devolvé ÚNICAMENTE un array JSON con este formato exacto, sin explicaciones ni texto adicional:
+[{"date":"YYYY-MM-DD","merchant":"nombre limpio","amount":123456,"currency":"COP","type":"EXPENSE|INCOME","category":"categoría","description":"descripción corta","rawText":"línea original"}]
+
+MONTOS Y MONEDA:
+- currency: la moneda NATIVA de la transacción ("COP" o "USD"), tomada de la columna de moneda del extracto. Si no hay columna de moneda, usá "COP".
+- amount: el valor en su moneda NATIVA. NO conviertas USD a COP — dejá el valor tal cual viene en esa moneda.
+- amount es entero positivo, sin separadores de miles ni decimales.
+- El extracto puede usar formato colombiano ($ 46.489,00) o americano (46,489.00) — detectá cuál es según el documento.
+- Descartá los centavos: redondeá a la unidad más cercana.
 
 TIPO:
 - EXPENSE: débitos, compras, pagos a terceros, comisiones, impuestos, cargos, intereses cobrados
@@ -60,7 +74,7 @@ TIPO:
 TARJETAS DE CRÉDITO (cuando el extracto tiene columnas "Número cuotas" y "Valor Cuota/Abono"):
 - Usá siempre la columna "Valor movimiento" (precio total de la compra), NUNCA "Valor Cuota/Abono"
 - Incluí cargos por INTERESES CORRIENTES y CUOTA DE MANEJO como EXPENSE
-- Excluí filas de PAGO ALTERNATIVO — son abonos a la tarjeta desde otra cuenta, no compras del titular
+- Los pagos/abonos a la tarjeta (ABONO, ABONO DEBITO AUTOMATICO, PAGO ALTERNATIVO) SÍ se incluyen, como INCOME — reducen la deuda de la tarjeta.
 
 FECHAS SIN AÑO:
 - Si las fechas no incluyen año (ej: "15/04", "1/01", "3 ene"), buscá el año en el encabezado del documento (campos DESDE, HASTA, FECHA DE CORTE, periodo facturado) y asignáselo a todas las transacciones
@@ -69,7 +83,6 @@ FECHAS SIN AÑO:
 EXCLUIR (no son movimientos del titular):
 - Filas de saldo corriente (columna "Saldo" que muestra balance acumulado)
 - Filas de totales, subtotales y encabezados de tabla
-- PAGO ALTERNATIVO (abono a tarjeta desde cuenta propia)
 
 Aplicá las reglas del usuario cuando el merchant coincida.
 """.trimIndent()
@@ -105,6 +118,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
                         date = row.date,
                         merchant = row.merchant,
                         amount = row.amount,
+                        currency = row.currency.trim().uppercase().ifEmpty { "COP" },
                         type = runCatching { TransactionType.valueOf(row.type) }.getOrDefault(TransactionType.EXPENSE),
                         category = row.category,
                         description = row.description,
@@ -119,6 +133,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         val date: String,
         val merchant: String,
         val amount: Long,
+        val currency: String = "COP",
         val type: String,
         val category: String,
         val description: String = "",

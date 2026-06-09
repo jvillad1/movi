@@ -23,6 +23,8 @@ movi-data/
 gradle/gradle-daemon-jvm.properties
 # Populated at build time by Dockerfile (wasmJs bundle copied here)
 /server/src/main/resources/static/
+# Real bank statements / personal financial data — never commit
+/docs/movements/
 # Local debug artifacts
 .playwright-mcp/
 /kotlin-js-store/

@@ -1,9 +1,11 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.*
 import io.ktor.http.HttpStatusCode
@@ -15,8 +17,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -47,6 +47,7 @@ fun Route.eventRoutes() {
                     it[accountId]            = event.accountId
                     it[type]                 = event.type.name
                     it[amount]               = event.amount
+                    it[Events.currency]      = event.currency
                     it[category]             = event.category
                     it[description]          = event.description
                     it[merchant]             = event.merchant
@@ -56,10 +57,6 @@ fun Route.eventRoutes() {
                     it[reconciliationStatus] = event.reconciliationStatus.name
                     it[syncedAt]             = event.syncedAt
                 }
-                val delta = if (event.type == TransactionType.INCOME) event.amount else -event.amount
-                Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
-                    it[balance] = Accounts.balance + delta
-                }
             }
             call.respond(HttpStatusCode.Created, event)
         }
@@ -67,47 +64,24 @@ fun Route.eventRoutes() {
         get {
             val uid = call.userId()
             val accountId = call.request.queryParameters["accountId"]
-            val result = dbQuery {
-                val voidedIds = VoidEvents.selectAll()
-                    .where { VoidEvents.userId eq uid }
-                    .map { it[VoidEvents.originalEventId] }
-                    .toSet()
-                val notVoided = if (voidedIds.isEmpty()) Op.TRUE
-                                else Events.id notInList voidedIds.toList()
-                val accountFilter = if (accountId != null) Events.accountId eq accountId else Op.TRUE
-                Events.selectAll()
-                    .where { (Events.userId eq uid) and accountFilter and notVoided }
-                    .orderBy(Events.timestamp, SortOrder.DESC)
-                    .map { it.toEvent() }
-            }
+            val result = loadNonVoidedEvents(uid, accountId).sortedByDescending { it.timestamp }
             call.respond(result)
         }
 
         get("/by-day") {
             val uid = call.userId()
-            val result = dbQuery {
-                val voidedIds = VoidEvents.selectAll()
-                    .where { VoidEvents.userId eq uid }
-                    .map { it[VoidEvents.originalEventId] }
-                    .toSet()
-                val notVoided = if (voidedIds.isEmpty()) Op.TRUE
-                                else Events.id notInList voidedIds.toList()
-                Events.selectAll()
-                    .where { (Events.userId eq uid) and notVoided }
-                    .orderBy(Events.timestamp, SortOrder.DESC)
-                    .map { it.toEvent() }
-                    .groupBy { epochToUtcDate(it.timestamp) }
-                    .map { (date, items) ->
-                        EventDay(
-                            date  = date,
-                            total = items.sumOf { e ->
-                                if (e.type == TransactionType.INCOME) e.amount else -e.amount
-                            },
-                            items = items,
-                        )
-                    }
-                    .sortedByDescending { it.date }
-            }
+            val result = loadNonVoidedEvents(uid)
+                .groupBy { epochToUtcDate(it.timestamp) }
+                .map { (date, items) ->
+                    EventDay(
+                        date  = date,
+                        total = items.filter { it.currency == "COP" }.sumOf { e ->
+                            if (e.type == TransactionType.INCOME) e.amount else -e.amount
+                        },
+                        items = items,
+                    )
+                }
+                .sortedByDescending { it.date }
             call.respond(result)
         }
 
@@ -120,7 +94,7 @@ fun Route.eventRoutes() {
             val event = dbQuery {
                 Events.selectAll()
                     .where { (Events.id eq id) and (Events.userId eq uid) }
-                    .firstOrNull()?.toEvent()
+                    .firstOrNull()?.toFinancialEvent()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
 
             val void: VoidEvent? = dbQuery {
@@ -139,10 +113,6 @@ fun Route.eventRoutes() {
                         it[VoidEvents.reason]          = reason
                         it[VoidEvents.timestamp]       = now
                     }
-                    val delta = if (event.type == TransactionType.INCOME) -event.amount else event.amount
-                    Accounts.update({ (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }) {
-                        it[balance] = Accounts.balance + delta
-                    }
                     VoidEvent(
                         id              = voidId,
                         originalEventId = id,
@@ -156,21 +126,6 @@ fun Route.eventRoutes() {
         }
     }
 }
-
-private fun ResultRow.toEvent() = FinancialEvent(
-    id                   = this[Events.id],
-    accountId            = this[Events.accountId],
-    type                 = TransactionType.valueOf(this[Events.type]),
-    amount               = this[Events.amount],
-    category             = this[Events.category],
-    description          = this[Events.description],
-    merchant             = this[Events.merchant],
-    timestamp            = this[Events.timestamp],
-    source               = EventSource.valueOf(this[Events.eventSource]),
-    rawPayload           = this[Events.rawPayload],
-    reconciliationStatus = ReconciliationStatus.valueOf(this[Events.reconciliationStatus]),
-    syncedAt             = this[Events.syncedAt],
-)
 
 private fun epochToUtcDate(millis: Long): String =
     Instant.ofEpochMilli(millis)

@@ -43,4 +43,27 @@ class ClaudeStatementParserTest {
         assertTrue(result[0].id != result[1].id)
         assertTrue(result[0].id.isNotBlank())
     }
+
+    @Test
+    fun `parseJson maps currency and defaults to COP`() {
+        val json = """[
+          {"date":"2026-06-04","merchant":"Anthropic","amount":100,"currency":"USD","type":"EXPENSE","category":"Tecnología","description":"","rawText":""},
+          {"date":"2026-05-31","merchant":"YouTube","amount":79000,"type":"EXPENSE","category":"Entretenimiento","description":"","rawText":""}
+        ]"""
+        val result = ClaudeStatementParser.parseJson(json)
+        assertEquals(2, result.size)
+        assertEquals("USD", result[0].currency)
+        assertEquals("COP", result[1].currency) // absent -> default
+    }
+
+    @Test
+    fun `parseJson normalizes currency casing and blanks`() {
+        val json = """[
+          {"date":"2026-06-04","merchant":"A","amount":100,"currency":"usd","type":"EXPENSE","category":"Tecnología","description":"","rawText":""},
+          {"date":"2026-06-04","merchant":"B","amount":50,"currency":" ","type":"EXPENSE","category":"Otros","description":"","rawText":""}
+        ]"""
+        val r = ClaudeStatementParser.parseJson(json)
+        assertEquals("USD", r[0].currency)
+        assertEquals("COP", r[1].currency)
+    }
 }
