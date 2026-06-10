@@ -88,6 +88,11 @@ class FamiriosParserTest {
         s25.createRow(p).also { row ->
             row.createCell(1).setCellValue("Gasolina")
             row.createCell(4).setCellValue(450_000.0)            // col 4 = Mar 2025
+        }; p++
+        s25.createRow(p).also { it.createCell(1).setCellValue("Gastos extraordinarios") }; p++
+        s25.createRow(p).also { row ->
+            row.createCell(1).setCellValue("Imprevistos")
+            row.createCell(3).setCellValue(800_000.0)            // col 3 = Feb 2025
         }
 
         return wb
@@ -98,8 +103,12 @@ class FamiriosParserTest {
         val today = LocalDate.of(2026, 6, 15)
         val txs = FamiriosParser.parse(famiriosWorkbook(), today)
 
-        // 2024: 2 income cells + 2 expense cells; 2025: 1; 2026: 1 (Sep excluded). Noise rows skipped.
-        assertEquals(6, txs.size)
+        // 2024: 2 income + 2 expense; 2025: 1 gasto + 1 extraordinario; 2026: 1 (Sep excluded).
+        assertEquals(7, txs.size)
+
+        val imprevistos = txs.first { it.merchant == "Imprevistos" }
+        assertEquals(TransactionType.EXPENSE, imprevistos.type)   // Gastos extraordinarios section
+        assertEquals("2025-02-28", imprevistos.date)
 
         val income = txs.filter { it.type == TransactionType.INCOME }
         assertEquals(2, income.size)

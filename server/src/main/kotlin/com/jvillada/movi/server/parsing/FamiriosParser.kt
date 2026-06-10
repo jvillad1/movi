@@ -28,9 +28,13 @@ object FamiriosParser {
     private val MONTH_NAMES_ES = listOf("enero", "febrero", "marzo", "abril", "mayo", "junio",
                                         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
 
+    /**
+     * Summary-row labels under the Resumén block. Section labels (gastos, tipo de
+     * ingreso, resumen…) are NOT listed here — they are consumed by the section
+     * state machine in [parseYearSheet] before this set is ever consulted.
+     */
     private val NOISE_EXACT = setOf(
-        "resumen", "dineros iniciales", "ingresos", "gastos fijos",
-        "gastos extraordinarios", "gastos", "tipo de ingreso", "saldo",
+        "dineros iniciales", "ingresos", "gastos fijos", "saldo",
     )
     private val NOISE_CONTAINS = listOf("ytd", "promedio", "presupuesto", "total", "gastos (%)")
 
