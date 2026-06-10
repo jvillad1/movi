@@ -65,7 +65,7 @@ fun DashboardScreen(
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    val totalBalance = accounts.sumOf { it.balance }
+    val (_, _, totalBalance) = assetsDebtsNet(accounts)
     val ingresos = summary?.ingresos ?: 0L
     val egresos  = summary?.egresos  ?: 0L
     val flujo    = ingresos - egresos
@@ -152,7 +152,7 @@ fun DashboardScreen(
                         )
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            text = formatCOP(totalBalance),
+                            text = "${if (totalBalance < 0) "−" else ""}${formatCOP(totalBalance)}",
                             fontSize = 44.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Normal,
@@ -244,7 +244,14 @@ fun DashboardScreen(
                                     CardRow(
                                         left = { Text(account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                                         sub = typeLabel(account.type),
-                                        right = { MonoText(formatCOP(account.balance), 14.5f) },
+                                        right = {
+                                            if (account.type == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD) {
+                                                val (debt, isEstimate) = cardDebt(account)
+                                                MonoText("−${if (isEstimate) "≈" else ""}${formatCOP(debt)}", 14.5f, color = MinExpense)
+                                            } else {
+                                                MonoText(formatCOP(account.balance), 14.5f)
+                                            }
+                                        },
                                         isLast = i == minOf(accounts.size, 3) - 1,
                                         onClick = { onNavigate(Screen.Accounts) },
                                     )
