@@ -54,7 +54,7 @@ fun VoidEventSheet(
     }
 
     val isIncome = event.type == TransactionType.INCOME
-    val signedAmount = "${if (isIncome) "+" else "−"}${formatCOP(event.amount)}"
+    val signedAmount = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}"
 
     Column(
         modifier = Modifier
