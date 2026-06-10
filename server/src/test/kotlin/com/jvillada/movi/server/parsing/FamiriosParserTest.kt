@@ -67,6 +67,29 @@ class FamiriosParserTest {
             row.createCell(5).setCellValue(2_000_000.0)      // May 2026 (header col 5 = May)
             row.createCell(9).setCellValue(3_000_000.0)      // Sep 2026 — FUTURE, excluded
         }
+
+        // ---- 2025 tab: REAL export layout — spacer col 0, labels in col 1,
+        // month headers as DATE-FORMATTED NUMERIC cells (Sheets export artifact) ----
+        val s25 = wb.createSheet("2025")
+        val dateStyle = wb.createCellStyle().apply {
+            dataFormat = wb.creationHelper.createDataFormat().getFormat("mmm")
+        }
+        var p = 0
+        s25.createRow(p).also { row ->
+            row.createCell(1).setCellValue("Resumén")
+            for (m in 1..12) {
+                val cell = row.createCell(m + 1)                 // months start at col 2
+                cell.setCellValue(java.sql.Date.valueOf(java.time.LocalDate.of(2020, m, 1)))
+                cell.cellStyle = dateStyle
+            }
+        }; p++
+        s25.createRow(p).also { it.createCell(1).setCellValue("Saldo"); it.createCell(2).setCellValue(777.0) }; p++  // summary noise
+        s25.createRow(p).also { it.createCell(1).setCellValue("Gastos") }; p++
+        s25.createRow(p).also { row ->
+            row.createCell(1).setCellValue("Gasolina")
+            row.createCell(4).setCellValue(450_000.0)            // col 4 = Mar 2025
+        }
+
         return wb
     }
 
@@ -75,8 +98,8 @@ class FamiriosParserTest {
         val today = LocalDate.of(2026, 6, 15)
         val txs = FamiriosParser.parse(famiriosWorkbook(), today)
 
-        // 2024: 2 income cells + 2 expense cells; 2026: 1 (Sep excluded). Noise rows skipped.
-        assertEquals(5, txs.size)
+        // 2024: 2 income cells + 2 expense cells; 2025: 1; 2026: 1 (Sep excluded). Noise rows skipped.
+        assertEquals(6, txs.size)
 
         val income = txs.filter { it.type == TransactionType.INCOME }
         assertEquals(2, income.size)
@@ -96,6 +119,11 @@ class FamiriosParserTest {
         assertEquals("Comida", mercado.category)
         assertEquals("2026-05-31", mercado.date)
         assertTrue(txs.none { it.date.startsWith("2026-09") }) // future month excluded
+
+        val gasolina = txs.first { it.merchant == "Gasolina" }
+        assertEquals("Transporte", gasolina.category)
+        assertEquals("2025-03-31", gasolina.date)
+        assertTrue(txs.none { it.merchant == "Saldo" })          // summary row skipped
 
         assertTrue(txs.all { it.currency == "COP" })
         assertTrue(txs.all { it.rawText.isNotBlank() })

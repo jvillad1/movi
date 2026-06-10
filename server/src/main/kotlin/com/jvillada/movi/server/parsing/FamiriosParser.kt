@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.TransactionType
 import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.CellType
+import org.apache.poi.ss.usermodel.DateUtil
 import org.apache.poi.ss.usermodel.Row
 import org.apache.poi.ss.usermodel.Sheet
 import org.apache.poi.ss.usermodel.Workbook
@@ -29,7 +30,7 @@ object FamiriosParser {
 
     private val NOISE_EXACT = setOf(
         "resumen", "dineros iniciales", "ingresos", "gastos fijos",
-        "gastos extraordinarios", "gastos", "tipo de ingreso",
+        "gastos extraordinarios", "gastos", "tipo de ingreso", "saldo",
     )
     private val NOISE_CONTAINS = listOf("ytd", "promedio", "presupuesto", "total", "gastos (%)")
 
@@ -54,7 +55,9 @@ object FamiriosParser {
             if (headerCols.size >= 6) monthCols = headerCols
 
             if (rowHasErrorLabel(row)) continue              // #REF! label
-            val label = labelOf(row)
+            val labelPair = labelOf(row)
+            val label = labelPair?.first
+            val labelCol = labelPair?.second ?: -1
             val norm = label?.let(::normalize)
 
             when (norm) {
@@ -68,6 +71,7 @@ object FamiriosParser {
             if (norm in NOISE_EXACT || NOISE_CONTAINS.any { norm!!.contains(it) }) continue
 
             for ((col, month) in monthCols) {
+                if (col == labelCol) continue                // never read the label cell as a value
                 if (year > today.year || (year == today.year && month > today.monthValue)) continue
                 val raw = numericAt(row, col) ?: continue
                 if (raw == 0.0) continue
@@ -90,18 +94,42 @@ object FamiriosParser {
     private fun monthColumns(row: Row): Map<Int, Int> {
         val map = mutableMapOf<Int, Int>()
         for (cell in row) {
-            val text = stringAt(cell)?.trim() ?: continue
-            val m = MONTHS.indexOf(text)
-            if (m >= 0) map[cell.columnIndex] = m + 1
+            when (effectiveType(cell)) {
+                CellType.STRING -> {
+                    val m = MONTHS.indexOf(cell.stringCellValue.trim())
+                    if (m >= 0) map[cell.columnIndex] = m + 1
+                }
+                CellType.NUMERIC -> {
+                    if (DateUtil.isCellDateFormatted(cell)) {
+                        map[cell.columnIndex] = cell.localDateTimeCellValue.monthValue
+                    }
+                }
+                else -> {}
+            }
         }
         return map
     }
 
-    private fun labelOf(row: Row): String? =
-        row.getCell(0)?.let { stringAt(it) }?.trim()?.takeIf { it.isNotBlank() }
+    /** Returns (labelText, columnIndex) of the first non-blank STRING cell in columns 0..2. */
+    private fun labelOf(row: Row): Pair<String, Int>? {
+        for (col in 0..2) {
+            val text = row.getCell(col)?.let { stringAt(it) }?.trim()
+            if (!text.isNullOrBlank()) return text to col
+        }
+        return null
+    }
 
-    private fun rowHasErrorLabel(row: Row): Boolean =
-        row.getCell(0)?.let { effectiveType(it) == CellType.ERROR } == true
+    private fun rowHasErrorLabel(row: Row): Boolean {
+        for (col in 0..2) {
+            val cell = row.getCell(col) ?: continue
+            when (effectiveType(cell)) {
+                CellType.ERROR -> return true
+                CellType.STRING -> return false   // real label found first
+                else -> {}
+            }
+        }
+        return false
+    }
 
     private fun stringAt(cell: Cell): String? = when (effectiveType(cell)) {
         CellType.STRING -> cell.stringCellValue
