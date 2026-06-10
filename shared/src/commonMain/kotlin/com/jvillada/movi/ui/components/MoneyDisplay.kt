@@ -70,7 +70,7 @@ fun CurrencyBreakdown(account: Account) {
                 BreakdownRow(label, signedMoney(amt, cur))
             }
         }
-        if (trm != null) BreakdownRow("TRM aplicada", "≈$" + groupThousands(trm))
+        if (trm != null) BreakdownRow("TRM aplicada", "≈$" + groupThousands(trm) + "/USD")
     }
 }
 

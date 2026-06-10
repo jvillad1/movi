@@ -157,7 +157,7 @@ fun DashboardScreen(
                             fontSize = 44.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Normal,
-                            color = MinText,
+                            color = if (totalBalance < 0) MinExpense else MinText,
                             letterSpacing = (-1.6).sp,
                             lineHeight = 44.sp,
                         )
