@@ -5,7 +5,7 @@ import org.apache.pdfbox.text.PDFTextStripper
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.ByteArrayInputStream
 
-enum class StatementDocumentType { TRANSACTION_STATEMENT, LOAN_SUMMARY, INVESTMENT_FUND }
+enum class StatementDocumentType { TRANSACTION_STATEMENT, LOAN_SUMMARY, INVESTMENT_FUND, FAMIRIOS }
 
 object StatementParser {
 
@@ -42,6 +42,8 @@ object StatementParser {
 
     fun detectDocumentType(text: String): StatementDocumentType {
         val upper = text.uppercase()
+        if (upper.contains("RESUMÉN") && upper.contains("TIPO DE INGRESO") && upper.contains("GASTOS FIJOS"))
+            return StatementDocumentType.FAMIRIOS
         if ((upper.contains("LÍNEA DE CRÉDITO") || upper.contains("LINEA DE CREDITO") ||
              upper.contains("CREDIÁGIL") || upper.contains("CREDITO PREAPROBADO")) &&
             upper.contains("ABONO A CAPITAL")

@@ -7,8 +7,11 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
+import com.jvillada.movi.server.parsing.FamiriosParser
 import com.jvillada.movi.server.parsing.StatementDocumentType
 import com.jvillada.movi.server.parsing.StatementParser
+import org.apache.poi.ss.usermodel.WorkbookFactory
+import java.io.ByteArrayInputStream
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.shared.model.*
@@ -61,21 +64,31 @@ fun Route.statementRoutes() {
         val text = StatementParser.extractText(bytes, fileName)
 
         val docType = StatementParser.detectDocumentType(text)
-        if (docType != StatementDocumentType.TRANSACTION_STATEMENT) {
+        if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
             val msg = when (docType) {
                 StatementDocumentType.LOAN_SUMMARY ->
                     "Este documento es un resumen de crédito, no un extracto de movimientos. No contiene transacciones importables."
-                StatementDocumentType.INVESTMENT_FUND ->
+                else ->
                     "Este documento es un estado de fondo de inversión. No contiene transacciones importables."
-                else -> "Documento no reconocido como extracto de transacciones."
             }
             call.respond(HttpStatusCode.UnprocessableEntity, msg)
             return@post
         }
 
-        val bankName = StatementParser.detectBankName(fileName, text)
-        val rules = Stores.merchantRules.getRules(uid)
-        val parsed = ClaudeStatementParser.parse(text, rules)
+        val isFamirios = docType == StatementDocumentType.FAMIRIOS
+        val bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
+        val parsed = if (isFamirios) {
+            WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
+                FamiriosParser.parse(wb, LocalDate.now(ZoneOffset.UTC))
+            }
+        } else {
+            ClaudeStatementParser.parse(text, Stores.merchantRules.getRules(uid))
+        }
+        if (isFamirios && parsed.isEmpty()) {
+            call.respond(HttpStatusCode.UnprocessableEntity,
+                "El archivo parece un Famirios pero no contiene celdas importables.")
+            return@post
+        }
 
         val voidedIds = dbQuery {
             VoidEvents.selectAll()
@@ -121,7 +134,10 @@ fun Route.statementRoutes() {
             }
         }
 
-        val period = runCatching {
+        val period = if (isFamirios) {
+            val years = parsed.mapNotNull { runCatching { LocalDate.parse(it.date).year }.getOrNull() }
+            if (years.isEmpty()) "" else "${years.min()}–${years.max()}"
+        } else runCatching {
             val date = LocalDate.parse(parsed.firstOrNull()?.date ?: "2025-01-01")
             "${monthName(date.monthValue)} ${date.year}"
         }.getOrDefault("")

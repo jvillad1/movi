@@ -26,4 +26,23 @@ class StatementParserTest {
         val result = StatementParser.extractText(ByteArray(0), "empty.csv")
         assertTrue(result.isEmpty())
     }
+
+    @Test
+    fun `detectDocumentType identifies a Famirios budget export`() {
+        val text = """
+            Resumén	Jan	Feb	Mar
+            Dineros iniciales
+            Ingresos	100	200	300
+            Gastos Fijos	50	60	70
+            Tipo de ingreso
+            Income Biweekly Pay 1	100	200	300
+        """.trimIndent()
+        assertEquals(StatementDocumentType.FAMIRIOS, StatementParser.detectDocumentType(text))
+    }
+
+    @Test
+    fun `detectDocumentType does not flag bank statements as Famirios`() {
+        val text = "Fecha\tTipo de transacción\tDescripción\tValor\n25 may 2026\tCrédito\tPago PAGOS\t100"
+        assertEquals(StatementDocumentType.TRANSACTION_STATEMENT, StatementParser.detectDocumentType(text))
+    }
 }
