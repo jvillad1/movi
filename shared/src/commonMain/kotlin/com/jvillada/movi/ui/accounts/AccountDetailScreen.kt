@@ -52,7 +52,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 .map { (date, items) ->
                     EventDay(
                         date  = date,
-                        total = items.sumOf {
+                        total = items.filter { it.currency == "COP" }.sumOf {
                             if (it.type == TransactionType.INCOME) it.amount else -it.amount
                         },
                         items = items.sortedByDescending { it.timestamp },
@@ -131,32 +131,47 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 // Balance hero card
                 account?.let { acc ->
                     item(key = "balance-card") {
+                        val isCard = acc.type == AccountType.CREDIT_CARD
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(20.dp),
                         ) {
                             Text(
-                                text = "SALDO ACTUAL",
+                                text = if (isCard) "DEUDA ACTUAL" else "SALDO ACTUAL",
                                 fontSize = 11.sp,
                                 color = MinTextMute,
                                 letterSpacing = 0.4.sp,
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(8.dp))
-                            MonoText(
-                                text = "${if (acc.balance < 0) "−" else ""}${formatCOP(acc.balance)}",
-                                fontSize = 28f,
-                                color = if (acc.balance >= 0) MinIncome else MinExpense,
-                                fontWeight = FontWeight.Medium,
-                            )
+                            if (isCard) {
+                                val (debt, isEstimate) = cardDebt(acc)
+                                MonoText(
+                                    text = "${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                    fontSize = 28f,
+                                    color = MinExpense,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            } else {
+                                MonoText(
+                                    text = "${if (acc.balance < 0) "−" else ""}${formatCOP(acc.balance)}",
+                                    fontSize = 28f,
+                                    color = if (acc.balance >= 0) MinIncome else MinExpense,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
                             if (typeLabel.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "COP · $typeLabel",
+                                    text = if (isCard) typeLabel else "COP · $typeLabel",
                                     fontSize = 11.sp,
                                     color = MinTextMute,
                                 )
+                            }
+                            if (isCard || hasForeignBalance(acc)) {
+                                Spacer(Modifier.height(12.dp))
+                                CurrencyBreakdown(acc)
                             }
                         }
                         Spacer(Modifier.height(20.dp))
@@ -254,7 +269,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                                 }
                                             }
                                             Text(
-                                                text = "${if (isIncome) "+" else "−"}${formatCOP(event.amount)}",
+                                                text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
                                                 fontSize = 14.5.sp,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Medium,
