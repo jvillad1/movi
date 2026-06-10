@@ -13,12 +13,6 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.theme.MinTextMute
 
-/** Thousands-grouped absolute value: 222933 -> "222.933". Sign is the caller's concern. */
-private fun groupThousands(amount: Long): String {
-    val abs = kotlin.math.abs(amount)
-    return abs.toString().reversed().chunked(3).joinToString(".").reversed()
-}
-
 /** Currency-aware money text: COP -> "$222.933", USD -> "US$181", other -> "EUR 50". */
 fun formatMoney(amount: Long, currency: String): String = when (currency) {
     "COP" -> formatCOP(amount)
@@ -26,14 +20,21 @@ fun formatMoney(amount: Long, currency: String): String = when (currency) {
     else  -> "$currency " + groupThousands(amount)
 }
 
+/** Sign-aware money text: -181 USD -> "−US$181". [formatMoney] strips signs; this preserves them. */
+fun signedMoney(amount: Long, currency: String): String =
+    (if (amount < 0) "−" else "") + formatMoney(amount, currency)
+
+/** True for account types whose balance represents debt (positive = owed). */
+fun isDebtAccount(type: AccountType): Boolean = type == AccountType.CREDIT_CARD
+
 /**
  * (activos, deudas, neto) across accounts.
  * Assets = COP balance of non-card accounts. Debts = each card's COP estimate
  * (or its COP balance when there is nothing foreign to estimate). Net = assets − deudas.
  */
 fun assetsDebtsNet(accounts: List<Account>): Triple<Long, Long, Long> {
-    val activos = accounts.filter { it.type != AccountType.CREDIT_CARD }.sumOf { it.balance }
-    val deudas = accounts.filter { it.type == AccountType.CREDIT_CARD }
+    val activos = accounts.filter { !isDebtAccount(it.type) }.sumOf { it.balance }
+    val deudas = accounts.filter { isDebtAccount(it.type) }
         .sumOf { it.estimatedTotalCop ?: it.balance }
     return Triple(activos, deudas, activos - deudas)
 }
@@ -58,12 +59,17 @@ fun hasForeignBalance(account: Account): Boolean =
 /** Per-currency balance lines + the implied TRM, for the account-detail hero card. */
 @Composable
 fun CurrencyBreakdown(account: Account) {
-    val cop = account.balancesByCurrency["COP"] ?: 0L
-    val usd = account.balancesByCurrency["USD"] ?: 0L
+    val balances = account.balancesByCurrency
+    val cop = balances["COP"] ?: 0L
     val trm = impliedTrm(account)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (cop != 0L) BreakdownRow("En pesos", formatMoney(cop, "COP"))
-        if (usd != 0L) BreakdownRow("En dólares", formatMoney(usd, "USD"))
+        if (cop != 0L) BreakdownRow("En pesos", signedMoney(cop, "COP"))
+        balances.forEach { (cur, amt) ->
+            if (cur != "COP" && amt != 0L) {
+                val label = if (cur == "USD") "En dólares" else "En $cur"
+                BreakdownRow(label, signedMoney(amt, cur))
+            }
+        }
         if (trm != null) BreakdownRow("TRM aplicada", "≈$" + groupThousands(trm))
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.*
@@ -231,13 +232,13 @@ fun DashboardScreen(
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                             ) {
-                                val typeLabel: (com.jvillada.movi.shared.model.AccountType) -> String = { type ->
+                                val typeLabel: (AccountType) -> String = { type ->
                                     when (type) {
-                                        com.jvillada.movi.shared.model.AccountType.CASH        -> "Efectivo"
-                                        com.jvillada.movi.shared.model.AccountType.SAVINGS     -> "Ahorros"
-                                        com.jvillada.movi.shared.model.AccountType.CHECKING    -> "Corriente"
-                                        com.jvillada.movi.shared.model.AccountType.INVESTMENT  -> "Inversión"
-                                        com.jvillada.movi.shared.model.AccountType.CREDIT_CARD -> "Crédito"
+                                        AccountType.CASH        -> "Efectivo"
+                                        AccountType.SAVINGS     -> "Ahorros"
+                                        AccountType.CHECKING    -> "Corriente"
+                                        AccountType.INVESTMENT  -> "Inversión"
+                                        AccountType.CREDIT_CARD -> "Crédito"
                                     }
                                 }
                                 accounts.take(3).forEachIndexed { i, account ->
@@ -245,9 +246,13 @@ fun DashboardScreen(
                                         left = { Text(account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                                         sub = typeLabel(account.type),
                                         right = {
-                                            if (account.type == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD) {
+                                            if (isDebtAccount(account.type)) {
                                                 val (debt, isEstimate) = cardDebt(account)
-                                                MonoText("−${if (isEstimate) "≈" else ""}${formatCOP(debt)}", 14.5f, color = MinExpense)
+                                                MonoText(
+                                                    "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                                    14.5f,
+                                                    color = if (debt < 0) MinIncome else MinExpense,
+                                                )
                                             } else {
                                                 MonoText(formatCOP(account.balance), 14.5f)
                                             }

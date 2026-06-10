@@ -131,7 +131,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 // Balance hero card
                 account?.let { acc ->
                     item(key = "balance-card") {
-                        val isCard = acc.type == AccountType.CREDIT_CARD
+                        val isCard = isDebtAccount(acc.type)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -148,9 +148,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                             if (isCard) {
                                 val (debt, isEstimate) = cardDebt(acc)
                                 MonoText(
-                                    text = "${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                    text = "${if (isEstimate) "≈" else ""}${if (debt < 0) "+" else ""}${formatCOP(debt)}",
                                     fontSize = 28f,
-                                    color = MinExpense,
+                                    color = if (debt < 0) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
                                 )
                             } else {
@@ -169,7 +169,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                     color = MinTextMute,
                                 )
                             }
-                            if (isCard || hasForeignBalance(acc)) {
+                            if (hasForeignBalance(acc)) {
                                 Spacer(Modifier.height(12.dp))
                                 CurrencyBreakdown(acc)
                             }
@@ -214,11 +214,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                     fontWeight = FontWeight.Medium,
                                     letterSpacing = 0.4.sp,
                                 )
-                                MonoText(
-                                    text = "${if (day.total >= 0) "+" else "−"}${formatCOP(day.total)}",
-                                    fontSize = 11f,
-                                    color = MinTextMute,
-                                )
+                                if (day.items.any { it.currency == "COP" }) {
+                                    MonoText(
+                                        text = "${if (day.total >= 0) "+" else "−"}${formatCOP(day.total)}",
+                                        fontSize = 11f,
+                                        color = MinTextMute,
+                                    )
+                                }
                             }
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),

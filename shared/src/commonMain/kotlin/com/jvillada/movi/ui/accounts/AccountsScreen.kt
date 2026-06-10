@@ -224,12 +224,12 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     },
                                     sub = typeLabel,
                                     right = {
-                                        if (account.type == AccountType.CREDIT_CARD) {
+                                        if (isDebtAccount(account.type)) {
                                             val (debt, isEstimate) = cardDebt(account)
                                             MonoText(
-                                                text = "−${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                                text = "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
                                                 fontSize = 14.5f,
-                                                color = MinExpense,
+                                                color = if (debt < 0) MinIncome else MinExpense,
                                             )
                                         } else {
                                             MonoText(
