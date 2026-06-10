@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.*
@@ -65,7 +66,7 @@ fun DashboardScreen(
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    val totalBalance = accounts.sumOf { it.balance }
+    val (_, _, totalBalance) = assetsDebtsNet(accounts)
     val ingresos = summary?.ingresos ?: 0L
     val egresos  = summary?.egresos  ?: 0L
     val flujo    = ingresos - egresos
@@ -152,11 +153,11 @@ fun DashboardScreen(
                         )
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            text = formatCOP(totalBalance),
+                            text = "${if (totalBalance < 0) "−" else ""}${formatCOP(totalBalance)}",
                             fontSize = 44.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Normal,
-                            color = MinText,
+                            color = if (totalBalance < 0) MinExpense else MinText,
                             letterSpacing = (-1.6).sp,
                             lineHeight = 44.sp,
                         )
@@ -231,20 +232,31 @@ fun DashboardScreen(
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                             ) {
-                                val typeLabel: (com.jvillada.movi.shared.model.AccountType) -> String = { type ->
+                                val typeLabel: (AccountType) -> String = { type ->
                                     when (type) {
-                                        com.jvillada.movi.shared.model.AccountType.CASH        -> "Efectivo"
-                                        com.jvillada.movi.shared.model.AccountType.SAVINGS     -> "Ahorros"
-                                        com.jvillada.movi.shared.model.AccountType.CHECKING    -> "Corriente"
-                                        com.jvillada.movi.shared.model.AccountType.INVESTMENT  -> "Inversión"
-                                        com.jvillada.movi.shared.model.AccountType.CREDIT_CARD -> "Crédito"
+                                        AccountType.CASH        -> "Efectivo"
+                                        AccountType.SAVINGS     -> "Ahorros"
+                                        AccountType.CHECKING    -> "Corriente"
+                                        AccountType.INVESTMENT  -> "Inversión"
+                                        AccountType.CREDIT_CARD -> "Crédito"
                                     }
                                 }
                                 accounts.take(3).forEachIndexed { i, account ->
                                     CardRow(
                                         left = { Text(account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                                         sub = typeLabel(account.type),
-                                        right = { MonoText(formatCOP(account.balance), 14.5f) },
+                                        right = {
+                                            if (isDebtAccount(account.type)) {
+                                                val (debt, isEstimate) = cardDebt(account)
+                                                MonoText(
+                                                    "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                                    14.5f,
+                                                    color = if (debt < 0) MinIncome else MinExpense,
+                                                )
+                                            } else {
+                                                MonoText(formatCOP(account.balance), 14.5f)
+                                            }
+                                        },
                                         isLast = i == minOf(accounts.size, 3) - 1,
                                         onClick = { onNavigate(Screen.Accounts) },
                                     )

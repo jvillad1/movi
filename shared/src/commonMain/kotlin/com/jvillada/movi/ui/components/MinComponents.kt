@@ -169,10 +169,13 @@ fun StatusDot(color: Color, size: Dp = 5.dp) {
     )
 }
 
-fun formatCOP(amount: Long): String {
+/** Thousands-grouped absolute value: 222933 -> "222.933". Sign is the caller's concern. */
+internal fun groupThousands(amount: Long): String {
     val abs = kotlin.math.abs(amount)
-    return "$" + abs.toString().reversed().chunked(3).joinToString(".").reversed()
+    return abs.toString().reversed().chunked(3).joinToString(".").reversed()
 }
+
+fun formatCOP(amount: Long): String = "$" + groupThousands(amount)
 
 fun formatMillions(amount: Long): String {
     val abs = kotlin.math.abs(amount)

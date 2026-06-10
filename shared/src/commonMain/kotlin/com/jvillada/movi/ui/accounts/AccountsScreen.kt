@@ -151,14 +151,14 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 } else if (accounts.isNotEmpty()) {
                     // Total assets card
                     item {
-                        val totalAssets = accounts.sumOf { it.balance }
+                        val (activos, deudas, neto) = assetsDebtsNet(accounts)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(20.dp),
                         ) {
                             Text(
-                                text = "TOTAL ACTIVOS",
+                                text = "PATRIMONIO NETO",
                                 fontSize = 11.sp,
                                 color = MinTextMute,
                                 letterSpacing = 0.4.sp,
@@ -166,11 +166,29 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             )
                             Spacer(Modifier.height(8.dp))
                             MonoText(
-                                text = formatCOP(totalAssets),
+                                text = "${if (neto < 0) "−" else ""}${formatCOP(neto)}",
                                 fontSize = 28f,
-                                color = MinIncome,
+                                color = if (neto >= 0) MinIncome else MinExpense,
                                 fontWeight = FontWeight.Medium,
                             )
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text("Activos", fontSize = 12.sp, color = MinTextMute)
+                                MonoText(formatCOP(activos), 12f, color = MinIncome)
+                            }
+                            if (deudas > 0) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Deudas", fontSize = 12.sp, color = MinTextMute)
+                                    MonoText("−${formatCOP(deudas)}", 12f, color = MinExpense)
+                                }
+                            }
                         }
                         Spacer(Modifier.height(20.dp))
                     }
@@ -206,11 +224,20 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     },
                                     sub = typeLabel,
                                     right = {
-                                        MonoText(
-                                            text = formatCOP(account.balance),
-                                            fontSize = 14.5f,
-                                            color = MinIncome,
-                                        )
+                                        if (isDebtAccount(account.type)) {
+                                            val (debt, isEstimate) = cardDebt(account)
+                                            MonoText(
+                                                text = "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                                fontSize = 14.5f,
+                                                color = if (debt < 0) MinIncome else MinExpense,
+                                            )
+                                        } else {
+                                            MonoText(
+                                                text = formatCOP(account.balance),
+                                                fontSize = 14.5f,
+                                                color = MinIncome,
+                                            )
+                                        }
                                     },
                                     isLast = index == accounts.size - 1,
                                     showChevron = true,
