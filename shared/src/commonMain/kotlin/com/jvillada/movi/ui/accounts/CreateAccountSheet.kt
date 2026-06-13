@@ -33,6 +33,7 @@ private val TYPE_OPTIONS = listOf(
     TypeOption(AccountType.SAVINGS, "🏦 Ahorros"),
     TypeOption(AccountType.CHECKING, "💳 Corriente"),
     TypeOption(AccountType.INVESTMENT, "📈 Inversión"),
+    TypeOption(AccountType.CREDIT_CARD, "💳 Crédito"),
 )
 
 @Composable
@@ -40,6 +41,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(AccountType.CASH) }
+    var selectedCurrency by remember { mutableStateOf("COP") }
     var initialBalance by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -56,6 +58,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                 name = name.trim(),
                 type = selectedType,
                 balance = initialBalance.toLongOrNull() ?: 0L,
+                currency = if (selectedType == AccountType.CREDIT_CARD) selectedCurrency else "COP",
             )
             val result = runCatching { Repositories.wallets.createAccount(account) }
             saving = false
@@ -147,7 +150,10 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                                             1.dp, MinBorder, RoundedCornerShape(10.dp),
                                         ) else Modifier,
                                     )
-                                    .clickable { selectedType = option.type }
+                                    .clickable {
+                                        selectedType = option.type
+                                        if (option.type != AccountType.CREDIT_CARD) selectedCurrency = "COP"
+                                    }
                                     .padding(vertical = 12.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -165,8 +171,9 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
 
             Spacer(Modifier.height(18.dp))
 
-            // --- SALDO INICIAL ---
-            SectionLabel("SALDO INICIAL")
+            // --- SALDO / DEUDA INICIAL ---
+            val isCard = selectedType == AccountType.CREDIT_CARD
+            SectionLabel(if (isCard) "DEUDA INICIAL" else "SALDO INICIAL")
             Spacer(Modifier.height(8.dp))
             Box(
                 modifier = Modifier
@@ -195,6 +202,44 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                         inner()
                     },
                 )
+            }
+
+            // --- MONEDA (solo tarjeta de crédito) ---
+            if (isCard) {
+                Spacer(Modifier.height(18.dp))
+                SectionLabel("MONEDA")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (cur in listOf("COP", "USD")) {
+                        val isSelected = selectedCurrency == cur
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (isSelected) MinPrimaryContainer else MinSurfaceContainerLow,
+                                )
+                                .then(
+                                    if (!isSelected) Modifier.border(
+                                        1.dp, MinBorder, RoundedCornerShape(10.dp),
+                                    ) else Modifier,
+                                )
+                                .clickable { selectedCurrency = cur }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = cur,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                                color = if (isSelected) MinOnPrimaryContainer else MinTextDim,
+                            )
+                        }
+                    }
+                }
             }
 
             // Inline error display
