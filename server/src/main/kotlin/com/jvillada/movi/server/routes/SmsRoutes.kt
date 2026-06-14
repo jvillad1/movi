@@ -7,12 +7,14 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 
@@ -112,6 +114,37 @@ fun Route.smsRoutes() {
             }
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
+    }
+
+    post("/api/sms/sync") {
+        val uid = call.userId()
+        val messages = call.receive<List<SmsMessage>>()
+        val insertedCount = dbQuery {
+            // Collect existing ids for this user so we can skip duplicates
+            // without touching rows that may already have a user-set state.
+            val existingIds = SmsMessages
+                .selectAll()
+                .where { SmsMessages.userId eq uid }
+                .map { it[SmsMessages.id] }
+                .toSet()
+
+            var count = 0
+            for (msg in messages) {
+                if (msg.id in existingIds) continue
+                SmsMessages.insert {
+                    it[id]     = msg.id
+                    it[userId] = uid
+                    it[time]   = msg.time
+                    it[bank]   = msg.bank
+                    it[text]   = msg.text
+                    it[state]  = msg.state.ifBlank { "new" }
+                    it[det]    = msg.det
+                }
+                count++
+            }
+            count
+        }
+        call.respond(mapOf("synced" to insertedCount))
     }
 }
 
