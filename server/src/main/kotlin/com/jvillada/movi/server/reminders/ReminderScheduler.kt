@@ -120,7 +120,7 @@ private suspend fun processUser(
                 }
             }
         }
-        logger.info("ReminderScheduler: reminded $userEmail about ${selected.size} payment(s) for period $period")
+        logger.info("ReminderScheduler: reminded user $userId about ${selected.size} payment(s) for period $period")
     }
 }
 

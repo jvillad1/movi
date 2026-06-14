@@ -22,17 +22,9 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
-import com.jvillada.movi.shared.model.Transaction
-import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.VoidEvent
-import com.jvillada.movi.shared.model.Wallet
 
 interface WalletRepository {
-    suspend fun getWallets(): List<Wallet>
-    suspend fun getWallet(id: String): Wallet
-    suspend fun getTransactions(walletId: String): List<Transaction>
-    suspend fun getTransactionsByDay(): List<TransactionDay>
-    suspend fun addTransaction(transaction: Transaction): Transaction
     suspend fun getHoldings(): List<Holding>
     suspend fun getCredits(): List<Credit>
     suspend fun getGoals(): List<Goal>
@@ -41,6 +33,7 @@ interface WalletRepository {
     suspend fun parseSms(id: String): ParsedSms
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
+    suspend fun syncSms(messages: List<SmsMessage>)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     suspend fun getBudgets(): List<Budget>
     suspend fun createBudget(budget: Budget): Budget

@@ -48,9 +48,11 @@ fun Route.statementRoutes() {
         var fileName = "statement"
         var bytes = ByteArray(0)
 
+        var mimeType = ""
         multipart.forEachPart { part ->
             if (part is PartData.FileItem) {
                 fileName = part.originalFileName ?: "statement"
+                mimeType = part.contentType?.toString() ?: ""
                 bytes = part.streamProvider().readBytes()
             }
             part.dispose()
@@ -61,33 +63,50 @@ fun Route.statementRoutes() {
             return@post
         }
 
-        val text = StatementParser.extractText(bytes, fileName)
+        val isImage = ClaudeStatementParser.isImageMime(mimeType) ||
+            fileName.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "heic")
 
-        val docType = StatementParser.detectDocumentType(text)
-        if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
-            val msg = when (docType) {
-                StatementDocumentType.LOAN_SUMMARY ->
-                    "Este documento es un resumen de crédito, no un extracto de movimientos. No contiene transacciones importables."
-                else ->
-                    "Este documento es un estado de fondo de inversión. No contiene transacciones importables."
+        val bankName: String
+        val parsed: List<ParsedTransaction>
+        var isFamirios = false
+        if (isImage) {
+            val imageMime = ClaudeStatementParser.supportedImageMime(mimeType, fileName)
+            if (imageMime == null) {
+                call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "Formato de imagen no soportado. Subí PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
+                )
+                return@post
             }
-            call.respond(HttpStatusCode.UnprocessableEntity, msg)
-            return@post
-        }
-
-        val isFamirios = docType == StatementDocumentType.FAMIRIOS
-        val bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
-        val parsed = if (isFamirios) {
-            WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
-                FamiriosParser.parse(wb, LocalDate.now(ZoneOffset.UTC))
-            }
+            bankName = StatementParser.detectBankName(fileName)
+            parsed = ClaudeStatementParser.parseImage(bytes, imageMime, Stores.merchantRules.getRules(uid))
         } else {
-            ClaudeStatementParser.parse(text, Stores.merchantRules.getRules(uid))
-        }
-        if (isFamirios && parsed.isEmpty()) {
-            call.respond(HttpStatusCode.UnprocessableEntity,
-                "El archivo parece un Famirios pero no contiene celdas importables.")
-            return@post
+            val text = StatementParser.extractText(bytes, fileName)
+            val docType = StatementParser.detectDocumentType(text)
+            if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
+                val msg = when (docType) {
+                    StatementDocumentType.LOAN_SUMMARY ->
+                        "Este documento es un resumen de crédito, no un extracto de movimientos. No contiene transacciones importables."
+                    else ->
+                        "Este documento es un estado de fondo de inversión. No contiene transacciones importables."
+                }
+                call.respond(HttpStatusCode.UnprocessableEntity, msg)
+                return@post
+            }
+            isFamirios = docType == StatementDocumentType.FAMIRIOS
+            bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
+            parsed = if (isFamirios) {
+                WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
+                    FamiriosParser.parse(wb, LocalDate.now(ZoneOffset.UTC))
+                }
+            } else {
+                ClaudeStatementParser.parse(text, Stores.merchantRules.getRules(uid))
+            }
+            if (isFamirios && parsed.isEmpty()) {
+                call.respond(HttpStatusCode.UnprocessableEntity,
+                    "El archivo parece un Famirios pero no contiene celdas importables.")
+                return@post
+            }
         }
 
         val voidedIds = dbQuery {

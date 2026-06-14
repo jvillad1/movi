@@ -58,14 +58,14 @@ object ResendClient {
         }
 
         if (response.statusCode() in 200..299) {
-            log.info("ResendClient: email sent to $to (status=${response.statusCode()})")
+            log.info("ResendClient: email sent (status=${response.statusCode()})")
             true
         } else {
-            log.warn("ResendClient: non-2xx sending to $to: status=${response.statusCode()} body=${response.body()}")
+            log.warn("ResendClient: non-2xx send: status=${response.statusCode()}")
             false
         }
     } catch (e: Exception) {
-        log.error("ResendClient: exception sending to $to: ${e.message}", e)
+        log.error("ResendClient: exception sending email: ${e.message}", e)
         false
     }
 

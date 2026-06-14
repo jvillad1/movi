@@ -7,11 +7,6 @@ import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 
 class NoOpRepository : WalletRepository {
-    override suspend fun getWallets() = emptyList<Wallet>()
-    override suspend fun getWallet(id: String) = error("stub")
-    override suspend fun getTransactions(walletId: String) = emptyList<Transaction>()
-    override suspend fun getTransactionsByDay() = emptyList<TransactionDay>()
-    override suspend fun addTransaction(transaction: Transaction) = error("stub")
     override suspend fun getHoldings() = emptyList<Holding>()
     override suspend fun getCredits() = emptyList<Credit>()
     override suspend fun getGoals() = emptyList<Goal>()
@@ -20,6 +15,7 @@ class NoOpRepository : WalletRepository {
     override suspend fun parseSms(id: String) = error("stub")
     override suspend fun confirmSms(id: String) {}
     override suspend fun ignoreSms(id: String) {}
+    override suspend fun syncSms(messages: List<SmsMessage>) {}
     override suspend fun getFinanceSummary(scope: Scope) = error("stub")
     override suspend fun getBudgets() = emptyList<Budget>()
     override suspend fun createBudget(budget: Budget) = budget

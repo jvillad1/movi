@@ -91,6 +91,6 @@ object SmsMessages : Table("sms_messages") {
     val text   = text("text")
     val state  = varchar("state", 20)
     val det    = varchar("det", 255)
-    override val primaryKey = PrimaryKey(id)
+    override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
 }

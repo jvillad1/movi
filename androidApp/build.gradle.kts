@@ -21,7 +21,13 @@ android {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
     buildTypes {
-        getByName("release") { isMinifyEnabled = false }
+        getByName("debug") {
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
