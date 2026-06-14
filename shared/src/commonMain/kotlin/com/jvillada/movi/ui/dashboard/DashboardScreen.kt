@@ -239,6 +239,7 @@ fun DashboardScreen(
                                         AccountType.CHECKING    -> "Corriente"
                                         AccountType.INVESTMENT  -> "Inversión"
                                         AccountType.CREDIT_CARD -> "Crédito"
+                                        AccountType.LOAN        -> "Préstamo"
                                     }
                                 }
                                 accounts.take(3).forEachIndexed { i, account ->
