@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.platform.rememberSmsSync
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventSource
@@ -35,6 +36,21 @@ import kotlinx.datetime.Clock
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
     var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
+    var syncWorking by remember { mutableStateOf(false) }
+    var syncError by remember { mutableStateOf<String?>(null) }
+    val coroutine = rememberCoroutineScope()
+
+    val smsSync = rememberSmsSync { messages ->
+        coroutine.launch {
+            syncWorking = true
+            syncError = null
+            runCatching { Repositories.wallets.syncSms(messages) }
+                .onSuccess { refreshKey++ }
+                .onFailure { syncError = it.toUserMessage() }
+            syncWorking = false
+        }
+    }
+
     LaunchedEffect(refreshKey) {
         runCatching { Repositories.wallets.getSmsMessages() }
             .onSuccess { smsItems = it }
@@ -76,6 +92,47 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         Text("Revisa los pendientes para confirmar comercios o categoría.", fontSize = 13.5.sp, color = MinTextMute, lineHeight = 19.sp)
                     }
                 }
+                if (smsSync.available) {
+                    Spacer(Modifier.height(10.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Default,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                        onClick = if (!syncWorking) smsSync.requestAndRead else null,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    if (syncWorking) "Sincronizando…" else "Sincronizar SMS del teléfono",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (syncWorking) MinTextMute else MinText,
+                                    letterSpacing = (-0.1).sp,
+                                )
+                                Text(
+                                    "Últimos 30 días · solo lectura",
+                                    fontSize = 11.5.sp,
+                                    color = MinTextMute,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                            Text(
+                                if (syncWorking) "…" else "↑",
+                                fontSize = 18.sp,
+                                color = if (syncWorking) MinTextFaint else MinPrimary,
+                            )
+                        }
+                        if (syncError != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(syncError!!, fontSize = 11.5.sp, color = MinExpense)
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(14.dp))
                 MinSectionHeader(title = "Bandeja", count = smsItems.size)
             }
