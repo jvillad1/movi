@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.reminders
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
@@ -51,7 +53,9 @@ object ResendClient {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build()
 
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        val response = withContext(Dispatchers.IO) {
+            httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        }
 
         if (response.statusCode() in 200..299) {
             log.info("ResendClient: email sent to $to (status=${response.statusCode()})")

@@ -152,7 +152,7 @@ private fun buildHtmlEmail(
             com.jvillada.movi.shared.model.PaymentStatus.UPCOMING   -> "color:#6b7280"
         }
 
-        val amountFormatted = "%,d".format(rule.amount)
+        val amountFormatted = String.format(java.util.Locale.US, "%,d", rule.amount)
 
         """<tr>
           <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0">

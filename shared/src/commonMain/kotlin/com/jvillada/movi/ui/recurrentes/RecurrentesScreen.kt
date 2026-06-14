@@ -371,29 +371,3 @@ private fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
     }
 }
 
-// ── Status badge pill (colored background pill) ───────────────────────────────
-
-@Composable
-private fun StatusBadge(status: PaymentStatus, daysUntil: Int, dueDate: String) {
-    val color = statusColor(status)
-    val day = dueDateDay(dueDate)
-    val label = when (status) {
-        PaymentStatus.OVERDUE   -> "Vencido"
-        PaymentStatus.DUE_TODAY -> "Hoy"
-        PaymentStatus.DUE_SOON  -> "En $daysUntil d"
-        PaymentStatus.UPCOMING  -> "Día $day"
-    }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(color.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = color,
-        )
-    }
-}
