@@ -87,9 +87,16 @@ class ClaudeStatementParserTest {
     }
 
     @Test
-    fun `resolveMime defaults to image-png for blank mime`() {
-        assertEquals("image/png", ClaudeStatementParser.resolveMime(""))
-        assertEquals("image/png", ClaudeStatementParser.resolveMime("   "))
-        assertEquals("image/jpeg", ClaudeStatementParser.resolveMime("image/jpeg"))
+    fun `supportedImageMime maps supported types and rejects unsupported`() {
+        // direct mime
+        assertEquals("image/png", ClaudeStatementParser.supportedImageMime("image/png", "x.png"))
+        assertEquals("image/jpeg", ClaudeStatementParser.supportedImageMime("image/jpeg", "x.jpg"))
+        assertEquals("image/jpeg", ClaudeStatementParser.supportedImageMime("image/jpg", "x.jpg")) // jpg -> jpeg
+        // blank mime falls back to filename extension
+        assertEquals("image/png", ClaudeStatementParser.supportedImageMime("", "captura.png"))
+        assertEquals("image/jpeg", ClaudeStatementParser.supportedImageMime("application/octet-stream", "foto.JPEG"))
+        // unsupported (HEIC) -> null so the route can 422 instead of crashing
+        assertEquals(null, ClaudeStatementParser.supportedImageMime("image/heic", "foto.heic"))
+        assertEquals(null, ClaudeStatementParser.supportedImageMime("", "foto.heic"))
     }
 }

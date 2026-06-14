@@ -110,8 +110,8 @@ Aplicá las reglas del usuario cuando el merchant coincida.
 
     suspend fun parseImage(bytes: ByteArray, mimeType: String, rules: List<MerchantRule>): List<ParsedTransaction> {
         val c = client ?: return emptyList()
-        val resolvedMime = resolveMime(mimeType)
-        val mediaType = Base64ImageSource.MediaType.of(resolvedMime)
+        // mimeType must already be a Claude-supported image media type (validated by supportedImageMime at the route).
+        val mediaType = Base64ImageSource.MediaType.of(mimeType)
         val b64 = java.util.Base64.getEncoder().encodeToString(bytes)
         val imageSource = Base64ImageSource.builder()
             .data(b64)
@@ -143,8 +143,26 @@ Aplicá las reglas del usuario cuando el merchant coincida.
     /** Returns true if [mimeType] represents an image (starts with "image/"). */
     fun isImageMime(mimeType: String): Boolean = mimeType.trim().lowercase().startsWith("image/")
 
-    /** Normalises mime for Claude: blank/unknown → "image/png". */
-    fun resolveMime(mimeType: String): String = mimeType.trim().lowercase().ifBlank { "image/png" }
+    /** Image media types Claude's vision API accepts. */
+    private val SUPPORTED_IMAGE_MIMES = setOf("image/jpeg", "image/png", "image/gif", "image/webp")
+
+    /**
+     * Maps an upload's mime/filename to a Claude-supported image media type, or null when the
+     * format is unsupported (e.g. HEIC, BMP, TIFF). Passing an unsupported value to the SDK throws,
+     * so the route must respond 422 on null rather than crash.
+     */
+    fun supportedImageMime(mimeType: String, fileName: String): String? {
+        val mime = mimeType.trim().lowercase().substringBefore(';')
+        val normalized = if (mime == "image/jpg") "image/jpeg" else mime
+        if (normalized in SUPPORTED_IMAGE_MIMES) return normalized
+        return when (fileName.substringAfterLast('.', "").lowercase()) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png"         -> "image/png"
+            "gif"         -> "image/gif"
+            "webp"        -> "image/webp"
+            else          -> null
+        }
+    }
 
     fun parseJson(rawText: String): List<ParsedTransaction> {
         val start = rawText.indexOf('[')

@@ -70,8 +70,16 @@ fun Route.statementRoutes() {
         val parsed: List<ParsedTransaction>
         var isFamirios = false
         if (isImage) {
+            val imageMime = ClaudeStatementParser.supportedImageMime(mimeType, fileName)
+            if (imageMime == null) {
+                call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "Formato de imagen no soportado. Subí PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
+                )
+                return@post
+            }
             bankName = StatementParser.detectBankName(fileName)
-            parsed = ClaudeStatementParser.parseImage(bytes, ClaudeStatementParser.resolveMime(mimeType), Stores.merchantRules.getRules(uid))
+            parsed = ClaudeStatementParser.parseImage(bytes, imageMime, Stores.merchantRules.getRules(uid))
         } else {
             val text = StatementParser.extractText(bytes, fileName)
             val docType = StatementParser.detectDocumentType(text)

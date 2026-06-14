@@ -137,7 +137,7 @@ fun Route.smsRoutes() {
                     it[time]   = msg.time
                     it[bank]   = msg.bank
                     it[text]   = msg.text
-                    it[state]  = msg.state.ifBlank { "new" }
+                    it[state]  = "new" // server owns state; /confirm + /ignore transition it. Never trust client.
                     it[det]    = msg.det
                 }
                 count++
