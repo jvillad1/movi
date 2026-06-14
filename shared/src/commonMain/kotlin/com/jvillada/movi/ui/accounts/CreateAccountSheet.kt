@@ -31,7 +31,7 @@ private data class TypeOption(val type: AccountType, val label: String)
 private val TYPE_OPTIONS = listOf(
     TypeOption(AccountType.CASH, "💵 Efectivo"),
     TypeOption(AccountType.SAVINGS, "🏦 Ahorros"),
-    TypeOption(AccountType.CHECKING, "💳 Corriente"),
+    TypeOption(AccountType.CHECKING, "🏧 Corriente"),
     TypeOption(AccountType.INVESTMENT, "📈 Inversión"),
     TypeOption(AccountType.CREDIT_CARD, "💳 Crédito"),
 )
@@ -137,33 +137,19 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         row.forEach { option ->
-                            val isSelected = selectedType == option.type
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        if (isSelected) MinPrimaryContainer else MinSurfaceContainerLow,
-                                    )
-                                    .then(
-                                        if (!isSelected) Modifier.border(
-                                            1.dp, MinBorder, RoundedCornerShape(10.dp),
-                                        ) else Modifier,
-                                    )
-                                    .clickable {
-                                        selectedType = option.type
-                                        if (option.type != AccountType.CREDIT_CARD) selectedCurrency = "COP"
-                                    }
-                                    .padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = option.label,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                                    color = if (isSelected) MinOnPrimaryContainer else MinTextDim,
-                                )
-                            }
+                            Chip(
+                                label = option.label,
+                                selected = selectedType == option.type,
+                                onClick = {
+                                    val wasCard = selectedType == AccountType.CREDIT_CARD
+                                    val willBeCard = option.type == AccountType.CREDIT_CARD
+                                    selectedType = option.type
+                                    if (!willBeCard) selectedCurrency = "COP"
+                                    // Crossing the debt↔asset boundary flips the amount's meaning;
+                                    // clear it so a debt isn't silently kept as a positive balance.
+                                    if (wasCard != willBeCard) initialBalance = ""
+                                },
+                            )
                         }
                     }
                 }
@@ -214,30 +200,11 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     for (cur in listOf("COP", "USD")) {
-                        val isSelected = selectedCurrency == cur
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    if (isSelected) MinPrimaryContainer else MinSurfaceContainerLow,
-                                )
-                                .then(
-                                    if (!isSelected) Modifier.border(
-                                        1.dp, MinBorder, RoundedCornerShape(10.dp),
-                                    ) else Modifier,
-                                )
-                                .clickable { selectedCurrency = cur }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = cur,
-                                fontSize = 13.sp,
-                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                                color = if (isSelected) MinOnPrimaryContainer else MinTextDim,
-                            )
-                        }
+                        Chip(
+                            label = cur,
+                            selected = selectedCurrency == cur,
+                            onClick = { selectedCurrency = cur },
+                        )
                     }
                 }
             }
@@ -286,4 +253,28 @@ private fun SectionLabel(text: String) {
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
+}
+
+/** Selectable rounded chip that fills its share of the enclosing [Row]. */
+@Composable
+private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .then(
+                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) MinOnPrimaryContainer else MinTextDim,
+        )
+    }
 }
