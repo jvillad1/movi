@@ -34,4 +34,5 @@ dependencies {
     implementation(libs.poi.ooxml)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.h2)
 }

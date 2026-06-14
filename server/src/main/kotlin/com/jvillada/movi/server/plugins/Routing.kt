@@ -16,7 +16,6 @@ fun Application.configureRouting() {
         authenticate("jwt") {
             accountRoutes()
             eventRoutes()
-            walletRoutes()
             financeRoutes()
             smsRoutes()
             aiRoutes()

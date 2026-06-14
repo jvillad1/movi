@@ -69,3 +69,27 @@ object Budgets : Table("budgets") {
     val monthlyLimit = long("monthly_limit")
     override val primaryKey = PrimaryKey(userId, category)
 }
+
+object RecurringRules : Table("recurring_rules") {
+    val id         = varchar("id", 50)
+    val userId     = varchar("user_id", 50)
+    val name       = varchar("name", 100)
+    val category   = varchar("category", 100)
+    val amount     = long("amount")
+    val dayOfMonth = integer("day_of_month")
+    val type       = varchar("type", 20)
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_recurring_rules_user_id", false, userId) }
+}
+
+object SmsMessages : Table("sms_messages") {
+    val id     = varchar("id", 50)
+    val userId = varchar("user_id", 50)
+    val time   = varchar("time", 50)
+    val bank   = varchar("bank", 100)
+    val text   = text("text")
+    val state  = varchar("state", 20)
+    val det    = varchar("det", 255)
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_sms_messages_user_id", false, userId) }
+}

@@ -1,13 +1,20 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.storage.Stores
+import com.jvillada.movi.server.db.SmsMessages
+import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 
 private val amountRegex = Regex("""\$\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)""")
 private val merchantInRegex = Regex("""en\s+(.+?)(?:\s+el\s|\s+a\s+las|\.|$)""", RegexOption.IGNORE_CASE)
@@ -53,45 +60,66 @@ private fun categoryFor(merchant: String, type: TransactionType): String {
 }
 
 fun Route.smsRoutes() {
-    get("/api/sms") { call.respond(Stores.sms.snapshot()) }
+    get("/api/sms") {
+        val uid = call.userId()
+        val list = dbQuery {
+            SmsMessages.selectAll().where { SmsMessages.userId eq uid }.map { it.toSmsMessage() }
+        }
+        call.respond(list)
+    }
 
     get("/api/sms/{id}") {
+        val uid = call.userId()
         val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-        val sms = Stores.sms.snapshot().find { it.id == id }
-            ?: return@get call.respond(HttpStatusCode.NotFound)
+        val sms = dbQuery {
+            SmsMessages.selectAll()
+                .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
+                .firstOrNull()?.toSmsMessage()
+        } ?: return@get call.respond(HttpStatusCode.NotFound)
         call.respond(sms)
     }
 
     get("/api/sms/{id}/parse") {
+        val uid = call.userId()
         val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-        val sms = Stores.sms.snapshot().find { it.id == id }
-            ?: return@get call.respond(HttpStatusCode.NotFound)
+        val sms = dbQuery {
+            SmsMessages.selectAll()
+                .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
+                .firstOrNull()?.toSmsMessage()
+        } ?: return@get call.respond(HttpStatusCode.NotFound)
         val parsed = parseSms(sms.text)
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "No se pudo parsear")
         call.respond(parsed)
     }
 
     post("/api/sms/{id}/confirm") {
+        val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        val updated = Stores.sms.mutate { list ->
-            val i = list.indexOfFirst { it.id == id }
-            if (i == -1) return@mutate false
-            list[i] = list[i].copy(state = "confirmed")
-            true
+        val updated = dbQuery {
+            SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
+                it[state] = "confirmed"
+            }
         }
-        if (!updated) call.respond(HttpStatusCode.NotFound)
-        else call.respond(HttpStatusCode.OK)
+        if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.OK)
     }
 
     post("/api/sms/{id}/ignore") {
+        val uid = call.userId()
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        val updated = Stores.sms.mutate { list ->
-            val i = list.indexOfFirst { it.id == id }
-            if (i == -1) return@mutate false
-            list[i] = list[i].copy(state = "ignored")
-            true
+        val updated = dbQuery {
+            SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
+                it[state] = "ignored"
+            }
         }
-        if (!updated) call.respond(HttpStatusCode.NotFound)
-        else call.respond(HttpStatusCode.NoContent)
+        if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
     }
 }
+
+private fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
+    id    = this[SmsMessages.id],
+    time  = this[SmsMessages.time],
+    bank  = this[SmsMessages.bank],
+    text  = this[SmsMessages.text],
+    state = this[SmsMessages.state],
+    det   = this[SmsMessages.det],
+)

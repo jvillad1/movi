@@ -5,10 +5,16 @@ import com.auth0.jwt.algorithms.Algorithm
 import java.util.Date
 
 object JwtConfig {
+    /** Pure, testable secret resolution: env var wins, then .env file, else fail fast. */
+    fun resolveSecret(env: String?, fromFile: String?): String {
+        val candidate = env?.takeIf { it.isNotBlank() }
+            ?: fromFile?.takeIf { it.isNotBlank() }
+        return candidate
+            ?: error("JWT_SECRET not set — refusing to start with an insecure default. Set the JWT_SECRET env var.")
+    }
+
     private val secret: String by lazy {
-        System.getenv("JWT_SECRET")
-            ?: readFromEnvFile("JWT_SECRET")
-            ?: "movi-dev-secret-change-in-production"
+        resolveSecret(System.getenv("JWT_SECRET"), readFromEnvFile("JWT_SECRET"))
     }
 
     private fun readFromEnvFile(key: String): String? {
