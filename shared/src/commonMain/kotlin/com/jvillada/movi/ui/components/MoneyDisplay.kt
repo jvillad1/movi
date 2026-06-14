@@ -25,11 +25,12 @@ fun signedMoney(amount: Long, currency: String): String =
     (if (amount < 0) "−" else "") + formatMoney(amount, currency)
 
 /** True for account types whose balance represents debt (positive = owed). */
-fun isDebtAccount(type: AccountType): Boolean = type == AccountType.CREDIT_CARD
+fun isDebtAccount(type: AccountType): Boolean =
+    type == AccountType.CREDIT_CARD || type == AccountType.LOAN
 
 /**
  * (activos, deudas, neto) across accounts.
- * Assets = COP balance of non-card accounts. Debts = each card's COP estimate
+ * Assets = COP balance of non-debt accounts. Debts = each debt account's COP estimate
  * (or its COP balance when there is nothing foreign to estimate). Net = assets − deudas.
  */
 fun assetsDebtsNet(accounts: List<Account>): Triple<Long, Long, Long> {

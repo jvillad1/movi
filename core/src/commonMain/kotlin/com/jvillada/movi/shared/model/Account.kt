@@ -3,7 +3,7 @@ package com.jvillada.movi.shared.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class AccountType { CASH, CHECKING, SAVINGS, CREDIT_CARD, INVESTMENT }
+enum class AccountType { CASH, CHECKING, SAVINGS, CREDIT_CARD, LOAN, INVESTMENT }
 
 @Serializable
 data class Account(

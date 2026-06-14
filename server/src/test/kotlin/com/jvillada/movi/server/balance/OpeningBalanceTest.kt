@@ -45,6 +45,19 @@ class OpeningBalanceTest {
     }
 
     @Test
+    fun `loan opening balance is EXPENSE Deuda inicial and a payment lowers it`() {
+        val acc = Account(id = "l", name = "Crédito Vehículo", type = AccountType.LOAN, balance = 540_786, currency = "COP")
+        val opening = assertNotNull(openingEventFor(acc, now = 1000L))
+        assertEquals(TransactionType.EXPENSE, opening.type)
+        assertEquals("Deuda inicial", opening.description)
+        assertEquals("Otros", opening.category)
+        assertEquals(540_786, opening.amount)
+        assertEquals(540_786, computeBalances(acc.type, listOf(opening))["COP"])
+        val payment = opening.copy(id = "pay", type = TransactionType.INCOME, amount = 40_786)
+        assertEquals(500_000, computeBalances(acc.type, listOf(opening, payment))["COP"])
+    }
+
+    @Test
     fun `negative input balance uses magnitude`() {
         val acc = Account(id = "a", name = "n", type = AccountType.SAVINGS, balance = -5_000)
         val ev = assertNotNull(openingEventFor(acc, now = 1000L))

@@ -285,4 +285,5 @@ private fun accountTypeInfo(type: AccountType): Pair<String, String> = when (typ
     AccountType.CHECKING    -> "💳" to "Corriente"
     AccountType.INVESTMENT  -> "📈" to "Inversión"
     AccountType.CREDIT_CARD -> "💳" to "Crédito"
+    AccountType.LOAN        -> "💸" to "Préstamo"
 }
