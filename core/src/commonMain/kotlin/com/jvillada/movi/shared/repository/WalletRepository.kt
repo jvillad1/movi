@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
@@ -46,6 +47,10 @@ interface WalletRepository {
     suspend fun updateBudget(category: String, budget: Budget): Budget
     suspend fun deleteBudget(category: String)
     suspend fun getRecurringRules(): List<RecurringRule>
+    suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
+    suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
+    suspend fun deleteRecurringRule(id: String)
+    suspend fun getUpcomingPayments(): List<UpcomingPayment>
     suspend fun chatAi(request: AiChatRequest): AiChatResponse
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account

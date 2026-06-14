@@ -20,6 +20,7 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
@@ -144,6 +145,10 @@ class LocalRepository(
     override suspend fun updateBudget(category: String, budget: Budget): Budget = remote.updateBudget(category, budget)
     override suspend fun deleteBudget(category: String) = remote.deleteBudget(category)
     override suspend fun getRecurringRules(): List<RecurringRule> = remote.getRecurringRules()
+    override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = remote.createRecurringRule(rule)
+    override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)
+    override suspend fun deleteRecurringRule(id: String) = remote.deleteRecurringRule(id)
+    override suspend fun getUpcomingPayments(): List<UpcomingPayment> = remote.getUpcomingPayments()
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = remote.chatAi(request)
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)

@@ -26,6 +26,10 @@ class NoOpRepository : WalletRepository {
     override suspend fun updateBudget(category: String, budget: Budget) = budget
     override suspend fun deleteBudget(category: String) {}
     override suspend fun getRecurringRules() = emptyList<RecurringRule>()
+    override suspend fun createRecurringRule(rule: RecurringRule) = rule
+    override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule
+    override suspend fun deleteRecurringRule(id: String) {}
+    override suspend fun getUpcomingPayments() = emptyList<com.jvillada.movi.shared.model.UpcomingPayment>()
     override suspend fun chatAi(request: AiChatRequest) = error("stub")
     override suspend fun getAccounts() = emptyList<Account>()
     override suspend fun getAccount(id: String) = error("stub")

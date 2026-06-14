@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
@@ -112,6 +113,25 @@ class WalletRepositoryImpl(
 
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()
+
+    override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule =
+        client.post("$baseUrl/api/recurring-rules") {
+            contentType(ContentType.Application.Json)
+            setBody(rule)
+        }.body()
+
+    override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule =
+        client.put("$baseUrl/api/recurring-rules/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(rule)
+        }.body()
+
+    override suspend fun deleteRecurringRule(id: String) {
+        client.delete("$baseUrl/api/recurring-rules/$id")
+    }
+
+    override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
+        client.get("$baseUrl/api/payments/upcoming").body()
 
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse =
         client.post("$baseUrl/api/ai/chat") {
