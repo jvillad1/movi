@@ -2,6 +2,9 @@ package com.jvillada.movi.server.parsing
 
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
+import com.anthropic.models.messages.Base64ImageSource
+import com.anthropic.models.messages.ContentBlockParam
+import com.anthropic.models.messages.ImageBlockParam
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
@@ -104,6 +107,44 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         }
         return parseJson(rawText)
     }
+
+    suspend fun parseImage(bytes: ByteArray, mimeType: String, rules: List<MerchantRule>): List<ParsedTransaction> {
+        val c = client ?: return emptyList()
+        val resolvedMime = resolveMime(mimeType)
+        val mediaType = Base64ImageSource.MediaType.of(resolvedMime)
+        val b64 = java.util.Base64.getEncoder().encodeToString(bytes)
+        val imageSource = Base64ImageSource.builder()
+            .data(b64)
+            .mediaType(mediaType)
+            .build()
+        val imageBlock = ContentBlockParam.ofImage(
+            ImageBlockParam.builder().source(imageSource).build()
+        )
+        val textBlock = ContentBlockParam.ofText(
+            TextBlockParam.builder()
+                .text("Extraé todos los movimientos de este extracto bancario o captura de pantalla y devolvé el JSON según las instrucciones del sistema.")
+                .build()
+        )
+        val params = MessageCreateParams.builder()
+            .model("claude-opus-4-7")
+            .maxTokens(4096L)
+            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(buildSystemPrompt(rules)).build()))
+            .addUserMessageOfBlockParams(listOf(imageBlock, textBlock))
+            .build()
+        val rawText = withContext(Dispatchers.IO) {
+            val response = c.messages().create(params)
+            response.content()
+                .mapNotNull { block -> block.text().orElse(null)?.text() }
+                .joinToString("")
+        }
+        return parseJson(rawText)
+    }
+
+    /** Returns true if [mimeType] represents an image (starts with "image/"). */
+    fun isImageMime(mimeType: String): Boolean = mimeType.trim().lowercase().startsWith("image/")
+
+    /** Normalises mime for Claude: blank/unknown → "image/png". */
+    fun resolveMime(mimeType: String): String = mimeType.trim().lowercase().ifBlank { "image/png" }
 
     fun parseJson(rawText: String): List<ParsedTransaction> {
         val start = rawText.indexOf('[')

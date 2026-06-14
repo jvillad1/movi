@@ -66,4 +66,30 @@ class ClaudeStatementParserTest {
         assertEquals("USD", r[0].currency)
         assertEquals("COP", r[1].currency)
     }
+
+    // image-branch offline tests — no network calls, exercise the mime/extension helpers only
+
+    @Test
+    fun `isImageMime detects image mime types correctly`() {
+        assertTrue(ClaudeStatementParser.isImageMime("image/png"))
+        assertTrue(ClaudeStatementParser.isImageMime("image/jpeg"))
+        assertTrue(ClaudeStatementParser.isImageMime("image/webp"))
+        assertTrue(ClaudeStatementParser.isImageMime("image/gif"))
+        assertTrue(ClaudeStatementParser.isImageMime("image/heic"))
+    }
+
+    @Test
+    fun `isImageMime rejects non-image types`() {
+        assertTrue(!ClaudeStatementParser.isImageMime("application/pdf"))
+        assertTrue(!ClaudeStatementParser.isImageMime("text/csv"))
+        assertTrue(!ClaudeStatementParser.isImageMime("application/vnd.ms-excel"))
+        assertTrue(!ClaudeStatementParser.isImageMime(""))
+    }
+
+    @Test
+    fun `resolveMime defaults to image-png for blank mime`() {
+        assertEquals("image/png", ClaudeStatementParser.resolveMime(""))
+        assertEquals("image/png", ClaudeStatementParser.resolveMime("   "))
+        assertEquals("image/jpeg", ClaudeStatementParser.resolveMime("image/jpeg"))
+    }
 }
