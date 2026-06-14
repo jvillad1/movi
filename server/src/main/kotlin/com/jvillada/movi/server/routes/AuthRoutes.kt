@@ -2,12 +2,14 @@ package com.jvillada.movi.server.routes
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.jvillada.movi.server.auth.JwtConfig
+import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RegisterRequest
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -20,6 +22,10 @@ fun Route.authRoutes() {
     route("/api/auth") {
 
         post("/register") {
+            val ip = call.request.origin.remoteHost
+            if (!RateLimiter.allow(ip, maxAttempts = 10, windowMs = 5 * 60_000L)) {
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
+            }
             val req = call.receive<RegisterRequest>()
             if (req.email.isBlank() || req.name.isBlank() || req.password.length < 6) {
                 return@post call.respond(HttpStatusCode.BadRequest, "Email required, password min 6 chars")
@@ -49,6 +55,10 @@ fun Route.authRoutes() {
         }
 
         post("/login") {
+            val ip = call.request.origin.remoteHost
+            if (!RateLimiter.allow(ip, maxAttempts = 10, windowMs = 5 * 60_000L)) {
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
+            }
             val req = call.receive<LoginRequest>()
             val row = dbQuery {
                 Users.selectAll()
