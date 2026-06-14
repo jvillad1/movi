@@ -139,6 +139,7 @@ class LocalRepository(
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)
     override suspend fun confirmSms(id: String) = remote.confirmSms(id)
     override suspend fun ignoreSms(id: String) = remote.ignoreSms(id)
+    override suspend fun syncSms(messages: List<SmsMessage>) = remote.syncSms(messages)
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = remote.getFinanceSummary(scope)
     override suspend fun getBudgets(): List<Budget> = remote.getBudgets()
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)
