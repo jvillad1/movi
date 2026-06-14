@@ -7,17 +7,32 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigAdaptive
+import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatRole
+import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import java.io.File
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.selectAll
 
 private fun resolveApiKey(): String? {
     System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() && it != "x" }?.let { return it }
@@ -62,7 +77,7 @@ fun Route.aiRoutes() {
             return@post
         }
 
-        val context = buildUserContext()
+        val context = buildUserContext(call.userId())
         val messageParams = body.messages.map { m ->
             val role = when (m.role) {
                 ChatRole.USER -> MessageParam.Role.USER
@@ -110,49 +125,75 @@ fun Route.aiRoutes() {
     }
 }
 
-private fun buildUserContext(): String = buildString {
-    appendLine("DATOS DEL USUARIO (Camilo, Colombia)")
-    appendLine()
-    appendLine("== Resumen mensual (abril) ==")
-    appendLine("- Balance: \$1.840.000")
-    appendLine("- Ingresos: \$4.500.000")
-    appendLine("- Egresos: \$2.660.000")
-    appendLine("- Flujo libre: \$1.840.000")
-    appendLine()
-    appendLine("== Egresos por categoría (abril) ==")
-    appendLine("- Mercado: \$312.400 (limite \$350.000, 89% — cerca del límite)")
-    appendLine("- Salud: \$47.200 (limite \$200.000, 23%)")
-    appendLine("- Restaurantes: \$42.300 (limite \$50.000, 84% — cerca del límite)")
-    appendLine("- Suscripción: \$28.900 (limite \$35.000, 82% — cerca del límite)")
-    appendLine("- Transporte: \$28.500 (limite \$25.000, 114% — sobrepasado)")
-    appendLine()
-    appendLine("== Recurrentes (mensual) ==")
-    appendLine("Ingresos fijos:")
-    appendLine("- Salario Globant: \$4.500.000 (día 25)")
-    appendLine("Egresos fijos:")
-    appendLine("- Arriendo apartamento: \$1.500.000 (día 5)")
-    appendLine("- Internet Claro: \$89.000 (día 10)")
-    appendLine("- Netflix: \$28.900 (día 1)")
-    appendLine("- Spotify Family: \$19.900 (día 15)")
-    appendLine("- Total egresos fijos: \$1.637.800")
-    appendLine("- Flujo libre después de fijos: \$2.862.200")
-    appendLine()
-    appendLine("== Inversiones (patrimonio) ==")
-    appendLine("- CDT Bancolombia: \$5.000.000 (12 meses, 11.8% E.A.)")
-    appendLine("- Acciones Globales (Skandia): \$4.280.000 (renta variable, +12.4%)")
-    appendLine("- Renta Fija COL (Fiduciaria): \$2.100.000 (bajo riesgo, +4.2%)")
-    appendLine("- Bitcoin (Binance): \$1.100.000 (cripto, -8.6%)")
-    appendLine("- Total invertido: \$12.480.000")
-    appendLine()
-    appendLine("== Créditos / deudas ==")
-    appendLine("- Crédito de vivienda Bancolombia: \$240.000.000 total, \$86.400.000 pagado, 11.2% E.A., próxima cuota \$1.860.000 el 30 abr")
-    appendLine("- Tarjeta Falabella CMR: \$4.320.000 total, \$2.680.000 pagado, 24.5% E.A., próxima cuota \$580.000 el 5 may")
-    appendLine("- Libre inversión Davivienda: \$12.000.000 total, \$7.200.000 pagado, 18.9% E.A., próxima cuota \$420.000 el 15 may")
-    appendLine("- Total deuda pendiente: \$159.040.000")
-    appendLine()
-    appendLine("== Metas de ahorro ==")
-    appendLine("- Viaje a Cartagena: meta \$5.000.000, ahorrado \$3.400.000 (Junio 2026, aporte mensual \$320.000)")
-    appendLine("- Cuota inicial apto: meta \$30.000.000, ahorrado \$8.600.000 (Diciembre 2027, aporte \$1.200.000)")
-    appendLine("- Fondo de emergencia: meta \$12.000.000, ahorrado \$12.000.000 (COMPLETADA)")
-    appendLine("- Cumpleaños Mateo: meta \$800.000, ahorrado \$220.000 (Agosto 2026, aporte \$145.000)")
+private suspend fun buildUserContext(uid: String): String {
+    val rate = FxRateService.usdToCop()
+
+    // Accounts with their computed COP value
+    val accountRows = dbQuery {
+        Accounts.selectAll().where { Accounts.userId eq uid }
+            .map { Triple(it[Accounts.id], it[Accounts.name], AccountType.valueOf(it[Accounts.type])) }
+    }
+    val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+
+    // Month window (UTC), same approach as finance-summary
+    val now = ZonedDateTime.now(ZoneOffset.UTC)
+    val monthStart = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+        .toInstant().toEpochMilli()
+    val monthEnd = now.withDayOfMonth(1).plusMonths(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+        .toInstant().toEpochMilli()
+
+    // Income and expense sums — filter ResultRows directly, same as finance-summary
+    val (ingresos, egresos) = dbQuery {
+        val voidedIds = VoidEvents.selectAll()
+            .where { VoidEvents.userId eq uid }
+            .map { it[VoidEvents.originalEventId] }
+            .toSet()
+
+        val monthEvents = Events.selectAll().where {
+            (Events.userId eq uid) and
+            (Events.timestamp greaterEq monthStart) and
+            (Events.timestamp less monthEnd)
+        }.filterNot { it[Events.id] in voidedIds }
+
+        val inc = monthEvents
+            .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
+            .sumOf { it[Events.amount] }
+        val exp = monthEvents
+            .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
+            .sumOf { it[Events.amount] }
+        inc to exp
+    }
+
+    // Budgets
+    val budgets = dbQuery {
+        Budgets.selectAll().where { Budgets.userId eq uid }
+            .map { it[Budgets.category] to it[Budgets.monthlyLimit] }
+    }
+
+    return buildString {
+        appendLine("DATOS DEL USUARIO (Colombia)")
+        appendLine()
+        appendLine("== Resumen del mes en curso ==")
+        appendLine("- Ingresos: \$$ingresos")
+        appendLine("- Egresos: \$$egresos")
+        appendLine("- Flujo: \$${ingresos - egresos}")
+        appendLine()
+        appendLine("== Cuentas ==")
+        if (accountRows.isEmpty()) {
+            appendLine("- (sin cuentas registradas)")
+        } else {
+            accountRows.forEach { (id, name, type) ->
+                val value = accountCopValue(type, eventsByAccount[id] ?: emptyList(), rate)
+                val kind = if (type == AccountType.CREDIT_CARD || type == AccountType.LOAN) "deuda" else "saldo"
+                appendLine("- $name ($type): $kind \$$value")
+            }
+        }
+        appendLine()
+        appendLine("== Presupuestos ==")
+        if (budgets.isEmpty()) {
+            appendLine("- (sin presupuestos)")
+        } else {
+            budgets.forEach { (cat, limit) -> appendLine("- $cat: límite \$$limit") }
+        }
+    }
 }
