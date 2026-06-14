@@ -34,6 +34,7 @@ private val TYPE_OPTIONS = listOf(
     TypeOption(AccountType.CHECKING, "🏧 Corriente"),
     TypeOption(AccountType.INVESTMENT, "📈 Inversión"),
     TypeOption(AccountType.CREDIT_CARD, "💳 Crédito"),
+    TypeOption(AccountType.LOAN, "💸 Préstamo"),
 )
 
 @Composable
@@ -141,13 +142,15 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                                 label = option.label,
                                 selected = selectedType == option.type,
                                 onClick = {
-                                    val wasCard = selectedType == AccountType.CREDIT_CARD
+                                    val wasDebt = isDebtAccount(selectedType)
+                                    val willBeDebt = isDebtAccount(option.type)
                                     val willBeCard = option.type == AccountType.CREDIT_CARD
                                     selectedType = option.type
+                                    // Currency selector is card-only; any non-card type is COP.
                                     if (!willBeCard) selectedCurrency = "COP"
                                     // Crossing the debt↔asset boundary flips the amount's meaning;
                                     // clear it so a debt isn't silently kept as a positive balance.
-                                    if (wasCard != willBeCard) initialBalance = ""
+                                    if (wasDebt != willBeDebt) initialBalance = ""
                                 },
                             )
                         }
@@ -159,7 +162,8 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
 
             // --- SALDO / DEUDA INICIAL ---
             val isCard = selectedType == AccountType.CREDIT_CARD
-            SectionLabel(if (isCard) "DEUDA INICIAL" else "SALDO INICIAL")
+            val isDebt = isDebtAccount(selectedType)
+            SectionLabel(if (isDebt) "DEUDA INICIAL" else "SALDO INICIAL")
             Spacer(Modifier.height(8.dp))
             Box(
                 modifier = Modifier
