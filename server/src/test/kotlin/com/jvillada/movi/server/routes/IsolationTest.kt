@@ -14,6 +14,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -24,6 +25,8 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
@@ -70,15 +73,16 @@ class IsolationTest {
         )
 
         transaction {
-            // Create all tables (idempotent — SchemaUtils.create is a no-op when
-            // the table already exists).
+            // Full drop + recreate of every table the app uses for a guaranteed
+            // clean slate between tests (no bleed from other suites or prior runs).
+            SchemaUtils.drop(
+                SmsMessages, RecurringRules, VoidEvents, Events,
+                StatementImports, Budgets, Accounts, Users,
+            )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages,
             )
-            // Drop + re-create the seeded tables for a clean slate each test run.
-            SchemaUtils.drop(SmsMessages, RecurringRules, Users)
-            SchemaUtils.create(Users, RecurringRules, SmsMessages)
 
             // ── User A ────────────────────────────────────────────────────────
             Users.insert {
@@ -277,5 +281,57 @@ class IsolationTest {
         assertEquals(HttpStatusCode.OK, resp.status)
         val arr = Json.parseToJsonElement(resp.bodyAsText()).jsonArray
         assertEquals(1, arr.size, "User A should see exactly 1 sms message; got: ${resp.bodyAsText()}")
+    }
+
+    // ── Cross-user SMS MUTATION isolation ─────────────────────────────────────
+
+    /**
+     * User B POST /api/sms/{id}/confirm where id is owned by A → 404.
+     * A's row state must remain unchanged.
+     */
+    @Test
+    fun `sms confirm by user B on user A message returns 404`() = testApplication {
+        application { testModule() }
+        val tokenB = mintToken(userBId, userBEmail)
+        val tokenA = mintToken(userAId, userAEmail)
+
+        // User B tries to confirm A's sms
+        val resp = client.post("/api/sms/$smsId/confirm") {
+            header(HttpHeaders.Authorization, "Bearer $tokenB")
+        }
+        assertEquals(HttpStatusCode.NotFound, resp.status, "User B confirming A's SMS should return 404")
+
+        // A's row state must still be "pending" (unchanged)
+        val getResp = client.get("/api/sms/$smsId") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        assertEquals(HttpStatusCode.OK, getResp.status)
+        val state = Json.parseToJsonElement(getResp.bodyAsText()).jsonObject["state"]!!.jsonPrimitive.content
+        assertEquals("pending", state, "A's SMS state must remain 'pending' after B's failed confirm")
+    }
+
+    /**
+     * User B POST /api/sms/{id}/ignore where id is owned by A → 404.
+     * A's row state must remain unchanged.
+     */
+    @Test
+    fun `sms ignore by user B on user A message returns 404`() = testApplication {
+        application { testModule() }
+        val tokenB = mintToken(userBId, userBEmail)
+        val tokenA = mintToken(userAId, userAEmail)
+
+        // User B tries to ignore A's sms
+        val resp = client.post("/api/sms/$smsId/ignore") {
+            header(HttpHeaders.Authorization, "Bearer $tokenB")
+        }
+        assertEquals(HttpStatusCode.NotFound, resp.status, "User B ignoring A's SMS should return 404")
+
+        // A's row state must still be "pending" (unchanged)
+        val getResp = client.get("/api/sms/$smsId") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        assertEquals(HttpStatusCode.OK, getResp.status)
+        val state = Json.parseToJsonElement(getResp.bodyAsText()).jsonObject["state"]!!.jsonPrimitive.content
+        assertEquals("pending", state, "A's SMS state must remain 'pending' after B's failed ignore")
     }
 }
