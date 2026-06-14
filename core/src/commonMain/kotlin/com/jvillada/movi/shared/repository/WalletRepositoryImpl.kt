@@ -22,10 +22,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
-import com.jvillada.movi.shared.model.Transaction
-import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.VoidEvent
-import com.jvillada.movi.shared.model.Wallet
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -44,24 +41,6 @@ class WalletRepositoryImpl(
     private val client: HttpClient,
     private val baseUrl: String,
 ) : WalletRepository {
-
-    override suspend fun getWallets(): List<Wallet> =
-        client.get("$baseUrl/api/wallets").body()
-
-    override suspend fun getWallet(id: String): Wallet =
-        client.get("$baseUrl/api/wallets/$id").body()
-
-    override suspend fun getTransactions(walletId: String): List<Transaction> =
-        client.get("$baseUrl/api/wallets/$walletId/transactions").body()
-
-    override suspend fun getTransactionsByDay(): List<TransactionDay> =
-        client.get("$baseUrl/api/transactions/by-day").body()
-
-    override suspend fun addTransaction(transaction: Transaction): Transaction =
-        client.post("$baseUrl/api/wallets/${transaction.walletId}/transactions") {
-            contentType(ContentType.Application.Json)
-            setBody(transaction)
-        }.body()
 
     override suspend fun getHoldings(): List<Holding> =
         client.get("$baseUrl/api/holdings").body()

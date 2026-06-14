@@ -26,11 +26,8 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
-import com.jvillada.movi.shared.model.Transaction
-import com.jvillada.movi.shared.model.TransactionDay
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.VoidEvent
-import com.jvillada.movi.shared.model.Wallet
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -126,11 +123,6 @@ class LocalRepository(
 
     // ── Delegate everything else to remote ────────────────────────────────────
 
-    override suspend fun getWallets(): List<Wallet> = remote.getWallets()
-    override suspend fun getWallet(id: String): Wallet = remote.getWallet(id)
-    override suspend fun getTransactions(walletId: String): List<Transaction> = remote.getTransactions(walletId)
-    override suspend fun getTransactionsByDay(): List<TransactionDay> = remote.getTransactionsByDay()
-    override suspend fun addTransaction(transaction: Transaction): Transaction = remote.addTransaction(transaction)
     override suspend fun getHoldings(): List<Holding> = remote.getHoldings()
     override suspend fun getCredits(): List<Credit> = remote.getCredits()
     override suspend fun getGoals(): List<Goal> = remote.getGoals()
