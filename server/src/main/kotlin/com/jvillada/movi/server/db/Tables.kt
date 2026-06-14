@@ -71,13 +71,14 @@ object Budgets : Table("budgets") {
 }
 
 object RecurringRules : Table("recurring_rules") {
-    val id         = varchar("id", 50)
-    val userId     = varchar("user_id", 50)
-    val name       = varchar("name", 100)
-    val category   = varchar("category", 100)
-    val amount     = long("amount")
-    val dayOfMonth = integer("day_of_month")
-    val type       = varchar("type", 20)
+    val id                 = varchar("id", 50)
+    val userId             = varchar("user_id", 50)
+    val name               = varchar("name", 100)
+    val category           = varchar("category", 100)
+    val amount             = long("amount")
+    val dayOfMonth         = integer("day_of_month")
+    val type               = varchar("type", 20)
+    val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable()  // "YYYY-MM", server-only
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }
