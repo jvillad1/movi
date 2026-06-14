@@ -30,7 +30,7 @@ fun isDebtAccount(type: AccountType): Boolean =
 
 /**
  * (activos, deudas, neto) across accounts.
- * Assets = COP balance of non-card accounts. Debts = each card's COP estimate
+ * Assets = COP balance of non-debt accounts. Debts = each debt account's COP estimate
  * (or its COP balance when there is nothing foreign to estimate). Net = assets − deudas.
  */
 fun assetsDebtsNet(accounts: List<Account>): Triple<Long, Long, Long> {
