@@ -33,6 +33,8 @@ dependencies {
     implementation(libs.pdfbox)
     implementation(libs.poi.ooxml)
     testImplementation(libs.ktor.server.tests)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.h2)
 }

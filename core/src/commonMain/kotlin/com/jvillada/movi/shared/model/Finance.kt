@@ -89,3 +89,14 @@ data class AiChatRequest(val messages: List<ChatMessage>)
 
 @Serializable
 data class AiChatResponse(val text: String)
+
+@Serializable
+enum class PaymentStatus { OVERDUE, DUE_TODAY, DUE_SOON, UPCOMING }
+
+@Serializable
+data class UpcomingPayment(
+    val rule: RecurringRule,
+    val dueDate: String,    // ISO "2026-06-05", current month
+    val daysUntil: Int,     // negative if overdue
+    val status: PaymentStatus,
+)
