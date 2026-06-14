@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.datetime.LocalDate
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,14 +40,17 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     var upcoming by remember { mutableStateOf<List<UpcomingPayment>>(emptyList()) }
     // loadKey increments after every create/update/delete to trigger a reload.
     var loadKey by remember { mutableStateOf(0) }
+    var loading by remember { mutableStateOf(true) }
 
     // Sheet state: null = closed; non-null = open with optional prefilled rule (edit) or null (create)
     var sheetRule by remember { mutableStateOf<RecurringRule?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(loadKey) {
+        loading = true
         runCatching { Repositories.wallets.getRecurringRules() }.onSuccess { rules = it }
         runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { upcoming = it }
+        loading = false
     }
 
     val ingresosFijos = rules.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
@@ -154,7 +158,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                             title = "Próximos pagos",
                             count = if (upcoming.isNotEmpty()) upcoming.size else null,
                         )
-                        if (upcoming.isEmpty()) {
+                        if (upcoming.isEmpty() && !loading) {
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 variant = MinCardVariant.Elevated,
@@ -188,7 +192,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         MinSectionHeader(title = "Por día del mes", count = if (rules.isNotEmpty()) rules.size else null)
-                        if (rules.isEmpty()) {
+                        if (rules.isEmpty() && !loading) {
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 variant = MinCardVariant.Elevated,
@@ -286,7 +290,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 // ── Status badge helpers ──────────────────────────────────────────────────────
 
 private fun dueDateDay(dueDate: String): Int =
-    dueDate.substringAfterLast('-').trimStart('0').ifEmpty { "0" }.toIntOrNull() ?: 0
+    runCatching { LocalDate.parse(dueDate).dayOfMonth }.getOrElse {
+        dueDate.takeLast(2).toIntOrNull()
+            ?: dueDate.substringAfterLast('-').toIntOrNull()
+            ?: 0
+    }
 
 private fun statusColor(status: PaymentStatus): Color = when (status) {
     PaymentStatus.OVERDUE   -> MinExpense
