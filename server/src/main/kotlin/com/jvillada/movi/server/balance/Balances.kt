@@ -7,12 +7,13 @@ import com.jvillada.movi.shared.model.TransactionType
 /**
  * One event's contribution to its account balance.
  * Asset accounts: INCOME adds, EXPENSE subtracts.
- * CREDIT_CARD (balance = positive debt): EXPENSE (purchase) raises debt, INCOME (payment) lowers it.
+ * CREDIT_CARD / LOAN (balance = positive debt): EXPENSE raises debt, INCOME (payment) lowers it.
  */
 fun signedDelta(accountType: AccountType, type: TransactionType, amount: Long): Long =
     when (accountType) {
-        AccountType.CREDIT_CARD -> if (type == TransactionType.EXPENSE) amount else -amount
-        else                    -> if (type == TransactionType.INCOME) amount else -amount
+        AccountType.CREDIT_CARD,
+        AccountType.LOAN -> if (type == TransactionType.EXPENSE) amount else -amount
+        else             -> if (type == TransactionType.INCOME) amount else -amount
     }
 
 /** Per-currency balance derived from an account's (already non-voided) events. */

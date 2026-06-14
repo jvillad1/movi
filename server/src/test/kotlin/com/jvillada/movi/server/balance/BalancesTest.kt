@@ -22,6 +22,12 @@ class BalancesTest {
     }
 
     @Test
+    fun `signedDelta on loan purchase raises debt payment lowers it`() {
+        assertEquals(100, signedDelta(AccountType.LOAN, TransactionType.EXPENSE, 100)) // desembolso/deuda
+        assertEquals(-100, signedDelta(AccountType.LOAN, TransactionType.INCOME, 100)) // pago cuota
+    }
+
+    @Test
     fun `computeBalances groups by currency with credit-card signs`() {
         val evs = listOf(
             ev(TransactionType.EXPENSE, 100, "USD"),  // compra USD  -> +100 debt
