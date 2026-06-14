@@ -14,17 +14,26 @@ import com.jvillada.movi.shared.model.SmsMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 // ── pure functions (unit-testable, no Compose) ────────────────────────────────
 
-/** Deterministic stable ID so repeated syncs deduplicate server-side. */
-fun stableSmsId(address: String, date: Long, body: String): String =
-    "sms_" + (address + date.toString() + body).hashCode().toLong().and(0xFFFFFFFFL).toString(16)
+/**
+ * Deterministic stable ID so repeated syncs deduplicate server-side. Uses SHA-256
+ * (truncated) rather than String.hashCode() — a 32-bit hash collision would silently
+ * drop a real transaction, which is unacceptable for finance data.
+ */
+fun stableSmsId(address: String, date: Long, body: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest("$address|$date|$body".toByteArray(Charsets.UTF_8))
+    val hex = digest.take(16).joinToString("") { "%02x".format(it) }
+    return "sms_$hex"
+}
 
-private val DATE_FMT = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+private val DATE_FMT = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT)
 
 /** Map a raw SMS row to the shared SmsMessage wire model. */
 fun rowToSmsMessage(address: String?, date: Long, body: String?): SmsMessage {
