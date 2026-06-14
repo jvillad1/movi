@@ -31,8 +31,9 @@ private data class TypeOption(val type: AccountType, val label: String)
 private val TYPE_OPTIONS = listOf(
     TypeOption(AccountType.CASH, "💵 Efectivo"),
     TypeOption(AccountType.SAVINGS, "🏦 Ahorros"),
-    TypeOption(AccountType.CHECKING, "💳 Corriente"),
+    TypeOption(AccountType.CHECKING, "🏧 Corriente"),
     TypeOption(AccountType.INVESTMENT, "📈 Inversión"),
+    TypeOption(AccountType.CREDIT_CARD, "💳 Crédito"),
 )
 
 @Composable
@@ -40,6 +41,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(AccountType.CASH) }
+    var selectedCurrency by remember { mutableStateOf("COP") }
     var initialBalance by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -56,6 +58,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                 name = name.trim(),
                 type = selectedType,
                 balance = initialBalance.toLongOrNull() ?: 0L,
+                currency = if (selectedType == AccountType.CREDIT_CARD) selectedCurrency else "COP",
             )
             val result = runCatching { Repositories.wallets.createAccount(account) }
             saving = false
@@ -134,30 +137,19 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         row.forEach { option ->
-                            val isSelected = selectedType == option.type
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        if (isSelected) MinPrimaryContainer else MinSurfaceContainerLow,
-                                    )
-                                    .then(
-                                        if (!isSelected) Modifier.border(
-                                            1.dp, MinBorder, RoundedCornerShape(10.dp),
-                                        ) else Modifier,
-                                    )
-                                    .clickable { selectedType = option.type }
-                                    .padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = option.label,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                                    color = if (isSelected) MinOnPrimaryContainer else MinTextDim,
-                                )
-                            }
+                            Chip(
+                                label = option.label,
+                                selected = selectedType == option.type,
+                                onClick = {
+                                    val wasCard = selectedType == AccountType.CREDIT_CARD
+                                    val willBeCard = option.type == AccountType.CREDIT_CARD
+                                    selectedType = option.type
+                                    if (!willBeCard) selectedCurrency = "COP"
+                                    // Crossing the debt↔asset boundary flips the amount's meaning;
+                                    // clear it so a debt isn't silently kept as a positive balance.
+                                    if (wasCard != willBeCard) initialBalance = ""
+                                },
+                            )
                         }
                     }
                 }
@@ -165,8 +157,9 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
 
             Spacer(Modifier.height(18.dp))
 
-            // --- SALDO INICIAL ---
-            SectionLabel("SALDO INICIAL")
+            // --- SALDO / DEUDA INICIAL ---
+            val isCard = selectedType == AccountType.CREDIT_CARD
+            SectionLabel(if (isCard) "DEUDA INICIAL" else "SALDO INICIAL")
             Spacer(Modifier.height(8.dp))
             Box(
                 modifier = Modifier
@@ -195,6 +188,25 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                         inner()
                     },
                 )
+            }
+
+            // --- MONEDA (solo tarjeta de crédito) ---
+            if (isCard) {
+                Spacer(Modifier.height(18.dp))
+                SectionLabel("MONEDA")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (cur in listOf("COP", "USD")) {
+                        Chip(
+                            label = cur,
+                            selected = selectedCurrency == cur,
+                            onClick = { selectedCurrency = cur },
+                        )
+                    }
+                }
             }
 
             // Inline error display
@@ -241,4 +253,28 @@ private fun SectionLabel(text: String) {
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
+}
+
+/** Selectable rounded chip that fills its share of the enclosing [Row]. */
+@Composable
+private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .then(
+                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) MinOnPrimaryContainer else MinTextDim,
+        )
+    }
 }
