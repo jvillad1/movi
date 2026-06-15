@@ -16,6 +16,7 @@ object SessionManager {
     private const val KEY_USER_ID = "user_id"
     private const val KEY_NAME    = "user_name"
     private const val KEY_EMAIL   = "user_email"
+    private const val KEY_REMEMBERED_EMAIL = "remembered_email"
 
     var token: String?
         get() = settings.getStringOrNull(KEY_TOKEN)
@@ -32,6 +33,11 @@ object SessionManager {
     var userEmail: String?
         get() = settings.getStringOrNull(KEY_EMAIL)
         set(v) { if (v == null) settings.remove(KEY_EMAIL) else settings[KEY_EMAIL] = v }
+
+    /** Last email used to log in. Persists across logout so the login form can pre-fill it. */
+    var rememberedEmail: String?
+        get() = settings.getStringOrNull(KEY_REMEMBERED_EMAIL)
+        set(v) { if (v == null) settings.remove(KEY_REMEMBERED_EMAIL) else settings[KEY_REMEMBERED_EMAIL] = v }
 
     val isLoggedIn: Boolean get() = !token.isNullOrBlank()
 
@@ -56,6 +62,7 @@ object SessionManager {
         this.userId   = userId
         this.userName = name
         this.userEmail = email
+        this.rememberedEmail = email  // kept across clear() so the next login pre-fills it
         consecutive401s = 0
         loggedIn = true
     }

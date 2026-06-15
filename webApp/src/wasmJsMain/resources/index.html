@@ -1,17 +1,137 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monedero</title>
+    <title>Movi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #121212; }
-        #ComposeTarget { width: 100vw; height: 100vh; }
+        body { background: #121212; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
+        #ComposeTarget { width: 100vw; height: 100vh; display: block; }
+
+        /* Native HTML login overlay — lets the browser's password manager
+           save & autofill credentials (Compose renders to canvas, which the
+           password manager can't see). */
+        #login-overlay {
+            position: fixed; inset: 0; z-index: 10;
+            background: #121212;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        #login-overlay.hidden { display: none; }
+        .lg-card { width: min(420px, 100%); }
+        .lg-title { color: #EDEDED; font-size: 34px; font-weight: 700; text-align: center; letter-spacing: -0.5px; }
+        .lg-sub { color: #9b9b9b; text-align: center; margin: 6px 0 26px; font-size: 15px; }
+        .lg-box { background: #1c1c1e; border-radius: 16px; padding: 24px; }
+        .lg-label { color: #8a8a8a; font-size: 13px; display: block; margin-bottom: 8px; }
+        .lg-input {
+            width: 100%; background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px;
+            color: #EDEDED; font-size: 15px; padding: 14px; margin-bottom: 18px; outline: none;
+        }
+        .lg-input:focus { border-color: #C9B8FF; }
+        .lg-err { color: #FFB4AB; font-size: 13px; min-height: 18px; margin-bottom: 8px; }
+        .lg-btn {
+            width: 100%; background: #C9B8FF; color: #1a1226; border: none; border-radius: 999px;
+            padding: 15px; font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        .lg-btn:disabled { opacity: 0.6; cursor: default; }
+        .lg-alt {
+            display: block; width: 100%; margin-top: 16px; padding: 6px;
+            background: none; border: none; color: #C9B8FF; font-size: 13px; text-align: center; cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <canvas id="ComposeTarget"></canvas>
+
+    <!-- Native login form (hidden by default; shown only when there is no session) -->
+    <div id="login-overlay" class="hidden">
+        <div class="lg-card">
+            <div class="lg-title">Movi</div>
+            <div class="lg-sub">Finanzas personales</div>
+            <div class="lg-box">
+                <form id="login-form" autocomplete="on">
+                    <label class="lg-label" for="login-email">Correo</label>
+                    <input class="lg-input" id="login-email" name="email" type="email"
+                           autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
+                    <label class="lg-label" for="login-password">Contraseña</label>
+                    <input class="lg-input" id="login-password" name="password" type="password"
+                           autocomplete="current-password" placeholder="••••••" required>
+                    <div class="lg-err" id="login-err"></div>
+                    <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
+                </form>
+                <button class="lg-alt" id="login-alt" type="button">Usar login clásico</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            try {
+                var overlay = document.getElementById('login-overlay');
+                var emailEl = document.getElementById('login-email');
+                var passEl = document.getElementById('login-password');
+                var form = document.getElementById('login-form');
+                var btn = document.getElementById('login-btn');
+                var err = document.getElementById('login-err');
+
+                // Pre-fill remembered email (survives logout via a dedicated key).
+                var remembered = localStorage.getItem('remembered_email') || localStorage.getItem('user_email');
+                if (remembered && emailEl) emailEl.value = remembered;
+
+                var hasToken = !!localStorage.getItem('auth_token');
+                if (!hasToken) {
+                    overlay.classList.remove('hidden');
+                    // focus password if email is already known, else email
+                    setTimeout(function () { (remembered ? passEl : emailEl).focus(); }, 50);
+                }
+
+                form.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    err.textContent = '';
+                    btn.disabled = true; btn.textContent = 'Entrando…';
+                    var email = (emailEl.value || '').trim();
+                    var password = passEl.value || '';
+                    try {
+                        var res = await fetch('/api/auth/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: email, password: password })
+                        });
+                        if (!res.ok) {
+                            err.textContent = res.status === 401
+                                ? 'Correo o contraseña incorrectos'
+                                : 'No se pudo entrar (' + res.status + ')';
+                            btn.disabled = false; btn.textContent = 'Entrar';
+                            return;
+                        }
+                        var data = await res.json();
+                        localStorage.setItem('auth_token', data.token);
+                        localStorage.setItem('user_id', data.userId);
+                        localStorage.setItem('user_email', data.email);
+                        localStorage.setItem('user_name', data.name);
+                        localStorage.setItem('remembered_email', data.email);
+                        // Reload so the browser offers to save the password and the
+                        // wasm app boots straight into the dashboard with the session.
+                        window.location.reload();
+                    } catch (ex) {
+                        err.textContent = 'No se pudo conectar. Probá de nuevo.';
+                        btn.disabled = false; btn.textContent = 'Entrar';
+                    }
+                });
+
+                // Fallback: reveal the Compose (canvas) login underneath.
+                document.getElementById('login-alt').addEventListener('click', function () {
+                    overlay.classList.add('hidden');
+                });
+            } catch (ex) {
+                // If anything in the overlay breaks, never block login:
+                // hide the overlay so the Compose login works.
+                var o = document.getElementById('login-overlay');
+                if (o) o.classList.add('hidden');
+            }
+        })();
+    </script>
     <script src="composeApp.js"></script>
 </body>
 </html>

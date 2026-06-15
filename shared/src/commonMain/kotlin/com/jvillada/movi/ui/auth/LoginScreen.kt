@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(onNavigate: (Screen) -> Unit) {
     val coroutine = rememberCoroutineScope()
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(SessionManager.rememberedEmail ?: "") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
