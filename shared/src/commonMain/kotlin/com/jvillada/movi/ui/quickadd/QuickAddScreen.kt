@@ -9,6 +9,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -370,7 +373,7 @@ private fun EditorBody(
                     .clickable { onOcr() },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("📷", fontSize = 20.sp)
+                Icon(imageVector = Icons.Filled.CameraAlt, contentDescription = "Escanear recibo", tint = MinText, modifier = Modifier.size(22.dp))
             }
             Box(
                 modifier = Modifier
