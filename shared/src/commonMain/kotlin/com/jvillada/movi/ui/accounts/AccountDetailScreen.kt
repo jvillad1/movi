@@ -4,6 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.RequestQuote
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -12,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -82,9 +91,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Header
-            val pair = account?.let { accountTypeIcon(it.type) } ?: ("" to "")
-            val typeIcon = pair.first
-            val typeLabel = pair.second
+            val accountTypePair = account?.let { accountTypeIcon(it.type) }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -107,8 +114,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                     letterSpacing = (-0.4).sp,
                     modifier = Modifier.weight(1f),
                 )
-                if (typeIcon.isNotEmpty()) {
-                    Text(text = typeIcon, fontSize = 20.sp)
+                if (accountTypePair != null) {
+                    Icon(
+                        imageVector = accountTypePair.first,
+                        contentDescription = accountTypePair.second,
+                        tint = MinTextDim,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
             }
 
@@ -131,6 +143,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 // Balance hero card
                 account?.let { acc ->
                     item(key = "balance-card") {
+                        val typeLabel = accountTypeIcon(acc.type).second
                         val isCard = isDebtAccount(acc.type)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -325,11 +338,11 @@ private fun epochToDate(millis: Long): String =
         .date
         .toString()
 
-private fun accountTypeIcon(type: AccountType): Pair<String, String> = when (type) {
-    AccountType.CASH        -> "💵" to "Efectivo"
-    AccountType.SAVINGS     -> "🏦" to "Ahorros"
-    AccountType.CHECKING    -> "💳" to "Corriente"
-    AccountType.INVESTMENT  -> "📈" to "Inversión"
-    AccountType.CREDIT_CARD -> "💳" to "Crédito"
-    AccountType.LOAN        -> "💸" to "Préstamo"
+private fun accountTypeIcon(type: AccountType): Pair<ImageVector, String> = when (type) {
+    AccountType.CASH        -> Icons.Filled.Payments to "Efectivo"
+    AccountType.SAVINGS     -> Icons.Filled.AccountBalance to "Ahorros"
+    AccountType.CHECKING    -> Icons.Filled.AccountBalanceWallet to "Corriente"
+    AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp to "Inversión"
+    AccountType.CREDIT_CARD -> Icons.Filled.CreditCard to "Crédito"
+    AccountType.LOAN        -> Icons.Filled.RequestQuote to "Préstamo"
 }

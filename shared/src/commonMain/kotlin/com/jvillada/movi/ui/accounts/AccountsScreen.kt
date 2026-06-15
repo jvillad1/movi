@@ -5,6 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.RequestQuote
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -14,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -213,7 +222,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
-                                            Text(text = icon, fontSize = 18.sp)
+                                            Icon(imageVector = icon, contentDescription = typeLabel, tint = MinTextDim, modifier = Modifier.size(20.dp))
                                             Text(
                                                 text = account.name,
                                                 fontSize = 14.5.sp,
@@ -279,11 +288,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
-private fun accountTypeInfo(type: AccountType): Pair<String, String> = when (type) {
-    AccountType.CASH        -> "💵" to "Efectivo"
-    AccountType.SAVINGS     -> "🏦" to "Ahorros"
-    AccountType.CHECKING    -> "💳" to "Corriente"
-    AccountType.INVESTMENT  -> "📈" to "Inversión"
-    AccountType.CREDIT_CARD -> "💳" to "Crédito"
-    AccountType.LOAN        -> "💸" to "Préstamo"
+private fun accountTypeInfo(type: AccountType): Pair<ImageVector, String> = when (type) {
+    AccountType.CASH        -> Icons.Filled.Payments to "Efectivo"
+    AccountType.SAVINGS     -> Icons.Filled.AccountBalance to "Ahorros"
+    AccountType.CHECKING    -> Icons.Filled.AccountBalanceWallet to "Corriente"
+    AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp to "Inversión"
+    AccountType.CREDIT_CARD -> Icons.Filled.CreditCard to "Crédito"
+    AccountType.LOAN        -> Icons.Filled.RequestQuote to "Préstamo"
 }
