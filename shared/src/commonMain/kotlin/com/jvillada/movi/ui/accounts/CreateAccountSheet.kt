@@ -7,6 +7,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.RequestQuote
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,15 +35,15 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
-private data class TypeOption(val type: AccountType, val label: String)
+private data class TypeOption(val type: AccountType, val label: String, val icon: ImageVector)
 
 private val TYPE_OPTIONS = listOf(
-    TypeOption(AccountType.CASH, "💵 Efectivo"),
-    TypeOption(AccountType.SAVINGS, "🏦 Ahorros"),
-    TypeOption(AccountType.CHECKING, "🏧 Corriente"),
-    TypeOption(AccountType.INVESTMENT, "📈 Inversión"),
-    TypeOption(AccountType.CREDIT_CARD, "💳 Crédito"),
-    TypeOption(AccountType.LOAN, "💸 Préstamo"),
+    TypeOption(AccountType.CASH, "Efectivo", Icons.Filled.Payments),
+    TypeOption(AccountType.SAVINGS, "Ahorros", Icons.Filled.AccountBalance),
+    TypeOption(AccountType.CHECKING, "Corriente", Icons.Filled.AccountBalanceWallet),
+    TypeOption(AccountType.INVESTMENT, "Inversión", Icons.AutoMirrored.Filled.TrendingUp),
+    TypeOption(AccountType.CREDIT_CARD, "Crédito", Icons.Filled.CreditCard),
+    TypeOption(AccountType.LOAN, "Préstamo", Icons.Filled.RequestQuote),
 )
 
 @Composable
@@ -140,6 +149,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                         row.forEach { option ->
                             Chip(
                                 label = option.label,
+                                icon = option.icon,
                                 selected = selectedType == option.type,
                                 onClick = {
                                     val wasDebt = isDebtAccount(selectedType)
@@ -261,7 +271,7 @@ private fun SectionLabel(text: String) {
 
 /** Selectable rounded chip that fills its share of the enclosing [Row]. */
 @Composable
-private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
     Box(
         modifier = Modifier
             .weight(1f)
@@ -274,11 +284,31 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) MinOnPrimaryContainer else MinTextDim,
-        )
+        if (icon != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (selected) MinOnPrimaryContainer else MinTextDim,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = label,
+                    fontSize = 13.sp,
+                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    color = if (selected) MinOnPrimaryContainer else MinTextDim,
+                )
+            }
+        } else {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                color = if (selected) MinOnPrimaryContainer else MinTextDim,
+            )
+        }
     }
 }

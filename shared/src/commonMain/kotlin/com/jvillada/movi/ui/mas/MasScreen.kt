@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -34,7 +35,7 @@ private data class MasItem(
 )
 
 private val items = listOf(
-    MasItem("Inversiones",  Icons.Rounded.TrendingUp,      Color(0xFF7DDDB0), Color(0x247DDDB0), Screen.Investments),
+    MasItem("Inversiones",  Icons.AutoMirrored.Rounded.TrendingUp, Color(0xFF7DDDB0), Color(0x247DDDB0), Screen.Investments),
     MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),
     MasItem("Metas",        Icons.Rounded.Flag,             Color(0xFFFFD479), Color(0x24FFD479), Screen.Goals),
     MasItem("Extractos",    Icons.Rounded.UploadFile,       Color(0xFFC7BCFF), Color(0x24C7BCFF), Screen.Extractos),

@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -107,7 +110,12 @@ fun DashboardScreen(
                         coroutine.launch { snackbarHostState.showSnackbar("Sin notificaciones por ahora") }
                     },
                 ) {
-                    Text("🔔", fontSize = 18.sp, color = MinTextDim)
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = "Notificaciones",
+                        tint = MinTextDim,
+                        modifier = Modifier.size(22.dp),
+                    )
                     Box(
                         modifier = Modifier
                             .size(6.dp)

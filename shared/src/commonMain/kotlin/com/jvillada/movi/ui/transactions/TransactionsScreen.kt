@@ -10,6 +10,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -94,7 +97,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                 color = MinText,
                 letterSpacing = (-0.8).sp,
             )
-            Text("🔍", fontSize = 20.sp, color = MinTextDim)
+            Icon(imageVector = Icons.Filled.Search, contentDescription = "Buscar", tint = MinTextDim, modifier = Modifier.size(22.dp))
         }
 
         // Filter chips

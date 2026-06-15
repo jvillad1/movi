@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -105,7 +109,7 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("⊞", fontSize = 22.sp, color = Color.White.copy(alpha = 0.7f))
+            Icon(imageVector = Icons.Filled.GridOn, contentDescription = "Cuadrícula", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
             Box(
                 modifier = Modifier
                     .size(70.dp)
@@ -115,7 +119,7 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
                     .background(Color.White)
                     .clickable { onNavigate(Screen.OCRConfirm) }
             )
-            Text("☀", fontSize = 22.sp, color = Color.White.copy(alpha = 0.7f))
+            Icon(imageVector = Icons.Filled.WbSunny, contentDescription = "Brillo", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
         }
     }
 }

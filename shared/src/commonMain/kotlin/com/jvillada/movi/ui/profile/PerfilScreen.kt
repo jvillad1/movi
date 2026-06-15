@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,7 +39,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Perfil", fontSize = 26.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.8).sp)
-            Text("⚙", fontSize = 20.sp, color = MinTextDim)
+            Icon(imageVector = Icons.Filled.Settings, contentDescription = "Ajustes", tint = MinTextDim, modifier = Modifier.size(22.dp))
         }
 
         LazyColumn(
