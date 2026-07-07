@@ -20,14 +20,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
-    var credits by remember { mutableStateOf<List<Credit>>(emptyList()) }
+    var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getCredits() }
             .onSuccess { credits = it }
@@ -44,7 +44,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             Text("Créditos", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 
-        val totalDebt = credits.sumOf { it.total - it.paid }
+        val totalDebt = credits.sumOf { it.account.balance }
 
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
@@ -56,19 +56,6 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     Text("Deuda total", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(10.dp))
                     Text(formatCOP(totalDebt), fontSize = 36.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
-                    if (credits.isNotEmpty()) {
-                        Spacer(Modifier.height(20.dp))
-                        Hairline()
-                        Spacer(Modifier.height(18.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Próxima cuota", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
-                                Spacer(Modifier.height(6.dp))
-                                Text(credits.firstOrNull()?.nextAmt ?: "—", fontSize = 15.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
-                                Text(credits.firstOrNull()?.nextDate ?: "", fontSize = 11.5.sp, color = MinTextMute)
-                            }
-                        }
-                    }
                 }
             }
 
@@ -87,7 +74,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         credits.forEach { c ->
-                            val pct = c.paid.toFloat() / c.total.toFloat()
+                            val pct = (c.paidPct ?: 0.0).toFloat()
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 variant = MinCardVariant.Elevated,
@@ -98,21 +85,18 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Text(c.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp)
-                                    Text(c.rate, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+                                    Text(c.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp)
+                                    Text(c.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
                                 }
-                                Text(c.bank, fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+                                Text(c.terms?.bank ?: "Sin términos registrados", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Row {
-                                        Text(formatCOP(c.paid), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                                        Text(" / ${formatCOP(c.total)}", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinTextMute, letterSpacing = (-0.3).sp)
-                                    }
-                                    Text("${(pct * 100).toInt()}%", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+                                    Text(formatCOP(c.account.balance), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+                                    Text("${(pct * 100).toInt()}% pagado", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
                                 }
                                 Spacer(Modifier.height(8.dp))
                                 Box(
@@ -130,15 +114,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                             .background(MinText.copy(alpha = 0.9f))
                                     )
                                 }
-                                Spacer(Modifier.height(14.dp))
-                                Hairline()
-                                Spacer(Modifier.height(12.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text("Próxima cuota · ${c.nextDate}", fontSize = 12.sp, color = MinTextMute)
-                                    Text(c.nextAmt, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                                c.terms?.let { t ->
+                                    Spacer(Modifier.height(14.dp))
+                                    Hairline()
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Text("Cuota · día ${t.dayOfMonth}", fontSize = 12.sp, color = MinTextMute)
+                                        Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                                    }
                                 }
                             }
                         }

@@ -22,14 +22,23 @@ data class Holding(
 )
 
 @Serializable
-data class Credit(
-    val name: String,
+data class CreditTerms(
+    val accountId: String,
     val bank: String,
-    val total: Long,
-    val paid: Long,
-    val rate: String,
-    val nextDate: String,
-    val nextAmt: String,
+    val principal: Long,        // capital original (COP)
+    val rateEa: Double,         // % EA, p.ej. 17.46
+    val termMonths: Int,
+    val installment: Long,      // cuota mensual total (incl. seguros)
+    val dayOfMonth: Int,        // día de pago
+    val startDate: String,      // ISO "2026-06-01" (desembolso)
+    val notes: String? = null,
+)
+
+@Serializable
+data class CreditSummary(
+    val account: Account,       // cuenta LOAN con deuda derivada en balance
+    val terms: CreditTerms?,    // null si la cuenta LOAN aún no tiene términos
+    val paidPct: Double?,       // 1 − deuda/principal clampado a [0,1]; null sin términos
 )
 
 @Serializable

@@ -8,7 +8,13 @@ import com.jvillada.movi.shared.model.StatementParseResult
 
 class NoOpRepository : WalletRepository {
     override suspend fun getHoldings() = emptyList<Holding>()
-    override suspend fun getCredits() = emptyList<Credit>()
+    override suspend fun getCredits() = emptyList<CreditSummary>()
+    override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(
+        account = Account(id = terms.accountId, name = "", type = AccountType.LOAN, balance = 0),
+        terms = terms,
+        paidPct = null,
+    )
+    override suspend fun deleteCreditTerms(accountId: String) {}
     override suspend fun getGoals() = emptyList<Goal>()
     override suspend fun getSmsMessages() = emptyList<SmsMessage>()
     override suspend fun getSms(id: String) = error("stub")

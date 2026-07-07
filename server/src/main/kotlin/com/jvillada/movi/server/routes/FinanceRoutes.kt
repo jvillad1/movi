@@ -12,7 +12,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
-import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
@@ -34,7 +34,7 @@ import java.time.ZonedDateTime
 
 fun Route.financeRoutes() {
     get("/api/holdings") { call.respond(emptyList<Holding>()) }
-    get("/api/credits") { call.respond(emptyList<Credit>()) }
+    get("/api/credits") { call.respond(emptyList<CreditSummary>()) }
     get("/api/goals") { call.respond(emptyList<Goal>()) }
     get("/api/recurring-rules") {
         val uid = call.userId()
