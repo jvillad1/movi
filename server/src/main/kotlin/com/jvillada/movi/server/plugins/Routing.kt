@@ -17,6 +17,7 @@ fun Application.configureRouting() {
             accountRoutes()
             eventRoutes()
             financeRoutes()
+            creditRoutes()
             reminderRoutes()
             smsRoutes()
             aiRoutes()

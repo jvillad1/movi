@@ -34,6 +34,14 @@ private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
 )
 
 fun Route.reminderRoutes() {
+    get("/api/recurring-rules") {
+        val uid = call.userId()
+        val rules = dbQuery {
+            RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
+        }
+        call.respond(rules)
+    }
+
     post("/api/recurring-rules") {
         val uid = call.userId()
         val body = call.receive<RecurringRule>()
