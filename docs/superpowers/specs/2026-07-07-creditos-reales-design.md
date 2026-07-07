@@ -103,10 +103,10 @@ Todo por `call.userId()`:
   y el usuario cambia `dayOfMonth`, el nuevo día aplica desde el mes siguiente.
 - `DELETE /api/credits/{accountId}` → borra los términos (la cuenta LOAN queda intacta).
 
-Se elimina el stub `get("/api/credits")` de `FinanceRoutes.kt`. De paso se elimina el
-`GET /api/recurring-rules` duplicado en `FinanceRoutes.kt` (queda solo el de
-`ReminderRoutes.kt` junto a sus mutaciones) — higiene directamente relacionada porque
-este spec toca ambos archivos de rutas.
+Se elimina el stub `get("/api/credits")` de `FinanceRoutes.kt`. De paso se **mueve** el
+`GET /api/recurring-rules` de `FinanceRoutes.kt` a `ReminderRoutes.kt` (hoy las
+mutaciones viven allá y el GET acá, partido en dos archivos) — higiene directamente
+relacionada porque este spec toca ambos archivos de rutas.
 
 Repo (`:core` `WalletRepository` + impls):
 `getCredits(): List<CreditSummary>` (reemplaza el stub actual que devuelve
