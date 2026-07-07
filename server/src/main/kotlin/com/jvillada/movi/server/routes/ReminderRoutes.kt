@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.reminders.upcomingPayments
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -91,6 +92,7 @@ fun Route.reminderRoutes() {
         val rules = dbQuery {
             RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
         }
-        call.respond(upcomingPayments(rules, LocalDate.now(ZoneOffset.UTC), leadDays))
+        val creditRules = loadCreditRulePairs(uid).map { it.first }
+        call.respond(upcomingPayments(rules + creditRules, LocalDate.now(ZoneOffset.UTC), leadDays))
     }
 }

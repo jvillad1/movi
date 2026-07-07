@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
@@ -91,8 +92,9 @@ private suspend fun processUser(
             .where { RecurringRules.userId eq userId }
             .map { row -> row.toRulePair() }
     }
+    val allPairs = rulePairs + loadCreditRulePairs(userId)
 
-    val selected = selectDueForReminder(rulePairs, today, leadDays, period)
+    val selected = selectDueForReminder(allPairs, today, leadDays, period)
 
     if (selected.isEmpty()) return
 
@@ -113,10 +115,14 @@ private suspend fun processUser(
         // in the where block, so individual updates are the cleanest approach.
         for (rule in selected) {
             dbQuery {
-                RecurringRules.update({
-                    (RecurringRules.id eq rule.id) and (RecurringRules.userId eq userId)
-                }) {
-                    it[RecurringRules.lastRemindedPeriod] = period
+                if (rule.id.startsWith(CREDIT_RULE_PREFIX)) {
+                    Credits.update({
+                        (Credits.accountId eq rule.id.removePrefix(CREDIT_RULE_PREFIX)) and (Credits.userId eq userId)
+                    }) { it[Credits.lastRemindedPeriod] = period }
+                } else {
+                    RecurringRules.update({
+                        (RecurringRules.id eq rule.id) and (RecurringRules.userId eq userId)
+                    }) { it[RecurringRules.lastRemindedPeriod] = period }
                 }
             }
         }

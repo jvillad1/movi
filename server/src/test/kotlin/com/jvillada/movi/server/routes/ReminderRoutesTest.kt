@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -70,10 +71,10 @@ class ReminderRoutesTest {
         transaction {
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages,
+                Budgets, RecurringRules, SmsMessages, Credits,
             )
-            SchemaUtils.drop(RecurringRules, Users)
-            SchemaUtils.create(Users, RecurringRules)
+            SchemaUtils.drop(Credits, RecurringRules, Users)
+            SchemaUtils.create(Users, RecurringRules, Credits)
 
             Users.insert {
                 it[id]           = userAId
@@ -196,5 +197,32 @@ class ReminderRoutesTest {
         assertEquals(HttpStatusCode.OK, resp.status)
         val arr = Json.parseToJsonElement(resp.bodyAsText()).jsonArray
         assertEquals(1, arr.size, "User A should see exactly 1 upcoming payment; got: ${resp.bodyAsText()}")
+    }
+
+    /** A credit's installment enters /api/payments/upcoming as a virtual recurring rule. */
+    @Test
+    fun `upcoming payments include credit installments`() = testApplication {
+        application { testModule() }
+        transaction {
+            Accounts.insert {
+                it[id] = "acc-loan-up"; it[userId] = userAId
+                it[name] = "Crédito Vehículo"; it[type] = "LOAN"
+                it[balance] = 0; it[currency] = "COP"
+            }
+            Credits.insert {
+                it[accountId] = "acc-loan-up"; it[userId] = userAId
+                it[bank] = "Santander"; it[principal] = 160_000_000
+                it[rateEa] = 21.56; it[termMonths] = 72
+                it[installment] = 4_550_030; it[dayOfMonth] = 15
+                it[startDate] = "2025-11-25"
+            }
+        }
+        val tokenA = mintToken(userAId, userAEmail)
+        val res = client.get("/api/payments/upcoming") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        val body = res.bodyAsText()
+        assertTrue(body.contains("credit_acc-loan-up"), "expected virtual credit rule in: $body")
+        assertTrue(body.contains("Cuota Crédito Vehículo"))
     }
 }
