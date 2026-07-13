@@ -58,6 +58,7 @@ fun CreditTermsSheet(
     var installment by remember { mutableStateOf(existingTerms?.installment?.toString() ?: "") }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
     var startDate by remember { mutableStateOf(existingTerms?.startDate ?: "") }
+    var notes by remember { mutableStateOf(existingTerms?.notes ?: "") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -69,7 +70,7 @@ fun CreditTermsSheet(
         (dayOfMonth.toIntOrNull() in 1..31) &&
         startDate.isNotBlank()
     val accountValid = if (editing != null) true
-        else if (newAccountMode) newAccountName.isNotBlank()
+        else if (newAccountMode) newAccountName.isNotBlank() && (newAccountDebt.toLongOrNull() ?: 0L) > 0L
         else selectedAccountId != null
     val canSave = termsValid && accountValid && !saving
 
@@ -102,6 +103,7 @@ fun CreditTermsSheet(
                         installment = installment.toLong(),
                         dayOfMonth = dayOfMonth.toInt(),
                         startDate = startDate.trim(),
+                        notes = notes.trim().ifBlank { null },
                     )
                 )
             }
@@ -192,6 +194,8 @@ fun CreditTermsSheet(
                 }
                 Spacer(Modifier.height(8.dp))
                 FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = it })
+                Spacer(Modifier.height(8.dp))
+                FieldBox("Notas (opcional)", notes, { notes = it })
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))

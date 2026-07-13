@@ -176,8 +176,12 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                     UpcomingPaymentRow(
                                         payment = payment,
                                         onClick = {
-                                            sheetRule = payment.rule
-                                            sheetOpen = true
+                                            if (payment.rule.id.startsWith("credit_")) {
+                                                onNavigate(Screen.Credits)
+                                            } else {
+                                                sheetRule = payment.rule
+                                                sheetOpen = true
+                                            }
                                         },
                                     )
                                     if (i < upcoming.size - 1) Hairline()
