@@ -103,4 +103,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    lint {
+        // The NullSafeMutableLiveData detector crashes lint analysis ("Unexpected
+        // failure during lint analysis") with AGP/lint 8.7.x on this codebase.
+        // The project doesn't use LiveData, so disabling it loses no coverage.
+        disable += "NullSafeMutableLiveData"
+    }
 }

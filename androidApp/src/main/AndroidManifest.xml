@@ -4,6 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_SMS" />
 
+    <!-- READ_SMS implies telephony hardware; mark it optional so the app stays
+         installable on ChromeOS/tablets without telephony (SMS reader is a no-op there). -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
