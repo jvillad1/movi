@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.theme.*
@@ -80,32 +80,31 @@ fun CreditTermsSheet(
         error = null
         coroutine.launch {
             val result = runCatching {
-                val accountId = when {
-                    editing != null -> editing.account.id
-                    newAccountMode -> Repositories.wallets.createAccount(
-                        Account(
-                            id = "",
-                            name = newAccountName.trim(),
-                            type = AccountType.LOAN,
-                            balance = newAccountDebt.toLongOrNull() ?: 0L,
-                            currency = "COP",
-                        )
-                    ).id
-                    else -> selectedAccountId!!
-                }
-                Repositories.wallets.putCreditTerms(
-                    CreditTerms(
-                        accountId = accountId,
-                        bank = bank.trim(),
-                        principal = principal.toLong(),
-                        rateEa = rateEa.toDouble(),
-                        termMonths = termMonths.toInt(),
-                        installment = installment.toLong(),
-                        dayOfMonth = dayOfMonth.toInt(),
-                        startDate = startDate.trim(),
-                        notes = notes.trim().ifBlank { null },
-                    )
+                val terms = CreditTerms(
+                    accountId = "",
+                    bank = bank.trim(),
+                    principal = principal.toLong(),
+                    rateEa = rateEa.toDouble(),
+                    termMonths = termMonths.toInt(),
+                    installment = installment.toLong(),
+                    dayOfMonth = dayOfMonth.toInt(),
+                    startDate = startDate.trim(),
+                    notes = notes.trim().ifBlank { null },
                 )
+                if (editing == null && newAccountMode) {
+                    // Alta atómica server-side: cuenta + deuda inicial + términos en una
+                    // sola operación — sin estados parciales si algo falla a mitad.
+                    Repositories.wallets.createCredit(
+                        CreateCreditRequest(
+                            name = newAccountName.trim(),
+                            initialDebt = newAccountDebt.toLong(),
+                            terms = terms,
+                        )
+                    )
+                } else {
+                    val accountId = editing?.account?.id ?: selectedAccountId!!
+                    Repositories.wallets.putCreditTerms(terms.copy(accountId = accountId))
+                }
             }
             saving = false
             result.onSuccess { onSaved() }.onFailure { error = it.toUserMessage() }

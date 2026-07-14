@@ -16,6 +16,7 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -266,6 +267,51 @@ class CreditRoutesTest {
             HttpStatusCode.NotFound,
             client.delete("/api/credits/$loanAccountId") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.status,
         )
+    }
+
+    @Test
+    fun `POST creates account, opening debt and terms atomically`() = testApplication {
+        wireApp()
+        val post = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"name":"Crédito Vehículo Santander","initialDebt":160000000,
+                   "terms":{"accountId":"","bank":"Santander","principal":160000000,"rateEa":21.56,
+                            "termMonths":72,"installment":4550030,"dayOfMonth":25,"startDate":"2025-11-25"}}"""
+            )
+        }
+        assertEquals(HttpStatusCode.Created, post.status)
+        val created = Json.parseToJsonElement(post.bodyAsText()).jsonObject
+        assertEquals(160_000_000L, created["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long)
+        assertEquals("Santander", created["terms"]!!.jsonObject["bank"]!!.jsonPrimitive.content)
+        // deuda == principal recién creado → 0% pagado
+        assertEquals(0.0, created["paidPct"]!!.jsonPrimitive.double, 1e-9)
+
+        // GET refleja lo mismo derivado desde el evento de apertura persistido
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }
+        val arr = Json.parseToJsonElement(res.bodyAsText()).jsonArray
+        assertEquals(1, arr.size)
+        assertEquals(160_000_000L, arr[0].jsonObject["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `POST with blank name or non-positive debt is 400`() = testApplication {
+        wireApp()
+        val terms = """"terms":{"accountId":"","bank":"X","principal":100,"rateEa":10.0,
+                        "termMonths":12,"installment":10,"dayOfMonth":1,"startDate":"2026-01-01"}"""
+        val blankName = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"  ","initialDebt":100,$terms}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, blankName.status)
+        val zeroDebt = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Préstamo","initialDebt":0,$terms}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, zeroDebt.status)
     }
 
     @Test

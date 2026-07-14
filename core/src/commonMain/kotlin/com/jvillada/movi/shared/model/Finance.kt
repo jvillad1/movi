@@ -41,6 +41,20 @@ data class CreditSummary(
     val paidPct: Double?,       // 1 − deuda/principal clampado a [0,1]; null sin términos
 )
 
+/**
+ * Prefijo de los ids de las reglas recurrentes sintéticas derivadas de credit_terms.
+ * Compartido entre el server (que las genera) y la UI (que las distingue de las reales).
+ */
+const val CREDIT_RULE_PREFIX = "credit_"
+
+/** Alta atómica de un crédito: cuenta LOAN + evento de apertura + términos en una sola operación server-side. */
+@Serializable
+data class CreateCreditRequest(
+    val name: String,           // nombre de la cuenta LOAN a crear
+    val initialDebt: Long,      // deuda actual (COP) — genera el evento "Deuda inicial"
+    val terms: CreditTerms,     // accountId se ignora; el server asigna el de la cuenta nueva
+)
+
 @Serializable
 data class Goal(
     val name: String,

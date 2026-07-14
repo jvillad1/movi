@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.EventDay
@@ -126,6 +127,7 @@ class LocalRepository(
 
     override suspend fun getHoldings(): List<Holding> = remote.getHoldings()
     override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
     override suspend fun getGoals(): List<Goal> = remote.getGoals()

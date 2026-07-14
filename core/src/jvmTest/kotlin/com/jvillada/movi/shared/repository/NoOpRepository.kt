@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.StatementImport
@@ -9,6 +10,7 @@ import com.jvillada.movi.shared.model.StatementParseResult
 class NoOpRepository : WalletRepository {
     override suspend fun getHoldings() = emptyList<Holding>()
     override suspend fun getCredits() = emptyList<CreditSummary>()
+    override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
     override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(
         account = Account(id = terms.accountId, name = "", type = AccountType.LOAN, balance = 0),
         terms = terms,

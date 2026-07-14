@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.EventDay
@@ -48,6 +49,12 @@ class WalletRepositoryImpl(
 
     override suspend fun getCredits(): List<CreditSummary> =
         client.get("$baseUrl/api/credits").body()
+
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary =
+        client.post("$baseUrl/api/credits") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
 
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary =
         client.put("$baseUrl/api/credits/${terms.accountId}") {

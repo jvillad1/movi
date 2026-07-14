@@ -4,6 +4,7 @@ import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.server.application.Application

@@ -4,15 +4,13 @@ import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
-
-/** Prefijo que distingue las reglas sintéticas de crédito de las recurring_rules reales. */
-const val CREDIT_RULE_PREFIX = "credit_"
 
 /**
  * Regla recurrente sintética para la cuota de un crédito. NO existe en recurring_rules:
