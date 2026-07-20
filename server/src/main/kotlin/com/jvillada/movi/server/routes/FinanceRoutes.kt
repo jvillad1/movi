@@ -5,18 +5,15 @@ import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
-import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
-import com.jvillada.movi.shared.model.Credit
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
-import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
@@ -34,24 +31,7 @@ import java.time.ZonedDateTime
 
 fun Route.financeRoutes() {
     get("/api/holdings") { call.respond(emptyList<Holding>()) }
-    get("/api/credits") { call.respond(emptyList<Credit>()) }
     get("/api/goals") { call.respond(emptyList<Goal>()) }
-    get("/api/recurring-rules") {
-        val uid = call.userId()
-        val rules = dbQuery {
-            RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map {
-                RecurringRule(
-                    id = it[RecurringRules.id],
-                    name = it[RecurringRules.name],
-                    category = it[RecurringRules.category],
-                    amount = it[RecurringRules.amount],
-                    dayOfMonth = it[RecurringRules.dayOfMonth],
-                    type = TransactionType.valueOf(it[RecurringRules.type]),
-                )
-            }
-        }
-        call.respond(rules)
-    }
 
     // ── Budgets — per-user, DB-backed ─────────────────────────────────────────
 

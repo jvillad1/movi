@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -176,8 +177,12 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                     UpcomingPaymentRow(
                                         payment = payment,
                                         onClick = {
-                                            sheetRule = payment.rule
-                                            sheetOpen = true
+                                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX)) {
+                                                onNavigate(Screen.Credits)
+                                            } else {
+                                                sheetRule = payment.rule
+                                                sheetOpen = true
+                                            }
                                         },
                                     )
                                     if (i < upcoming.size - 1) Hairline()

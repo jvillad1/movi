@@ -7,7 +7,9 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
-import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.CreateCreditRequest
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -124,7 +126,10 @@ class LocalRepository(
     // ── Delegate everything else to remote ────────────────────────────────────
 
     override suspend fun getHoldings(): List<Holding> = remote.getHoldings()
-    override suspend fun getCredits(): List<Credit> = remote.getCredits()
+    override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
+    override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
+    override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
     override suspend fun getGoals(): List<Goal> = remote.getGoals()
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)

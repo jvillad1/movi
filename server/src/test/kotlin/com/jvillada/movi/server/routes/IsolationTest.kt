@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -76,12 +77,12 @@ class IsolationTest {
             // Full drop + recreate of every table the app uses for a guaranteed
             // clean slate between tests (no bleed from other suites or prior runs).
             SchemaUtils.drop(
-                SmsMessages, RecurringRules, VoidEvents, Events,
+                Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages,
+                Budgets, RecurringRules, SmsMessages, Credits,
             )
 
             // ── User A ────────────────────────────────────────────────────────

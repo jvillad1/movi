@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.shared.model.Credit
+import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.EventDay
@@ -34,7 +34,7 @@ private data class CategoryTotal(val category: String, val total: Long)
 fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var holdings by remember { mutableStateOf<List<Holding>>(emptyList()) }
-    var credits by remember { mutableStateOf<List<Credit>>(emptyList()) }
+    var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     var goals by remember { mutableStateOf<List<Goal>>(emptyList()) }
 
     LaunchedEffect(Unit) {
@@ -54,7 +54,7 @@ fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
     val totalEgresos = byCategory.sumOf { it.total }
 
     val totalInvertido = holdings.sumOf { it.amount }
-    val totalDeuda = credits.sumOf { it.total - it.paid }
+    val totalDeuda = credits.sumOf { it.account.balance }
     val totalAhorrado = goals.sumOf { it.saved }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {

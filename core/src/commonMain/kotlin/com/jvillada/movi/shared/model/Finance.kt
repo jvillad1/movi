@@ -22,14 +22,37 @@ data class Holding(
 )
 
 @Serializable
-data class Credit(
-    val name: String,
+data class CreditTerms(
+    val accountId: String,
     val bank: String,
-    val total: Long,
-    val paid: Long,
-    val rate: String,
-    val nextDate: String,
-    val nextAmt: String,
+    val principal: Long,        // capital original (COP)
+    val rateEa: Double,         // % EA, p.ej. 17.46
+    val termMonths: Int,
+    val installment: Long,      // cuota mensual total (incl. seguros)
+    val dayOfMonth: Int,        // día de pago
+    val startDate: String,      // ISO "2026-06-01" (desembolso)
+    val notes: String? = null,
+)
+
+@Serializable
+data class CreditSummary(
+    val account: Account,       // cuenta LOAN con deuda derivada en balance
+    val terms: CreditTerms?,    // null si la cuenta LOAN aún no tiene términos
+    val paidPct: Double?,       // 1 − deuda/principal clampado a [0,1]; null sin términos
+)
+
+/**
+ * Prefijo de los ids de las reglas recurrentes sintéticas derivadas de credit_terms.
+ * Compartido entre el server (que las genera) y la UI (que las distingue de las reales).
+ */
+const val CREDIT_RULE_PREFIX = "credit_"
+
+/** Alta atómica de un crédito: cuenta LOAN + evento de apertura + términos en una sola operación server-side. */
+@Serializable
+data class CreateCreditRequest(
+    val name: String,           // nombre de la cuenta LOAN a crear
+    val initialDebt: Long,      // deuda actual (COP) — genera el evento "Deuda inicial"
+    val terms: CreditTerms,     // accountId se ignora; el server asigna el de la cuenta nueva
 )
 
 @Serializable

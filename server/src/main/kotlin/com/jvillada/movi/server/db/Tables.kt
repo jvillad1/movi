@@ -94,3 +94,19 @@ object SmsMessages : Table("sms_messages") {
     override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
 }
+
+object Credits : Table("credit_terms") {
+    val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
+    val userId             = varchar("user_id", 50)
+    val bank               = varchar("bank", 80)
+    val principal          = long("principal")            // capital original (COP)
+    val rateEa             = double("rate_ea")            // % EA
+    val termMonths         = integer("term_months")
+    val installment        = long("installment")          // cuota mensual total
+    val dayOfMonth         = integer("day_of_month")
+    val startDate          = varchar("start_date", 10)    // ISO desembolso
+    val notes              = varchar("notes", 300).nullable()
+    val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
+    override val primaryKey = PrimaryKey(accountId)
+    init { index("idx_credit_terms_user_id", false, userId) }
+}
