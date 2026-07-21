@@ -29,6 +29,9 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -207,6 +210,32 @@ class SubscriptionRoutesTest {
         repeat(2) { client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") } }
         val res = client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
         assertEquals(2, Json.parseToJsonElement(res.bodyAsText()).jsonObject["subscriptions"]!!.jsonArray.size)
+    }
+
+    // Reproduce el doble-tap en "Re-escanear": N detects concurrentes para el mismo
+    // usuario pueden ver `existing` sin la fila (check-then-insert) y competir por el
+    // mismo (userId, merchantKey, currency). Antes de este fix, el perdedor de la
+    // carrera contra uq_subscriptions_user_merchant_currency devolvía un 500 sin
+    // manejar. La carrera no siempre se dispara en una sola corrida (depende del
+    // scheduler de corrutinas/hilos de H2), así que este test es un smoke guard: si
+    // la carrera ocurre debe resolverse en 200s, y si no ocurre el resultado también
+    // debe ser correcto — nunca debe quedar en rojo por flakiness.
+    @Test
+    fun `concurrent detects for the same user never 500 and converge to one row per subscription`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val responses = coroutineScope {
+            (1..4).map {
+                async {
+                    client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+                }
+            }.awaitAll()
+        }
+        responses.forEach { assertEquals(HttpStatusCode.OK, it.status) }
+
+        val after = client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.OK, after.status)
+        assertEquals(2, Json.parseToJsonElement(after.bodyAsText()).jsonObject["subscriptions"]!!.jsonArray.size)
     }
 
     @Test
