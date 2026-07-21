@@ -69,7 +69,9 @@ fun normalizeMerchant(description: String): MerchantId? {
     val key = d.replace(Regex("[^a-z0-9]+"), "_").trim('_')
     if (key.length < 3) return null
     val display = d.split(Regex("\\s+")).joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
-    return MerchantId(key, display, known = false)
+    // La tabla declara merchant_key varchar(80) / display_name varchar(100); una descripción
+    // recurrente larga (>255 originalmente) no debe tronar el insert/update con un 500.
+    return MerchantId(key.take(80), display.take(100), known = false)
 }
 
 private const val DAY_MS = 86_400_000L
@@ -81,8 +83,10 @@ private fun dateOf(ts: Long): LocalDate =
  * Detección determinística: agrupa EXPENSE por (merchantKey, currency) y marca como
  * suscripción los grupos con ≥2 meses distintos, suma mensual estable (dispersión ≤15%
  * sobre la mediana) y cadencia ~mensual (ningún hueco > 45 días entre cargos; los cargos
- * separados ≤3 días cuentan como el mismo ciclo). HIGH = ≥3 meses + dispersión ≤5% +
- * huecos regulares (26–35 días). Eventos futuros a [today] se ignoran.
+ * separados ≤3 días cuentan como el mismo ciclo). HIGH = comercio conocido (known == true)
+ * + ≥3 meses + dispersión ≤5% + huecos regulares (26–35 días); un comercio desconocido nunca
+ * pasa de MEDIUM, sin importar qué tan bien encaje con la heurística. Eventos futuros a
+ * [today] se ignoran.
  */
 fun detectSubscriptions(events: List<FinancialEvent>, today: LocalDate): List<DetectedSub> {
     val expenses = events.asSequence()
@@ -95,6 +99,9 @@ fun detectSubscriptions(events: List<FinancialEvent>, today: LocalDate): List<De
         .mapNotNull { (groupKey, pairs) ->
             val (merchantKey, currency) = groupKey
             val display = pairs.first().first.displayName
+            // Todos los pares del grupo comparten merchantKey, y KNOWN_SERVICES se evalúa
+            // antes que el fallback, así que `known` es uniforme dentro del grupo.
+            val known = pairs.first().first.known
             val evs = pairs.map { it.second }.sortedBy { it.timestamp }
 
             val byMonth = evs.groupBy { dateOf(it.timestamp).let { d -> d.year to d.monthValue } }
@@ -112,8 +119,12 @@ fun detectSubscriptions(events: List<FinancialEvent>, today: LocalDate): List<De
 
             val days = evs.map { dateOf(it.timestamp).dayOfMonth }.sorted()
             val regular = gaps.all { it in 26..35 }
+            // Solo comercios conocidos (known == true) pueden llegar a HIGH → AUTO. Un
+            // comercio desconocido que cumple toda la heurística (p.ej. un agregado mensual
+            // estable que no es en realidad una suscripción) cae en MEDIUM → CANDIDATE, para
+            // que el usuario lo revise en vez de auto-confirmarlo.
             val confidence = when {
-                byMonth.size >= 3 && maxDev <= 0.05 && regular -> SubConfidence.HIGH
+                known && byMonth.size >= 3 && maxDev <= 0.05 && regular -> SubConfidence.HIGH
                 else -> SubConfidence.MEDIUM
             }
             DetectedSub(

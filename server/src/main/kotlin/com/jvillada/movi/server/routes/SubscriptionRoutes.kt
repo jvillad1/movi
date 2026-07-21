@@ -37,6 +37,15 @@ import kotlin.math.roundToLong
 // SQLSTATE estándar (Postgres y H2) para violación de índice único.
 private const val UNIQUE_VIOLATION_SQLSTATE = "23505"
 
+// FamiriosParser.kt stampa cada ParsedTransaction que genera con este prefijo exacto en
+// `description` ("Famirios · $label · $mes $año"). Son agregados mensuales de presupuesto
+// (un EXPENSE por categoría×mes, monto estable, fecha de fin de mes) — cumplen toda la
+// heurística del detector pero NO son suscripciones reales, así que se excluyen del pool de
+// eventos ANTES de detectar. Se filtra por `description` (no por `category`, que varía por
+// categoría de gasto, ni por `rawPayload`, que no se usa) porque es el único campo con un
+// discriminador fijo y determinístico para todos los eventos de este origen.
+private const val FAMIRIOS_STAMP_PREFIX = "Famirios · "
+
 fun Route.subscriptionRoutes() {
     route("/api/subscriptions") {
         get {
@@ -47,6 +56,7 @@ fun Route.subscriptionRoutes() {
         post("/detect") {
             val uid = call.userId()
             val events = loadNonVoidedEvents(uid)
+                .filterNot { it.description.startsWith(FAMIRIOS_STAMP_PREFIX) }
             val detected = detectSubscriptions(events, LocalDate.now(ZoneOffset.UTC))
             dbQuery {
                 val existing = Subscriptions.selectAll()
@@ -76,9 +86,9 @@ fun Route.subscriptionRoutes() {
             val row = dbQuery {
                 Subscriptions.selectAll()
                     .where { (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }
-                    .first().toSubscription()
-            }
-            call.respond(row)
+                    .firstOrNull()
+            } ?: return@put call.respond(HttpStatusCode.NotFound)  // borrado concurrente entre el update y el re-read
+            call.respond(row.toSubscription())
         }
 
         delete("/{id}") {

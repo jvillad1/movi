@@ -306,6 +306,25 @@ class SubscriptionRoutesTest {
             client.delete("/api/subscriptions/$id") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }.status)
     }
 
+    // FamiriosParser.kt stampa sus agregados mensuales con description = "Famirios · $label ·
+    // $mes $año" — un EXPENSE por categoría×mes, monto estable, cumple toda la heurística del
+    // detector pero es una línea de presupuesto, no una suscripción real. El handler debe
+    // filtrarlos por ese prefijo antes de detectar.
+    @Test
+    fun `Famirios budget aggregates are excluded from detection`() = testApplication {
+        wireApp()
+        transaction {
+            insertExpense("evt-famirios-1", "Famirios · Arriendo · abril 2026", 1_800_000, "2026-04-30")
+            insertExpense("evt-famirios-2", "Famirios · Arriendo · mayo 2026", 1_800_000, "2026-05-30")
+            insertExpense("evt-famirios-3", "Famirios · Arriendo · junio 2026", 1_800_000, "2026-06-30")
+        }
+        val res = client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val subs = Json.parseToJsonElement(res.bodyAsText()).jsonObject["subscriptions"]!!.jsonArray
+        val keys = subs.map { it.jsonObject["merchantKey"]!!.jsonPrimitive.content }
+        assertEquals(setOf("netflix", "youtube"), keys.toSet())
+    }
+
     @Test
     fun `DELETE removes and second delete is 404`() = testApplication {
         wireApp()

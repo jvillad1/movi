@@ -129,6 +129,35 @@ class SubscriptionDetectorTest {
     }
 
     @Test
+    fun `unknown merchant never reaches HIGH even with 3 stable regular months`() {
+        val events = listOf(
+            expense("MERCPAGO*GIMNASIO BODYTECH", 89_900, "2026-04-05"),
+            expense("MERCPAGO*GIMNASIO BODYTECH", 89_900, "2026-05-05"),
+            expense("MERCPAGO*GIMNASIO BODYTECH", 89_900, "2026-06-05"),
+        )
+        val subs = detectSubscriptions(events, today)
+        assertEquals(1, subs.size)
+        assertEquals("gimnasio_bodytech", subs[0].merchantKey)
+        assertEquals(3, subs[0].occurrences)
+        assertEquals(SubConfidence.MEDIUM, subs[0].confidence)
+    }
+
+    @Test
+    fun `a long recurring description is clamped to fit merchant_key and display_name columns`() {
+        // merchant_key varchar(80) / display_name varchar(100): una descripción de 200
+        // caracteres no debe tronar la detección ni el insert/update posterior.
+        val longDesc = "SUSCRIPCION SERVICIO RECURRENTE " + "X".repeat(170)
+        val events = listOf(
+            expense(longDesc, 15_000, "2026-05-08"),
+            expense(longDesc, 15_000, "2026-06-08"),
+        )
+        val subs = detectSubscriptions(events, today)
+        assertEquals(1, subs.size)
+        assertTrue(subs[0].merchantKey.length <= 80)
+        assertTrue(subs[0].displayName.length <= 100)
+    }
+
+    @Test
     fun `same merchant in different currencies stays separate`() {
         val events = listOf(
             expense("ANTHROPIC CLAUDE.AI", 20, "2026-05-05", currency = "USD"),
