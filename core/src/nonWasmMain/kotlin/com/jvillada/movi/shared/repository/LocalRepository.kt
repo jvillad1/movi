@@ -28,6 +28,8 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
+import com.jvillada.movi.shared.model.Subscription
+import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.VoidEvent
 import kotlinx.datetime.Clock
@@ -130,6 +132,10 @@ class LocalRepository(
     override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
+    override suspend fun getSubscriptions(): SubscriptionsResult = remote.getSubscriptions()
+    override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
+    override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = remote.updateSubscription(id, subscription)
+    override suspend fun deleteSubscription(id: String) = remote.deleteSubscription(id)
     override suspend fun getGoals(): List<Goal> = remote.getGoals()
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)

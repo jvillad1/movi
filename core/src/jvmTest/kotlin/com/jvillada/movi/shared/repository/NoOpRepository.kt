@@ -17,6 +17,10 @@ class NoOpRepository : WalletRepository {
         paidPct = null,
     )
     override suspend fun deleteCreditTerms(accountId: String) {}
+    override suspend fun getSubscriptions() = SubscriptionsResult(emptyList(), 0)
+    override suspend fun detectSubscriptions() = SubscriptionsResult(emptyList(), 0)
+    override suspend fun updateSubscription(id: String, subscription: Subscription) = subscription
+    override suspend fun deleteSubscription(id: String) {}
     override suspend fun getGoals() = emptyList<Goal>()
     override suspend fun getSmsMessages() = emptyList<SmsMessage>()
     override suspend fun getSms(id: String) = error("stub")
