@@ -30,3 +30,4 @@ gradle/gradle-daemon-jvm.properties
 /kotlin-js-store/
 /*.png
 /.snapshots/
+iosApp/buildServer.json
