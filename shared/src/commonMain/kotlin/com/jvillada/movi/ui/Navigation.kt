@@ -16,6 +16,7 @@ sealed class Screen {
     data object Goals : Screen()
     data object Budgets : Screen()
     data object Recurrentes : Screen()
+    data object Subscriptions : Screen()
     data object OCRCapture : Screen()
     data object OCRConfirm : Screen()
     data object SMSInbox : Screen()

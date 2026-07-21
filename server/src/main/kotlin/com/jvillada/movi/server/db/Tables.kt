@@ -110,3 +110,24 @@ object Credits : Table("credit_terms") {
     override val primaryKey = PrimaryKey(accountId)
     init { index("idx_credit_terms_user_id", false, userId) }
 }
+
+object Subscriptions : Table("subscriptions") {
+    val id          = varchar("id", 50)
+    val userId      = varchar("user_id", 50)
+    val merchantKey = varchar("merchant_key", 80)
+    val displayName = varchar("display_name", 100)
+    val amount      = long("amount")                 // gasto mensual típico (moneda nativa)
+    val currency    = varchar("currency", 10)
+    val dayOfMonth  = integer("day_of_month")
+    val status      = varchar("status", 20)          // AUTO | CANDIDATE | CONFIRMED | DISMISSED
+    val confidence  = varchar("confidence", 10)      // HIGH | MEDIUM | LOW
+    val firstSeen   = long("first_seen")
+    val lastSeen    = long("last_seen")
+    val occurrences = integer("occurrences")
+    val accountId   = varchar("account_id", 50).nullable()
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_subscriptions_user_id", false, userId)
+        uniqueIndex("uq_subscriptions_user_merchant_currency", userId, merchantKey, currency)
+    }
+}

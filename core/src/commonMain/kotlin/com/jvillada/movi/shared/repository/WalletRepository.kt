@@ -24,6 +24,8 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
+import com.jvillada.movi.shared.model.Subscription
+import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.VoidEvent
 
 interface WalletRepository {
@@ -32,6 +34,10 @@ interface WalletRepository {
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary
     suspend fun deleteCreditTerms(accountId: String)
+    suspend fun getSubscriptions(): SubscriptionsResult
+    suspend fun detectSubscriptions(): SubscriptionsResult
+    suspend fun updateSubscription(id: String, subscription: Subscription): Subscription
+    suspend fun deleteSubscription(id: String)
     suspend fun getGoals(): List<Goal>
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getSms(id: String): SmsMessage

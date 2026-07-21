@@ -24,6 +24,8 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
+import com.jvillada.movi.shared.model.Subscription
+import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.VoidEvent
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -64,6 +66,22 @@ class WalletRepositoryImpl(
 
     override suspend fun deleteCreditTerms(accountId: String) {
         client.delete("$baseUrl/api/credits/$accountId")
+    }
+
+    override suspend fun getSubscriptions(): SubscriptionsResult =
+        client.get("$baseUrl/api/subscriptions").body()
+
+    override suspend fun detectSubscriptions(): SubscriptionsResult =
+        client.post("$baseUrl/api/subscriptions/detect").body()
+
+    override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription =
+        client.put("$baseUrl/api/subscriptions/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(subscription)
+        }.body()
+
+    override suspend fun deleteSubscription(id: String) {
+        client.delete("$baseUrl/api/subscriptions/$id")
     }
 
     override suspend fun getGoals(): List<Goal> =
