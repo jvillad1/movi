@@ -33,7 +33,7 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(reloadKey) {
         runCatching { Repositories.wallets.getSubscriptions() }
-            .onSuccess { result = it }
+            .onSuccess { result = it; error = null }
             .onFailure { error = it.toUserMessage() }
     }
 
@@ -122,7 +122,7 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Text(s.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
-                                        Text(formatAmount(s), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                                        Text(formatMoney(s.amount, s.currency), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
                                     }
                                     Text("Visto ${s.occurrences} ${if (s.occurrences == 1) "mes" else "meses"} · día ${s.dayOfMonth}", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp))
                                     Spacer(Modifier.height(12.dp))
@@ -166,7 +166,7 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(s.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
-                                    Text(formatAmount(s), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                                    Text(formatMoney(s.amount, s.currency), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -193,9 +193,6 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 }
-
-private fun formatAmount(s: Subscription): String =
-    if (s.currency == "USD") "US$${s.amount}" else formatCOP(s.amount)
 
 @Composable
 private fun ActionChip(label: String, primary: Boolean, onClick: () -> Unit) {
