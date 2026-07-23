@@ -4,6 +4,7 @@ import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.dbQuery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import nl.martijndwars.webpush.Encoding
 import nl.martijndwars.webpush.Notification
 import nl.martijndwars.webpush.PushService
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -43,7 +44,9 @@ object WebPushSender {
         for ((endpoint, p256dh, auth) in subs) {
             val status = withContext(Dispatchers.IO) {
                 runCatching {
-                    service.send(Notification(endpoint, p256dh, auth, payloadJson.toByteArray())).statusLine.statusCode
+                    // aes128gcm explícito (RFC 8291): el default de la lib es el draft legacy aesgcm,
+                    // que Apple (web.push.apple.com) rechaza — sin esto, push nunca llega al iPhone PWA.
+                    service.send(Notification(endpoint, p256dh, auth, payloadJson.toByteArray()), Encoding.AES128GCM).statusLine.statusCode
                 }.getOrElse { e ->
                     logger.warn("push a $endpoint falló: ${e.message}")
                     -1
