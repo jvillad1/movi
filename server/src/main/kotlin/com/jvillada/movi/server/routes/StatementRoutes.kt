@@ -252,7 +252,10 @@ fun Route.statementRoutes() {
         // Trigger silencioso de detección de suscripciones (spec 2026-07-22-detect-on-import):
         // best-effort — un fallo aquí JAMÁS falla el import; "Re-escanear" queda como fallback.
         runCatching { runSubscriptionDetection(uid) }
-            .onFailure { call.application.log.warn("detect-on-import falló para $uid: ${it.message}") }
+            .onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                call.application.log.warn("detect-on-import falló para $uid", it)
+            }
 
         call.respond(HttpStatusCode.OK, mapOf("imported" to importedCount + reconciledCount))
     }
