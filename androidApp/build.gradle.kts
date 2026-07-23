@@ -53,4 +53,5 @@ dependencies {
     implementation(compose.components.uiToolingPreview)
     implementation(libs.androidx.activity.compose)
     debugImplementation(compose.uiTooling)
+    testImplementation(kotlin("test"))
 }
