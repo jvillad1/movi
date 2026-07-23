@@ -5,6 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
@@ -69,11 +70,11 @@ class SmsSyncTest {
         transaction {
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages,
+                Budgets, RecurringRules, SmsMessages, PushSubscriptions,
             )
             // Fresh slate: drop + recreate tables touched by this suite
-            SchemaUtils.drop(SmsMessages, Users)
-            SchemaUtils.create(Users, SmsMessages)
+            SchemaUtils.drop(SmsMessages, PushSubscriptions, Users)
+            SchemaUtils.create(Users, SmsMessages, PushSubscriptions)
 
             Users.insert {
                 it[id]           = userAId
@@ -252,5 +253,33 @@ class SmsSyncTest {
         val smsObj = Json.parseToJsonElement(getResp.body<String>()).jsonObject
         assertEquals("confirmed", smsObj["state"]!!.jsonPrimitive.content,
             "State must remain 'confirmed' after re-sync")
+    }
+
+    /**
+     * Push hook (spec sms-realtime): con VAPID configurado pero sin suscripciones,
+     * el hook corre (best-effort) y NUNCA rompe el sync — sigue devolviendo 200
+     * y contando ambos mensajes, sea o no parseable el texto.
+     */
+    @Test
+    fun `sync with push configured but no subscriptions still succeeds`() = testApplication {
+        System.setProperty("movi.vapid.public", "test-pub")
+        System.setProperty("movi.vapid.private", "test-priv")
+        try {
+            application { testModule() }
+            val client = smsClient(this)
+
+            val tokenA = mintToken(userAId, userAEmail)
+            val syncResp = client.post("/api/sms/sync") {
+                header(HttpHeaders.Authorization, "Bearer $tokenA")
+                contentType(ContentType.Application.Json)
+                setBody(listOf(makeSms("msg-push-1", "Bancolombia: Compra por \$50.000 en EXITO"), makeSms("msg-push-2", "hola")))
+            }
+            assertEquals(HttpStatusCode.OK, syncResp.status)
+            val syncBody = Json.parseToJsonElement(syncResp.body<String>()).jsonObject
+            assertEquals(2, syncBody["synced"]!!.jsonPrimitive.int, "synced count should include both messages")
+        } finally {
+            System.clearProperty("movi.vapid.public")
+            System.clearProperty("movi.vapid.private")
+        }
     }
 }

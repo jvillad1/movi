@@ -3,10 +3,13 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.push.WebPushSender
+import com.jvillada.movi.server.push.buildSmsPushPayload
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -119,6 +122,7 @@ fun Route.smsRoutes() {
     post("/api/sms/sync") {
         val uid = call.userId()
         val messages = call.receive<List<SmsMessage>>()
+        val inserted = mutableListOf<SmsMessage>()
         val insertedCount = dbQuery {
             // Collect existing ids for this user so we can skip duplicates
             // without touching rows that may already have a user-set state.
@@ -140,10 +144,24 @@ fun Route.smsRoutes() {
                     it[state]  = "new" // server owns state; /confirm + /ignore transition it. Never trust client.
                     it[det]    = msg.det
                 }
+                inserted += msg
                 count++
             }
             count
         }
+
+        // Hook de push (spec sms-realtime): SMS nuevos parseables → una push agrupada.
+        // Best-effort — jamás falla el sync; los que no parsean quedan en el inbox como siempre.
+        if (inserted.isNotEmpty() && WebPushSender.isConfigured()) {
+            runCatching {
+                val parsed = inserted.mapNotNull { parseSms(it.text) }
+                if (parsed.isNotEmpty()) WebPushSender.sendToUser(uid, buildSmsPushPayload(parsed))
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                call.application.log.warn("push de sms-sync falló para $uid", it)
+            }
+        }
+
         call.respond(mapOf("synced" to insertedCount))
     }
 }

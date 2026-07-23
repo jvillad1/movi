@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.push
 
+import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.serialization.json.Json
@@ -45,5 +46,25 @@ class PushPayloadTest {
     @Test
     fun `empty list yields empty body`() {
         assertTrue(body(buildPushPayload(emptyList(), today, leadDays = 3)).isEmpty())
+    }
+
+    @Test
+    fun `single sms movement renders amount and merchant`() {
+        val json = buildSmsPushPayload(listOf(ParsedSms(50_000.0, "EXITO COUNTRY", TransactionType.EXPENSE, "Mercado")))
+        val obj = Json.parseToJsonElement(json).jsonObject
+        assertEquals("Nuevo movimiento", obj["title"]!!.jsonPrimitive.content)
+        assertEquals("$50.000 en EXITO COUNTRY — toca para confirmar", obj["body"]!!.jsonPrimitive.content)
+        assertEquals("/", obj["url"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `multiple sms movements group with suffix`() {
+        val parsed = (1..4).map { ParsedSms(10_000.0 * it, "Comercio $it", TransactionType.EXPENSE, "Otros") }
+        val obj = Json.parseToJsonElement(buildSmsPushPayload(parsed)).jsonObject
+        assertEquals("4 movimientos nuevos", obj["title"]!!.jsonPrimitive.content)
+        val lines = obj["body"]!!.jsonPrimitive.content.split("\n")
+        assertEquals(4, lines.size)
+        assertEquals("$10.000 en Comercio 1", lines[0])
+        assertEquals("…y 1 más", lines[3])
     }
 }
