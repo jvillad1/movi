@@ -32,6 +32,8 @@ dependencies {
     implementation(libs.postgresql.driver)
     implementation(libs.pdfbox)
     implementation(libs.poi.ooxml)
+    implementation(libs.webpush)
+    implementation(libs.bcprov)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.serialization.kotlinx.json)

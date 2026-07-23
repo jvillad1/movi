@@ -131,3 +131,13 @@ object Subscriptions : Table("subscriptions") {
         uniqueIndex("uq_subscriptions_user_merchant_currency", userId, merchantKey, currency)
     }
 }
+
+object PushSubscriptions : Table("push_subscriptions") {
+    val endpoint  = varchar("endpoint", 500)   // PK: único por navegador/dispositivo
+    val userId    = varchar("user_id", 50)
+    val p256dh    = varchar("p256dh", 200)     // clave pública del cliente (base64url)
+    val auth      = varchar("auth", 50)        // auth secret (base64url)
+    val createdAt = long("created_at")
+    override val primaryKey = PrimaryKey(endpoint)
+    init { index("idx_push_subscriptions_user_id", false, userId) }
+}
