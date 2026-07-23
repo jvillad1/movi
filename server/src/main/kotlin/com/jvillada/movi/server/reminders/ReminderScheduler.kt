@@ -4,6 +4,8 @@ import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.push.WebPushSender
+import com.jvillada.movi.server.push.buildPushPayload
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -32,8 +34,12 @@ import java.time.format.DateTimeFormatter
  */
 fun Application.startReminderScheduler() {
     val apiKey = readEnv("RESEND_API_KEY")
-    if (apiKey.isNullOrBlank()) {
-        log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")
+    val emailEnabled = !apiKey.isNullOrBlank()
+    val pushEnabled = WebPushSender.isConfigured()
+    if (!emailEnabled) log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")
+    if (!pushEnabled) log.warn("ReminderScheduler: VAPID keys not set — push reminders disabled")
+    if (!emailEnabled && !pushEnabled) {
+        log.warn("ReminderScheduler: ningún canal configurado — scheduler apagado")
         return
     }
 
@@ -55,7 +61,7 @@ fun Application.startReminderScheduler() {
 
 // ── Sweep ────────────────────────────────────────────────────────────────────
 
-private suspend fun sweep(apiKey: String, from: String, leadDays: Int) {
+private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     val today  = LocalDate.now(ZoneOffset.UTC)
     val period = today.format(DateTimeFormatter.ofPattern("yyyy-MM"))
 
@@ -82,7 +88,7 @@ private suspend fun processUser(
     today: LocalDate,
     period: String,
     leadDays: Int,
-    apiKey: String,
+    apiKey: String?,
     from: String,
 ) {
     val logger = org.slf4j.LoggerFactory.getLogger("ReminderScheduler")
@@ -99,18 +105,20 @@ private suspend fun processUser(
 
     if (selected.isEmpty()) return
 
-    // Build one grouped HTML email for this user
-    val html = buildHtmlEmail(selected, today, leadDays)
+    val emailSent = if (!apiKey.isNullOrBlank()) {
+        val html = buildHtmlEmail(selected, today, leadDays)
+        ResendClient.sendEmail(
+            to = userEmail, subject = "Pagos próximos en movi",
+            html = html, apiKey = apiKey, from = from,
+        )
+    } else false
 
-    val sent = ResendClient.sendEmail(
-        to      = userEmail,
-        subject = "Pagos próximos en movi",
-        html    = html,
-        apiKey  = apiKey,
-        from    = from,
-    )
+    val pushSent = if (WebPushSender.isConfigured()) {
+        runCatching { WebPushSender.sendToUser(userId, buildPushPayload(selected, today, leadDays)) }
+            .getOrElse { logger.warn("push sweep falló para $userId: ${it.message}"); false }
+    } else false
 
-    if (sent) {
+    if (emailSent || pushSent) {
         // Seal each selected rule so we don't re-notify this month.
         // Update rules one-by-one: Exposed's update DSL doesn't support an IN clause
         // in the where block, so individual updates are the cleanest approach.

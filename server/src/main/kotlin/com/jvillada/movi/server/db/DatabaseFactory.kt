@@ -24,7 +24,7 @@ object DatabaseFactory {
         }
         Database.connect(HikariDataSource(config))
         transaction {
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, PushSubscriptions)
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules)
         }
     }

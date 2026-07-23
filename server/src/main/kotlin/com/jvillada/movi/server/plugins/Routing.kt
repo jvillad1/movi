@@ -12,6 +12,7 @@ fun Application.configureRouting() {
     routing {
         get("/health") { call.respondText("OK") }
         authRoutes()                     // public — no auth required
+        pushPublicRoutes()                // public — no auth required
 
         authenticate("jwt") {
             accountRoutes()
@@ -19,6 +20,7 @@ fun Application.configureRouting() {
             financeRoutes()
             creditRoutes()
             subscriptionRoutes()
+            pushRoutes()
             reminderRoutes()
             smsRoutes()
             aiRoutes()
