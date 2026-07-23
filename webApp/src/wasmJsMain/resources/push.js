@@ -37,11 +37,15 @@
             var reg = await navigator.serviceWorker.register('push-sw.js');
             var sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(vapid) });
             var json = sub.toJSON();
-            await fetch('/api/push/subscribe', {
+            var postRes = await fetch('/api/push/subscribe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('auth_token') },
                 body: JSON.stringify({ endpoint: sub.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth })
             });
+            if (!postRes.ok) {
+                // el server no guardó la suscripción: revertir la del navegador
+                try { await sub.unsubscribe(); } catch (e2) {}
+            }
         } catch (e) { /* cae a refresh */ }
         return refresh();
     }

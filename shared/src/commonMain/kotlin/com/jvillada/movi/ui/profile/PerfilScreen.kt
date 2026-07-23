@@ -116,8 +116,8 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         var refreshTick by remember { mutableStateOf(0) }
                         LaunchedEffect(refreshTick) {
                             // el flujo JS es async: refrescar unas veces tras cada acción
-                            repeat(6) {
-                                kotlinx.coroutines.delay(400)
+                            repeat(20) {
+                                kotlinx.coroutines.delay(600)
                                 pushStatus = PushOptIn.status()
                             }
                         }
