@@ -14,11 +14,13 @@ import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.ByteArrayInputStream
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.storage.Stores
+import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.*
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
 import io.ktor.http.content.streamProvider
+import io.ktor.server.application.log
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -246,6 +248,11 @@ fun Route.statementRoutes() {
                 it[StatementImports.reconciledCount] = reconciledCount
             }
         }
+
+        // Trigger silencioso de detección de suscripciones (spec 2026-07-22-detect-on-import):
+        // best-effort — un fallo aquí JAMÁS falla el import; "Re-escanear" queda como fallback.
+        runCatching { runSubscriptionDetection(uid) }
+            .onFailure { call.application.log.warn("detect-on-import falló para $uid: ${it.message}") }
 
         call.respond(HttpStatusCode.OK, mapOf("imported" to importedCount + reconciledCount))
     }
