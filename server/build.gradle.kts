@@ -34,6 +34,9 @@ dependencies {
     implementation(libs.poi.ooxml)
     implementation(libs.webpush)
     implementation(libs.bcprov)
+    // web-push's POM declares httpasyncclient/httpcore as runtime-scope only, so PushService's
+    // return type (org.apache.http.HttpResponse) isn't visible at compile time without this.
+    implementation(libs.httpcore)
     testImplementation(libs.ktor.server.tests)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.serialization.kotlinx.json)
