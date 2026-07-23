@@ -11,6 +11,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -102,6 +108,51 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             color = MinTextDim,
                             lineHeight = 19.sp,
                         )
+                    }
+
+                    if (PushOptIn.supported) {
+                        Spacer(Modifier.height(14.dp))
+                        var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
+                        var refreshTick by remember { mutableStateOf(0) }
+                        LaunchedEffect(refreshTick) {
+                            // el flujo JS es async: refrescar unas veces tras cada acción
+                            repeat(6) {
+                                kotlinx.coroutines.delay(400)
+                                pushStatus = PushOptIn.status()
+                            }
+                        }
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column {
+                                    Text("Notificaciones push", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
+                                    Text(
+                                        when (pushStatus) {
+                                            "enabled" -> "Activadas en este dispositivo"
+                                            "denied" -> "Bloqueadas por el navegador"
+                                            else -> "Recibe tus pagos próximos"
+                                        },
+                                        fontSize = 12.sp, color = MinTextMute,
+                                    )
+                                }
+                                Text(
+                                    if (pushStatus == "enabled") "Desactivar" else "Activar",
+                                    fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                    color = if (pushStatus == "denied") MinTextFaint else MinText,
+                                    modifier = Modifier.clickable(enabled = pushStatus != "denied") {
+                                        if (pushStatus == "enabled") PushOptIn.disable() else PushOptIn.enable()
+                                        refreshTick++
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
