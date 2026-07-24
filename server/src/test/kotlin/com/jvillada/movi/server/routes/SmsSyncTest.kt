@@ -5,6 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
@@ -69,11 +70,11 @@ class SmsSyncTest {
         transaction {
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages,
+                Budgets, RecurringRules, SmsMessages, PushSubscriptions,
             )
             // Fresh slate: drop + recreate tables touched by this suite
-            SchemaUtils.drop(SmsMessages, Users)
-            SchemaUtils.create(Users, SmsMessages)
+            SchemaUtils.drop(SmsMessages, PushSubscriptions, Users)
+            SchemaUtils.create(Users, SmsMessages, PushSubscriptions)
 
             Users.insert {
                 it[id]           = userAId
@@ -141,11 +142,17 @@ class SmsSyncTest {
         val tokenA = mintToken(userAId, userAEmail)
         val tokenB = mintToken(userBId, userBEmail)
 
-        // Sync two messages as user A
+        // Sync two DISTINCT messages as user A (distinct text — text is now part of the
+        // dedupe key, so reusing makeSms' default text for both would collapse them).
         val syncResp = client.post("/api/sms/sync") {
             header(HttpHeaders.Authorization, "Bearer $tokenA")
             contentType(ContentType.Application.Json)
-            setBody(listOf(makeSms("msg-sync-1"), makeSms("msg-sync-2")))
+            setBody(
+                listOf(
+                    makeSms("msg-sync-1", "Compra \$10.000 en Netflix"),
+                    makeSms("msg-sync-2", "Compra \$20.000 en Spotify"),
+                )
+            )
         }
         assertEquals(HttpStatusCode.OK, syncResp.status)
         val syncBody = Json.parseToJsonElement(syncResp.body<String>()).jsonObject
@@ -252,5 +259,97 @@ class SmsSyncTest {
         val smsObj = Json.parseToJsonElement(getResp.body<String>()).jsonObject
         assertEquals("confirmed", smsObj["state"]!!.jsonPrimitive.content,
             "State must remain 'confirmed' after re-sync")
+    }
+
+    /**
+     * Fix (final review): la ruta realtime inserta ids `sms_rt_<hex>` y la ruta de pull
+     * manual inserta ids `sms_<hex>` para el MISMO SMS físico — nunca coinciden porque
+     * hashean distintas fuentes de timestamp. El dedupe por-id solo no detecta esta
+     * colisión cross-esquema, así que el mismo SMS bancario termina duplicado en el inbox.
+     *
+     * Sync con id estilo-pull → luego sync del MISMO texto/bank con id estilo-realtime →
+     * el segundo sync no debe insertar (synced=0) y solo debe quedar UNA fila.
+     */
+    @Test
+    fun `re-sync same text under different id scheme does not insert duplicate`() = testApplication {
+        application { testModule() }
+        val client = smsClient(this)
+
+        val tokenA = mintToken(userAId, userAEmail)
+        val sharedText = "Bancolombia: Compra por \$25.000 en EXITO"
+
+        // Pull-style id (32 hex chars, prefix sms_)
+        val pullMsg = makeSms("sms_" + "a".repeat(32), sharedText)
+        val first = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(pullMsg))
+        }
+        assertEquals(HttpStatusCode.OK, first.status)
+        val firstBody = Json.parseToJsonElement(first.body<String>()).jsonObject
+        assertEquals(1, firstBody["synced"]!!.jsonPrimitive.int, "first sync (pull-style id) should insert 1")
+
+        // Realtime-style id (16 hex chars, prefix sms_rt_), same text/bank
+        val realtimeMsg = makeSms("sms_rt_" + "b".repeat(16), sharedText)
+        val second = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(realtimeMsg))
+        }
+        assertEquals(HttpStatusCode.OK, second.status)
+        val secondBody = Json.parseToJsonElement(second.body<String>()).jsonObject
+        assertEquals(0, secondBody["synced"]!!.jsonPrimitive.int, "cross-scheme duplicate should not be inserted")
+
+        // Only one row exists
+        val list = client.get("/api/sms") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        val arr = Json.parseToJsonElement(list.body<String>()).jsonArray
+        assertEquals(1, arr.size, "Only 1 row should exist after cross-scheme re-sync")
+    }
+
+    /**
+     * Push hook (spec sms-realtime): con VAPID configurado pero sin suscripciones,
+     * el hook corre (best-effort) y NUNCA rompe el sync — sigue devolviendo 200
+     * y contando todos los mensajes, sea o no parseable el texto, sin importar
+     * el esquema de id (pull `sms_<hex>` vs realtime `sms_rt_<hex>`).
+     *
+     * Fix (final review): el push solo debe considerar mensajes `sms_rt_*` (capturas
+     * en tiempo real); los de pull manual (históricos, sin filtrar) nunca deben empujar
+     * push. No podemos observar el envío del sender directamente en este harness (no hay
+     * suscripciones registradas), así que este test prueba que AMBOS esquemas de id
+     * siguen sincronizando con éxito con VAPID activo — el scoping exacto del push se
+     * verifica por re-revisión del diff.
+     */
+    @Test
+    fun `sync with push configured but no subscriptions still succeeds`() = testApplication {
+        System.setProperty("movi.vapid.public", "test-pub")
+        System.setProperty("movi.vapid.private", "test-priv")
+        try {
+            application { testModule() }
+            val client = smsClient(this)
+
+            val tokenA = mintToken(userAId, userAEmail)
+            val syncResp = client.post("/api/sms/sync") {
+                header(HttpHeaders.Authorization, "Bearer $tokenA")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    listOf(
+                        makeSms("msg-push-1", "Bancolombia: Compra por \$50.000 en EXITO"),
+                        makeSms("msg-push-2", "hola"),
+                        // pull-style id, parseable text — must sync fine but NOT push (manual pull)
+                        makeSms("sms_" + "c".repeat(32), "Bancolombia: Compra por \$30.000 en Netflix"),
+                        // realtime-style id, parseable text — must sync fine and stay push-eligible
+                        makeSms("sms_rt_" + "d".repeat(16), "Bancolombia: Compra por \$40.000 en Rappi"),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.OK, syncResp.status)
+            val syncBody = Json.parseToJsonElement(syncResp.body<String>()).jsonObject
+            assertEquals(4, syncBody["synced"]!!.jsonPrimitive.int, "synced count should include all 4 distinct messages")
+        } finally {
+            System.clearProperty("movi.vapid.public")
+            System.clearProperty("movi.vapid.private")
+        }
     }
 }

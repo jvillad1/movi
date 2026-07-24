@@ -52,5 +52,7 @@ dependencies {
     implementation(compose.ui)
     implementation(compose.components.uiToolingPreview)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.work.runtime.ktx)
     debugImplementation(compose.uiTooling)
+    testImplementation(kotlin("test"))
 }

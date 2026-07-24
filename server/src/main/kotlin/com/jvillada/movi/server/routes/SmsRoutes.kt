@@ -3,10 +3,13 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.push.WebPushSender
+import com.jvillada.movi.server.push.buildSmsPushPayload
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -119,18 +122,37 @@ fun Route.smsRoutes() {
     post("/api/sms/sync") {
         val uid = call.userId()
         val messages = call.receive<List<SmsMessage>>()
+        val inserted = mutableListOf<SmsMessage>()
         val insertedCount = dbQuery {
-            // Collect existing ids for this user so we can skip duplicates
+            // Collect existing rows for this user so we can skip duplicates
             // without touching rows that may already have a user-set state.
-            val existingIds = SmsMessages
+            val existingRows = SmsMessages
                 .selectAll()
                 .where { SmsMessages.userId eq uid }
-                .map { it[SmsMessages.id] }
-                .toSet()
+                .map { it[SmsMessages.id] to it[SmsMessages.text] }
+
+            val existingIds = existingRows.map { it.first }.toSet()
+
+            // Cross-scheme dedupe (final review fix): the realtime capture path inserts
+            // ids `sms_rt_<16hex>` while the manual pull path inserts ids `sms_<32hex>`
+            // for the SAME physical SMS — the two schemes hash different timestamp
+            // sources, so the ids can never collide. Id-only dedupe above therefore
+            // lets the same bank SMS in twice (double push, double-confirm risk).
+            //
+            // We dedupe on `text` alone rather than `text + bank`: both paths derive
+            // `bank` from the same raw sender address for a given physical SMS in the
+            // common case, but they diverge on the null-sender edge case (pull leaves
+            // it "", the realtime worker falls back to "SMS") — so `bank` can't be
+            // trusted as part of the key. Text-only dedupe is an acceptable tradeoff:
+            // two DISTINCT real purchases producing byte-identical SMS text is
+            // vanishingly rare, and if it ever happens the user still has the device
+            // inbox as the source of truth.
+            val existingTexts = existingRows.map { it.second }.toMutableSet()
 
             var count = 0
             for (msg in messages) {
                 if (msg.id in existingIds) continue
+                if (msg.text in existingTexts) continue
                 SmsMessages.insert {
                     it[id]     = msg.id
                     it[userId] = uid
@@ -140,10 +162,31 @@ fun Route.smsRoutes() {
                     it[state]  = "new" // server owns state; /confirm + /ignore transition it. Never trust client.
                     it[det]    = msg.det
                 }
+                existingTexts += msg.text
+                inserted += msg
                 count++
             }
             count
         }
+
+        // Hook de push (spec sms-realtime): SMS nuevos parseables → una push agrupada.
+        // Best-effort — jamás falla el sync; los que no parsean quedan en el inbox como siempre.
+        //
+        // Scoped to realtime captures only (final review fix): manual pull syncs
+        // (SmsReader.android.kt) upload historical, unfiltered inbox contents — pushing
+        // for those would spam the user with notifications for old SMS. Only messages
+        // captured live by SmsRealtimeReceiver (ids prefixed `sms_rt_`) participate.
+        val realtimeCaptures = inserted.filter { it.id.startsWith("sms_rt_") }
+        if (realtimeCaptures.isNotEmpty() && WebPushSender.isConfigured()) {
+            runCatching {
+                val parsed = realtimeCaptures.mapNotNull { parseSms(it.text) }
+                if (parsed.isNotEmpty()) WebPushSender.sendToUser(uid, buildSmsPushPayload(parsed))
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                call.application.log.warn("push de sms-sync falló para $uid", it)
+            }
+        }
+
         call.respond(mapOf("synced" to insertedCount))
     }
 }
