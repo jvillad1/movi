@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.accounts.AccountsScreen
 import com.jvillada.movi.ui.accounts.AccountDetailScreen
 import com.jvillada.movi.ui.extractos.StatementReviewScreen
 import com.jvillada.movi.ui.extractos.ImportDetailScreen
+import com.jvillada.movi.ui.sdui.editor.ScreenEditorScreen
 import com.jvillada.movi.shared.model.StatementParseResult
 import kotlinx.serialization.json.Json
 
@@ -125,6 +126,7 @@ fun App() {
                         onNavigate = navigate,
                         importId = currentScreen.importId,
                     )
+                    Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
                 }
                 } // SaveableStateProvider
                 } // inner Box (max-width container)
