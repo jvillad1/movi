@@ -157,6 +157,7 @@ fun DashboardScreen(
                     isFamily = isFamily,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     onNavigate = onNavigate,
+                    onShowCreateSheet = { showCreateSheet = true },
                 )
             } ?: DashboardFallback(
                 totalBalance = totalBalance,

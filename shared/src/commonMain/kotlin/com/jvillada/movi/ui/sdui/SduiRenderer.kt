@@ -61,6 +61,7 @@ fun SduiRenderer(
     isFamily: Boolean,
     modifier: Modifier = Modifier,
     onNavigate: (Screen) -> Unit,
+    onShowCreateSheet: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
 
@@ -78,6 +79,7 @@ fun SduiRenderer(
                     accounts = accounts,
                     isFamily = isFamily,
                     onNavigate = onNavigate,
+                    onShowCreateSheet = onShowCreateSheet,
                     uriHandler = uriHandler,
                 )
             }
@@ -92,11 +94,12 @@ private fun SduiSection(
     accounts: List<Account>,
     isFamily: Boolean,
     onNavigate: (Screen) -> Unit,
+    onShowCreateSheet: () -> Unit,
     uriHandler: UriHandler,
 ) {
     when (section.type) {
         "HERO_BALANCE" -> HeroBalanceSection(summary, accounts, isFamily)
-        "ACCOUNTS_SUMMARY" -> AccountsSummarySection(accounts, onNavigate)
+        "ACCOUNTS_SUMMARY" -> AccountsSummarySection(accounts, onNavigate, onShowCreateSheet)
         "CARD_ROW" -> CardRowSection(section, onNavigate, uriHandler)
         "CARD_LIST" -> CardListSection(section, onNavigate, uriHandler)
         "LINK_LIST" -> LinkListSection(section, onNavigate, uriHandler)
@@ -198,12 +201,16 @@ private fun HeroBalanceSection(summary: FinanceSummary?, accounts: List<Account>
 }
 
 // ── ACCOUNTS_SUMMARY — independent re-implementation of the current "Mis cuentas"
-//    section, driven by `accounts` directly. The empty-state CTA navigates to the
-//    Accounts screen instead of opening `CreateAccountSheet` — that sheet's state lives
-//    in DashboardScreen (chrome) and isn't part of this renderer's signature.
+//    section, driven by `accounts` directly. The empty-state CTA opens `CreateAccountSheet`
+//    (via `onShowCreateSheet`, threaded in from DashboardScreen) — same behavior as
+//    `DashboardFallback`'s empty state, so the two paths stay in parity.
 
 @Composable
-private fun AccountsSummarySection(accounts: List<Account>, onNavigate: (Screen) -> Unit) {
+private fun AccountsSummarySection(
+    accounts: List<Account>,
+    onNavigate: (Screen) -> Unit,
+    onShowCreateSheet: () -> Unit,
+) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         MinSectionHeader(
             title = "Mis cuentas",
@@ -229,10 +236,10 @@ private fun AccountsSummarySection(accounts: List<Account>, onNavigate: (Screen)
                             .height(44.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(MinPrimaryContainer)
-                            .clickable { onNavigate(Screen.Accounts) },
+                            .clickable { onShowCreateSheet() },
                         contentAlignment = androidx.compose.ui.Alignment.Center,
                     ) {
-                        Text("+ Agregar cuenta", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinOnPrimaryContainer)
+                        Text("+ Crear primera cuenta", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinOnPrimaryContainer)
                     }
                 }
             }
