@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.screens.seedScreens
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.Dispatchers
@@ -24,9 +25,10 @@ object DatabaseFactory {
         }
         Database.connect(HikariDataSource(config))
         transaction {
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, PushSubscriptions)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, PushSubscriptions, Screens)
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules)
         }
+        seedScreens()
     }
 
     // Extracts credentials from postgres:// or postgresql:// URLs and returns
