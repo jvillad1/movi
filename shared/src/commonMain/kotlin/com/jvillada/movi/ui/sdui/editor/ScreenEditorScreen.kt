@@ -89,6 +89,19 @@ private suspend fun Throwable.toScreenSaveMessage(): String {
     return toUserMessage()
 }
 
+/**
+ * Verifica si alguna tarjeta en las secciones tiene una acción OPEN_URL con un enlace
+ * inválido (que no empieza con "https://").
+ */
+private fun sectionsHaveInvalidUrl(sections: List<ScreenSection>): Boolean {
+    return sections.any { section ->
+        section.cards.any { card ->
+            val action = card.action
+            action != null && action.type == "OPEN_URL" && !action.target.startsWith("https://")
+        }
+    }
+}
+
 @Composable
 fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
     val coroutine = rememberCoroutineScope()
@@ -266,12 +279,13 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
 
             item {
                 Spacer(Modifier.height(4.dp))
+                val canSave = !saving && !sectionsHaveInvalidUrl(sections)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (!saving) MinText else MinTextFaint)
-                        .clickable(enabled = !saving) { save() }
+                        .background(if (canSave) MinText else MinTextFaint)
+                        .clickable(enabled = canSave) { save() }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -442,7 +456,17 @@ private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Uni
             }
             "OPEN_URL" -> {
                 Spacer(Modifier.height(8.dp))
+                val isValidUrl = action.target.startsWith("https://")
                 FieldBox("https://", action.target, { onChange(ScreenAction("OPEN_URL", it)) })
+                if (!isValidUrl) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Los enlaces deben empezar con https://",
+                        fontSize = 12.sp,
+                        color = MinExpense,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
             else -> Unit
         }
