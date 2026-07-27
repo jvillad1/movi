@@ -132,6 +132,15 @@ object Subscriptions : Table("subscriptions") {
     }
 }
 
+object Screens : Table("screen_definitions") {
+    val slug         = varchar("slug", 64)
+    val version      = integer("version")
+    val sectionsJson = text("sections_json")
+    val active       = bool("active").default(true)
+    val updatedAt    = long("updated_at")
+    override val primaryKey = PrimaryKey(slug)
+}
+
 object PushSubscriptions : Table("push_subscriptions") {
     val endpoint  = varchar("endpoint", 500)   // PK: único por navegador/dispositivo
     val userId    = varchar("user_id", 50)
