@@ -196,6 +196,22 @@ class ScreenRoutesTest {
     }
 
     @Test
+    fun `404 for inactive screen`() = testApplication {
+        transaction { seedScreens() }
+        transaction {
+            Screens.update({ Screens.slug eq "dashboard" }) {
+                it[active] = false
+            }
+        }
+        wireApp()
+
+        val res = client.get("/api/screens/dashboard") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NotFound, res.status)
+    }
+
+    @Test
     fun `404 and no 500 on corrupt sections_json`() = testApplication {
         transaction {
             Screens.insert {
