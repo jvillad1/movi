@@ -23,6 +23,10 @@ fun validateDefinition(sections: List<ScreenSection>): String? {
             actionError(a)?.let { return it }
         }
     }
+    // Hoy esta rama es inalcanzable: el bucle de tipos de arriba ya rechaza cualquier
+    // sección que renderableSections() también filtraría. Se conserva como defensa en
+    // profundidad por si renderableSections() gana criterios de filtrado adicionales
+    // que este bucle no cubra.
     val renderable = renderableSections(ScreenDefinition(slug = "_", version = 0, sections = sections))
     if (renderable.isEmpty()) return "La pantalla no tiene secciones que se puedan mostrar"
     return null

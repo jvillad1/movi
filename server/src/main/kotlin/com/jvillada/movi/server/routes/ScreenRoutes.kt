@@ -24,6 +24,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.vendors.ForUpdateOption
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -78,7 +79,12 @@ fun Route.screenRoutes() {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, mapOf("error" to it))
             }
             val saved = dbQuery {
-                val current = Screens.selectAll().where { Screens.slug eq slug }.singleOrNull()
+                // .forUpdate() bloquea la fila hasta el fin de la transacción: dos ediciones
+                // concurrentes no pueden leer la misma versión y pisarse el contenido una a otra
+                // manteniendo el mismo número de versión (la segunda espera a que la primera commitee).
+                val current = Screens.selectAll().where { Screens.slug eq slug }
+                    .forUpdate(ForUpdateOption.ForUpdate)
+                    .singleOrNull()
                     ?: return@dbQuery null
                 val newVersion = current[Screens.version] + 1
                 Screens.update({ Screens.slug eq slug }) {
@@ -98,7 +104,11 @@ fun Route.screenRoutes() {
             val seed = SCREEN_SEED.firstOrNull { it.slug == slug }
                 ?: return@post call.respond(HttpStatusCode.NotFound)
             val saved = dbQuery {
-                val current = Screens.selectAll().where { Screens.slug eq slug }.singleOrNull()
+                // Mismo lock de fila que en PUT /{slug}: evita que un restore concurrente con
+                // otra edición/restore pisen el contenido mientras comparten número de versión.
+                val current = Screens.selectAll().where { Screens.slug eq slug }
+                    .forUpdate(ForUpdateOption.ForUpdate)
+                    .singleOrNull()
                     ?: return@dbQuery null
                 val newVersion = current[Screens.version] + 1
                 Screens.update({ Screens.slug eq slug }) {
