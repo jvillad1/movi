@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
@@ -240,4 +241,18 @@ class WalletRepositoryImpl(
         if (response.status == HttpStatusCode.NotModified) return null
         return response.body()
     }
+
+    override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition =
+        client.put("$baseUrl/api/screens/$slug") {
+            contentType(ContentType.Application.Json)
+            setBody(ScreenDefinition(slug = slug, version = 0, sections = sections))
+        }.body()
+
+    override suspend fun restoreScreen(slug: String): ScreenDefinition =
+        client.post("$baseUrl/api/screens/$slug/restore").body()
+
+    override suspend fun isScreenAdmin(): Boolean =
+        runCatching {
+            client.get("$baseUrl/api/screens/admin/status").body<Map<String, Boolean>>()["isAdmin"] == true
+        }.getOrDefault(false)
 }

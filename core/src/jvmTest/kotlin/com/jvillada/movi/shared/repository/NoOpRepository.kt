@@ -55,4 +55,10 @@ class NoOpRepository : WalletRepository {
     override suspend fun getStatementImportDetail(id: String) =
         StatementImportDetail(StatementImport("", "", "", "", 0L, 0, 0), emptyList())
     override suspend fun getScreen(slug: String, cachedVersion: Int?) = null
+    // La versión del body se ignora — la asigna el server.
+    override suspend fun putScreen(slug: String, sections: List<ScreenSection>) =
+        ScreenDefinition(slug = slug, version = 1, sections = sections)
+    override suspend fun restoreScreen(slug: String) =
+        ScreenDefinition(slug = slug, version = 1, sections = emptyList())
+    override suspend fun isScreenAdmin() = false
 }
