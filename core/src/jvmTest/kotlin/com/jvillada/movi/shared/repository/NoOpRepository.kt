@@ -54,4 +54,5 @@ class NoOpRepository : WalletRepository {
     override suspend fun getStatementImports() = emptyList<StatementImport>()
     override suspend fun getStatementImportDetail(id: String) =
         StatementImportDetail(StatementImport("", "", "", "", 0L, 0, 0), emptyList())
+    override suspend fun getScreen(slug: String, cachedVersion: Int?) = null
 }
