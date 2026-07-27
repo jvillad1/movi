@@ -55,7 +55,7 @@ sin build ni deploy.
 
 - Unit `:core`: (de)serialización, tipo desconocido tolerado+filtrado, acciones
   inválidas strippeadas (portar los tests de NeoVita adaptados a los tipos movi).
-- HTTP (harness H2 existente de movi, patrón CreditRoutesTest): 200 con seed (6
+- HTTP (harness H2 existente de movi, patrón CreditRoutesTest): 200 con seed (5
   secciones), 304, 404 slug malo, 404 con sections_json corrupto, 401 sin auth, seed
   por-slug idempotente (edición sobrevive re-seed; slug nuevo en seed SÍ se agrega con
   tabla no vacía).
