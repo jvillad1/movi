@@ -69,12 +69,19 @@ fun seedScreens(defs: List<ScreenDefinition> = SCREEN_SEED) = transaction {
     val existingSlugs = Screens.selectAll().map { it[Screens.slug] }.toSet()
     val now = System.currentTimeMillis()
     defs.filter { it.slug !in existingSlugs }.forEach { def ->
-        Screens.insert {
-            it[slug] = def.slug
-            it[version] = def.version
-            it[sectionsJson] = json.encodeToString(def.sections)
-            it[active] = true
-            it[updatedAt] = now
-        }
+        // Dos boots pueden correr esta selección-luego-inserción en paralelo (p.ej. dos
+        // instancias arrancando a la vez); si el otro boot ya insertó este slug entre el
+        // select y el insert, esto lanzaría una violación de PK que mataría el arranque
+        // vía DatabaseFactory.init. runCatching degrada esa carrera a un no-op: "el otro
+        // boot ya lo insertó" -- nunca actualiza ni pisa la fila existente.
+        runCatching {
+            Screens.insert {
+                it[slug] = def.slug
+                it[version] = def.version
+                it[sectionsJson] = json.encodeToString(def.sections)
+                it[active] = true
+                it[updatedAt] = now
+            }
+        }.onFailure { e -> println("seedScreens: slug '${def.slug}' already inserted by a racing boot (${e.message})") }
     }
 }

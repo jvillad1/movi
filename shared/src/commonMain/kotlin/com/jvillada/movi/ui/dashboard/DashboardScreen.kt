@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
@@ -57,17 +58,25 @@ fun DashboardScreen(
     LaunchedEffect(scope, refreshKey) {
         loading = true
         error = null
+        // SDUI: server-driven definition for this screen, fetched FIRST so the SDUI
+        // dashboard (when available) is already in place before the fallback would
+        // otherwise render — avoids a visible fallback→SDUI flip on every cold load.
+        // Silent on failure — anti-rotura layer 2 (ScreenDefCache) keeps the last
+        // valid one; layer 3 (DashboardFallback) covers a cold start with no cache
+        // and no successful fetch yet.
+        runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
+            .onSuccess {
+                // Capa 4 anti-rotura: una definición que no renderiza nada equivale a
+                // no tener definición — evita un dashboard en blanco por typos en los
+                // section types.
+                it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
+            }
         runCatching { Repositories.wallets.getFinanceSummary(scope) }
             .onSuccess { summary = it }
             .onFailure { e -> error = e.toUserMessage() }
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
             .onFailure { e -> if (error == null) error = e.toUserMessage() }
-        // SDUI: server-driven definition for this screen. Silent on failure — anti-rotura
-        // layer 2 (ScreenDefCache) keeps the last valid one; layer 3 (DashboardFallback)
-        // covers a cold start with no cache and no successful fetch yet.
-        runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
-            .onSuccess { it?.let { d -> screenDef = d; ScreenDefCache.dashboard = d } }
         loading = false
     }
 
