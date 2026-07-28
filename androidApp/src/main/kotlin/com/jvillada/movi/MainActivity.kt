@@ -6,8 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.tooling.preview.Preview
+import com.jvillada.movi.sensor.SensorScreen
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
 
 class MainActivity : ComponentActivity() {
@@ -19,13 +18,7 @@ class MainActivity : ComponentActivity() {
         )
         DatabaseDriverFactory.init(applicationContext)
         setContent {
-            App()
+            SensorScreen()
         }
     }
-}
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App()
 }
