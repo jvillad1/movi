@@ -57,10 +57,21 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             conn.disconnect()
             when {
                 code in 200..299 -> {
-                    applicationContext.getSharedPreferences("movi_sms_filter", Context.MODE_PRIVATE)
-                        .edit().putLong(SmsFilterConfigStore.KEY_LAST_CAPTURE_AT, System.currentTimeMillis()).apply()
-                    SmsFilterConfigStore.refreshIfStale(applicationContext)
+                    SmsFilterConfigStore.markLastCapture(applicationContext)
+                    // Bloqueante a propósito: WorkManager puede dejar morir el proceso
+                    // apenas doWork retorna, así que un thread{} suelto no se ejecutaría.
+                    SmsFilterConfigStore.refreshIfStaleBlocking(applicationContext)
                     Result.success()
+                }
+                code == 401 -> {
+                    // El token venció (30 días, sin endpoint de refresh). Sin esto el
+                    // sensor queda mudo para siempre y la pantalla sigue mostrando una
+                    // sesión sana: marcamos el error y cerramos sesión para que
+                    // SensorScreen muestre el aviso y el formulario de login.
+                    Log.w(TAG, "sync 401 — sesión vencida, se requiere volver a entrar")
+                    SmsFilterConfigStore.markAuthExpired(applicationContext)
+                    SessionManager.clear()
+                    Result.failure()
                 }
                 code >= 500 -> Result.retry()
                 else -> {

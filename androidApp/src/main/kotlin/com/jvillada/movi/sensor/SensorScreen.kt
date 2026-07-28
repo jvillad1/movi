@@ -1,20 +1,24 @@
 package com.jvillada.movi.sensor
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,6 +38,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +55,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.apiBaseUrl
@@ -68,7 +76,8 @@ private val TextColor = Color(0xFFF5F5F5)
 private val TextMutedColor = Color(0xFFA0A0A0)
 private val ErrorColor = Color(0xFFFF6B6B)
 
-private const val SMS_PREFS = "movi_sms_filter"
+/** Recuerda que YA pedimos los permisos en la app: distingue "nunca preguntó" de "denegó". */
+private const val KEY_PERM_REQUESTED = "perm_requested"
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
 
@@ -109,7 +118,9 @@ fun SensorScreen() {
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                // fillMaxSize, no fillMaxWidth: con contenido corto el fondo oscuro debe
+                // llegar al borde inferior, si no se ve el blanco del tema de la Activity.
+                .fillMaxSize()
                 .background(BgColor)
                 .systemBarsPadding()
                 .verticalScroll(rememberScrollState())
@@ -129,9 +140,7 @@ fun SensorScreen() {
             Spacer(Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apiBaseUrl)))
-                },
+                onClick = { openMoviWeb(context) },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
             ) {
@@ -157,8 +166,14 @@ private fun SensorCard(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun SessionCard() {
+    val context = LocalContext.current
+    val loggedIn = SessionManager.loggedIn
+    // Re-leído cuando cambia loggedIn: si el Worker corta la sesión con la pantalla
+    // abierta, el aviso aparece sin reiniciar la Activity.
+    var authErrorAt by remember(loggedIn) { mutableStateOf(SmsFilterConfigStore.authErrorAt(context)) }
+
     SensorCard(title = "SESIÓN") {
-        if (SessionManager.loggedIn) {
+        if (loggedIn) {
             Text(SessionManager.userEmail ?: "—", fontSize = 15.sp, color = TextColor)
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
@@ -168,13 +183,24 @@ private fun SessionCard() {
                 Text("Cerrar sesión")
             }
         } else {
-            LoginForm()
+            if (SmsFilterConfigStore.isSessionExpired(authErrorAt, loggedIn)) {
+                Text(
+                    "Sesión vencida — volvé a entrar. Hasta entonces el sensor captura pero no puede subir nada.",
+                    fontSize = 13.sp,
+                    color = ErrorColor,
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+            LoginForm(onLoggedIn = {
+                SmsFilterConfigStore.clearAuthExpired(context)
+                authErrorAt = 0L
+            })
         }
     }
 }
 
 @Composable
-private fun LoginForm() {
+private fun LoginForm(onLoggedIn: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     var email by remember { mutableStateOf(SessionManager.rememberedEmail ?: "") }
     var password by remember { mutableStateOf("") }
@@ -190,6 +216,7 @@ private fun LoginForm() {
                 Repositories.wallets.login(LoginRequest(email.trim(), password))
             }.onSuccess { resp ->
                 SessionManager.save(resp.token, resp.userId, resp.name, resp.email)
+                onLoggedIn()
                 loading = false
             }.onFailure {
                 error = "Correo o contraseña incorrectos"
@@ -253,11 +280,63 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 private fun hasSmsPermissions(context: Context): Boolean =
     SmsPermissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
 
+private tailrec fun Context.findComponentActivity(): ComponentActivity? = when (this) {
+    is ComponentActivity -> this
+    is ContextWrapper -> baseContext.findComponentActivity()
+    else -> null
+}
+
+private fun canShowRationale(activity: Activity?): Boolean =
+    activity != null && SmsPermissions.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
+
+/**
+ * Decide entre pedir el permiso en la app y mandar a los ajustes del sistema.
+ *
+ * En Android 11+ tras una denegación (13+ tras dos), `requestPermissions` es un no-op
+ * silencioso: el botón no haría nada y el sensor quedaría mudo sin salida desde la app.
+ * Si ya preguntamos y el sistema ya no deja mostrar el diálogo, el único camino es
+ * ACTION_APPLICATION_DETAILS_SETTINGS.
+ */
+internal fun shouldOpenSettings(askedBefore: Boolean, canShowRationale: Boolean): Boolean =
+    askedBefore && !canShowRationale
+
+private fun openAppSettings(context: Context) {
+    val intent = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.fromParts("package", context.packageName, null),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
+}
+
+private fun openMoviWeb(context: Context) {
+    // Sin navegador que atienda el ACTION_VIEW esto tira ActivityNotFoundException y
+    // crashea el sensor; que el botón no haga nada es preferible.
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apiBaseUrl))) }
+}
+
 @Composable
 private fun PermissionsCard(context: Context) {
+    val activity = remember(context) { context.findComponentActivity() }
     var granted by remember { mutableStateOf(hasSmsPermissions(context)) }
+    var asked by remember { mutableStateOf(readPermissionAsked(context)) }
+    var rationale by remember { mutableStateOf(canShowRationale(activity)) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         granted = hasSmsPermissions(context)
+        rationale = canShowRationale(activity)
+    }
+
+    // Los permisos concedidos desde los ajustes del sistema no llegan por el launcher:
+    // sin este re-chequeo la tarjeta seguiría diciendo "Faltan" hasta reiniciar la app.
+    DisposableEffect(activity) {
+        val lifecycle = activity?.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                granted = hasSmsPermissions(context)
+                rationale = canShowRationale(activity)
+            }
+        }
+        lifecycle?.addObserver(observer)
+        onDispose { lifecycle?.removeObserver(observer) }
     }
 
     SensorCard(title = "PERMISOS") {
@@ -271,21 +350,45 @@ private fun PermissionsCard(context: Context) {
             )
         }
         if (!granted) {
+            val toSettings = activity == null || shouldOpenSettings(asked, rationale)
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = { launcher.launch(SmsPermissions) },
+                onClick = {
+                    if (toSettings) {
+                        openAppSettings(context)
+                    } else {
+                        markPermissionAsked(context)
+                        asked = true
+                        launcher.launch(SmsPermissions)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
             ) {
-                Text("Conceder permisos")
+                Text(if (toSettings) "Abrir ajustes de la app" else "Conceder permisos")
+            }
+            if (toSettings) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Android ya no muestra el diálogo: concedé SMS en Permisos, dentro de los ajustes de la app.",
+                    fontSize = 12.sp,
+                    color = TextMutedColor,
+                )
             }
         }
     }
 }
 
-private fun readLastCaptureAt(context: Context): Long =
-    context.getSharedPreferences(SMS_PREFS, Context.MODE_PRIVATE)
-        .getLong(SmsFilterConfigStore.KEY_LAST_CAPTURE_AT, 0L)
+private fun readPermissionAsked(context: Context): Boolean =
+    context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_PERM_REQUESTED, false)
+
+private fun markPermissionAsked(context: Context) {
+    context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_PERM_REQUESTED, true).apply()
+}
+
+private fun readLastCaptureAt(context: Context): Long = SmsFilterConfigStore.lastCaptureAt(context)
 
 @Composable
 private fun SensorInfoCard(lastCaptureAt: Long, senderCodes: List<String>) {

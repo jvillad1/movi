@@ -22,6 +22,16 @@ class SmsFilterConfigStoreTest {
     }
 
     @Test
+    fun `session counts as expired only with a 401 mark and no active session`() {
+        // Tras el 401 el Worker limpia la sesión: aviso + formulario de login.
+        assertTrue(SmsFilterConfigStore.isSessionExpired(authErrorAt = 1_700_000_000_000, loggedIn = false))
+        // Volver a entrar borra la marca; mientras tanto, sesión viva no muestra aviso.
+        assertFalse(SmsFilterConfigStore.isSessionExpired(authErrorAt = 1_700_000_000_000, loggedIn = true))
+        // Deslogueo normal (nunca hubo 401) no es "sesión vencida".
+        assertFalse(SmsFilterConfigStore.isSessionExpired(authErrorAt = 0L, loggedIn = false))
+    }
+
+    @Test
     fun `staleness honors the 24h ttl`() {
         val now = 1_700_000_000_000
         assertFalse(SmsFilterConfigStore.isStale(fetchedAt = now - 23 * 3_600_000L, now = now))

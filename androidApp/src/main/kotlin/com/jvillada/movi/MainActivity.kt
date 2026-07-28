@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.jvillada.movi.sensor.SensorScreen
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
+import com.jvillada.movi.sms.SmsFilterRefreshWorker
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -17,6 +18,9 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         DatabaseDriverFactory.init(applicationContext)
+        // Refresco diario de la config del filtro sin depender de que el usuario abra la
+        // app ni de que haya habido una captura exitosa (ver SmsFilterRefreshWorker).
+        SmsFilterRefreshWorker.schedule(applicationContext)
         setContent {
             SensorScreen()
         }
