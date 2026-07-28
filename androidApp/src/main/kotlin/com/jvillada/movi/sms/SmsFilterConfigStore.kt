@@ -10,8 +10,10 @@ import kotlin.concurrent.thread
 /**
  * Config remota del filtro con cache local. El camino del SMS (receiver) SOLO lee
  * SharedPreferences — la red vive en refreshIfStale, disparado desde la pantalla del
- * sensor, el Worker de sync y el Worker periódico. Fail-open: sin cache válida →
- * BankSenderFilter.DEFAULTS.
+ * sensor, el Worker de sync y el Worker periódico. Fail-open en dos capas: sin cache
+ * válida (ausente o corrupta) → BankSenderFilter.DEFAULTS tal cual; con cache válida →
+ * unión con BankSenderFilter.DEFAULTS (ver [withDefaults]), así el server nunca puede
+ * angostar el filtro por debajo del piso compilado.
  */
 object SmsFilterConfigStore {
     /** Prefs del sensor. Único dueño del nombre: nadie más debe escribir el literal. */
@@ -31,8 +33,26 @@ object SmsFilterConfigStore {
 
     fun load(context: Context): FilterConfig {
         val json = prefs(context).getString(KEY_JSON, null)
-        return json?.let { parseConfigJson(it) } ?: BankSenderFilter.DEFAULTS
+        val remote = json?.let { parseConfigJson(it) }
+        return if (remote != null) withDefaults(remote) else BankSenderFilter.DEFAULTS
     }
+
+    /**
+     * Piso, no espejo: el resultado es SIEMPRE senderCodes/bodyKeywords de [remote] unidos
+     * con BankSenderFilter.DEFAULTS (de-duplicados, remote primero). El server SOLO puede
+     * AGREGAR códigos o keywords al filtro — nunca puede angostarlo por debajo de los
+     * DEFAULTS compilados, ni por typo, ni por un CURRENT_FILTER mal editado, ni por una
+     * lista vacía. Es una decisión deliberada: los DEFAULTS son apenas 3 códigos + 1
+     * keyword, así que el costo de no poder removerlos remotamente es bajo, y el beneficio
+     * es que ningún error del lado del server puede dejar ciego al sensor (fail-open es el
+     * principio rector de todo este subsistema). NO "arreglar" esto para que el server
+     * pueda angostar el filtro — angostarlo silenciosamente es exactamente el bug que esto
+     * previene.
+     */
+    fun withDefaults(remote: FilterConfig): FilterConfig = FilterConfig(
+        senderCodes = (remote.senderCodes + BankSenderFilter.DEFAULTS.senderCodes).distinct(),
+        bodyKeywords = (remote.bodyKeywords + BankSenderFilter.DEFAULTS.bodyKeywords).distinct(),
+    )
 
     /**
      * Dispara el refresh en un hilo aparte — para el camino de UI, donde el proceso sigue
@@ -79,11 +99,18 @@ object SmsFilterConfigStore {
 
     fun isStale(fetchedAt: Long, now: Long): Boolean = now - fetchedAt > TTL_MS
 
+    /**
+     * Devuelve null solo ante JSON corrupto o con claves faltantes/mal tipadas — NO ante
+     * un remote "vacío" (`{"senderCodes":[],"bodyKeywords":[]}`): ese caso ya no necesita
+     * rechazo especial, porque [withDefaults] lo une con BankSenderFilter.DEFAULTS de
+     * todos modos y el resultado es idéntico al fallback. Rechazarlo aquí sería
+     * redundante y confundiría "vacío" con "corrupto".
+     */
     fun parseConfigJson(json: String): FilterConfig? = runCatching {
         val obj = JSONObject(json)
         val codes = obj.getJSONArray("senderCodes").let { a -> (0 until a.length()).map { a.getString(it) } }
         val kws = obj.getJSONArray("bodyKeywords").let { a -> (0 until a.length()).map { a.getString(it) } }
-        if (codes.isEmpty() && kws.isEmpty()) null else FilterConfig(codes, kws)
+        FilterConfig(codes, kws)
     }.getOrNull()
 
     fun markLastCapture(context: Context) {
