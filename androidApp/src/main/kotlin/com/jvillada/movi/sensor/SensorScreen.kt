@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -78,8 +80,19 @@ private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.p
 fun SensorScreen() {
     val context = LocalContext.current
 
+    var lastCaptureAt by remember { mutableStateOf(readLastCaptureAt(context)) }
+    var senderCodes by remember { mutableStateOf(SmsFilterConfigStore.load(context).senderCodes) }
+
     LaunchedEffect(Unit) {
-        SmsFilterConfigStore.refreshIfStale(context)
+        val mainHandler = Handler(Looper.getMainLooper())
+        SmsFilterConfigStore.refreshIfStale(context) {
+            // Invocado desde el hilo background del fetch — saltamos a main antes de tocar
+            // estado de Compose.
+            mainHandler.post {
+                lastCaptureAt = readLastCaptureAt(context)
+                senderCodes = SmsFilterConfigStore.load(context).senderCodes
+            }
+        }
     }
 
     MaterialTheme(
@@ -110,7 +123,7 @@ fun SensorScreen() {
             PermissionsCard(context)
             Spacer(Modifier.height(16.dp))
 
-            SensorInfoCard(context)
+            SensorInfoCard(lastCaptureAt, senderCodes)
             Spacer(Modifier.height(24.dp))
 
             Button(
@@ -268,12 +281,12 @@ private fun PermissionsCard(context: Context) {
     }
 }
 
-@Composable
-private fun SensorInfoCard(context: Context) {
-    val lastCaptureAt = context.getSharedPreferences(SMS_PREFS, Context.MODE_PRIVATE)
+private fun readLastCaptureAt(context: Context): Long =
+    context.getSharedPreferences(SMS_PREFS, Context.MODE_PRIVATE)
         .getLong(SmsFilterConfigStore.KEY_LAST_CAPTURE_AT, 0L)
-    val senderCodes = SmsFilterConfigStore.load(context).senderCodes
 
+@Composable
+private fun SensorInfoCard(lastCaptureAt: Long, senderCodes: List<String>) {
     SensorCard(title = "SENSOR") {
         Text("Última captura: ${formatCaptureDate(lastCaptureAt)}", fontSize = 14.sp, color = TextColor)
         Spacer(Modifier.height(6.dp))

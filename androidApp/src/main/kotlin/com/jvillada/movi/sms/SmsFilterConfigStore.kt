@@ -24,20 +24,29 @@ object SmsFilterConfigStore {
         return json?.let { parseConfigJson(it) } ?: BankSenderFilter.DEFAULTS
     }
 
-    fun refreshIfStale(context: Context, force: Boolean = false) {
+    /**
+     * [onUpdated], si se provee, se invoca SOLO cuando la config en cache cambió (fetch
+     * exitoso + parseable). Se llama desde el hilo background del fetch — quien lo pase
+     * es responsable de saltar al hilo principal si va a tocar estado de Compose.
+     */
+    fun refreshIfStale(context: Context, force: Boolean = false, onUpdated: (() -> Unit)? = null) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!force && !isStale(prefs.getLong(KEY_FETCHED_AT, 0), System.currentTimeMillis())) return
         thread(name = "sms-filter-refresh") {
             runCatching {
                 val conn = URL("$apiBaseUrl/api/sms/filter-config").openConnection() as HttpURLConnection
                 conn.connectTimeout = 10_000; conn.readTimeout = 10_000
-                val body = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
+                val body = try {
+                    conn.inputStream.bufferedReader().readText()
+                } finally {
+                    conn.disconnect()
+                }
                 if (parseConfigJson(body) != null) {
                     prefs.edit()
                         .putString(KEY_JSON, body)
                         .putLong(KEY_FETCHED_AT, System.currentTimeMillis())
                         .apply()
+                    onUpdated?.invoke()
                 }
             }  // silencioso: el fallback compilado cubre
         }
