@@ -88,7 +88,11 @@ object SmsFilterConfigStore {
         } finally {
             conn.disconnect()
         }
-        if (parseConfigJson(body) == null) return@runCatching false
+        val parsed = parseConfigJson(body) ?: return@runCatching false
+        // No pisar el último cache bueno con una respuesta válida-pero-vacía: dejar la
+        // cache stale para que el próximo trigger no-forzado (pantalla, sync) reintente
+        // en minutos, en vez de escribir vacío + timestamp fresco y quedar mudo 24h.
+        if (parsed.addsNothing()) return@runCatching false
         prefs(context).edit()
             .putString(KEY_JSON, body)
             .putLong(KEY_FETCHED_AT, System.currentTimeMillis())
@@ -135,3 +139,15 @@ object SmsFilterConfigStore {
      */
     fun isSessionExpired(authErrorAt: Long, loggedIn: Boolean): Boolean = authErrorAt > 0L && !loggedIn
 }
+
+/**
+ * Guard de ESCRITURA en cache — deliberadamente separado del guard de PARSEO en
+ * [SmsFilterConfigStore.parseConfigJson]: son preguntas distintas. "¿esto parsea?"
+ * (parseConfigJson) es sobre validez sintáctica — un remote vacío es válido. "¿esto vale
+ * la pena escribir encima del último cache bueno?" (este predicado, usado en
+ * fetchAndStore) es sobre si pisar una config con sender codes/keywords reales por una
+ * vacía. NO fusionar esto de vuelta en parseConfigJson: ahí un remote vacío volvería a
+ * ser rechazado como si fuera corrupto, que es justo la confusión que el doc de
+ * parseConfigJson dejó explícitamente resuelta.
+ */
+fun FilterConfig.addsNothing(): Boolean = senderCodes.isEmpty() && bodyKeywords.isEmpty()

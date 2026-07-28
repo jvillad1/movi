@@ -37,10 +37,14 @@ class SmsFilterConfigStoreTest {
 
     @Test
     fun `withDefaults keeps compiled defaults even when remote is a strict subset`() {
+        // Assertion is about coverage, not order: matches() is order-agnostic, so pinning
+        // exact list order here would incidentally pass only because the remote subset
+        // ("85540") happens to be the first compiled default — swap it for "87400" and an
+        // order-sensitive assertEquals would fail despite identical, correct behavior.
         val remote = FilterConfig(senderCodes = listOf("85540"), bodyKeywords = emptyList())
         val result = SmsFilterConfigStore.withDefaults(remote)
-        assertEquals(BankSenderFilter.DEFAULTS.senderCodes, result.senderCodes)
-        assertEquals(BankSenderFilter.DEFAULTS.bodyKeywords, result.bodyKeywords)
+        assertTrue(result.senderCodes.containsAll(BankSenderFilter.DEFAULTS.senderCodes))
+        assertTrue(result.bodyKeywords.containsAll(BankSenderFilter.DEFAULTS.bodyKeywords))
     }
 
     @Test
@@ -58,6 +62,17 @@ class SmsFilterConfigStoreTest {
         val result = SmsFilterConfigStore.withDefaults(remote)
         assertEquals(listOf("85540", "891333", "87400"), result.senderCodes)
         assertEquals(listOf("bancolombia"), result.bodyKeywords)
+    }
+
+    @Test
+    fun `addsNothing is true only when both lists are empty — the store-level write guard`() {
+        // Covers what the old parseConfigJson-both-empty-returns-null test used to pin
+        // indirectly: a valid-but-empty response must not be worth writing over a good
+        // cache. That guard now lives here (see fetchAndStore), separate from parsing.
+        assertTrue(FilterConfig(emptyList(), emptyList()).addsNothing())
+        assertFalse(FilterConfig(listOf("85540"), emptyList()).addsNothing())
+        assertFalse(FilterConfig(emptyList(), listOf("bancolombia")).addsNothing())
+        assertFalse(FilterConfig(listOf("85540"), listOf("bancolombia")).addsNothing())
     }
 
     @Test
