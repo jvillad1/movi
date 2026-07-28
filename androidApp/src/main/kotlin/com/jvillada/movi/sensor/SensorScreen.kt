@@ -185,7 +185,8 @@ private fun SessionCard() {
         } else {
             if (SmsFilterConfigStore.isSessionExpired(authErrorAt, loggedIn)) {
                 Text(
-                    "Sesión vencida — volvé a entrar. Hasta entonces el sensor captura pero no puede subir nada.",
+                    "Sesión vencida — volvé a entrar. Los SMS que lleguen hasta entonces se pierden: " +
+                        "el sensor no los guarda para subirlos después.",
                     fontSize = 13.sp,
                     color = ErrorColor,
                 )
