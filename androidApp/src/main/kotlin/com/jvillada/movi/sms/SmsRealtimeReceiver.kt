@@ -25,7 +25,7 @@ class SmsRealtimeReceiver : BroadcastReceiver() {
         val bySender = messages.filterNotNull().groupBy { it.originatingAddress }
         for ((sender, parts) in bySender) {
             val body = parts.joinToString("") { it.messageBody.orEmpty() }
-            if (body.isBlank() || !BankSenderFilter.matches(sender, body)) continue
+            if (body.isBlank() || !BankSenderFilter.matches(sender, body, SmsFilterConfigStore.load(context))) continue
             val ts = parts.first().timestampMillis
             val id = smsRealtimeId(sender, ts, body)
             val work = OneTimeWorkRequestBuilder<SmsSyncWorker>()

@@ -14,8 +14,10 @@ android {
         applicationId = "com.jvillada.movi"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        // El APK es de instalación única pero sideloaded: sin bump, un instalador
+        // consciente de versiones rechaza la actualización por "misma versión".
+        versionCode = 2
+        versionName = "1.1"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -49,10 +51,13 @@ dependencies {
     implementation(project(":shared"))
     implementation(project(":core"))
     implementation(compose.runtime)
+    implementation(compose.foundation)
+    implementation(compose.material3)
     implementation(compose.ui)
-    implementation(compose.components.uiToolingPreview)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.work.runtime.ktx)
-    debugImplementation(compose.uiTooling)
     testImplementation(kotlin("test"))
+    // JVM unit tests only (not shipped in the APK): AGP's mockable android.jar stubs
+    // org.json to throw at runtime, so real parsing needs the real implementation here.
+    testImplementation(libs.org.json)
 }

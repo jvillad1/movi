@@ -27,6 +27,7 @@ webpush = "5.1.2"
 bcprov = "1.85"
 httpcore = "4.4.15"
 workmanager = "2.11.2"
+orgJson = "20231013"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -91,6 +92,7 @@ h2 = { module = "com.h2database:h2", version.ref = "h2" }
 webpush = { module = "nl.martijndwars:web-push", version.ref = "webpush" }
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcprov" }
 httpcore = { module = "org.apache.httpcomponents:httpcore", version.ref = "httpcore" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

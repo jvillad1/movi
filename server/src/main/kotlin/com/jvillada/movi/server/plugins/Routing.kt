@@ -13,6 +13,7 @@ fun Application.configureRouting() {
         get("/health") { call.respondText("OK") }
         authRoutes()                     // public — no auth required
         pushPublicRoutes()                // public — no auth required
+        smsFilterConfigRoutes()           // public — no auth required
 
         authenticate("jwt") {
             accountRoutes()
