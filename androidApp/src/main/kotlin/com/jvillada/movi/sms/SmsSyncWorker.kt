@@ -56,7 +56,12 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             val code = conn.responseCode
             conn.disconnect()
             when {
-                code in 200..299 -> Result.success()
+                code in 200..299 -> {
+                    applicationContext.getSharedPreferences("movi_sms_filter", Context.MODE_PRIVATE)
+                        .edit().putLong(SmsFilterConfigStore.KEY_LAST_CAPTURE_AT, System.currentTimeMillis()).apply()
+                    SmsFilterConfigStore.refreshIfStale(applicationContext)
+                    Result.success()
+                }
                 code >= 500 -> Result.retry()
                 else -> {
                     Log.w(TAG, "sync rechazado con $code — sin retry")

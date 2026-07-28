@@ -2,19 +2,26 @@ package com.jvillada.movi.sms
 
 import java.security.MessageDigest
 
+data class FilterConfig(val senderCodes: List<String>, val bodyKeywords: List<String>)
+
 /**
  * Filtro de privacidad (LOCKED en el spec): SOLO los SMS que matchean aquí salen del
- * teléfono. Remitentes cortos de Bancolombia + keyword en el cuerpo. Ampliar estas
- * constantes cuando lleguen SMS reales de otros bancos.
+ * teléfono. Remitentes cortos de bancos + keyword en el cuerpo. La config es
+ * parametrizable (ver SmsFilterConfigStore) para agregar bancos sin reinstalar el APK;
+ * DEFAULTS es el fallback compilado, idéntico a la fuente del server.
  */
 object BankSenderFilter {
-    private val SENDER_CODES = listOf("85540", "891333", "87400")
-    private const val BODY_KEYWORD = "bancolombia"
+    /** Idénticos a la fuente del server (GET /api/sms/filter-config) — fallback compilado. */
+    val DEFAULTS = FilterConfig(
+        senderCodes = listOf("85540", "891333", "87400"),
+        bodyKeywords = listOf("bancolombia"),
+    )
 
-    fun matches(sender: String?, body: String): Boolean {
+    fun matches(sender: String?, body: String, config: FilterConfig = DEFAULTS): Boolean {
         val s = sender.orEmpty()
-        if (SENDER_CODES.any { s.contains(it) }) return true
-        return body.lowercase().contains(BODY_KEYWORD)
+        if (config.senderCodes.any { s.contains(it) }) return true
+        val lower = body.lowercase()
+        return config.bodyKeywords.any { lower.contains(it.lowercase()) }
     }
 }
 

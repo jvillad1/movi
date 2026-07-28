@@ -37,4 +37,12 @@ class BankSenderFilterTest {
         assertTrue(a.startsWith("sms_rt_"))
         assertEquals("sms_rt_".length + 16, a.length)
     }
+
+    @Test
+    fun `remote config can add senders and keywords without reinstalling`() {
+        val remote = FilterConfig(senderCodes = listOf("85540", "890123"), bodyKeywords = listOf("bancolombia", "nequi"))
+        assertTrue(BankSenderFilter.matches("890123", "cualquier cosa", remote))
+        assertTrue(BankSenderFilter.matches("Info", "Nequi: pago recibido", remote))
+        assertFalse(BankSenderFilter.matches("890123", "cualquier cosa"))   // defaults no lo conocen
+    }
 }

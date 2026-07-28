@@ -55,4 +55,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     debugImplementation(compose.uiTooling)
     testImplementation(kotlin("test"))
+    // JVM unit tests only (not shipped in the APK): AGP's mockable android.jar stubs
+    // org.json to throw at runtime, so real parsing needs the real implementation here.
+    testImplementation(libs.org.json)
 }
