@@ -22,6 +22,8 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
@@ -164,6 +166,14 @@ class LocalRepository(
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =
         remote.getStatementImportDetail(id)
+    override suspend fun getScreen(slug: String, cachedVersion: Int?): ScreenDefinition? =
+        remote.getScreen(slug, cachedVersion)
+    override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition =
+        remote.putScreen(slug, sections)
+    override suspend fun restoreScreen(slug: String): ScreenDefinition =
+        remote.restoreScreen(slug)
+    override suspend fun isScreenAdmin(): Boolean =
+        remote.isScreenAdmin()
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

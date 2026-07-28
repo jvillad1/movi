@@ -17,6 +17,8 @@ import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
@@ -69,4 +71,8 @@ interface WalletRepository {
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail
+    suspend fun getScreen(slug: String, cachedVersion: Int? = null): ScreenDefinition?
+    suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition
+    suspend fun restoreScreen(slug: String): ScreenDefinition
+    suspend fun isScreenAdmin(): Boolean
 }

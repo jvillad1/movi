@@ -17,6 +17,8 @@ import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
@@ -36,9 +38,11 @@ import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
+import io.ktor.client.request.header
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 
 class WalletRepositoryImpl(
@@ -228,4 +232,27 @@ class WalletRepositoryImpl(
 
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =
         client.get("$baseUrl/api/statements/imports/$id").body()
+
+    override suspend fun getScreen(slug: String, cachedVersion: Int?): ScreenDefinition? {
+        val response = client.get("$baseUrl/api/screens/$slug") {
+            cachedVersion?.let { header("If-None-Match", it.toString()) }
+        }
+        // No safeCall en este repo: chequear 304 ANTES de .body() (lección NeoVita).
+        if (response.status == HttpStatusCode.NotModified) return null
+        return response.body()
+    }
+
+    override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition =
+        client.put("$baseUrl/api/screens/$slug") {
+            contentType(ContentType.Application.Json)
+            setBody(ScreenDefinition(slug = slug, version = 0, sections = sections))
+        }.body()
+
+    override suspend fun restoreScreen(slug: String): ScreenDefinition =
+        client.post("$baseUrl/api/screens/$slug/restore").body()
+
+    override suspend fun isScreenAdmin(): Boolean =
+        runCatching {
+            client.get("$baseUrl/api/screens/admin/status").body<Map<String, Boolean>>()["isAdmin"] == true
+        }.getOrDefault(false)
 }
