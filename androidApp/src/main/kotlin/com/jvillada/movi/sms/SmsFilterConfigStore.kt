@@ -92,7 +92,7 @@ object SmsFilterConfigStore {
         // No pisar el último cache bueno con una respuesta válida-pero-vacía: dejar la
         // cache stale para que el próximo trigger no-forzado (pantalla, sync) reintente
         // en minutos, en vez de escribir vacío + timestamp fresco y quedar mudo 24h.
-        if (parsed.addsNothing()) return@runCatching false
+        if (parsed.hasNoEntries()) return@runCatching false
         prefs(context).edit()
             .putString(KEY_JSON, body)
             .putLong(KEY_FETCHED_AT, System.currentTimeMillis())
@@ -149,5 +149,11 @@ object SmsFilterConfigStore {
  * vacía. NO fusionar esto de vuelta en parseConfigJson: ahí un remote vacío volvería a
  * ser rechazado como si fuera corrupto, que es justo la confusión que el doc de
  * parseConfigJson dejó explícitamente resuelta.
+ *
+ * OJO con el nombre: significa "no trae NINGUNA entrada", no "no agrega nada sobre los
+ * DEFAULTS". Una config remota idéntica a DEFAULTS tampoco agrega nada y sin embargo
+ * devuelve false — a propósito: hay que escribirla para refrescar el TTL. Si alguien
+ * "corrige" esto para comparar contra DEFAULTS, todo teléfono cuyo server sirva
+ * exactamente los defaults queda con la cache stale para siempre, refetcheando sin fin.
  */
-fun FilterConfig.addsNothing(): Boolean = senderCodes.isEmpty() && bodyKeywords.isEmpty()
+fun FilterConfig.hasNoEntries(): Boolean = senderCodes.isEmpty() && bodyKeywords.isEmpty()

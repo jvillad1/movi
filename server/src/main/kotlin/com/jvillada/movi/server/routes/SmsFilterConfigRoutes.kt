@@ -11,9 +11,13 @@ import kotlinx.serialization.Serializable
  * (el receiver la cachea con TTL 24h). OJO: los defaults compilados en el APK
  * (BankSenderFilter.DEFAULTS) son un PISO, no un espejo — el cliente siempre une esta
  * config con esos defaults (SmsFilterConfigStore.withDefaults). Por eso AGREGAR un
- * código o keyword acá sí llega a los teléfonos, pero QUITAR uno de los 3 defaults
- * compilados (85540, 891333, 87400, "bancolombia") NO deja de capturarlo — el piso
- * sigue vivo hasta el próximo release del APK.
+ * código o keyword acá sí llega a los teléfonos, pero QUITAR uno del piso compilado
+ * (los códigos 85540, 891333, 87400 y la keyword "bancolombia") NO deja de capturarlo
+ * — el piso sigue vivo hasta el próximo release del APK.
+ *
+ * Para revertir lo que agregaste acá, volvé a servir el piso explícitamente en vez de
+ * listas vacías: el cliente ignora una config totalmente vacía (no pisa su último cache
+ * bueno con nada), así que servir `[]` no borra nada y además lo deja refetcheando.
  * Pública a propósito: solo contiene códigos de remitentes bancarios, nada sensible.
  */
 @Serializable

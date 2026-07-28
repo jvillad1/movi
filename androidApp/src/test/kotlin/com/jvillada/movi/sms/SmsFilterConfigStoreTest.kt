@@ -65,14 +65,14 @@ class SmsFilterConfigStoreTest {
     }
 
     @Test
-    fun `addsNothing is true only when both lists are empty — the store-level write guard`() {
+    fun `hasNoEntries is true only when both lists are empty — the store-level write guard`() {
         // Covers what the old parseConfigJson-both-empty-returns-null test used to pin
         // indirectly: a valid-but-empty response must not be worth writing over a good
         // cache. That guard now lives here (see fetchAndStore), separate from parsing.
-        assertTrue(FilterConfig(emptyList(), emptyList()).addsNothing())
-        assertFalse(FilterConfig(listOf("85540"), emptyList()).addsNothing())
-        assertFalse(FilterConfig(emptyList(), listOf("bancolombia")).addsNothing())
-        assertFalse(FilterConfig(listOf("85540"), listOf("bancolombia")).addsNothing())
+        assertTrue(FilterConfig(emptyList(), emptyList()).hasNoEntries())
+        assertFalse(FilterConfig(listOf("85540"), emptyList()).hasNoEntries())
+        assertFalse(FilterConfig(emptyList(), listOf("bancolombia")).hasNoEntries())
+        assertFalse(FilterConfig(listOf("85540"), listOf("bancolombia")).hasNoEntries())
     }
 
     @Test
