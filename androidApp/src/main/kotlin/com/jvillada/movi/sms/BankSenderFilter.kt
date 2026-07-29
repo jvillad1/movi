@@ -8,10 +8,13 @@ data class FilterConfig(val senderCodes: List<String>, val bodyKeywords: List<St
  * Filtro de privacidad (LOCKED en el spec): SOLO los SMS que matchean aquí salen del
  * teléfono. Remitentes cortos de bancos + keyword en el cuerpo. La config es
  * parametrizable (ver SmsFilterConfigStore) para agregar bancos sin reinstalar el APK;
- * DEFAULTS es el fallback compilado, idéntico a la fuente del server.
+ * DEFAULTS es el fallback compilado — hoy arranca igual a la fuente del server, pero ya
+ * no es un espejo: es el PISO. SmsFilterConfigStore.load() siempre une la config remota
+ * con DEFAULTS (ver withDefaults), así que el server puede agregar códigos/keywords por
+ * encima de este piso pero nunca angostarlo por debajo.
  */
 object BankSenderFilter {
-    /** Idénticos a la fuente del server (GET /api/sms/filter-config) — fallback compilado. */
+    /** Fallback compilado — piso mínimo garantizado, no un espejo del server (ver arriba). */
     val DEFAULTS = FilterConfig(
         senderCodes = listOf("85540", "891333", "87400"),
         bodyKeywords = listOf("bancolombia"),
