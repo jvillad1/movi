@@ -59,12 +59,16 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
-    LaunchedEffect(pushRefreshTick) {
-        // El flujo de permisos del navegador es async (moviPush.js): refrescar unas
-        // veces tras cada acción para que el aviso desaparezca sin necesidad de reabrir la app.
-        repeat(20) {
-            kotlinx.coroutines.delay(600)
-            pushStatus = PushOptIn.status()
+    if (PushOptIn.supported) {
+        LaunchedEffect(pushRefreshTick) {
+            // El flujo de permisos del navegador es async (moviPush.js): refrescar unas
+            // veces tras cada acción para que el aviso desaparezca sin necesidad de reabrir la app.
+            // Solo donde el push existe: en Android/iOS status() es una constante y esto
+            // sería un bucle inútil (mismo gate que usa PerfilScreen).
+            repeat(20) {
+                kotlinx.coroutines.delay(600)
+                pushStatus = PushOptIn.status()
+            }
         }
     }
 
