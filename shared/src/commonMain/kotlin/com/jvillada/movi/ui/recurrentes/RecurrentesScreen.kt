@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
@@ -47,11 +48,28 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     var sheetRule by remember { mutableStateOf<RecurringRule?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
 
+    // Estado del opt-in de push, para el aviso de "tus recordatorios no te van a llegar".
+    var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
+    var pushRefreshTick by remember { mutableStateOf(0) }
+
     LaunchedEffect(loadKey) {
         loading = true
         runCatching { Repositories.wallets.getRecurringRules() }.onSuccess { rules = it }
         runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { upcoming = it }
         loading = false
+    }
+
+    if (PushOptIn.supported) {
+        LaunchedEffect(pushRefreshTick) {
+            // El flujo de permisos del navegador es async (moviPush.js): refrescar unas
+            // veces tras cada acción para que el aviso desaparezca sin necesidad de reabrir la app.
+            // Solo donde el push existe: en Android/iOS status() es una constante y esto
+            // sería un bucle inútil (mismo gate que usa PerfilScreen).
+            repeat(20) {
+                kotlinx.coroutines.delay(600)
+                pushStatus = PushOptIn.status()
+            }
+        }
     }
 
     val ingresosFijos = rules.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
@@ -147,6 +165,22 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                     letterSpacing = (-0.3).sp,
                                 )
                             }
+                        }
+                    }
+                }
+
+                // ── Aviso: recordatorios sin canal de entrega ───────────────────
+                if (shouldShowReminderWarning(pushStatus, upcoming.isNotEmpty())) {
+                    item {
+                        Spacer(Modifier.height(20.dp))
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            ReminderWarningBanner(
+                                pushStatus = pushStatus,
+                                onEnable = {
+                                    PushOptIn.enable()
+                                    pushRefreshTick++
+                                },
+                            )
                         }
                     }
                 }
@@ -381,6 +415,58 @@ private fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
             color = if (isIncome) MinIncome else MinText,
             letterSpacing = (-0.3).sp,
         )
+    }
+}
+
+// ── Aviso de recordatorios sin canal de entrega ────────────────────────────────
+
+@Composable
+private fun ReminderWarningBanner(pushStatus: String, onEnable: () -> Unit) {
+    val denied = pushStatus == "denied"
+    MinCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 3.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MinAmber),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Tus recordatorios no te van a llegar",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.1).sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = if (denied) {
+                        "Bloqueaste las notificaciones de Movi en el navegador, así que no podemos avisarte de estos pagos. Reactívalas desde la configuración del sitio en tu navegador."
+                    } else {
+                        "Tienes pagos próximos, pero las notificaciones están apagadas y no hay otro canal activo para avisarte. Actívalas para no perderte un vencimiento."
+                    },
+                    fontSize = 12.5.sp,
+                    color = MinTextDim,
+                    lineHeight = 17.sp,
+                )
+                if (!denied) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Activar notificaciones",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinPrimary,
+                        modifier = Modifier.clickable(onClick = onEnable),
+                    )
+                }
+            }
+        }
     }
 }
 
