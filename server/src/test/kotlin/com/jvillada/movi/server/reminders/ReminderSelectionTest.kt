@@ -147,8 +147,9 @@ class ReminderSelectionTest {
         assertEquals(LocalDate.of(2026, 8, 1), dueDateFor(rule, julyEnd))
         assertEquals(1, selectDueForReminder(listOf(rule to null), julyEnd, leadDays).size)
 
-        // el scheduler lo sella con el periodo del VENCIMIENTO, no con el de hoy ("2026-07")
-        val sealed = periodOf(dueDateFor(rule, julyEnd))
+        // el scheduler sella con reminderKeyFor — la MISMA función que usa selectDueForReminder
+        // para filtrar (no una expresión espejo), así que este test ejercita el sellado real.
+        val sealed = reminderKeyFor(rule, julyEnd)
         assertEquals("2026-08", sealed)
 
         // el 1 de agosto vence hoy, pero ya se avisó por ese vencimiento → no se repite

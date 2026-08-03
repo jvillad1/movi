@@ -69,16 +69,22 @@ class DueDatesTest {
     }
 
     @Test fun `no due date is ever more than the grace window in the past`() {
-        // barrido: ningún día de regla contra ningún día del mes puede afirmar un atraso ilimitado
-        for (day in 1..31) {
-            for (dom in 1..31) {
-                val today = LocalDate.of(2026, 1, dom)
-                val due = dueDateFor(rule(day), today)
-                val daysLate = ChronoUnit.DAYS.between(due, today)
-                assertTrue(
-                    daysLate <= grace,
-                    "regla día=$day, hoy=$today → $due son $daysLate días de atraso",
-                )
+        // barrido: ningún día de regla contra ningún día de ningún mes puede afirmar un atraso
+        // ilimitado. Cubre los 12 meses de un año bisiesto (2028) y de uno no bisiesto (2026) —
+        // el mismo loop que ya cubría por separado los casos de febrero y de año bisiesto.
+        for (year in listOf(2026, 2028)) {
+            for (month in 1..12) {
+                for (day in 1..31) {
+                    for (dom in 1..YearMonth.of(year, month).lengthOfMonth()) {
+                        val today = LocalDate.of(year, month, dom)
+                        val due = dueDateFor(rule(day), today)
+                        val daysLate = ChronoUnit.DAYS.between(due, today)
+                        assertTrue(
+                            daysLate <= grace,
+                            "regla día=$day, hoy=$today → $due son $daysLate días de atraso",
+                        )
+                    }
+                }
             }
         }
     }

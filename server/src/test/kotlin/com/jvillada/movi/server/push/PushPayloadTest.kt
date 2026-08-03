@@ -31,6 +31,9 @@ class PushPayloadTest {
     fun `overdue and due today use the email copy`() {
         val json = buildPushPayload(listOf(rule("Arriendo", 2_500_000, 15), rule("Internet", 90_000, 20)), today, leadDays = 3)
         val lines = body(json).split("\n")
+        // Arriendo (día 15) contra today=20 jul cae exactamente en DEFAULT_GRACE_DAYS (5) de
+        // atraso — a propósito, para fijar el límite de la ventana de gracia. Si el default baja
+        // de 5, esta línea se rompe con un mensaje de formato de push, no de la ventana de gracia.
         assertEquals("Arriendo — ${'$'}2.500.000 (vencido hace 5 días)", lines[0])
         assertEquals("Internet — ${'$'}90.000 (vence hoy)", lines[1])
     }

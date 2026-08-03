@@ -27,6 +27,17 @@ fun occurrenceInMonth(month: YearMonth, dayOfMonth: Int): LocalDate =
 fun periodOf(date: LocalDate): String = YearMonth.from(date).toString()
 
 /**
+ * Clave de dedupe del vencimiento actual de una regla.
+ *
+ * Es el periodo del vencimiento vigente (no el de hoy), calculado con la misma [dueDateFor] que
+ * decide el estado del pago. [selectDueForReminder] y [com.jvillada.movi.server.reminders.ReminderScheduler]
+ * DEBEN sellar/filtrar con esta misma función — de lo contrario nada garantiza que sus criterios
+ * de "ya se avisó este vencimiento" coincidan.
+ */
+fun reminderKeyFor(rule: RecurringRule, today: LocalDate, graceDays: Int = DEFAULT_GRACE_DAYS): String =
+    periodOf(dueDateFor(rule, today, graceDays))
+
+/**
  * Fecha de vencimiento vigente de la regla.
  *
  * Es la ocurrencia de este mes mientras siga adelante o lleve como mucho [graceDays] de atraso;
@@ -72,7 +83,7 @@ fun upcomingPayments(rules: List<RecurringRule>, today: LocalDate, leadDays: Int
  * La unidad de deduplicación es el periodo del **vencimiento**, no el de hoy: cerca de fin de
  * mes [dueDateFor] puede devolver una fecha del mes siguiente, y comparar contra el periodo de
  * hoy notificaría el mismo pago dos veces (una en el mes viejo y otra al cambiar el mes).
- * [ReminderScheduler] sella con el mismo periodo que se compara aquí, vía [periodOf].
+ * [ReminderScheduler] sella con [reminderKeyFor], la misma función que filtra aquí.
  *
  * @param rules       pairs of rule + the value of `lastRemindedPeriod` from the DB row
  * @param today       reference date (normally LocalDate.now(UTC))
@@ -87,7 +98,7 @@ fun selectDueForReminder(
         .filter { (rule, lastRemindedPeriod) ->
             val due = dueDateFor(rule, today)
             rule.type == TransactionType.EXPENSE &&
-                lastRemindedPeriod != periodOf(due) &&
+                lastRemindedPeriod != reminderKeyFor(rule, today) &&
                 statusFor(due, today, leadDays) != PaymentStatus.UPCOMING
         }
         .map { it.first }
