@@ -21,7 +21,6 @@ import org.jetbrains.exposed.sql.update
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 /**
  * In-process daily email scheduler for payment reminders.
@@ -62,8 +61,7 @@ fun Application.startReminderScheduler() {
 // ── Sweep ────────────────────────────────────────────────────────────────────
 
 private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
-    val today  = LocalDate.now(ZoneOffset.UTC)
-    val period = today.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+    val today = LocalDate.now(ZoneOffset.UTC)
 
     // Load all users (id + email)
     val users = dbQuery {
@@ -73,7 +71,7 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     }
 
     for ((userId, userEmail) in users) {
-        runCatching { processUser(userId, userEmail, today, period, leadDays, apiKey, from) }
+        runCatching { processUser(userId, userEmail, today, leadDays, apiKey, from) }
             .onFailure {
                 // One user's failure must not stop the sweep for others
                 org.slf4j.LoggerFactory.getLogger("ReminderScheduler")
@@ -86,7 +84,6 @@ private suspend fun processUser(
     userId: String,
     userEmail: String,
     today: LocalDate,
-    period: String,
     leadDays: Int,
     apiKey: String?,
     from: String,
@@ -101,7 +98,7 @@ private suspend fun processUser(
     }
     val allPairs = rulePairs + loadCreditRulePairs(userId)
 
-    val selected = selectDueForReminder(allPairs, today, leadDays, period)
+    val selected = selectDueForReminder(allPairs, today, leadDays)
 
     if (selected.isEmpty()) return
 
@@ -119,23 +116,32 @@ private suspend fun processUser(
     } else false
 
     if (emailSent || pushSent) {
-        // Seal each selected rule so we don't re-notify this month.
+        // Seal each selected rule so we don't re-notify for the SAME due date.
+        // El sello es el periodo del vencimiento (no el de hoy): cerca de fin de mes el
+        // vencimiento puede caer en el mes siguiente, y sellar con el mes de hoy dejaría el
+        // pago libre para notificarse otra vez al cambiar el mes. Mismo criterio que usa
+        // selectDueForReminder para filtrar.
         // Update rules one-by-one: Exposed's update DSL doesn't support an IN clause
         // in the where block, so individual updates are the cleanest approach.
         for (rule in selected) {
+            val duePeriod = periodOf(dueDateFor(rule, today))
             dbQuery {
                 if (rule.id.startsWith(CREDIT_RULE_PREFIX)) {
                     Credits.update({
                         (Credits.accountId eq rule.id.removePrefix(CREDIT_RULE_PREFIX)) and (Credits.userId eq userId)
-                    }) { it[Credits.lastRemindedPeriod] = period }
+                    }) { it[Credits.lastRemindedPeriod] = duePeriod }
                 } else {
                     RecurringRules.update({
                         (RecurringRules.id eq rule.id) and (RecurringRules.userId eq userId)
-                    }) { it[RecurringRules.lastRemindedPeriod] = period }
+                    }) { it[RecurringRules.lastRemindedPeriod] = duePeriod }
                 }
             }
         }
-        logger.info("ReminderScheduler: reminded user $userId about ${selected.size} payment(s) for period $period")
+        val periods = selected.map { periodOf(dueDateFor(it, today)) }.distinct().sorted()
+        logger.info(
+            "ReminderScheduler: reminded user $userId about ${selected.size} payment(s) " +
+                "for period(s) ${periods.joinToString(", ")}",
+        )
     }
 }
 
