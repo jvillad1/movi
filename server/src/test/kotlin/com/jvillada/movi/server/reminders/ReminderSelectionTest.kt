@@ -14,7 +14,8 @@ import kotlin.test.assertTrue
  * The function takes a list of (RecurringRule, lastRemindedPeriod?) pairs and returns the
  * EXPENSE rules that:
  *   1. Have status OVERDUE, DUE_TODAY, or DUE_SOON (within leadDays)
- *   2. Have NOT already been reminded for that due date (lastRemindedPeriod != periodOf(due))
+ *   2. Have NOT already been reminded for that due date
+ *      (lastRemindedPeriod != reminderKeyFor(rule, today) — la MISMA función que usa el sellado)
  */
 class ReminderSelectionTest {
 
