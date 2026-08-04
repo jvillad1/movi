@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +64,11 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.apiBaseUrl
 import com.jvillada.movi.shared.model.LoginRequest
+import com.jvillada.movi.sms.BackfillOutcome
+import com.jvillada.movi.sms.SmsBackfill
 import com.jvillada.movi.sms.SmsFilterConfigStore
+import com.jvillada.movi.sms.backfillMessage
+import com.jvillada.movi.sms.isBackfillError
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -137,6 +142,9 @@ fun SensorScreen() {
             Spacer(Modifier.height(16.dp))
 
             SensorInfoCard(lastCaptureAt, senderCodes)
+            Spacer(Modifier.height(16.dp))
+
+            BackfillCard(context, onSynced = { lastCaptureAt = readLastCaptureAt(context) })
             Spacer(Modifier.height(24.dp))
 
             Button(
@@ -278,8 +286,14 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = AccentColor,
 )
 
-private fun hasSmsPermissions(context: Context): Boolean =
-    SmsPermissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+private fun hasPermission(context: Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+private fun hasSmsPermissions(context: Context): Boolean = SmsPermissions.all { hasPermission(context, it) }
+
+/** El backfill lee el inbox: necesita READ_SMS, que el camino en tiempo real no usa. */
+private fun hasReadSmsPermission(context: Context): Boolean =
+    hasPermission(context, Manifest.permission.READ_SMS)
 
 private tailrec fun Context.findComponentActivity(): ComponentActivity? = when (this) {
     is ComponentActivity -> this
@@ -287,8 +301,29 @@ private tailrec fun Context.findComponentActivity(): ComponentActivity? = when (
     else -> null
 }
 
+private fun canShowRationaleFor(activity: Activity?, permission: String): Boolean =
+    activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+
 private fun canShowRationale(activity: Activity?): Boolean =
-    activity != null && SmsPermissions.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
+    SmsPermissions.any { canShowRationaleFor(activity, it) }
+
+/**
+ * Re-chequeo al volver a la pantalla. Los permisos concedidos desde los ajustes del
+ * sistema no llegan por el launcher: sin esto las tarjetas seguirían diciendo "Faltan"
+ * hasta reiniciar la app.
+ */
+@Composable
+private fun OnResume(activity: ComponentActivity?, onResume: () -> Unit) {
+    val current by rememberUpdatedState(onResume)
+    DisposableEffect(activity) {
+        val lifecycle = activity?.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) current()
+        }
+        lifecycle?.addObserver(observer)
+        onDispose { lifecycle?.removeObserver(observer) }
+    }
+}
 
 /**
  * Decide entre pedir el permiso en la app y mandar a los ajustes del sistema.
@@ -326,18 +361,9 @@ private fun PermissionsCard(context: Context) {
         rationale = canShowRationale(activity)
     }
 
-    // Los permisos concedidos desde los ajustes del sistema no llegan por el launcher:
-    // sin este re-chequeo la tarjeta seguiría diciendo "Faltan" hasta reiniciar la app.
-    DisposableEffect(activity) {
-        val lifecycle = activity?.lifecycle
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                granted = hasSmsPermissions(context)
-                rationale = canShowRationale(activity)
-            }
-        }
-        lifecycle?.addObserver(observer)
-        onDispose { lifecycle?.removeObserver(observer) }
+    OnResume(activity) {
+        granted = hasSmsPermissions(context)
+        rationale = canShowRationale(activity)
     }
 
     SensorCard(title = "PERMISOS") {
@@ -376,6 +402,111 @@ private fun PermissionsCard(context: Context) {
                     color = TextMutedColor,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Recuperación manual del historial. El sensor puede quedar mudo sin avisar (token
+ * vencido, force-stop, hibernación, permisos revocados) y hasta ahora esa ventana era
+ * pérdida de datos permanente aunque los SMS siguieran en el inbox. Este es el único
+ * camino que los recupera — con el MISMO filtro bancario que el receiver, así que sube
+ * menos que el backfill viejo, no más.
+ */
+@Composable
+private fun BackfillCard(context: Context, onSynced: () -> Unit) {
+    val activity = remember(context) { context.findComponentActivity() }
+    val scope = rememberCoroutineScope()
+    val loggedIn = SessionManager.loggedIn
+    var canRead by remember { mutableStateOf(hasReadSmsPermission(context)) }
+    var asked by remember { mutableStateOf(readPermissionAsked(context)) }
+    var rationale by remember { mutableStateOf(canShowRationaleFor(activity, Manifest.permission.READ_SMS)) }
+    var running by remember { mutableStateOf(false) }
+    var outcome by remember { mutableStateOf<BackfillOutcome?>(null) }
+
+    OnResume(activity) {
+        canRead = hasReadSmsPermission(context)
+        rationale = canShowRationaleFor(activity, Manifest.permission.READ_SMS)
+    }
+
+    fun start() {
+        if (running) return
+        running = true
+        outcome = null
+        scope.launch {
+            val result = SmsBackfill.run(context)
+            outcome = result
+            running = false
+            if (result is BackfillOutcome.Uploaded) onSynced()
+        }
+    }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        canRead = granted
+        rationale = canShowRationaleFor(activity, Manifest.permission.READ_SMS)
+        if (granted) start() else outcome = BackfillOutcome.NoPermission
+    }
+
+    val toSettings = !canRead && (activity == null || shouldOpenSettings(asked, rationale))
+
+    SensorCard(title = "HISTORIAL") {
+        Text(
+            "Sube los SMS bancarios de los últimos 30 días que sigan en el teléfono. " +
+                "Sirve para recuperar lo que el sensor no alcanzó a mandar.",
+            fontSize = 13.sp,
+            color = TextMutedColor,
+        )
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = {
+                when {
+                    canRead -> start()
+                    toSettings -> openAppSettings(context)
+                    else -> {
+                        markPermissionAsked(context)
+                        asked = true
+                        launcher.launch(Manifest.permission.READ_SMS)
+                    }
+                }
+            },
+            enabled = loggedIn && !running,
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
+        ) {
+            if (running) {
+                CircularProgressIndicator(modifier = Modifier.height(20.dp), color = Color(0xFF1A1A1A), strokeWidth = 2.dp)
+            } else {
+                Text(
+                    if (toSettings) "Abrir ajustes de la app" else "Sincronizar últimos 30 días",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        if (running) {
+            Spacer(Modifier.height(10.dp))
+            Text("Leyendo el inbox y subiendo…", fontSize = 13.sp, color = TextMutedColor)
+        }
+        if (!loggedIn) {
+            Spacer(Modifier.height(8.dp))
+            Text("Entrá arriba para poder subir el historial.", fontSize = 12.sp, color = TextMutedColor)
+        }
+        if (toSettings) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Falta el permiso de lectura de SMS y Android ya no muestra el diálogo: " +
+                    "concedelo en Permisos, dentro de los ajustes de la app.",
+                fontSize = 12.sp,
+                color = TextMutedColor,
+            )
+        }
+        outcome?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                backfillMessage(it),
+                fontSize = 13.sp,
+                color = if (isBackfillError(it)) ErrorColor else AccentColor,
+            )
         }
     }
 }
