@@ -96,6 +96,7 @@ fun SensorScreen() {
     val context = LocalContext.current
 
     var lastCaptureAt by remember { mutableStateOf(readLastCaptureAt(context)) }
+    var lastBackfillAt by remember { mutableStateOf(SmsFilterConfigStore.lastBackfillAt(context)) }
     var senderCodes by remember { mutableStateOf(SmsFilterConfigStore.load(context).senderCodes) }
 
     LaunchedEffect(Unit) {
@@ -141,10 +142,10 @@ fun SensorScreen() {
             PermissionsCard(context)
             Spacer(Modifier.height(16.dp))
 
-            SensorInfoCard(lastCaptureAt, senderCodes)
+            SensorInfoCard(lastCaptureAt, lastBackfillAt, senderCodes)
             Spacer(Modifier.height(16.dp))
 
-            BackfillCard(context, onSynced = { lastCaptureAt = readLastCaptureAt(context) })
+            BackfillCard(context, onSynced = { lastBackfillAt = SmsFilterConfigStore.lastBackfillAt(context) })
             Spacer(Modifier.height(24.dp))
 
             Button(
@@ -363,6 +364,7 @@ private fun PermissionsCard(context: Context) {
 
     OnResume(activity) {
         granted = hasSmsPermissions(context)
+        asked = readPermissionAsked(context)
         rationale = canShowRationale(activity)
     }
 
@@ -424,9 +426,24 @@ private fun BackfillCard(context: Context, onSynced: () -> Unit) {
     var running by remember { mutableStateOf(false) }
     var outcome by remember { mutableStateOf<BackfillOutcome?>(null) }
 
+    // OJO: NO remember(loggedIn) para outcome. SmsBackfill.run puede ser la MISMA llamada
+    // que produce SessionExpired Y desloguea (un 401 dispara SessionManager.clear()), así
+    // que la key y el resultado cambiarían en el mismo instante: el resultado se escribiría
+    // en un slot que la recomposición ya descartó y el aviso jamás se vería. En cambio,
+    // reaccionamos solo a la TRANSICIÓN a logueado (login exitoso) — ahí sí un outcome
+    // SessionExpired que haya quedado en pantalla ya no describe la realidad.
+    LaunchedEffect(loggedIn) {
+        if (loggedIn) outcome = null
+    }
+
     OnResume(activity) {
+        val wasBlocked = !canRead
         canRead = hasReadSmsPermission(context)
+        asked = readPermissionAsked(context)
         rationale = canShowRationaleFor(activity, Manifest.permission.READ_SMS)
+        // Igual que arriba: si el permiso se concedió desde ajustes del sistema, el
+        // NoPermission que quedó en pantalla ya no describe la realidad.
+        if (wasBlocked && canRead) outcome = null
     }
 
     fun start() {
@@ -523,9 +540,18 @@ private fun markPermissionAsked(context: Context) {
 private fun readLastCaptureAt(context: Context): Long = SmsFilterConfigStore.lastCaptureAt(context)
 
 @Composable
-private fun SensorInfoCard(lastCaptureAt: Long, senderCodes: List<String>) {
+private fun SensorInfoCard(lastCaptureAt: Long, lastBackfillAt: Long, senderCodes: List<String>) {
     SensorCard(title = "SENSOR") {
         Text("Última captura: ${formatCaptureDate(lastCaptureAt)}", fontSize = 14.sp, color = TextColor)
+        Spacer(Modifier.height(6.dp))
+        // Línea separada a propósito: si esta fecha es reciente y la de arriba no, el
+        // receiver en tiempo real está mudo aunque el historial esté al día — justo lo que
+        // este indicador existe para no esconder.
+        Text(
+            "Último historial sincronizado: ${formatCaptureDate(lastBackfillAt)}",
+            fontSize = 14.sp,
+            color = TextColor,
+        )
         Spacer(Modifier.height(6.dp))
         Text(
             "Remitentes vigentes: ${senderCodes.joinToString().ifBlank { "—" }}",

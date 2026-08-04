@@ -27,7 +27,7 @@ object SmsBackfill {
         if (token.isNullOrBlank()) return@withContext BackfillOutcome.NoSession
 
         val inbox = runCatching { readDeviceSms(context) }
-            .getOrElse { return@withContext BackfillOutcome.Failed }
+            .getOrElse { return@withContext outcomeForReadFailure(it) }
         val bank = filterBankMessages(inbox, SmsFilterConfigStore.load(context))
         if (bank.isEmpty()) return@withContext BackfillOutcome.NothingFound
 
@@ -36,7 +36,12 @@ object SmsBackfill {
         )
         when (val result = postSmsSync(token, payload)) {
             is SmsSyncResult.Success -> {
-                SmsFilterConfigStore.markLastCapture(context)
+                // OJO: NO markLastCapture acá. Esa marca significa "el receiver en tiempo
+                // real anduvo" — es el indicador de que el sensor sigue mudo (token vencido,
+                // force-stop, hibernación). Si el backfill la pisara, una sincronización
+                // manual exitosa escondería justo el síntoma que esta función existe para
+                // detectar. Se guarda aparte en markLastBackfill.
+                SmsFilterConfigStore.markLastBackfill(context)
                 BackfillOutcome.Uploaded(found = bank.size, synced = result.synced)
             }
             SmsSyncResult.Unauthorized -> {
@@ -50,6 +55,17 @@ object SmsBackfill {
         }
     }
 }
+
+/**
+ * SecurityException es lo que `contentResolver.query` tira cuando READ_SMS se revocó entre
+ * el chequeo de la UI y esta llamada — exactamente lo que el auto-revoke por hibernación le
+ * hace a esta app. Distinguirla de cualquier otra falla de lectura importa: [NoPermission]
+ * ya tiene la copia correcta ("sin el permiso...") y, vía OnResume en la pantalla, la ruta a
+ * ajustes — mientras que [Failed] dice "revisá la conexión", que es un consejo falso y sin
+ * salida para este caso. Función pura para poder testearla sin mockear Android.
+ */
+internal fun outcomeForReadFailure(t: Throwable): BackfillOutcome =
+    if (t is SecurityException) BackfillOutcome.NoPermission else BackfillOutcome.Failed
 
 /** Resultado del backfill — cada rama tiene su mensaje en [backfillMessage]. */
 sealed interface BackfillOutcome {
@@ -68,11 +84,11 @@ sealed interface BackfillOutcome {
  * El filtro de privacidad aplicado al inbox. Idéntico al del receiver: remitente bancario
  * o keyword en el cuerpo. Función pura para poder testearla sin Android.
  */
-fun filterBankMessages(messages: List<SmsMessage>, config: FilterConfig): List<SmsMessage> =
+internal fun filterBankMessages(messages: List<SmsMessage>, config: FilterConfig): List<SmsMessage> =
     messages.filter { it.text.isNotBlank() && BankSenderFilter.matches(it.bank, it.text, config) }
 
 /** Texto que ve el usuario. Ninguna rama es silenciosa: siempre hay algo que leer. */
-fun backfillMessage(outcome: BackfillOutcome): String = when (outcome) {
+internal fun backfillMessage(outcome: BackfillOutcome): String = when (outcome) {
     is BackfillOutcome.Uploaded -> when {
         outcome.synced == null -> "${outcome.found} mensajes bancarios enviados."
         outcome.synced == 0 -> "${outcome.found} mensajes bancarios encontrados; el server ya los tenía todos."
@@ -86,7 +102,7 @@ fun backfillMessage(outcome: BackfillOutcome): String = when (outcome) {
 }
 
 /** Solo [BackfillOutcome.Uploaded] con algo subido es un final feliz; el resto avisa en rojo. */
-fun isBackfillError(outcome: BackfillOutcome): Boolean = when (outcome) {
+internal fun isBackfillError(outcome: BackfillOutcome): Boolean = when (outcome) {
     is BackfillOutcome.Uploaded, BackfillOutcome.NothingFound -> false
     else -> true
 }

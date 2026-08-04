@@ -23,6 +23,15 @@ object SmsFilterConfigStore {
     const val KEY_LAST_CAPTURE_AT = "last_capture_at"
 
     /**
+     * Momento del último backfill subido con éxito. Deliberadamente separada de
+     * [KEY_LAST_CAPTURE_AT]: esa clave significa "el receiver en tiempo real anduvo", que
+     * es el indicador de que el sensor sigue mudo. Si el backfill la pisara, una
+     * sincronización manual exitosa escondería el síntoma que el backfill existe para
+     * recuperar. Ver [markLastBackfill].
+     */
+    const val KEY_LAST_BACKFILL_AT = "last_backfill_at"
+
+    /**
      * Momento del último 401 del Worker de sync. Marca que el token venció: el sensor
      * sigue capturando pero no puede subir nada hasta que el usuario vuelva a entrar.
      */
@@ -122,6 +131,12 @@ object SmsFilterConfigStore {
     }
 
     fun lastCaptureAt(context: Context): Long = prefs(context).getLong(KEY_LAST_CAPTURE_AT, 0L)
+
+    fun markLastBackfill(context: Context) {
+        prefs(context).edit().putLong(KEY_LAST_BACKFILL_AT, System.currentTimeMillis()).apply()
+    }
+
+    fun lastBackfillAt(context: Context): Long = prefs(context).getLong(KEY_LAST_BACKFILL_AT, 0L)
 
     fun markAuthExpired(context: Context) {
         prefs(context).edit().putLong(KEY_AUTH_ERROR_AT, System.currentTimeMillis()).apply()

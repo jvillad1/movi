@@ -16,8 +16,8 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         // El APK es de instalación única pero sideloaded: sin bump, un instalador
         // consciente de versiones rechaza la actualización por "misma versión".
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }

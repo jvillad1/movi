@@ -90,3 +90,20 @@ class BackfillMessageTest {
         assertFalse(isBackfillError(BackfillOutcome.NothingFound))
     }
 }
+
+class OutcomeForReadFailureTest {
+
+    @Test
+    fun `un SecurityException al leer el inbox se mapea a NoPermission, no a Failed`() {
+        // Esto es justo lo que el auto-revoke por hibernación le hace a esta app: READ_SMS
+        // se revoca entre el chequeo de la UI y la llamada real a contentResolver.query.
+        // "Revisá la conexión" sería un consejo falso y sin salida.
+        assertEquals(BackfillOutcome.NoPermission, outcomeForReadFailure(SecurityException("permiso revocado")))
+    }
+
+    @Test
+    fun `cualquier otra falla de lectura se mapea a Failed`() {
+        assertEquals(BackfillOutcome.Failed, outcomeForReadFailure(RuntimeException("boom")))
+        assertEquals(BackfillOutcome.Failed, outcomeForReadFailure(IllegalStateException("cursor nulo")))
+    }
+}

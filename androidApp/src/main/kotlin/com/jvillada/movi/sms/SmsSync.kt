@@ -80,27 +80,30 @@ internal fun parseSyncedCount(body: String?): Int? =
 /** POST bloqueante — llamar SIEMPRE desde un hilo de IO. */
 internal fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
     val conn = URL("$apiBaseUrl/api/sms/sync").openConnection() as HttpURLConnection
-    conn.requestMethod = "POST"
-    conn.setRequestProperty("Content-Type", "application/json")
-    conn.setRequestProperty("Authorization", "Bearer $token")
-    conn.doOutput = true
-    conn.connectTimeout = 15_000
-    conn.readTimeout = 15_000
-    conn.outputStream.use { it.write(payload.toByteArray()) }
-    val code = conn.responseCode
-    // El cuerpo solo se lee en éxito y sin dejar que una falla de lectura degrade un 2xx
-    // a reintento: el conteo es informativo, la inserción ya ocurrió.
-    val body = if (code in 200..299) {
-        runCatching { conn.inputStream.bufferedReader().use { it.readText() } }.getOrNull()
-    } else {
-        null
-    }
-    conn.disconnect()
-    when {
-        code in 200..299 -> SmsSyncResult.Success(parseSyncedCount(body))
-        code == 401 -> SmsSyncResult.Unauthorized
-        code >= 500 -> SmsSyncResult.ServerError(code)
-        else -> SmsSyncResult.Rejected(code)
+    try {
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        conn.doOutput = true
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 15_000
+        conn.outputStream.use { it.write(payload.toByteArray()) }
+        val code = conn.responseCode
+        // El cuerpo solo se lee en éxito y sin dejar que una falla de lectura degrade un 2xx
+        // a reintento: el conteo es informativo, la inserción ya ocurrió.
+        val body = if (code in 200..299) {
+            runCatching { conn.inputStream.bufferedReader().use { it.readText() } }.getOrNull()
+        } else {
+            null
+        }
+        when {
+            code in 200..299 -> SmsSyncResult.Success(parseSyncedCount(body))
+            code == 401 -> SmsSyncResult.Unauthorized
+            code >= 500 -> SmsSyncResult.ServerError(code)
+            else -> SmsSyncResult.Rejected(code)
+        }
+    } finally {
+        conn.disconnect()
     }
 } catch (_: IOException) {
     SmsSyncResult.Network
