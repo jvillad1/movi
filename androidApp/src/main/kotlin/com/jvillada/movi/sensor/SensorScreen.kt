@@ -454,6 +454,10 @@ private fun BackfillCard(context: Context, onSynced: () -> Unit) {
             val result = SmsBackfill.run(context)
             outcome = result
             running = false
+            // El permiso pudo revocarse entre el chequeo de la UI y la lectura (auto-revoke
+            // por hibernación). Sin esto la tarjeta dice "falta el permiso" pero el botón
+            // sigue ofreciendo reintentar en vez de llevar a Ajustes.
+            if (result is BackfillOutcome.NoPermission) canRead = false
             if (result is BackfillOutcome.Uploaded) onSynced()
         }
     }
@@ -542,7 +546,7 @@ private fun readLastCaptureAt(context: Context): Long = SmsFilterConfigStore.las
 @Composable
 private fun SensorInfoCard(lastCaptureAt: Long, lastBackfillAt: Long, senderCodes: List<String>) {
     SensorCard(title = "SENSOR") {
-        Text("Última captura: ${formatCaptureDate(lastCaptureAt)}", fontSize = 14.sp, color = TextColor)
+        Text("Última captura: ${formatCaptureDate(lastCaptureAt, "ninguna aún")}", fontSize = 14.sp, color = TextColor)
         Spacer(Modifier.height(6.dp))
         // Línea separada a propósito: si esta fecha es reciente y la de arriba no, el
         // receiver en tiempo real está mudo aunque el historial esté al día — justo lo que
@@ -561,6 +565,7 @@ private fun SensorInfoCard(lastCaptureAt: Long, lastBackfillAt: Long, senderCode
     }
 }
 
-private fun formatCaptureDate(millis: Long): String =
-    if (millis <= 0L) "ninguna aún"
+/** [vacio] lo pone quien llama: las dos líneas que usan esto tienen género distinto. */
+private fun formatCaptureDate(millis: Long, vacio: String = "nunca"): String =
+    if (millis <= 0L) vacio
     else SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(millis))
