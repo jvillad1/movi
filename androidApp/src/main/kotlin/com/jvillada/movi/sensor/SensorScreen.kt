@@ -426,11 +426,12 @@ private fun openHibernationSettings(context: Context) {
         Intent.ACTION_AUTO_REVOKE_PERMISSIONS,
         Uri.parse("package:${context.packageName}"),
     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    // resolveActivity no alcanza: aun resolviendo, startActivity puede tirar
-    // ActivityNotFoundException (la Activity puede estar deshabilitada entre medio).
-    val opened = intent.resolveActivity(context.packageManager) != null &&
-        runCatching { context.startActivity(intent) }.isSuccess
-    if (!opened) openAppSettings(context)
+    // Sin precheck de resolveActivity a propósito: con targetSdk 35 y sin <queries>, el
+    // filtrado de visibilidad de paquetes puede devolver null aunque la Activity exista,
+    // y nos sacaría del intent específico sin motivo. startActivity NO sufre ese filtrado
+    // (resuelve en system_server), y runCatching ya cubre el único fallo real.
+    runCatching { context.startActivity(intent) }
+        .onFailure { openAppSettings(context) }
 }
 
 /**
@@ -457,8 +458,11 @@ private fun HibernationCard(context: Context) {
 
     SensorCard(title = "HIBERNACIÓN") {
         Text(
-            "Si no abrís esta app durante unos meses, Android le revoca los permisos y la " +
-                "detiene: el sensor deja de capturar SMS y no avisa.",
+            // Sin nombrar la hibernación: desde Android 11 se revocan los permisos, y desde
+            // Android 13 además se detiene la app. La consecuencia es la misma en ambos y es
+            // lo único que le importa a quien lee esto.
+            "Si no abrís esta app durante unos meses, Android le revoca los permisos: " +
+                "el sensor deja de capturar SMS y no avisa.",
             fontSize = 13.sp,
             color = ErrorColor,
         )
