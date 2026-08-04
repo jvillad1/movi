@@ -30,7 +30,7 @@ class CreditRemindersTest {
     fun `due virtual rule enters the reminder sweep`() {
         val rule = virtualRuleFor(terms, "Crédito Vehículo")
         val today = LocalDate.of(2026, 7, 24)  // un día antes del día 25
-        val selected = selectDueForReminder(listOf(rule to null), today, leadDays = 3, period = "2026-07")
+        val selected = selectDueForReminder(listOf(rule to null), today, leadDays = 3)
         assertEquals(listOf(rule), selected)
     }
 
@@ -38,7 +38,7 @@ class CreditRemindersTest {
     fun `already-reminded virtual rule is excluded this period`() {
         val rule = virtualRuleFor(terms, "Crédito Vehículo")
         val today = LocalDate.of(2026, 7, 24)
-        val selected = selectDueForReminder(listOf(rule to "2026-07"), today, leadDays = 3, period = "2026-07")
+        val selected = selectDueForReminder(listOf(rule to "2026-07"), today, leadDays = 3)
         assertTrue(selected.isEmpty())
     }
 
@@ -47,7 +47,7 @@ class CreditRemindersTest {
         val virtual = virtualRuleFor(terms, "Crédito Vehículo")
         val manual = virtual.copy(id = "rr_manual-dup")
         val today = LocalDate.of(2026, 7, 24)
-        val selected = selectDueForReminder(listOf(virtual to null, manual to null), today, leadDays = 3, period = "2026-07")
+        val selected = selectDueForReminder(listOf(virtual to null, manual to null), today, leadDays = 3)
         assertEquals(2, selected.size)  // conviven por diseño; la de-duplicación es manual (siembra)
     }
 }

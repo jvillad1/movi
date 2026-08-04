@@ -21,7 +21,6 @@ import org.jetbrains.exposed.sql.update
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 /**
  * In-process daily email scheduler for payment reminders.
@@ -62,8 +61,7 @@ fun Application.startReminderScheduler() {
 // ── Sweep ────────────────────────────────────────────────────────────────────
 
 private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
-    val today  = LocalDate.now(ZoneOffset.UTC)
-    val period = today.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+    val today = LocalDate.now(ZoneOffset.UTC)
 
     // Load all users (id + email)
     val users = dbQuery {
@@ -73,7 +71,7 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     }
 
     for ((userId, userEmail) in users) {
-        runCatching { processUser(userId, userEmail, today, period, leadDays, apiKey, from) }
+        runCatching { processUser(userId, userEmail, today, leadDays, apiKey, from) }
             .onFailure {
                 // One user's failure must not stop the sweep for others
                 org.slf4j.LoggerFactory.getLogger("ReminderScheduler")
@@ -86,7 +84,6 @@ private suspend fun processUser(
     userId: String,
     userEmail: String,
     today: LocalDate,
-    period: String,
     leadDays: Int,
     apiKey: String?,
     from: String,
@@ -101,7 +98,7 @@ private suspend fun processUser(
     }
     val allPairs = rulePairs + loadCreditRulePairs(userId)
 
-    val selected = selectDueForReminder(allPairs, today, leadDays, period)
+    val selected = selectDueForReminder(allPairs, today, leadDays)
 
     if (selected.isEmpty()) return
 
@@ -119,23 +116,32 @@ private suspend fun processUser(
     } else false
 
     if (emailSent || pushSent) {
-        // Seal each selected rule so we don't re-notify this month.
+        // Seal each selected rule so we don't re-notify for the SAME due date.
+        // El sello es reminderKeyFor: el periodo del vencimiento (no el de hoy), calculado con
+        // la MISMA función que usa selectDueForReminder para filtrar. Si algún día vuelven a
+        // divergir (p.ej. alguien "simplifica" esto de vuelta a periodOf(today)) el bug que este
+        // cambio arregló reaparece: se notificaría el mismo vencimiento dos veces al mes.
         // Update rules one-by-one: Exposed's update DSL doesn't support an IN clause
         // in the where block, so individual updates are the cleanest approach.
         for (rule in selected) {
+            val duePeriod = reminderKeyFor(rule, today)
             dbQuery {
                 if (rule.id.startsWith(CREDIT_RULE_PREFIX)) {
                     Credits.update({
                         (Credits.accountId eq rule.id.removePrefix(CREDIT_RULE_PREFIX)) and (Credits.userId eq userId)
-                    }) { it[Credits.lastRemindedPeriod] = period }
+                    }) { it[Credits.lastRemindedPeriod] = duePeriod }
                 } else {
                     RecurringRules.update({
                         (RecurringRules.id eq rule.id) and (RecurringRules.userId eq userId)
-                    }) { it[RecurringRules.lastRemindedPeriod] = period }
+                    }) { it[RecurringRules.lastRemindedPeriod] = duePeriod }
                 }
             }
         }
-        logger.info("ReminderScheduler: reminded user $userId about ${selected.size} payment(s) for period $period")
+        val periods = selected.map { reminderKeyFor(it, today) }.distinct().sorted()
+        logger.info(
+            "ReminderScheduler: reminded user $userId about ${selected.size} payment(s) " +
+                "for period(s) ${periods.joinToString(", ")}",
+        )
     }
 }
 
@@ -149,7 +155,11 @@ private fun buildHtmlEmail(
     val items = rules.joinToString(separator = "") { rule ->
         val due     = dueDateFor(rule, today)
         val status  = statusFor(due, today, leadDays)
-        val dayStr  = due.dayOfMonth.toString()
+        // Con la ventana de gracia, una regla de día<=leadDays puede vencer legítimamente el
+        // mes PASADO (p.ej. el 29 de julio, un día 1 vence "el 1 de agosto"). Mostrar solo el
+        // número de día bajo un encabezado "este mes" leería como si fuera el mes en curso —
+        // el mismo tipo de afirmación falsa que esta rama existe para evitar. Se incluye el mes.
+        val dayStr  = "${due.dayOfMonth} de ${SPANISH_MONTHS[due.monthValue - 1]}"
         val daysAgo = java.time.temporal.ChronoUnit.DAYS.between(due, today).toInt()
         val daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, due).toInt()
 
@@ -186,7 +196,7 @@ private fun buildHtmlEmail(
 <head><meta charset="UTF-8"><title>Pagos próximos en movi</title></head>
 <body style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#1f2937">
   <h2 style="margin-bottom:4px">💳 Pagos próximos en movi</h2>
-  <p style="color:#6b7280;margin-top:0">Tienes pagos pendientes para este mes.</p>
+  <p style="color:#6b7280;margin-top:0">Tienes pagos pendientes.</p>
   <table style="width:100%;border-collapse:collapse;margin-top:16px">
     <thead>
       <tr style="background:#f9fafb">
@@ -204,6 +214,12 @@ private fun buildHtmlEmail(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Nombres de mes en español, indexados 0=enero..11=diciembre (evita depender de Locale("es")). */
+private val SPANISH_MONTHS = listOf(
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
 
 private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
     val rule = RecurringRule(
