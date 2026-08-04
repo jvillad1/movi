@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -141,6 +142,10 @@ fun SensorScreen() {
 
             PermissionsCard(context)
             Spacer(Modifier.height(16.dp))
+
+            // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para
+            // no dejar un hueco doble cuando la app ya está exenta.
+            HibernationCard(context)
 
             SensorInfoCard(lastCaptureAt, lastBackfillAt, senderCodes)
             Spacer(Modifier.height(16.dp))
@@ -406,6 +411,87 @@ private fun PermissionsCard(context: Context) {
             }
         }
     }
+}
+
+/**
+ * Lleva a la pantalla donde se apaga la pausa por inactividad.
+ *
+ * Verificado en API 35 (AOSP): ACTION_AUTO_REVOKE_PERMISSIONS resuelve a
+ * com.android.settings InstalledAppDetails, o sea la ficha "Información de la app" con el
+ * interruptor de pausa. Si no resolviera (ROM sin esa Activity, filtrado por visibilidad
+ * de paquetes), caemos a los ajustes de la app, que es el mismo destino por otro camino.
+ */
+private fun openHibernationSettings(context: Context) {
+    val intent = Intent(
+        Intent.ACTION_AUTO_REVOKE_PERMISSIONS,
+        Uri.parse("package:${context.packageName}"),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    // Sin precheck de resolveActivity a propósito: con targetSdk 35 y sin <queries>, el
+    // filtrado de visibilidad de paquetes puede devolver null aunque la Activity exista,
+    // y nos sacaría del intent específico sin motivo. startActivity NO sufre ese filtrado
+    // (resuelve en system_server), y runCatching ya cubre el único fallo real.
+    runCatching { context.startActivity(intent) }
+        .onFailure { openAppSettings(context) }
+}
+
+/**
+ * Aviso de hibernación / auto-revoke.
+ *
+ * La premisa de esta pantalla es "instalar y olvidar", y eso es exactamente lo que
+ * Android castiga: a los pocos meses sin abrir la app le revoca los permisos y la
+ * force-stopea, con lo que el receiver deja de recibir SMS_RECEIVED y el sensor muere en
+ * silencio. Abrir la PWA no cuenta — es otra app.
+ *
+ * Nada que ver con la optimización de batería / Doze: eso es otro problema, con otras
+ * APIs, y WorkManager ya lo sobrevive.
+ */
+@Composable
+private fun HibernationCard(context: Context) {
+    val activity = remember(context) { context.findComponentActivity() }
+    var exempt by remember { mutableStateOf(isAutoRevokeExempt(context)) }
+
+    // El usuario cambia esto FUERA de la app: sin releer al volver, el aviso seguiría
+    // en pantalla después de haberlo resuelto.
+    OnResume(activity) { exempt = isAutoRevokeExempt(context) }
+
+    if (!shouldWarnAboutHibernation(Build.VERSION.SDK_INT, exempt)) return
+
+    SensorCard(title = "HIBERNACIÓN") {
+        Text(
+            // Sin nombrar la hibernación: desde Android 11 se revocan los permisos, y desde
+            // Android 13 además se detiene la app. La consecuencia es la misma en ambos y es
+            // lo único que le importa a quien lee esto.
+            "Si no abrís esta app durante unos meses, Android le revoca los permisos: " +
+                "el sensor deja de capturar SMS y no avisa.",
+            fontSize = 13.sp,
+            color = ErrorColor,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Usar Movi en el navegador no cuenta: para Android es otra app.",
+            fontSize = 12.sp,
+            color = TextMutedColor,
+        )
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = { openHibernationSettings(context) },
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
+        ) {
+            Text("Evitar que Android la pause", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            // El texto exacto del interruptor cambia por versión de Android ("Administrar la
+            // app si no se usa" en 13+, "Pausar actividad de la app si no se usa" antes), así
+            // que nombramos la sección, que sí es estable.
+            "Se abre la ficha de la app: hasta abajo, en «Apps sin usar», apagá el " +
+                "interruptor. Al volver acá, este aviso desaparece.",
+            fontSize = 12.sp,
+            color = TextMutedColor,
+        )
+    }
+    Spacer(Modifier.height(16.dp))
 }
 
 /**
