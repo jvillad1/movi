@@ -44,10 +44,10 @@ class SmsDedupeTest {
 
     @Test
     fun `same text exactly at the tolerance boundary is a duplicate`() {
-        assertEquals(2L, SMS_DEDUPE_TOLERANCE.toMinutes(), "el borde probado es el real")
+        assertEquals(1L, SMS_DEDUPE_TOLERANCE.toMinutes(), "el borde probado es el real")
         assertTrue(
             isDuplicateSms(
-                SmsKey(uber, "2026-08-01 07:17"),
+                SmsKey(uber, "2026-08-01 07:16"),
                 listOf(SmsKey(uber, "2026-08-01 07:15")),
             ),
             "la ventana es inclusiva en el borde",
@@ -58,8 +58,20 @@ class SmsDedupeTest {
     fun `same text just past the tolerance is not a duplicate`() {
         assertFalse(
             isDuplicateSms(
-                SmsKey(uber, "2026-08-01 07:18"),
+                SmsKey(uber, "2026-08-01 07:17"),
                 listOf(SmsKey(uber, "2026-08-01 07:15")),
+            )
+        )
+    }
+
+    @Test
+    fun `same text just past the tolerance at second granularity is not a duplicate`() {
+        // parseSmsTime también acepta segundos, así que el lado exclusivo de la ventana
+        // hay que pinnearlo más fino que el minuto: un segundo de más ya no es duplicado.
+        assertFalse(
+            isDuplicateSms(
+                SmsKey(uber, "2026-08-01 07:16:01"),
+                listOf(SmsKey(uber, "2026-08-01 07:15:00")),
             )
         )
     }

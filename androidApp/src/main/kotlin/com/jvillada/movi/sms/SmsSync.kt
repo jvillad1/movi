@@ -16,8 +16,13 @@ import java.util.Locale
  * Lo usan los DOS caminos que suben SMS: la captura en tiempo real (SmsSyncWorker, un
  * mensaje por request) y el backfill manual de la pantalla (SmsBackfill, un lote). Que
  * compartan payload, auth y manejo de códigos es deliberado: el server dedupea por texto
- * dentro del usuario, así que ambos caminos tienen que producir exactamente la misma
- * forma de mensaje o el dedupe se vuelve frágil. No agregar un segundo uploader.
+ * Y TIEMPO dentro del usuario (ver `SmsDedupe.kt`), así que ambos caminos tienen que
+ * producir exactamente la misma forma de mensaje o el dedupe se vuelve frágil. Eso incluye
+ * la fuente de reloj: el receiver en tiempo real fecha con `timestampMillis` del PDU
+ * (`SmsRealtimeReceiver.kt`) y el backfill con `Telephony.Sms.DATE`
+ * (`SmsReader.android.kt`) — si cambiás cualquiera de los dos relojes, la tolerancia del
+ * server (`SMS_DEDUPE_TOLERANCE`) depende de esa diferencia y hay que revisarla. No
+ * agregar un segundo uploader.
  */
 internal data class SmsSyncItem(
     val id: String,

@@ -4,6 +4,7 @@ import java.time.DateTimeException
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Clave de dedupe de un SMS bancario dentro de un usuario: el texto crudo y la hora del
@@ -16,16 +17,38 @@ data class SmsKey(val text: String, val time: String)
  * Ventana dentro de la cual dos SMS con el mismo texto se consideran el mismo evento.
  *
  * Los dos caminos de captura fechan el MISMO SMS físico con relojes distintos: el receiver
- * en tiempo real usa `timestampMillis` del PDU y el backfill usa `Telephony.Sms.DATE`.
- * Ambos formatean con precisión de minuto ("yyyy-MM-dd HH:mm"), así que una diferencia de
- * pocos segundos entre las dos fuentes puede aparecer como un minuto entero de diferencia
- * si cae sobre el cambio de minuto. Dos minutos deja un minuto de margen sobre ese máximo
- * teórico sin acercarse a la escala en la que dos compras distintas con texto byte-idéntico
- * son plausibles (los SMS sin fecha ni referencia se repiten con horas o días de por medio).
+ * en tiempo real usa `timestampMillis` del PDU (`SmsRealtimeReceiver.kt`, cuándo el BANCO
+ * mandó el SMS) y el backfill usa `Telephony.Sms.DATE` (`SmsReader.android.kt`, cuándo el
+ * TELÉFONO lo recibió y guardó). Ambos formatean con precisión de minuto
+ * ("yyyy-MM-dd HH:mm"), así que el truncado por sí solo puede mover el reloj hasta un
+ * minuto entero si el evento cae justo sobre el cambio de minuto. Un minuto cubre
+ * exactamente ese máximo teórico, sin margen extra.
  *
- * Más chica resucita el duplicado cross-esquema; más grande resucita la pérdida silenciosa.
+ * Residual conocido y deliberado, que NO cierra esta ventana: la cola de entrega del SMS
+ * puede demorar la llegada al teléfono minutos u horas más allá del truncado — con el
+ * teléfono apagado, en modo avión o sin cobertura, el delay es no acotado. Un banco que
+ * manda a las 14:00 y un teléfono que reconecta a las 14:20 produce una fila realtime en
+ * 14:00 y una fila de backfill en 14:20: ninguna tolerancia finita cierra esa brecha, y
+ * ensancharla para intentarlo cuesta más de lo que rescata (ver abajo). Es el lado seguro
+ * del error — dos filas para un movimiento, visible y corregible, no una pérdida
+ * silenciosa —, pero un futuro mantenedor no debería asumir que este número ya lo cubre.
+ * El arreglo real es hashear/formatear `Telephony.Sms.DATE_SENT` (cuándo lo mandó el banco)
+ * en vez de `DATE` en `SmsReader.android.kt`: alinearía las dos fuentes con el mismo reloj
+ * y los dos esquemas de id colisionarían exacto, sin necesitar esta heurística. Fuera de
+ * alcance acá — es un cambio de cliente.
+ *
+ * Por qué no ensanchar para compensar ese residual: cada minuto extra compra supresión del
+ * duplicado cross-esquema al costo de volver a perder movimientos reales en silencio — el
+ * fallo que el issue #27 existe para eliminar, y el lado equivocado de esa prioridad. Dos
+ * cobros idénticos 90 segundos aparte (un doble-swipe de POS, o una compra partida en dos
+ * cargos iguales al mismo comercio) sobreviven a un minuto de ventana; a dos minutos se
+ * pierden.
+ *
+ * Más chica resucita el duplicado cross-esquema del truncado a minuto; más grande resucita
+ * la pérdida silenciosa sin arreglar la brecha de delivery-delay, que de todos modos ya es
+ * más grande que cualquier ventana razonable.
  */
-val SMS_DEDUPE_TOLERANCE: Duration = Duration.ofMinutes(2)
+val SMS_DEDUPE_TOLERANCE: Duration = Duration.ofMinutes(1)
 
 /**
  * Formato del wire ("yyyy-MM-dd HH:mm", lo que producen `SmsSync.captureItem` y
@@ -34,7 +57,7 @@ val SMS_DEDUPE_TOLERANCE: Duration = Duration.ofMinutes(2)
  * puedan leer, menos filas caen en el fallback de "ilegible → insertar".
  */
 private val WIRE_TIME_FORMAT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd[' ']['T']HH:mm[:ss]")
+    DateTimeFormatter.ofPattern("yyyy-MM-dd[' ']['T']HH:mm[:ss]", Locale.ROOT)
 
 /** Devuelve null si el texto no es una fecha-hora legible. */
 fun parseSmsTime(raw: String): LocalDateTime? =

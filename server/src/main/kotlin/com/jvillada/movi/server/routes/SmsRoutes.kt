@@ -151,15 +151,24 @@ fun Route.smsRoutes() {
             // duplicado que el usuario puede ignorar.
             //
             // Lo que separa los dos casos es el tiempo: las dos fuentes fechan el mismo
-            // SMS físico con segundos de diferencia (a lo sumo un minuto tras truncar a
-            // minutos), mientras que dos transacciones distintas están a horas o días.
-            // Ver SMS_DEDUPE_TOLERANCE. `bank` sigue fuera de la clave: los dos caminos
-            // divergen en el remitente vacío (backfill "" vs realtime "SMS").
+            // SMS físico a lo sumo un minuto aparte tras truncar a minutos, mientras que
+            // dos transacciones distintas están a horas o días. Ver SMS_DEDUPE_TOLERANCE
+            // para el residual conocido (delay de entrega) y por qué no se ensancha para
+            // cubrirlo. `bank` sigue fuera de la clave: los dos caminos divergen en el
+            // remitente vacío (backfill "" vs realtime "SMS").
             val dedupe = SmsDedupeIndex(existingRows.map { SmsKey(it.second, it.third) })
+
+            // Repeats del mismo id dentro de UN payload: el chequeo por texto+tiempo de
+            // arriba solo los atrapa si el tiempo parsea (mismo id ⇒ mismo texto y tiempo
+            // ⇒ mismo SmsKey). Si no parsea, ambos caen en el fallback "ilegible → insertar"
+            // y el segundo insert choca contra la primary key, abortando la transacción
+            // entera del sync. seenIds los filtra antes de llegar ahí, sin depender del parseo.
+            val seenIds = mutableSetOf<String>()
 
             var count = 0
             for (msg in messages) {
                 if (msg.id in existingIds) continue
+                if (!seenIds.add(msg.id)) continue
                 val key = SmsKey(msg.text, msg.time)
                 if (dedupe.isDuplicate(key)) continue
                 SmsMessages.insert {
