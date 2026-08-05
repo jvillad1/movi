@@ -124,8 +124,17 @@ class SmsSyncTest {
 
     // ── Helper SMS factory ─────────────────────────────────────────────────────
 
-    private fun makeSms(id: String, text: String = "Compra \$10.000 en Netflix") =
-        SmsMessage(id = id, time = "2024-01-01T10:00:00", bank = "Bancolombia",
+    /**
+     * `time` por defecto queda en ISO local a propósito: el dedupe por texto+tiempo acepta
+     * tanto el formato del wire ("yyyy-MM-dd HH:mm", lo que mandan los dos caminos Android)
+     * como ISO local, y estos casos históricos ejercitan esa tolerancia. Los tests nuevos
+     * que dependen de la ventana de tiempo pasan el formato del wire explícitamente.
+     */
+    private fun makeSms(
+        id: String,
+        text: String = "Compra \$10.000 en Netflix",
+        time: String = "2024-01-01T10:00:00",
+    ) = SmsMessage(id = id, time = time, bank = "Bancolombia",
             text = text, state = "", det = "")
 
     // ── Tests ──────────────────────────────────────────────────────────────────
@@ -306,6 +315,100 @@ class SmsSyncTest {
         }
         val arr = Json.parseToJsonElement(list.body<String>()).jsonArray
         assertEquals(1, arr.size, "Only 1 row should exist after cross-scheme re-sync")
+    }
+
+    /**
+     * Issue #27 — el dedupe por texto solo se tragaba transacciones reales distintas.
+     *
+     * "Compra aprobada $28.500 en Uber BV." no trae fecha, ni hora, ni referencia: dos
+     * viajes de $28.500 en días distintos producen texto byte-idéntico. Con dedupe por
+     * texto el segundo desaparecía en silencio y `synced` mentía. Ambos tienen que entrar,
+     * tanto dentro del mismo lote como en un sync posterior.
+     */
+    @Test
+    fun `identical text on different days both survive`() = testApplication {
+        application { testModule() }
+        val client = smsClient(this)
+
+        val tokenA = mintToken(userAId, userAEmail)
+        val uberText = "Compra aprobada \$28.500 en Uber BV."
+
+        // Mismo lote, dos días distintos → los dos entran (dedupe intra-lote por texto+tiempo)
+        val first = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                listOf(
+                    makeSms("sms_" + "1".repeat(32), uberText, "2026-08-01 07:15"),
+                    makeSms("sms_" + "2".repeat(32), uberText, "2026-08-03 19:40"),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, first.status)
+        val firstBody = Json.parseToJsonElement(first.body<String>()).jsonObject
+        assertEquals(2, firstBody["synced"]!!.jsonPrimitive.int,
+            "dos viajes distintos con el mismo texto deben insertarse los dos")
+
+        // Sync posterior con un tercer viaje idéntico → también entra (dedupe contra la tabla)
+        val second = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(makeSms("sms_" + "3".repeat(32), uberText, "2026-08-05 08:02")))
+        }
+        assertEquals(HttpStatusCode.OK, second.status)
+        val secondBody = Json.parseToJsonElement(second.body<String>()).jsonObject
+        assertEquals(1, secondBody["synced"]!!.jsonPrimitive.int,
+            "un tercer viaje en otro día no es duplicado de los anteriores")
+
+        val list = client.get("/api/sms") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        val arr = Json.parseToJsonElement(list.body<String>()).jsonArray
+        assertEquals(3, arr.size, "las 3 transacciones reales deben estar en el inbox")
+    }
+
+    /**
+     * Issue #27 — la otra mitad: el MISMO SMS físico subido por los dos caminos sigue
+     * colapsando a una fila aunque los timestamps no coincidan exactamente.
+     *
+     * El broadcast usa `timestampMillis` del PDU y el backfill `Telephony.Sms.DATE`; al
+     * truncar a minutos pueden quedar a un minuto de distancia. La ventana de tolerancia
+     * es lo que separa este caso del de arriba.
+     */
+    @Test
+    fun `same sms via both id schemes with one minute skew collapses to one row`() = testApplication {
+        application { testModule() }
+        val client = smsClient(this)
+
+        val tokenA = mintToken(userAId, userAEmail)
+        val sharedText = "Bancolombia: Compra por \$25.000 en EXITO"
+
+        // Camino backfill (id `sms_<32hex>`, hora del inbox del dispositivo)
+        val first = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(makeSms("sms_" + "a".repeat(32), sharedText, "2026-08-01 07:15")))
+        }
+        assertEquals(HttpStatusCode.OK, first.status)
+        val firstBody = Json.parseToJsonElement(first.body<String>()).jsonObject
+        assertEquals(1, firstBody["synced"]!!.jsonPrimitive.int, "el primer camino inserta 1")
+
+        // Camino realtime (id `sms_rt_<16hex>`, hora del PDU — un minuto de diferencia)
+        val second = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(makeSms("sms_rt_" + "b".repeat(16), sharedText, "2026-08-01 07:16")))
+        }
+        assertEquals(HttpStatusCode.OK, second.status)
+        val secondBody = Json.parseToJsonElement(second.body<String>()).jsonObject
+        assertEquals(0, secondBody["synced"]!!.jsonPrimitive.int,
+            "el mismo SMS por el otro esquema de id no debe insertarse de nuevo")
+
+        val list = client.get("/api/sms") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        val arr = Json.parseToJsonElement(list.body<String>()).jsonArray
+        assertEquals(1, arr.size, "solo debe quedar una fila para un mismo SMS físico")
     }
 
     /**
