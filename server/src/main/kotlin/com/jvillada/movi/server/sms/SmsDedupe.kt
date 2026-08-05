@@ -40,9 +40,11 @@ data class SmsKey(val text: String, val time: String)
  * Por qué no ensanchar para compensar ese residual: cada minuto extra compra supresión del
  * duplicado cross-esquema al costo de volver a perder movimientos reales en silencio — el
  * fallo que el issue #27 existe para eliminar, y el lado equivocado de esa prioridad. Dos
- * cobros idénticos 90 segundos aparte (un doble-swipe de POS, o una compra partida en dos
- * cargos iguales al mismo comercio) sobreviven a un minuto de ventana; a dos minutos se
- * pierden.
+ * cobros idénticos (un doble-swipe de POS, o una compra partida en dos cargos iguales al
+ * mismo comercio) separados por 2 minutos o más SIEMPRE sobreviven con esta ventana; a dos
+ * minutos se perderían siempre. Ojo con el caso intermedio: una separación real de 90
+ * segundos trunca a 1 o a 2 minutos según dónde caiga respecto del borde de minuto, así
+ * que sobrevive solo en parte de los casos — mejor que perderse siempre, no equivalente.
  *
  * Más chica resucita el duplicado cross-esquema del truncado a minuto; más grande resucita
  * la pérdida silenciosa sin arreglar la brecha de delivery-delay, que de todos modos ya es
