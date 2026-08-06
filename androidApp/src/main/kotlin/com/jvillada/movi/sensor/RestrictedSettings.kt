@@ -15,7 +15,13 @@ import android.os.Build
  *
  * El problema es que desde el lado de la app ese bloqueo es idéntico a "el usuario denegó
  * para siempre": denegado + `shouldShowRequestPermissionRationale` en false en los dos
- * casos. Por eso el veredicto combina varias señales en vez de mirar una sola.
+ * casos, y ninguna API expone la diferencia. Se intentó deducirla (origen de la
+ * instalación + cuánto tardó la petición) y no se sostiene: en el AVD de prueba el bloqueo
+ * silencioso tardó 1,4–1,6 s porque el controlador de permisos arranca en frío, o sea más
+ * que el diálogo real, así que cualquier umbral que separe los dos casos acusa en falso a
+ * alguien. Por eso acá NO se afirma nada: lo único que se hace es nombrar la posibilidad
+ * donde el mecanismo puede aplicar (ver [shouldHintRestrictedSettings]). Un condicional no
+ * puede estar equivocado, apenas puede ser irrelevante.
  */
 
 /**
@@ -28,8 +34,8 @@ import android.os.Build
  * (SMS y teléfono por defecto) y a otros accesos especiales (admin de dispositivo,
  * superposición, acceso de uso). Verificado contra la documentación pública del cambio
  * de Android 15 y contra los reportes del comportamiento real: en 13 y 14 un APK
- * sideloaded sigue recibiendo el diálogo de SMS normal. Poner 33 acá haría que TODO
- * veredicto de bloqueo en un Android 13 o 14 fuera falso por construcción.
+ * sideloaded sigue recibiendo el diálogo de SMS normal. Poner 33 acá haría que el aviso
+ * saliera en Android 13 y 14, donde el mecanismo no puede aplicarle al permiso de SMS.
  *
  * minSdk del APK es 24.
  */
@@ -84,40 +90,22 @@ internal enum class SmsPermissionVerdict {
     /** El diálogo del sistema todavía sirve: pedir el permiso dentro de la app. */
     ASK_IN_APP,
 
-    /** Android negó el permiso sin preguntar porque el APK no vino de una tienda. */
-    BLOCKED_BY_RESTRICTED_SETTINGS,
-
-    /** Denegación común: el usuario vio el diálogo y dijo que no. Copy de siempre. */
+    /**
+     * El permiso falta y el diálogo ya no sale. Puede ser una denegación del usuario o el
+     * bloqueo por ajustes restringidos: desde acá no se distinguen, y el copy no elige.
+     */
     DENIED,
 }
 
 /**
- * Único criterio para culpar a Android del permiso faltante.
+ * En qué estado está el permiso de SMS, en función de lo que el sistema deja ver.
  *
- * Cómo falla ante la duda: hacia [SmsPermissionVerdict.DENIED], o sea el estado y el copy
- * que ya existían. Un "Android bloqueó esto" falso manda al usuario a buscar un menú que
- * no le va a resolver nada, y eso es peor que el mensaje genérico. Por eso hacen falta
- * TODAS las señales a la vez: API >= [RESTRICTED_SETTINGS_MIN_SDK], instalación
- * clasificada como sideload (UNKNOWN no alcanza), ya haber pedido el permiso, y una
- * petición observada que se haya comportado como el bloqueo.
- *
- * [blockLikeRequestSeen] es la que separa el bloqueo de una denegación real, y es una
- * afirmación POSITIVA: esta versión pidió el permiso y la respuesta volvió sin diálogo
- * (ver [requestLooksBlocked]). La versión anterior preguntaba lo contrario — "¿nunca vimos
- * un diálogo?" — y tratar la ausencia de observación como prueba acusaba a Android en toda
- * instalación de la que no tuviéramos historia (una actualización desde una versión que no
- * anotaba nada, por ejemplo). No observar nada no prueba nada: sin una petición que mirar,
- * el veredicto es DENIED.
- *
- * A diferencia de un latch, la señal se puede desmentir: cualquier prueba de
- * [sawPermissionDialog] la borra, así que una medición desafortunada se corrige sola en el
- * siguiente intento en vez de quedar clavada para siempre.
+ * No intenta atribuir la falta del permiso a nadie — no se puede, ver el encabezado de
+ * este archivo. Solo separa los tres casos que tienen acciones distintas: no falta nada,
+ * todavía sirve pedirlo en la app, o el único camino que queda son los ajustes.
  */
 internal fun smsPermissionVerdict(
-    sdkInt: Int,
-    installSource: InstallSource,
     askedBefore: Boolean,
-    blockLikeRequestSeen: Boolean,
     granted: Boolean,
     canShowRationale: Boolean,
 ): SmsPermissionVerdict = when {
@@ -125,20 +113,15 @@ internal fun smsPermissionVerdict(
     // Si nunca pedimos, no hay denegación de nadie; si el sistema todavía deja mostrar el
     // diálogo, el camino sigue siendo pedirlo dentro de la app.
     !askedBefore || canShowRationale -> SmsPermissionVerdict.ASK_IN_APP
-    sdkInt >= RESTRICTED_SETTINGS_MIN_SDK &&
-        installSource == InstallSource.SIDELOADED &&
-        blockLikeRequestSeen -> SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS
     else -> SmsPermissionVerdict.DENIED
 }
 
 /**
  * ¿Corresponde nombrar los ajustes restringidos como POSIBILIDAD, sin afirmar nada?
  *
- * Hay un estado que no se puede resolver ni con la señal positiva ni con ninguna otra: una
- * instalación de la que no tenemos historia (venía de una versión que no anotaba señales) y
- * cuyo permiso ya está denegado con el rationale en false. Ahí el copy genérico manda a
- * conceder el permiso en la ficha de la app — y si el bloqueo es real, ese interruptor está
- * gris y el usuario se queda sin explicación ni salida.
+ * El estado que motiva esto: el permiso ya está denegado y el rationale en false. Ahí el
+ * copy genérico manda a conceder el permiso en la ficha de la app — y si el bloqueo es
+ * real, ese interruptor está gris y el usuario se queda sin explicación ni salida.
  *
  * La respuesta no es adivinar el veredicto, sino nombrar la condición: "SI el interruptor
  * aparece gris, es por esto y se arregla así". No afirma que Android bloqueó nada, así que
@@ -147,89 +130,6 @@ internal fun smsPermissionVerdict(
  */
 internal fun shouldHintRestrictedSettings(sdkInt: Int, installSource: InstallSource): Boolean =
     sdkInt >= RESTRICTED_SETTINGS_MIN_SDK && installSource == InstallSource.SIDELOADED
-
-/**
- * Piso de duración para creer que el sistema llegó a dibujar el diálogo de permisos.
- *
- * Medio segundo. De un lado, el bloqueo por ajustes restringidos no abre ninguna ventana:
- * el sistema resuelve la denegación y devuelve el resultado en el orden de los
- * milisegundos, y aun despertando en frío al controlador de permisos ese ida y vuelta no
- * llega ni cerca de 500 ms. Del otro, para que un humano cancele con Atrás el diálogo
- * tiene que animarse hacia adentro (~250 ms) y recién ahí la persona puede verlo y
- * reaccionar (~250 ms de reacción visual en el mejor caso, con la mano ya apoyada).
- *
- * El umbral es a propósito BAJO y no alto: "tardó ≥ 500 ms" se interpreta como "el diálogo
- * se mostró", que apaga la acusación y deja el copy genérico. Si el número quedó corto, el
- * costo es perder el mensaje de ajustes restringidos en un intento de un teléfono lento; si
- * quedara largo, el costo sería acusar a Android de un bloqueo que no ocurrió. Solo el
- * primero es aceptable. No subirlo.
- *
- * Ese costo además ya no es permanente: la señal que sostiene la acusación se recalcula en
- * cada petición, así que un arranque en frío desafortunado lo pierde una vez y el siguiente
- * intento lo recupera.
- */
-internal const val DIALOG_SHOWN_MIN_ELAPSED_MS = 500L
-
-/**
- * ¿Lo que tardó la petición dice que hubo diálogo?
- *
- * Los tiempos van en reloj monotónico (`SystemClock.elapsedRealtime`): el reloj de pared
- * puede saltar hacia atrás por NTP o por el usuario justo mientras el diálogo está abierto
- * y produciría una duración negativa o absurda.
- *
- * Sin una medición utilizable (inicio perdido porque el proceso se recreó con el diálogo
- * abierto, o un fin anterior al inicio) devuelve true: no medimos nada, y ante la duda la
- * respuesta segura es "sí se mostró", que desactiva la acusación.
- */
-internal fun requestDurationSaysDialogShown(startedAtMs: Long, endedAtMs: Long): Boolean {
-    if (startedAtMs <= 0L || endedAtMs < startedAtMs) return true
-    return endedAtMs - startedAtMs >= DIALOG_SHOWN_MIN_ELAPSED_MS
-}
-
-/**
- * Pruebas de que el diálogo del sistema SÍ llegó a mostrarse. Cualquiera alcanza.
- *
- * - [canShowRationale]: solo se pone en true después de que el usuario vio el diálogo y
- *   dijo que no. El bloqueo por ajustes restringidos jamás lo produce.
- * - [granted]: tener el permiso prueba que esta instalación NO está restringida. Es una
- *   afirmación más débil que "el diálogo funcionaba" — el permiso pudo concederse desde los
- *   ajustes del sistema sin que ningún diálogo saliera nunca — pero es exactamente la que
- *   el veredicto necesita: una instalación restringida no puede sostener el permiso por
- *   ningún camino, ni siquiera desde los ajustes. Importa incluso cuando después vuelve a
- *   faltar — la hibernación revoca permisos concedidos sin pasar nunca por rationale true,
- *   y sin esta prueba ese estado quedaría indistinguible de un bloqueo (ver Hibernation.kt:
- *   a esta app le pasa, no es hipotético).
- * - [requestDurationSaysDialogShown]: el usuario pudo cancelar el diálogo con Atrás o
- *   tocando afuera, lo que no toca ninguna de las dos señales anteriores. Lo que sí deja
- *   es tiempo transcurrido.
- *
- * [requestDurationSaysDialogShown] se pasa ya evaluado en vez de los timestamps crudos
- * porque hay relecturas (volver a la pantalla) donde no hubo ninguna petición que medir.
- */
-internal fun sawPermissionDialog(
-    canShowRationale: Boolean,
-    granted: Boolean,
-    requestWasSlow: Boolean = false,
-): Boolean = canShowRationale || granted || requestWasSlow
-
-/**
- * ¿Esta petición concreta se comportó como el bloqueo por ajustes restringidos?
- *
- * Es la única forma de anotar la señal que habilita la acusación, y por eso exige una
- * petición: no hay manera de responder que sí "sin querer". Un bloqueo devuelve denegado,
- * sin ganar rationale y sin haber dibujado ninguna ventana — o sea, la negación exacta de
- * [sawPermissionDialog]. Cualquier prueba de que el diálogo sí salió da false y borra la
- * marca anterior, así que la señal se puede desmentir tantas veces como haga falta.
- *
- * Ojo con lo que NO prueba: que la respuesta llegue instantáneamente solo dice que no hubo
- * ventana. Quién puede llamar a esto y en qué estado es lo que le da sentido — se anota al
- * volver de una petición real, nunca al releer la pantalla.
- */
-internal fun requestLooksBlocked(
-    canShowRationale: Boolean,
-    granted: Boolean,
-    requestWasSlow: Boolean,
-): Boolean = !sawPermissionDialog(canShowRationale, granted, requestWasSlow)
 
 /**
  * Traduce lo que reporta el sistema sobre el origen de la instalación.

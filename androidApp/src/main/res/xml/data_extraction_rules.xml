@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ (android:dataExtractionRules). Mismo motivo que backup_rules.xml, y hay que
+    repetirlo en los dos caminos: la copia a la nube y la transferencia directa entre
+    teléfonos se configuran por separado, y el estado de permisos no debe sobrevivir a
+    ninguna de las dos.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude
+            domain="sharedpref"
+            path="movi_sms_filter.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude
+            domain="sharedpref"
+            path="movi_sms_filter.xml" />
+    </device-transfer>
+</data-extraction-rules>

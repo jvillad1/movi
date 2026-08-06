@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Auto Backup, Android 11 y anteriores (android:fullBackupContent).
+
+    `movi_sms_filter` guarda hechos de ESTA instalación en ESTE teléfono: si ya pedimos los
+    permisos de SMS, cuándo capturó el receiver por última vez, cuándo se sincronizó el
+    historial, cuándo falló la sesión. Restaurados en un teléfono nuevo todos mienten — el
+    peor es `perm_requested`, que haría que la pantalla mandara a los ajustes del sistema en
+    vez de ofrecer el diálogo que ahí sí funcionaría. La lista de remitentes bancarios se
+    vuelve a bajar del server sola, así que no se pierde nada por excluir el archivo entero.
+-->
+<full-backup-content>
+    <exclude
+        domain="sharedpref"
+        path="movi_sms_filter.xml" />
+</full-backup-content>

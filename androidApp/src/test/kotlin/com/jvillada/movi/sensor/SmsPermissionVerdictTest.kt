@@ -6,265 +6,55 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * El caso que motiva todo esto: en Android 15+ una app instalada fuera de una tienda no
- * puede recibir el permiso de SMS por el diálogo normal. `requestPermissions` devuelve
- * denegado SIN mostrar nada y `shouldShowRequestPermissionRationale` sigue en false —
- * exactamente lo mismo que ve la app cuando el usuario denegó para siempre. Estos tests
- * fijan cuándo tenemos derecho a decir "esto lo bloqueó Android".
+ * En qué estado está el permiso de SMS y qué acción queda disponible.
+ *
+ * No intenta atribuir la falta del permiso a nadie: en Android 15+ una app instalada fuera
+ * de una tienda recibe exactamente lo mismo que ve tras una denegación permanente del
+ * usuario — denegado, sin diálogo y con `shouldShowRequestPermissionRationale` en false — y
+ * ninguna API separa los dos casos. Lo que sí cambia entre estados es qué botón tiene
+ * sentido ofrecer, y eso es lo que estos tests fijan.
  */
 class SmsPermissionVerdictTest {
 
     private fun verdict(
-        sdkInt: Int = 35,
-        installSource: InstallSource = InstallSource.SIDELOADED,
         askedBefore: Boolean = true,
-        blockLikeRequestSeen: Boolean = true,
         granted: Boolean = false,
         canShowRationale: Boolean = false,
-    ) = smsPermissionVerdict(sdkInt, installSource, askedBefore, blockLikeRequestSeen, granted, canShowRationale)
+    ) = smsPermissionVerdict(askedBefore, granted, canShowRationale)
 
     @Test
-    fun `a sideloaded denial with a request that never drew a dialog is the system blocking it`() {
-        assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, verdict())
-    }
-
-    @Test
-    fun `without a request that behaved like the block there is nothing to blame Android for`() {
-        // La regla entera, en una línea: la acusación necesita una PRUEBA POSITIVA. No
-        // haber visto un diálogo no es una; solo lo es haber visto una petición volver sin
-        // ninguno. Todo lo demás de este caso es idéntico al de arriba.
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(blockLikeRequestSeen = false))
+    fun `a denial the system will not re-prompt for leaves only the settings route`() {
+        assertEquals(SmsPermissionVerdict.DENIED, verdict())
     }
 
     @Test
     fun `an ordinary first denial keeps asking in-app`() {
-        // El diálogo SÍ salió y el sistema todavía deja volver a pedirlo.
-        assertEquals(
-            SmsPermissionVerdict.ASK_IN_APP,
-            verdict(blockLikeRequestSeen = false, canShowRationale = true),
-        )
-    }
-
-    @Test
-    fun `a real permanent denial is not blamed on Android`() {
-        // Mismo APK sideloaded, misma señal del sistema; lo único que cambia es que la
-        // última petición mostró el diálogo, así que la marca del bloqueo quedó borrada.
-        // Sin esta distinción mandaríamos a todo el mundo a buscar un menú que no le sirve.
-        assertEquals(
-            SmsPermissionVerdict.DENIED,
-            verdict(blockLikeRequestSeen = false, canShowRationale = false),
-        )
+        // El sistema todavía deja volver a mostrar el diálogo.
+        assertEquals(SmsPermissionVerdict.ASK_IN_APP, verdict(canShowRationale = true))
     }
 
     @Test
     fun `nothing to show once the permission is granted`() {
         assertEquals(SmsPermissionVerdict.GRANTED, verdict(granted = true))
-        // Ni siquiera con las señales del bloqueo puestas: concedido gana siempre.
-        assertEquals(
-            SmsPermissionVerdict.GRANTED,
-            verdict(granted = true, askedBefore = true, blockLikeRequestSeen = true),
-        )
+        // Concedido gana incluso sobre el rationale, que puede quedar en true de una
+        // denegación anterior.
+        assertEquals(SmsPermissionVerdict.GRANTED, verdict(granted = true, canShowRationale = true))
     }
 
     @Test
     fun `never asked cannot be a denial`() {
         assertEquals(SmsPermissionVerdict.ASK_IN_APP, verdict(askedBefore = false))
     }
-
-    @Test
-    fun `below Android 15 there are no restricted settings on SMS to blame`() {
-        // minSdk 24. Los ajustes restringidos de Android 13 cubren accesibilidad y escucha
-        // de notificaciones; el permiso de SMS entra recién en API 35. Por debajo, el mismo
-        // par de señales solo puede significar una denegación común.
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(sdkInt = 24))
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(sdkInt = 31))
-        // Los dos que el umbral viejo (33) acusaba en falso.
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(sdkInt = 33))
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(sdkInt = 34))
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(sdkInt = RESTRICTED_SETTINGS_MIN_SDK - 1))
-        assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, verdict(sdkInt = RESTRICTED_SETTINGS_MIN_SDK))
-    }
-
-    @Test
-    fun `an install we could not classify falls back to the generic copy`() {
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(installSource = InstallSource.UNKNOWN))
-    }
-
-    @Test
-    fun `an app installed from a store is never restricted`() {
-        assertEquals(SmsPermissionVerdict.DENIED, verdict(installSource = InstallSource.STORE))
-    }
 }
 
 /**
- * Las tres formas de enterarse de que el diálogo del sistema sí se mostró.
+ * El aviso condicional, que es todo lo que se dice sobre los ajustes restringidos.
  *
- * Cada una desmiente el bloqueo por su cuenta. Sin ellas la única señal disponible sería
- * `shouldShowRequestPermissionRationale`, y hay caminos legítimos que llegan a "denegado +
- * rationale false" sin haber pasado nunca por rationale true — cancelar el diálogo con
- * Atrás, o que la hibernación revoque un permiso ya concedido. Cada uno de esos caminos
- * terminaba en una acusación falsa.
- */
-class DialogShownEvidenceTest {
-
-    @Test
-    fun `the rationale turning true is the classic proof`() {
-        assertTrue(sawPermissionDialog(canShowRationale = true, granted = false))
-    }
-
-    @Test
-    fun `having held the permission proves the dialog worked`() {
-        // Auto-revoke por hibernación: concedido → revocado sin pasar jamás por rationale
-        // true. A esta app le pasa de verdad (ver Hibernation.kt), y sin esta prueba el
-        // estado posterior es indistinguible de un bloqueo.
-        assertTrue(sawPermissionDialog(canShowRationale = false, granted = true))
-    }
-
-    @Test
-    fun `a slow request proves a window was on screen`() {
-        // Cancelar con Atrás o tocando afuera: denegado, rationale intacto, latch sin
-        // escribir. Lo único que queda del diálogo es el tiempo que estuvo abierto.
-        assertTrue(sawPermissionDialog(canShowRationale = false, granted = false, requestWasSlow = true))
-    }
-
-    @Test
-    fun `no evidence at all is no evidence`() {
-        assertFalse(sawPermissionDialog(canShowRationale = false, granted = false, requestWasSlow = false))
-        // El default es "no hubo petición que medir": una relectura al volver a la pantalla
-        // no puede inventar una prueba de duración.
-        assertFalse(sawPermissionDialog(canShowRationale = false, granted = false))
-    }
-}
-
-/**
- * La señal de duración, que es la que hace representable "nos preguntaron, el diálogo
- * salió, y no lo supimos ver".
- *
- * Va en reloj monotónico. Falla a favor de "se mostró", porque esa respuesta apaga la
- * acusación y deja el copy genérico.
- */
-class RequestDurationTest {
-
-    @Test
-    fun `an instant return is the windowless block`() {
-        assertFalse(requestDurationSaysDialogShown(startedAtMs = 1_000L, endedAtMs = 1_003L))
-        assertFalse(requestDurationSaysDialogShown(startedAtMs = 1_000L, endedAtMs = 1_000L))
-    }
-
-    @Test
-    fun `just under the threshold is still too fast for a human`() {
-        assertFalse(
-            requestDurationSaysDialogShown(
-                startedAtMs = 1_000L,
-                endedAtMs = 1_000L + DIALOG_SHOWN_MIN_ELAPSED_MS - 1,
-            ),
-        )
-    }
-
-    @Test
-    fun `the threshold itself already counts as a dialog`() {
-        assertTrue(
-            requestDurationSaysDialogShown(
-                startedAtMs = 1_000L,
-                endedAtMs = 1_000L + DIALOG_SHOWN_MIN_ELAPSED_MS,
-            ),
-        )
-    }
-
-    @Test
-    fun `a human pressing Back takes seconds`() {
-        assertTrue(requestDurationSaysDialogShown(startedAtMs = 1_000L, endedAtMs = 3_400L))
-    }
-
-    @Test
-    fun `an unusable measurement falls back to saying the dialog was shown`() {
-        // Nunca arrancamos el cronómetro (proceso recreado con el diálogo abierto).
-        assertTrue(requestDurationSaysDialogShown(startedAtMs = 0L, endedAtMs = 12_000L))
-        assertTrue(requestDurationSaysDialogShown(startedAtMs = -5L, endedAtMs = 12_000L))
-        // Fin anterior al inicio: la medición no significa nada.
-        assertTrue(requestDurationSaysDialogShown(startedAtMs = 9_000L, endedAtMs = 8_000L))
-    }
-}
-
-/**
- * La señal positiva: qué petición tiene derecho a encender la acusación y cuál la apaga.
- *
- * Es la negación exacta de [sawPermissionDialog], pero el sentido de la escritura importa
- * tanto como el valor: se anota SOLO al volver de una petición real, nunca al releer la
- * pantalla, y se reescribe en los dos sentidos (nada de latch).
- */
-class RequestLooksBlockedTest {
-
-    @Test
-    fun `an instant denial with nothing else to show for it is the block`() {
-        assertTrue(requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = false))
-    }
-
-    @Test
-    fun `a request that drew a dialog denies the block`() {
-        // Cada una de las tres pruebas del diálogo, por separado, apaga la marca.
-        assertFalse(requestLooksBlocked(canShowRationale = true, granted = false, requestWasSlow = false))
-        assertFalse(requestLooksBlocked(canShowRationale = false, granted = true, requestWasSlow = false))
-        assertFalse(requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = true))
-    }
-}
-
-/**
- * La actualización desde una versión que no guardaba ninguna señal.
- *
- * Este es el estado que el modelo anterior no podía representar y que por eso dejó pasar el
- * bug: el teléfono real tiene `perm_requested` en true — lo puso el toque que produjo el
- * bloqueo silencioso — y ninguna otra señal. Al preguntar "¿nunca vimos un diálogo?", ese
- * estado respondía "no" y la acusación salía sola; al taparlo con una siembra en la
- * migración, respondía "sí" y el mensaje quedaba muerto para siempre en el único teléfono
- * que lo motivó. La pregunta positiva no necesita migración: no observamos nada, así que no
- * afirmamos nada, y la primera petición de esta versión decide.
- */
-class LegacyUpgradeTest {
-
-    private fun upgraded(blockLikeRequestSeen: Boolean) = smsPermissionVerdict(
-        sdkInt = 35,
-        installSource = InstallSource.SIDELOADED,
-        // Lo escribió la versión vieja. Es lo ÚNICO que sobrevive a la actualización.
-        askedBefore = true,
-        blockLikeRequestSeen = blockLikeRequestSeen,
-        granted = false,
-        canShowRationale = false,
-    )
-
-    @Test
-    fun `an upgrade with no observation of its own does not accuse Android`() {
-        assertEquals(SmsPermissionVerdict.DENIED, upgraded(blockLikeRequestSeen = false))
-    }
-
-    @Test
-    fun `the same upgrade after one request that came back without a dialog does`() {
-        // El teléfono genuinamente bloqueado. Antes no había forma de llegar acá: el latch
-        // sembrado no se podía apagar y el rationale ya nunca vuelve a true.
-        assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, upgraded(blockLikeRequestSeen = true))
-    }
-
-    @Test
-    fun `an unlucky slow request is recoverable instead of permanent`() {
-        // Arranque en frío del controlador de permisos que se pasa del umbral sin dibujar
-        // nada: la petición se lee como "hubo diálogo" y el mensaje no sale…
-        val slowFirstTry = requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = true)
-        assertFalse(slowFirstTry)
-        assertEquals(SmsPermissionVerdict.DENIED, upgraded(blockLikeRequestSeen = slowFirstTry))
-        // …y el intento siguiente, ya en caliente, lo recupera. Con un latch de una sola
-        // escritura este segundo intento no habría podido cambiar nada.
-        val secondTry = requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = false)
-        assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, upgraded(blockLikeRequestSeen = secondTry))
-    }
-}
-
-/**
- * El aviso condicional del estado ambiguo.
- *
- * Hay un estado que ninguna señal resuelve: instalación sin historia propia, permiso ya
- * denegado y rationale en false. Ahí el veredicto es DENIED — el copy genérico manda a
- * conceder el permiso en la ficha de la app — y si el bloqueo existe, ese interruptor está
- * gris. El aviso nombra esa posibilidad sin afirmarla, y solo donde es posible.
+ * Con el permiso denegado y el rationale en false, el copy genérico manda a conceder el
+ * permiso en la ficha de la app — y si el bloqueo existe, ese interruptor está gris. El
+ * aviso nombra esa posibilidad sin afirmarla, y solo donde el mecanismo puede aplicar. Un
+ * condicional no puede estar equivocado; a lo sumo es irrelevante, y por eso no hace falta
+ * (ni se puede) probar antes que el bloqueo exista.
  */
 class RestrictedSettingsHintTest {
 
