@@ -29,10 +29,11 @@ data class SmsKey(val text: String, val time: String)
  * del server, que está acotado a `sms_rt_` justo para que un backfill no dispare
  * notificaciones — no es un camino que valga perseguir.)
  *
- * Ambos caminos formatean `time` con precisión de minuto ("yyyy-MM-dd HH:mm"), así que el
- * truncado por sí solo puede mover el reloj hasta un minuto entero si el evento cae justo
- * sobre el cambio de minuto. Un minuto cubre exactamente ese máximo teórico, sin margen
- * extra — más el margen que dejan los residuales de abajo.
+ * Ambos caminos formatean `time` con precisión de minuto ("yyyy-MM-dd HH:mm"). Cuando
+ * `DATE_SENT` es usable los dos formatean el MISMO instante del PDU, así que las cadenas
+ * salen idénticas y el truncado no desvía nada: solo muerde en los casos de fallback de
+ * abajo, donde los dos relojes son distintos y el evento puede caer sobre el cambio de
+ * minuto. Un minuto cubre exactamente ese máximo teórico, sin margen extra.
  *
  * Residuales conocidos y deliberados que esta ventana NO cierra, porque alinear el reloj
  * (arriba) no cubre todos los casos en que `time` se aparta:

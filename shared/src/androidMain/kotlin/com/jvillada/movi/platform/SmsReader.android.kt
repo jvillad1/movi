@@ -67,9 +67,11 @@ fun smsWireTime(millis: Long): String =
  * Tampoco asuma que `DATE` es la referencia sana frente a la que se mide: `DATE` sale del
  * reloj del TELÉFONO en el momento de recibir, mientras que `DATE_SENT` sale del PDU y es
  * independiente de ese reloj. Con el teléfono con la hora mal puesta (batería muerta, sin
- * hora de red), `DATE` es el valor corrupto y `DATE_SENT` el sano — y esta guarda, en
- * cualquiera de las dos direcciones, rechaza el `DATE_SENT` sano por "desviarse" del
- * `DATE` corrupto y se queda con el corrupto.
+ * hora de red), `DATE` es el valor corrupto y `DATE_SENT` el sano — y esta guarda puede
+ * rechazar el `DATE_SENT` sano por "desviarse" del `DATE` corrupto. Ojo que el daño es
+ * asimétrico: con el reloj del teléfono ATRASADO la deriva sale positiva y la guarda de
+ * +5 min lo rechaza siempre; con el reloj ADELANTADO la deriva sale negativa y el
+ * `DATE_SENT` sano se sigue usando hasta las 48 h.
  *
  * Se mantiene la guarda igual: el costo de sacarla es peor que el de tenerla — aceptar
  * cualquier `DATE_SENT` futuro sin filtro fecharía un movimiento financiero a voluntad de
@@ -99,10 +101,14 @@ const val MAX_SMSC_QUEUE_MILLIS: Long = 48 * 60 * 60 * 1000L
  * El chequeo normal (`MAX_SMSC_QUEUE_MILLIS`) ya rechaza un epoch-en-segundos frente a un
  * `DATE` bueno, pero cuando no hay `DATE` de referencia (`date <= 0`) no hay nada contra
  * qué medir la deriva — sin este piso, un `DATE_SENT` en segundos en vez de milisegundos
- * (el mismo bug de provider que motiva `MAX_SMSC_QUEUE_MILLIS`) pasaría directo y fecharía
- * el SMS en 1970. Hoy esa rama es inalcanzable — la query de `readDeviceSms` garantiza
- * `DATE > 0` — pero `rowToSmsMessage` es API pública de un módulo compartido, así que el
- * piso queda puesto de todos modos.
+ * (el mismo bug de provider que motiva `MAX_SMSC_QUEUE_MILLIS`) pasaría directo como si
+ * fuera dato bueno.
+ *
+ * Lo que compra el piso NO es evitar un 1970: sin `DATE` útil, caer al fallback devuelve
+ * ese mismo `date <= 0` y el SMS igual queda fechado en 1970. Lo que compra es que un
+ * valor implausible deje de aceptarse EN SILENCIO como si fuera el instante real de envío.
+ * Hoy la rama es inalcanzable — la query de `readDeviceSms` garantiza `DATE > 0` — pero
+ * `rowToSmsMessage` es API pública de un módulo compartido, así que el piso queda puesto.
  */
 const val MIN_PLAUSIBLE_SMS_MILLIS: Long = 946_684_800_000L // 2000-01-01T00:00:00Z
 
