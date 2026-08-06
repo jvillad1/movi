@@ -111,6 +111,25 @@ class SmsReaderTimeTest {
         assertEquals(0L, effectiveSmsTime(dateSent = 0L, date = 0L))
     }
 
+    // ── piso absoluto: sin DATE de referencia, un DATE_SENT en segundos no pasa ─
+
+    @Test
+    fun dateInservibleConDateSentEnSegundosSeCaeADate() {
+        // Sin `date` no hay contra qué medir la deriva; sin el piso absoluto este
+        // epoch-en-segundos (año ~1970 en millis) pasaría directo. Debe caer a `date`.
+        val enSegundos = AHORA / 1000
+        assertEquals(0L, effectiveSmsTime(dateSent = enSegundos, date = 0L))
+    }
+
+    @Test
+    fun bordeDelPisoAbsolutoSeUsa() {
+        assertEquals(
+            MIN_PLAUSIBLE_SMS_MILLIS,
+            effectiveSmsTime(dateSent = MIN_PLAUSIBLE_SMS_MILLIS, date = 0L),
+        )
+        assertEquals(0L, effectiveSmsTime(dateSent = MIN_PLAUSIBLE_SMS_MILLIS - 1, date = 0L))
+    }
+
     // ── la asimetría deliberada: el id sigue anclado a DATE ──────────────────
 
     @Test

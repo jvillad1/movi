@@ -25,6 +25,11 @@ import java.util.Locale
  * Deterministic stable ID so repeated syncs deduplicate server-side. Uses SHA-256
  * (truncated) rather than String.hashCode() — a 32-bit hash collision would silently
  * drop a real transaction, which is unacceptable for finance data.
+ *
+ * [date] must stay `Telephony.Sms.DATE` — never `DATE_SENT`, even though [rowToSmsMessage]
+ * now dates the wire `time` from `DATE_SENT` when it's usable. That id/time split is
+ * deliberate and preserves backfill idempotency; see the KDoc on [rowToSmsMessage] before
+ * changing what this function is called with.
  */
 fun stableSmsId(address: String, date: Long, body: String): String {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -33,19 +38,43 @@ fun stableSmsId(address: String, date: Long, body: String): String {
     return "sms_$hex"
 }
 
-private val DATE_FMT = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT)
-
-/** Formato del wire ("yyyy-MM-dd HH:mm") — el que parsea `SmsDedupe.parseSmsTime` en el server. */
-fun smsWireTime(millis: Long): String = DATE_FMT.format(Date(millis))
+/**
+ * Formato del wire ("yyyy-MM-dd HH:mm") — el que parsea `SmsDedupe.parseSmsTime` en el server.
+ *
+ * `SimpleDateFormat` no es thread-safe, así que el formatter se construye adentro, por
+ * llamada — igual que `SmsSync.captureItem` (ver ese archivo). Es API pública: dos llamadas
+ * concurrentes a `readDeviceSms` (p.ej. un doble-tap del botón de sync) no pueden compartir
+ * una instancia sin arriesgar un `time` corrupto en una fila financiera.
+ */
+fun smsWireTime(millis: Long): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date(millis))
 
 /**
- * Deriva máxima hacia ADELANTE que se le tolera a `DATE_SENT` respecto de `DATE`.
+ * Deriva máxima hacia ADELANTE que se le tolera a `DATE_SENT` respecto de `DATE`, antes de
+ * descartarlo y caer a `DATE`.
  *
- * Un SMS no puede recibirse antes de mandarse, así que cualquier `DATE_SENT` posterior a
- * la recepción es reloj desalineado, no un dato. Se tolera una franja chica porque el
- * reloj del SMSC y el del teléfono no son el mismo; más allá de eso es basura conocida
- * (hay ROMs/carriers que escriben la hora local del centro de mensajes como si fuera UTC,
- * lo que produce desfases de horas enteras).
+ * El objetivo NO es plausibilidad física en abstracto — es coincidir con el camino en
+ * tiempo real. `SmsRealtimeReceiver` no aplica ningún chequeo de cordura: graba el
+ * `timestampMillis` crudo del PDU tal cual llega, adelantado o no. Si el reloj del SMSC
+ * está adelantado (p.ej. desfase de zona horaria del centro de mensajes), la fila en
+ * tiempo real queda con ese valor adelantado sin filtrar, mientras que esta guarda hace
+ * que el backfill lo descarte y caiga a `DATE`. Resultado: las dos filas del mismo SMS
+ * físico terminan separadas por horas otra vez — el duplicado que este cambio existe para
+ * evitar vuelve, y vuelve justo en el escenario de desfase de zona horaria que motiva esta
+ * guarda. (La mitad "hacia atrás" del mismo desfase sí pasa la guarda y sí queda alineada
+ * con tiempo real — el problema es asimétrico.)
+ *
+ * Tampoco asuma que `DATE` es la referencia sana frente a la que se mide: `DATE` sale del
+ * reloj del TELÉFONO en el momento de recibir, mientras que `DATE_SENT` sale del PDU y es
+ * independiente de ese reloj. Con el teléfono con la hora mal puesta (batería muerta, sin
+ * hora de red), `DATE` es el valor corrupto y `DATE_SENT` el sano — y esta guarda, en
+ * cualquiera de las dos direcciones, rechaza el `DATE_SENT` sano por "desviarse" del
+ * `DATE` corrupto y se queda con el corrupto.
+ *
+ * Se mantiene la guarda igual: el costo de sacarla es peor que el de tenerla — aceptar
+ * cualquier `DATE_SENT` futuro sin filtro fecharía un movimiento financiero a voluntad de
+ * lo que venga en el PDU. Esto documenta lo que cuesta, no una promesa de que cubre todos
+ * los casos.
  */
 const val MAX_SMS_CLOCK_SKEW_MILLIS: Long = 5 * 60 * 1000L
 
@@ -63,6 +92,19 @@ const val MAX_SMS_CLOCK_SKEW_MILLIS: Long = 5 * 60 * 1000L
  * mensaje en 1970 y lo mostraría con 55 años de antigüedad.
  */
 const val MAX_SMSC_QUEUE_MILLIS: Long = 48 * 60 * 60 * 1000L
+
+/**
+ * Piso absoluto de plausibilidad para un `DATE_SENT` sin `DATE` con el que compararlo.
+ *
+ * El chequeo normal (`MAX_SMSC_QUEUE_MILLIS`) ya rechaza un epoch-en-segundos frente a un
+ * `DATE` bueno, pero cuando no hay `DATE` de referencia (`date <= 0`) no hay nada contra
+ * qué medir la deriva — sin este piso, un `DATE_SENT` en segundos en vez de milisegundos
+ * (el mismo bug de provider que motiva `MAX_SMSC_QUEUE_MILLIS`) pasaría directo y fecharía
+ * el SMS en 1970. Hoy esa rama es inalcanzable — la query de `readDeviceSms` garantiza
+ * `DATE > 0` — pero `rowToSmsMessage` es API pública de un módulo compartido, así que el
+ * piso queda puesto de todos modos.
+ */
+const val MIN_PLAUSIBLE_SMS_MILLIS: Long = 946_684_800_000L // 2000-01-01T00:00:00Z
 
 /**
  * Qué reloj fecha el SMS: `DATE_SENT` (cuándo lo mandó el banco) si es creíble, si no
@@ -84,9 +126,12 @@ const val MAX_SMSC_QUEUE_MILLIS: Long = 48 * 60 * 60 * 1000L
  */
 fun effectiveSmsTime(dateSent: Long, date: Long): Long {
     if (dateSent <= 0L) return date            // no poblado: el caso frecuente
-    if (date <= 0L) return dateSent            // sin referencia para el chequeo de cordura
+    if (date <= 0L) {
+        // Sin `DATE` de referencia, solo queda el piso absoluto — ver MIN_PLAUSIBLE_SMS_MILLIS.
+        return if (dateSent >= MIN_PLAUSIBLE_SMS_MILLIS) dateSent else date
+    }
     val delta = dateSent - date
-    if (delta > MAX_SMS_CLOCK_SKEW_MILLIS) return date   // "enviado" después de recibido
+    if (delta > MAX_SMS_CLOCK_SKEW_MILLIS) return date   // desalineado con tiempo real, no necesariamente falso — ver doc de MAX_SMS_CLOCK_SKEW_MILLIS
     if (delta < -MAX_SMSC_QUEUE_MILLIS) return date      // demasiado viejo para ser real
     return dateSent
 }
@@ -124,7 +169,15 @@ fun rowToSmsMessage(address: String?, date: Long, dateSent: Long, body: String?)
     )
 }
 
-/** Query Telephony.Sms.Inbox for messages from the last 30 days. Runs on Dispatchers.IO. */
+/**
+ * Query Telephony.Sms.Inbox for messages from the last 30 days. Runs on Dispatchers.IO.
+ *
+ * El filtro de 30 días es sobre `DATE` (cuándo el teléfono guardó la fila), no sobre `time`.
+ * Como `time` puede quedar hasta `MAX_SMSC_QUEUE_MILLIS` (48 h) más viejo que `DATE`, una
+ * fila cerca del borde de estos 30 días — o de un cambio de mes — puede salir con `time`
+ * apenas fuera de esa ventana, o en el mes calendario anterior. Es correcto (el banco la
+ * mandó ahí), no un bug del filtro ni del dedupe.
+ */
 suspend fun readDeviceSms(context: Context): List<SmsMessage> = withContext(Dispatchers.IO) {
     val thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
     val uri = Telephony.Sms.Inbox.CONTENT_URI
