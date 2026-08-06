@@ -19,9 +19,13 @@ import java.util.Locale
  * Y TIEMPO dentro del usuario (ver `SmsDedupe.kt`), así que ambos caminos tienen que
  * producir exactamente la misma forma de mensaje o el dedupe se vuelve frágil. Eso incluye
  * la fuente de reloj: el receiver en tiempo real fecha con `timestampMillis` del PDU
- * (`SmsRealtimeReceiver.kt`) y el backfill con `Telephony.Sms.DATE`
- * (`SmsReader.android.kt`) — si cambiás cualquiera de los dos relojes, la tolerancia del
- * server (`SMS_DEDUPE_TOLERANCE`) depende de esa diferencia y hay que revisarla. No
+ * (`SmsRealtimeReceiver.kt`), sin ningún chequeo de cordura, y el backfill fecha con
+ * `Telephony.Sms.DATE_SENT` cuando es creíble contra `Telephony.Sms.DATE`, cayendo a
+ * `DATE` si no lo es (`effectiveSmsTime` en `SmsReader.android.kt`) — así que los dos
+ * caminos apuntan al mismo reloj, el del banco, cuando `DATE_SENT` está poblado y es
+ * plausible. La tolerancia del server (`SMS_DEDUPE_TOLERANCE`) sigue existiendo para
+ * cuando eso no pasa (`DATE_SENT` ausente o descartado) además del truncado a minuto — si
+ * cambiás cualquiera de los dos relojes o la guarda de cordura, hay que revisarla. No
  * agregar un segundo uploader.
  */
 internal data class SmsSyncItem(

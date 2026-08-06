@@ -16,39 +16,53 @@ data class SmsKey(val text: String, val time: String)
 /**
  * Ventana dentro de la cual dos SMS con el mismo texto se consideran el mismo evento.
  *
- * Los dos caminos de captura fechan el MISMO SMS físico con relojes distintos: el receiver
- * en tiempo real usa `timestampMillis` del PDU (`SmsRealtimeReceiver.kt`, cuándo el BANCO
- * mandó el SMS) y el backfill usa `Telephony.Sms.DATE` (`SmsReader.android.kt`, cuándo el
- * TELÉFONO lo recibió y guardó). Ambos formatean con precisión de minuto
- * ("yyyy-MM-dd HH:mm"), así que el truncado por sí solo puede mover el reloj hasta un
- * minuto entero si el evento cae justo sobre el cambio de minuto. Un minuto cubre
- * exactamente ese máximo teórico, sin margen extra.
+ * Los dos caminos de captura fechan el MISMO SMS físico apuntando al mismo reloj — el del
+ * BANCO — cuando pueden: el receiver en tiempo real usa `timestampMillis` del PDU sin
+ * ningún chequeo de cordura (`SmsRealtimeReceiver.kt`), y el backfill usa
+ * `Telephony.Sms.DATE_SENT` cuando es creíble contra `Telephony.Sms.DATE`, cayendo a
+ * `DATE` (cuándo el TELÉFONO lo recibió) si no lo es (`effectiveSmsTime` en
+ * `SmsReader.android.kt`). Lo que esta ventana — y el dedupe en general — compara es el
+ * campo `time`, nunca el `id`: los dos esquemas de id (`sms_` + 32 hex acá, `sms_rt_` + 16
+ * hex en tiempo real) no pueden coincidir como string con ninguna entrada, alineados los
+ * relojes o no, así que esta ventana sigue siendo la única defensa contra el duplicado
+ * cross-esquema. (Unificar los prefijos para que "colisionaran" rompería el hook de push
+ * del server, que está acotado a `sms_rt_` justo para que un backfill no dispare
+ * notificaciones — no es un camino que valga perseguir.)
  *
- * Residual conocido y deliberado, que NO cierra esta ventana: la cola de entrega del SMS
- * puede demorar la llegada al teléfono minutos u horas más allá del truncado — con el
- * teléfono apagado, en modo avión o sin cobertura, el delay es no acotado. Un banco que
- * manda a las 14:00 y un teléfono que reconecta a las 14:20 produce una fila realtime en
- * 14:00 y una fila de backfill en 14:20: ninguna tolerancia finita cierra esa brecha, y
- * ensancharla para intentarlo cuesta más de lo que rescata (ver abajo). Es el lado seguro
- * del error — dos filas para un movimiento, visible y corregible, no una pérdida
- * silenciosa —, pero un futuro mantenedor no debería asumir que este número ya lo cubre.
- * El arreglo real es hashear/formatear `Telephony.Sms.DATE_SENT` (cuándo lo mandó el banco)
- * en vez de `DATE` en `SmsReader.android.kt`: alinearía las dos fuentes con el mismo reloj
- * y los dos esquemas de id colisionarían exacto, sin necesitar esta heurística. Fuera de
- * alcance acá — es un cambio de cliente.
+ * Ambos caminos formatean `time` con precisión de minuto ("yyyy-MM-dd HH:mm"). Cuando
+ * `DATE_SENT` es usable los dos formatean el MISMO instante del PDU, así que las cadenas
+ * salen idénticas y el truncado no desvía nada: solo muerde en los casos de fallback de
+ * abajo, donde los dos relojes son distintos y el evento puede caer sobre el cambio de
+ * minuto. Un minuto cubre exactamente ese máximo teórico, sin margen extra.
  *
- * Por qué no ensanchar para compensar ese residual: cada minuto extra compra supresión del
- * duplicado cross-esquema al costo de volver a perder movimientos reales en silencio — el
- * fallo que el issue #27 existe para eliminar, y el lado equivocado de esa prioridad. Dos
- * cobros idénticos (un doble-swipe de POS, o una compra partida en dos cargos iguales al
- * mismo comercio) separados por 2 minutos o más SIEMPRE sobreviven con esta ventana; a dos
- * minutos se perderían siempre. Ojo con el caso intermedio: una separación real de 90
+ * Residuales conocidos y deliberados que esta ventana NO cierra, porque alinear el reloj
+ * (arriba) no cubre todos los casos en que `time` se aparta:
+ * - `DATE_SENT` sin poblar (frecuente en varias ROMs/carriers): el backfill cae a `DATE`.
+ * - Cola de entrega del SMSC más allá de la ventana que `effectiveSmsTime` acepta hacia
+ *   atrás (`MAX_SMSC_QUEUE_MILLIS`, 48 h del lado del cliente) — con el teléfono apagado,
+ *   en modo avión o sin cobertura por más de eso.
+ * - Reloj del SMSC desalineado hacia adelante: `effectiveSmsTime` lo descarta
+ *   (`MAX_SMS_CLOCK_SKEW_MILLIS`) y el backfill cae a `DATE`, que vuelve a diferir del
+ *   `timestampMillis` crudo que usa tiempo real.
+ * En cualquiera de estos, un banco que manda a las 14:00 y un teléfono que reconecta a las
+ * 14:20 puede seguir produciendo una fila realtime en 14:00 y una de backfill en 14:20:
+ * ninguna tolerancia finita cierra esa brecha, y ensancharla para intentarlo cuesta más de
+ * lo que rescata (ver abajo). Es el lado seguro del error — dos filas para un movimiento,
+ * visible y corregible, no una pérdida silenciosa —, pero un futuro mantenedor no debería
+ * asumir que este número ya lo cubre.
+ *
+ * Por qué no ensanchar para compensar esos residuales: cada minuto extra compra supresión
+ * del duplicado cross-esquema al costo de volver a perder movimientos reales en silencio —
+ * el fallo que el issue #27 existe para eliminar, y el lado equivocado de esa prioridad.
+ * Dos cobros idénticos (un doble-swipe de POS, o una compra partida en dos cargos iguales
+ * al mismo comercio) separados por 2 minutos o más SIEMPRE sobreviven con esta ventana; a
+ * dos minutos se perderían siempre. Ojo con el caso intermedio: una separación real de 90
  * segundos trunca a 1 o a 2 minutos según dónde caiga respecto del borde de minuto, así
  * que sobrevive solo en parte de los casos — mejor que perderse siempre, no equivalente.
  *
  * Más chica resucita el duplicado cross-esquema del truncado a minuto; más grande resucita
- * la pérdida silenciosa sin arreglar la brecha de delivery-delay, que de todos modos ya es
- * más grande que cualquier ventana razonable.
+ * la pérdida silenciosa sin arreglar los residuales de arriba, que de todos modos ya son
+ * más grandes que cualquier ventana razonable.
  */
 val SMS_DEDUPE_TOLERANCE: Duration = Duration.ofMinutes(1)
 
