@@ -18,14 +18,22 @@ class SmsPermissionVerdictTest {
         sdkInt: Int = 35,
         installSource: InstallSource = InstallSource.SIDELOADED,
         askedBefore: Boolean = true,
-        dialogEverShown: Boolean = false,
+        blockLikeRequestSeen: Boolean = true,
         granted: Boolean = false,
         canShowRationale: Boolean = false,
-    ) = smsPermissionVerdict(sdkInt, installSource, askedBefore, dialogEverShown, granted, canShowRationale)
+    ) = smsPermissionVerdict(sdkInt, installSource, askedBefore, blockLikeRequestSeen, granted, canShowRationale)
 
     @Test
-    fun `sideloaded denial without the dialog ever appearing is the system blocking it`() {
+    fun `a sideloaded denial with a request that never drew a dialog is the system blocking it`() {
         assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, verdict())
+    }
+
+    @Test
+    fun `without a request that behaved like the block there is nothing to blame Android for`() {
+        // La regla entera, en una línea: la acusación necesita una PRUEBA POSITIVA. No
+        // haber visto un diálogo no es una; solo lo es haber visto una petición volver sin
+        // ninguno. Todo lo demás de este caso es idéntico al de arriba.
+        assertEquals(SmsPermissionVerdict.DENIED, verdict(blockLikeRequestSeen = false))
     }
 
     @Test
@@ -33,18 +41,18 @@ class SmsPermissionVerdictTest {
         // El diálogo SÍ salió y el sistema todavía deja volver a pedirlo.
         assertEquals(
             SmsPermissionVerdict.ASK_IN_APP,
-            verdict(dialogEverShown = true, canShowRationale = true),
+            verdict(blockLikeRequestSeen = false, canShowRationale = true),
         )
     }
 
     @Test
     fun `a real permanent denial is not blamed on Android`() {
-        // Mismo APK sideloaded, misma señal del sistema; lo único que cambia es que el
-        // usuario llegó a ver el diálogo y dijo que no. Sin esta señal mandaríamos a
-        // todo el mundo a buscar un menú que no le va a servir.
+        // Mismo APK sideloaded, misma señal del sistema; lo único que cambia es que la
+        // última petición mostró el diálogo, así que la marca del bloqueo quedó borrada.
+        // Sin esta distinción mandaríamos a todo el mundo a buscar un menú que no le sirve.
         assertEquals(
             SmsPermissionVerdict.DENIED,
-            verdict(dialogEverShown = true, canShowRationale = false),
+            verdict(blockLikeRequestSeen = false, canShowRationale = false),
         )
     }
 
@@ -54,7 +62,7 @@ class SmsPermissionVerdictTest {
         // Ni siquiera con las señales del bloqueo puestas: concedido gana siempre.
         assertEquals(
             SmsPermissionVerdict.GRANTED,
-            verdict(granted = true, askedBefore = true, dialogEverShown = false),
+            verdict(granted = true, askedBefore = true, blockLikeRequestSeen = true),
         )
     }
 
@@ -91,10 +99,11 @@ class SmsPermissionVerdictTest {
 /**
  * Las tres formas de enterarse de que el diálogo del sistema sí se mostró.
  *
- * Sin ellas el latch dependía únicamente de `shouldShowRequestPermissionRationale`, y hay
- * caminos legítimos que llegan a "denegado + rationale false" sin haber pasado nunca por
- * rationale true. Cada uno de esos caminos terminaba en una acusación falsa y sin salida:
- * el rationale ya no vuelve a true, así que el latch no podía encenderse nunca más.
+ * Cada una desmiente el bloqueo por su cuenta. Sin ellas la única señal disponible sería
+ * `shouldShowRequestPermissionRationale`, y hay caminos legítimos que llegan a "denegado +
+ * rationale false" sin haber pasado nunca por rationale true — cancelar el diálogo con
+ * Atrás, o que la hibernación revoque un permiso ya concedido. Cada uno de esos caminos
+ * terminaba en una acusación falsa.
  */
 class DialogShownEvidenceTest {
 
@@ -178,31 +187,101 @@ class RequestDurationTest {
 }
 
 /**
- * Migración de las prefs al actualizar.
+ * La señal positiva: qué petición tiene derecho a encender la acusación y cuál la apaga.
  *
- * Es el mismo bug que los otros dos, escrito en el disco en vez de en una variable: una
- * instalación vieja tiene "ya pedimos" sin "el diálogo se mostró", y eso leído de frente
- * es exactamente la firma del bloqueo.
+ * Es la negación exacta de [sawPermissionDialog], pero el sentido de la escritura importa
+ * tanto como el valor: se anota SOLO al volver de una petición real, nunca al releer la
+ * pantalla, y se reescribe en los dos sentidos (nada de latch).
  */
-class PermissionSignalsMigrationTest {
+class RequestLooksBlockedTest {
 
     @Test
-    fun `an upgrade that had already asked gets the dialog latched`() {
-        assertTrue(shouldSeedDialogShown(storedVersion = 0, askedBefore = true))
+    fun `an instant denial with nothing else to show for it is the block`() {
+        assertTrue(requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = false))
     }
 
     @Test
-    fun `a fresh install has nothing to seed`() {
-        // Sin petición previa el veredicto es ASK_IN_APP igual, y sembrar el latch acá
-        // desactivaría el mensaje para siempre sin motivo.
-        assertFalse(shouldSeedDialogShown(storedVersion = 0, askedBefore = false))
+    fun `a request that drew a dialog denies the block`() {
+        // Cada una de las tres pruebas del diálogo, por separado, apaga la marca.
+        assertFalse(requestLooksBlocked(canShowRationale = true, granted = false, requestWasSlow = false))
+        assertFalse(requestLooksBlocked(canShowRationale = false, granted = true, requestWasSlow = false))
+        assertFalse(requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = true))
+    }
+}
+
+/**
+ * La actualización desde una versión que no guardaba ninguna señal.
+ *
+ * Este es el estado que el modelo anterior no podía representar y que por eso dejó pasar el
+ * bug: el teléfono real tiene `perm_requested` en true — lo puso el toque que produjo el
+ * bloqueo silencioso — y ninguna otra señal. Al preguntar "¿nunca vimos un diálogo?", ese
+ * estado respondía "no" y la acusación salía sola; al taparlo con una siembra en la
+ * migración, respondía "sí" y el mensaje quedaba muerto para siempre en el único teléfono
+ * que lo motivó. La pregunta positiva no necesita migración: no observamos nada, así que no
+ * afirmamos nada, y la primera petición de esta versión decide.
+ */
+class LegacyUpgradeTest {
+
+    private fun upgraded(blockLikeRequestSeen: Boolean) = smsPermissionVerdict(
+        sdkInt = 35,
+        installSource = InstallSource.SIDELOADED,
+        // Lo escribió la versión vieja. Es lo ÚNICO que sobrevive a la actualización.
+        askedBefore = true,
+        blockLikeRequestSeen = blockLikeRequestSeen,
+        granted = false,
+        canShowRationale = false,
+    )
+
+    @Test
+    fun `an upgrade with no observation of its own does not accuse Android`() {
+        assertEquals(SmsPermissionVerdict.DENIED, upgraded(blockLikeRequestSeen = false))
     }
 
     @Test
-    fun `signals written by this version are left alone`() {
-        // Ya migrado: volver a sembrar borraría la única distinción que sostiene el mensaje.
-        assertFalse(shouldSeedDialogShown(storedVersion = PERM_SIGNALS_VERSION, askedBefore = true))
-        assertFalse(shouldSeedDialogShown(storedVersion = PERM_SIGNALS_VERSION + 1, askedBefore = true))
+    fun `the same upgrade after one request that came back without a dialog does`() {
+        // El teléfono genuinamente bloqueado. Antes no había forma de llegar acá: el latch
+        // sembrado no se podía apagar y el rationale ya nunca vuelve a true.
+        assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, upgraded(blockLikeRequestSeen = true))
+    }
+
+    @Test
+    fun `an unlucky slow request is recoverable instead of permanent`() {
+        // Arranque en frío del controlador de permisos que se pasa del umbral sin dibujar
+        // nada: la petición se lee como "hubo diálogo" y el mensaje no sale…
+        val slowFirstTry = requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = true)
+        assertFalse(slowFirstTry)
+        assertEquals(SmsPermissionVerdict.DENIED, upgraded(blockLikeRequestSeen = slowFirstTry))
+        // …y el intento siguiente, ya en caliente, lo recupera. Con un latch de una sola
+        // escritura este segundo intento no habría podido cambiar nada.
+        val secondTry = requestLooksBlocked(canShowRationale = false, granted = false, requestWasSlow = false)
+        assertEquals(SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS, upgraded(blockLikeRequestSeen = secondTry))
+    }
+}
+
+/**
+ * El aviso condicional del estado ambiguo.
+ *
+ * Hay un estado que ninguna señal resuelve: instalación sin historia propia, permiso ya
+ * denegado y rationale en false. Ahí el veredicto es DENIED — el copy genérico manda a
+ * conceder el permiso en la ficha de la app — y si el bloqueo existe, ese interruptor está
+ * gris. El aviso nombra esa posibilidad sin afirmarla, y solo donde es posible.
+ */
+class RestrictedSettingsHintTest {
+
+    @Test
+    fun `a sideloaded install on Android 15 gets the conditional pointer`() {
+        assertTrue(shouldHintRestrictedSettings(35, InstallSource.SIDELOADED))
+    }
+
+    @Test
+    fun `nothing to hint where the mechanism cannot apply`() {
+        // Mismo sideload, Android donde el permiso de SMS no entra en ajustes restringidos.
+        assertFalse(shouldHintRestrictedSettings(34, InstallSource.SIDELOADED))
+        assertFalse(shouldHintRestrictedSettings(24, InstallSource.SIDELOADED))
+        // Y en Android 15 con una instalación que no puede estar restringida, o que no
+        // pudimos clasificar: mandar a un menú que no existe para ellos es ruido.
+        assertFalse(shouldHintRestrictedSettings(35, InstallSource.STORE))
+        assertFalse(shouldHintRestrictedSettings(35, InstallSource.UNKNOWN))
     }
 }
 

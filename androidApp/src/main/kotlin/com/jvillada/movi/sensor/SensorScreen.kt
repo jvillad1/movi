@@ -88,22 +88,18 @@ private val ErrorColor = Color(0xFFFF6B6B)
 private const val KEY_PERM_REQUESTED = "perm_requested"
 
 /**
- * Recuerda que el sistema LLEGÓ A MOSTRAR el diálogo de permisos alguna vez.
+ * Recuerda que una petición hecha por ESTA versión volvió con la firma del bloqueo.
  *
- * No duplica a [KEY_PERM_REQUESTED] — ese guarda que nosotros pedimos, este guarda que el
- * sistema respondió preguntándole al usuario. Es la señal que separa una denegación real
- * del bloqueo por ajustes restringidos, que son idénticos vistos desde la app. Se enciende
- * con cualquiera de las pruebas de [sawPermissionDialog]. Ver RestrictedSettings.kt.
- */
-private const val KEY_PERM_DIALOG_SHOWN = "perm_dialog_shown"
-
-/**
- * Versión del juego de señales de permisos ya escrito en estas prefs.
+ * No duplica a [KEY_PERM_REQUESTED] — ese guarda que pedimos el permiso alguna vez, este
+ * guarda CÓMO respondió el sistema la última vez que lo pedimos: sin diálogo, sin conceder
+ * y sin habilitar el rationale. Es la única señal que autoriza a decir "esto lo bloqueó
+ * Android", y es una afirmación positiva: mientras no exista, el copy es el genérico.
  *
- * Ausente (0) significa "las escribió una versión que no sabía mirar el diálogo", y eso
- * cambia cómo hay que leerlas. Ver [migratePermissionSignals].
+ * No es un latch. Se reescribe en cada petición y se borra en cuanto se ve cualquier prueba
+ * de que el diálogo funciona ([sawPermissionDialog]), así que ni una medición desafortunada
+ * ni un permiso concedido más tarde dejan la pantalla mintiendo. Ver RestrictedSettings.kt.
  */
-private const val KEY_PERM_SIGNALS_VERSION = "perm_signals_version"
+private const val KEY_PERM_FAST_REQUEST_SEEN = "perm_fast_request_seen"
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
 
@@ -115,6 +111,11 @@ private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.p
 @Composable
 fun SensorScreen() {
     val context = LocalContext.current
+
+    // El origen de la instalación no cambia mientras la app vive y la consulta cruza un
+    // binder al PackageManager: se resuelve una vez acá y baja a las dos tarjetas que lo
+    // necesitan, en vez de repetirse en cada una al arrancar.
+    val installSource = remember(context) { readInstallSource(context) }
 
     var lastCaptureAt by remember { mutableStateOf(readLastCaptureAt(context)) }
     var lastBackfillAt by remember { mutableStateOf(SmsFilterConfigStore.lastBackfillAt(context)) }
@@ -160,7 +161,7 @@ fun SensorScreen() {
             SessionCard()
             Spacer(Modifier.height(16.dp))
 
-            PermissionsCard(context)
+            PermissionsCard(context, installSource)
             Spacer(Modifier.height(16.dp))
 
             // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para
@@ -170,7 +171,11 @@ fun SensorScreen() {
             SensorInfoCard(lastCaptureAt, lastBackfillAt, senderCodes)
             Spacer(Modifier.height(16.dp))
 
-            BackfillCard(context, onSynced = { lastBackfillAt = SmsFilterConfigStore.lastBackfillAt(context) })
+            BackfillCard(
+                context,
+                installSource,
+                onSynced = { lastBackfillAt = SmsFilterConfigStore.lastBackfillAt(context) },
+            )
             Spacer(Modifier.height(24.dp))
 
             Button(
@@ -377,14 +382,12 @@ private fun openMoviWeb(context: Context) {
 }
 
 @Composable
-private fun PermissionsCard(context: Context) {
+private fun PermissionsCard(context: Context, installSource: InstallSource) {
     val activity = remember(context) { context.findComponentActivity() }
-    // El origen de la instalación no cambia mientras la app vive: se consulta una vez.
-    val installSource = remember(context) { readInstallSource(context) }
     var granted by remember { mutableStateOf(hasSmsPermissions(context)) }
     var asked by remember { mutableStateOf(readPermissionAsked(context)) }
     var rationale by remember { mutableStateOf(canShowRationale(activity)) }
-    var dialogShown by remember { mutableStateOf(readPermissionDialogShown(context)) }
+    var blockLike by remember { mutableStateOf(readBlockLikeRequest(context)) }
 
     // elapsedRealtime del último launch; 0 = no hay petición en vuelo que medir. Reloj
     // monotónico a propósito: el de pared puede saltar mientras el diálogo está abierto.
@@ -392,16 +395,17 @@ private fun PermissionsCard(context: Context) {
     // requestDurationSaysDialogShown), así que no hace falta sobrevivirla.
     var requestStartedAt by remember { mutableLongStateOf(0L) }
 
-    fun refresh(requestWasSlow: Boolean = false) {
+    fun refresh() {
         granted = hasSmsPermissions(context)
         asked = readPermissionAsked(context)
         rationale = canShowRationale(activity)
-        // Se anota ACÁ, en cada relectura, porque ninguna de las pruebas dura: el rationale
-        // solo está en true en la ventana entre la primera y la última negativa, y un
-        // permiso concedido lo puede revocar la hibernación. Si no las guardamos al verlas,
-        // una denegación real queda indistinguible del bloqueo.
-        markPermissionDialogShown(context, sawPermissionDialog(rationale, granted, requestWasSlow))
-        dialogShown = readPermissionDialogShown(context)
+        // Una relectura NO puede afirmar el bloqueo — no hubo petición que medir — pero sí
+        // desmentirlo: tener el permiso o poder mostrar el rationale prueban que esta
+        // instalación no está restringida. Sin esto, una marca vieja seguiría sosteniendo la
+        // acusación después de que el usuario concediera el permiso desde los ajustes y la
+        // hibernación se lo revocara meses más tarde.
+        if (sawPermissionDialog(rationale, granted)) clearBlockLikeRequest(context)
+        blockLike = readBlockLikeRequest(context)
     }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -409,7 +413,17 @@ private fun PermissionsCard(context: Context) {
         // rationale — igual que el bloqueo. Lo único que los separa es cuánto tardó.
         val slow = requestDurationSaysDialogShown(requestStartedAt, SystemClock.elapsedRealtime())
         requestStartedAt = 0L
-        refresh(requestWasSlow = slow)
+        // El resultado del launcher no alcanza: hace falta el rationale de después para
+        // saber si el sistema llegó a preguntar. Se escribe siempre, en los dos sentidos.
+        writeBlockLikeRequest(
+            context,
+            requestLooksBlocked(
+                canShowRationale = canShowRationale(activity),
+                granted = hasSmsPermissions(context),
+                requestWasSlow = slow,
+            ),
+        )
+        refresh()
     }
 
     // Cubre también el primer ON_RESUME: el observador se registra con el ciclo de vida ya
@@ -436,7 +450,7 @@ private fun PermissionsCard(context: Context) {
             sdkInt = Build.VERSION.SDK_INT,
             installSource = installSource,
             askedBefore = asked,
-            dialogEverShown = dialogShown,
+            blockLikeRequestSeen = blockLike,
             granted = granted,
             canShowRationale = rationale,
         )
@@ -469,6 +483,21 @@ private fun PermissionsCard(context: Context) {
                     fontSize = 12.sp,
                     color = TextMutedColor,
                 )
+                if (shouldHintRestrictedSettings(Build.VERSION.SDK_INT, installSource)) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        // Condicional a propósito: acá no sabemos si el bloqueo existe (ver
+                        // shouldHintRestrictedSettings). Lo que sí sabemos es que en esta
+                        // instalación es posible, y que el usuario que se lo encuentre no
+                        // tiene forma de adivinar el menú donde se desactiva.
+                        "Si el interruptor de SMS aparece gris y no te deja activarlo, es porque la app " +
+                            "no se instaló desde una tienda: en esa misma ficha, menú de tres puntos " +
+                            "(arriba a la derecha) → «Permitir ajustes restringidos». Después el " +
+                            "interruptor se deja activar.",
+                        fontSize = 12.sp,
+                        color = TextMutedColor,
+                    )
+                }
             }
 
             SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS -> RestrictedSettingsHelp(
@@ -619,15 +648,14 @@ private fun HibernationCard(context: Context) {
  * menos que el backfill viejo, no más.
  */
 @Composable
-private fun BackfillCard(context: Context, onSynced: () -> Unit) {
+private fun BackfillCard(context: Context, installSource: InstallSource, onSynced: () -> Unit) {
     val activity = remember(context) { context.findComponentActivity() }
     val scope = rememberCoroutineScope()
     val loggedIn = SessionManager.loggedIn
-    val installSource = remember(context) { readInstallSource(context) }
     var canRead by remember { mutableStateOf(hasReadSmsPermission(context)) }
     var asked by remember { mutableStateOf(readPermissionAsked(context)) }
     var rationale by remember { mutableStateOf(canShowRationaleFor(activity, Manifest.permission.READ_SMS)) }
-    var dialogShown by remember { mutableStateOf(readPermissionDialogShown(context)) }
+    var blockLike by remember { mutableStateOf(readBlockLikeRequest(context)) }
     var requestStartedAt by remember { mutableLongStateOf(0L) }
     var running by remember { mutableStateOf(false) }
     var outcome by remember { mutableStateOf<BackfillOutcome?>(null) }
@@ -647,10 +675,11 @@ private fun BackfillCard(context: Context, onSynced: () -> Unit) {
         canRead = hasReadSmsPermission(context)
         asked = readPermissionAsked(context)
         rationale = canShowRationaleFor(activity, Manifest.permission.READ_SMS)
-        // Mismo latch que en PERMISOS, y por el mismo motivo: este botón también pide el
-        // permiso, así que también tiene que dejar constancia de que el diálogo se mostró.
-        markPermissionDialogShown(context, sawPermissionDialog(rationale, canRead))
-        dialogShown = readPermissionDialogShown(context)
+        // Misma señal que en PERMISOS y por el mismo motivo: acá tampoco hubo petición que
+        // medir, así que solo se puede desmentir el bloqueo, nunca afirmarlo. Tener READ_SMS
+        // alcanza: el bloqueo es del grupo entero, no de un permiso suelto.
+        if (sawPermissionDialog(rationale, canRead)) clearBlockLikeRequest(context)
+        blockLike = readBlockLikeRequest(context)
         // Igual que arriba: si el permiso se concedió desde ajustes del sistema, el
         // NoPermission que quedó en pantalla ya no describe la realidad.
         if (wasBlocked && canRead) outcome = null
@@ -677,8 +706,8 @@ private fun BackfillCard(context: Context, onSynced: () -> Unit) {
         requestStartedAt = 0L
         canRead = granted
         rationale = canShowRationaleFor(activity, Manifest.permission.READ_SMS)
-        markPermissionDialogShown(context, sawPermissionDialog(rationale, granted, slow))
-        dialogShown = readPermissionDialogShown(context)
+        writeBlockLikeRequest(context, requestLooksBlocked(rationale, granted, slow))
+        blockLike = readBlockLikeRequest(context)
         if (granted) start() else outcome = BackfillOutcome.NoPermission
     }
 
@@ -691,7 +720,7 @@ private fun BackfillCard(context: Context, onSynced: () -> Unit) {
         sdkInt = Build.VERSION.SDK_INT,
         installSource = installSource,
         askedBefore = asked,
-        dialogEverShown = dialogShown,
+        blockLikeRequestSeen = blockLike,
         granted = canRead,
         canShowRationale = rationale,
     ) == SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS
@@ -773,39 +802,25 @@ private fun markPermissionAsked(context: Context) {
         .edit().putBoolean(KEY_PERM_REQUESTED, true).apply()
 }
 
-private fun readPermissionDialogShown(context: Context): Boolean =
+private fun readBlockLikeRequest(context: Context): Boolean =
     context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_PERM_DIALOG_SHOWN, false)
+        .getBoolean(KEY_PERM_FAST_REQUEST_SEEN, false)
 
 /**
- * Anota, una sola vez y para siempre, que el diálogo del sistema sí se mostró.
+ * Guarda cómo se comportó la última petición del permiso. Ver [KEY_PERM_FAST_REQUEST_SEEN].
  *
- * Es un latch: una vez visto el diálogo, esta instalación ya no puede volver a ser un caso
- * de ajustes restringidos. Quién decide el [shown] está en [sawPermissionDialog].
+ * Escribe los dos valores a propósito: una petición que sí mostró el diálogo tiene que
+ * BORRAR la marca de la anterior. No sobrevive a una desinstalación ni a un borrado de
+ * datos, que es justo lo que se quiere — sin esta instalación no hay observación.
  */
-private fun markPermissionDialogShown(context: Context, shown: Boolean) {
-    if (!shown || readPermissionDialogShown(context)) return
+private fun writeBlockLikeRequest(context: Context, blockLike: Boolean) {
+    if (blockLike == readBlockLikeRequest(context)) return
     context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_PERM_DIALOG_SHOWN, true).apply()
+        .edit().putBoolean(KEY_PERM_FAST_REQUEST_SEEN, blockLike).apply()
 }
 
-/**
- * Pone al día las señales de permisos al actualizar desde una versión que no las guardaba.
- *
- * Corre una sola vez por instalación, al arrancar la Activity. Sin esto, todo teléfono que
- * ya venía con el sensor y había denegado el permiso arrancaría esta versión acusando a
- * Android de un bloqueo que nunca ocurrió, y sin salida. Ver [shouldSeedDialogShown].
- */
-internal fun migratePermissionSignals(context: Context) {
-    val prefs = context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
-    val storedVersion = prefs.getInt(KEY_PERM_SIGNALS_VERSION, 0)
-    if (storedVersion >= PERM_SIGNALS_VERSION) return
-    val editor = prefs.edit()
-    if (shouldSeedDialogShown(storedVersion, prefs.getBoolean(KEY_PERM_REQUESTED, false))) {
-        editor.putBoolean(KEY_PERM_DIALOG_SHOWN, true)
-    }
-    editor.putInt(KEY_PERM_SIGNALS_VERSION, PERM_SIGNALS_VERSION).apply()
-}
+/** Desmiente el bloqueo sin haber pedido nada. Solo lo llaman las relecturas. */
+private fun clearBlockLikeRequest(context: Context) = writeBlockLikeRequest(context, false)
 
 private fun readLastCaptureAt(context: Context): Long = SmsFilterConfigStore.lastCaptureAt(context)
 
