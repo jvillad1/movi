@@ -85,6 +85,17 @@ private val ErrorColor = Color(0xFFFF6B6B)
 /** Recuerda que YA pedimos los permisos en la app: distingue "nunca preguntó" de "denegó". */
 private const val KEY_PERM_REQUESTED = "perm_requested"
 
+/**
+ * Recuerda que el sistema LLEGÓ A MOSTRAR el diálogo de permisos alguna vez.
+ *
+ * No duplica a [KEY_PERM_REQUESTED] — ese guarda que nosotros pedimos, este guarda que el
+ * sistema respondió preguntándole al usuario. Es la señal que separa una denegación real
+ * del bloqueo por ajustes restringidos, que son idénticos vistos desde la app. Se marca
+ * cuando `shouldShowRequestPermissionRationale` da true, cosa que solo pasa después de que
+ * el usuario vio el diálogo y dijo que no. Ver RestrictedSettings.kt.
+ */
+private const val KEY_PERM_DIALOG_SHOWN = "perm_dialog_shown"
+
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
 
 /**
@@ -359,18 +370,50 @@ private fun openMoviWeb(context: Context) {
 @Composable
 private fun PermissionsCard(context: Context) {
     val activity = remember(context) { context.findComponentActivity() }
+    // El origen de la instalación no cambia mientras la app vive: se consulta una vez.
+    val installSource = remember(context) { readInstallSource(context) }
     var granted by remember { mutableStateOf(hasSmsPermissions(context)) }
     var asked by remember { mutableStateOf(readPermissionAsked(context)) }
     var rationale by remember { mutableStateOf(canShowRationale(activity)) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        granted = hasSmsPermissions(context)
-        rationale = canShowRationale(activity)
-    }
+    var dialogShown by remember { mutableStateOf(readPermissionDialogShown(context)) }
 
-    OnResume(activity) {
+    fun refresh() {
         granted = hasSmsPermissions(context)
         asked = readPermissionAsked(context)
         rationale = canShowRationale(activity)
+        // Se anota ACÁ, en cada relectura, porque el rationale solo está en true en la
+        // ventana entre la primera y la última negativa: si no lo guardamos al verlo, esa
+        // información se pierde y una denegación real quedaría indistinguible del bloqueo.
+        markPermissionDialogShown(context, rationale)
+        dialogShown = readPermissionDialogShown(context)
+    }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        refresh()
+    }
+
+    OnResume(activity) { refresh() }
+
+    fun requestPermissions() {
+        markPermissionAsked(context)
+        asked = true
+        launcher.launch(SmsPermissions)
+    }
+
+    val verdict = if (activity == null && !granted) {
+        // Sin Activity no podemos consultar el rationale, así que no tenemos con qué
+        // sostener ninguna afirmación: caemos al estado genérico, que además es el único
+        // con salida (los ajustes del sistema).
+        SmsPermissionVerdict.DENIED
+    } else {
+        smsPermissionVerdict(
+            sdkInt = Build.VERSION.SDK_INT,
+            installSource = installSource,
+            askedBefore = asked,
+            dialogEverShown = dialogShown,
+            granted = granted,
+            canShowRationale = rationale,
+        )
     }
 
     SensorCard(title = "PERMISOS") {
@@ -383,25 +426,17 @@ private fun PermissionsCard(context: Context) {
                 color = if (granted) AccentColor else ErrorColor,
             )
         }
-        if (!granted) {
-            val toSettings = activity == null || shouldOpenSettings(asked, rationale)
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {
-                    if (toSettings) {
-                        openAppSettings(context)
-                    } else {
-                        markPermissionAsked(context)
-                        asked = true
-                        launcher.launch(SmsPermissions)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
-            ) {
-                Text(if (toSettings) "Abrir ajustes de la app" else "Conceder permisos")
+        when (verdict) {
+            SmsPermissionVerdict.GRANTED -> Unit
+
+            SmsPermissionVerdict.ASK_IN_APP -> {
+                Spacer(Modifier.height(12.dp))
+                PermissionButton("Conceder permisos") { requestPermissions() }
             }
-            if (toSettings) {
+
+            SmsPermissionVerdict.DENIED -> {
+                Spacer(Modifier.height(12.dp))
+                PermissionButton("Abrir ajustes de la app") { openAppSettings(context) }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Android ya no muestra el diálogo: concedé SMS en Permisos, dentro de los ajustes de la app.",
@@ -409,8 +444,64 @@ private fun PermissionsCard(context: Context) {
                     color = TextMutedColor,
                 )
             }
+
+            SmsPermissionVerdict.BLOCKED_BY_RESTRICTED_SETTINGS -> RestrictedSettingsHelp(
+                onOpenSettings = { openAppSettings(context) },
+                onRetry = { requestPermissions() },
+            )
         }
     }
+}
+
+@Composable
+private fun PermissionButton(label: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
+    ) {
+        Text(label)
+    }
+}
+
+/**
+ * Qué se le dice al usuario cuando Android bloqueó el permiso por ajustes restringidos.
+ *
+ * Dos cosas que este texto NO puede hacer, porque el sistema no lo permite: activar el
+ * desbloqueo por su cuenta y llevar directo al menú de tres puntos (no hay intent para
+ * esa opción). Lo único honesto es nombrar el camino exacto. El botón cae en la ficha de
+ * la app, que es la pantalla donde vive ese menú: de ahí, un toque.
+ */
+@Composable
+private fun RestrictedSettingsHelp(onOpenSettings: () -> Unit, onRetry: () -> Unit) {
+    Spacer(Modifier.height(12.dp))
+    Text(
+        "Android bloqueó el permiso sin preguntarte. No fue algo que hiciste: como esta app " +
+            "no se instaló desde una tienda, el sistema no deja concederle SMS hasta que lo " +
+            "habilites a mano.",
+        fontSize = 13.sp,
+        color = ErrorColor,
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Ajustes → Aplicaciones → Movi → menú de tres puntos (arriba a la derecha) → " +
+            "«Permitir ajustes restringidos». La app no puede activarlo por vos: Android no " +
+            "expone ninguna forma de hacerlo desde acá.",
+        fontSize = 12.sp,
+        color = TextMutedColor,
+    )
+    Spacer(Modifier.height(12.dp))
+    PermissionButton("Abrir la ficha de la app", onOpenSettings)
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+        Text("Ya lo permití — pedir de nuevo")
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Con los ajustes restringidos habilitados, el diálogo de SMS vuelve a salir.",
+        fontSize = 12.sp,
+        color = TextMutedColor,
+    )
 }
 
 /**
@@ -625,6 +716,23 @@ private fun readPermissionAsked(context: Context): Boolean =
 private fun markPermissionAsked(context: Context) {
     context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
         .edit().putBoolean(KEY_PERM_REQUESTED, true).apply()
+}
+
+private fun readPermissionDialogShown(context: Context): Boolean =
+    context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_PERM_DIALOG_SHOWN, false)
+
+/**
+ * Anota, una sola vez y para siempre, que el diálogo del sistema sí se mostró.
+ *
+ * [rationale] true solo puede venir de una negativa del usuario ante el diálogo real; el
+ * bloqueo por ajustes restringidos nunca lo produce. Es un latch: una vez visto el
+ * diálogo, esta instalación ya no puede volver a ser un caso de ajustes restringidos.
+ */
+private fun markPermissionDialogShown(context: Context, rationale: Boolean) {
+    if (!rationale || readPermissionDialogShown(context)) return
+    context.getSharedPreferences(SmsFilterConfigStore.PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_PERM_DIALOG_SHOWN, true).apply()
 }
 
 private fun readLastCaptureAt(context: Context): Long = SmsFilterConfigStore.lastCaptureAt(context)
