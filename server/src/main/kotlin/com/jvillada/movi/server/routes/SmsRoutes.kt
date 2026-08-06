@@ -5,6 +5,8 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildSmsPushPayload
+import com.jvillada.movi.server.sms.SmsDedupeIndex
+import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
@@ -126,33 +128,49 @@ fun Route.smsRoutes() {
         val insertedCount = dbQuery {
             // Collect existing rows for this user so we can skip duplicates
             // without touching rows that may already have a user-set state.
+            // One query per sync, never one per message.
             val existingRows = SmsMessages
                 .selectAll()
                 .where { SmsMessages.userId eq uid }
-                .map { it[SmsMessages.id] to it[SmsMessages.text] }
+                .map { Triple(it[SmsMessages.id], it[SmsMessages.text], it[SmsMessages.time]) }
 
             val existingIds = existingRows.map { it.first }.toSet()
 
-            // Cross-scheme dedupe (final review fix): the realtime capture path inserts
-            // ids `sms_rt_<16hex>` while the manual pull path inserts ids `sms_<32hex>`
-            // for the SAME physical SMS — the two schemes hash different timestamp
-            // sources, so the ids can never collide. Id-only dedupe above therefore
-            // lets the same bank SMS in twice (double push, double-confirm risk).
+            // Dedupe cross-esquema por texto + tiempo (issue #27).
             //
-            // We dedupe on `text` alone rather than `text + bank`: both paths derive
-            // `bank` from the same raw sender address for a given physical SMS in the
-            // common case, but they diverge on the null-sender edge case (pull leaves
-            // it "", the realtime worker falls back to "SMS") — so `bank` can't be
-            // trusted as part of the key. Text-only dedupe is an acceptable tradeoff:
-            // two DISTINCT real purchases producing byte-identical SMS text is
-            // vanishingly rare, and if it ever happens the user still has the device
-            // inbox as the source of truth.
-            val existingTexts = existingRows.map { it.second }.toMutableSet()
+            // El camino realtime inserta ids `sms_rt_<16hex>` y el backfill del inbox
+            // inserta ids `sms_<32hex>` para el MISMO SMS físico: hashean fuentes de
+            // timestamp distintas, así que los ids nunca coinciden y el chequeo por id
+            // de arriba deja pasar el mismo SMS bancario dos veces.
+            //
+            // El texto tampoco alcanza como clave. Los SMS de compra no traen fecha, ni
+            // hora, ni referencia ("Compra aprobada $28.500 en Uber BV."), así que dos
+            // transacciones REALES distintas producen texto byte-idéntico y el dedupe por
+            // texto se comía la segunda en silencio, con `synced` mintiendo. En una app de
+            // finanzas personales perder un movimiento sin señal es peor que mostrar un
+            // duplicado que el usuario puede ignorar.
+            //
+            // Lo que separa los dos casos es el tiempo: las dos fuentes fechan el mismo
+            // SMS físico a lo sumo un minuto aparte tras truncar a minutos, mientras que
+            // dos transacciones distintas están a horas o días. Ver SMS_DEDUPE_TOLERANCE
+            // para el residual conocido (delay de entrega) y por qué no se ensancha para
+            // cubrirlo. `bank` sigue fuera de la clave: los dos caminos divergen en el
+            // remitente vacío (backfill "" vs realtime "SMS").
+            val dedupe = SmsDedupeIndex(existingRows.map { SmsKey(it.second, it.third) })
+
+            // Repeats del mismo id dentro de UN payload: el chequeo por texto+tiempo de
+            // arriba solo los atrapa si el tiempo parsea (mismo id ⇒ mismo texto y tiempo
+            // ⇒ mismo SmsKey). Si no parsea, ambos caen en el fallback "ilegible → insertar"
+            // y el segundo insert choca contra la primary key, abortando la transacción
+            // entera del sync. seenIds los filtra antes de llegar ahí, sin depender del parseo.
+            val seenIds = mutableSetOf<String>()
 
             var count = 0
             for (msg in messages) {
                 if (msg.id in existingIds) continue
-                if (msg.text in existingTexts) continue
+                if (!seenIds.add(msg.id)) continue
+                val key = SmsKey(msg.text, msg.time)
+                if (dedupe.isDuplicate(key)) continue
                 SmsMessages.insert {
                     it[id]     = msg.id
                     it[userId] = uid
@@ -162,7 +180,7 @@ fun Route.smsRoutes() {
                     it[state]  = "new" // server owns state; /confirm + /ignore transition it. Never trust client.
                     it[det]    = msg.det
                 }
-                existingTexts += msg.text
+                dedupe.add(key)
                 inserted += msg
                 count++
             }
