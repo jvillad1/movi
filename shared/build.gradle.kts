@@ -90,6 +90,11 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        // Tests JVM de los `actual` de Android (p.ej. el reloj del backfill de SMS en
+        // platform/SmsReader.android.kt). Corren con ./gradlew :shared:testDebugUnitTest.
+        androidUnitTest.dependencies {
+            implementation(libs.kotlin.test)
+        }
     }
 }
 
