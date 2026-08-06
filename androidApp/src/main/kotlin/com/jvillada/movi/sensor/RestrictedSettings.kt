@@ -69,9 +69,15 @@ private val StoreInstallers = setOf(
 private val SideloadInstallers = setOf(
     "com.android.packageinstaller",
     "com.google.android.packageinstaller",
-    "com.android.shell", // `adb install`
-    "com.google.android.packageinstaller.permission",
+    // Un `adb install` es un sideload en el sentido llano, así que el clasificador lo dice.
+    // Ojo: en la práctica no se llega acá desde API 33+, porque ahí packageSource está
+    // presente y —medido en API 35— un `adb install` reporta STORE (Android lo exime), y
+    // packageSource gana antes de que se mire el nombre.
+    "com.android.shell",
 )
+// Fuera a propósito: "com.google.android.packageinstaller.permission" no es un paquete real
+// —el controlador de permisos es com.google.android.permissioncontroller— así que nunca
+// puede figurar como instalador.
 
 internal enum class InstallSource {
     /** Vino de una tienda: los ajustes restringidos no aplican. */
@@ -125,11 +131,19 @@ internal fun smsPermissionVerdict(
  *
  * La respuesta no es adivinar el veredicto, sino nombrar la condición: "SI el interruptor
  * aparece gris, es por esto y se arregla así". No afirma que Android bloqueó nada, así que
- * no es la acusación con otro nombre; solo aparece donde el bloqueo es posible (API 35+ y
- * sideload), porque en cualquier otro lado sería ruido.
+ * no es la acusación con otro nombre.
+ *
+ * Por qué UNKNOWN también pasa: excluirlo tenía sentido cuando este gate alimentaba una
+ * ACUSACIÓN — un origen que no sabemos clasificar no puede sostener "Android te bloqueó".
+ * Para una condicional no aplica: bajo UNKNOWN el antecedente sigue protegiendo la frase y
+ * la causa no se sabe falsa. STORE es el único valor donde la pista sería afirmativamente
+ * incorrecta, porque una instalación de tienda no puede tener ese interruptor gris por esta
+ * razón. Y la exclusión importa en concreto: el APK llega por Drive, y si el sistema anota
+ * a Drive como instalador sin `packageSource` utilizable, el origen queda UNKNOWN — o sea
+ * que dejarlo afuera silenciaba la pista justo en el teléfono para el que se escribió.
  */
 internal fun shouldHintRestrictedSettings(sdkInt: Int, installSource: InstallSource): Boolean =
-    sdkInt >= RESTRICTED_SETTINGS_MIN_SDK && installSource == InstallSource.SIDELOADED
+    sdkInt >= RESTRICTED_SETTINGS_MIN_SDK && installSource != InstallSource.STORE
 
 /**
  * Traduce lo que reporta el sistema sobre el origen de la instalación.

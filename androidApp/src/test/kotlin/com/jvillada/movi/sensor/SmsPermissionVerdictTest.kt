@@ -64,14 +64,23 @@ class RestrictedSettingsHintTest {
     }
 
     @Test
+    fun `un origen sin clasificar tambien recibe la pista`() {
+        // El APK llega por Drive: si el sistema anota a Drive como instalador y no da un
+        // packageSource utilizable, el origen queda UNKNOWN. Excluirlo silenciaba la pista
+        // justo en el teléfono para el que se escribió. Como es condicional y no una
+        // acusación, bajo UNKNOWN el antecedente sigue protegiendo la frase.
+        assertTrue(shouldHintRestrictedSettings(35, InstallSource.UNKNOWN))
+    }
+
+    @Test
     fun `nothing to hint where the mechanism cannot apply`() {
         // Mismo sideload, Android donde el permiso de SMS no entra en ajustes restringidos.
         assertFalse(shouldHintRestrictedSettings(34, InstallSource.SIDELOADED))
         assertFalse(shouldHintRestrictedSettings(24, InstallSource.SIDELOADED))
-        // Y en Android 15 con una instalación que no puede estar restringida, o que no
-        // pudimos clasificar: mandar a un menú que no existe para ellos es ruido.
+        assertFalse(shouldHintRestrictedSettings(34, InstallSource.UNKNOWN))
+        // STORE es el único origen donde la pista sería afirmativamente falsa: una
+        // instalación de tienda no puede tener el interruptor gris por esta razón.
         assertFalse(shouldHintRestrictedSettings(35, InstallSource.STORE))
-        assertFalse(shouldHintRestrictedSettings(35, InstallSource.UNKNOWN))
     }
 }
 
