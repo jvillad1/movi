@@ -14,7 +14,11 @@ object JwtConfig {
     }
 
     private val secret: String by lazy {
-        resolveSecret(System.getenv("JWT_SECRET"), readFromEnvFile("JWT_SECRET"))
+        // La system property va primero para que los tests puedan fijar un secreto sin depender
+        // de que exista un server/.env en el checkout (mismo idioma que VapidConfig). No cambia
+        // nada del token en sí: algoritmo, claims y validez siguen igual.
+        System.getProperty("movi.jwt.secret")?.takeIf { it.isNotBlank() }
+            ?: resolveSecret(System.getenv("JWT_SECRET"), readFromEnvFile("JWT_SECRET"))
     }
 
     private fun readFromEnvFile(key: String): String? {

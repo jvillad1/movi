@@ -25,7 +25,11 @@ object DatabaseFactory {
         }
         Database.connect(HikariDataSource(config))
         transaction {
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, PushSubscriptions, Screens)
+            // SchemaUtils.create emite CREATE TABLE IF NOT EXISTS: una tabla nueva se crea sola
+            // al arrancar y las existentes quedan intactas. No hay archivos de migración en este
+            // proyecto; createMissingTablesAndColumns está abajo y solo cubre COLUMNAS nuevas de
+            // las dos tablas que las tuvieron. Una tabla nueva basta con agregarla acá.
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens)
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules)
         }
         seedScreens()

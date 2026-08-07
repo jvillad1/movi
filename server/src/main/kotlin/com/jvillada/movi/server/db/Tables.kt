@@ -10,6 +10,30 @@ object Users : Table("users") {
     override val primaryKey = PrimaryKey(id)
 }
 
+/**
+ * Tokens de recuperación de contraseña.
+ *
+ * `token_hash` guarda `sha256(token)` — **el token en claro no se persiste nunca**. Un dump de
+ * esta tabla no sirve para canjear ningún reset.
+ *
+ * `used_at` implementa el uso único: se sella al consumir el token y también al invalidar los
+ * hermanos del mismo usuario. Una fila con `used_at` no nulo o con `expires_at` en el pasado
+ * ya no vale — el confirm falla cerrado ante cualquiera de las dos condiciones.
+ */
+object PasswordResetTokens : Table("password_reset_tokens") {
+    val id        = varchar("id", 50)
+    val userId    = varchar("user_id", 50)
+    val tokenHash = varchar("token_hash", 64)   // sha256 hex — jamás el token
+    val createdAt = long("created_at")
+    val expiresAt = long("expires_at")
+    val usedAt    = long("used_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init {
+        uniqueIndex("uq_password_reset_token_hash", tokenHash)
+        index("idx_password_reset_user_id", false, userId)
+    }
+}
+
 object Accounts : Table("accounts") {
     val id       = varchar("id", 50)
     val userId   = varchar("user_id", 50)

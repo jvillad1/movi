@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.LoginRequest
+import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MinCard
@@ -46,6 +47,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
 
     val passwordFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -54,6 +56,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         if (loading) return
         loading = true
         error = null
+        notice = null
         focusManager.clearFocus()
         coroutine.launch {
             runCatching {
@@ -64,6 +67,44 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 onNavigate(Screen.Dashboard)
             }.onFailure {
                 error = "Correo o contraseña incorrectos"
+                loading = false
+            }
+        }
+    }
+
+    /**
+     * Pide el enlace de recuperación. El paso 2 (elegir la contraseña nueva) NO vive acá: el
+     * enlace del correo abre la PWA en el navegador, que tiene el formulario. Duplicar ese
+     * formulario en Compose obligaría a pegar el token a mano — peor experiencia y una segunda
+     * copia de la misma pantalla. Acá está lo que sí hace falta desde el teléfono: pedirlo.
+     */
+    fun requestReset() {
+        if (loading) return
+        val trimmed = email.trim()
+        if (trimmed.isBlank()) {
+            error = "Escribí tu correo y volvé a tocar «¿Olvidaste tu contraseña?»"
+            return
+        }
+        loading = true
+        error = null
+        notice = null
+        focusManager.clearFocus()
+        coroutine.launch {
+            runCatching {
+                Repositories.wallets.requestPasswordReset(PasswordResetRequest(trimmed))
+            }.onSuccess { status ->
+                when (status) {
+                    // 202 es idéntico exista o no el correo — la app no sabe (ni debe saber) cuál fue.
+                    202  -> notice = "Si el correo está registrado, te enviamos un enlace. Abrilo desde el correo para elegir una contraseña nueva."
+                    // El servidor no tiene cómo mandar correo. Se dice, en vez de prometer un
+                    // mensaje que nunca va a llegar.
+                    503  -> error = "El envío de correo no está configurado en el servidor, así que no se puede recuperar la contraseña por ahí."
+                    429  -> error = "Demasiados pedidos. Esperá unos minutos."
+                    else -> error = "No se pudo pedir el enlace ($status)"
+                }
+                loading = false
+            }.onFailure {
+                error = "No se pudo conectar. Probá de nuevo."
                 loading = false
             }
         }
@@ -95,7 +136,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             AuthField(
                 value = password,
                 onChange = { password = it },
-                placeholder = "••••••",
+                placeholder = "••••••",   // login: no se insinúa longitud, la cuenta puede ser vieja
                 isPassword = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
@@ -109,6 +150,17 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text(it, fontSize = 12.sp, color = MinExpense)
             }
+            notice?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, fontSize = 12.sp, color = MinTextMute)
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "¿Olvidaste tu contraseña?",
+                fontSize = 13.sp, color = MinPrimary,
+                modifier = Modifier.noRippleClickable { requestReset() },
+            )
 
             Spacer(Modifier.height(20.dp))
             Box(

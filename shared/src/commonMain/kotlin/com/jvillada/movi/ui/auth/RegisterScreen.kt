@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -43,8 +44,15 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
 
     fun submit() {
         if (loading) return
-        if (name.isBlank() || email.isBlank() || password.length < 6) {
-            error = "Nombre, correo y contraseña (mín. 6 chars) requeridos"
+        if (name.isBlank() || email.isBlank()) {
+            error = "Nombre y correo requeridos"
+            return
+        }
+        // El mínimo sale de PasswordPolicy (:core), el mismo objeto que usa el servidor para
+        // validar. Antes había un `6` escrito a mano acá y otro en AuthRoutes.kt: mover uno no
+        // movía el otro. Esto es cortesía de UI; la validación que manda es la del servidor.
+        PasswordPolicy.problemWith(password)?.let {
+            error = PasswordPolicy.messageFor(it)
             return
         }
         loading = true; error = null
@@ -103,7 +111,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
             AuthField(
                 value = password,
                 onChange = { password = it },
-                placeholder = "••••••",
+                placeholder = "•".repeat(PasswordPolicy.MIN_LENGTH),
                 isPassword = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
