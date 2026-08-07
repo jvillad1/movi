@@ -75,7 +75,11 @@
                         <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
                     </form>
                     <button class="lg-alt" id="forgot-link" type="button">¿Olvidaste tu contraseña?</button>
-                    <button class="lg-alt" id="login-alt" type="button">Usar login clásico</button>
+                    <!-- Esta capa HTML no tiene registro: solo entra. El registro vive en la
+                         app Compose de abajo, así que este botón es la ÚNICA puerta para
+                         quien llega sin cuenta. Se llama por su destino y no "login clásico",
+                         que describía el mecanismo (y al revés: el clásico es el de abajo). -->
+                    <button class="lg-alt" id="login-alt" type="button">¿No tenés cuenta? Registrate</button>
                 </div>
 
                 <!-- Panel 2: pedir el enlace de recuperación -->
@@ -292,7 +296,10 @@
                     resetBtn.disabled = false; resetBtn.textContent = 'Guardar contraseña';
                 });
 
-                // Fallback: reveal the Compose (canvas) login underneath.
+                // Descubre el login de Compose que está debajo. Doble propósito: es la vía
+                // al registro (esta capa no lo tiene) y el escape si el overlay estorba.
+                // Ojo: aterriza en el login de Compose, no directo en el formulario de
+                // registro — desde ahí falta un toque más en "¿No tenés cuenta? Registrate".
                 document.getElementById('login-alt').addEventListener('click', function () {
                     overlay.classList.add('hidden');
                 });
