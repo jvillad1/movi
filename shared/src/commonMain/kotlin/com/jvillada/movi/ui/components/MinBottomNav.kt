@@ -32,6 +32,9 @@ fun MinBottomNav(
     active: NavTab,
     onTabSelected: (NavTab) -> Unit,
 ) {
+    // On wide windows the root-level MinNavRail takes over; the 14 screens
+    // that embed this bar keep calling it and it simply renders nothing.
+    if (LocalWindowWidthClass.current == WindowWidthClass.Expanded) return
     Box(
         modifier = Modifier
             .fillMaxWidth()

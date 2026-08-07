@@ -11,11 +11,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DRIVE="$HOME/Library/CloudStorage/GoogleDrive-jvillad1@gmail.com"
-# `|| true`: si macOS bloquea el acceso a CloudStorage (TCC), ls falla y con
-# `set -e` + pipefail el script moriría acá sin decir nada. Queremos llegar al
-# mensaje del final, que explica cómo copiarlo a mano.
-DEST=$(ls -d "$DRIVE"/*/Work/Movi 2>/dev/null | head -1 || true)
+# Se sube con rclone, NO copiando a la carpeta de Drive de escritorio: macOS (TCC)
+# niega el acceso a ~/Library/CloudStorage desde el shell, y ese permiso no quedó
+# concedido de forma estable ni siquiera tras autorizarlo una vez. rclone sube por
+# la API de Drive, así que no toca el sistema de archivos y el bloqueo no aplica.
+RCLONE_DEST="drive:Work/Movi"
 
 VERSION=$(grep -m1 'versionName' androidApp/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
 BUILD=$(grep -m1 'versionCode' androidApp/build.gradle.kts | sed 's/[^0-9]//g')
@@ -34,17 +34,28 @@ printf 'listo: %s (%.1f MB)\n' "$OUT" "$(echo "scale=2; $(stat -f%z "$OUT")/1048
 
 [ "${1:-}" = "--no-copy" ] && exit 0
 
-if [ -z "$DEST" ]; then
-  echo "AVISO: no encontré la carpeta de Drive. ¿Está montada la cuenta jvillad1@gmail.com?" >&2
+if ! command -v rclone >/dev/null 2>&1; then
+  echo "AVISO: falta rclone. Instalalo con: brew install rclone" >&2
   exit 1
 fi
-# Puede fallar por TCC (privacidad de macOS): el proceso necesita permiso para
-# escribir en CloudStorage. Si falla, se corre a mano o se concede Acceso a disco
-# completo a la app desde la que se ejecuta esto.
-if cp "$OUT" "$DEST/$NAME" 2>/dev/null; then
-  echo "subido a Drive: Work/Movi/$NAME"
+
+echo "Subiendo a Drive ($RCLONE_DEST)…"
+# Sin `| grep -v NOTICE` en la condición: grep devuelve 1 cuando no queda ninguna
+# línea, así que una subida EXITOSA —cuya única salida es el NOTICE del client_id
+# compartido de rclone— se leía como fallo. El código de salida lo tiene que dar
+# rclone, no el filtro.
+if rclone copy "$OUT" "$RCLONE_DEST" --stats-one-line 2>/dev/null; then
+  # Verificar contra el remoto en vez de confiar en el código de salida: el tamaño
+  # que reporta Drive tiene que coincidir con el local o la subida quedó a medias.
+  REMOTE_SIZE=$(rclone lsl "$RCLONE_DEST/$NAME" 2>/dev/null | grep -v NOTICE | awk '{print $1}')
+  LOCAL_SIZE=$(stat -f%z "$OUT")
+  if [ "$REMOTE_SIZE" = "$LOCAL_SIZE" ]; then
+    echo "subido y verificado: Work/Movi/$NAME ($LOCAL_SIZE bytes)"
+  else
+    echo "ERROR: el remoto reporta '$REMOTE_SIZE' bytes y el local $LOCAL_SIZE — subida incompleta" >&2
+    exit 1
+  fi
 else
-  echo "NO pude escribir en Drive (permisos de macOS). Copialo con:" >&2
-  echo "  cp \"$PWD/$OUT\" \"$DEST/\"" >&2
+  echo "ERROR: rclone no pudo subir. Verificá el remoto con: rclone lsd drive:" >&2
   exit 1
 fi
