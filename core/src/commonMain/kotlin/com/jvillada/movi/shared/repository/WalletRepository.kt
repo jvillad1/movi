@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
+import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -67,6 +68,14 @@ interface WalletRepository {
     suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
+
+    /**
+     * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un
+     * cuerpo tipado a propósito: el servidor responde 202 idéntico exista o no el correo
+     * (anti-enumeración) y 503 cuando el envío de correo no está configurado en el servidor,
+     * y la UI necesita distinguir esos dos casos para no prometer un correo que nunca llega.
+     */
+    suspend fun requestPasswordReset(request: PasswordResetRequest): Int
     suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>

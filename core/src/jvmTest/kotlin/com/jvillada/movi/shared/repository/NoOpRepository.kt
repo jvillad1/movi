@@ -48,6 +48,7 @@ class NoOpRepository : WalletRepository {
     override suspend fun voidEvent(id: String, reason: String?) = error("stub")
     override suspend fun register(request: RegisterRequest) = error("stub")
     override suspend fun login(request: LoginRequest) = error("stub")
+    override suspend fun requestPasswordReset(request: PasswordResetRequest) = 202
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String) =
         StatementParseResult("", "", "", emptyList(), emptyList())
     override suspend fun importStatement(decision: ImportDecision) {}

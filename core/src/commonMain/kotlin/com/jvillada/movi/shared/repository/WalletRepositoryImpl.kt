@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
+import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -209,6 +210,13 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(request)
         }.body()
+
+    // No se usa .body(): la respuesta puede ser 202 o 503 y lo que la UI necesita es el código.
+    override suspend fun requestPasswordReset(request: PasswordResetRequest): Int =
+        client.post("$baseUrl/api/auth/password-reset/request") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.status.value
 
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
         client.post("$baseUrl/api/statements/upload") {

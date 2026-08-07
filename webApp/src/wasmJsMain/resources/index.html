@@ -46,6 +46,10 @@
             display: block; width: 100%; margin-top: 16px; padding: 6px;
             background: none; border: none; color: #C9B8FF; font-size: 13px; text-align: center; cursor: pointer;
         }
+        .lg-hidden { display: none; }
+        .lg-note { color: #9b9b9b; font-size: 13px; line-height: 1.45; margin-bottom: 16px; }
+        .lg-ok { color: #A8E6A1; font-size: 13px; line-height: 1.45; }
+        .lg-ok:not(:empty) { margin-bottom: 14px; }
     </style>
 </head>
 <body>
@@ -57,17 +61,59 @@
             <div class="lg-title">Movi</div>
             <div class="lg-sub">Finanzas personales</div>
             <div class="lg-box">
-                <form id="login-form" autocomplete="on">
-                    <label class="lg-label" for="login-email">Correo</label>
-                    <input class="lg-input" id="login-email" name="email" type="email"
-                           autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
-                    <label class="lg-label" for="login-password">Contraseña</label>
-                    <input class="lg-input" id="login-password" name="password" type="password"
-                           autocomplete="current-password" placeholder="••••••" required>
-                    <div class="lg-err" id="login-err"></div>
-                    <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
-                </form>
-                <button class="lg-alt" id="login-alt" type="button">Usar login clásico</button>
+                <!-- Panel 1: entrar (el de siempre) -->
+                <div id="login-panel">
+                    <div class="lg-ok" id="login-ok"></div>
+                    <form id="login-form" autocomplete="on">
+                        <label class="lg-label" for="login-email">Correo</label>
+                        <input class="lg-input" id="login-email" name="email" type="email"
+                               autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
+                        <label class="lg-label" for="login-password">Contraseña</label>
+                        <input class="lg-input" id="login-password" name="password" type="password"
+                               autocomplete="current-password" placeholder="••••••" required>
+                        <div class="lg-err" id="login-err"></div>
+                        <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
+                    </form>
+                    <button class="lg-alt" id="forgot-link" type="button">¿Olvidaste tu contraseña?</button>
+                    <!-- Esta capa HTML no tiene registro: solo entra. El registro vive en la
+                         app Compose de abajo, así que este botón es la ÚNICA puerta para
+                         quien llega sin cuenta. NO dice "Registrate" porque no lleva al
+                         formulario de registro: lleva al login de la app, donde hace falta un
+                         toque más. Decía exactamente lo mismo que el botón de destino
+                         ("¿No tenés cuenta? Registrate"), así que el toque se leía como que no
+                         había pasado nada. El texto nombra el destino sin prometer ser él. -->
+                    <button class="lg-alt" id="login-alt" type="button">¿No tenés cuenta? Ir al login de la app</button>
+                </div>
+
+                <!-- Panel 2: pedir el enlace de recuperación -->
+                <div id="forgot-panel" class="lg-hidden">
+                    <div class="lg-note">Te enviamos un enlace para elegir una contraseña nueva. Vence en 1 hora y sirve una sola vez.</div>
+                    <form id="forgot-form" autocomplete="on">
+                        <label class="lg-label" for="forgot-email">Correo</label>
+                        <input class="lg-input" id="forgot-email" name="email" type="email"
+                               autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
+                        <div class="lg-err" id="forgot-err"></div>
+                        <div class="lg-ok" id="forgot-ok"></div>
+                        <button class="lg-btn" id="forgot-btn" type="submit">Enviar enlace</button>
+                    </form>
+                    <button class="lg-alt" id="forgot-back" type="button">Volver a entrar</button>
+                </div>
+
+                <!-- Panel 3: elegir contraseña nueva (solo con ?reset=… en la URL) -->
+                <div id="reset-panel" class="lg-hidden">
+                    <div class="lg-note">Elegí tu contraseña nueva.</div>
+                    <form id="reset-form" autocomplete="on">
+                        <label class="lg-label" for="reset-password">Contraseña nueva</label>
+                        <input class="lg-input" id="reset-password" name="new-password" type="password"
+                               autocomplete="new-password" placeholder="••••••••••••" required>
+                        <label class="lg-label" for="reset-password2">Repetila</label>
+                        <input class="lg-input" id="reset-password2" name="new-password-confirm" type="password"
+                               autocomplete="new-password" placeholder="••••••••••••" required>
+                        <div class="lg-err" id="reset-err"></div>
+                        <button class="lg-btn" id="reset-btn" type="submit">Guardar contraseña</button>
+                    </form>
+                    <button class="lg-alt" id="reset-back" type="button">Volver a entrar</button>
+                </div>
             </div>
         </div>
     </div>
@@ -86,8 +132,40 @@
                 var remembered = localStorage.getItem('remembered_email') || localStorage.getItem('user_email');
                 if (remembered && emailEl) emailEl.value = remembered;
 
+                // ── Recuperación de contraseña ─────────────────────────────
+                // El enlace del correo apunta a la raíz de la PWA con ?reset=TOKEN. Si está,
+                // se muestra el formulario de contraseña nueva aunque haya sesión guardada:
+                // quien llega por acá justamente no puede entrar de la forma normal.
+                var loginPanel = document.getElementById('login-panel');
+                var forgotPanel = document.getElementById('forgot-panel');
+                var resetPanel = document.getElementById('reset-panel');
+                var loginOk = document.getElementById('login-ok');
+                var resetToken = new URLSearchParams(window.location.search).get('reset');
+
+                function showPanel(which) {
+                    loginPanel.classList.toggle('lg-hidden', which !== 'login');
+                    forgotPanel.classList.toggle('lg-hidden', which !== 'forgot');
+                    resetPanel.classList.toggle('lg-hidden', which !== 'reset');
+                }
+
+                // El servidor responde con el texto serializado como JSON ("…"). Se intenta
+                // parsear y si no, se usa crudo: así el mensaje del servidor (que es el que
+                // sabe el mínimo de caracteres real) llega tal cual a la persona.
+                async function serverMessage(res, fallback) {
+                    try {
+                        var raw = await res.text();
+                        if (!raw) return fallback;
+                        try { var parsed = JSON.parse(raw); return typeof parsed === 'string' ? parsed : fallback; }
+                        catch (e) { return raw; }
+                    } catch (e) { return fallback; }
+                }
+
                 var hasToken = !!localStorage.getItem('auth_token');
-                if (!hasToken) {
+                if (resetToken) {
+                    overlay.classList.remove('hidden');
+                    showPanel('reset');
+                    setTimeout(function () { document.getElementById('reset-password').focus(); }, 50);
+                } else if (!hasToken) {
                     overlay.classList.remove('hidden');
                     // focus password if email is already known, else email
                     setTimeout(function () { (remembered ? passEl : emailEl).focus(); }, 50);
@@ -127,7 +205,111 @@
                     }
                 });
 
-                // Fallback: reveal the Compose (canvas) login underneath.
+                // ── Pedir el enlace ────────────────────────────────────────
+                var forgotEmailEl = document.getElementById('forgot-email');
+                var forgotBtn = document.getElementById('forgot-btn');
+                var forgotErr = document.getElementById('forgot-err');
+                var forgotOk = document.getElementById('forgot-ok');
+
+                document.getElementById('forgot-link').addEventListener('click', function () {
+                    forgotEmailEl.value = (emailEl.value || '').trim() || remembered || '';
+                    forgotErr.textContent = ''; forgotOk.textContent = '';
+                    showPanel('forgot');
+                    setTimeout(function () { forgotEmailEl.focus(); }, 50);
+                });
+                document.getElementById('forgot-back').addEventListener('click', function () { showPanel('login'); });
+
+                document.getElementById('forgot-form').addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    forgotErr.textContent = ''; forgotOk.textContent = '';
+                    forgotBtn.disabled = true; forgotBtn.textContent = 'Enviando…';
+                    try {
+                        var res = await fetch('/api/auth/password-reset/request', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: (forgotEmailEl.value || '').trim() })
+                        });
+                        // 202 es la MISMA respuesta exista o no el correo — a propósito, para no
+                        // convertir esto en un buscador de cuentas. 503 es el servidor diciendo
+                        // que no tiene cómo mandar correo; se muestra tal cual en vez de fingir.
+                        if (res.status === 202) {
+                            forgotOk.textContent = await serverMessage(res, 'Si el correo está registrado, te enviamos un enlace.');
+                        } else if (res.status === 503) {
+                            forgotErr.textContent = await serverMessage(res, 'El envío de correo no está configurado en este servidor.');
+                        } else if (res.status === 429) {
+                            forgotErr.textContent = 'Demasiados pedidos. Esperá unos minutos.';
+                        } else {
+                            forgotErr.textContent = 'No se pudo pedir el enlace (' + res.status + ')';
+                        }
+                    } catch (ex) {
+                        forgotErr.textContent = 'No se pudo conectar. Probá de nuevo.';
+                    }
+                    forgotBtn.disabled = false; forgotBtn.textContent = 'Enviar enlace';
+                });
+
+                // ── Elegir contraseña nueva ────────────────────────────────
+                var resetPassEl = document.getElementById('reset-password');
+                var resetPass2El = document.getElementById('reset-password2');
+                var resetBtn = document.getElementById('reset-btn');
+                var resetErr = document.getElementById('reset-err');
+
+                function backToLogin(message) {
+                    // Saca el token de la barra de direcciones: ya se usó y no tiene por qué
+                    // quedar en el historial ni en un enlace que alguien comparta sin pensar.
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState({}, '', window.location.pathname);
+                    }
+                    loginOk.textContent = message || '';
+                    showPanel('login');
+                }
+                document.getElementById('reset-back').addEventListener('click', function () { backToLogin(''); });
+
+                document.getElementById('reset-form').addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    resetErr.textContent = '';
+                    if (resetPassEl.value !== resetPass2El.value) {
+                        resetErr.textContent = 'Las dos contraseñas no coinciden';
+                        return;
+                    }
+                    resetBtn.disabled = true; resetBtn.textContent = 'Guardando…';
+                    try {
+                        var res = await fetch('/api/auth/password-reset/confirm', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: resetToken, newPassword: resetPassEl.value })
+                        });
+                        if (res.ok) {
+                            // Un reset NO deja una sesión iniciada: hay que entrar con la nueva.
+                            // Se limpia la sesión ENTERA de este navegador, no solo el token:
+                            // borrar `auth_token` y dejar `user_id`/`user_email`/`user_name`
+                            // deja media identidad colgada que la app de abajo puede leer y
+                            // mostrar como si hubiera sesión. Es una limpieza local, NO
+                            // revocación: los JWT de movi no se revocan (ver AuthRoutes.kt).
+                            ['auth_token', 'user_id', 'user_email', 'user_name']
+                                .forEach(function (k) { localStorage.removeItem(k); });
+                            // `remembered_email` se conserva a propósito: no es credencial ni
+                            // sesión, es el correo para prellenar el formulario de entrada —
+                            // justo lo que la persona necesita en el paso siguiente.
+                            resetPassEl.value = ''; resetPass2El.value = '';
+                            backToLogin('Listo, tu contraseña quedó actualizada. Entrá con la nueva.');
+                        } else if (res.status === 429) {
+                            resetErr.textContent = 'Demasiados intentos. Esperá unos minutos.';
+                        } else {
+                            // El servidor es la autoridad sobre el mínimo de caracteres y sobre
+                            // si el enlace sirve: se muestra su mensaje, no uno inventado acá.
+                            resetErr.textContent = await serverMessage(res, 'No se pudo guardar la contraseña (' + res.status + ')');
+                        }
+                    } catch (ex) {
+                        resetErr.textContent = 'No se pudo conectar. Probá de nuevo.';
+                    }
+                    resetBtn.disabled = false; resetBtn.textContent = 'Guardar contraseña';
+                });
+
+                // Descubre el login de Compose que está debajo. Doble propósito: es la vía
+                // al registro (esta capa no lo tiene) y el escape si el overlay estorba.
+                // Aterriza en el login de Compose, no en el formulario de registro: desde ahí
+                // falta un toque más en "¿No tenés cuenta? Registrate". Por eso este botón NO
+                // se llama igual que aquél — ver el comentario del markup.
                 document.getElementById('login-alt').addEventListener('click', function () {
                     overlay.classList.add('hidden');
                 });
