@@ -14,9 +14,18 @@ object JwtConfig {
     }
 
     private val secret: String by lazy {
-        // La system property va primero para que los tests puedan fijar un secreto sin depender
-        // de que exista un server/.env en el checkout (mismo idioma que VapidConfig). No cambia
-        // nada del token en sí: algoritmo, claims y validez siguen igual.
+        // ESCOTILLA SOLO PARA TESTS. La system property va primero para que los tests puedan
+        // fijar un secreto sin depender de que exista un server/.env en el checkout (mismo
+        // idioma que VapidConfig). No cambia nada del token en sí: algoritmo, claims y validez
+        // siguen igual.
+        //
+        // Que vaya ANTES de la variable de entorno es deliberado pero conviene entender qué
+        // implica: quien pueda agregar un `-Dmovi.jwt.secret=…` a la línea de arranque le gana
+        // a `JWT_SECRET` y firma tokens válidos para cualquier usuario. Eso NO es una escalada
+        // real —quien controla los argumentos del proceso ya controla el proceso entero— y en
+        // producción no se pasa ningún `-D`: Railway arranca el fat JAR sin propiedades y el
+        // secreto sale de la variable de entorno. Si algún día el arranque pasa a componerse
+        // desde una plantilla o un script con argumentos de terceros, invertir este orden.
         System.getProperty("movi.jwt.secret")?.takeIf { it.isNotBlank() }
             ?: resolveSecret(System.getenv("JWT_SECRET"), readFromEnvFile("JWT_SECRET"))
     }

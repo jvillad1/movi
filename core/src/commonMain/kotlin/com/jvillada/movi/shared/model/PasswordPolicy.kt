@@ -35,21 +35,46 @@ object PasswordPolicy {
     const val MIN_LENGTH = 12
 
     /**
-     * **72.** No es una restricción de política sino el límite real de BCrypt, que ignora
-     * todo byte a partir del 72. Rechazar con un error explícito es preferible a aceptar 200
-     * caracteres y autenticar en silencio solo con los primeros 72 — eso sería mentirle a la
-     * persona sobre la fuerza de su contraseña.
+     * **72 BYTES en UTF-8** — no caracteres. No es una restricción de política sino el límite
+     * real de BCrypt.
      *
-     * Cumple de sobra la recomendación de NIST de aceptar al menos 64. Nota: el límite de
-     * BCrypt es en BYTES; acá se cuenta en caracteres, así que para contraseñas con acentos o
-     * emoji el corte real llega un poco antes. Es conservador en la dirección correcta.
+     * Ojo con la creencia habitual: `at.favre.lib:bcrypt` **no trunca en silencio**. Usa
+     * `LongPasswordStrategies.strict()` por defecto y **lanza** `IllegalArgumentException`
+     * ("password must not be longer than 72 bytes plus null terminator encoded in utf-8").
+     * Verificado ejecutando la librería:
+     *
+     * ```
+     * "a" x 72                      chars=72  bytes=72   -> OK
+     * "a" x 73                      chars=73  bytes=73   -> IllegalArgumentException
+     * "ñ" x 36                      chars=36  bytes=72   -> OK          ← el borde real
+     * "ñ" x 37                      chars=37  bytes=74   -> IllegalArgumentException
+     * "mi contraseña … á é í ó ú ñ" chars=65  bytes=73   -> IllegalArgumentException
+     * ```
+     *
+     * Por eso contar caracteres era **permisivo**, no conservador: una frase en español de 65
+     * caracteres pasaba la política y reventaba dentro de BCrypt. Sin `StatusPages`, eso salía
+     * como un 500 pelado en el camino de recuperación de cuenta. Acá se cuentan bytes, que es
+     * exactamente lo que mide la librería.
+     *
+     * Cumple de sobra la recomendación de NIST de aceptar al menos 64: 72 bytes son 72
+     * caracteres ASCII, y aun con acentos en cada letra quedan 36 — pero el mínimo es 12, así
+     * que ninguna contraseña razonable choca contra este techo.
      */
-    const val MAX_LENGTH = 72
+    const val MAX_BYTES = 72
 
-    /** `null` si la contraseña cumple la política. */
+    /** Lo que realmente cuenta BCrypt. Idéntico a `length` para ASCII puro. */
+    fun byteLength(password: String): Int = password.encodeToByteArray().size
+
+    /**
+     * `null` si la contraseña cumple la política.
+     *
+     * Asimetría deliberada: el **mínimo** se mide en caracteres (es una promesa a la persona:
+     * "al menos 12 caracteres"; medirlo en bytes dejaría pasar una contraseña de 10 letras
+     * acentuadas) y el **máximo** en bytes (es el límite de BCrypt, que no negocia).
+     */
     fun problemWith(password: String): PasswordProblem? = when {
         password.length < MIN_LENGTH -> PasswordProblem.TOO_SHORT
-        password.length > MAX_LENGTH -> PasswordProblem.TOO_LONG
+        byteLength(password) > MAX_BYTES -> PasswordProblem.TOO_LONG
         else -> null
     }
 
@@ -57,11 +82,17 @@ object PasswordPolicy {
 
     /**
      * Mensaje en español para mostrarle a la persona. Compartido para que la UI y el servidor
-     * digan exactamente lo mismo y el número salga siempre de [MIN_LENGTH] / [MAX_LENGTH].
+     * digan exactamente lo mismo y el número salga siempre de [MIN_LENGTH] / [MAX_BYTES].
+     *
+     * El mensaje de "demasiado larga" nombra los bytes y además explica por qué el número no
+     * coincide con lo que la persona ve escrito: sin esa aclaración, "no puede superar los 72"
+     * frente a una frase de 65 caracteres se lee como un bug.
      */
     fun messageFor(problem: PasswordProblem): String = when (problem) {
         PasswordProblem.TOO_SHORT -> "La contraseña debe tener al menos $MIN_LENGTH caracteres"
-        PasswordProblem.TOO_LONG  -> "La contraseña no puede superar los $MAX_LENGTH caracteres"
+        PasswordProblem.TOO_LONG  ->
+            "La contraseña no puede superar los $MAX_BYTES bytes (las tildes, la ñ y los emojis " +
+                "ocupan más de un byte, así que el corte puede llegar antes de los $MAX_BYTES caracteres)"
     }
 }
 

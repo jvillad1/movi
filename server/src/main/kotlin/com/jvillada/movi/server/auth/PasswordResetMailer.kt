@@ -11,7 +11,15 @@ import com.jvillada.movi.server.reminders.ResendClient
  */
 object PasswordResetMailer {
 
-    var sender: suspend (to: String, subject: String, html: String, apiKey: String, from: String) -> Boolean =
+    /**
+     * **Costura de test, `internal` a propósito.** Es un `var` mutable sobre un singleton de
+     * producción: quien pueda escribirlo redirige TODOS los correos de recuperación —o sea, los
+     * enlaces de reset— a donde quiera. `internal` lo deja al alcance del módulo `:server` (y
+     * de sus tests, que son una compilación asociada) y fuera del alcance de cualquier otro
+     * módulo. No convertirlo en `public` "por comodidad": si algún día hace falta cambiar el
+     * transporte desde afuera, el camino correcto es un parámetro de configuración, no esto.
+     */
+    internal var sender: suspend (to: String, subject: String, html: String, apiKey: String, from: String) -> Boolean =
         { to, subject, html, apiKey, from -> ResendClient.sendEmail(to, subject, html, apiKey, from) }
 
     suspend fun sendResetLink(to: String, link: String, apiKey: String, from: String): Boolean =

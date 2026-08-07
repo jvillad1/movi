@@ -77,9 +77,12 @@
                     <button class="lg-alt" id="forgot-link" type="button">¿Olvidaste tu contraseña?</button>
                     <!-- Esta capa HTML no tiene registro: solo entra. El registro vive en la
                          app Compose de abajo, así que este botón es la ÚNICA puerta para
-                         quien llega sin cuenta. Se llama por su destino y no "login clásico",
-                         que describía el mecanismo (y al revés: el clásico es el de abajo). -->
-                    <button class="lg-alt" id="login-alt" type="button">¿No tenés cuenta? Registrate</button>
+                         quien llega sin cuenta. NO dice "Registrate" porque no lleva al
+                         formulario de registro: lleva al login de la app, donde hace falta un
+                         toque más. Decía exactamente lo mismo que el botón de destino
+                         ("¿No tenés cuenta? Registrate"), así que el toque se leía como que no
+                         había pasado nada. El texto nombra el destino sin prometer ser él. -->
+                    <button class="lg-alt" id="login-alt" type="button">¿No tenés cuenta? Ir al login de la app</button>
                 </div>
 
                 <!-- Panel 2: pedir el enlace de recuperación -->
@@ -277,10 +280,16 @@
                         });
                         if (res.ok) {
                             // Un reset NO deja una sesión iniciada: hay que entrar con la nueva.
-                            // La sesión vieja de este navegador se limpia para no dejar a la
-                            // persona mirando un dashboard con un token que ya no representa
-                            // lo que acaba de hacer.
-                            localStorage.removeItem('auth_token');
+                            // Se limpia la sesión ENTERA de este navegador, no solo el token:
+                            // borrar `auth_token` y dejar `user_id`/`user_email`/`user_name`
+                            // deja media identidad colgada que la app de abajo puede leer y
+                            // mostrar como si hubiera sesión. Es una limpieza local, NO
+                            // revocación: los JWT de movi no se revocan (ver AuthRoutes.kt).
+                            ['auth_token', 'user_id', 'user_email', 'user_name']
+                                .forEach(function (k) { localStorage.removeItem(k); });
+                            // `remembered_email` se conserva a propósito: no es credencial ni
+                            // sesión, es el correo para prellenar el formulario de entrada —
+                            // justo lo que la persona necesita en el paso siguiente.
                             resetPassEl.value = ''; resetPass2El.value = '';
                             backToLogin('Listo, tu contraseña quedó actualizada. Entrá con la nueva.');
                         } else if (res.status === 429) {
@@ -298,8 +307,9 @@
 
                 // Descubre el login de Compose que está debajo. Doble propósito: es la vía
                 // al registro (esta capa no lo tiene) y el escape si el overlay estorba.
-                // Ojo: aterriza en el login de Compose, no directo en el formulario de
-                // registro — desde ahí falta un toque más en "¿No tenés cuenta? Registrate".
+                // Aterriza en el login de Compose, no en el formulario de registro: desde ahí
+                // falta un toque más en "¿No tenés cuenta? Registrate". Por eso este botón NO
+                // se llama igual que aquél — ver el comentario del markup.
                 document.getElementById('login-alt').addEventListener('click', function () {
                     overlay.classList.add('hidden');
                 });

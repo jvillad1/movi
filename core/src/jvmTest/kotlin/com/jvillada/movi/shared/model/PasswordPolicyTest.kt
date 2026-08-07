@@ -37,17 +37,53 @@ class PasswordPolicyTest {
 
     @Test
     fun `el maximo no baja de 64 — NIST pide aceptar al menos esa longitud`() {
-        assertTrue(PasswordPolicy.MAX_LENGTH >= 64, "MAX_LENGTH=${PasswordPolicy.MAX_LENGTH}")
+        assertTrue(PasswordPolicy.MAX_BYTES >= 64, "MAX_BYTES=${PasswordPolicy.MAX_BYTES}")
         assertTrue(PasswordPolicy.isValid("a".repeat(64)))
     }
 
     @Test
     fun `pasarse del maximo es TOO_LONG`() {
-        assertNull(PasswordPolicy.problemWith("a".repeat(PasswordPolicy.MAX_LENGTH)))
+        assertNull(PasswordPolicy.problemWith("a".repeat(PasswordPolicy.MAX_BYTES)))
         assertEquals(
             PasswordProblem.TOO_LONG,
-            PasswordPolicy.problemWith("a".repeat(PasswordPolicy.MAX_LENGTH + 1)),
+            PasswordPolicy.problemWith("a".repeat(PasswordPolicy.MAX_BYTES + 1)),
         )
+    }
+
+    /**
+     * El techo se mide en BYTES UTF-8 porque eso es lo que mide BCrypt, que además **lanza**
+     * `IllegalArgumentException` al pasarse (`at.favre.lib:bcrypt` usa `LongPasswordStrategies
+     * .strict()`, no trunca). Contar caracteres era permisivo en la dirección peligrosa: esta
+     * frase tiene 65 caracteres —bajo cualquier techo de 72 caracteres— y 73 bytes, así que
+     * habría llegado hasta adentro de BCrypt y salido como un 500.
+     *
+     * Es exactamente el caso de esta app: español, con tildes, y un mínimo de 12 que empuja a
+     * escribir frases.
+     */
+    @Test
+    fun `una frase en espanol bajo el limite de caracteres pero sobre el de bytes es TOO_LONG`() {
+        val frase = "mi contraseña es una frase larga con muchas tildes: á é í ó ú ñ ü"
+        assertEquals(65, frase.length)
+        assertEquals(73, PasswordPolicy.byteLength(frase))
+        assertTrue(frase.length <= PasswordPolicy.MAX_BYTES, "la trampa: por caracteres pasaba")
+        assertEquals(PasswordProblem.TOO_LONG, PasswordPolicy.problemWith(frase))
+    }
+
+    /** El borde real con acentos: 36 eñes son 72 bytes exactos (OK), 37 son 74 (no). */
+    @Test
+    fun `el borde con acentos esta en bytes, no en caracteres`() {
+        assertEquals(72, PasswordPolicy.byteLength("ñ".repeat(36)))
+        assertNull(PasswordPolicy.problemWith("ñ".repeat(36)))
+
+        assertEquals(74, PasswordPolicy.byteLength("ñ".repeat(37)))
+        assertEquals(PasswordProblem.TOO_LONG, PasswordPolicy.problemWith("ñ".repeat(37)))
+    }
+
+    /** Para ASCII puro, bytes y caracteres coinciden: nada cambió para el caso común. */
+    @Test
+    fun `en ascii puro bytes y caracteres son lo mismo`() {
+        val ascii = "una-contrasena-sin-acentos"
+        assertEquals(ascii.length, PasswordPolicy.byteLength(ascii))
     }
 
     /**
@@ -73,6 +109,6 @@ class PasswordPolicyTest {
     @Test
     fun `el mensaje nombra el numero real para que UI y servidor no diverjan`() {
         assertTrue(PasswordPolicy.messageFor(PasswordProblem.TOO_SHORT).contains("${PasswordPolicy.MIN_LENGTH}"))
-        assertTrue(PasswordPolicy.messageFor(PasswordProblem.TOO_LONG).contains("${PasswordPolicy.MAX_LENGTH}"))
+        assertTrue(PasswordPolicy.messageFor(PasswordProblem.TOO_LONG).contains("${PasswordPolicy.MAX_BYTES}"))
     }
 }
