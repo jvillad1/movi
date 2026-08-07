@@ -69,9 +69,6 @@ object RateLimiter {
         }
     }
 
-    /** Cuántas claves hay vivas. Solo para tests: nadie debería decidir nada con esto. */
-    internal fun trackedKeys(): Int = attempts.size
-
     /** Clears all state — useful in tests. */
     fun reset() {
         attempts.clear()

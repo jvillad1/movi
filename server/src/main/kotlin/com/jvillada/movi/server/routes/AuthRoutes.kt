@@ -108,7 +108,11 @@ fun Route.authRoutes() {
             // Balde propio: antes register y login compartían la clave `$ip` y 10 logins
             // fallidos apagaban también el registro. Ver el bloque de arriba.
             val ip = call.request.origin.remoteHost
-            if (!RateLimiter.allow("register:global:$ip", maxAttempts = 30, windowMs = WINDOW_LOGIN_MS)) {
+            // Se queda en 10, no en el techo alto que usan login y pwreset: esos lo pueden
+            // subir porque el balde por email hace el trabajo estricto, y el registro no
+            // puede tener uno — no hay cuenta todavía. Con el registro abierto, este es el
+            // único freno a la creación masiva de cuentas.
+            if (!RateLimiter.allow("register:global:$ip", maxAttempts = 10, windowMs = WINDOW_LOGIN_MS)) {
                 return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
             }
             val req = call.receive<RegisterRequest>()

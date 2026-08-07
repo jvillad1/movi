@@ -40,4 +40,26 @@ class RateLimiterTest {
         assertTrue(RateLimiter.allow(keyB, maxAttempts = 10, windowMs = 60_000L),
             "keyB should still be allowed")
     }
+
+    /**
+     * Lo que el barrido NO debe hacer: regalar intentos. Un barrido demasiado agresivo es la
+     * forma silenciosa de romper el límite — nadie ve un error, solo entran más intentos.
+     *
+     * La otra mitad —que efectivamente descarte las claves vencidas y acote la memoria— NO
+     * está cubierta acá: el barrido descarta por RETENTION_MS (1 h), no por la ventana del
+     * límite, y RateLimiter lee `System.currentTimeMillis()` directo, sin costura para
+     * adelantar el reloj. Verificarlo exigiría inyectar el tiempo. Se deja anotado en vez de
+     * fingir cobertura con un test que pasa por otra razón.
+     */
+    @Test
+    fun `el barrido conserva las claves con intentos dentro de la ventana`() {
+        RateLimiter.allow("viva", maxAttempts = 10, windowMs = 60 * 60_000L)
+        repeat(600) { RateLimiter.allow("efimera:$it", maxAttempts = 1, windowMs = 1L) }
+        repeat(9) {
+            assertTrue(RateLimiter.allow("viva", maxAttempts = 10, windowMs = 60 * 60_000L),
+                "la clave viva no debía perder sus intentos en el barrido")
+        }
+        assertFalse(RateLimiter.allow("viva", maxAttempts = 10, windowMs = 60 * 60_000L),
+            "el intento 11 debía denegarse: el barrido no puede regalar intentos")
+    }
 }
