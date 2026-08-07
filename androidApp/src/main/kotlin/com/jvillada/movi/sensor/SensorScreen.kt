@@ -82,7 +82,13 @@ private val TextColor = Color(0xFFF5F5F5)
 private val TextMutedColor = Color(0xFFA0A0A0)
 private val ErrorColor = Color(0xFFFF6B6B)
 
-/** Recuerda que YA pedimos los permisos en la app: distingue "nunca preguntó" de "denegó". */
+/**
+ * Recuerda que YA pedimos los permisos en la app: distingue "nunca preguntó" de "denegó".
+ *
+ * Es un hecho de ESTA instalación, así que el archivo de prefs entero queda excluido de
+ * Auto Backup (ver res/xml/backup_rules.xml): restaurado en un teléfono nuevo diría que ya
+ * preguntamos cuando nunca lo hicimos, y esconde el botón que sí funcionaría ahí.
+ */
 private const val KEY_PERM_REQUESTED = "perm_requested"
 
 private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
@@ -95,6 +101,11 @@ private val SmsPermissions = arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.p
 @Composable
 fun SensorScreen() {
     val context = LocalContext.current
+
+    // El origen de la instalación no cambia mientras la app vive y la consulta cruza un
+    // binder al PackageManager: se resuelve una vez acá y baja a las dos tarjetas que lo
+    // necesitan, en vez de repetirse en cada una al arrancar.
+    val installSource = remember(context) { readInstallSource(context) }
 
     var lastCaptureAt by remember { mutableStateOf(readLastCaptureAt(context)) }
     var lastBackfillAt by remember { mutableStateOf(SmsFilterConfigStore.lastBackfillAt(context)) }
@@ -140,7 +151,7 @@ fun SensorScreen() {
             SessionCard()
             Spacer(Modifier.height(16.dp))
 
-            PermissionsCard(context)
+            PermissionsCard(context, installSource)
             Spacer(Modifier.height(16.dp))
 
             // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para
@@ -150,7 +161,11 @@ fun SensorScreen() {
             SensorInfoCard(lastCaptureAt, lastBackfillAt, senderCodes)
             Spacer(Modifier.height(16.dp))
 
-            BackfillCard(context, onSynced = { lastBackfillAt = SmsFilterConfigStore.lastBackfillAt(context) })
+            BackfillCard(
+                context,
+                installSource,
+                onSynced = { lastBackfillAt = SmsFilterConfigStore.lastBackfillAt(context) },
+            )
             Spacer(Modifier.height(24.dp))
 
             Button(
@@ -357,20 +372,44 @@ private fun openMoviWeb(context: Context) {
 }
 
 @Composable
-private fun PermissionsCard(context: Context) {
+private fun PermissionsCard(context: Context, installSource: InstallSource) {
     val activity = remember(context) { context.findComponentActivity() }
     var granted by remember { mutableStateOf(hasSmsPermissions(context)) }
     var asked by remember { mutableStateOf(readPermissionAsked(context)) }
     var rationale by remember { mutableStateOf(canShowRationale(activity)) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        granted = hasSmsPermissions(context)
-        rationale = canShowRationale(activity)
-    }
 
-    OnResume(activity) {
+    fun refresh() {
         granted = hasSmsPermissions(context)
         asked = readPermissionAsked(context)
         rationale = canShowRationale(activity)
+    }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        // El resultado del launcher no alcanza: hace falta releer el rationale de después
+        // para saber si todavía queda camino dentro de la app.
+        refresh()
+    }
+
+    // Los permisos concedidos o revocados fuera de la app (ajustes del sistema,
+    // auto-revoke por hibernación) no llegan por el launcher.
+    OnResume(activity) { refresh() }
+
+    fun requestPermissions() {
+        markPermissionAsked(context)
+        asked = true
+        launcher.launch(SmsPermissions)
+    }
+
+    val verdict = if (activity == null && !granted) {
+        // Sin Activity no podemos consultar el rationale ni lanzar el diálogo: caemos al
+        // estado genérico, que además es el único con salida (los ajustes del sistema).
+        SmsPermissionVerdict.DENIED
+    } else {
+        smsPermissionVerdict(
+            askedBefore = asked,
+            granted = granted,
+            canShowRationale = rationale,
+        )
     }
 
     SensorCard(title = "PERMISOS") {
@@ -383,33 +422,51 @@ private fun PermissionsCard(context: Context) {
                 color = if (granted) AccentColor else ErrorColor,
             )
         }
-        if (!granted) {
-            val toSettings = activity == null || shouldOpenSettings(asked, rationale)
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {
-                    if (toSettings) {
-                        openAppSettings(context)
-                    } else {
-                        markPermissionAsked(context)
-                        asked = true
-                        launcher.launch(SmsPermissions)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
-            ) {
-                Text(if (toSettings) "Abrir ajustes de la app" else "Conceder permisos")
+        when (verdict) {
+            SmsPermissionVerdict.GRANTED -> Unit
+
+            SmsPermissionVerdict.ASK_IN_APP -> {
+                Spacer(Modifier.height(12.dp))
+                PermissionButton("Conceder permisos") { requestPermissions() }
             }
-            if (toSettings) {
+
+            SmsPermissionVerdict.DENIED -> {
+                Spacer(Modifier.height(12.dp))
+                PermissionButton("Abrir ajustes de la app") { openAppSettings(context) }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Android ya no muestra el diálogo: concedé SMS en Permisos, dentro de los ajustes de la app.",
                     fontSize = 12.sp,
                     color = TextMutedColor,
                 )
+                if (shouldHintRestrictedSettings(Build.VERSION.SDK_INT, installSource)) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        // Condicional a propósito: acá no sabemos si el bloqueo existe (ver
+                        // shouldHintRestrictedSettings). Lo que sí sabemos es que en esta
+                        // instalación es posible, y que el usuario que se lo encuentre no
+                        // tiene forma de adivinar el menú donde se desactiva.
+                        "Si el interruptor de SMS aparece gris y no te deja activarlo, es porque la app " +
+                            "no se instaló desde una tienda: en esa misma ficha, menú de tres puntos " +
+                            "(arriba a la derecha) → «Permitir ajustes restringidos». Después el " +
+                            "interruptor se deja activar.",
+                        fontSize = 12.sp,
+                        color = TextMutedColor,
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun PermissionButton(label: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = Color(0xFF1A1A1A)),
+    ) {
+        Text(label)
     }
 }
 
@@ -502,7 +559,7 @@ private fun HibernationCard(context: Context) {
  * menos que el backfill viejo, no más.
  */
 @Composable
-private fun BackfillCard(context: Context, onSynced: () -> Unit) {
+private fun BackfillCard(context: Context, installSource: InstallSource, onSynced: () -> Unit) {
     val activity = remember(context) { context.findComponentActivity() }
     val scope = rememberCoroutineScope()
     val loggedIn = SessionManager.loggedIn
@@ -606,6 +663,18 @@ private fun BackfillCard(context: Context, onSynced: () -> Unit) {
                 fontSize = 12.sp,
                 color = TextMutedColor,
             )
+            // Sin esto la línea de arriba mandaría a tocar un interruptor que puede estar
+            // gris, sin decir cómo destrabarlo. Misma condición y mismo tono condicional que
+            // el aviso de PERMISOS: acá tampoco se afirma que el bloqueo exista.
+            if (shouldHintRestrictedSettings(Build.VERSION.SDK_INT, installSource)) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Si ese interruptor aparece gris, primero hay que permitir los ajustes " +
+                        "restringidos desde el menú de tres puntos de esa misma ficha.",
+                    fontSize = 12.sp,
+                    color = TextMutedColor,
+                )
+            }
         }
         outcome?.let {
             Spacer(Modifier.height(10.dp))
