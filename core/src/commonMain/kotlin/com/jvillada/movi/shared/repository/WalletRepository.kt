@@ -37,6 +37,8 @@ interface WalletRepository {
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary
     suspend fun deleteCreditTerms(accountId: String)
+    /** Deja la deuda del crédito en [targetBalance] registrando el movimiento de ajuste server-side. */
+    suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
     suspend fun getSubscriptions(): SubscriptionsResult
     suspend fun detectSubscriptions(): SubscriptionsResult
     suspend fun updateSubscription(id: String, subscription: Subscription): Subscription

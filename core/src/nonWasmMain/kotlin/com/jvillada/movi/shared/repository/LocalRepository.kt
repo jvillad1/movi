@@ -135,6 +135,8 @@ class LocalRepository(
     override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary =
+        remote.adjustCreditBalance(accountId, targetBalance)
     override suspend fun getSubscriptions(): SubscriptionsResult = remote.getSubscriptions()
     override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
     override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = remote.updateSubscription(id, subscription)

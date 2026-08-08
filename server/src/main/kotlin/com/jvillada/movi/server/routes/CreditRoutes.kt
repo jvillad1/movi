@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.MAX_CREDIT_DEBT_COP
+import com.jvillada.movi.server.balance.computeBalances
+import com.jvillada.movi.server.balance.debtAdjustmentEventFor
 import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.openingEventFor
@@ -14,6 +17,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
@@ -118,6 +122,48 @@ fun Route.creditRoutes() {
                 Credits.upsert { fillTerms(it, uid, body) }
             }
             call.respond(summaryFor(account, body, loadNonVoidedEvents(uid, accountId), FxRateService.usdToCop()))
+        }
+
+        // Ajuste de la deuda al saldo real del banco. Recibe el saldo OBJETIVO, no el delta:
+        // la deuda de un crédito se mueve a diario por intereses causados, así que un delta
+        // calculado sobre la vista del cliente puede llegar viejo. Acá se resta contra los
+        // eventos vigentes y se registra un movimiento real — la deuda sigue derivándose de
+        // los eventos (ver computeBalances), nunca se sobrescribe.
+        post("/{accountId}/balance-adjustment") {
+            val uid = call.userId()
+            val accountId = call.parameters["accountId"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing accountId")
+            val account = dbQuery {
+                Accounts.selectAll()
+                    .where { (Accounts.id eq accountId) and (Accounts.userId eq uid) }
+                    .firstOrNull()?.toAccount()
+            } ?: return@post call.respond(HttpStatusCode.NotFound)
+            if (account.type != AccountType.LOAN) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Solo cuentas LOAN llevan deuda de crédito")
+            }
+            val target = call.receive<AdjustCreditBalanceRequest>().targetBalance
+            if (target < 0L) {
+                return@post call.respond(HttpStatusCode.BadRequest, "La deuda no puede ser negativa")
+            }
+            if (target > MAX_CREDIT_DEBT_COP) {
+                return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisá el monto")
+            }
+
+            val events  = loadNonVoidedEvents(uid, accountId)
+            val current = computeBalances(account.type, events)[account.currency] ?: 0L
+            // Sin diferencia no se registra nada: un evento de $0 sería ruido en el listado
+            // y no movería el saldo. Eso además hace el endpoint idempotente si se repite.
+            val adjustment = debtAdjustmentEventFor(account, current, target, now = System.currentTimeMillis())
+            if (adjustment != null) dbQuery { insertEventRow(uid, adjustment) }
+
+            val terms = dbQuery {
+                Credits.selectAll()
+                    .where { (Credits.accountId eq accountId) and (Credits.userId eq uid) }
+                    .firstOrNull()?.toCreditTerms()
+            }
+            call.respond(
+                summaryFor(account, terms, events + listOfNotNull(adjustment), FxRateService.usdToCop()),
+            )
         }
 
         delete("/{accountId}") {

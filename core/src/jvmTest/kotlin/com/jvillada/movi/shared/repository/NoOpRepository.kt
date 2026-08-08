@@ -17,6 +17,11 @@ class NoOpRepository : WalletRepository {
         paidPct = null,
     )
     override suspend fun deleteCreditTerms(accountId: String) {}
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long) = CreditSummary(
+        account = Account(id = accountId, name = "", type = AccountType.LOAN, balance = targetBalance),
+        terms = null,
+        paidPct = null,
+    )
     override suspend fun getSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun detectSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun updateSubscription(id: String, subscription: Subscription) = subscription

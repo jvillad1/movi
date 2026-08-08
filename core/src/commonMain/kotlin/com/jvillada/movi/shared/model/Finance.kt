@@ -55,6 +55,19 @@ data class CreateCreditRequest(
     val terms: CreditTerms,     // accountId se ignora; el server asigna el de la cuenta nueva
 )
 
+/**
+ * Ajusta la deuda de un crédito ya existente al saldo real que reporta el banco.
+ *
+ * Se manda el saldo OBJETIVO, no la diferencia: el server calcula el delta contra los
+ * eventos actuales de la cuenta y lo registra como un movimiento visible. Si el cliente
+ * mandara el delta, una vista desactualizada (la deuda se mueve a diario por intereses)
+ * dejaría el saldo en otra cifra.
+ */
+@Serializable
+data class AdjustCreditBalanceRequest(
+    val targetBalance: Long,    // deuda real (en la moneda de la cuenta), >= 0
+)
+
 @Serializable
 data class Goal(
     val name: String,

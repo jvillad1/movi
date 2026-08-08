@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
@@ -72,6 +73,12 @@ class WalletRepositoryImpl(
     override suspend fun deleteCreditTerms(accountId: String) {
         client.delete("$baseUrl/api/credits/$accountId")
     }
+
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary =
+        client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
+            contentType(ContentType.Application.Json)
+            setBody(AdjustCreditBalanceRequest(targetBalance))
+        }.body()
 
     override suspend fun getSubscriptions(): SubscriptionsResult =
         client.get("$baseUrl/api/subscriptions").body()

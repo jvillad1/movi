@@ -230,7 +230,7 @@ fun CreditTermsSheet(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text,
         fontSize = 11.sp,
@@ -241,7 +241,7 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun FieldBox(
+internal fun FieldBox(
     placeholder: String,
     value: String,
     onValueChange: (String) -> Unit,
