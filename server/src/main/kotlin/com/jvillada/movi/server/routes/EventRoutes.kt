@@ -1,6 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
+import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -100,6 +103,26 @@ fun Route.eventRoutes() {
                 }
                 .sortedByDescending { it.date }
             call.respond(result)
+        }
+
+        // Candidatos a pago de tarjeta ya cargados con otra categoría (Task 2 de
+        // SP-ajustar-saldo). Solo LEE y PROPONE — nada se recategoriza acá; el dueño confirma
+        // en un paso posterior. Por eso alcanza con reusar loadNonVoidedEventsIn +
+        // accountTypesFor: los mismos que ya deciden qué es flujo de caja.
+        get("/card-payment-candidates") {
+            val uid = call.userId()
+            val assetTypes = setOf(
+                AccountType.CASH, AccountType.CHECKING, AccountType.SAVINGS, AccountType.INVESTMENT,
+            )
+            val candidates = dbQuery {
+                val accountTypes = accountTypesFor(uid)
+                loadNonVoidedEventsIn(uid).filter { event ->
+                    event.type == TransactionType.EXPENSE &&
+                        accountTypes[event.accountId] in assetTypes &&
+                        looksLikeCardPayment(event.description, event.category)
+                }
+            }
+            call.respond(candidates)
         }
 
         post("/{id}/void") {

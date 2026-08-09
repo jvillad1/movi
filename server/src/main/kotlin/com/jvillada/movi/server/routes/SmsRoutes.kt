@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
@@ -7,6 +8,7 @@ import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildSmsPushPayload
 import com.jvillada.movi.server.sms.SmsDedupeIndex
 import com.jvillada.movi.server.sms.SmsKey
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
@@ -46,11 +48,20 @@ internal fun parseSms(text: String): ParsedSms? {
         else -> merchantInRegex.find(text)?.groupValues?.get(1)?.trim() ?: "Movimiento"
     }
 
-    val category = categoryFor(merchant, type)
+    val category = categoryFor(text, merchant, type)
     return ParsedSms(amount, merchant, type, category)
 }
 
-private fun categoryFor(merchant: String, type: TransactionType): String {
+/**
+ * [text] es el SMS completo, no solo [merchant]: "pago tc"/"pago tarjeta" viven en frases como
+ * "Pago autom TC ...1234 por $80.894" que `merchantInRegex` no captura (no tiene "en <algo>"),
+ * así que el merchant extraído llega como "Movimiento" y perdería la señal. Se revisa el texto
+ * crudo antes de caer en las reglas por merchant.
+ */
+private fun categoryFor(text: String, merchant: String, type: TransactionType): String {
+    if (type == TransactionType.EXPENSE && looksLikeCardPayment(text, category = "")) {
+        return CARD_PAYMENT_CATEGORY
+    }
     if (type == TransactionType.INCOME) {
         return if (merchant.equals("Nómina", true)) "Nómina" else "Transferencia"
     }

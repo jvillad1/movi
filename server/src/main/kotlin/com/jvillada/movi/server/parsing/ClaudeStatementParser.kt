@@ -58,7 +58,8 @@ $rulesJson
 CATEGORÍAS — asigná a cada transacción EXACTAMENTE uno de estos nombres (no inventes otros):
 - Si type es EXPENSE, elegí de: $expenseCats. Si ninguna aplica, usá "Otros".
 - Si type es INCOME, elegí de: $incomeCats. Si ninguna aplica, usá "Otros ingresos".
-- Traslados o transferencias entre cuentas propias no tienen categoría natural: usá "Otros" si es EXPENSE u "Otros ingresos" si es INCOME.
+- El pago del extracto de una tarjeta de crédito (la fila sale de la cuenta de ahorros/corriente con descripciones como "PAGO TC", "PAGO TARJETA", "PAGO AUTOM TC", "ABONO TARJETA" o similar) usá la categoría "Pago de tarjeta" — no es un gasto nuevo, es la misma compra que ya se contó cuando se hizo con la tarjeta.
+- Otros traslados o transferencias entre cuentas propias (que no sean el pago de una tarjeta) no tienen categoría natural: usá "Otros" si es EXPENSE u "Otros ingresos" si es INCOME.
 
 Devolvé ÚNICAMENTE un array JSON con este formato exacto, sin explicaciones ni texto adicional:
 [{"date":"YYYY-MM-DD","merchant":"nombre limpio","amount":123456,"currency":"COP","type":"EXPENSE|INCOME","category":"categoría","description":"descripción corta","rawText":"línea original"}]
