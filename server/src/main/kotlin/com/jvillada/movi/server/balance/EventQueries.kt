@@ -55,5 +55,5 @@ fun Transaction.accountTypesFor(uid: String): Map<String, AccountType> =
 /** Marca el evento con si cuenta o no como ingreso/egreso del mes (ver [isCashFlow]). */
 fun FinancialEvent.withCashFlowFlag(typeByAccount: Map<String, AccountType>): FinancialEvent {
     val accountType = typeByAccount[accountId] ?: return this
-    return copy(countsAsCashFlow = isCashFlow(accountType, type))
+    return copy(countsAsCashFlow = isCashFlow(accountType, type, category))
 }

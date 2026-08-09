@@ -251,7 +251,7 @@ class LocalRepository(
         reconciliationStatus = ReconciliationStatus.valueOf(reconciliationStatus),
         syncedAt = syncedAt,
         countsAsCashFlow = typeByAccount[accountId]
-            ?.let { isCashFlow(it, TransactionType.valueOf(type)) }
+            ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,
     )
 }

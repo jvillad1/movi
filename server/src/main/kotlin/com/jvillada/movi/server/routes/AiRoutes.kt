@@ -163,7 +163,8 @@ private suspend fun buildUserContext(uid: String): String {
         val accountTypeById = accountTypesFor(uid)
         val cashFlow = monthEvents.filter { row ->
             val accountType = accountTypeById[row[Events.accountId]]
-            accountType == null || isCashFlow(accountType, TransactionType.valueOf(row[Events.type]))
+            accountType == null ||
+                isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
         }
 
         val inc = cashFlow

@@ -69,7 +69,7 @@ fun Route.eventRoutes() {
             }
             call.respond(
                 HttpStatusCode.Created,
-                accountType?.let { event.copy(countsAsCashFlow = isCashFlow(it, event.type)) } ?: event,
+                accountType?.let { event.copy(countsAsCashFlow = isCashFlow(it, event.type, event.category)) } ?: event,
             )
         }
 

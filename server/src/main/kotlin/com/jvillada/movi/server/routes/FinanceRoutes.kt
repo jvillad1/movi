@@ -134,7 +134,8 @@ fun Route.financeRoutes() {
             // "Deuda inicial" de apertura, que venía contándose como egreso del mes.
             val cashFlow = monthEvents.filter { row ->
                 val accountType = accountTypeById[row[Events.accountId]]
-                accountType == null || isCashFlow(accountType, TransactionType.valueOf(row[Events.type]))
+                accountType == null ||
+                    isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
             }
 
             val ingresos = cashFlow

@@ -26,6 +26,7 @@ val PREDEFINED_CATEGORIES: List<Category> = listOf(
     Category("cat_housing",    "Vivienda",        "🏠", "#F0E68C", "EXPENSE"),
     Category("cat_clothing",   "Ropa",            "👗", "#FFB6C1", "EXPENSE"),
     Category("cat_tech",       "Tecnología",      "💻", "#87CEEB", "EXPENSE"),
+    Category("cat_card_payment", "Pago de tarjeta", "💳", "#B0A8B9", "EXPENSE"),
     Category("cat_other_exp",  "Otros",           "📦", "#D3D3D3", "EXPENSE"),
     // Incomes
     Category("cat_salary",     "Salario",         "💼", "#90EE90", "INCOME"),
