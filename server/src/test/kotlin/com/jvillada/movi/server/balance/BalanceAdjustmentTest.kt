@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -61,7 +62,10 @@ class BalanceAdjustmentTest {
     fun `el evento de ajuste sigue las convenciones del evento de apertura`() {
         val opening  = assertNotNull(openingEventFor(loan(balance = 100_000_000L), now = 1L))
         val adjusted = assertNotNull(debtAdjustmentEventFor(loan(), current = 100_000_000L, target = 120_000_000L, now = 2L))
-        assertEquals(opening.category, adjusted.category)
+        // La categoría es lo único que NO sigue a la apertura: el ajuste va bajo nombre propio
+        // para no confundirse con un gasto misceláneo ni chocar con un presupuesto "Otros".
+        assertEquals(ADJUSTMENT_CATEGORY, adjusted.category)
+        assertNotEquals(opening.category, adjusted.category)
         assertEquals(EventSource.MANUAL, adjusted.source)
         assertEquals(ReconciliationStatus.RECONCILED, adjusted.reconciliationStatus)
         assertEquals("acc-loan", adjusted.accountId)

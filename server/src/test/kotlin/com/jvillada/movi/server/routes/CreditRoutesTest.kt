@@ -339,6 +339,57 @@ class CreditRoutesTest {
             }.bodyAsText()
         ).jsonArray.map { it.jsonObject }
 
+    private suspend fun ApplicationTestBuilder.summaryOf(userId: String) =
+        Json.parseToJsonElement(
+            client.get("/api/finance-summary") {
+                header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            }.bodyAsText()
+        ).jsonObject
+
+    /**
+     * El ajuste NO es flujo de caja del mes.
+     *
+     * Este es el renglón que hace falta cuidar de todo el feature: bajar la deuda al saldo real
+     * del banco registra un INCOME por la diferencia, y sin filtrar por tipo de cuenta el
+     * Dashboard reportaba ese INCOME como "Ingresos del mes". Con la deuda real de la libranza
+     * eso son sesenta millones de pesos de ingreso inventado, en la cifra más visible de la app.
+     *
+     * Se comprueba también que el gasto de una cuenta de activo SÍ sigue contando: el filtro
+     * tiene que excluir la deuda, no vaciar el resumen.
+     */
+    @Test
+    fun `un ajuste de deuda no entra como ingreso del mes`() = testApplication {
+        wireApp()
+        val antes = summaryOf(userAId)
+        // La apertura del crédito (100M EXPENSE sobre la cuenta LOAN) tampoco es egreso del mes.
+        assertEquals(0L, antes["ingresos"]!!.jsonPrimitive.long)
+        assertEquals(0L, antes["egresos"]!!.jsonPrimitive.long)
+
+        assertEquals(HttpStatusCode.OK, adjust(userAId, loanAccountId, 40_000_000L).status)
+        assertEquals(40_000_000L, debtOf(userAId, loanAccountId))
+
+        val despues = summaryOf(userAId)
+        assertEquals(
+            0L,
+            despues["ingresos"]!!.jsonPrimitive.long,
+            "el abono de 60.000.000 que bajó la deuda no puede leerse como ingreso del mes",
+        )
+        assertEquals(0L, despues["egresos"]!!.jsonPrimitive.long)
+
+        // Control positivo: un gasto de una cuenta de activo sí cuenta.
+        val gasto = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"evt-mercado","accountId":"$cashAccountId","type":"EXPENSE","amount":250000,""" +
+                    """"currency":"COP","category":"Mercado","description":"Mercado",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.Created, gasto.status)
+        assertEquals(250_000L, summaryOf(userAId)["egresos"]!!.jsonPrimitive.long)
+    }
+
     @Test
     fun `ajustar hacia arriba deja la deuda exactamente en el objetivo`() = testApplication {
         wireApp()
@@ -358,7 +409,7 @@ class CreditRoutesTest {
         // `source` se omite del JSON cuando vale el default (MANUAL).
         assertEquals("MANUAL", adjustment["source"]?.jsonPrimitive?.content ?: "MANUAL")
         assertEquals("RECONCILED", adjustment["reconciliationStatus"]!!.jsonPrimitive.content)
-        assertEquals("Otros", adjustment["category"]!!.jsonPrimitive.content)
+        assertEquals("Ajuste de saldo", adjustment["category"]!!.jsonPrimitive.content)
     }
 
     @Test

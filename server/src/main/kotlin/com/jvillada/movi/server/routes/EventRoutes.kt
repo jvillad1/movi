@@ -74,8 +74,13 @@ fun Route.eventRoutes() {
                 .groupBy { epochToUtcDate(it.timestamp) }
                 .map { (date, items) ->
                     EventDay(
+                        // El total del día es flujo de caja, igual que el del mes: los
+                        // movimientos de cuentas de deuda quedan fuera (ver countsAsCashFlow).
+                        // El renglón del ajuste SÍ se sigue listando —es un movimiento real de
+                        // la cuenta— pero un ajuste de $60.000.000 no puede encabezar el día
+                        // como "+$60.000.000", que es el mismo número engañoso del Dashboard.
                         date  = date,
-                        total = items.filter { it.currency == "COP" }.sumOf { e ->
+                        total = items.filter { it.currency == "COP" && it.countsAsCashFlow }.sumOf { e ->
                             if (e.type == TransactionType.INCOME) e.amount else -e.amount
                         },
                         items = items,

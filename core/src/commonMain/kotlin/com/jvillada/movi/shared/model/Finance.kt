@@ -39,6 +39,16 @@ data class CreditSummary(
     val account: Account,       // cuenta LOAN con deuda derivada en balance
     val terms: CreditTerms?,    // null si la cuenta LOAN aún no tiene términos
     val paidPct: Double?,       // 1 − deuda/principal clampado a [0,1]; null sin términos
+    /**
+     * Movimiento que el server acabó de registrar, o null si no registró ninguno.
+     *
+     * Solo lo llena `POST /api/credits/{id}/balance-adjustment`; en GET/PUT es null. Está acá
+     * para que el cliente offline-first pueda espejar en su DB local el evento exacto que
+     * escribió el server, en vez de adivinarlo: [com.jvillada.movi.shared.repository]
+     * lo inserta ya marcado como sincronizado. Sin esto, en Android el ajuste no aparecía
+     * en movimientos ni movía el saldo cacheado de la cuenta.
+     */
+    val adjustmentEvent: FinancialEvent? = null,
 )
 
 /**
@@ -67,6 +77,15 @@ data class CreateCreditRequest(
 data class AdjustCreditBalanceRequest(
     val targetBalance: Long,    // deuda real (en la moneda de la cuenta), >= 0
 )
+
+/**
+ * Techo defensivo para la deuda objetivo de un crédito (COP). No es un límite de negocio:
+ * atrapa el dedazo de teclear dígitos de más al copiar el saldo de la banca en línea.
+ *
+ * Vive en `:core` a propósito — el server lo aplica y la hoja de ajuste lo espeja para poder
+ * explicar el rechazo *antes* de llamar, en vez de que el usuario reciba un error genérico.
+ */
+const val MAX_CREDIT_DEBT_COP = 1_000_000_000_000L // un billón de pesos
 
 @Serializable
 data class Goal(

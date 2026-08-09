@@ -1,6 +1,15 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.shared.repository.ApiException
+
 fun Throwable.toUserMessage(): String {
+    // Cuando el server explicó el rechazo en el cuerpo, eso gana: es más específico que
+    // cualquier cosa que se pueda adivinar del código. Antes se perdía —`.body()` explotaba
+    // deserializando un cuerpo de texto— y el usuario leía "Algo salió mal" justo en los casos
+    // donde había una razón concreta que leer.
+    if (this is ApiException) {
+        serverMessage?.takeIf { it.isNotBlank() && it.length <= 200 }?.let { return it }
+    }
     val msg = message ?: ""
     return when {
         msg.contains("Unable to resolve host", ignoreCase = true) ||

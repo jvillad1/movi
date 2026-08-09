@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
@@ -16,6 +17,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -125,10 +127,20 @@ fun Route.financeRoutes() {
                 (Events.timestamp less monthEnd)
             }.filterNot { it[Events.id] in voidedIds }
 
-            val ingresos = monthEvents
+            val accountTypeById = accountTypesFor(uid)
+            // Movimientos de cuentas de deuda NO son flujo de caja del mes (ver isCashFlow):
+            // bajar la deuda de un crédito al saldo real del banco no es un ingreso, y subirla
+            // no es un gasto — es la misma plata cambiando de periodo. Esto también corrige la
+            // "Deuda inicial" de apertura, que venía contándose como egreso del mes.
+            val cashFlow = monthEvents.filter { row ->
+                val accountType = accountTypeById[row[Events.accountId]]
+                accountType == null || isCashFlow(accountType, TransactionType.valueOf(row[Events.type]))
+            }
+
+            val ingresos = cashFlow
                 .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
-            val egresos = monthEvents
+            val egresos = cashFlow
                 .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
 

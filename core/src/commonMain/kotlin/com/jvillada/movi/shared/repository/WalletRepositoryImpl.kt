@@ -41,11 +41,13 @@ import io.ktor.client.request.setBody
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 
 class WalletRepositoryImpl(
     private val client: HttpClient,
@@ -74,11 +76,20 @@ class WalletRepositoryImpl(
         client.delete("$baseUrl/api/credits/$accountId")
     }
 
-    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary =
-        client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
+    // Único call site que mira el status antes de deserializar: es el que tiene rechazos
+    // legibles del server (400 fuera de rango, 404, 422 no-LOAN / no-COP) y son justo los que
+    // el usuario necesita leer. Sin esto, `.body()` sobre el 400 fallaba deserializando y el
+    // texto del server se perdía.
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
+        val response = client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
             contentType(ContentType.Application.Json)
             setBody(AdjustCreditBalanceRequest(targetBalance))
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
 
     override suspend fun getSubscriptions(): SubscriptionsResult =
         client.get("$baseUrl/api/subscriptions").body()

@@ -9,10 +9,15 @@ import java.util.UUID
 import kotlin.math.abs
 
 /**
- * Techo defensivo para la deuda objetivo de un crédito (COP). No es un límite de negocio:
- * atrapa el dedazo de teclear dígitos de más al copiar el saldo de la banca en línea.
+ * Categoría propia del ajuste, en vez de `"Otros"`.
+ *
+ * El ajuste ya no cuenta como flujo de caja (ver `isCashFlow`), pero **sigue siendo una fila
+ * visible** en movimientos y en el detalle de la cuenta. Bajo `"Otros"` era indistinguible de
+ * un gasto misceláneo real y además chocaba de frente con un presupuesto llamado "Otros",
+ * que quedaba en OVER al instante. Con nombre propio se puede separar en cualquier desglose
+ * que lo siga mostrando, sin depender de la bandera.
  */
-const val MAX_CREDIT_DEBT_COP = 1_000_000_000_000L // un billón de pesos
+const val ADJUSTMENT_CATEGORY = "Ajuste de saldo"
 
 /** Movimiento que hay que registrar para llevar la deuda de un valor a otro. */
 data class DebtAdjustment(val type: TransactionType, val amount: Long)
@@ -36,8 +41,9 @@ fun debtAdjustmentFor(current: Long, target: Long): DebtAdjustment? = when {
  * que ajustar. La deuda se deriva de los eventos, así que corregirla es registrar un
  * movimiento más — nunca sobrescribir un número.
  *
- * Categoría, origen y estado de conciliación siguen a [openingEventFor]: es el mismo tipo de
- * asiento declarado por la persona dueña de la cuenta, no un movimiento observado del banco.
+ * Origen y estado de conciliación siguen a [openingEventFor]: es el mismo tipo de asiento
+ * declarado por la persona dueña de la cuenta, no un movimiento observado del banco. La
+ * categoría sí se aparta (ver [ADJUSTMENT_CATEGORY]).
  */
 fun debtAdjustmentEventFor(
     account: Account,
@@ -52,7 +58,7 @@ fun debtAdjustmentEventFor(
         type                 = adjustment.type,
         amount               = adjustment.amount,
         currency             = account.currency,
-        category             = "Otros",
+        category             = ADJUSTMENT_CATEGORY,
         description          = adjustmentDescription(target, account.currency),
         timestamp            = now,
         source               = EventSource.MANUAL,

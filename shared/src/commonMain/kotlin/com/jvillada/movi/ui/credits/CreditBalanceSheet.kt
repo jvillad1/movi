@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.MAX_CREDIT_DEBT_COP
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -46,9 +47,13 @@ fun CreditBalanceSheet(
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    // El techo se espeja del server (MAX_CREDIT_DEBT_COP, en :core) para poder explicar el
+    // dedazo acá mismo en vez de mandarlo y traducir un 400. `toLongOrNull` además devuelve
+    // null si se pegan tantos dígitos que no caben en Long — ese caso cae en el mismo aviso.
     val parsed = target.toLongOrNull()
+    val overCap = parsed != null && parsed > MAX_CREDIT_DEBT_COP
     val delta = parsed?.let { it - current }
-    val canSave = parsed != null && delta != null && delta != 0L && !saving
+    val canSave = parsed != null && !overCap && delta != null && delta != 0L && !saving
 
     fun adjust() {
         if (!canSave) return
@@ -119,6 +124,9 @@ fun CreditBalanceSheet(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text = when {
+                        target.isNotEmpty() && parsed == null ->
+                            "Ese número es demasiado grande — revisá los dígitos."
+                        overCap        -> "Saldo fuera de rango — revisá el monto."
                         parsed == null -> "Copiá el saldo que muestra la banca en línea hoy."
                         delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
                         delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."

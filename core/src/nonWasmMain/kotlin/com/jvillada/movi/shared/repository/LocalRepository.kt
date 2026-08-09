@@ -35,6 +35,7 @@ import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.VoidEvent
+import com.jvillada.movi.shared.model.isCashFlow
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -91,10 +92,11 @@ class LocalRepository(
 
     override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
         val uid = userId()
+        val types = accountTypes(uid)
         return if (accountId != null)
-            db.financialEventQueries.selectByAccount(accountId, uid).executeAsList().map { it.toModel() }
+            db.financialEventQueries.selectByAccount(accountId, uid).executeAsList().map { it.toModel(types) }
         else
-            db.financialEventQueries.selectAll(uid).executeAsList().map { it.toModel() }
+            db.financialEventQueries.selectAll(uid).executeAsList().map { it.toModel(types) }
     }
 
     override suspend fun getEventsByDay(): List<EventDay> =
@@ -102,8 +104,11 @@ class LocalRepository(
             .groupBy { epochMillisToDate(it.timestamp) }
             .map { (date, items) ->
                 EventDay(
+                    // Mismo criterio que el server (ver EventRoutes /by-day): el total del día
+                    // es flujo de caja, así que los movimientos de cuentas de deuda no entran.
+                    // El renglón se sigue listando; solo no encabeza el día.
                     date = date,
-                    total = items.sumOf {
+                    total = items.filter { it.countsAsCashFlow }.sumOf {
                         if (it.type == TransactionType.INCOME) it.amount else -it.amount
                     },
                     items = items,
@@ -135,8 +140,49 @@ class LocalRepository(
     override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
-    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary =
-        remote.adjustCreditBalance(accountId, targetBalance)
+    /**
+     * Ajusta contra el server y **espeja el resultado en la DB local**.
+     *
+     * El resto de las operaciones de crédito delegan y ya: se leen siempre desde el server. El
+     * ajuste no puede, porque su efecto secundario —un movimiento en la cuenta— se lee desde acá:
+     * [getEvents]/[getEventsByDay] y [getAccounts] van a SQLDelight, y [com.jvillada.movi.shared.SyncEngine]
+     * solo empuja, nunca trae. Sin este espejo, en Android el ajuste no aparecía en Movimientos,
+     * ni en Análisis, ni en Presupuestos, ni en el detalle de la cuenta, y la pantalla de Cuentas
+     * seguía mostrando la deuda vieja para siempre — mientras la hoja prometía por escrito que
+     * "queda como un movimiento visible en la cuenta".
+     *
+     * Se escribe el evento **exacto** que devolvió el server (`adjustmentEvent`), no uno
+     * reconstruido: mismo id, mismo monto, misma marca de tiempo. Va ya marcado como sincronizado
+     * para que el SyncEngine no lo vuelva a subir y duplique el ajuste.
+     *
+     * El saldo de la cuenta se copia del server en vez de sumarle un delta calculado acá: el
+     * server lo deriva de todos los eventos con el signo correcto por tipo de cuenta, y para una
+     * cuenta LOAN el delta local de [postEvent] tiene el signo al revés.
+     */
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
+        val summary = remote.adjustCreditBalance(accountId, targetBalance)
+        val uid = userId()
+        val event = summary.adjustmentEvent
+        db.transaction {
+            if (event != null) {
+                db.financialEventQueries.insert(
+                    event.id, event.accountId, event.type.name, event.amount,
+                    event.category, event.description, event.merchant,
+                    event.timestamp, event.source.name, event.rawPayload,
+                    event.reconciliationStatus.name,
+                    event.syncedAt ?: Clock.System.now().toEpochMilliseconds(),
+                    uid,
+                )
+            }
+            // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
+            // existir localmente todavía, y en ese caso la pantalla de Cuentas ni siquiera lo veía.
+            db.accountQueries.insert(
+                summary.account.id, summary.account.name, summary.account.type.name,
+                summary.account.balance, summary.account.currency, uid,
+            )
+        }
+        return summary
+    }
     override suspend fun getSubscriptions(): SubscriptionsResult = remote.getSubscriptions()
     override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
     override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = remote.updateSubscription(id, subscription)
@@ -181,7 +227,20 @@ class LocalRepository(
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private fun com.jvillada.movi.Financial_event.toModel() = FinancialEvent(
+    /**
+     * Tipo de cuenta por id. `countsAsCashFlow` no está en la tabla local —es derivado, igual que
+     * en el server— así que hay que resolverlo contra `account` en cada lectura.
+     */
+    private fun accountTypes(uid: String): Map<String, AccountType> =
+        db.accountQueries.selectAll(uid).executeAsList()
+            .mapNotNull { row ->
+                runCatching { AccountType.valueOf(row.type) }.getOrNull()?.let { row.id to it }
+            }
+            .toMap()
+
+    private fun com.jvillada.movi.Financial_event.toModel(
+        typeByAccount: Map<String, AccountType> = emptyMap(),
+    ) = FinancialEvent(
         id = id, accountId = accountId,
         type = TransactionType.valueOf(type),
         amount = amount, category = category,
@@ -191,6 +250,9 @@ class LocalRepository(
         rawPayload = rawPayload,
         reconciliationStatus = ReconciliationStatus.valueOf(reconciliationStatus),
         syncedAt = syncedAt,
+        countsAsCashFlow = typeByAccount[accountId]
+            ?.let { isCashFlow(it, TransactionType.valueOf(type)) }
+            ?: true,
     )
 }
 
