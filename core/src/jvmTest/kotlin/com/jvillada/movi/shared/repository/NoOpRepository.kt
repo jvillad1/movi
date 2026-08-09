@@ -17,10 +17,26 @@ class NoOpRepository : WalletRepository {
         paidPct = null,
     )
     override suspend fun deleteCreditTerms(accountId: String) {}
+    /**
+     * Imita al server: devuelve la cuenta con la deuda ya en el objetivo **y** el evento que
+     * registró para llegar ahí. Ese `adjustmentEvent` es lo que [LocalRepository] tiene que
+     * espejar en la DB local, así que sin él el stub no ejercitaría nada.
+     */
     override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long) = CreditSummary(
-        account = Account(id = accountId, name = "", type = AccountType.LOAN, balance = targetBalance),
+        account = Account(id = accountId, name = "Crédito", type = AccountType.LOAN, balance = targetBalance),
         terms = null,
         paidPct = null,
+        adjustmentEvent = FinancialEvent(
+            id                   = "ev-ajuste-$accountId",
+            accountId            = accountId,
+            type                 = TransactionType.INCOME,
+            amount               = 60_000_000L,
+            category             = "Ajuste de saldo",
+            description          = "Ajuste al saldo del banco",
+            timestamp            = 1_700_000_000_000L,
+            source               = EventSource.MANUAL,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        ),
     )
     override suspend fun getSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun detectSubscriptions() = SubscriptionsResult(emptyList(), 0)

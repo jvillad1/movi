@@ -7,7 +7,11 @@ fun Throwable.toUserMessage(): String {
     // cualquier cosa que se pueda adivinar del código. Antes se perdía —`.body()` explotaba
     // deserializando un cuerpo de texto— y el usuario leía "Algo salió mal" justo en los casos
     // donde había una razón concreta que leer.
-    if (this is ApiException) {
+    // Solo 4xx de validación: ahí el cuerpo lo escribió una ruta nuestra, a mano y en español.
+    // Un 5xx no — el server no tiene StatusPages, así que el cuerpo de un 500 es un stack trace
+    // (en developmentMode) o el HTML de error del proxy de Railway, y ninguno de los dos mejora
+    // en nada por recortarlo a 200 caracteres frente al usuario.
+    if (this is ApiException && status in 400..422) {
         serverMessage?.takeIf { it.isNotBlank() && it.length <= 200 }?.let { return it }
     }
     val msg = message ?: ""

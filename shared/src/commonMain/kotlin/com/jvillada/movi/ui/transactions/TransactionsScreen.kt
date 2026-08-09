@@ -75,7 +75,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                 else -> day.items
             }
             if (filtered.isEmpty()) null
-            else day.copy(items = filtered, total = filtered.sumOf { signedAmount(it) })
+            // El total recalculado sigue el mismo criterio que el del server (ver EventRoutes
+            // /by-day): countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin
+            // esto, el encabezado del día decía $0 en "Todo" y +$60.000.000 en "Ingresos" —
+            // el mismo número engañoso que esta rama vino a matar, una pestaña más allá.
+            else day.copy(items = filtered, total = filtered.filter { it.countsAsCashFlow }.sumOf { signedAmount(it) })
         }
     }
 

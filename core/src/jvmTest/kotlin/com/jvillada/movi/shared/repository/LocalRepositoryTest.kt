@@ -11,6 +11,8 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class LocalRepositoryTest {
@@ -63,6 +65,41 @@ class LocalRepositoryTest {
         val events = repo.getEvents("acc3")
         assertTrue(events.any { it.id == "evt3" })
         assertTrue(events.any { it.id == "evt4" })
+    }
+
+    /**
+     * El ajuste vive en el server, pero lo que el dueño ve en su teléfono sale de esta DB:
+     * Movimientos, Análisis, Presupuestos y Cuentas leen de acá, y el SyncEngine solo empuja.
+     * Si el espejo no ocurre, el ajuste es invisible en Android y la deuda vieja se queda en
+     * pantalla para siempre.
+     */
+    @Test
+    fun adjustCreditBalance_espeja_el_evento_y_el_saldo_del_server() = runBlocking {
+        repo.createAccount(Account("acc-loan", "Libranza", AccountType.LOAN, 100_000_000L))
+
+        val summary = repo.adjustCreditBalance("acc-loan", 40_000_000L)
+        assertEquals(40_000_000L, summary.account.balance)
+
+        val mirrored = repo.getEvents("acc-loan").single { it.id == "ev-ajuste-acc-loan" }
+        assertEquals(60_000_000L, mirrored.amount)
+        assertEquals(TransactionType.INCOME, mirrored.type)
+        // Ya sincronizado: si quedara pendiente, el SyncEngine lo subiría y duplicaría el ajuste.
+        assertNotNull(mirrored.syncedAt)
+        // Cuenta LOAN ⇒ no es flujo de caja. Es la mitad que evita el "+$60.000.000" de ingresos.
+        assertFalse(mirrored.countsAsCashFlow)
+
+        // El saldo cacheado se copia del server, no se recalcula con un delta local: para una
+        // cuenta LOAN el delta de postEvent tiene el signo al revés y habría dado 160.000.000.
+        assertEquals(40_000_000L, repo.getAccount("acc-loan").balance)
+    }
+
+    /** Control: en una cuenta de activo la bandera sigue en true y nada de esto la toca. */
+    @Test
+    fun getEvents_marca_como_flujo_de_caja_los_movimientos_de_cuentas_de_activo() = runBlocking {
+        repo.createAccount(Account("acc-cash", "Efectivo", AccountType.CASH, 0L))
+        repo.postEvent(event("ev-mercado", "acc-cash", TransactionType.EXPENSE, 250_000L))
+
+        assertTrue(repo.getEvents("acc-cash").single { it.id == "ev-mercado" }.countsAsCashFlow)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

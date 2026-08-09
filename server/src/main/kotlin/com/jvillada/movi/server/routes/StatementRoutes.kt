@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.StatementImports
@@ -289,9 +291,10 @@ fun Route.statementRoutes() {
         }
 
         val events = dbQuery {
+            val types = accountTypesFor(uid)
             Events.selectAll()
                 .where { (Events.statementImportId eq importId) and (Events.userId eq uid) }
-                .map { it.toFinancialEvent() }
+                .map { it.toFinancialEvent().withCashFlowFlag(types) }
         }
 
         call.respond(StatementImportDetail(rowToStatementImport(importRow), events))

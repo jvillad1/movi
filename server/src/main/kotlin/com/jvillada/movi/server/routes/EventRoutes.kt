@@ -58,7 +58,19 @@ fun Route.eventRoutes() {
                     it[syncedAt]             = event.syncedAt
                 }
             }
-            call.respond(HttpStatusCode.Created, event)
+            // El eco lleva la bandera derivada, no la que mandó el cliente: countsAsCashFlow
+            // sale del tipo de la cuenta y el cliente no tiene voz ahí. Sin esto, el POST
+            // devolvía el default `true` para un evento de una cuenta de deuda y contradecía
+            // a los GET, que sí la derivan.
+            val accountType = dbQuery {
+                Accounts.selectAll()
+                    .where { (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }
+                    .firstOrNull()?.let { runCatching { AccountType.valueOf(it[Accounts.type]) }.getOrNull() }
+            }
+            call.respond(
+                HttpStatusCode.Created,
+                accountType?.let { event.copy(countsAsCashFlow = isCashFlow(it, event.type)) } ?: event,
+            )
         }
 
         get {
