@@ -15,6 +15,8 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -25,6 +27,7 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -205,6 +208,13 @@ class EventRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
         }
 
+    private suspend fun ApplicationTestBuilder.putCategory(id: String, category: String, userId: String) =
+        client.put("/api/events/$id/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"category":"$category"}""")
+        }
+
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
@@ -320,5 +330,85 @@ class EventRoutesTest {
         assertEquals("Otros", row[Events.category])
         assertEquals("Pago tarjeta de crédito", row[Events.description])
         assertEquals("EXPENSE", row[Events.type])
+    }
+
+    // ── PUT /api/events/{id}/category (Task 3 de SP-ajustar-saldo) ─────────────
+
+    /**
+     * El caso central del diseño: un pago del extracto cargado en la cuenta de ahorros
+     * (cuenta de activo, donde por tipo de cuenta `countsAsCashFlow` daría `true`) deja de
+     * contar como flujo de caja en cuanto se le pone la categoría "Pago de tarjeta" — la regla
+     * de [com.jvillada.movi.shared.model.isCashFlow] gana sobre el tipo de cuenta.
+     */
+    @Test
+    fun `PUT category actualiza la categoria y responde countsAsCashFlow derivado`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-pago", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+
+        val res = putCategory("evt-pago", "Pago de tarjeta", userAId)
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("Pago de tarjeta", body["category"]!!.jsonPrimitive.content)
+        assertEquals(false, body["countsAsCashFlow"]!!.jsonPrimitive.boolean)
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-pago" }.single() }
+        assertEquals("Pago de tarjeta", row[Events.category])
+    }
+
+    @Test
+    fun `PUT category responde 404 en vez de 403 si el evento es de otro usuario`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-a", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Compra", category = "Otros",
+        )
+
+        val res = putCategory("evt-a", "Pago de tarjeta", userBId)
+        assertEquals(HttpStatusCode.NotFound, res.status)
+
+        // el evento de A no cambió
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-a" }.single() }
+        assertEquals("Otros", row[Events.category])
+    }
+
+    @Test
+    fun `PUT category responde 404 si el evento no existe`() = testApplication {
+        wireApp()
+        val res = putCategory("no-existe", "Pago de tarjeta", userAId)
+        assertEquals(HttpStatusCode.NotFound, res.status)
+    }
+
+    @Test
+    fun `PUT category rechaza categoria vacia con 400`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-b", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Compra", category = "Otros",
+        )
+
+        val res = putCategory("evt-b", "", userAId)
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-b" }.single() }
+        assertEquals("Otros", row[Events.category])
+    }
+
+    @Test
+    fun `PUT category rechaza categoria de mas de 60 caracteres con 400`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-c", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Compra", category = "Otros",
+        )
+
+        val tooLong = "x".repeat(61)
+        val res = putCategory("evt-c", tooLong, userAId)
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-c" }.single() }
+        assertEquals("Otros", row[Events.category])
     }
 }

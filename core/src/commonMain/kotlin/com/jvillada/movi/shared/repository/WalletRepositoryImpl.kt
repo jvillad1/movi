@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.UpdateEventCategoryRequest
 import com.jvillada.movi.shared.model.VoidEvent
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -215,6 +216,19 @@ class WalletRepositoryImpl(
         val url = if (reason != null) "$baseUrl/api/events/$id/void?reason=$reason"
                   else "$baseUrl/api/events/$id/void"
         return client.post(url).body()
+    }
+
+    // Mismo idioma que adjustCreditBalance: el server puede rechazar con 404 (otro usuario) o
+    // 400 (categoría vacía o demasiado larga) y ese texto se pierde si se deserializa a ciegas.
+    override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/category") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateEventCategoryRequest(category))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
     }
 
     override suspend fun register(request: RegisterRequest): AuthResponse =

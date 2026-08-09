@@ -133,6 +133,27 @@ class LocalRepository(
         return VoidEvent(id = voidId, originalEventId = id, reason = reason, timestamp = now)
     }
 
+    /**
+     * Cambia la categoría contra el server y **espeja el resultado en SQLDelight**.
+     *
+     * Mismo problema que [adjustCreditBalance]: en Android, Movimientos/Análisis/Presupuestos
+     * leen de acá, no del server, y el `SyncEngine` solo empuja — nunca trae. Sin este espejo,
+     * recategorizar un pago de tarjeta como [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY]
+     * quedaría bien en el server pero la fila local seguiría con la categoría vieja, y el gasto
+     * duplicado que esta feature existe para arreglar seguiría duplicado en el teléfono.
+     *
+     * A diferencia de [adjustCreditBalance], acá **no hay saldo que copiar**: recategorizar no es
+     * un movimiento de plata, así que el espejo es un UPDATE puntual de `category` — no un
+     * insert, y `account` no se toca. Se escribe `updated.id`/`updated.category` (lo que devolvió
+     * el server, ya recortado/validado) en vez de los parámetros crudos, mismo criterio que
+     * [adjustCreditBalance] usa para el evento de ajuste.
+     */
+    override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+        val updated = remote.updateEventCategory(id, category)
+        db.financialEventQueries.updateCategory(updated.category, updated.id, userId())
+        return updated
+    }
+
     // ── Delegate everything else to remote ────────────────────────────────────
 
     override suspend fun getHoldings(): List<Holding> = remote.getHoldings()

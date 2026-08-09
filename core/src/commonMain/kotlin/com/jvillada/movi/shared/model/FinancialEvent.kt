@@ -38,6 +38,16 @@ data class FinancialEvent(
     val countsAsCashFlow: Boolean = true,
 )
 
+/**
+ * Body de `PUT /api/events/{id}/category`.
+ *
+ * Un DTO propio en vez de reusar [FinancialEvent] entero: el cliente solo tiene voz sobre la
+ * categoría (ver [FinancialEvent.countsAsCashFlow], que es derivado y se ignora si viene en el
+ * body), así que el wire de entrada no debería ni sugerir que se puede mandar el resto de campos.
+ */
+@Serializable
+data class UpdateEventCategoryRequest(val category: String)
+
 @Serializable
 data class VoidEvent(
     val id: String,

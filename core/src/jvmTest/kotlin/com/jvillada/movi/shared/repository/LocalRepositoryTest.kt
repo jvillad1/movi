@@ -3,6 +3,7 @@ package com.jvillada.movi.shared.repository
 import com.jvillada.movi.shared.db.createDatabase
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -100,6 +101,30 @@ class LocalRepositoryTest {
         repo.postEvent(event("ev-mercado", "acc-cash", TransactionType.EXPENSE, 250_000L))
 
         assertTrue(repo.getEvents("acc-cash").single { it.id == "ev-mercado" }.countsAsCashFlow)
+    }
+
+    /**
+     * El espejo local de `updateEventCategory`: sin esto, en Android recategorizar un pago del
+     * extracto actualizaría el server pero Movimientos/Análisis/Presupuestos —que leen de
+     * SQLDelight, no del server— seguirían mostrando la categoría vieja, y el gasto duplicado
+     * que esta feature existe para arreglar seguiría duplicado en el teléfono.
+     */
+    @Test
+    fun updateEventCategory_espeja_la_categoria_sin_tocar_el_saldo() = runBlocking {
+        repo.createAccount(Account("acc-savings", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-pago", "acc-savings", TransactionType.EXPENSE, 300_000L))
+        val balanceBefore = repo.getAccount("acc-savings").balance
+
+        val result = repo.updateEventCategory("evt-pago", CARD_PAYMENT_CATEGORY)
+        assertEquals(CARD_PAYMENT_CATEGORY, result.category)
+
+        val mirrored = repo.getEvents("acc-savings").single { it.id == "evt-pago" }
+        assertEquals(CARD_PAYMENT_CATEGORY, mirrored.category)
+        // "Pago de tarjeta" nunca cuenta como flujo de caja, sin importar el tipo de cuenta.
+        assertFalse(mirrored.countsAsCashFlow)
+
+        // Recategorizar no es un movimiento de plata: el saldo de la cuenta no se toca.
+        assertEquals(balanceBefore, repo.getAccount("acc-savings").balance)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

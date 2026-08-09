@@ -67,6 +67,22 @@ class NoOpRepository : WalletRepository {
     override suspend fun getEvents(accountId: String?) = emptyList<FinancialEvent>()
     override suspend fun getEventsByDay() = emptyList<EventDay>()
     override suspend fun voidEvent(id: String, reason: String?) = error("stub")
+    /**
+     * Imita al server: echoa el mismo [id] y la [category] que le mandaron, como haría el
+     * update real. [LocalRepository] espeja `updated.id`/`updated.category` (no los parámetros
+     * crudos), así que sin este echo el test del espejo local apuntaría a una fila equivocada.
+     */
+    override suspend fun updateEventCategory(id: String, category: String) = FinancialEvent(
+        id = id,
+        accountId = "acc-stub",
+        type = TransactionType.EXPENSE,
+        amount = 50_000L,
+        category = category,
+        description = "stub",
+        timestamp = 1_700_000_000_000L,
+        source = EventSource.MANUAL,
+        reconciliationStatus = ReconciliationStatus.RECONCILED,
+    )
     override suspend fun register(request: RegisterRequest) = error("stub")
     override suspend fun login(request: LoginRequest) = error("stub")
     override suspend fun requestPasswordReset(request: PasswordResetRequest) = 202

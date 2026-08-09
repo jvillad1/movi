@@ -4,6 +4,7 @@ import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.balance.looksLikeCardPayment
+import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -17,6 +18,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -123,6 +125,37 @@ fun Route.eventRoutes() {
                 }
             }
             call.respond(candidates)
+        }
+
+        // Recategorizar un movimiento (Task 3 de SP-ajustar-saldo). Es la pieza que le falta al
+        // GET /card-payment-candidates de arriba: propone, esta confirma. Aislado por usuario
+        // (404, no 403, si el evento es de otro) y countsAsCashFlow siempre se recalcula acá —
+        // nunca se guarda ni se toma del cliente.
+        put("/{id}/category") {
+            val id = call.parameters["id"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val category = call.receive<UpdateEventCategoryRequest>().category.trim()
+            if (category.isBlank()) {
+                return@put call.respond(HttpStatusCode.BadRequest, "La categoría no puede estar vacía")
+            }
+            if (category.length > 60) {
+                return@put call.respond(HttpStatusCode.BadRequest, "La categoría no puede superar 60 caracteres")
+            }
+
+            val updated: FinancialEvent? = dbQuery {
+                val event = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                if (event != null) {
+                    Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
+                        it[Events.category] = category
+                    }
+                }
+                event?.copy(category = category)?.withCashFlowFlag(accountTypesFor(uid))
+            }
+            if (updated == null) call.respond(HttpStatusCode.NotFound)
+            else call.respond(updated)
         }
 
         post("/{id}/void") {

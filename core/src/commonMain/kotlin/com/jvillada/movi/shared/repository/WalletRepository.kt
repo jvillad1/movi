@@ -68,6 +68,13 @@ interface WalletRepository {
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>
     suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
+
+    /**
+     * Cambia la categoría de un movimiento ya registrado. Devuelve el [FinancialEvent]
+     * actualizado con `countsAsCashFlow` derivado — el server lo recalcula, nunca lo toma del
+     * cliente.
+     */
+    suspend fun updateEventCategory(id: String, category: String): FinancialEvent
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
 
