@@ -75,6 +75,14 @@ interface WalletRepository {
      * cliente.
      */
     suspend fun updateEventCategory(id: String, category: String): FinancialEvent
+
+    /**
+     * Movimientos que **parecen** el pago del extracto de una tarjeta pero todavía no están
+     * categorizados como [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] — candidatos
+     * a confirmar con [updateEventCategory], nunca aplicados solos. El server solo propone
+     * (ver `looksLikeCardPayment`); esta llamada no muta nada.
+     */
+    suspend fun getCardPaymentCandidates(): List<FinancialEvent>
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
 

@@ -240,6 +240,10 @@ class LocalRepository(
     override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
     override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = remote.updateSubscription(id, subscription)
     override suspend fun deleteSubscription(id: String) = remote.deleteSubscription(id)
+    // Propuesta de solo lectura, sin efecto secundario que espejar (a diferencia de
+    // updateEventCategory/adjustCreditBalance arriba): delega directo, igual que el resto de
+    // esta sección.
+    override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = remote.getCardPaymentCandidates()
     override suspend fun getGoals(): List<Goal> = remote.getGoals()
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)

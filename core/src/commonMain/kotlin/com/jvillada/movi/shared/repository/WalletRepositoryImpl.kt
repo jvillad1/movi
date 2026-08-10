@@ -231,6 +231,9 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    override suspend fun getCardPaymentCandidates(): List<FinancialEvent> =
+        client.get("$baseUrl/api/events/card-payment-candidates").body()
+
     override suspend fun register(request: RegisterRequest): AuthResponse =
         client.post("$baseUrl/api/auth/register") {
             contentType(ContentType.Application.Json)

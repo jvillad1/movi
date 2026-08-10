@@ -47,6 +47,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var refreshKey by remember { mutableStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
+    // fallo acá no debe tapar Movimientos con un snackbar — se queda simplemente vacía.
+    var candidates by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    var showCandidatesSheet by remember { mutableStateOf(false) }
+
     LaunchedEffect(refreshKey) {
         loading = true
         error = null
@@ -54,6 +60,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             .onSuccess { allDays = it }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
+    }
+
+    LaunchedEffect(refreshKey) {
+        runCatching { Repositories.wallets.getCardPaymentCandidates() }
+            .onSuccess { candidates = it }
     }
 
     LaunchedEffect(error) {
@@ -141,6 +152,33 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
+        // Entrada discreta a los candidatos de pago de tarjeta: solo aparece si hay algo que
+        // proponer, y abre una lista donde cada uno se confirma por separado (ver
+        // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
+        if (candidates.isNotEmpty()) {
+            MinCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                variant = MinCardVariant.Default,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                onClick = { showCandidatesSheet = true },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = if (candidates.size == 1) "1 pago de tarjeta sin marcar"
+                               else "${candidates.size} pagos de tarjeta sin marcar",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                    )
+                    ChevronRight()
+                }
+            }
+        }
+
         if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
         LazyColumn(
@@ -190,6 +228,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .clickable { selectedEvent = tx }
                                             .padding(vertical = 14.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -259,5 +298,21 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         hostState = snackbarHostState,
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp),
     )
+
+    selectedEvent?.let { event ->
+        ChangeCategorySheet(
+            event = event,
+            onDismiss = { selectedEvent = null },
+            onCategoryChanged = { selectedEvent = null; refreshKey++ },
+        )
+    }
+
+    if (showCandidatesSheet) {
+        CardPaymentCandidatesSheet(
+            candidates = candidates,
+            onDismiss = { showCandidatesSheet = false },
+            onConfirmed = { refreshKey++ },
+        )
+    }
     }
 }

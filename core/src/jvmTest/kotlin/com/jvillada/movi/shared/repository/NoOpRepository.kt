@@ -98,6 +98,7 @@ class NoOpRepository(
             reconciliationStatus = ReconciliationStatus.RECONCILED,
         )
     }
+    override suspend fun getCardPaymentCandidates() = emptyList<FinancialEvent>()
     override suspend fun register(request: RegisterRequest) = error("stub")
     override suspend fun login(request: LoginRequest) = error("stub")
     override suspend fun requestPasswordReset(request: PasswordResetRequest) = 202

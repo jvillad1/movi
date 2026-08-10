@@ -1,0 +1,264 @@
+package com.jvillada.movi.ui.transactions
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.*
+import kotlinx.coroutines.launch
+
+/**
+ * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
+ * clickeable para cerrar, panel con esquinas redondeadas arriba y el "handle" de 32×4.dp. Se
+ * duplica acá en vez de importarse — mismo criterio que [com.jvillada.movi.ui.accounts.CreateAccountSheet],
+ * cada pantalla trae sus propios helpers de hoja.
+ */
+@Composable
+private fun BottomSheetScaffold(
+    onDismiss: () -> Unit,
+    dismissEnabled: Boolean,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(enabled = dismissEnabled, onClick = onDismiss),
+    ) {
+        Box(modifier = Modifier.weight(1f))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(MinSurfaceContainerHigh)
+                .padding(horizontal = 20.dp)
+                .clickable(enabled = false) {},
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(vertical = 12.dp)
+                    .width(32.dp).height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MinTextFaint),
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SheetLabel(text: String) {
+    Text(
+        text = text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        color = MinTextMute,
+        letterSpacing = 0.5.sp,
+    )
+}
+
+@Composable
+private fun CategoryRow(icon: String, name: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(icon, fontSize = 18.sp)
+        Text(name, fontSize = 14.5.sp, color = MinText, modifier = Modifier.weight(1f))
+        if (selected) Text("✓", fontSize = 15.sp, color = MinPrimary, fontWeight = FontWeight.Bold)
+    }
+}
+
+/**
+ * Cambia la categoría de un movimiento ya registrado.
+ *
+ * Lista las [PREDEFINED_CATEGORIES] del mismo lado que el movimiento (gasto vs. ingreso):
+ * cambiar un gasto a una categoría de ingreso no significa nada en Movi. Elegir una llama a
+ * [com.jvillada.movi.shared.repository.WalletRepository.updateEventCategory] — el server
+ * recalcula `countsAsCashFlow`, esta hoja nunca lo manda.
+ */
+@Composable
+fun ChangeCategorySheet(
+    event: FinancialEvent,
+    onDismiss: () -> Unit,
+    onCategoryChanged: (FinancialEvent) -> Unit,
+) {
+    val coroutine = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val options = remember(event.type) {
+        PREDEFINED_CATEGORIES.filter { it.type == event.type.name || it.type == "BOTH" }
+    }
+    // Los extractos importados traen categorías libres del parser (ver ClaudeStatementParser)
+    // que pueden no estar en el catálogo. Si la actual no aparece en `options`, se agrega igual
+    // como la opción ya marcada — perderla acá sería más confuso que una entrada de más.
+    val currentIsKnown = options.any { it.name == event.category }
+
+    fun choose(category: String) {
+        if (category == event.category || saving) return
+        saving = true
+        error = null
+        coroutine.launch {
+            val result = runCatching { Repositories.wallets.updateEventCategory(event.id, category) }
+            saving = false
+            result.onSuccess { onCategoryChanged(it) }.onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = !saving) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            SheetLabel("CAMBIAR CATEGORÍA")
+            Spacer(Modifier.height(8.dp))
+            Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+            Spacer(Modifier.height(16.dp))
+
+            if (!currentIsKnown) {
+                CategoryRow(icon = "🏷️", name = event.category, selected = true, enabled = false, onClick = {})
+                Hairline()
+            }
+            options.forEachIndexed { i, cat ->
+                CategoryRow(
+                    icon = cat.icon,
+                    name = cat.name,
+                    selected = cat.name == event.category,
+                    enabled = !saving,
+                    onClick = { choose(cat.name) },
+                )
+                if (i < options.size - 1) Hairline()
+            }
+
+            if (saving) {
+                Spacer(Modifier.height(10.dp))
+                Text("Guardando…", fontSize = 12.sp, color = MinTextMute)
+            }
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, fontSize = 12.sp, color = MinExpense)
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+/**
+ * Candidatos que el server propone como pago de extracto de tarjeta (`looksLikeCardPayment`
+ * en el server) pero que todavía no están marcados con [CARD_PAYMENT_CATEGORY]. **Cada uno se
+ * confirma por separado** — no hay botón de "marcar todos": es la promesa central de esta
+ * feature (el dueño decide, Movi no adivina en bloque).
+ */
+@Composable
+fun CardPaymentCandidatesSheet(
+    candidates: List<FinancialEvent>,
+    onDismiss: () -> Unit,
+    onConfirmed: () -> Unit,
+) {
+    val coroutine = rememberCoroutineScope()
+    var remaining by remember(candidates) { mutableStateOf(candidates) }
+    var savingId by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun confirm(event: FinancialEvent) {
+        if (savingId != null) return
+        savingId = event.id
+        error = null
+        coroutine.launch {
+            val result = runCatching { Repositories.wallets.updateEventCategory(event.id, CARD_PAYMENT_CATEGORY) }
+            savingId = null
+            result.onSuccess {
+                remaining = remaining.filterNot { it.id == event.id }
+                onConfirmed()
+            }.onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = savingId == null) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            SheetLabel("PAGOS DE TARJETA SIN MARCAR")
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Marcarlos como \"$CARD_PAYMENT_CATEGORY\" evita contar esta plata dos veces: " +
+                    "ya se contó como gasto el día que se compró con la tarjeta.",
+                fontSize = 12.sp,
+                color = MinTextMute,
+                lineHeight = 17.sp,
+            )
+            Spacer(Modifier.height(14.dp))
+
+            if (remaining.isEmpty()) {
+                Text("Ya no quedan pagos por confirmar.", fontSize = 13.sp, color = MinTextMute)
+            }
+
+            remaining.forEachIndexed { i, event ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            event.description,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text("hoy: ${event.category}", fontSize = 12.sp, color = MinTextMute)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        formatCOP(event.amount),
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MinText,
+                        modifier = Modifier.padding(end = 10.dp),
+                    )
+                    val isSavingThis = savingId == event.id
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSavingThis) MinTextFaint else MinText)
+                            .clickable(enabled = savingId == null) { confirm(event) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            if (isSavingThis) "Marcando…" else "Marcar",
+                            color = MinBg,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+                if (i < remaining.size - 1) Hairline()
+            }
+
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, fontSize = 12.sp, color = MinExpense)
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
