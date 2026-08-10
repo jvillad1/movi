@@ -3,29 +3,15 @@ package com.jvillada.movi.server.balance
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.signedDelta
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
+// Los tests de signedDelta en sí viven en :core (BalanceTest.kt), junto a la función —se movió
+// ahí para que cliente y server compartan una sola definición del signo. Acá se sigue usando
+// (importada) para blindar computeBalances/accountCopValue, que sí son server-only.
 class BalancesTest {
-
-    @Test
-    fun `signedDelta on asset account income adds expense subtracts`() {
-        assertEquals(100, signedDelta(AccountType.SAVINGS, TransactionType.INCOME, 100))
-        assertEquals(-100, signedDelta(AccountType.SAVINGS, TransactionType.EXPENSE, 100))
-    }
-
-    @Test
-    fun `signedDelta on credit card purchase raises debt payment lowers it`() {
-        assertEquals(100, signedDelta(AccountType.CREDIT_CARD, TransactionType.EXPENSE, 100)) // compra
-        assertEquals(-100, signedDelta(AccountType.CREDIT_CARD, TransactionType.INCOME, 100)) // abono
-    }
-
-    @Test
-    fun `signedDelta on loan purchase raises debt payment lowers it`() {
-        assertEquals(100, signedDelta(AccountType.LOAN, TransactionType.EXPENSE, 100)) // desembolso/deuda
-        assertEquals(-100, signedDelta(AccountType.LOAN, TransactionType.INCOME, 100)) // pago cuota
-    }
 
     @Test
     fun `computeBalances groups by currency with credit-card signs`() {
@@ -49,6 +35,39 @@ class BalancesTest {
     @Test
     fun `estimatedTotalCop is null when only COP`() {
         assertNull(estimatedTotalCop(mapOf("COP" to 30_000L), 3950.0))
+    }
+
+    // ── netWorth (Hallazgo menor 4 de la revisión de `feat/ajustar-saldo`) ──────────────────
+
+    @Test
+    fun `netWorth resta las cuentas de deuda en vez de sumarlas`() {
+        val accountRows = listOf("cash" to AccountType.CASH, "loan" to AccountType.LOAN)
+        val eventsByAccount = mapOf(
+            "cash" to listOf(ev(TransactionType.INCOME, 1_000_000, "COP")),
+            "loan" to listOf(ev(TransactionType.EXPENSE, 400_000, "COP")), // deuda = 400.000
+        )
+        // Antes del fix esto sumaba 1.000.000 + 400.000 = 1.400.000 ("activos + deudas").
+        assertEquals(600_000L, netWorth(accountRows, eventsByAccount, 3950.0))
+    }
+
+    @Test
+    fun `netWorth con solo cuentas de activo es la suma simple`() {
+        val accountRows = listOf("cash" to AccountType.CASH, "savings" to AccountType.SAVINGS)
+        val eventsByAccount = mapOf(
+            "cash" to listOf(ev(TransactionType.INCOME, 500_000, "COP")),
+            "savings" to listOf(ev(TransactionType.INCOME, 2_000_000, "COP")),
+        )
+        assertEquals(2_500_000L, netWorth(accountRows, eventsByAccount, 3950.0))
+    }
+
+    @Test
+    fun `netWorth puede dar negativo cuando la deuda supera los activos`() {
+        val accountRows = listOf("cash" to AccountType.CASH, "loan" to AccountType.LOAN)
+        val eventsByAccount = mapOf(
+            "cash" to listOf(ev(TransactionType.INCOME, 100_000, "COP")),
+            "loan" to listOf(ev(TransactionType.EXPENSE, 40_000_000, "COP")),
+        )
+        assertEquals(100_000L - 40_000_000L, netWorth(accountRows, eventsByAccount, 3950.0))
     }
 
     private fun ev(t: TransactionType, amount: Long, cur: String) = FinancialEvent(

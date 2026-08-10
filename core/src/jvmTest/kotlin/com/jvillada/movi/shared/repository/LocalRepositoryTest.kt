@@ -94,6 +94,50 @@ class LocalRepositoryTest {
         assertEquals(40_000_000L, repo.getAccount("acc-loan").balance)
     }
 
+    /**
+     * Hallazgo bloqueante 2 de la revisión de `feat/ajustar-saldo`: `postEvent` aplicaba el
+     * delta local con la convención de cuenta de activo (INCOME suma) sin mirar el tipo de
+     * cuenta. Escenario real: libranza ajustada a $40.000.000 vía [adjustCreditBalance] (ver
+     * el test de arriba), después un abono de $1.000.000 registrado desde QuickAdd. El abono
+     * es un INCOME — baja la deuda — pero antes de este fix el cálculo local le sumaba el
+     * monto, dejando la deuda en $41.000.000 en el teléfono mientras el server (que sí deriva
+     * con el signo correcto) decía $39.000.000.
+     */
+    @Test
+    fun postEvent_en_cuenta_LOAN_un_abono_INCOME_baja_la_deuda_no_la_sube() = runBlocking {
+        repo.createAccount(Account("acc-loan-abono", "Libranza", AccountType.LOAN, 40_000_000L))
+
+        repo.postEvent(event("ev-abono", "acc-loan-abono", TransactionType.INCOME, 1_000_000L))
+
+        assertEquals(39_000_000L, repo.getAccount("acc-loan-abono").balance)
+    }
+
+    /** Mismo hallazgo, la otra cara: un desembolso (EXPENSE) en LOAN sube la deuda. */
+    @Test
+    fun postEvent_en_cuenta_LOAN_un_desembolso_EXPENSE_sube_la_deuda() = runBlocking {
+        repo.createAccount(Account("acc-loan-desem", "Libranza", AccountType.LOAN, 40_000_000L))
+
+        repo.postEvent(event("ev-desembolso", "acc-loan-desem", TransactionType.EXPENSE, 2_000_000L))
+
+        assertEquals(42_000_000L, repo.getAccount("acc-loan-desem").balance)
+    }
+
+    /**
+     * `voidEvent` tiene el mismo problema en espejo: revertía con la convención de activo. Si
+     * el abono de arriba se anula, la deuda tiene que volver exactamente a como estaba antes
+     * — no a otra cifra por aplicar el signo equivocado en la reversión.
+     */
+    @Test
+    fun voidEvent_en_cuenta_LOAN_revierte_con_la_convencion_de_deuda() = runBlocking {
+        repo.createAccount(Account("acc-loan-void", "Libranza", AccountType.LOAN, 40_000_000L))
+        repo.postEvent(event("ev-abono-void", "acc-loan-void", TransactionType.INCOME, 1_000_000L))
+        assertEquals(39_000_000L, repo.getAccount("acc-loan-void").balance)
+
+        repo.voidEvent("ev-abono-void")
+
+        assertEquals(40_000_000L, repo.getAccount("acc-loan-void").balance)
+    }
+
     /** Control: en una cuenta de activo la bandera sigue en true y nada de esto la toca. */
     @Test
     fun getEvents_marca_como_flujo_de_caja_los_movimientos_de_cuentas_de_activo() = runBlocking {

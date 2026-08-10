@@ -43,5 +43,12 @@ INSERT OR REPLACE INTO financial_event(
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;
 
+-- El SyncEngine usa esta variante, no markSynced a secas (ver su KDoc en SyncEngine.kt): solo
+-- sella la fila si la categoría sigue siendo la que efectivamente se empujó al server. Si
+-- cambió mientras el POST estaba en vuelo (el dueño recategorizó desde la UI), la fila se queda
+-- sin sellar a propósito para que el próximo ciclo la vuelva a levantar de selectUnsynced.
+markSyncedIfUnchanged:
+UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id AND category = :category;
+
 updateCategory:
 UPDATE financial_event SET category = :category WHERE id = :id AND userId = :userId;

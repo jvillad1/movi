@@ -1,8 +1,8 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.balance.accountCopValue
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.balance.netWorth
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
@@ -111,9 +111,13 @@ fun Route.financeRoutes() {
                 .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
         }
         val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
-        val derivedBalance = accountRows.sumOf { (accId, accType) ->
-            accountCopValue(accType, eventsByAccount[accId] ?: emptyList(), rate)
-        }
+        // netWorth, no accountCopValue sumado de frente (Hallazgo menor 4 de la revisión de esta
+        // rama) — ver su KDoc. Nadie renderiza este campo hoy (Dashboard y el SDUI usan
+        // assetsDebtsNet(accounts) del lado del cliente), pero dejarlo mal calculado a la espera
+        // de que alguien lo cablee es peor que arreglarlo ahora: quien lo use primero se
+        // encontraría con el mismo "patrimonio" hinchado por la deuda que esta rama vino a matar
+        // en otras pantallas.
+        val derivedBalance = netWorth(accountRows, eventsByAccount, rate)
 
         val summary = dbQuery {
             val voidedIds = VoidEvents.selectAll()

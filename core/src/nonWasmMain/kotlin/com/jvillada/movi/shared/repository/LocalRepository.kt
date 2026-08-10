@@ -36,6 +36,7 @@ import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.signedDelta
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -83,7 +84,12 @@ class LocalRepository(
             )
             val acct = db.accountQueries.selectById(event.accountId).executeAsOneOrNull()
             if (acct != null) {
-                val delta = if (event.type == TransactionType.INCOME) event.amount else -event.amount
+                // signedDelta, no un `if INCOME suma` a secas (Hallazgo bloqueante 2 de la
+                // revisión de esta rama): en una cuenta LOAN/CREDIT_CARD un INCOME es un abono
+                // que BAJA la deuda. Antes de este fix, un abono desde QuickAdd a una libranza
+                // ya ajustada la subía en vez de bajarla — el teléfono y el server divergían.
+                val accountType = AccountType.valueOf(acct.type)
+                val delta = signedDelta(accountType, event.type, event.amount)
                 db.accountQueries.updateBalance(acct.balance + delta, acct.id)
             }
         }
@@ -125,8 +131,12 @@ class LocalRepository(
             if (event != null) {
                 val acct = db.accountQueries.selectById(event.accountId).executeAsOneOrNull()
                 if (acct != null) {
-                    val delta = if (event.type == "INCOME") -event.amount else event.amount
-                    db.accountQueries.updateBalance(acct.balance + delta, acct.id)
+                    // Reversa exacta de signedDelta (mismo hallazgo que postEvent, arriba):
+                    // anular un evento en una cuenta LOAN/CREDIT_CARD tiene que deshacer el
+                    // efecto con la convención de deuda, no con la de cuenta de activo.
+                    val accountType = AccountType.valueOf(acct.type)
+                    val originalDelta = signedDelta(accountType, TransactionType.valueOf(event.type), event.amount)
+                    db.accountQueries.updateBalance(acct.balance - originalDelta, acct.id)
                 }
             }
         }
@@ -159,11 +169,22 @@ class LocalRepository(
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
         val uid = userId()
         val types = accountTypes(uid)
-        // Leer y escribir en una transacción, y **revalidar** adentro: el SyncEngine corre en
-        // otro hilo y puede marcar la fila como sincronizada justo entre el SELECT y el UPDATE.
-        // Si eso pasara sin revalidar, la fila quedaría sincronizada con la categoría vieja en
-        // el server y la nueva solo en local — y como ya no sale en `selectUnsynced`, ningún
-        // ciclo futuro la volvería a empujar. La divergencia sería silenciosa y permanente.
+        // Leer y escribir en una transacción, y **revalidar** adentro: esto cierra SOLO LA MITAD
+        // de la carrera con el `SyncEngine` (hallazgo de revisión: un comentario que prometía
+        // cerrarla entera estaba mal). La mitad que sí cierra: si el `SyncEngine` YA marcó la
+        // fila como sincronizada antes de que esta transacción arrancara, acá se ve
+        // `local.syncedAt != null` (se relee fresco, no se confía en un snapshot de afuera) y se
+        // cae al camino de `remote`, que es el correcto para una fila ya sincronizada.
+        //
+        // La otra mitad — el `SyncEngine` terminando su `postEvent` (en vuelo, sin ningún lock
+        // sobre la fila) y sellando la fila con `markSynced` DESPUÉS de que esta transacción ya
+        // commiteó la categoría nueva — NO se cierra acá: para cuando el `SyncEngine` intenta
+        // sellar, esta transacción ya terminó y no hay nada que revalidar. Esa mitad se cierra
+        // del otro lado, en `SyncEngine.syncEvents`/`markSyncedIfUnchanged`: el sello solo aplica
+        // si la categoría no cambió desde el snapshot que efectivamente se empujó. Sin ese fix,
+        // la fila quedaba sincronizada con la categoría vieja en el server y la nueva solo en
+        // local — y como ya no sale en `selectUnsynced`, ningún ciclo futuro la volvía a
+        // empujar. La divergencia era silenciosa y permanente.
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
             if (local != null && local.syncedAt == null) {
