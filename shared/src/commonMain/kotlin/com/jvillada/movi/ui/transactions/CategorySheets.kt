@@ -173,7 +173,8 @@ fun ChangeCategorySheet(
 fun CardPaymentCandidatesSheet(
     candidates: List<FinancialEvent>,
     onDismiss: () -> Unit,
-    onConfirmed: () -> Unit,
+    /** Recibe el id confirmado: quien llama tiene que poder descartarlo aunque el refetch falle. */
+    onConfirmed: (String) -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     var remaining by remember(candidates) { mutableStateOf(candidates) }
@@ -189,7 +190,7 @@ fun CardPaymentCandidatesSheet(
             savingId = null
             result.onSuccess {
                 remaining = remaining.filterNot { it.id == event.id }
-                onConfirmed()
+                onConfirmed(event.id)
             }.onFailure { error = it.toUserMessage() }
         }
     }

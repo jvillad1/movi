@@ -48,8 +48,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
-    // fallo acá no debe tapar Movimientos con un snackbar — se queda simplemente vacía.
+    // fallo al traerlos no debe tapar Movimientos con un snackbar.
     var candidates by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    // Los que el dueño ya confirmó en esta pantalla. Se descuentan de `candidates` porque el
+    // refetch puede fallar y dejar la lista vieja: sin esto, un pago recién marcado volvía a
+    // aparecer con su botón "Marcar" activo y el contador seguía diciendo el número de antes —
+    // o sea, la app le decía que su confirmación no se había guardado, cuando sí se guardó.
+    var confirmedIds by remember { mutableStateOf(emptySet<String>()) }
+    val pendingCandidates = candidates.filterNot { it.id in confirmedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
@@ -155,7 +161,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         // Entrada discreta a los candidatos de pago de tarjeta: solo aparece si hay algo que
         // proponer, y abre una lista donde cada uno se confirma por separado (ver
         // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
-        if (candidates.isNotEmpty()) {
+        if (pendingCandidates.isNotEmpty()) {
             MinCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
                 variant = MinCardVariant.Default,
@@ -168,8 +174,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = if (candidates.size == 1) "1 pago de tarjeta sin marcar"
-                               else "${candidates.size} pagos de tarjeta sin marcar",
+                        text = if (pendingCandidates.size == 1) "1 pago de tarjeta sin marcar"
+                               else "${pendingCandidates.size} pagos de tarjeta sin marcar",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = MinText,
@@ -309,9 +315,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 
     if (showCandidatesSheet) {
         CardPaymentCandidatesSheet(
-            candidates = candidates,
+            candidates = pendingCandidates,
             onDismiss = { showCandidatesSheet = false },
-            onConfirmed = { refreshKey++ },
+            onConfirmed = { id -> confirmedIds = confirmedIds + id; refreshKey++ },
         )
     }
     }
