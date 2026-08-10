@@ -158,11 +158,29 @@ class LocalRepository(
      */
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
         val uid = userId()
-        val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
-        if (local != null && local.syncedAt == null) {
-            db.financialEventQueries.updateCategory(category, id, uid)
-            return local.toModel(accountTypes(uid)).copy(category = category)
+        val types = accountTypes(uid)
+        // Leer y escribir en una transacción, y **revalidar** adentro: el SyncEngine corre en
+        // otro hilo y puede marcar la fila como sincronizada justo entre el SELECT y el UPDATE.
+        // Si eso pasara sin revalidar, la fila quedaría sincronizada con la categoría vieja en
+        // el server y la nueva solo en local — y como ya no sale en `selectUnsynced`, ningún
+        // ciclo futuro la volvería a empujar. La divergencia sería silenciosa y permanente.
+        val resolvedLocally = db.transactionWithResult {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            if (local != null && local.syncedAt == null) {
+                db.financialEventQueries.updateCategory(category, id, uid)
+                // La categoría se aplica ANTES de derivar la bandera: al revés, countsAsCashFlow
+                // saldría calculado contra la categoría vieja y el objeto devuelto diría que un
+                // pago de tarjeta sí es flujo de caja — el mismo doble conteo que esto arregla.
+                val model = local.toModel(types).copy(category = category)
+                val accountType = types[model.accountId]
+                if (accountType == null) model
+                else model.copy(countsAsCashFlow = isCashFlow(accountType, model.type, category))
+            } else {
+                null
+            }
         }
+        if (resolvedLocally != null) return resolvedLocally
+
         val updated = remote.updateEventCategory(id, category)
         db.financialEventQueries.updateCategory(updated.category, updated.id, uid)
         return updated

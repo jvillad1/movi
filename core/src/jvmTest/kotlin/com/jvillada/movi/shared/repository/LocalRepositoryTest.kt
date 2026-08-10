@@ -160,6 +160,10 @@ class LocalRepositoryTest {
         // Si esto hubiera ido al server, el stub habría devuelto accountId="acc-stub" (ver
         // NoOpRepository) — acá tiene que seguir siendo la cuenta real: se resolvió local.
         assertEquals("acc-savings", result.accountId)
+        // Sobre el objeto DEVUELTO, no sobre una relectura: una UI optimista se queda con esto.
+        // Si la bandera se derivara antes de aplicar la categoría, acá diría `true` —y el
+        // refetch de abajo taparía el bug, porque relee la categoría ya persistida.
+        assertFalse(result.countsAsCashFlow)
 
         val mirrored = repo.getEvents("acc-savings").single { it.id == "evt-pago" }
         assertEquals(CARD_PAYMENT_CATEGORY, mirrored.category)
