@@ -147,12 +147,18 @@ fun Route.eventRoutes() {
                 val event = Events.selectAll()
                     .where { (Events.id eq id) and (Events.userId eq uid) }
                     .firstOrNull()?.toFinancialEvent()
-                if (event != null) {
+                // Un evento anulado no está disponible para recategorizar: ningún GET lo vuelve a
+                // mostrar (ver loadNonVoidedEventsIn), así que el countsAsCashFlow que devolviera
+                // acá no se vería en ninguna pantalla — tratarlo igual que si no existiera.
+                val isVoided = event != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (event != null && !isVoided) {
                     Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
                         it[Events.category] = category
                     }
                 }
-                event?.copy(category = category)?.withCashFlowFlag(accountTypesFor(uid))
+                event?.takeIf { !isVoided }?.copy(category = category)?.withCashFlowFlag(accountTypesFor(uid))
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
             else call.respond(updated)

@@ -381,6 +381,28 @@ class EventRoutesTest {
         assertEquals(HttpStatusCode.NotFound, res.status)
     }
 
+    /**
+     * Hallazgo 3 de la revisión de `396a695`: un evento anulado no está disponible para
+     * recategorizar, mismo criterio que `loadNonVoidedEventsIn` usa para los GET — ningún GET
+     * vuelve a mostrar un evento anulado, así que el `countsAsCashFlow` de una respuesta 200 acá
+     * no se vería en ninguna pantalla. Responde igual que "no existe": 404, sin tocar la fila.
+     */
+    @Test
+    fun `PUT category responde 404 y no toca la fila si el evento esta anulado`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-voided-put", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Compra", category = "Otros",
+        )
+        voidEvent("evt-voided-put", userAId)
+
+        val res = putCategory("evt-voided-put", "Pago de tarjeta", userAId)
+        assertEquals(HttpStatusCode.NotFound, res.status)
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-voided-put" }.single() }
+        assertEquals("Otros", row[Events.category])
+    }
+
     @Test
     fun `PUT category rechaza categoria vacia con 400`() = testApplication {
         wireApp()

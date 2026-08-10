@@ -104,19 +104,62 @@ class LocalRepositoryTest {
     }
 
     /**
-     * El espejo local de `updateEventCategory`: sin esto, en Android recategorizar un pago del
-     * extracto actualizaría el server pero Movimientos/Análisis/Presupuestos —que leen de
-     * SQLDelight, no del server— seguirían mostrando la categoría vieja, y el gasto duplicado
-     * que esta feature existe para arreglar seguiría duplicado en el teléfono.
+     * Camino A: el evento ya se sincronizó con el server (`syncedAt != null`, ver `markSynced`).
+     * Acá `remote` es la fuente de verdad y sí hay que llamarlo antes de espejar — sin este test
+     * separado del de abajo, un fix que resolviera *todo* localmente (sin importar `syncedAt`)
+     * pasaría igual y dejaría el server desactualizado.
+     *
+     * El id se declara en `knownEventIds` para que el stub no dé el 404 que le daría a un evento
+     * que no conoce (ver [NoOpRepository.updateEventCategory]): acá el evento sí existe en el
+     * server, así que el camino correcto es justamente llamarlo.
      */
     @Test
-    fun updateEventCategory_espeja_la_categoria_sin_tocar_el_saldo() = runBlocking {
+    fun updateEventCategory_evento_sincronizado_pasa_por_el_server_y_se_espeja() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoSincronizado = LocalRepository(
+            db = db,
+            remote = NoOpRepository(knownEventIds = setOf("evt-pago-sync")),
+            userId = { testUserId },
+        )
+        repoSincronizado.createAccount(Account("acc-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repoSincronizado.postEvent(event("evt-pago-sync", "acc-sync", TransactionType.EXPENSE, 300_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "evt-pago-sync")
+        val balanceBefore = repoSincronizado.getAccount("acc-sync").balance
+
+        val result = repoSincronizado.updateEventCategory("evt-pago-sync", CARD_PAYMENT_CATEGORY)
+        assertEquals(CARD_PAYMENT_CATEGORY, result.category)
+        // El stub siempre echoa accountId="acc-stub" (ver NoOpRepository): que el resultado lo
+        // traiga es la prueba de que sí pasó por remote y no se resolvió local.
+        assertEquals("acc-stub", result.accountId)
+
+        val mirrored = repoSincronizado.getEvents("acc-sync").single { it.id == "evt-pago-sync" }
+        assertEquals(CARD_PAYMENT_CATEGORY, mirrored.category)
+        assertFalse(mirrored.countsAsCashFlow)
+
+        // Recategorizar no es un movimiento de plata: el saldo de la cuenta no se toca.
+        assertEquals(balanceBefore, repoSincronizado.getAccount("acc-sync").balance)
+    }
+
+    /**
+     * Camino B (Hallazgo 1 de la revisión de `396a695`): el evento **todavía no llegó al
+     * server** — `postEvent` es local-only y `syncedAt` sigue `null` hasta que el `SyncEngine`
+     * lo empuje en su ciclo de 30s. El stub de este test no tiene `"evt-pago"` en
+     * `knownEventIds`, así que si `updateEventCategory` intentara llamar a `remote` acá, tiraría
+     * el mismo `ApiException(404)` que tiraría el server real para un evento que no conoce —y el
+     * test fallaría con esa excepción sin llegar a los asserts. El camino correcto es resolver
+     * **solo local** y dejar que el `SyncEngine` suba el evento con la categoría ya corregida.
+     */
+    @Test
+    fun updateEventCategory_evento_pendiente_se_resuelve_local_sin_llamar_al_server() = runBlocking {
         repo.createAccount(Account("acc-savings", "Ahorros", AccountType.SAVINGS, 1_000_000L))
         repo.postEvent(event("evt-pago", "acc-savings", TransactionType.EXPENSE, 300_000L))
         val balanceBefore = repo.getAccount("acc-savings").balance
 
         val result = repo.updateEventCategory("evt-pago", CARD_PAYMENT_CATEGORY)
         assertEquals(CARD_PAYMENT_CATEGORY, result.category)
+        // Si esto hubiera ido al server, el stub habría devuelto accountId="acc-stub" (ver
+        // NoOpRepository) — acá tiene que seguir siendo la cuenta real: se resolvió local.
+        assertEquals("acc-savings", result.accountId)
 
         val mirrored = repo.getEvents("acc-savings").single { it.id == "evt-pago" }
         assertEquals(CARD_PAYMENT_CATEGORY, mirrored.category)

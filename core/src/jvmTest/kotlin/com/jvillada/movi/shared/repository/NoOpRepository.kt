@@ -7,7 +7,13 @@ import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 
-class NoOpRepository : WalletRepository {
+class NoOpRepository(
+    /**
+     * Ids que el "server" ya conoce. Cualquier otro id dispara el mismo 404 que daría el server
+     * real para un evento que no existe (o que es de otro usuario) — ver [updateEventCategory].
+     */
+    private val knownEventIds: Set<String> = emptySet(),
+) : WalletRepository {
     override suspend fun getHoldings() = emptyList<Holding>()
     override suspend fun getCredits() = emptyList<CreditSummary>()
     override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
@@ -68,21 +74,30 @@ class NoOpRepository : WalletRepository {
     override suspend fun getEventsByDay() = emptyList<EventDay>()
     override suspend fun voidEvent(id: String, reason: String?) = error("stub")
     /**
-     * Imita al server: echoa el mismo [id] y la [category] que le mandaron, como haría el
+     * Imita al server: 404 para un evento que no está en [knownEventIds] — igual que el
+     * `PUT /api/events/{id}/category` real cuando el evento no existe o es de otro usuario —, y
+     * para uno que sí conoce, echoa el mismo [id] y la [category] que le mandaron, como haría el
      * update real. [LocalRepository] espeja `updated.id`/`updated.category` (no los parámetros
      * crudos), así que sin este echo el test del espejo local apuntaría a una fila equivocada.
+     *
+     * Antes este stub hacía echo incondicional sin importar el id, así que el test del espejo
+     * local pasaba aunque `LocalRepository` llamara al server para un evento todavía sin
+     * sincronizar: el 404 real que daría el server ahí nunca se ejercitaba.
      */
-    override suspend fun updateEventCategory(id: String, category: String) = FinancialEvent(
-        id = id,
-        accountId = "acc-stub",
-        type = TransactionType.EXPENSE,
-        amount = 50_000L,
-        category = category,
-        description = "stub",
-        timestamp = 1_700_000_000_000L,
-        source = EventSource.MANUAL,
-        reconciliationStatus = ReconciliationStatus.RECONCILED,
-    )
+    override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+        if (id !in knownEventIds) throw ApiException(404)
+        return FinancialEvent(
+            id = id,
+            accountId = "acc-stub",
+            type = TransactionType.EXPENSE,
+            amount = 50_000L,
+            category = category,
+            description = "stub",
+            timestamp = 1_700_000_000_000L,
+            source = EventSource.MANUAL,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        )
+    }
     override suspend fun register(request: RegisterRequest) = error("stub")
     override suspend fun login(request: LoginRequest) = error("stub")
     override suspend fun requestPasswordReset(request: PasswordResetRequest) = 202

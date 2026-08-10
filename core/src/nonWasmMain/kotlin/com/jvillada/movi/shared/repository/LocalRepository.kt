@@ -147,10 +147,24 @@ class LocalRepository(
      * insert, y `account` no se toca. Se escribe `updated.id`/`updated.category` (lo que devolvió
      * el server, ya recortado/validado) en vez de los parámetros crudos, mismo criterio que
      * [adjustCreditBalance] usa para el evento de ajuste.
+     *
+     * Hay un segundo caso, el inverso del anterior: el evento **todavía no llegó al server**
+     * (`postEvent` escribe solo local, `syncedAt == null` hasta que el `SyncEngine` lo empuje en
+     * su ciclo de 30s). Ahí llamar a `remote` primero es al revés — el server ni sabe que el
+     * evento existe, así que responde 404 antes de que la categoría se corrija en ningún lado.
+     * Para ese caso el UPDATE es **solo local**: el `SyncEngine` va a subir el evento en su
+     * próximo ciclo y `syncEvents` ya manda `row.category`, así que la categoría corregida viaja
+     * sola, sin necesidad de tocar el server acá.
      */
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+        val uid = userId()
+        val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+        if (local != null && local.syncedAt == null) {
+            db.financialEventQueries.updateCategory(category, id, uid)
+            return local.toModel(accountTypes(uid)).copy(category = category)
+        }
         val updated = remote.updateEventCategory(id, category)
-        db.financialEventQueries.updateCategory(updated.category, updated.id, userId())
+        db.financialEventQueries.updateCategory(updated.category, updated.id, uid)
         return updated
     }
 
