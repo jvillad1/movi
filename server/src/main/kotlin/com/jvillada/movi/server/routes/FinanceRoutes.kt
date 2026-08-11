@@ -1,7 +1,8 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.balance.netWorth
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
@@ -16,6 +17,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -109,9 +111,13 @@ fun Route.financeRoutes() {
                 .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
         }
         val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
-        val derivedBalance = accountRows.sumOf { (accId, accType) ->
-            accountCopValue(accType, eventsByAccount[accId] ?: emptyList(), rate)
-        }
+        // netWorth, no accountCopValue sumado de frente (Hallazgo menor 4 de la revisión de esta
+        // rama) — ver su KDoc. Nadie renderiza este campo hoy (Dashboard y el SDUI usan
+        // assetsDebtsNet(accounts) del lado del cliente), pero dejarlo mal calculado a la espera
+        // de que alguien lo cablee es peor que arreglarlo ahora: quien lo use primero se
+        // encontraría con el mismo "patrimonio" hinchado por la deuda que esta rama vino a matar
+        // en otras pantallas.
+        val derivedBalance = netWorth(accountRows, eventsByAccount, rate)
 
         val summary = dbQuery {
             val voidedIds = VoidEvents.selectAll()
@@ -125,10 +131,21 @@ fun Route.financeRoutes() {
                 (Events.timestamp less monthEnd)
             }.filterNot { it[Events.id] in voidedIds }
 
-            val ingresos = monthEvents
+            val accountTypeById = accountTypesFor(uid)
+            // Movimientos de cuentas de deuda NO son flujo de caja del mes (ver isCashFlow):
+            // bajar la deuda de un crédito al saldo real del banco no es un ingreso, y subirla
+            // no es un gasto — es la misma plata cambiando de periodo. Esto también corrige la
+            // "Deuda inicial" de apertura, que venía contándose como egreso del mes.
+            val cashFlow = monthEvents.filter { row ->
+                val accountType = accountTypeById[row[Events.accountId]]
+                accountType == null ||
+                    isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
+            }
+
+            val ingresos = cashFlow
                 .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
-            val egresos = monthEvents
+            val egresos = cashFlow
                 .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
 

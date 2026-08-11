@@ -44,9 +44,11 @@ fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
         runCatching { Repositories.wallets.getGoals() }.onSuccess { goals = it }
     }
 
+    // countsAsCashFlow deja fuera los movimientos de cuentas de deuda: un ajuste de saldo de un
+    // crédito, o el pago de una tarjeta, no son gasto del mes y aterrizaban en "Otros".
     val byCategory = remember(days) {
         days.flatMap { it.items }
-            .filter { it.type == TransactionType.EXPENSE }
+            .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow }
             .groupBy { it.category }
             .map { (cat, txs) -> CategoryTotal(cat, txs.sumOf { it.amount }) }
             .sortedByDescending { it.total }
@@ -95,7 +97,7 @@ fun AnalisisScreen(onNavigate: (Screen) -> Unit) {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "${byCategory.size} categorías · ${days.flatMap { it.items }.count { it.type == TransactionType.EXPENSE }} movimientos",
+                        text = "${byCategory.size} categorías · ${days.flatMap { it.items }.count { it.type == TransactionType.EXPENSE && it.countsAsCashFlow }} movimientos",
                         fontSize = 12.sp,
                         color = MinTextMute,
                     )

@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -61,9 +62,18 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 .map { (date, items) ->
                     EventDay(
                         date  = date,
-                        total = items.filter { it.currency == "COP" }.sumOf {
-                            if (it.type == TransactionType.INCOME) it.amount else -it.amount
-                        },
+                        // accountDayTotal, no countsAsCashFlow (Hallazgo bloqueante 1 de la
+                        // revisión de esta rama). Movimientos/`by-day` filtran por
+                        // countsAsCashFlow porque agregan VARIAS cuentas para responder "¿cuánta
+                        // plata entró o salió del bolsillo?" — acá ya se sabe de qué cuenta se
+                        // trata (es esta pantalla), así que esa pregunta no aplica. Lo que no
+                        // miente es "¿cuánto se movió el saldo de esta cuenta hoy?", con SU
+                        // convención: en LOAN/CREDIT_CARD un INCOME (abono) resta. Con
+                        // countsAsCashFlow el total habría dado $0 todos los días en una cuenta
+                        // LOAN (la regla es "LOAN nunca es flujo de caja") — incluso el día de un
+                        // ajuste de $60.000.000 — y en CREDIT_CARD el abono habría desaparecido
+                        // del total aunque sí mueve la deuda. Ver el KDoc de accountDayTotal.
+                        total = accountDayTotal(acc.type, items),
                         items = items.sortedByDescending { it.timestamp },
                     )
                 }

@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
@@ -29,6 +30,7 @@ import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.UpdateEventCategoryRequest
 import com.jvillada.movi.shared.model.VoidEvent
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -40,11 +42,13 @@ import io.ktor.client.request.setBody
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 
 class WalletRepositoryImpl(
     private val client: HttpClient,
@@ -71,6 +75,21 @@ class WalletRepositoryImpl(
 
     override suspend fun deleteCreditTerms(accountId: String) {
         client.delete("$baseUrl/api/credits/$accountId")
+    }
+
+    // Único call site que mira el status antes de deserializar: es el que tiene rechazos
+    // legibles del server (400 fuera de rango, 404, 422 no-LOAN / no-COP) y son justo los que
+    // el usuario necesita leer. Sin esto, `.body()` sobre el 400 fallaba deserializando y el
+    // texto del server se perdía.
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
+        val response = client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
+            contentType(ContentType.Application.Json)
+            setBody(AdjustCreditBalanceRequest(targetBalance))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
     }
 
     override suspend fun getSubscriptions(): SubscriptionsResult =
@@ -198,6 +217,22 @@ class WalletRepositoryImpl(
                   else "$baseUrl/api/events/$id/void"
         return client.post(url).body()
     }
+
+    // Mismo idioma que adjustCreditBalance: el server puede rechazar con 404 (otro usuario) o
+    // 400 (categoría vacía o demasiado larga) y ese texto se pierde si se deserializa a ciegas.
+    override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/category") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateEventCategoryRequest(category))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun getCardPaymentCandidates(): List<FinancialEvent> =
+        client.get("$baseUrl/api/events/card-payment-candidates").body()
 
     override suspend fun register(request: RegisterRequest): AuthResponse =
         client.post("$baseUrl/api/auth/register") {

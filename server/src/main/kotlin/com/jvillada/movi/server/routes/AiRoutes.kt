@@ -8,6 +8,7 @@ import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigAdaptive
 import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
@@ -21,6 +22,7 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -155,10 +157,20 @@ private suspend fun buildUserContext(uid: String): String {
             (Events.timestamp less monthEnd)
         }.filterNot { it[Events.id] in voidedIds }
 
-        val inc = monthEvents
+        // Mismo filtro que /api/finance-summary: los movimientos de cuentas de deuda no son
+        // ingreso ni gasto del mes (ver isCashFlow). Sin esto, un ajuste de deuda de $60M
+        // entraba al contexto del asistente rotulado como "Ingresos" y razonaba sobre él.
+        val accountTypeById = accountTypesFor(uid)
+        val cashFlow = monthEvents.filter { row ->
+            val accountType = accountTypeById[row[Events.accountId]]
+            accountType == null ||
+                isCashFlow(accountType, TransactionType.valueOf(row[Events.type]), row[Events.category])
+        }
+
+        val inc = cashFlow
             .filter { it[Events.type] == TransactionType.INCOME.name && it[Events.currency] == "COP" }
             .sumOf { it[Events.amount] }
-        val exp = monthEvents
+        val exp = cashFlow
             .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
             .sumOf { it[Events.amount] }
         inc to exp

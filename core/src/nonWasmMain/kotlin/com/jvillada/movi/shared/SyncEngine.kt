@@ -30,6 +30,32 @@ class SyncEngine(
         }
     }
 
+    /**
+     * Empuja los eventos pendientes y sella los que llegaron con `markSyncedIfUnchanged`.
+     *
+     * `markSyncedIfUnchanged`, no `markSynced` a secas: entre el SELECT de acá arriba y el
+     * `postEvent` (una llamada de red, sin ningún lock sobre la fila mientras está en vuelo) la
+     * categoría puede cambiar por otro camino — [com.jvillada.movi.shared.repository.LocalRepository.updateEventCategory]
+     * resuelve local cuando `syncedAt` sigue null, que es exactamente la ventana en la que este
+     * ciclo está trabajando. Si esta función sellara con `markSynced` a secas usando el snapshot
+     * viejo (`row.category`), la fila quedaría "sincronizada" con la categoría vieja en el server
+     * y la corregida solo en local — y como ya no sale en `selectUnsynced`, ningún ciclo futuro
+     * la volvería a empujar: la divergencia sería silenciosa y permanente. `updateEventCategory`
+     * revalida esa misma carrera del otro lado (adentro de su propia transacción), pero eso solo
+     * cubre la mitad: la revalidación ve si SyncEngine YA selló antes de que ese código corriera,
+     * no si SyncEngine va a sellar DESPUÉS con un snapshot desactualizado — que es este caso.
+     *
+     * Con la condición `AND category = :category`, si la categoría cambió el UPDATE no toca
+     * ninguna fila: `syncedAt` se queda en null y el próximo ciclo (30s) la vuelve a levantar de
+     * `selectUnsynced`, esta vez con la categoría ya corregida. Nota: eso reintenta un
+     * `postEvent` con un id que el server ya tiene — si el evento original sí llegó a insertarse,
+     * ese reintento va a fallar (conflicto de id) y quedar atrapado por el catch de abajo,
+     * reintentando en silencio cada ciclo. Es preferible a la alternativa (divergencia
+     * silenciosa y PERMANENTE): acá el evento sigue visible en `selectUnsynced`, así que el
+     * problema es diagnosticable. Arreglar ese reintento de raíz —enseñarle a SyncEngine a
+     * distinguir "nunca llegó" de "ya llegó, solo cambió la categoría" y usar
+     * `remote.updateEventCategory` en ese segundo caso— queda fuera de este fix.
+     */
     private suspend fun syncEvents() {
         val unsynced = db.financialEventQueries.selectUnsynced(userId()).executeAsList()
         for (row in unsynced) {
@@ -47,8 +73,8 @@ class SyncEngine(
                         syncedAt = row.syncedAt,
                     )
                 )
-                db.financialEventQueries.markSynced(
-                    Clock.System.now().toEpochMilliseconds(), row.id
+                db.financialEventQueries.markSyncedIfUnchanged(
+                    Clock.System.now().toEpochMilliseconds(), row.id, row.category,
                 )
             } catch (_: Exception) {}
         }

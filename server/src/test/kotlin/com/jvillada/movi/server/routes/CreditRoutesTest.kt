@@ -314,6 +314,186 @@ class CreditRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, zeroDebt.status)
     }
 
+    // ── POST /{accountId}/balance-adjustment ──────────────────────────────────
+    // La deuda de A arranca en 100.000.000 (evento de apertura sembrado en setUp).
+
+    private suspend fun ApplicationTestBuilder.adjust(userId: String, accountId: String, target: Long) =
+        client.post("/api/credits/$accountId/balance-adjustment") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"targetBalance":$target}""")
+        }
+
+    private suspend fun ApplicationTestBuilder.debtOf(userId: String, accountId: String): Long {
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}") }
+        return Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject }
+            .first { it["account"]!!.jsonObject["id"]!!.jsonPrimitive.content == accountId }
+            .let { it["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long }
+    }
+
+    private suspend fun ApplicationTestBuilder.eventsOf(userId: String, accountId: String) =
+        Json.parseToJsonElement(
+            client.get("/api/events?accountId=$accountId") {
+                header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            }.bodyAsText()
+        ).jsonArray.map { it.jsonObject }
+
+    private suspend fun ApplicationTestBuilder.summaryOf(userId: String) =
+        Json.parseToJsonElement(
+            client.get("/api/finance-summary") {
+                header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            }.bodyAsText()
+        ).jsonObject
+
+    /**
+     * El ajuste NO es flujo de caja del mes.
+     *
+     * Este es el renglón que hace falta cuidar de todo el feature: bajar la deuda al saldo real
+     * del banco registra un INCOME por la diferencia, y sin filtrar por tipo de cuenta el
+     * Dashboard reportaba ese INCOME como "Ingresos del mes". Con la deuda real de la libranza
+     * eso son sesenta millones de pesos de ingreso inventado, en la cifra más visible de la app.
+     *
+     * Se comprueba también que el gasto de una cuenta de activo SÍ sigue contando: el filtro
+     * tiene que excluir la deuda, no vaciar el resumen.
+     */
+    @Test
+    fun `un ajuste de deuda no entra como ingreso del mes`() = testApplication {
+        wireApp()
+        val antes = summaryOf(userAId)
+        // La apertura del crédito (100M EXPENSE sobre la cuenta LOAN) tampoco es egreso del mes.
+        assertEquals(0L, antes["ingresos"]!!.jsonPrimitive.long)
+        assertEquals(0L, antes["egresos"]!!.jsonPrimitive.long)
+
+        assertEquals(HttpStatusCode.OK, adjust(userAId, loanAccountId, 40_000_000L).status)
+        assertEquals(40_000_000L, debtOf(userAId, loanAccountId))
+
+        val despues = summaryOf(userAId)
+        assertEquals(
+            0L,
+            despues["ingresos"]!!.jsonPrimitive.long,
+            "el abono de 60.000.000 que bajó la deuda no puede leerse como ingreso del mes",
+        )
+        assertEquals(0L, despues["egresos"]!!.jsonPrimitive.long)
+
+        // Control positivo: un gasto de una cuenta de activo sí cuenta.
+        val gasto = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"evt-mercado","accountId":"$cashAccountId","type":"EXPENSE","amount":250000,""" +
+                    """"currency":"COP","category":"Mercado","description":"Mercado",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.Created, gasto.status)
+        assertEquals(250_000L, summaryOf(userAId)["egresos"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `ajustar hacia arriba deja la deuda exactamente en el objetivo`() = testApplication {
+        wireApp()
+        val res = adjust(userAId, loanAccountId, 226_465_057L)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(
+            226_465_057L,
+            Json.parseToJsonElement(res.bodyAsText()).jsonObject["account"]!!
+                .jsonObject["balance"]!!.jsonPrimitive.long,
+        )
+        assertEquals(226_465_057L, debtOf(userAId, loanAccountId))
+
+        val adjustment = eventsOf(userAId, loanAccountId).single { it["id"]!!.jsonPrimitive.content != "evt-loan-a-opening" }
+        assertEquals("EXPENSE", adjustment["type"]!!.jsonPrimitive.content)
+        assertEquals(126_465_057L, adjustment["amount"]!!.jsonPrimitive.long)
+        assertEquals("Ajuste al saldo del banco — quedó en $226.465.057", adjustment["description"]!!.jsonPrimitive.content)
+        // `source` se omite del JSON cuando vale el default (MANUAL).
+        assertEquals("MANUAL", adjustment["source"]?.jsonPrimitive?.content ?: "MANUAL")
+        assertEquals("RECONCILED", adjustment["reconciliationStatus"]!!.jsonPrimitive.content)
+        assertEquals("Ajuste de saldo", adjustment["category"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `ajustar hacia abajo registra un abono y deja la deuda en el objetivo`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, adjust(userAId, loanAccountId, 40_000_000L).status)
+        assertEquals(40_000_000L, debtOf(userAId, loanAccountId))
+
+        val adjustment = eventsOf(userAId, loanAccountId).single { it["id"]!!.jsonPrimitive.content != "evt-loan-a-opening" }
+        assertEquals("INCOME", adjustment["type"]!!.jsonPrimitive.content)
+        assertEquals(60_000_000L, adjustment["amount"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `ajustes sucesivos siguen cayendo en el objetivo`() = testApplication {
+        wireApp()
+        adjust(userAId, loanAccountId, 226_465_057L)
+        adjust(userAId, loanAccountId, 226_352_287L)
+        assertEquals(226_352_287L, debtOf(userAId, loanAccountId))
+        assertEquals(3, eventsOf(userAId, loanAccountId).size)
+    }
+
+    @Test
+    fun `ajustar al mismo saldo no registra evento`() = testApplication {
+        wireApp()
+        val res = adjust(userAId, loanAccountId, 100_000_000L)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(100_000_000L, debtOf(userAId, loanAccountId))
+        assertEquals(1, eventsOf(userAId, loanAccountId).size)   // solo el de apertura
+    }
+
+    @Test
+    fun `ajustar el credito de otro usuario es 404 y no toca su saldo`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.NotFound, adjust(userBId, loanAccountId, 1L).status)
+        assertEquals(100_000_000L, debtOf(userAId, loanAccountId))
+        assertEquals(1, eventsOf(userAId, loanAccountId).size)
+        assertEquals("[]", client.get("/api/events?accountId=$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}")
+        }.bodyAsText())
+    }
+
+    @Test
+    fun `ajustar una cuenta inexistente es 404`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.NotFound, adjust(userAId, "acc-que-no-existe", 1_000L).status)
+    }
+
+    @Test
+    fun `ajustar una cuenta no LOAN es 422`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.UnprocessableEntity, adjust(userAId, cashAccountId, 1_000L).status)
+    }
+
+    @Test
+    fun `objetivo negativo o absurdo es 400 y no registra nada`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, adjust(userAId, loanAccountId, -1L).status)
+        assertEquals(HttpStatusCode.BadRequest, adjust(userAId, loanAccountId, 1_000_000_000_001L).status)
+        assertEquals(100_000_000L, debtOf(userAId, loanAccountId))
+        assertEquals(1, eventsOf(userAId, loanAccountId).size)
+    }
+
+    @Test
+    fun `ajustar a cero deja la deuda saldada`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, adjust(userAId, loanAccountId, 0L).status)
+        assertEquals(0L, debtOf(userAId, loanAccountId))
+    }
+
+    @Test
+    fun `el ajuste conserva los terminos y recalcula el pct pagado`() = testApplication {
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson)
+        }
+        val res = adjust(userAId, loanAccountId, 131_000_000L)   // mitad del principal (262M)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("Bancolombia", body["terms"]!!.jsonObject["bank"]!!.jsonPrimitive.content)
+        assertEquals(0.5, body["paidPct"]!!.jsonPrimitive.double, 1e-9)
+    }
+
     @Test
     fun `user B cannot see user A's credits`() = testApplication {
         wireApp()

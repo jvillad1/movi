@@ -23,7 +23,30 @@ data class FinancialEvent(
     val rawPayload: String? = null,
     val reconciliationStatus: ReconciliationStatus = ReconciliationStatus.UNCONFIRMED,
     val syncedAt: Long? = null,
+    /**
+     * ¿Cuenta como ingreso/egreso del mes? **Derivado, nunca almacenado**: sale del tipo de la
+     * cuenta a la que pertenece el evento (ver [isCashFlow]) y se recalcula en cada lectura,
+     * tanto en el server como en la caché local. Lo que mande un cliente en un POST se ignora.
+     *
+     * Existe como campo del wire porque las pantallas que agregan gasto (Análisis,
+     * Presupuestos) solo reciben eventos, no el tipo de la cuenta — sin esto no podrían
+     * distinguir un ajuste de deuda de una compra real.
+     *
+     * `true` por defecto: un evento sin cuenta conocida se cuenta, que es el comportamiento
+     * histórico y el conservador para cuentas de activo.
+     */
+    val countsAsCashFlow: Boolean = true,
 )
+
+/**
+ * Body de `PUT /api/events/{id}/category`.
+ *
+ * Un DTO propio en vez de reusar [FinancialEvent] entero: el cliente solo tiene voz sobre la
+ * categoría (ver [FinancialEvent.countsAsCashFlow], que es derivado y se ignora si viene en el
+ * body), así que el wire de entrada no debería ni sugerir que se puede mandar el resto de campos.
+ */
+@Serializable
+data class UpdateEventCategoryRequest(val category: String)
 
 @Serializable
 data class VoidEvent(

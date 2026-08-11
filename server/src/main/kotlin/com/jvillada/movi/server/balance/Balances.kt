@@ -2,19 +2,11 @@ package com.jvillada.movi.server.balance
 
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.signedDelta
 
-/**
- * One event's contribution to its account balance.
- * Asset accounts: INCOME adds, EXPENSE subtracts.
- * CREDIT_CARD / LOAN (balance = positive debt): EXPENSE raises debt, INCOME (payment) lowers it.
- */
-fun signedDelta(accountType: AccountType, type: TransactionType, amount: Long): Long =
-    when (accountType) {
-        AccountType.CREDIT_CARD,
-        AccountType.LOAN -> if (type == TransactionType.EXPENSE) amount else -amount
-        else             -> if (type == TransactionType.INCOME) amount else -amount
-    }
+// signedDelta se movió a :core (com.jvillada.movi.shared.model.Balance.kt) para que el cliente
+// offline-first y el server compartan una sola definición del signo por tipo de cuenta — ver el
+// KDoc de la función allá para el porqué (Hallazgo bloqueante 2 de la revisión de esta rama).
 
 /** Per-currency balance derived from an account's (already non-voided) events. */
 fun computeBalances(accountType: AccountType, events: List<FinancialEvent>): Map<String, Long> =
@@ -44,4 +36,20 @@ fun estimatedTotalCop(balances: Map<String, Long>, usdToCop: Double): Long? {
 fun accountCopValue(accountType: AccountType, events: List<FinancialEvent>, usdToCop: Double): Long {
     val balances = computeBalances(accountType, events)
     return estimatedTotalCop(balances, usdToCop) ?: (balances["COP"] ?: 0L)
+}
+
+/**
+ * Patrimonio: activos + deudas, no "suma de todos los saldos" (Hallazgo menor 4 de la revisión
+ * de `feat/ajustar-saldo`). [accountCopValue] de una cuenta LOAN/CREDIT_CARD es deuda positiva
+ * (ver [signedDelta]), así que sumarla de frente da "activos + deudas" en vez del neto. Mismo
+ * criterio que `assetsDebtsNet` del lado del cliente (`MoneyDisplay.kt`), reimplementado acá
+ * porque ese vive en `:shared` (Compose) y este código es server-only.
+ */
+fun netWorth(
+    accountRows: List<Pair<String, AccountType>>,
+    eventsByAccount: Map<String, List<FinancialEvent>>,
+    usdToCop: Double,
+): Long = accountRows.sumOf { (accId, accType) ->
+    val value = accountCopValue(accType, eventsByAccount[accId] ?: emptyList(), usdToCop)
+    if (accType == AccountType.LOAN || accType == AccountType.CREDIT_CARD) -value else value
 }

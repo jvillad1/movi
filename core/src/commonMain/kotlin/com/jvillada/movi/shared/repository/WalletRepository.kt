@@ -37,6 +37,8 @@ interface WalletRepository {
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary
     suspend fun deleteCreditTerms(accountId: String)
+    /** Deja la deuda del crédito en [targetBalance] registrando el movimiento de ajuste server-side. */
+    suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
     suspend fun getSubscriptions(): SubscriptionsResult
     suspend fun detectSubscriptions(): SubscriptionsResult
     suspend fun updateSubscription(id: String, subscription: Subscription): Subscription
@@ -66,6 +68,21 @@ interface WalletRepository {
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>
     suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
+
+    /**
+     * Cambia la categoría de un movimiento ya registrado. Devuelve el [FinancialEvent]
+     * actualizado con `countsAsCashFlow` derivado — el server lo recalcula, nunca lo toma del
+     * cliente.
+     */
+    suspend fun updateEventCategory(id: String, category: String): FinancialEvent
+
+    /**
+     * Movimientos que **parecen** el pago del extracto de una tarjeta pero todavía no están
+     * categorizados como [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] — candidatos
+     * a confirmar con [updateEventCategory], nunca aplicados solos. El server solo propone
+     * (ver `looksLikeCardPayment`); esta llamada no muta nada.
+     */
+    suspend fun getCardPaymentCandidates(): List<FinancialEvent>
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
 

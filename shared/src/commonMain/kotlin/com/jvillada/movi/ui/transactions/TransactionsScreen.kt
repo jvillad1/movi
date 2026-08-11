@@ -47,6 +47,18 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var refreshKey by remember { mutableStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
+    // fallo al traerlos no debe tapar Movimientos con un snackbar.
+    var candidates by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    // Los que el dueño ya confirmó en esta pantalla. Se descuentan de `candidates` porque el
+    // refetch puede fallar y dejar la lista vieja: sin esto, un pago recién marcado volvía a
+    // aparecer con su botón "Marcar" activo y el contador seguía diciendo el número de antes —
+    // o sea, la app le decía que su confirmación no se había guardado, cuando sí se guardó.
+    var confirmedIds by remember { mutableStateOf(emptySet<String>()) }
+    val pendingCandidates = candidates.filterNot { it.id in confirmedIds }
+    var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    var showCandidatesSheet by remember { mutableStateOf(false) }
+
     LaunchedEffect(refreshKey) {
         loading = true
         error = null
@@ -54,6 +66,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             .onSuccess { allDays = it }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
+    }
+
+    LaunchedEffect(refreshKey) {
+        runCatching { Repositories.wallets.getCardPaymentCandidates() }
+            .onSuccess { candidates = it }
     }
 
     LaunchedEffect(error) {
@@ -75,7 +92,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                 else -> day.items
             }
             if (filtered.isEmpty()) null
-            else day.copy(items = filtered, total = filtered.sumOf { signedAmount(it) })
+            // El total recalculado sigue el mismo criterio que el del server (ver EventRoutes
+            // /by-day): countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin
+            // esto, el encabezado del día decía $0 en "Todo" y +$60.000.000 en "Ingresos" —
+            // el mismo número engañoso que esta rama vino a matar, una pestaña más allá.
+            else day.copy(items = filtered, total = filtered.filter { it.countsAsCashFlow }.sumOf { signedAmount(it) })
         }
     }
 
@@ -137,6 +158,33 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             }
         }
 
+        // Entrada discreta a los candidatos de pago de tarjeta: solo aparece si hay algo que
+        // proponer, y abre una lista donde cada uno se confirma por separado (ver
+        // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
+        if (pendingCandidates.isNotEmpty()) {
+            MinCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                variant = MinCardVariant.Default,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                onClick = { showCandidatesSheet = true },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = if (pendingCandidates.size == 1) "1 pago de tarjeta sin marcar"
+                               else "${pendingCandidates.size} pagos de tarjeta sin marcar",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                    )
+                    ChevronRight()
+                }
+            }
+        }
+
         if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
         LazyColumn(
@@ -186,6 +234,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .clickable { selectedEvent = tx }
                                             .padding(vertical = 14.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -255,5 +304,21 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         hostState = snackbarHostState,
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp),
     )
+
+    selectedEvent?.let { event ->
+        ChangeCategorySheet(
+            event = event,
+            onDismiss = { selectedEvent = null },
+            onCategoryChanged = { selectedEvent = null; refreshKey++ },
+        )
+    }
+
+    if (showCandidatesSheet) {
+        CardPaymentCandidatesSheet(
+            candidates = pendingCandidates,
+            onDismiss = { showCandidatesSheet = false },
+            onConfirmed = { id -> confirmedIds = confirmedIds + id; refreshKey++ },
+        )
+    }
     }
 }

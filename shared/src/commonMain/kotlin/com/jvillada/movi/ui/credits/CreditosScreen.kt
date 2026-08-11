@@ -30,6 +30,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     var showSheet by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<CreditSummary?>(null) }
+    var adjusting by remember { mutableStateOf<CreditSummary?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     LaunchedEffect(reloadKey) {
         runCatching { Repositories.wallets.getCredits() }
@@ -135,6 +136,25 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                             Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
                                         }
                                     }
+                                    // La deuda es estado (se mueve a diario por intereses), no
+                                    // contrato: por eso cuadrarla con el banco vive fuera de la
+                                    // hoja de términos.
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                    ) {
+                                        Text(
+                                            "Ajustar saldo",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MinTextMute,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickableSimple { adjusting = c }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -158,6 +178,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 candidates = credits.filter { it.terms == null }.map { it.account },
                 onDismiss = { showSheet = false },
                 onSaved = { showSheet = false; reloadKey++ },
+            )
+        }
+        adjusting?.let { credit ->
+            CreditBalanceSheet(
+                credit = credit,
+                onDismiss = { adjusting = null },
+                onSaved = { adjusting = null; reloadKey++ },
             )
         }
     }
