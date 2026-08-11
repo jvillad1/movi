@@ -74,5 +74,11 @@ object SessionManager {
         settings.remove(KEY_EMAIL)
         consecutive401s = 0
         loggedIn = false
+        // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
+        // retome el control. clear() tiene dos llamadores (el logout explícito de Perfil y el
+        // logout forzado de onUnauthorized tras 401s repetidos) y a los dos les hace falta —
+        // los dos dejan a Compose sin sesión, y en la web eso sin recargar es el segundo login
+        // de vuelta. En Android/iOS es un no-op.
+        reloadForLogout()
     }
 }

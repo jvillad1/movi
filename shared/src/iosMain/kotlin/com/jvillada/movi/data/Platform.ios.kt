@@ -53,3 +53,7 @@ actual fun createRepository(): WalletRepository {
     SyncEngine(db, remote, userId).start()
     return LocalRepository(db, remote, userId)
 }
+
+// No-op: no hay overlay HTML que recuperar acá. Compose navega solo al ver
+// SessionManager.loggedIn == false (ver App.kt).
+actual fun reloadForLogout() {}
