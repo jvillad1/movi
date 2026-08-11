@@ -79,12 +79,15 @@ object SessionManager {
         // llamadores más del lado Android— porque todos dejan a Compose sin sesión, y en la web
         // eso sin recargar es el segundo login de vuelta. En Android/iOS es un no-op.
         //
-        // Va DESPUÉS de borrar el almacenamiento y ANTES de `loggedIn = false`, y las dos cosas
-        // importan. Después de borrar, porque recargar con el token todavía guardado volvería a
-        // entrar sola. Antes de bajar la bandera, porque esa bandera dispara el LaunchedEffect
-        // de App.kt que resetea el backstack a Screen.Login: si se bajara primero, Compose
-        // podría alcanzar a pintar un frame de SU login —el que este cambio vino a sacar— en el
-        // parpadeo antes de que la navegación se complete.
+        // El orden que SÍ importa es respecto del borrado de arriba: recargar con el token
+        // todavía guardado haría que la página vuelva y entre sola, o sea que el logout no
+        // cerraría nada.
+        //
+        // Respecto de `loggedIn = false` da igual, y conviene decirlo para que nadie "arregle"
+        // el orden más tarde creyendo que sostiene algo: las dos sentencias corren en el mismo
+        // tick de JS y la recomposición de Compose en wasmJs espera al próximo frame, así que
+        // entre una y otra no se pinta nada. Van en este orden por costumbre de dejar la
+        // mutación de estado al final, no porque evite un parpadeo.
         reloadForLogout()
         loggedIn = false
     }
