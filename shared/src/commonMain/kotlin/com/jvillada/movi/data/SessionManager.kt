@@ -73,12 +73,19 @@ object SessionManager {
         settings.remove(KEY_NAME)
         settings.remove(KEY_EMAIL)
         consecutive401s = 0
-        loggedIn = false
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
-        // retome el control. clear() tiene dos llamadores (el logout explícito de Perfil y el
-        // logout forzado de onUnauthorized tras 401s repetidos) y a los dos les hace falta —
-        // los dos dejan a Compose sin sesión, y en la web eso sin recargar es el segundo login
-        // de vuelta. En Android/iOS es un no-op.
+        // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
+        // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres
+        // llamadores más del lado Android— porque todos dejan a Compose sin sesión, y en la web
+        // eso sin recargar es el segundo login de vuelta. En Android/iOS es un no-op.
+        //
+        // Va DESPUÉS de borrar el almacenamiento y ANTES de `loggedIn = false`, y las dos cosas
+        // importan. Después de borrar, porque recargar con el token todavía guardado volvería a
+        // entrar sola. Antes de bajar la bandera, porque esa bandera dispara el LaunchedEffect
+        // de App.kt que resetea el backstack a Screen.Login: si se bajara primero, Compose
+        // podría alcanzar a pintar un frame de SU login —el que este cambio vino a sacar— en el
+        // parpadeo antes de que la navegación se complete.
         reloadForLogout()
+        loggedIn = false
     }
 }
