@@ -34,3 +34,9 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
 actual val apiBaseUrl: String = window.location.origin
 
 actual fun createRepository(): WalletRepository = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
+
+// Recarga la página: es lo único que hace que index.html vuelva a evaluar su overlay HTML
+// nativo (el único login con el que el gestor de contraseñas del navegador sabe hablar) en
+// vez de dejar a Compose mostrando su propio LoginScreen sobre el canvas. Ver el comentario
+// en Platform.kt para el porqué completo.
+actual fun reloadForLogout() { window.location.reload() }

@@ -73,6 +73,22 @@ object SessionManager {
         settings.remove(KEY_NAME)
         settings.remove(KEY_EMAIL)
         consecutive401s = 0
+        // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
+        // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
+        // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres
+        // llamadores más del lado Android— porque todos dejan a Compose sin sesión, y en la web
+        // eso sin recargar es el segundo login de vuelta. En Android/iOS es un no-op.
+        //
+        // El orden que SÍ importa es respecto del borrado de arriba: recargar con el token
+        // todavía guardado haría que la página vuelva y entre sola, o sea que el logout no
+        // cerraría nada.
+        //
+        // Respecto de `loggedIn = false` da igual, y conviene decirlo para que nadie "arregle"
+        // el orden más tarde creyendo que sostiene algo: las dos sentencias corren en el mismo
+        // tick de JS y la recomposición de Compose en wasmJs espera al próximo frame, así que
+        // entre una y otra no se pinta nada. Van en este orden por costumbre de dejar la
+        // mutación de estado al final, no porque evite un parpadeo.
+        reloadForLogout()
         loggedIn = false
     }
 }

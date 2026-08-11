@@ -75,14 +75,7 @@
                         <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
                     </form>
                     <button class="lg-alt" id="forgot-link" type="button">¿Olvidaste tu contraseña?</button>
-                    <!-- Esta capa HTML no tiene registro: solo entra. El registro vive en la
-                         app Compose de abajo, así que este botón es la ÚNICA puerta para
-                         quien llega sin cuenta. NO dice "Registrate" porque no lleva al
-                         formulario de registro: lleva al login de la app, donde hace falta un
-                         toque más. Decía exactamente lo mismo que el botón de destino
-                         ("¿No tenés cuenta? Registrate"), así que el toque se leía como que no
-                         había pasado nada. El texto nombra el destino sin prometer ser él. -->
-                    <button class="lg-alt" id="login-alt" type="button">¿No tenés cuenta? Ir al login de la app</button>
+                    <button class="lg-alt" id="register-link" type="button">¿No tenés cuenta? Registrate</button>
                 </div>
 
                 <!-- Panel 2: pedir el enlace de recuperación -->
@@ -114,6 +107,31 @@
                     </form>
                     <button class="lg-alt" id="reset-back" type="button">Volver a entrar</button>
                 </div>
+
+                <!-- Panel 4: crear cuenta. Vive acá, no en el Compose de abajo, por la misma
+                     razón que el resto de esta capa: el `autocomplete` correcto (name,
+                     username, new-password) es lo único que hace que el gestor de
+                     contraseñas del navegador ofrezca guardar la cuenta recién creada. -->
+                <div id="register-panel" class="lg-hidden">
+                    <div class="lg-note">Creá tu cuenta para empezar a usar Movi.</div>
+                    <form id="register-form" autocomplete="on">
+                        <label class="lg-label" for="register-name">Nombre</label>
+                        <input class="lg-input" id="register-name" name="name" type="text"
+                               autocomplete="name" placeholder="Tu nombre" required>
+                        <label class="lg-label" for="register-email">Correo</label>
+                        <input class="lg-input" id="register-email" name="email" type="email"
+                               autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
+                        <label class="lg-label" for="register-password">Contraseña</label>
+                        <input class="lg-input" id="register-password" name="new-password" type="password"
+                               autocomplete="new-password" placeholder="••••••••••••" required>
+                        <label class="lg-label" for="register-password2">Repetila</label>
+                        <input class="lg-input" id="register-password2" name="new-password-confirm" type="password"
+                               autocomplete="new-password" placeholder="••••••••••••" required>
+                        <div class="lg-err" id="register-err"></div>
+                        <button class="lg-btn" id="register-btn" type="submit">Crear cuenta</button>
+                    </form>
+                    <button class="lg-alt" id="register-back" type="button">¿Ya tenés cuenta? Entrá</button>
+                </div>
             </div>
         </div>
     </div>
@@ -139,6 +157,7 @@
                 var loginPanel = document.getElementById('login-panel');
                 var forgotPanel = document.getElementById('forgot-panel');
                 var resetPanel = document.getElementById('reset-panel');
+                var registerPanel = document.getElementById('register-panel');
                 var loginOk = document.getElementById('login-ok');
                 var resetToken = new URLSearchParams(window.location.search).get('reset');
 
@@ -146,6 +165,7 @@
                     loginPanel.classList.toggle('lg-hidden', which !== 'login');
                     forgotPanel.classList.toggle('lg-hidden', which !== 'forgot');
                     resetPanel.classList.toggle('lg-hidden', which !== 'reset');
+                    registerPanel.classList.toggle('lg-hidden', which !== 'register');
                 }
 
                 // El servidor responde con el texto serializado como JSON ("…"). Se intenta
@@ -305,17 +325,85 @@
                     resetBtn.disabled = false; resetBtn.textContent = 'Guardar contraseña';
                 });
 
-                // Descubre el login de Compose que está debajo. Doble propósito: es la vía
-                // al registro (esta capa no lo tiene) y el escape si el overlay estorba.
-                // Aterriza en el login de Compose, no en el formulario de registro: desde ahí
-                // falta un toque más en "¿No tenés cuenta? Registrate". Por eso este botón NO
-                // se llama igual que aquél — ver el comentario del markup.
-                document.getElementById('login-alt').addEventListener('click', function () {
-                    overlay.classList.add('hidden');
+                // ── Crear cuenta ───────────────────────────────────────────
+                // Antes este botón escapaba al login de Compose (la única puerta al registro,
+                // porque esta capa no sabía registrar). Ahora registra acá mismo, con los
+                // `autocomplete` que hacen que el navegador ofrezca guardar la cuenta nueva —
+                // que es la razón de ser de todo este overlay. El login de Compose de abajo
+                // queda sin usar en la web (ver el `catch` de más abajo para la única salida).
+                var nameEl = document.getElementById('register-name');
+                var regEmailEl = document.getElementById('register-email');
+                var regPassEl = document.getElementById('register-password');
+                var regPass2El = document.getElementById('register-password2');
+                var registerForm = document.getElementById('register-form');
+                var registerBtn = document.getElementById('register-btn');
+                var registerErr = document.getElementById('register-err');
+
+                document.getElementById('register-link').addEventListener('click', function () {
+                    // Mismo arrastre que "¿Olvidaste tu contraseña?": si ya escribió el correo
+                    // en el login, no se lo hace escribir de nuevo.
+                    regEmailEl.value = (emailEl.value || '').trim() || remembered || '';
+                    registerErr.textContent = '';
+                    showPanel('register');
+                    setTimeout(function () { nameEl.focus(); }, 50);
+                });
+                document.getElementById('register-back').addEventListener('click', function () { showPanel('login'); });
+
+                registerForm.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    registerErr.textContent = '';
+                    if (regPassEl.value !== regPass2El.value) {
+                        registerErr.textContent = 'Las dos contraseñas no coinciden';
+                        return;
+                    }
+                    registerBtn.disabled = true; registerBtn.textContent = 'Creando cuenta…';
+                    try {
+                        var res = await fetch('/api/auth/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                email: (regEmailEl.value || '').trim(),
+                                name: (nameEl.value || '').trim(),
+                                password: regPassEl.value,
+                            })
+                        });
+                        if (!res.ok) {
+                            if (res.status === 409) {
+                                // El servidor manda "Email already registered" en inglés (ver
+                                // AuthRoutes.kt) — no se repite tal cual, se traduce, igual que
+                                // el panel de login nunca muestra el "Invalid credentials" del 401.
+                                registerErr.textContent = 'Ese correo ya tiene una cuenta. Entrá con tu contraseña.';
+                            } else if (res.status === 429) {
+                                registerErr.textContent = await serverMessage(res, 'Demasiados intentos. Esperá unos minutos.');
+                            } else {
+                                // 400 trae el mensaje de PasswordPolicy (:core, mínimo 12
+                                // caracteres) — el servidor es la autoridad, se muestra tal cual
+                                // en vez de duplicar la regla acá.
+                                registerErr.textContent = await serverMessage(res, 'No se pudo crear la cuenta (' + res.status + ')');
+                            }
+                            registerBtn.disabled = false; registerBtn.textContent = 'Crear cuenta';
+                            return;
+                        }
+                        var data = await res.json();
+                        localStorage.setItem('auth_token', data.token);
+                        localStorage.setItem('user_id', data.userId);
+                        localStorage.setItem('user_email', data.email);
+                        localStorage.setItem('user_name', data.name);
+                        localStorage.setItem('remembered_email', data.email);
+                        // Misma recarga deliberada que el submit del login: es lo que hace que
+                        // el navegador ofrezca guardar la contraseña recién creada.
+                        window.location.reload();
+                    } catch (ex) {
+                        registerErr.textContent = 'No se pudo conectar. Probá de nuevo.';
+                        registerBtn.disabled = false; registerBtn.textContent = 'Crear cuenta';
+                    }
                 });
             } catch (ex) {
-                // If anything in the overlay breaks, never block login:
-                // hide the overlay so the Compose login works.
+                // Red de seguridad, no el segundo login: si algo de este script explota (un
+                // elemento que no aparece, una API del navegador que falta), el overlay se
+                // esconde y el login de Compose de abajo queda como último recurso para que
+                // nadie se quede afuera de su propia cuenta. No se toca a propósito — ver el
+                // pedido que dio origen a este archivo.
                 var o = document.getElementById('login-overlay');
                 if (o) o.classList.add('hidden');
             }
