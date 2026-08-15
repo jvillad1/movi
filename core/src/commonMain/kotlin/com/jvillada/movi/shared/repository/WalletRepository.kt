@@ -83,6 +83,18 @@ interface WalletRepository {
      * (ver `looksLikeCardPayment`); esta llamada no muta nada.
      */
     suspend fun getCardPaymentCandidates(): List<FinancialEvent>
+
+    /**
+     * Descarta un candidato de [getCardPaymentCandidates] de forma persistente ("No es") — el
+     * server deja de proponerlo, pero **no toca su categoría**: el gasto sigue contando como
+     * flujo de caja del mes, que es justo lo que hay que preservar en un falso positivo. Idempotente.
+     *
+     * No hay forma de deshacer este descarte: si fue un error, el movimiento sigue en Movimientos
+     * y se recategoriza a mano con [updateEventCategory] (p. ej. desde
+     * [com.jvillada.movi.ui.transactions.ChangeCategorySheet]), incluso a
+     * [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] si en verdad lo era.
+     */
+    suspend fun dismissCardPaymentCandidate(id: String)
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
 

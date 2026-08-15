@@ -50,12 +50,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
     // fallo al traerlos no debe tapar Movimientos con un snackbar.
     var candidates by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
-    // Los que el dueño ya confirmó en esta pantalla. Se descuentan de `candidates` porque el
-    // refetch puede fallar y dejar la lista vieja: sin esto, un pago recién marcado volvía a
-    // aparecer con su botón "Marcar" activo y el contador seguía diciendo el número de antes —
-    // o sea, la app le decía que su confirmación no se había guardado, cuando sí se guardó.
-    var confirmedIds by remember { mutableStateOf(emptySet<String>()) }
-    val pendingCandidates = candidates.filterNot { it.id in confirmedIds }
+    // Los que el dueño ya resolvió en esta pantalla — confirmados con "Marcar" o descartados con
+    // "No es", mismo tratamiento para los dos. Se descuentan de `candidates` porque el refetch
+    // puede fallar y dejar la lista vieja: sin esto, un pago recién resuelto volvía a aparecer
+    // con sus botones activos y el contador seguía diciendo el número de antes — o sea, la app le
+    // decía que su acción no se había guardado, cuando sí se guardó. Para "No es" en particular,
+    // sin este descuento el falso positivo revivía en cuanto el refetch fallaba.
+    var resolvedIds by remember { mutableStateOf(emptySet<String>()) }
+    val pendingCandidates = candidates.filterNot { it.id in resolvedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
@@ -317,7 +319,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         CardPaymentCandidatesSheet(
             candidates = pendingCandidates,
             onDismiss = { showCandidatesSheet = false },
-            onConfirmed = { id -> confirmedIds = confirmedIds + id; refreshKey++ },
+            onConfirmed = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
+            onDismissedCandidate = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
         )
     }
     }

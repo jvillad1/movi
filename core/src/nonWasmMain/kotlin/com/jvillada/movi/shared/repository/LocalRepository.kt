@@ -265,6 +265,9 @@ class LocalRepository(
     // updateEventCategory/adjustCreditBalance arriba): delega directo, igual que el resto de
     // esta sección.
     override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = remote.getCardPaymentCandidates()
+    // Igual que getCardPaymentCandidates arriba: no hay nada que espejar localmente — "No es" no
+    // toca la categoría del evento, así que no hay ninguna fila local que quedaría desactualizada.
+    override suspend fun dismissCardPaymentCandidate(id: String) = remote.dismissCardPaymentCandidate(id)
     override suspend fun getGoals(): List<Goal> = remote.getGoals()
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)

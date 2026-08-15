@@ -87,6 +87,24 @@ object VoidEvents : Table("void_events") {
     init { uniqueIndex("uq_void_events_original_user", originalEventId, userId) }
 }
 
+/**
+ * Candidatos de `card-payment-candidates` que el dueño marcó explícitamente como "No es" (ver
+ * `POST /api/events/{id}/not-card-payment` en `EventRoutes`). Clave compuesta porque lo único
+ * que hace falta guardar es "este usuario descartó este evento" — no hay nada más que decir de
+ * la fila, ni un motivo, ni una fecha que alguna pantalla necesite mostrar.
+ *
+ * No hay "restaurar" para esta tabla: si el descarte fue un error, el movimiento sigue en
+ * Movimientos y se recategoriza a mano desde ahí (ver `ChangeCategorySheet`), incluso a
+ * "Pago de tarjeta" si en verdad lo era. La fila de acá se queda — inofensiva, porque el filtro
+ * del GET solo la usa para excluir, y un evento ya recategorizado no vuelve a matchear
+ * `looksLikeCardPayment` de todas formas.
+ */
+object CardPaymentDismissals : Table("card_payment_dismissals") {
+    val userId  = varchar("user_id", 50)
+    val eventId = varchar("event_id", 50)
+    override val primaryKey = PrimaryKey(userId, eventId)
+}
+
 object Budgets : Table("budgets") {
     val userId       = varchar("user_id", 50)
     val category     = varchar("category", 100)

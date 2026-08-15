@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
@@ -15,6 +16,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -75,11 +77,11 @@ class EventRoutesTest {
         transaction {
             SchemaUtils.drop(
                 Credits, SmsMessages, RecurringRules, VoidEvents, Events,
-                StatementImports, Budgets, Accounts, Users,
+                StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits,
+                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals,
             )
 
             Users.insert {
@@ -213,6 +215,11 @@ class EventRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
             header(HttpHeaders.ContentType, "application/json")
             setBody("""{"category":"$category"}""")
+        }
+
+    private suspend fun ApplicationTestBuilder.notCardPayment(id: String, userId: String) =
+        client.post("/api/events/$id/not-card-payment") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
         }
 
     // ── Tests ──────────────────────────────────────────────────────────────────
@@ -432,5 +439,123 @@ class EventRoutesTest {
 
         val row = transaction { Events.selectAll().where { Events.id eq "evt-c" }.single() }
         assertEquals("Otros", row[Events.category])
+    }
+
+    // ── POST /api/events/{id}/not-card-payment ("No es") ───────────────────────
+
+    @Test
+    fun `descartar saca el evento del GET de candidatos`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-fp", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+        assertEquals(1, Json.parseToJsonElement(candidatesFor(userAId).bodyAsText()).jsonArray.size)
+
+        val res = notCardPayment("evt-fp", userAId)
+        assertEquals(HttpStatusCode.NoContent, res.status)
+
+        val arr = Json.parseToJsonElement(candidatesFor(userAId).bodyAsText()).jsonArray
+        assertTrue(arr.isEmpty(), "un candidato descartado no debería volver a proponerse")
+    }
+
+    @Test
+    fun `descartar no cambia la categoria del evento`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-fp2", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+
+        notCardPayment("evt-fp2", userAId)
+
+        // "No es" saca el candidato de la propuesta, pero el gasto real sigue contando como
+        // flujo de caja del mes — es justo lo que hay que preservar en un falso positivo.
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-fp2" }.single() }
+        assertEquals("Otros", row[Events.category])
+    }
+
+    @Test
+    fun `descartar dos veces es 204 las dos`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-fp3", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+
+        assertEquals(HttpStatusCode.NoContent, notCardPayment("evt-fp3", userAId).status)
+        assertEquals(HttpStatusCode.NoContent, notCardPayment("evt-fp3", userAId).status)
+    }
+
+    @Test
+    fun `descartar un evento de otro usuario es 404 y no escribe nada`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-fp4", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+
+        val res = notCardPayment("evt-fp4", userBId)
+        assertEquals(HttpStatusCode.NotFound, res.status)
+
+        // Nada se escribió: el candidato de A sigue proponiéndose para A.
+        val arr = Json.parseToJsonElement(candidatesFor(userAId).bodyAsText()).jsonArray
+        assertEquals(1, arr.size)
+    }
+
+    @Test
+    fun `descartar un evento inexistente es 404`() = testApplication {
+        wireApp()
+        val res = notCardPayment("no-existe", userAId)
+        assertEquals(HttpStatusCode.NotFound, res.status)
+    }
+
+    @Test
+    fun `descartar un evento anulado es 404 y no escribe nada`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-fp-voided", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+        voidEvent("evt-fp-voided", userAId)
+
+        val res = notCardPayment("evt-fp-voided", userAId)
+        assertEquals(HttpStatusCode.NotFound, res.status)
+    }
+
+    /**
+     * Aislamiento del filtro: que A descarte un candidato no puede afectar a B. Sin esto, un
+     * `NOT IN` sin filtrar por usuario borraría el candidato de B también.
+     */
+    @Test
+    fun `un evento descartado por A sigue siendo candidato para B si B tuviera uno igual`() = testApplication {
+        wireApp()
+        val savingsAccountB = "acc-savings-b"
+        transaction {
+            Accounts.insert {
+                it[id]       = savingsAccountB
+                it[userId]   = userBId
+                it[name]     = "Ahorros B"
+                it[type]     = "SAVINGS"
+                it[currency] = "COP"
+            }
+        }
+        seedEvent(
+            id = "evt-a-fp", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+        seedEvent(
+            id = "evt-b-fp", userId = userBId, accountId = savingsAccountB,
+            type = "EXPENSE", description = "Pago tarjeta de crédito", category = "Otros",
+        )
+
+        assertEquals(HttpStatusCode.NoContent, notCardPayment("evt-a-fp", userAId).status)
+
+        val arrA = Json.parseToJsonElement(candidatesFor(userAId).bodyAsText()).jsonArray
+        assertTrue(arrA.isEmpty(), "el de A quedó descartado")
+
+        val arrB = Json.parseToJsonElement(candidatesFor(userBId).bodyAsText()).jsonArray
+        assertEquals(1, arrB.size, "el descarte de A no debe afectar el candidato de B")
+        assertEquals("evt-b-fp", arrB[0].jsonObject["id"]!!.jsonPrimitive.content)
     }
 }

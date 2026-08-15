@@ -1,11 +1,13 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
@@ -118,8 +120,12 @@ fun Route.eventRoutes() {
             )
             val candidates = dbQuery {
                 val accountTypes = accountTypesFor(uid)
+                // Lo que descartó "No es" (ver POST /{id}/not-card-payment abajo) no se vuelve a
+                // proponer — es la pieza que hace que el botón signifique algo.
+                val dismissed = dismissedCardPaymentEventIds(uid)
                 loadNonVoidedEventsIn(uid).filter { event ->
-                    event.type == TransactionType.EXPENSE &&
+                    event.id !in dismissed &&
+                        event.type == TransactionType.EXPENSE &&
                         accountTypes[event.accountId] in assetTypes &&
                         looksLikeCardPayment(event.description, event.category)
                 }
@@ -162,6 +168,48 @@ fun Route.eventRoutes() {
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
             else call.respond(updated)
+        }
+
+        // "No es un pago de tarjeta": descarta el candidato de GET /card-payment-candidates de
+        // forma persistente, SIN tocar su categoría — el gasto sigue contando como flujo de caja
+        // del mes, que es justo lo que hay que preservar en un falso positivo (ver el KDoc de
+        // looksLikeCardPayment). Solo agrega una fila a CardPaymentDismissals; nunca escribe en
+        // Events. Idempotente (descartar dos veces es 204 las dos) y aislado por usuario: 404,
+        // no 403, si el evento no existe o es de otro — mismo criterio que PUT /{id}/category de
+        // arriba. Un evento anulado (VoidEvents) se trata como inexistente, igual que ahí.
+        //
+        // No hay endpoint para deshacer esto: si el dueño se equivoca, el movimiento sigue en
+        // Movimientos y se recategoriza a mano desde ahí con ChangeCategorySheet — incluso a
+        // "Pago de tarjeta" si en verdad lo era.
+        post("/{id}/not-card-payment") {
+            val id = call.parameters["id"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+
+            val found = dbQuery {
+                val event = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()
+                val isVoided = event != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (event != null && !isVoided) {
+                    val alreadyDismissed = CardPaymentDismissals.selectAll()
+                        .where { (CardPaymentDismissals.eventId eq id) and (CardPaymentDismissals.userId eq uid) }
+                        .count() > 0
+                    if (!alreadyDismissed) {
+                        CardPaymentDismissals.insert {
+                            it[CardPaymentDismissals.userId]  = uid
+                            it[CardPaymentDismissals.eventId] = id
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            if (!found) call.respond(HttpStatusCode.NotFound)
+            else call.respond(HttpStatusCode.NoContent)
         }
 
         post("/{id}/void") {

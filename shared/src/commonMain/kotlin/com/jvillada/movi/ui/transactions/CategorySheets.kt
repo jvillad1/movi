@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -168,6 +169,12 @@ fun ChangeCategorySheet(
  * en el server) pero que todavía no están marcados con [CARD_PAYMENT_CATEGORY]. **Cada uno se
  * confirma por separado** — no hay botón de "marcar todos": es la promesa central de esta
  * feature (el dueño decide, Movi no adivina en bloque).
+ *
+ * Cada fila tiene dos botones: "Marcar" (confirma que sí es el pago, recategoriza) y "No es"
+ * (descarta el candidato para siempre — ver [com.jvillada.movi.shared.repository.WalletRepository.dismissCardPaymentCandidate]
+ * — **sin tocar la categoría**: el gasto sigue contando como flujo de caja del mes). Si "No es"
+ * fue un error, no hay forma de deshacerlo acá: el movimiento sigue en Movimientos y se
+ * recategoriza a mano desde ahí con [ChangeCategorySheet].
  */
 @Composable
 fun CardPaymentCandidatesSheet(
@@ -175,6 +182,8 @@ fun CardPaymentCandidatesSheet(
     onDismiss: () -> Unit,
     /** Recibe el id confirmado: quien llama tiene que poder descartarlo aunque el refetch falle. */
     onConfirmed: (String) -> Unit,
+    /** Recibe el id de un "No es": mismo motivo que [onConfirmed] — el refetch puede fallar. */
+    onDismissedCandidate: (String) -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     var remaining by remember(candidates) { mutableStateOf(candidates) }
@@ -191,6 +200,20 @@ fun CardPaymentCandidatesSheet(
             result.onSuccess {
                 remaining = remaining.filterNot { it.id == event.id }
                 onConfirmed(event.id)
+            }.onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    fun dismiss(event: FinancialEvent) {
+        if (savingId != null) return
+        savingId = event.id
+        error = null
+        coroutine.launch {
+            val result = runCatching { Repositories.wallets.dismissCardPaymentCandidate(event.id) }
+            savingId = null
+            result.onSuccess {
+                remaining = remaining.filterNot { it.id == event.id }
+                onDismissedCandidate(event.id)
             }.onFailure { error = it.toUserMessage() }
         }
     }
@@ -237,19 +260,35 @@ fun CardPaymentCandidatesSheet(
                         modifier = Modifier.padding(end = 10.dp),
                     )
                     val isSavingThis = savingId == event.id
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSavingThis) MinTextFaint else MinText)
-                            .clickable(enabled = savingId == null) { confirm(event) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            if (isSavingThis) "Marcando…" else "Marcar",
-                            color = MinBg,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, MinBorderStrong, RoundedCornerShape(10.dp))
+                                .clickable(enabled = savingId == null) { dismiss(event) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                if (isSavingThis) "…" else "No es",
+                                color = MinTextMute,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSavingThis) MinTextFaint else MinText)
+                                .clickable(enabled = savingId == null) { confirm(event) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                if (isSavingThis) "Marcando…" else "Marcar",
+                                color = MinBg,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
                     }
                 }
                 if (i < remaining.size - 1) Hairline()
