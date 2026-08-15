@@ -218,6 +218,21 @@ class LocalRepositoryTest {
         assertEquals(balanceBefore, repo.getAccount("acc-savings").balance)
     }
 
+    /**
+     * "No es" no toca ninguna fila local (a diferencia de updateEventCategory/adjustCreditBalance
+     * arriba): el candidato siempre se lee del server, así que acá alcanza con probar que
+     * LocalRepository delega — no hay ningún espejo que verificar.
+     */
+    @Test
+    fun dismissCardPaymentCandidate_delega_al_remoto() = runBlocking {
+        val remote = NoOpRepository()
+        val repoConRemote = LocalRepository(db = createDatabase("test.db"), remote = remote, userId = { testUserId })
+
+        repoConRemote.dismissCardPaymentCandidate("evt-descartado")
+
+        assertTrue("evt-descartado" in remote.dismissedCandidateIds)
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

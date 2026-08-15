@@ -14,6 +14,9 @@ class NoOpRepository(
      */
     private val knownEventIds: Set<String> = emptySet(),
 ) : WalletRepository {
+    /** Ids que pasaron por [dismissCardPaymentCandidate] — lo que un test de delegación verifica. */
+    val dismissedCandidateIds = mutableListOf<String>()
+
     override suspend fun getHoldings() = emptyList<Holding>()
     override suspend fun getCredits() = emptyList<CreditSummary>()
     override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
@@ -99,6 +102,9 @@ class NoOpRepository(
         )
     }
     override suspend fun getCardPaymentCandidates() = emptyList<FinancialEvent>()
+    override suspend fun dismissCardPaymentCandidate(id: String) {
+        dismissedCandidateIds += id
+    }
     override suspend fun register(request: RegisterRequest) = error("stub")
     override suspend fun login(request: LoginRequest) = error("stub")
     override suspend fun requestPasswordReset(request: PasswordResetRequest) = 202

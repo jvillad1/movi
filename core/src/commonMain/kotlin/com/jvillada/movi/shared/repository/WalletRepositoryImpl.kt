@@ -234,6 +234,15 @@ class WalletRepositoryImpl(
     override suspend fun getCardPaymentCandidates(): List<FinancialEvent> =
         client.get("$baseUrl/api/events/card-payment-candidates").body()
 
+    // Mismo idioma que updateEventCategory: 404 (evento inexistente o de otro usuario) trae su
+    // propio texto y se pierde si se deserializa a ciegas.
+    override suspend fun dismissCardPaymentCandidate(id: String) {
+        val response = client.post("$baseUrl/api/events/$id/not-card-payment")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
+
     override suspend fun register(request: RegisterRequest): AuthResponse =
         client.post("$baseUrl/api/auth/register") {
             contentType(ContentType.Application.Json)

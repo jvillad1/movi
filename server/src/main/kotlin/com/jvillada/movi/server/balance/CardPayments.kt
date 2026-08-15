@@ -1,6 +1,10 @@
 package com.jvillada.movi.server.balance
 
+import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.selectAll
 
 /**
  * Frases que, en los extractos reales de Bancolombia, aparecen en la descripción del pago
@@ -27,11 +31,13 @@ private val CARD_PAYMENT_PATTERNS = listOf(
  * el evento se queda sin marcar, contado como "Otros", corregible a mano después con
  * [com.jvillada.movi.ui.transactions.ChangeCategorySheet].
  *
- * Hoy **no hay forma de descartar** un candidato — la hoja solo tiene el botón "Marcar"
- * ([CardPaymentCandidatesSheet]) — así que un falso positivo simplemente se queda proponiéndose
- * cada vez que se abre la hoja, hasta que el dueño lo confirme (equivocadamente) o hasta que
- * alguien construya el descarte. Es una decisión de producto pendiente, no un bug de esta
- * función: no se resuelve acá.
+ * Un falso positivo ya no se queda proponiéndose para siempre: la hoja tiene un segundo botón,
+ * "No es" ([CardPaymentCandidatesSheet]), que llama a `POST /api/events/{id}/not-card-payment`
+ * ([com.jvillada.movi.server.routes.eventRoutes]) y descarta el candidato de forma persistente
+ * sin tocar su categoría. El GET de arriba filtra por [dismissedCardPaymentEventIds], así que un
+ * evento descartado no vuelve a aparecer. No hay "restaurar" ese descarte: si fue un error, el
+ * movimiento sigue en Movimientos y se recategoriza a mano desde ahí
+ * ([com.jvillada.movi.ui.transactions.ChangeCategorySheet]).
  *
  * Si [category] ya es [CARD_PAYMENT_CATEGORY] no hay nada que proponer: el evento ya está bien.
  */
@@ -40,3 +46,15 @@ fun looksLikeCardPayment(description: String, category: String): Boolean {
     val normalized = description.lowercase()
     return CARD_PAYMENT_PATTERNS.any { it in normalized }
 }
+
+/**
+ * Ids de eventos que [uid] ya descartó como "No es" un pago de tarjeta (ver
+ * [CardPaymentDismissals]). El GET de candidatos resta este conjunto — es lo único que hace que
+ * el botón "No es" signifique algo: sin este filtro el candidato volvería a proponerse la
+ * próxima vez que se abriera la hoja.
+ */
+fun Transaction.dismissedCardPaymentEventIds(uid: String): Set<String> =
+    CardPaymentDismissals.selectAll()
+        .where { CardPaymentDismissals.userId eq uid }
+        .map { it[CardPaymentDismissals.eventId] }
+        .toSet()
