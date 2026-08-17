@@ -110,7 +110,8 @@ fun Route.financeRoutes() {
             Accounts.selectAll().where { Accounts.userId eq uid }
                 .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
         }
-        val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+        val nonVoidedEvents = loadNonVoidedEvents(uid)
+        val eventsByAccount = nonVoidedEvents.groupBy { it.accountId }
         // netWorth, no accountCopValue sumado de frente (Hallazgo menor 4 de la revisión de esta
         // rama) — ver su KDoc. Nadie renderiza este campo hoy (Dashboard y el SDUI usan
         // assetsDebtsNet(accounts) del lado del cliente), pero dejarlo mal calculado a la espera
@@ -149,7 +150,17 @@ fun Route.financeRoutes() {
                 .filter { it[Events.type] == TransactionType.EXPENSE.name && it[Events.currency] == "COP" }
                 .sumOf { it[Events.amount] }
 
-            FinanceSummary(scope = scope, balance = derivedBalance, ingresos = ingresos, egresos = egresos)
+            FinanceSummary(
+                scope = scope,
+                balance = derivedBalance,
+                ingresos = ingresos,
+                egresos = egresos,
+                // Del usuario completo, no del mes ni del `scope` — ver KDoc del campo en
+                // FinanceSummary. `scope` hoy no filtra nada en este endpoint (ver arriba:
+                // ni accountRows ni nonVoidedEvents lo usan), así que no hay nada que
+                // "desfiltrar" acá — es directamente el tamaño de la lista ya cargada.
+                eventCount = nonVoidedEvents.size,
+            )
         }
         call.respond(summary)
     }

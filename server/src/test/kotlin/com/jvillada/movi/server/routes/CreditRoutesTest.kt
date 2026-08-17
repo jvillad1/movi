@@ -30,6 +30,7 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -504,5 +505,50 @@ class CreditRoutesTest {
         }
         val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }
         assertEquals("[]", res.bodyAsText())
+    }
+
+    // ── FinanceSummary.eventCount ─────────────────────────────────────────────
+    // Hallazgo 2 de la revisión de "primeros pasos": el Dashboard usaba
+    // `GET /api/events` (todo el historial) solo para saber "¿hay al menos un
+    // movimiento?". `eventCount` viaja gratis en `/api/finance-summary`, que ya carga
+    // todos los eventos no anulados del usuario para calcular el resumen.
+
+    // El server no serializa el JSON con `encodeDefaults` (Serialization.kt) — un
+    // `eventCount == 0` (su default) sale del wire sin la clave, no como `0` explícito.
+    // Mismo comportamiento que cualquier otro campo con default: es justamente lo que
+    // permite que un cliente viejo contra un server nuevo siga deserializando.
+    private fun JsonObject.eventCount(): Long =
+        this["eventCount"]?.jsonPrimitive?.long ?: 0L
+
+    /**
+     * `eventCount` tiene que ser del usuario completo (no del mes, no del scope — el
+     * endpoint hoy no filtra por scope en absoluto, ver `nonVoidedEvents` en
+     * `FinanceRoutes.kt`), y sobre todo tiene que ser por usuario: los eventos de userB
+     * no pueden sumarse al conteo de userA ni viceversa.
+     */
+    @Test
+    fun `eventCount refleja los eventos del usuario y no los de otro usuario`() = testApplication {
+        wireApp()
+        // userA ya tiene 1 evento del setUp (la apertura del crédito LOAN).
+        assertEquals(1L, summaryOf(userAId).eventCount())
+        // userB no tiene cuentas ni eventos todavía — sale del wire sin la clave (ver
+        // arriba), y el default de FinanceSummary.eventCount lo cubre.
+        assertEquals(0L, summaryOf(userBId).eventCount())
+
+        val gasto = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"evt-otro-gasto","accountId":"$cashAccountId","type":"EXPENSE","amount":50000,""" +
+                    """"currency":"COP","category":"Otro","description":"Otro gasto",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.Created, gasto.status)
+
+        // El segundo evento de userA lo sube a 2...
+        assertEquals(2L, summaryOf(userAId).eventCount())
+        // ...pero no contamina el conteo de userB, que sigue en cero.
+        assertEquals(0L, summaryOf(userBId).eventCount())
     }
 }

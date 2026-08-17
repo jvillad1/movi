@@ -11,6 +11,17 @@ data class FinanceSummary(
     val balance: Long,
     val ingresos: Long,
     val egresos: Long,
+    /**
+     * Cantidad total de eventos no anulados del usuario (todas las cuentas, no solo el mes
+     * ni el [scope]) — el server ya los carga completos para calcular este resumen
+     * ([com.jvillada.movi.server.balance.loadNonVoidedEvents]), así que este campo es
+     * prácticamente gratis. Existe para que el Dashboard pueda saber "¿esta cuenta tiene
+     * algún movimiento?" sin traerse la lista completa con `GET /api/events`.
+     *
+     * Con default para que un cliente viejo (que no lo espera) y un server viejo (que no lo
+     * manda) sigan deserializando sin romperse.
+     */
+    val eventCount: Int = 0,
 )
 
 @Serializable

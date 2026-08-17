@@ -8,6 +8,15 @@ expect val apiBaseUrl: String
 expect fun createRepository(): WalletRepository
 
 /**
+ * True solo en Android. La lectura de SMS bancarios (`SmsReader`) depende del permiso
+ * READ_SMS y de la bandeja del sistema — no existe en iOS ni en la web. `commonMain` no
+ * tenía hasta ahora forma de preguntar "¿en qué plataforma estoy corriendo?"; este flag
+ * mínimo es eso, para poder ocultar accesos que no tienen sentido fuera de Android
+ * (p.ej. el acceso a SMS en la guía de primeros pasos del Dashboard).
+ */
+expect val isAndroid: Boolean
+
+/**
  * Se llama justo después de que una sesión termina (logout explícito o el logout forzado de
  * [SessionManager.onUnauthorized] tras 401s repetidos).
  *
