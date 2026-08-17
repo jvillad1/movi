@@ -6,6 +6,12 @@
       "runtimeExecutable": "./gradlew",
       "runtimeArgs": [":webApp:wasmJsBrowserDevelopmentRun", "--console=plain"],
       "port": 8080
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": [":server:run", "--console=plain"],
+      "port": 8080
     }
   ]
 }
