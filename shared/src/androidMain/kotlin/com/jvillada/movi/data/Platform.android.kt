@@ -46,6 +46,8 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
 
 actual val apiBaseUrl: String = "https://movi-project-production.up.railway.app"
 
+actual val isAndroid: Boolean = true
+
 actual fun createRepository(): WalletRepository {
     val remote = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
     val db = createDatabase("movi.db")

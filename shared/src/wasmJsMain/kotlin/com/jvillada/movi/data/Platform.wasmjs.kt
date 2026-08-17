@@ -33,6 +33,8 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
 
 actual val apiBaseUrl: String = window.location.origin
 
+actual val isAndroid: Boolean = false
+
 actual fun createRepository(): WalletRepository = WalletRepositoryImpl(createHttpClient(), apiBaseUrl)
 
 // Recarga la página: es lo único que hace que index.html vuelva a evaluar su overlay HTML
