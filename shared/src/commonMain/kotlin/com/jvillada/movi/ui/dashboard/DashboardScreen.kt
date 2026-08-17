@@ -32,7 +32,6 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.FinanceSummary
-import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.renderableSections
@@ -41,6 +40,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.sdui.SduiRenderer
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
@@ -53,10 +53,9 @@ fun DashboardScreen(
     var summary by remember { mutableStateOf<FinanceSummary?>(null) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     // Solo para la guía de "Primeros pasos" — no se pinta nada más con esto, así que no
-    // hace falta que bloqueen `loading` ni que su fetch falle silenciosamente distinto
-    // de los otros: si fallan, la guía simplemente no tilda ese paso, error inofensivo.
+    // hace falta que bloquee `loading` ni que su fetch falle silenciosamente distinto de
+    // los otros: si falla, la guía simplemente no tilda ese paso, error inofensivo.
     var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
-    var movements by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -81,17 +80,28 @@ fun DashboardScreen(
                 // section types.
                 it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
             }
-        runCatching { Repositories.wallets.getFinanceSummary(scope) }
-            .onSuccess { summary = it }
-            .onFailure { e -> error = e.toUserMessage() }
-        runCatching { Repositories.wallets.getAccounts() }
-            .onSuccess { accounts = it }
-            .onFailure { e -> if (error == null) error = e.toUserMessage() }
-        // Guía "Primeros pasos": silencioso a propósito, sin tocar `error` — un fallo acá
-        // no debe mostrar un snackbar de reintento sobre datos que son secundarios; en el
-        // peor caso el paso correspondiente simplemente no se tilda esta vez.
-        runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it }
-        runCatching { Repositories.wallets.getEvents() }.onSuccess { movements = it }
+        // Estos tres no tienen la restricción de orden de arriba (screenDef tiene que
+        // resolverse primero para no parpadear fallback→SDUI) — van en paralelo para que
+        // `credits` no llegue último y la guía de "Primeros pasos" no parpadee con pasos
+        // sin tildar mientras carga.
+        coroutineScope {
+            launch {
+                runCatching { Repositories.wallets.getFinanceSummary(scope) }
+                    .onSuccess { summary = it }
+                    .onFailure { e -> error = e.toUserMessage() }
+            }
+            launch {
+                runCatching { Repositories.wallets.getAccounts() }
+                    .onSuccess { accounts = it }
+                    .onFailure { e -> if (error == null) error = e.toUserMessage() }
+            }
+            // Guía "Primeros pasos": silencioso a propósito, sin tocar `error` — un fallo
+            // acá no debe mostrar un snackbar de reintento sobre datos que son secundarios;
+            // en el peor caso el paso correspondiente simplemente no se tilda esta vez.
+            launch {
+                runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it }
+            }
+        }
         loading = false
     }
 
@@ -173,12 +183,14 @@ fun DashboardScreen(
 
             // Guía "Primeros pasos" — vive acá, fuera de la definición SDUI, a propósito:
             // así existe siempre, sin depender de tocar `screen_definitions` en producción
-            // ni de que el server esté al día. Se apaga sola cuando ya hay cuenta, crédito
-            // y movimiento — sin flag ni columna nueva, los datos son el estado.
+            // ni de que el server esté al día. Se apaga sola cuando ya hay cuenta y
+            // movimiento — sin flag ni columna nueva, los datos son el estado. Créditos NO
+            // condiciona el apagado (ver KDoc de `PrimerosPasosCard`): alguien sin deuda no
+            // tiene por qué ver esta guía para siempre.
             val hasAccount = accounts.isNotEmpty()
             val hasCredit = credits.isNotEmpty()
-            val hasMovement = movements.isNotEmpty()
-            if (!(hasAccount && hasCredit && hasMovement)) {
+            val hasMovement = (summary?.eventCount ?: 0) > 0
+            if (!(hasAccount && hasMovement)) {
                 PrimerosPasosCard(
                     hasAccount = hasAccount,
                     hasCredit = hasCredit,
@@ -495,10 +507,16 @@ private fun ColumnScope.DashboardFallback(
  * movimientos. Vive en `DashboardScreen`, no en la definición SDUI — así sobrevive a
  * cualquier cambio de `screen_definitions` en producción y no requiere tocar el server.
  *
- * Se apaga sola sin flag ni columna nueva: cada vez que el Dashboard carga, recalcula los
- * tres "hecho" a partir de los datos reales (cuentas, créditos, movimientos). El día que
- * los tres estén en true, esta tarjeta deja de renderizarse — y si el dueño vacía la
- * instancia de nuevo, vuelve a aparecer sola, que es lo correcto.
+ * Se apaga sola sin flag ni columna nueva: cada vez que el Dashboard carga, recalcula el
+ * estado a partir de los datos reales (cuentas, movimientos). El día que haya cuenta Y
+ * movimiento, la tarjeta entera deja de renderizarse — y si el dueño vacía la instancia de
+ * nuevo, vuelve a aparecer sola, que es lo correcto.
+ *
+ * Créditos (paso 2) NO condiciona el apagado — a propósito. Es un paso *ofrecido*, no
+ * *requerido*: se tilda si hay créditos cargados, pero alguien con una cuenta de ahorros y
+ * gastos que nunca va a tener un préstamo o tarjeta no tiene por qué ver esta guía para
+ * siempre esperando un tercer casillero que jamás se cumple. Cuando la tarjeta se apaga
+ * (cuenta + movimiento), se apaga entera, paso 2 incluido, tenga o no créditos.
  *
  * El paso 1 abre la misma hoja de crear cuenta que ya dispara la tarjeta "Sin cuentas aún"
  * de la sección "Mis cuentas" — decisión consciente, no un descuido: esa tarjeta vive más
@@ -507,10 +525,10 @@ private fun ColumnScope.DashboardFallback(
  * ofrecido en dos momentos distintos del scroll, y el de acá es el que de verdad importa
  * antes de que exista una sola cuenta.
  *
- * El paso 4 ("dejar que la app se llene sola") no tiene un "hecho" propio: a diferencia de
- * 1-3, no es una acción puntual sino un hábito (conectar extractos / dejar el SMS
- * corriendo). Usar el paso 3 como proxy sería engañoso — alguien puede cargar un
- * movimiento a mano sin haber configurado nunca el llenado automático. Se muestra sin
+ * El paso 4 ("dejar que la app se llene sola") tampoco tiene un "hecho" propio, por la
+ * misma razón que créditos: no es una acción puntual sino un hábito (conectar extractos /
+ * dejar el SMS corriendo). Usar el paso 3 como proxy sería engañoso — alguien puede cargar
+ * un movimiento a mano sin haber configurado nunca el llenado automático. Se muestra sin
  * tilde, como acceso puro.
  */
 @Composable
@@ -542,8 +560,8 @@ private fun PrimerosPasosCard(
         Hairline()
         PasoRow(
             done = hasCredit,
-            title = "Cargá tus créditos",
-            subtitle = "Para que Movi calcule cuotas e intereses por vos",
+            title = "Si tenés préstamos o tarjetas, cargalos acá",
+            subtitle = "Movi calcula cuotas e intereses por vos",
             onClick = { onNavigate(Screen.Credits) },
         )
         Hairline()
