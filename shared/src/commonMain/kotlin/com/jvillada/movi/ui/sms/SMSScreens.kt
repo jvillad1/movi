@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.platform.rememberSmsSync
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -64,8 +65,8 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
         ) {
             Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.Dashboard) })
             Column(modifier = Modifier.weight(1f)) {
-                Text("SMS bancarios", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                Text("Conectado a 2 bancos · $pendingCount pendientes", fontSize = 12.sp, color = MinTextMute)
+                Text("Mensajes del banco", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+                Text("$pendingCount por confirmar", fontSize = 12.sp, color = MinTextMute)
             }
             Text(
                 "↻",
@@ -85,11 +86,26 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(18.dp),
                 ) {
-                    Text("AUTO-LECTURA ACTIVA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 1.4.sp, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(8.dp))
-                    Row {
-                        Text("Movi lee tus SMS bancarios automáticamente. ", fontSize = 13.5.sp, color = MinText, lineHeight = 19.sp)
-                        Text("Revisa los pendientes para confirmar comercios o categoría.", fontSize = 13.5.sp, color = MinTextMute, lineHeight = 19.sp)
+                    // La lectura automática solo existe en Android (permiso READ_SMS + bandeja
+                    // del sistema). En web/iOS mostrar "AUTO-LECTURA ACTIVA" sería mentir: acá
+                    // no hay ninguna lectura pasando, solo la revisión de lo que el teléfono ya
+                    // subió.
+                    if (isAndroid) {
+                        Text("AUTO-LECTURA ACTIVA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 1.4.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Movi lee tus SMS bancarios automáticamente. Revisa los pendientes para confirmar comercios o categoría.",
+                            fontSize = 13.5.sp,
+                            color = MinText,
+                            lineHeight = 19.sp,
+                        )
+                    } else {
+                        Text(
+                            "Los mensajes del banco los lee tu teléfono con Movi instalado. Aquí los revisas antes de que cuenten.",
+                            fontSize = 13.5.sp,
+                            color = MinText,
+                            lineHeight = 19.sp,
+                        )
                     }
                 }
                 if (smsSync.available) {
