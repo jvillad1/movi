@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.openingEventFor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

@@ -27,6 +27,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -252,7 +253,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         coroutine.launch {
             runCatching {
                 val event = FinancialEvent(
-                    id = "",
+                    // Mismo motivo que en QuickAddScreen — ver newId().
+                    id = newId("ev"),
                     accountId = acct.id,
                     type = p.type,
                     amount = p.amount.toLong(),

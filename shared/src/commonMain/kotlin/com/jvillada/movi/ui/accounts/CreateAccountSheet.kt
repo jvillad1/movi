@@ -29,9 +29,12 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.openingEventFor
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 private data class TypeOption(val type: AccountType, val label: String, val icon: ImageVector)
 
@@ -63,22 +66,55 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
         else -> null
     }
 
+    // La cuenta que ya quedó creada en el server si el paso 1 (crear) tuvo éxito y el paso 2
+    // (postear la apertura) falló — en la web son dos POST independientes. Sin esto, tocar
+    // «Crear cuenta» de nuevo creaba una SEGUNDA cuenta (id nuevo) y la primera quedaba
+    // huérfana en $0 para siempre, sin forma de borrarla desde la app. Con esto, el reintento
+    // reusa la cuenta y solo repite el paso que falló. En Android/iOS postEvent nunca lanza,
+    // así que este estado no se llega a usar — pero no cuesta nada tenerlo.
+    var createdAccount by remember { mutableStateOf<Account?>(null) }
+
     fun save() {
         if (!canSave) return
         saving = true
         error = null
         coroutine.launch {
-            val account = Account(
-                id = "",
+            val account = createdAccount ?: Account(
+                // Generado acá, no en blanco — mismo motivo que en QuickAddScreen: en Android/iOS
+                // esto pasa por LocalRepository, que ahora necesita un id propio desde el
+                // primer instante (ver newId() y LocalRepository.createAccount).
+                id = newId("acc"),
                 name = name.trim(),
                 type = selectedType,
                 balance = initialBalance ?: 0L,
                 currency = if (selectedType == AccountType.CREDIT_CARD) selectedCurrency else "COP",
             )
-            val result = runCatching { Repositories.wallets.createAccount(account) }
+            val result = runCatching {
+                // La cuenta se crea SIEMPRE en $0 — el saldo/deuda inicial que el dueño tipeó
+                // arriba no viaja en este POST. Es este único call site el que decide "esta
+                // cuenta arranca con plata", posteando el evento de apertura aparte, explícito y
+                // una sola vez (ver el KDoc de openingEventFor en :core para el porqué: el server
+                // dejó de fabricarlo — hacerlo ahí duplicaba el saldo de una cuenta creada
+                // offline cuando el ingreso/gasto real anotado antes del sync se sumaba encima de
+                // la apertura que el server fabricaba a partir del balance sincronizado).
+                val created = createdAccount
+                    ?: Repositories.wallets.createAccount(account.copy(balance = 0L)).also { createdAccount = it }
+                if (account.balance != 0L) {
+                    val opening = openingEventFor(
+                        account.copy(id = created.id),
+                        now = Clock.System.now().toEpochMilliseconds(),
+                    )
+                    if (opening != null) Repositories.wallets.postEvent(opening)
+                }
+                created
+            }
             saving = false
             result.onSuccess { onAccountCreated() }
-                .onFailure { error = it.toUserMessage() }
+                .onFailure {
+                    error = if (createdAccount != null)
+                        "La cuenta quedó creada, pero no se pudo registrar el saldo inicial. Toca «Crear cuenta» para reintentar."
+                    else it.toUserMessage()
+                }
         }
     }
 

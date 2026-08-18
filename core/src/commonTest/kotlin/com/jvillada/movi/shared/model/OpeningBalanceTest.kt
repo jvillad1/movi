@@ -1,15 +1,10 @@
-package com.jvillada.movi.server.balance
+package com.jvillada.movi.shared.model
 
-import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.EventSource
-import com.jvillada.movi.shared.model.OPENING_CATEGORY
-import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.isCashFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class OpeningBalanceTest {
 
@@ -31,8 +26,11 @@ class OpeningBalanceTest {
         assertEquals(EventSource.MANUAL, ev.source)
         assertEquals("a", ev.accountId)
         assertEquals(1000L, ev.timestamp)
-        // derived balance must equal the declared opening balance
-        assertEquals(1_000_000, computeBalances(acc.type, listOf(ev))["COP"])
+        // el evento, aplicado con signedDelta, deja el saldo derivado en exactamente lo declarado
+        // (mismo cálculo que usa LocalRepository.postEvent y que computeBalances hace del lado
+        // del server — no se importa computeBalances acá porque vive en :server, aguas abajo
+        // de :core).
+        assertEquals(1_000_000L, signedDelta(acc.type, ev.type, ev.amount))
         // F54: la apertura no es un ingreso del mes, sin importar el tipo de cuenta.
         assertEquals(false, isCashFlow(acc.type, ev.type, ev.category))
     }
@@ -45,7 +43,7 @@ class OpeningBalanceTest {
         assertEquals("Deuda inicial", ev.description)
         assertEquals(OPENING_CATEGORY, ev.category)
         // derived debt must equal the declared opening debt
-        assertEquals(222_933, computeBalances(acc.type, listOf(ev))["COP"])
+        assertEquals(222_933L, signedDelta(acc.type, ev.type, ev.amount))
         // F54: tampoco es un egreso del mes.
         assertEquals(false, isCashFlow(acc.type, ev.type, ev.category))
     }
@@ -58,9 +56,9 @@ class OpeningBalanceTest {
         assertEquals("Deuda inicial", opening.description)
         assertEquals(OPENING_CATEGORY, opening.category)
         assertEquals(540_786, opening.amount)
-        assertEquals(540_786, computeBalances(acc.type, listOf(opening))["COP"])
-        val payment = opening.copy(id = "pay", type = TransactionType.INCOME, amount = 40_786)
-        assertEquals(500_000, computeBalances(acc.type, listOf(opening, payment))["COP"])
+        assertEquals(540_786L, signedDelta(acc.type, opening.type, opening.amount))
+        val paymentDelta = signedDelta(acc.type, TransactionType.INCOME, 40_786)
+        assertEquals(500_000L, signedDelta(acc.type, opening.type, opening.amount) + paymentDelta)
     }
 
     @Test
@@ -68,5 +66,21 @@ class OpeningBalanceTest {
         val acc = Account(id = "a", name = "n", type = AccountType.SAVINGS, balance = -5_000)
         val ev = assertNotNull(openingEventFor(acc, now = 1000L))
         assertEquals(5_000, ev.amount)
+    }
+
+    @Test
+    fun `id por defecto se genera con newId y prefijo ev — cada apertura tiene su propia PK`() {
+        val acc = Account(id = "a", name = "n", type = AccountType.SAVINGS, balance = 1_000)
+        val first = assertNotNull(openingEventFor(acc, now = 1000L))
+        val second = assertNotNull(openingEventFor(acc, now = 1000L))
+        assertTrue(first.id.startsWith("ev_"))
+        assertTrue(first.id != second.id, "dos llamadas sin id explícito no deberían colisionar")
+    }
+
+    @Test
+    fun `id explicito se respeta — lo usa CreditRoutes para el alta atomica de credito`() {
+        val acc = Account(id = "a", name = "n", type = AccountType.SAVINGS, balance = 1_000)
+        val ev = assertNotNull(openingEventFor(acc, now = 1000L, id = "ev-fijo"))
+        assertEquals("ev-fijo", ev.id)
     }
 }

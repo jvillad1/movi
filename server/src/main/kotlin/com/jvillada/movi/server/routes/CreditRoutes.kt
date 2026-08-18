@@ -5,7 +5,6 @@ import com.jvillada.movi.server.balance.debtAdjustmentEventFor
 import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
-import com.jvillada.movi.server.balance.openingEventFor
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.credits.paidPctFor
 import com.jvillada.movi.server.credits.toCreditTerms
@@ -23,6 +22,7 @@ import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MAX_CREDIT_DEBT_COP
+import com.jvillada.movi.shared.model.openingEventFor
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
