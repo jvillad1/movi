@@ -1,0 +1,11 @@
+-- Migración 1 → 2: agrega account.syncedAt.
+--
+-- Primera migración de este proyecto: antes de esta Ola no existía carpeta `migrations/`, así
+-- que el esquema instalado en cualquier APK/app ya en manos del dueño está, implícitamente, en
+-- la versión 1 (la que definían los .sq sin este archivo). Este .sqm es justamente el paso de
+-- esa versión 1 a la 2 — SQLDelight deriva `schemaVersion = 2` de que este es el .sqm con el
+-- número más alto. Sin este archivo, `AndroidSqliteDriver(MoviDatabase.Schema, ...)` nunca
+-- llamaría a `onUpgrade` (la versión del schema no cambiaría) y la tabla `account` instalada se
+-- quedaría sin `syncedAt` para siempre — rompiendo `LocalRepository.createAccount`/`SyncEngine`
+-- en cualquier teléfono que ya tuviera la app instalada antes de este cambio.
+ALTER TABLE account ADD COLUMN syncedAt INTEGER;

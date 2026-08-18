@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
+import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -64,36 +65,79 @@ class LocalRepository(
                 balance = row.balance, currency = row.currency)
         }
 
+    /**
+     * Crea la cuenta contra el server y **espeja el resultado en SQLDelight** — mismo patrón que
+     * [adjustCreditBalance]/[updateEventCategory] abajo: `remote` primero, la fila local se
+     * escribe con lo que el server devolvió.
+     *
+     * Antes esto escribía SOLO local, con lo que una cuenta creada en el teléfono nunca llegaba
+     * al server (el `SyncEngine` no sincronizaba cuentas), y como los eventos que se le anotaran
+     * llevaban ese `accountId`, `SyncEngine.syncEvents` los empujaba contra una cuenta que el
+     * server no conocía — 404 "Account not found" (ver `EventRoutes.kt` POST), tragado en
+     * silencio por el catch de [com.jvillada.movi.shared.SyncEngine].
+     *
+     * Sin red (o cualquier otra falla de `remote.createAccount`): la cuenta se escribe igual,
+     * local, con `syncedAt = null` — **pendiente**, no perdida. [com.jvillada.movi.shared.SyncEngine.syncAccounts]
+     * la recoge en su próximo ciclo y la empuja, siempre ANTES de `syncEvents` (una cuenta tiene
+     * que existir en el server antes que sus eventos). Se decide no distinguir acá "sin red" de
+     * "el server rechazó la cuenta" — la alternativa (perder la cuenta que el dueño acaba de
+     * crear) es peor que reintentarla cada 30s; ver el KDoc de `SyncEngine.syncAccounts` para el
+     * mismo trade-off en la otra punta.
+     */
     override suspend fun createAccount(account: Account): Account {
-        db.accountQueries.insert(
-            account.id, account.name, account.type.name,
-            account.balance, account.currency, userId()
-        )
-        return account
+        // Red de seguridad, no la vía principal: la UI ya manda `id = newId("acc")` (ver
+        // com.jvillada.movi.ui.accounts.CreateAccountSheet). Nunca insertar con PK "" — con
+        // INSERT OR REPLACE, una segunda cuenta creada antes de que la primera tuviera id
+        // reemplazaría a la primera en vez de agregarse.
+        val resolved = if (account.id.isBlank()) account.copy(id = newId("acc")) else account
+        val uid = userId()
+        return try {
+            val created = remote.createAccount(resolved)
+            db.accountQueries.insert(
+                created.id, created.name, created.type.name,
+                created.balance, created.currency, uid,
+                Clock.System.now().toEpochMilliseconds(),
+            )
+            created
+        } catch (e: Exception) {
+            db.accountQueries.insert(
+                resolved.id, resolved.name, resolved.type.name,
+                resolved.balance, resolved.currency, uid,
+                null,
+            )
+            resolved
+        }
     }
 
     // ── Events ────────────────────────────────────────────────────────────────
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+        // Red de seguridad, no la vía principal: la UI ya manda `id = newId("ev")` en los tres
+        // call sites (QuickAddScreen, SMSScreens; CreateAccountSheet es para cuentas, no
+        // eventos). Nunca insertar con PK "" — con INSERT OR REPLACE, un segundo evento sin id
+        // reemplazaría al primero en vez de agregarse, y si el segundo llegaba a sincronizarse
+        // antes que el ciclo de 30s levantara al primero, este último nunca subía: el teléfono y
+        // el server terminaban mostrando movimientos distintos.
+        val resolved = if (event.id.isBlank()) event.copy(id = newId("ev")) else event
         db.transaction {
             db.financialEventQueries.insert(
-                event.id, event.accountId, event.type.name, event.amount,
-                event.category, event.description, event.merchant,
-                event.timestamp, event.source.name, event.rawPayload,
-                event.reconciliationStatus.name, event.syncedAt, userId()
+                resolved.id, resolved.accountId, resolved.type.name, resolved.amount,
+                resolved.category, resolved.description, resolved.merchant,
+                resolved.timestamp, resolved.source.name, resolved.rawPayload,
+                resolved.reconciliationStatus.name, resolved.syncedAt, userId()
             )
-            val acct = db.accountQueries.selectById(event.accountId).executeAsOneOrNull()
+            val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
                 // signedDelta, no un `if INCOME suma` a secas (Hallazgo bloqueante 2 de la
                 // revisión de esta rama): en una cuenta LOAN/CREDIT_CARD un INCOME es un abono
                 // que BAJA la deuda. Antes de este fix, un abono desde QuickAdd a una libranza
                 // ya ajustada la subía en vez de bajarla — el teléfono y el server divergían.
                 val accountType = AccountType.valueOf(acct.type)
-                val delta = signedDelta(accountType, event.type, event.amount)
+                val delta = signedDelta(accountType, resolved.type, resolved.amount)
                 db.accountQueries.updateBalance(acct.balance + delta, acct.id)
             }
         }
-        return event
+        return resolved
     }
 
     override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
@@ -250,9 +294,11 @@ class LocalRepository(
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
             // existir localmente todavía, y en ese caso la pantalla de Cuentas ni siquiera lo veía.
+            // syncedAt = ahora: esto vino del server, no hay nada pendiente de empujar.
             db.accountQueries.insert(
                 summary.account.id, summary.account.name, summary.account.type.name,
                 summary.account.balance, summary.account.currency, uid,
+                Clock.System.now().toEpochMilliseconds(),
             )
         }
         return summary

@@ -7,7 +7,10 @@ import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 
-class NoOpRepository(
+// `open`: SyncEngineTest y FailingCreateAccountRepository extienden este stub para sobrescribir
+// solo un puñado de métodos (createAccount/postEvent) sin tener que reimplementar los ~40
+// restantes de WalletRepository.
+open class NoOpRepository(
     /**
      * Ids que el "server" ya conoce. Cualquier otro id dispara el mismo 404 que daría el server
      * real para un evento que no existe (o que es de otro usuario) — ver [updateEventCategory].

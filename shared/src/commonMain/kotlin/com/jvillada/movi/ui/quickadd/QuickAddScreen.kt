@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -103,7 +104,11 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
         error = null
         coroutine.launch {
             val event = FinancialEvent(
-                id = "",
+                // Generado acá, no en blanco: en Android/iOS Repositories.wallets es
+                // LocalRepository (offline-first), que inserta por PK id con INSERT OR REPLACE.
+                // Con id = "" cada evento nuevo reemplazaba al anterior en el teléfono en vez de
+                // agregarse (Hallazgo Crítico de la revisión de la Ola 1). Ver newId().
+                id = newId("ev"),
                 accountId = selectedAccountId ?: accounts.firstOrNull()?.id ?: "acc_1",
                 type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                 amount = amount.toLongOrNull() ?: 0L,

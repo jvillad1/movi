@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LocalRepositoryTest {
@@ -231,6 +232,77 @@ class LocalRepositoryTest {
         repoConRemote.dismissCardPaymentCandidate("evt-descartado")
 
         assertTrue("evt-descartado" in remote.dismissedCandidateIds)
+    }
+
+    /**
+     * Red de seguridad de [LocalRepository.postEvent] (Hallazgo Crítico de la revisión de la Ola
+     * 1: `id = ""` en la UI + `INSERT OR REPLACE` por PK `id` = el segundo evento reemplaza al
+     * primero en el teléfono). La UI ya manda `newId("ev")` en los tres call sites, pero acá se
+     * prueba la red de seguridad de `postEvent` en sí: nunca insertar con PK en blanco. Sin este
+     * fix, el segundo `postEvent("", ...)` de abajo pisaría al primero y `getEvents` devolvería
+     * uno solo con saldo de 2.000, no dos con saldo de 3.000.
+     */
+    @Test
+    fun postEvent_con_id_en_blanco_genera_uno_en_vez_de_pisar_el_evento_anterior() = runBlocking {
+        repo.createAccount(Account("acc-idgen", "Efectivo", AccountType.CASH, 0L))
+
+        val primero = repo.postEvent(event("", "acc-idgen", TransactionType.INCOME, 1_000L))
+        val segundo = repo.postEvent(event("", "acc-idgen", TransactionType.INCOME, 2_000L))
+
+        assertTrue(primero.id.isNotBlank())
+        assertTrue(segundo.id.isNotBlank())
+        assertTrue(primero.id != segundo.id)
+        assertEquals(2, repo.getEvents("acc-idgen").size)
+        assertEquals(3_000L, repo.getAccount("acc-idgen").balance)
+    }
+
+    /**
+     * Camino feliz de [LocalRepository.createAccount] (Hallazgo Crítico, Ola 1b): antes esto
+     * escribía SOLO local — el `SyncEngine` no sincronizaba cuentas, así que una cuenta creada en
+     * el teléfono nunca llegaba al server. Ahora llama a `remote.createAccount` primero (mismo
+     * patrón que `adjustCreditBalance`/`updateEventCategory` arriba) y espeja lo que devolvió, ya
+     * marcada sincronizada — si quedara `syncedAt = null`, `SyncEngine.syncAccounts` la volvería
+     * a empujar aunque el server ya la tenga.
+     */
+    @Test
+    fun createAccount_llama_al_server_primero_y_la_espeja_ya_sincronizada() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoConRemote = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+
+        val created = repoConRemote.createAccount(Account("acc-remote", "Ahorros", AccountType.SAVINGS, 500_000L))
+
+        assertEquals("acc-remote", created.id)
+        val row = db.accountQueries.selectById("acc-remote").executeAsOne()
+        assertEquals(500_000L, row.balance)
+        assertTrue(row.syncedAt != null)
+    }
+
+    /**
+     * Camino sin red de [LocalRepository.createAccount]: `remote.createAccount` falla y la cuenta
+     * se escribe igual, local, PENDIENTE (`syncedAt = null`) — no se pierde. Es la decisión que
+     * pide el brief de la Ola 1b: la alternativa (no escribir nada localmente) le hace desaparecer
+     * al dueño la cuenta que acaba de crear con sus propios dedos. `SyncEngine.syncAccounts` la
+     * recoge en su próximo ciclo (ver SyncEngineTest).
+     */
+    @Test
+    fun createAccount_sin_red_escribe_local_pendiente_de_sync() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoSinRed = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+
+        val created = repoSinRed.createAccount(Account("acc-offline", "Efectivo", AccountType.CASH, 0L))
+
+        assertEquals("acc-offline", created.id)
+        val row = db.accountQueries.selectById("acc-offline").executeAsOne()
+        assertEquals(0L, row.balance)
+        assertNull(row.syncedAt)
+    }
+
+    /** Red de seguridad de createAccount, mismo criterio que postEvent arriba. */
+    @Test
+    fun createAccount_con_id_en_blanco_genera_uno() = runBlocking {
+        val created = repo.createAccount(Account("", "Efectivo", AccountType.CASH, 0L))
+
+        assertTrue(created.id.isNotBlank())
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -69,7 +70,10 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
         error = null
         coroutine.launch {
             val account = Account(
-                id = "",
+                // Generado acá, no en blanco — mismo motivo que en QuickAddScreen: en Android/iOS
+                // esto pasa por LocalRepository, que ahora necesita un id propio desde el
+                // primer instante (ver newId() y LocalRepository.createAccount).
+                id = newId("acc"),
                 name = name.trim(),
                 type = selectedType,
                 balance = initialBalance ?: 0L,

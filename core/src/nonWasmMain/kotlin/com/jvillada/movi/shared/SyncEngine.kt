@@ -1,6 +1,8 @@
 package com.jvillada.movi.shared
 
 import com.jvillada.movi.shared.db.MoviDatabase
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -24,8 +26,41 @@ class SyncEngine(
         scope.launch {
             while (true) {
                 delay(30_000L)
-                try { syncEvents() } catch (_: Exception) {}
-                try { syncVoids() } catch (_: Exception) {}
+                // syncAccounts ANTES que syncEvents: una cuenta creada offline (ver
+                // LocalRepository.createAccount) tiene que existir en el server antes que sus
+                // eventos, o EventRoutes.kt POST la rechaza con 404 "Account not found" — y ese
+                // 404 quedaba tragado en silencio por el catch de syncEvents, así que el evento
+                // (y la cuenta) nunca llegaban al server aunque hubiera red.
+                try { syncAccounts() } catch (e: Exception) { logSyncFailure("syncAccounts", e) }
+                try { syncEvents() } catch (e: Exception) { logSyncFailure("syncEvents", e) }
+                try { syncVoids() } catch (e: Exception) { logSyncFailure("syncVoids", e) }
+            }
+        }
+    }
+
+    /**
+     * Empuja las cuentas creadas offline (`syncedAt IS NULL`, ver [com.jvillada.movi.shared.repository.LocalRepository.createAccount])
+     * y sella las que llegaron. Corre antes que [syncEvents] en [start] a propósito: los eventos
+     * de una cuenta todavía no sincronizada rebotan con 404 contra el server (ver arriba).
+     *
+     * Igual que [syncEvents]: si `remote.createAccount` falla (sin red, o el server la rechaza)
+     * la fila se queda sin sellar y el próximo ciclo la vuelve a intentar — sin distinguir esos
+     * dos casos, mismo trade-off documentado en el KDoc de `LocalRepository.createAccount`.
+     */
+    internal suspend fun syncAccounts() {
+        val unsynced = db.accountQueries.selectUnsynced(userId()).executeAsList()
+        for (row in unsynced) {
+            try {
+                val created = remote.createAccount(
+                    Account(
+                        id = row.id, name = row.name,
+                        type = AccountType.valueOf(row.type),
+                        balance = row.balance, currency = row.currency,
+                    )
+                )
+                db.accountQueries.markSynced(Clock.System.now().toEpochMilliseconds(), created.id)
+            } catch (e: Exception) {
+                logSyncFailure("syncAccounts", e, id = row.id)
             }
         }
     }
@@ -56,7 +91,7 @@ class SyncEngine(
      * distinguir "nunca llegó" de "ya llegó, solo cambió la categoría" y usar
      * `remote.updateEventCategory` en ese segundo caso— queda fuera de este fix.
      */
-    private suspend fun syncEvents() {
+    internal suspend fun syncEvents() {
         val unsynced = db.financialEventQueries.selectUnsynced(userId()).executeAsList()
         for (row in unsynced) {
             try {
@@ -76,11 +111,13 @@ class SyncEngine(
                 db.financialEventQueries.markSyncedIfUnchanged(
                     Clock.System.now().toEpochMilliseconds(), row.id, row.category,
                 )
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                logSyncFailure("syncEvents", e, id = row.id)
+            }
         }
     }
 
-    private suspend fun syncVoids() {
+    internal suspend fun syncVoids() {
         val unsynced = db.voidEventQueries.selectUnsynced().executeAsList()
         for (row in unsynced) {
             try {
@@ -88,7 +125,24 @@ class SyncEngine(
                 db.voidEventQueries.markSynced(
                     Clock.System.now().toEpochMilliseconds(), row.id
                 )
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                logSyncFailure("syncVoids", e, id = row.id)
+            }
         }
+    }
+
+    /**
+     * Antes esta clase se tragaba TODO error de sync con `catch (_: Exception) {}` — ni el id de
+     * la fila que falló ni el motivo quedaban en ningún lado, así que un evento/cuenta atascado
+     * (id en conflicto, cuenta inexistente, lo que sea) era indiagnosticable desde afuera: el
+     * dueño solo veía que "algo" no llegaba al server. `println` porque no hay ningún logger ya
+     * elegido en `:core` (no hay dependencia tipo Napier/co.touchlab acá, y este módulo corre en
+     * JVM/Android/iOS — `println` es lo único que las tres plataformas comparten sin agregar una
+     * dependencia nueva). No cambia la política de reintento: la fila se queda sin sellar y el
+     * próximo ciclo de 30s la vuelve a intentar, exactamente igual que antes de este log.
+     */
+    private fun logSyncFailure(step: String, error: Exception, id: String? = null) {
+        val target = id?.let { " id=$it" } ?: ""
+        println("[SyncEngine] $step falló$target: ${error.message}")
     }
 }

@@ -4,7 +4,13 @@ CREATE TABLE account (
     type       TEXT    NOT NULL,
     balance    INTEGER NOT NULL DEFAULT 0,
     currency   TEXT    NOT NULL DEFAULT 'COP',
-    userId     TEXT    NOT NULL DEFAULT ''
+    userId     TEXT    NOT NULL DEFAULT '',
+    -- NULL = todavía no llegó al server (creada offline). Antes de esta columna una cuenta
+    -- creada en el teléfono se quedaba SOLO local para siempre: el SyncEngine no sabía que
+    -- existía y nunca la empujaba, así que los eventos que se le anotaran (con su accountId)
+    -- rebotaban con 404 "Account not found" cuando el SyncEngine intentaba subirlos (ver
+    -- EventRoutes.kt POST). Mismo patrón que financial_event.syncedAt.
+    syncedAt   INTEGER
 );
 
 selectAll:
@@ -13,9 +19,15 @@ SELECT * FROM account WHERE userId = :userId;
 selectById:
 SELECT * FROM account WHERE id = :id;
 
+selectUnsynced:
+SELECT * FROM account WHERE syncedAt IS NULL AND userId = :userId;
+
 insert:
-INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 updateBalance:
 UPDATE account SET balance = :balance WHERE id = :id;
+
+markSynced:
+UPDATE account SET syncedAt = :syncedAt WHERE id = :id;
