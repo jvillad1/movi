@@ -171,14 +171,17 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                             if (isCard) {
                                 val (debt, isEstimate) = cardDebt(acc)
                                 MonoText(
-                                    text = "${if (isEstimate) "≈" else ""}${if (debt < 0) "+" else ""}${formatCOP(debt)}",
+                                    // debt < 0 es saldo a favor: signo invertido a propósito, así que se
+                                    // le pasa el valor absoluto — si no, formatCOP (F36) le pondría su
+                                    // propio "−" encima del "+" de acá.
+                                    text = "${if (isEstimate) "≈" else ""}${if (debt < 0) "+" else ""}${formatCOP(kotlin.math.abs(debt))}",
                                     fontSize = 28f,
                                     color = if (debt < 0) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
                                 )
                             } else {
                                 MonoText(
-                                    text = "${if (acc.balance < 0) "−" else ""}${formatCOP(acc.balance)}",
+                                    text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
                                     fontSize = 28f,
                                     color = if (acc.balance >= 0) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
@@ -239,7 +242,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
                                     MonoText(
-                                        text = "${if (day.total >= 0) "+" else "−"}${formatCOP(day.total)}",
+                                        // Se pasa el valor absoluto: el signo ya lo pone el if de acá
+                                        // (siempre "+" o "−", incluso en 0) — pasarle el total con signo
+                                        // a formatCOP (F36) duplicaría el "−" cuando el día cierra en rojo.
+                                        text = "${if (day.total >= 0) "+" else "−"}${formatCOP(kotlin.math.abs(day.total))}",
                                         fontSize = 11f,
                                         color = MinTextMute,
                                     )

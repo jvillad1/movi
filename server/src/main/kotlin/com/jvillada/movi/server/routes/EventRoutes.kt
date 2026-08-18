@@ -38,6 +38,15 @@ fun Route.eventRoutes() {
             val event = body.copy(
                 id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
                 timestamp = if (body.timestamp == 0L) now else body.timestamp,
+                // F12, capa 2: "por confirmar" es para lo que entra solo (SMS, OCR, extracto) —
+                // no para lo que el usuario anotó a mano, que ya está confirmado por definición.
+                // Esto es la red de seguridad del server, no solo de QuickAdd: cualquier cliente
+                // (viejo, o uno que no aplique el fix del lado UI) que mande MANUAL+UNCONFIRMED
+                // queda corregido acá, para que no le pase lo mismo por otra puerta.
+                reconciliationStatus = if (body.source == EventSource.MANUAL && body.reconciliationStatus == ReconciliationStatus.UNCONFIRMED)
+                    ReconciliationStatus.RECONCILED
+                else
+                    body.reconciliationStatus,
             )
 
             val accountExists = dbQuery {

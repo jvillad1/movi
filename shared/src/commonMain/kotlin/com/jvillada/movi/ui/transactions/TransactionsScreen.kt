@@ -39,7 +39,9 @@ import com.jvillada.movi.ui.components.*
 @Composable
 fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var activeFilter by remember { mutableStateOf(0) }
-    val filters = listOf("Todo", "Egresos", "Ingresos", "Pendientes")
+    // F12: "Pendientes" no decía qué es — son los movimientos que entraron solos (SMS, OCR,
+    // extracto) y esperan que confirmes monto y categoría. "Por confirmar" sí lo dice.
+    val filters = listOf("Todo", "Egresos", "Ingresos", "Por confirmar")
 
     var allDays by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }

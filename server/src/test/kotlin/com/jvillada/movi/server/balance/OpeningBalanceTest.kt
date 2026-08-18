@@ -3,7 +3,9 @@ package com.jvillada.movi.server.balance
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isCashFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,12 +27,14 @@ class OpeningBalanceTest {
         assertEquals(1_000_000, ev.amount)
         assertEquals("COP", ev.currency)
         assertEquals("Saldo inicial", ev.description)
-        assertEquals("Otros ingresos", ev.category)
+        assertEquals(OPENING_CATEGORY, ev.category)
         assertEquals(EventSource.MANUAL, ev.source)
         assertEquals("a", ev.accountId)
         assertEquals(1000L, ev.timestamp)
         // derived balance must equal the declared opening balance
         assertEquals(1_000_000, computeBalances(acc.type, listOf(ev))["COP"])
+        // F54: la apertura no es un ingreso del mes, sin importar el tipo de cuenta.
+        assertEquals(false, isCashFlow(acc.type, ev.type, ev.category))
     }
 
     @Test
@@ -39,9 +43,11 @@ class OpeningBalanceTest {
         val ev = assertNotNull(openingEventFor(acc, now = 1000L))
         assertEquals(TransactionType.EXPENSE, ev.type)
         assertEquals("Deuda inicial", ev.description)
-        assertEquals("Otros", ev.category)
+        assertEquals(OPENING_CATEGORY, ev.category)
         // derived debt must equal the declared opening debt
         assertEquals(222_933, computeBalances(acc.type, listOf(ev))["COP"])
+        // F54: tampoco es un egreso del mes.
+        assertEquals(false, isCashFlow(acc.type, ev.type, ev.category))
     }
 
     @Test
@@ -50,7 +56,7 @@ class OpeningBalanceTest {
         val opening = assertNotNull(openingEventFor(acc, now = 1000L))
         assertEquals(TransactionType.EXPENSE, opening.type)
         assertEquals("Deuda inicial", opening.description)
-        assertEquals("Otros", opening.category)
+        assertEquals(OPENING_CATEGORY, opening.category)
         assertEquals(540_786, opening.amount)
         assertEquals(540_786, computeBalances(acc.type, listOf(opening))["COP"])
         val payment = opening.copy(id = "pay", type = TransactionType.INCOME, amount = 40_786)

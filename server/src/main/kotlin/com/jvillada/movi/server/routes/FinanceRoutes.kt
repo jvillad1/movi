@@ -15,6 +15,7 @@ import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
@@ -158,8 +159,10 @@ fun Route.financeRoutes() {
                 // Del usuario completo, no del mes ni del `scope` — ver KDoc del campo en
                 // FinanceSummary. `scope` hoy no filtra nada en este endpoint (ver arriba:
                 // ni accountRows ni nonVoidedEvents lo usan), así que no hay nada que
-                // "desfiltrar" acá — es directamente el tamaño de la lista ya cargada.
-                eventCount = nonVoidedEvents.size,
+                // "desfiltrar" acá más que la apertura de cuenta (F54): un "Saldo inicial" no es
+                // un movimiento que el usuario haya anotado, así que no cuenta para la guía de
+                // primeros pasos.
+                eventCount = nonVoidedEvents.count { it.category != OPENING_CATEGORY },
             )
         }
         call.respond(summary)

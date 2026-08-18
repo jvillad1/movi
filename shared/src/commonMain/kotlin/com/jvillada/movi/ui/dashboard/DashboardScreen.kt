@@ -292,7 +292,7 @@ private fun ColumnScope.DashboardFallback(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "${if (totalBalance < 0) "−" else ""}${formatCOP(totalBalance)}",
+                    text = formatCOP(totalBalance), // formatCOP ya trae el signo (F36) — no duplicarlo acá
                     fontSize = 44.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Normal,
@@ -389,7 +389,10 @@ private fun ColumnScope.DashboardFallback(
                                     if (isDebtAccount(account.type)) {
                                         val (debt, isEstimate) = cardDebt(account)
                                         MonoText(
-                                            "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                            // debt < 0 es saldo a favor: signo invertido a propósito, así
+                                            // que se le pasa el valor absoluto — si no, formatCOP (F36) le
+                                            // pondría su propio "−" encima del "+" de acá.
+                                            "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(kotlin.math.abs(debt))}",
                                             14.5f,
                                             color = if (debt < 0) MinIncome else MinExpense,
                                         )

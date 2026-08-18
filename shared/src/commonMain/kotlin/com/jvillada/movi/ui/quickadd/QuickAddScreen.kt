@@ -28,6 +28,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -103,6 +104,11 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
                 category = category,
                 description = note.ifBlank { category },
                 source = EventSource.MANUAL,
+                // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es
+                // solo para lo que entra solo (SMS, OCR, extracto), no para lo que el usuario
+                // acaba de escribir con sus propios dedos. Sin esto caía en el default
+                // UNCONFIRMED y desaparecía de "Egresos", que excluye lo pendiente.
+                reconciliationStatus = ReconciliationStatus.RECONCILED,
                 timestamp = Clock.System.now().toEpochMilliseconds(),
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }

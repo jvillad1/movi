@@ -93,4 +93,26 @@ class CashFlowTest {
     fun `Pago de tarjeta en un prestamo no cuenta como flujo de caja — ya era false por LOAN`() {
         assertFalse(isCashFlow(AccountType.LOAN, TransactionType.INCOME, CARD_PAYMENT_CATEGORY))
     }
+
+    // ── Categoría OPENING_CATEGORY (F54): el saldo inicial nunca es flujo de caja ───────────
+
+    @Test
+    fun `saldo inicial de una cuenta de activo no cuenta como ingreso del mes`() {
+        assertFalse(isCashFlow(AccountType.SAVINGS, TransactionType.INCOME, OPENING_CATEGORY))
+    }
+
+    @Test
+    fun `deuda inicial de una tarjeta no cuenta como egreso del mes`() {
+        assertFalse(isCashFlow(AccountType.CREDIT_CARD, TransactionType.EXPENSE, OPENING_CATEGORY))
+    }
+
+    @Test
+    fun `deuda inicial de un prestamo no cuenta como egreso del mes — ya era false por LOAN`() {
+        assertFalse(isCashFlow(AccountType.LOAN, TransactionType.EXPENSE, OPENING_CATEGORY))
+    }
+
+    @Test
+    fun `saldo inicial en efectivo tampoco cuenta`() {
+        assertFalse(isCashFlow(AccountType.CASH, TransactionType.INCOME, OPENING_CATEGORY))
+    }
 }

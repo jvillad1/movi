@@ -222,6 +222,13 @@ class EventRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
         }
 
+    private suspend fun ApplicationTestBuilder.postEvent(userId: String, body: String) =
+        client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
@@ -557,5 +564,69 @@ class EventRoutesTest {
         val arrB = Json.parseToJsonElement(candidatesFor(userBId).bodyAsText()).jsonArray
         assertEquals(1, arrB.size, "el descarte de A no debe afectar el candidato de B")
         assertEquals("evt-b-fp", arrB[0].jsonObject["id"]!!.jsonPrimitive.content)
+    }
+
+    // ── POST /api/events — F12: lo anotado a mano nace confirmado ──────────────
+
+    /**
+     * El caso central de F12: un cliente que omite `reconciliationStatus` (como QuickAdd antes
+     * del fix) hereda el default UNCONFIRMED del modelo — pero al venir con `source` MANUAL (el
+     * otro default), el server lo corrige a RECONCILED. Sin esto, todo lo anotado a mano caía en
+     * el filtro "Por confirmar" y desaparecía de "Egresos", que excluye lo pendiente.
+     */
+    @Test
+    fun `evento manual sin reconciliationStatus explicito nace RECONCILED`() = testApplication {
+        wireApp()
+        val res = postEvent(
+            userAId,
+            """{"id":"","accountId":"$savingsAccountId","type":"EXPENSE","amount":25000,
+                "category":"Comida","description":"Almuerzo","timestamp":0}""",
+        )
+        assertEquals(HttpStatusCode.Created, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("RECONCILED", body["reconciliationStatus"]!!.jsonPrimitive.content)
+
+        val row = transaction { Events.selectAll().where { Events.accountId eq savingsAccountId }.single() }
+        assertEquals("RECONCILED", row[Events.reconciliationStatus])
+    }
+
+    @Test
+    fun `evento manual con UNCONFIRMED explicito tambien se corrige a RECONCILED`() = testApplication {
+        wireApp()
+        val res = postEvent(
+            userAId,
+            """{"id":"","accountId":"$savingsAccountId","type":"EXPENSE","amount":25000,
+                "category":"Comida","description":"Almuerzo","source":"MANUAL",
+                "reconciliationStatus":"UNCONFIRMED","timestamp":0}""",
+        )
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("RECONCILED", body["reconciliationStatus"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * El contraste que prueba que la corrección es específica de MANUAL: un SMS que todavía no
+     * se revisó SÍ debe quedar "por confirmar" — esa es la razón de ser del estado. Corregirlo acá
+     * también rompería el flujo de revisión de SMS/OCR/extracto.
+     */
+    @Test
+    fun `evento de SMS con UNCONFIRMED se mantiene UNCONFIRMED`() = testApplication {
+        wireApp()
+        val res = postEvent(
+            userAId,
+            """{"id":"","accountId":"$savingsAccountId","type":"EXPENSE","amount":25000,
+                "category":"Comida","description":"Almuerzo","source":"SMS",
+                "reconciliationStatus":"UNCONFIRMED","timestamp":0}""",
+        )
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        // El Json del server tiene encodeDefaults=false: UNCONFIRMED es el default de
+        // reconciliationStatus, así que cuando el valor coincide con el default el campo no
+        // viaja en el wire — ausencia de la clave es justamente "se quedó en su default".
+        assertEquals("UNCONFIRMED", body["reconciliationStatus"]?.jsonPrimitive?.content ?: "UNCONFIRMED")
+
+        // Confirmación real, sin depender del detalle de encodeDefaults: la fila en la DB.
+        val row = transaction {
+            Events.selectAll().where { Events.accountId eq savingsAccountId }.single()
+        }
+        assertEquals("UNCONFIRMED", row[Events.reconciliationStatus])
     }
 }

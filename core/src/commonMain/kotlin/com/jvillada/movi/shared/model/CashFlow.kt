@@ -4,6 +4,14 @@ package com.jvillada.movi.shared.model
 const val CARD_PAYMENT_CATEGORY = "Pago de tarjeta"
 
 /**
+ * Categoría del evento de apertura que [com.jvillada.movi.server.balance.openingEventFor] genera
+ * al crear una cuenta con saldo — tanto para el activo ("Saldo inicial") como para la deuda
+ * ("Deuda inicial"; la descripción distingue, la categoría es la misma para las dos). Existe para
+ * que [isCashFlow] pueda reconocer y excluir el evento sin importar el tipo de cuenta (ver F54).
+ */
+const val OPENING_CATEGORY = "Saldo inicial"
+
+/**
  * ¿Este movimiento es **flujo de caja del mes** — plata que entró o salió del bolsillo?
  *
  * No todo evento es un ingreso o un egreso. El saldo de una cuenta de deuda (LOAN,
@@ -12,6 +20,15 @@ const val CARD_PAYMENT_CATEGORY = "Pago de tarjeta"
  * en cuánto se debe.
  *
  * Reglas, en orden, y el porqué de cada una:
+ *
+ * - **Categoría [OPENING_CATEGORY] → nunca**, sin importar tipo de cuenta ni tipo de movimiento
+ *   (F54). Abrir una cuenta con plata que ya tenías no es un ingreso del mes — ni tampoco, para
+ *   una deuda, un gasto del mes: es la foto inicial de algo que ya existía antes de que Movi
+ *   empezara a llevarlo, igual que el desembolso de un LOAN de la regla de abajo. Antes de este
+ *   fix, crear una cuenta de activo con $1.000.000 inflaba "Ingresos del mes" en esa misma cifra.
+ *   Nota de datos: producción está vacía al momento de este cambio, así que no hace falta
+ *   migración — los eventos de apertura viejos (si los hay) quedaron con categoría "Otros
+ *   ingresos"/"Otros" y NO se benefician de esta regla; ver el commit de F54.
  *
  * - **Categoría [CARD_PAYMENT_CATEGORY] → nunca**, sin importar de qué cuenta salga. Una
  *   compra con tarjeta ya se contó como EXPENSE en la cuenta CREDIT_CARD — el momento real
@@ -45,6 +62,7 @@ const val CARD_PAYMENT_CATEGORY = "Pago de tarjeta"
  * vía `signedDelta`/`computeBalances`. Esto solo decide qué se suma como ingreso/egreso.
  */
 fun isCashFlow(accountType: AccountType, type: TransactionType, category: String): Boolean = when {
+    category == OPENING_CATEGORY -> false
     category == CARD_PAYMENT_CATEGORY -> false
     accountType == AccountType.LOAN        -> false
     accountType == AccountType.CREDIT_CARD -> type == TransactionType.EXPENSE

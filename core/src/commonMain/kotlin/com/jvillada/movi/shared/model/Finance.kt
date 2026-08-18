@@ -12,11 +12,18 @@ data class FinanceSummary(
     val ingresos: Long,
     val egresos: Long,
     /**
-     * Cantidad total de eventos no anulados del usuario (todas las cuentas, no solo el mes
-     * ni el [scope]) — el server ya los carga completos para calcular este resumen
-     * ([com.jvillada.movi.server.balance.loadNonVoidedEvents]), así que este campo es
-     * prácticamente gratis. Existe para que el Dashboard pueda saber "¿esta cuenta tiene
-     * algún movimiento?" sin traerse la lista completa con `GET /api/events`.
+     * Cantidad de eventos no anulados **y que no sean de apertura de cuenta** del usuario (todas
+     * las cuentas, no solo el mes ni el [scope]) — el server ya los carga completos para calcular
+     * este resumen ([com.jvillada.movi.server.balance.loadNonVoidedEvents]), así que este campo
+     * es prácticamente gratis. Existe para que el Dashboard pueda saber "¿esta cuenta tiene algún
+     * movimiento?" — o, más importante, "¿el usuario ya anotó algo?" para apagar la guía de
+     * primeros pasos — sin traerse la lista completa con `GET /api/events`.
+     *
+     * F54: el evento "Saldo inicial"/"Deuda inicial" (categoría
+     * [com.jvillada.movi.shared.model.OPENING_CATEGORY]) NO cuenta acá. Crear una cuenta con
+     * plata que ya tenías no es "un movimiento" a ojos del usuario — sin este filtro, la guía de
+     * primeros pasos se apagaba sola apenas creabas la primera cuenta con saldo, antes de que
+     * anotaras nada de verdad.
      *
      * Con default para que un cliente viejo (que no lo espera) y un server viejo (que no lo
      * manda) sigan deserializando sin romperse.
