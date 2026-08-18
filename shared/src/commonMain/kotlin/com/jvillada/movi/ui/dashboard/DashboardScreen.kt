@@ -136,15 +136,9 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.clickable { onNavigate(Screen.Profile) },
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(MinSurfaceContainerHigh),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(SessionManager.userName?.firstOrNull()?.uppercaseChar()?.toString() ?: "U", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MinText)
-                    }
+                    // F41: mismo componente que Movimientos y Presupuestos — el borde sutil es
+                    // lo que antes faltaba para que se viera tocable, no solo lo fuera.
+                    AvatarButton(onClick = { onNavigate(Screen.Profile) })
                     Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                 }
                 // Bell with dot
@@ -227,7 +221,7 @@ fun DashboardScreen(
             MinBottomNav(active = NavTab.HOME) { tab ->
                 when (tab) {
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                     else -> {}
@@ -292,7 +286,7 @@ private fun ColumnScope.DashboardFallback(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "${if (totalBalance < 0) "−" else ""}${formatCOP(totalBalance)}",
+                    text = formatCOP(totalBalance), // formatCOP ya trae el signo (F36) — no duplicarlo acá
                     fontSize = 44.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Normal,
@@ -389,7 +383,10 @@ private fun ColumnScope.DashboardFallback(
                                     if (isDebtAccount(account.type)) {
                                         val (debt, isEstimate) = cardDebt(account)
                                         MonoText(
-                                            "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                            // debt < 0 es saldo a favor: signo invertido a propósito, así
+                                            // que se le pasa el valor absoluto — si no, formatCOP (F36) le
+                                            // pondría su propio "−" encima del "+" de acá.
+                                            "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(kotlin.math.abs(debt))}",
                                             14.5f,
                                             color = if (debt < 0) MinIncome else MinExpense,
                                         )
@@ -569,7 +566,7 @@ private fun PrimerosPasosCard(
             done = hasMovement,
             title = "Registrá un movimiento",
             subtitle = "El primer ingreso o gasto arranca el historial",
-            onClick = { onNavigate(Screen.QuickAdd) },
+            onClick = { onNavigate(Screen.QuickAdd()) },
         )
         Hairline()
 

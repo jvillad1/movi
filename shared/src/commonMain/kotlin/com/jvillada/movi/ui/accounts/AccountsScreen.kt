@@ -74,7 +74,12 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     text = "‹",
                     fontSize = 22.sp,
                     color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Dashboard) },
+                    // F22 (pila de navegación) es Ola 2 — hasta entonces, hardcodeado a Más.
+                    // Ojo: acá también se llega desde el Inicio («Ver todas +» y las filas de
+                    // cuentas), y en ese caso la flecha te deja en Más en vez de en Inicio.
+                    // Es el defecto conocido que F22 cierra; se prefirió Más porque es el
+                    // acceso permanente (F19).
+                    modifier = Modifier.clickable { onNavigate(Screen.Mas) },
                 )
                 Text(
                     text = "Mis cuentas",
@@ -175,7 +180,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             )
                             Spacer(Modifier.height(8.dp))
                             MonoText(
-                                text = "${if (neto < 0) "−" else ""}${formatCOP(neto)}",
+                                text = formatCOP(neto), // formatCOP ya trae el signo (F36) — no duplicarlo acá
                                 fontSize = 28f,
                                 color = if (neto >= 0) MinIncome else MinExpense,
                                 fontWeight = FontWeight.Medium,
@@ -236,7 +241,10 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                         if (isDebtAccount(account.type)) {
                                             val (debt, isEstimate) = cardDebt(account)
                                             MonoText(
-                                                text = "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(debt)}",
+                                                // debt < 0 es saldo a favor: signo invertido a propósito, así
+                                                // que se le pasa el valor absoluto — si no, formatCOP (F36) le
+                                                // pondría su propio "−" encima del "+" de acá.
+                                                text = "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(kotlin.math.abs(debt))}",
                                                 fontSize = 14.5f,
                                                 color = if (debt < 0) MinIncome else MinExpense,
                                             )
@@ -262,7 +270,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 when (tab) {
                     NavTab.HOME         -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                 }

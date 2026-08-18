@@ -169,19 +169,36 @@ fun StatusDot(color: Color, size: Dp = 5.dp) {
     )
 }
 
-/** Thousands-grouped absolute value: 222933 -> "222.933". Sign is the caller's concern. */
+/** Thousands-grouped absolute value: 222933 -> "222.933". Sign is added by the caller below. */
 internal fun groupThousands(amount: Long): String {
     val abs = kotlin.math.abs(amount)
     return abs.toString().reversed().chunked(3).joinToString(".").reversed()
 }
 
-fun formatCOP(amount: Long): String = "$" + groupThousands(amount)
+/**
+ * Signo menos tipográfico (U+2212), no el guion ASCII "-". Es el mismo carácter que ya usaba
+ * AccountDetailScreen a mano en varios lugares; ahora vive acá para que ningún llamador tenga
+ * que reconstruirlo.
+ */
+private const val MINUS_SIGN = "−"
 
+/**
+ * `-1500 -> "−$1.500"`, `1500 -> "$1.500"`.
+ *
+ * Antes de este fix devolvía siempre el valor absoluto (F36): un mes en rojo (egresos > ingresos)
+ * se mostraba en positivo en toda la app, porque cada pantalla asumía que tenía que armar el
+ * signo aparte y la mayoría no lo hacía. Ahora el signo es parte del formato — los llamadores que
+ * SÍ necesitan un signo propio (p.ej. mostrar deuda con la convención invertida) deben pasar
+ * `kotlin.math.abs(x)` para no terminar con dos signos.
+ */
+fun formatCOP(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$" + groupThousands(amount)
+
+/** Igual que [formatCOP] pero en millones («$1,25M»); mismo arreglo de signo, mismo motivo (F36). */
 fun formatMillions(amount: Long): String {
     val abs = kotlin.math.abs(amount)
     // Round to nearest 0.01M without floating-point error.
     val hundredths = (abs + 5_000) / 10_000
     val intPart = hundredths / 100
     val frac = (hundredths % 100).toString().padStart(2, '0')
-    return "$$intPart,${frac}M"
+    return (if (amount < 0) MINUS_SIGN else "") + "$$intPart,${frac}M"
 }

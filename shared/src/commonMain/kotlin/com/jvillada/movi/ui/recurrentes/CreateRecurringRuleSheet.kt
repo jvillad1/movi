@@ -23,6 +23,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 
@@ -36,7 +37,7 @@ fun CreateRecurringRuleSheet(
 
     // Prefill state from existing rule when in edit mode
     var name by remember { mutableStateOf(existing?.name ?: "") }
-    var amount by remember { mutableStateOf(existing?.amount?.toString() ?: "") }
+    var amount by remember { mutableStateOf(existing?.amount) }
     var dayOfMonth by remember { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
     var selectedType by remember { mutableStateOf(existing?.type ?: TransactionType.EXPENSE) }
     var category by remember { mutableStateOf(existing?.category ?: "Otros") }
@@ -44,12 +45,20 @@ fun CreateRecurringRuleSheet(
     var error by remember { mutableStateOf<String?>(null) }
 
     val isEditMode = existing != null
-    val canSave = name.isNotBlank() && amount.isNotBlank() && dayOfMonth.isNotBlank() && !saving
+    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && dayOfMonth.toIntOrNull() in 1..31 && !saving
+    // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
+    // gris sin explicación.
+    val missingFieldMessage = when {
+        name.isBlank() -> "Falta el nombre"
+        (amount ?: 0L) <= 0L -> "Falta el monto"
+        dayOfMonth.toIntOrNull() !in 1..31 -> "El día del mes tiene que estar entre 1 y 31"
+        else -> null
+    }
 
     fun save() {
         if (!canSave) return
         val day = dayOfMonth.toIntOrNull()?.coerceIn(1, 31) ?: return
-        val amt = amount.toLongOrNull() ?: return
+        val amt = amount ?: return
         saving = true
         error = null
         coroutine.launch {
@@ -158,25 +167,7 @@ fun CreateRecurringRuleSheet(
             // --- MONTO ---
             SheetSectionLabel("MONTO")
             Spacer(Modifier.height(8.dp))
-            SheetInputBox {
-                BasicTextField(
-                    value = amount,
-                    onValueChange = { input ->
-                        amount = input.filter { it.isDigit() }.take(12)
-                    },
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (amount.isEmpty()) {
-                            Text("$ 0", fontSize = 14.sp, color = MinTextMute)
-                        }
-                        inner()
-                    },
-                )
-            }
+            MoneyField(value = amount, onValueChange = { amount = it })
 
             Spacer(Modifier.height(18.dp))
 
@@ -278,6 +269,15 @@ fun CreateRecurringRuleSheet(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                )
+            }
+            if (!canSave && !saving && missingFieldMessage != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = missingFieldMessage,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
 

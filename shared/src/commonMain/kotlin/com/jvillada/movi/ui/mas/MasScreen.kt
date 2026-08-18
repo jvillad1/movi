@@ -41,6 +41,9 @@ private data class MasItem(
 )
 
 private val items = listOf(
+    // F19: Cuentas era invisible sin al menos una cuenta ya creada (el "Ver todas +" del Inicio
+    // solo aparece con la lista no vacía) — entra acá como primer acceso, incondicional.
+    MasItem("Cuentas",      Icons.Rounded.AccountBalanceWallet, Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Accounts),
     MasItem("Inversiones",  Icons.AutoMirrored.Rounded.TrendingUp, Color(0xFF7DDDB0), Color(0x247DDDB0), Screen.Investments),
     MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),
     MasItem("Metas",        Icons.Rounded.Flag,             Color(0xFFFFD479), Color(0x24FFD479), Screen.Goals),
@@ -92,7 +95,7 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
             when (tab) {
                 NavTab.HOME         -> onNavigate(Screen.Dashboard)
                 NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                 NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                 NavTab.MORE         -> Unit
             }

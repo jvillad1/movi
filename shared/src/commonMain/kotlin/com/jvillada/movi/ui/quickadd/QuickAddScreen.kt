@@ -28,6 +28,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -49,23 +50,30 @@ private sealed class Picker {
 }
 
 @Composable
-fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
+fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, presetAccountId: String? = null) {
     val coroutine = rememberCoroutineScope()
     var typeIndex by remember { mutableStateOf(0) }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(EXPENSE_CATEGORIES.first()) }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
-    var selectedAccountId by remember { mutableStateOf<String?>(null) }
+    // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
+    // si no existiera (borrada entre medio) el efecto de abajo cae al primer accountId disponible.
+    var selectedAccountId by remember { mutableStateOf(presetAccountId) }
     var picker by remember { mutableStateOf<Picker>(Picker.None) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var accountsRefreshKey by remember { mutableStateOf(0) }
+    // «No tienes cuentas» solo se afirma cuando la lista llegó y vino vacía. Antes de eso —o si
+    // la llamada falló— no se sabe, y decírselo a alguien con cinco cuentas porque el server
+    // tardó es la clase de mentira que esta ola vino a sacar.
+    var accountsLoaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(accountsRefreshKey) {
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { list ->
+                accountsLoaded = true
                 accounts = list
                 if (selectedAccountId == null || list.none { it.id == selectedAccountId }) {
                     selectedAccountId = list.firstOrNull()?.id
@@ -81,7 +89,6 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
     fun onKey(key: String) {
         amount = when (key) {
             "⌫" -> if (amount.isNotEmpty()) amount.dropLast(1) else amount
-            "." -> if ("." !in amount) amount + key else amount
             else -> if (amount.length < 12) amount + key else amount
         }
     }
@@ -103,6 +110,11 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
                 category = category,
                 description = note.ifBlank { category },
                 source = EventSource.MANUAL,
+                // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es
+                // solo para lo que entra solo (SMS, OCR, extracto), no para lo que el usuario
+                // acaba de escribir con sus propios dedos. Sin esto caía en el default
+                // UNCONFIRMED y desaparecía de "Egresos", que excluye lo pendiente.
+                reconciliationStatus = ReconciliationStatus.RECONCILED,
                 timestamp = Clock.System.now().toEpochMilliseconds(),
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
@@ -173,7 +185,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
                         saving = saving,
                         error = error,
                         onSave = ::save,
-                        hasNoAccounts = accounts.isEmpty(),
+                        hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                         onCreateAccount = { showCreateSheet = true },
                     )
                 }
@@ -248,7 +260,9 @@ private fun EditorBody(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "$${amount.ifEmpty { "0" }}",
+            // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
+            // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
+            text = "$" + formatAmountKeypadDisplay(amount),
             fontSize = 56.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Normal,
@@ -277,7 +291,10 @@ private fun EditorBody(
             left = { Text("Cuenta", fontSize = 14.5.sp, color = MinTextMute) },
             right = { Text(walletLabel, fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) },
             showChevron = true,
-            onClick = onPickWallet,
+            // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
+            // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
+            // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
+            onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
         CardRow(
             left = { Text("Nota", fontSize = 14.5.sp, color = MinTextMute) },
@@ -306,7 +323,9 @@ private fun EditorBody(
             listOf("1", "2", "3"),
             listOf("4", "5", "6"),
             listOf("7", "8", "9"),
-            listOf(".", "0", "⌫"),
+            // Sin tecla decimal: en COP no hay centavos, y «2500.5» pasaba la validación como 2500.5
+            // pero se guardaba como $0 (toLongOrNull). Ver revisión de la Ola 1.
+            listOf("000", "0", "⌫"),
         ).forEach { row ->
             Row(modifier = Modifier.fillMaxWidth()) {
                 row.forEach { key ->
@@ -339,9 +358,10 @@ private fun EditorBody(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                "Primero creá una cuenta",
+                "Primero crea una cuenta donde anotar este movimiento",
                 fontSize = 13.sp,
                 color = MinTextMute,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             Box(
                 modifier = Modifier
@@ -458,7 +478,9 @@ private fun WalletPicker(
     Column(modifier = Modifier.fillMaxWidth()) {
         PickerHeader("Cuenta", onClose)
         if (accounts.isEmpty()) {
-            Text("Cargando cuentas…", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
+            // F10: este picker ya no debería ser alcanzable sin cuentas (ver el onClick de la
+            // fila "Cuenta" en EditorBody), pero el texto no miente si de todos modos se llega.
+            Text("No tienes cuentas todavía.", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
         } else {
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                 items(accounts) { account ->

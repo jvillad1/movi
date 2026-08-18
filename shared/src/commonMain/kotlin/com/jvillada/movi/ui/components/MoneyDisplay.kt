@@ -13,9 +13,15 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.theme.MinTextMute
 
-/** Currency-aware money text: COP -> "$222.933", USD -> "US$181", other -> "EUR 50". */
+/**
+ * Currency-aware money text: COP -> "$222.933", USD -> "US$181", other -> "EUR 50".
+ *
+ * A propósito usa `groupThousands` (siempre positivo) y NO [formatCOP] — desde F36 [formatCOP]
+ * ya trae su propio signo, y este helper necesita quedarse sin signo para que [signedMoney]
+ * (el único llamador que le importa el signo) pueda ponerlo una sola vez sin duplicarlo.
+ */
 fun formatMoney(amount: Long, currency: String): String = when (currency) {
-    "COP" -> formatCOP(amount)
+    "COP" -> "$" + groupThousands(amount)
     "USD" -> "US$" + groupThousands(amount)
     else  -> "$currency " + groupThousands(amount)
 }

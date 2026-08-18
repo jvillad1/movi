@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -171,14 +173,17 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                             if (isCard) {
                                 val (debt, isEstimate) = cardDebt(acc)
                                 MonoText(
-                                    text = "${if (isEstimate) "≈" else ""}${if (debt < 0) "+" else ""}${formatCOP(debt)}",
+                                    // debt < 0 es saldo a favor: signo invertido a propósito, así que se
+                                    // le pasa el valor absoluto — si no, formatCOP (F36) le pondría su
+                                    // propio "−" encima del "+" de acá.
+                                    text = "${if (isEstimate) "≈" else ""}${if (debt < 0) "+" else ""}${formatCOP(kotlin.math.abs(debt))}",
                                     fontSize = 28f,
                                     color = if (debt < 0) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
                                 )
                             } else {
                                 MonoText(
-                                    text = "${if (acc.balance < 0) "−" else ""}${formatCOP(acc.balance)}",
+                                    text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
                                     fontSize = 28f,
                                     color = if (acc.balance >= 0) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
@@ -209,13 +214,32 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 // Empty state
                 if (!loading && days.isEmpty()) {
                     item(key = "empty-state") {
-                        Box(
+                        // F10: la acción registra directo en esta cuenta — no en la primera de
+                        // la lista, que es lo que pasaba antes de que QuickAdd aceptara un
+                        // accountId preseleccionado.
+                        Column(
                             modifier = Modifier
                                 .fillParentMaxWidth()
                                 .padding(top = 60.dp),
-                            contentAlignment = Alignment.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(MinPrimaryContainer)
+                                    .clickable { onNavigate(Screen.QuickAdd(presetAccountId = accountId)) }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "+ Registrar el primero",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MinOnPrimaryContainer,
+                                )
+                            }
                         }
                     }
                 }
@@ -239,7 +263,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
                                     MonoText(
-                                        text = "${if (day.total >= 0) "+" else "−"}${formatCOP(day.total)}",
+                                        // Se pasa el valor absoluto: el signo ya lo pone el if de acá
+                                        // (siempre "+" o "−", incluso en 0) — pasarle el total con signo
+                                        // a formatCOP (F36) duplicaría el "−" cuando el día cierra en rojo.
+                                        text = "${if (day.total >= 0) "+" else "−"}${formatCOP(kotlin.math.abs(day.total))}",
                                         fontSize = 11f,
                                         color = MinTextMute,
                                     )
@@ -315,7 +342,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 when (tab) {
                     NavTab.HOME         -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                 }

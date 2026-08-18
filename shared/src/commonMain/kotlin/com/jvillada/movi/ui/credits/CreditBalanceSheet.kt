@@ -14,7 +14,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -43,14 +42,14 @@ fun CreditBalanceSheet(
     val coroutine = rememberCoroutineScope()
     val current = credit.account.balance
 
-    var target by remember { mutableStateOf("") }
+    var target by remember { mutableStateOf<Long?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     // El techo se espeja del server (MAX_CREDIT_DEBT_COP, en :core) para poder explicar el
-    // dedazo acá mismo en vez de mandarlo y traducir un 400. `toLongOrNull` además devuelve
-    // null si se pegan tantos dígitos que no caben en Long — ese caso cae en el mismo aviso.
-    val parsed = target.toLongOrNull()
+    // dedazo acá mismo en vez de mandarlo y traducir un 400. MoneyField ya descarta lo que no
+    // quepa en un Long al escribir, así que ese caso ya no llega acá con `parsed == null`.
+    val parsed = target
     val overCap = parsed != null && parsed > MAX_CREDIT_DEBT_COP
     val delta = parsed?.let { it - current }
     val canSave = parsed != null && !overCap && delta != null && delta != 0L && !saving
@@ -114,18 +113,15 @@ fun CreditBalanceSheet(
                 }
                 Spacer(Modifier.height(14.dp))
 
-                FieldBox(
-                    "Deuda real según el banco (COP)",
-                    target,
-                    { target = it.filter { ch -> ch.isDigit() } },
-                    KeyboardType.Number,
+                MoneyField(
+                    value = target,
+                    onValueChange = { target = it },
+                    placeholder = "Deuda real según el banco (COP)",
                 )
 
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text = when {
-                        target.isNotEmpty() && parsed == null ->
-                            "Ese número es demasiado grande — revisá los dígitos."
                         overCap        -> "Saldo fuera de rango — revisá el monto."
                         parsed == null -> "Copiá el saldo que muestra la banca en línea hoy."
                         delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
