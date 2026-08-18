@@ -66,12 +66,20 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
         else -> null
     }
 
+    // La cuenta que ya quedó creada en el server si el paso 1 (crear) tuvo éxito y el paso 2
+    // (postear la apertura) falló — en la web son dos POST independientes. Sin esto, tocar
+    // «Crear cuenta» de nuevo creaba una SEGUNDA cuenta (id nuevo) y la primera quedaba
+    // huérfana en $0 para siempre, sin forma de borrarla desde la app. Con esto, el reintento
+    // reusa la cuenta y solo repite el paso que falló. En Android/iOS postEvent nunca lanza,
+    // así que este estado no se llega a usar — pero no cuesta nada tenerlo.
+    var createdAccount by remember { mutableStateOf<Account?>(null) }
+
     fun save() {
         if (!canSave) return
         saving = true
         error = null
         coroutine.launch {
-            val account = Account(
+            val account = createdAccount ?: Account(
                 // Generado acá, no en blanco — mismo motivo que en QuickAddScreen: en Android/iOS
                 // esto pasa por LocalRepository, que ahora necesita un id propio desde el
                 // primer instante (ver newId() y LocalRepository.createAccount).
@@ -89,7 +97,8 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                 // dejó de fabricarlo — hacerlo ahí duplicaba el saldo de una cuenta creada
                 // offline cuando el ingreso/gasto real anotado antes del sync se sumaba encima de
                 // la apertura que el server fabricaba a partir del balance sincronizado).
-                val created = Repositories.wallets.createAccount(account.copy(balance = 0L))
+                val created = createdAccount
+                    ?: Repositories.wallets.createAccount(account.copy(balance = 0L)).also { createdAccount = it }
                 if (account.balance != 0L) {
                     val opening = openingEventFor(
                         account.copy(id = created.id),
@@ -101,7 +110,11 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
             }
             saving = false
             result.onSuccess { onAccountCreated() }
-                .onFailure { error = it.toUserMessage() }
+                .onFailure {
+                    error = if (createdAccount != null)
+                        "La cuenta quedó creada, pero no se pudo registrar el saldo inicial. Toca «Crear cuenta» para reintentar."
+                    else it.toUserMessage()
+                }
         }
     }
 
