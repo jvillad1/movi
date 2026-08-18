@@ -6,8 +6,10 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.openingEventFor
 import kotlinx.coroutines.runBlocking
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -303,6 +305,57 @@ class LocalRepositoryTest {
         val created = repo.createAccount(Account("", "Efectivo", AccountType.CASH, 0L))
 
         assertTrue(created.id.isNotBlank())
+    }
+
+    /**
+     * Camino que sigue `CreateAccountSheet.kt` (único call site en la UI, Ola 1b): crea la cuenta
+     * en $0 y postea el saldo inicial aparte, como su propio evento. `LocalRepository` no sabe
+     * nada de "apertura" — solo tiene que espejar correctamente lo que la UI le manda: la cuenta
+     * creada y el evento posteado después. Camino ONLINE (`remote` responde sin fallar).
+     */
+    @Test
+    fun crear_cuenta_con_saldo_deja_el_opening_en_getEvents_y_el_balance_correcto_camino_online() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoOnline = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+
+        val created = repoOnline.createAccount(Account("acc-con-saldo", "Ahorros", AccountType.SAVINGS, 0L))
+        val opening = openingEventFor(
+            Account("acc-con-saldo", "Ahorros", AccountType.SAVINGS, balance = 700_000L),
+            now = 1_700_000_000_000L,
+        )!!
+        repoOnline.postEvent(opening)
+
+        assertEquals("acc-con-saldo", created.id)
+        val mirrored = repoOnline.getEvents("acc-con-saldo").single()
+        assertEquals(OPENING_CATEGORY, mirrored.category)
+        assertEquals("Saldo inicial", mirrored.description)
+        assertEquals(700_000L, repoOnline.getAccount("acc-con-saldo").balance)
+    }
+
+    /**
+     * Mismo camino, pero SIN red al crear la cuenta (`FailingCreateAccountRepository`): la cuenta
+     * queda local, `syncedAt = null`. `postEvent` para el opening no depende de que la cuenta ya
+     * esté sincronizada con el server — escribe local igual, como cualquier otro evento — así que
+     * el resultado que ve el dueño en su teléfono es idéntico al camino online.
+     */
+    @Test
+    fun crear_cuenta_con_saldo_deja_el_opening_en_getEvents_y_el_balance_correcto_camino_offline() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoOffline = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+
+        val created = repoOffline.createAccount(Account("acc-offline-saldo", "Efectivo", AccountType.CASH, 0L))
+        assertNull(db.accountQueries.selectById("acc-offline-saldo").executeAsOne().syncedAt)
+
+        val opening = openingEventFor(
+            Account("acc-offline-saldo", "Efectivo", AccountType.CASH, balance = 300_000L),
+            now = 1_700_000_000_000L,
+        )!!
+        repoOffline.postEvent(opening)
+
+        assertEquals("acc-offline-saldo", created.id)
+        val mirrored = repoOffline.getEvents("acc-offline-saldo").single()
+        assertEquals(OPENING_CATEGORY, mirrored.category)
+        assertEquals(300_000L, repoOffline.getAccount("acc-offline-saldo").balance)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

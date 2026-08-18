@@ -4,10 +4,10 @@ package com.jvillada.movi.shared.model
 const val CARD_PAYMENT_CATEGORY = "Pago de tarjeta"
 
 /**
- * Categoría del evento de apertura que [com.jvillada.movi.server.balance.openingEventFor] genera
- * al crear una cuenta con saldo — tanto para el activo ("Saldo inicial") como para la deuda
- * ("Deuda inicial"; la descripción distingue, la categoría es la misma para las dos). Existe para
- * que [isCashFlow] pueda reconocer y excluir el evento sin importar el tipo de cuenta (ver F54).
+ * Categoría del evento de apertura que [openingEventFor] genera al crear una cuenta con saldo —
+ * tanto para el activo ("Saldo inicial") como para la deuda ("Deuda inicial"; la descripción
+ * distingue, la categoría es la misma para las dos). Existe para que [isCashFlow] pueda reconocer
+ * y excluir el evento sin importar el tipo de cuenta (ver F54).
  */
 const val OPENING_CATEGORY = "Saldo inicial"
 

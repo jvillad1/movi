@@ -76,6 +76,19 @@ class LocalRepository(
      * server no conocía — 404 "Account not found" (ver `EventRoutes.kt` POST), tragado en
      * silencio por el catch de [com.jvillada.movi.shared.SyncEngine].
      *
+     * `account.balance` acá es lo que el llamador mande — esta función no decide si la cuenta
+     * "arranca con plata". Esa decisión, y quién crea el movimiento de apertura, es de
+     * [com.jvillada.movi.ui.accounts.CreateAccountSheet] (único call site en la UI, Ola 1b): crea
+     * la cuenta en $0 y después postea el evento de apertura aparte, vía [postEvent], si el dueño
+     * declaró un saldo/deuda inicial. El server (`AccountRoutes.kt` POST) YA NO fabrica ese
+     * evento a partir del balance — antes lo hacía, y era la mitad server de un doble conteo: una
+     * cuenta offline con un ingreso real anotado antes del primer sync sincroniza acá con
+     * `row.balance` ya movido por ese ingreso ([com.jvillada.movi.shared.SyncEngine.syncAccounts]
+     * manda ese valor tal cual); si el server lo hubiera vuelto a convertir en un evento de
+     * apertura, el ingreso real que `syncEvents` empuja justo después se sumaba ENCIMA de esa
+     * apertura fabricada — el doble del saldo real, silencioso y permanente. Ver el KDoc de
+     * [com.jvillada.movi.shared.model.openingEventFor] para el detalle completo del escenario.
+     *
      * Sin red (o cualquier otra falla de `remote.createAccount`): la cuenta se escribe igual,
      * local, con `syncedAt = null` — **pendiente**, no perdida. [com.jvillada.movi.shared.SyncEngine.syncAccounts]
      * la recoge en su próximo ciclo y la empuja, siempre ANTES de `syncEvents` (una cuenta tiene

@@ -30,9 +30,11 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.openingEventFor
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 private data class TypeOption(val type: AccountType, val label: String, val icon: ImageVector)
 
@@ -79,7 +81,24 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                 balance = initialBalance ?: 0L,
                 currency = if (selectedType == AccountType.CREDIT_CARD) selectedCurrency else "COP",
             )
-            val result = runCatching { Repositories.wallets.createAccount(account) }
+            val result = runCatching {
+                // La cuenta se crea SIEMPRE en $0 — el saldo/deuda inicial que el dueño tipeó
+                // arriba no viaja en este POST. Es este único call site el que decide "esta
+                // cuenta arranca con plata", posteando el evento de apertura aparte, explícito y
+                // una sola vez (ver el KDoc de openingEventFor en :core para el porqué: el server
+                // dejó de fabricarlo — hacerlo ahí duplicaba el saldo de una cuenta creada
+                // offline cuando el ingreso/gasto real anotado antes del sync se sumaba encima de
+                // la apertura que el server fabricaba a partir del balance sincronizado).
+                val created = Repositories.wallets.createAccount(account.copy(balance = 0L))
+                if (account.balance != 0L) {
+                    val opening = openingEventFor(
+                        account.copy(id = created.id),
+                        now = Clock.System.now().toEpochMilliseconds(),
+                    )
+                    if (opening != null) Repositories.wallets.postEvent(opening)
+                }
+                created
+            }
             saving = false
             result.onSuccess { onAccountCreated() }
                 .onFailure { error = it.toUserMessage() }

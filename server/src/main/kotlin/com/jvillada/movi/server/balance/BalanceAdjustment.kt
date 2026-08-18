@@ -41,9 +41,9 @@ fun debtAdjustmentFor(current: Long, target: Long): DebtAdjustment? = when {
  * que ajustar. La deuda se deriva de los eventos, así que corregirla es registrar un
  * movimiento más — nunca sobrescribir un número.
  *
- * Origen y estado de conciliación siguen a [openingEventFor]: es el mismo tipo de asiento
- * declarado por la persona dueña de la cuenta, no un movimiento observado del banco. La
- * categoría sí se aparta (ver [ADJUSTMENT_CATEGORY]).
+ * Origen y estado de conciliación siguen a [com.jvillada.movi.shared.model.openingEventFor]: es
+ * el mismo tipo de asiento declarado por la persona dueña de la cuenta, no un movimiento
+ * observado del banco. La categoría sí se aparta (ver [ADJUSTMENT_CATEGORY]).
  */
 fun debtAdjustmentEventFor(
     account: Account,

@@ -41,7 +41,21 @@ class SyncEngine(
     /**
      * Empuja las cuentas creadas offline (`syncedAt IS NULL`, ver [com.jvillada.movi.shared.repository.LocalRepository.createAccount])
      * y sella las que llegaron. Corre antes que [syncEvents] en [start] a propósito: los eventos
-     * de una cuenta todavía no sincronizada rebotan con 404 contra el server (ver arriba).
+     * de una cuenta todavía no sincronizada rebotan con 404 contra el server (ver arriba) — y ese
+     * orden es lo que garantiza que el evento de apertura (creado en el cliente, ver
+     * [com.jvillada.movi.shared.model.openingEventFor]) llegue al server DESPUÉS de que la cuenta
+     * exista, no antes.
+     *
+     * `row.balance` se manda tal cual, aunque ya no sea $0 (una cuenta con eventos posteados
+     * antes del primer sync termina con `row.balance` movido por esos eventos, vía
+     * [com.jvillada.movi.shared.repository.LocalRepository.postEvent]) — y eso ya no puede
+     * duplicar nada: desde la Ola 1b, `POST /api/accounts` NO convierte ese balance en un evento
+     * (ver `AccountRoutes.kt`, server); la columna cruda `accounts.balance` no se lee para
+     * derivar nada, así que mandarla es inofensivo. Antes de este fix, si esta cuenta tenía un
+     * ingreso de $50.000 anotado offline, `row.balance` llegaba en $50.000, el server lo convertía
+     * en un evento de apertura de $50.000, y el ingreso real que `syncEvents` empuja a
+     * continuación se sumaba ENCIMA — $100.000 en el server, el doble del real. Ahora el único
+     * evento de apertura es el que el cliente ya creó, explícito, en `CreateAccountSheet.kt`.
      *
      * Igual que [syncEvents]: si `remote.createAccount` falla (sin red, o el server la rechaza)
      * la fila se queda sin sellar y el próximo ciclo la vuelve a intentar — sin distinguir esos

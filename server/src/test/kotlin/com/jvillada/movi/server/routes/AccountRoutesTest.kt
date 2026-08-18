@@ -34,6 +34,7 @@ import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.BeforeTest
@@ -41,35 +42,36 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * F54 + Ola 1b: crear una cuenta con saldo no debe contarse como ingreso/egreso del mes ni como
- * "primer movimiento" para la guía de primeros pasos. Mismo arnés que CreditRoutesTest/
- * EventRoutesTest: H2 en memoria (compat PostgreSQL), JWT local, cadena completa de plugins vía
- * `wireApp()`.
+ * Hallazgo Critical de la revisión de la Ola 1b: hasta acá, `POST /api/accounts` fabricaba un
+ * evento "Saldo inicial"/"Deuda inicial" a partir de `body.balance`. Una cuenta creada offline
+ * (`LocalRepository.createAccount`) sincroniza esa misma fila vía `SyncEngine.syncAccounts` con
+ * el balance ya movido por eventos reales anotados antes del primer sync — si esta ruta seguía
+ * fabricando la apertura a partir de ese balance, el ingreso/gasto real que `syncEvents` empuja
+ * justo después se sumaba ENCIMA: doble conteo silencioso y permanente.
  *
- * A diferencia de esos dos, acá la cuenta se crea vía POST /api/accounts (no sembrada
- * directamente en la DB) para ejercitar el camino real. Desde la Ola 1b, `POST /api/accounts`
- * ya NO fabrica ningún evento de apertura (ver `AccountRoutes.kt` y el KDoc de
- * `openingEventFor` en :core) — el cliente lo crea, explícito, con un POST propio a
- * `/api/events`. Los dos primeros tests de abajo pasan trivialmente porque no hay ningún evento
- * que contar; lo que blindan es que crear una cuenta con saldo, sola, no deja NADA en
- * `finance-summary` — ver `AccountRoutesTest` para el camino completo (cuenta con saldo +
- * apertura explícita del cliente) y el filtro de `eventCount` trabajando juntos.
+ * La decisión (ver `openingEventFor` en :core): el cliente crea la apertura, explícita y una sola
+ * vez, con su propio `POST /api/events`. Esta ruta deja de fabricar nada — la columna cruda
+ * `accounts.balance` ya no importa, el balance que ve el cliente sale siempre de
+ * `enrichWith`/`computeBalances`, derivado de eventos reales.
+ *
+ * Mismo arnés que CreditRoutesTest/FinanceRoutesTest: H2 en memoria (compat PostgreSQL), JWT
+ * local, cadena completa de plugins vía `wireApp()`.
  */
-class FinanceRoutesTest {
+class AccountRoutesTest {
 
-    private val testSecret = "test-secret-for-finance-routes-tests-min-32-chars"
+    private val testSecret = "test-secret-for-account-routes-tests-min-32-chars"
     private val issuer   = "movi"
     private val audience = "movi-client"
 
-    private val userId = "user-a-finance"
-    private val userEmail = "a@finance.test"
+    private val userId = "user-a-accounts"
+    private val userEmail = "a@accounts.test"
 
     // ── DB bootstrap ─────────────────────────────────────────────────────────
 
     @BeforeTest
     fun setUp() {
         Database.connect(
-            url    = "jdbc:h2:mem:finance_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
+            url    = "jdbc:h2:mem:account_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )
 
@@ -143,15 +145,26 @@ class FinanceRoutesTest {
             setBody("""{"id":"$id","name":"Cuenta","type":"$type","balance":$balance}""")
         }
 
-    private suspend fun ApplicationTestBuilder.postEvent(accountId: String, type: String, amount: Long) =
-        client.post("/api/events") {
-            header(HttpHeaders.Authorization, "Bearer $token")
-            header(HttpHeaders.ContentType, "application/json")
-            setBody(
-                """{"id":"","accountId":"$accountId","type":"$type","amount":$amount,
-                    "category":"Comida","description":"Almuerzo","timestamp":0}""",
-            )
-        }
+    private suspend fun ApplicationTestBuilder.postOpeningEvent(
+        accountId: String,
+        type: String,
+        amount: Long,
+        description: String,
+    ) = client.post("/api/events") {
+        header(HttpHeaders.Authorization, "Bearer $token")
+        header(HttpHeaders.ContentType, "application/json")
+        setBody(
+            """{"id":"","accountId":"$accountId","type":"$type","amount":$amount,
+                "category":"Saldo inicial","description":"$description","timestamp":0}""",
+        )
+    }
+
+    private suspend fun ApplicationTestBuilder.accountBalance(id: String): Long =
+        Json.parseToJsonElement(
+            client.get("/api/accounts/$id") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }.bodyAsText(),
+        ).jsonObject["balance"]!!.jsonPrimitive.long
 
     private suspend fun ApplicationTestBuilder.summary() =
         Json.parseToJsonElement(
@@ -160,56 +173,75 @@ class FinanceRoutesTest {
             }.bodyAsText(),
         ).jsonObject
 
-    // El Json del server tiene encodeDefaults=false (default de kotlinx.serialization): un
-    // eventCount de 0 — exactamente el default de FinanceSummary.eventCount — no viaja en el
-    // wire. El cliente ya lo maneja con el propio default de la data class (ver su KDoc); acá
-    // se hace lo mismo para no confundir "no vino" con "vino en cero".
     private fun kotlinx.serialization.json.JsonObject.eventCount(): Int =
         this["eventCount"]?.jsonPrimitive?.long?.toInt() ?: 0
+
+    private fun eventsInDb(): Int = transaction { Events.selectAll().count().toInt() }
 
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    fun `crear una cuenta de activo con saldo no cuenta como ingreso del mes ni como movimiento`() = testApplication {
+    fun `POST crea la cuenta con el balance recibido pero no fabrica ningun evento`() = testApplication {
         wireApp()
         val res = createAccount("acc-savings", "SAVINGS", 1_000_000L)
         assertEquals(HttpStatusCode.Created, res.status)
 
-        val body = summary()
-        assertEquals(0L, body["ingresos"]!!.jsonPrimitive.long, "el saldo inicial no es un ingreso de agosto")
-        assertEquals(0L, body["egresos"]!!.jsonPrimitive.long)
-        assertEquals(
-            0,
-            body.eventCount(),
-            "el saldo inicial no cuenta como \"primer movimiento\" para la guía de primeros pasos",
-        )
+        assertEquals(0, eventsInDb(), "crear la cuenta no debe insertar ninguna fila en events")
     }
 
     @Test
-    fun `crear una tarjeta con deuda no cuenta como egreso del mes ni como movimiento`() = testApplication {
-        wireApp()
-        val res = createAccount("acc-cc", "CREDIT_CARD", 500_000L)
-        assertEquals(HttpStatusCode.Created, res.status)
-
-        val body = summary()
-        assertEquals(0L, body["egresos"]!!.jsonPrimitive.long, "la deuda inicial no es un egreso de agosto")
-        assertEquals(0L, body["ingresos"]!!.jsonPrimitive.long)
-        assertEquals(0, body.eventCount())
-    }
-
-    @Test
-    fun `un movimiento real despues de crear la cuenta si cuenta como primer movimiento`() = testApplication {
+    fun `el balance derivado de la cuenta es 0 hasta que el cliente postea la apertura`() = testApplication {
         wireApp()
         createAccount("acc-savings", "SAVINGS", 1_000_000L)
-        assertEquals(0, summary().eventCount())
-
-        val evRes = postEvent("acc-savings", "EXPENSE", 25_000L)
-        assertEquals(HttpStatusCode.Created, evRes.status)
 
         assertEquals(
-            1,
-            summary().eventCount(),
-            "un gasto anotado por el usuario sí debería apagar la guía de primeros pasos",
+            0L,
+            accountBalance("acc-savings"),
+            "sin ningún evento, el balance derivado (enrichWith/computeBalances) tiene que ser 0 " +
+                "aunque la fila cruda de accounts.balance haya llegado en 1.000.000",
         )
+    }
+
+    @Test
+    fun `tras postear el evento de apertura el balance derivado queda en la cifra declarada`() = testApplication {
+        wireApp()
+        createAccount("acc-savings", "SAVINGS", 1_000_000L)
+
+        val evRes = postOpeningEvent("acc-savings", "INCOME", 1_000_000L, "Saldo inicial")
+        assertEquals(HttpStatusCode.Created, evRes.status)
+
+        assertEquals(1_000_000L, accountBalance("acc-savings"))
+    }
+
+    @Test
+    fun `la apertura posteada por el cliente sigue sin contar como ingreso del mes ni como movimiento`() =
+        testApplication {
+            wireApp()
+            createAccount("acc-savings", "SAVINGS", 1_000_000L)
+            postOpeningEvent("acc-savings", "INCOME", 1_000_000L, "Saldo inicial")
+
+            val body = summary()
+            assertEquals(0L, body["ingresos"]!!.jsonPrimitive.long, "la apertura no es un ingreso del mes")
+            assertEquals(0L, body["egresos"]!!.jsonPrimitive.long)
+            assertEquals(
+                0,
+                body.eventCount(),
+                "la apertura no cuenta como \"primer movimiento\" para la guía de primeros pasos",
+            )
+        }
+
+    /**
+     * Sin este caso, el fix de la Ola 1b (no fabricar la apertura en el server) podría revertirse
+     * por accidente sin que ningún test lo note: si `POST /api/accounts` volviera a fabricar el
+     * evento, este test vería DOS eventos en vez de uno tras el POST explícito del cliente —el
+     * mismo doble conteo que el hallazgo Critical describe para el escenario offline.
+     */
+    @Test
+    fun `crear la cuenta y postear la apertura no deja eventos duplicados`() = testApplication {
+        wireApp()
+        createAccount("acc-savings", "SAVINGS", 1_000_000L)
+        postOpeningEvent("acc-savings", "INCOME", 1_000_000L, "Saldo inicial")
+
+        assertEquals(1, eventsInDb(), "solo el evento que posteó el cliente — ninguno fabricado por el server")
     }
 }
