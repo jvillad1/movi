@@ -119,7 +119,7 @@ private fun SduiSection(
 private fun screenForTarget(target: String): Screen? = when (target) {
     "dashboard" -> Screen.Dashboard
     "transactions" -> Screen.Transactions
-    "quickadd" -> Screen.QuickAdd
+    "quickadd" -> Screen.QuickAdd()
     "budgets" -> Screen.Budgets
     "mas" -> Screen.Mas
     "accounts" -> Screen.Accounts

@@ -74,7 +74,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     text = "‹",
                     fontSize = 22.sp,
                     color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Dashboard) },
+                    // F22 (pila de navegación) es Ola 2 — hasta entonces, hardcodeado a Más:
+                    // hoy se entra acá siempre desde Más (F19), nunca desde Inicio directo.
+                    modifier = Modifier.clickable { onNavigate(Screen.Mas) },
                 )
                 Text(
                     text = "Mis cuentas",
@@ -265,7 +267,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 when (tab) {
                     NavTab.HOME         -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                 }

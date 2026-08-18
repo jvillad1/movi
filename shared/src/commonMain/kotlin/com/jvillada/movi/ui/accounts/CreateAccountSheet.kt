@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
@@ -25,7 +24,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -52,11 +50,18 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(AccountType.CASH) }
     var selectedCurrency by remember { mutableStateOf("COP") }
-    var initialBalance by remember { mutableStateOf("") }
+    var initialBalance by remember { mutableStateOf<Long?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val canSave = name.isNotBlank() && !saving
+    // F24: el mismo patrón para todas las hojas de crear — si el botón está gris, debajo dice
+    // la PRIMERA cosa que falta, no solo se apaga en silencio. Acá lo único obligatorio es el
+    // nombre (el saldo puede quedar en $0).
+    val missingFieldMessage = when {
+        name.isBlank() -> "Falta el nombre"
+        else -> null
+    }
 
     fun save() {
         if (!canSave) return
@@ -67,7 +72,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                 id = "",
                 name = name.trim(),
                 type = selectedType,
-                balance = initialBalance.toLongOrNull() ?: 0L,
+                balance = initialBalance ?: 0L,
                 currency = if (selectedType == AccountType.CREDIT_CARD) selectedCurrency else "COP",
             )
             val result = runCatching { Repositories.wallets.createAccount(account) }
@@ -160,7 +165,7 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                                     if (!willBeCard) selectedCurrency = "COP"
                                     // Crossing the debt↔asset boundary flips the amount's meaning;
                                     // clear it so a debt isn't silently kept as a positive balance.
-                                    if (wasDebt != willBeDebt) initialBalance = ""
+                                    if (wasDebt != willBeDebt) initialBalance = null
                                 },
                             )
                         }
@@ -175,34 +180,10 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
             val isDebt = isDebtAccount(selectedType)
             SectionLabel(if (isDebt) "DEUDA INICIAL" else "SALDO INICIAL")
             Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MinSurfaceContainerLow)
-                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-            ) {
-                BasicTextField(
-                    value = initialBalance,
-                    onValueChange = { input ->
-                        // Only allow digit characters, max 12 chars
-                        val filtered = input.filter { it.isDigit() }.take(12)
-                        initialBalance = filtered
-                    },
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (initialBalance.isEmpty()) {
-                            Text("$ 0", fontSize = 14.sp, color = MinTextMute)
-                        }
-                        inner()
-                    },
-                )
-            }
+            MoneyField(
+                value = initialBalance,
+                onValueChange = { initialBalance = it },
+            )
 
             // --- MONEDA (solo tarjeta de crédito) ---
             if (isCard) {
@@ -250,6 +231,15 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                )
+            }
+            if (!canSave && !saving && missingFieldMessage != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = missingFieldMessage,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
 

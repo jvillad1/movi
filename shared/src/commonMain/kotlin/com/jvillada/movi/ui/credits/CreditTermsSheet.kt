@@ -49,30 +49,52 @@ fun CreditTermsSheet(
     var selectedAccountId by remember { mutableStateOf(editing?.account?.id ?: candidates.firstOrNull()?.id) }
     var newAccountMode by remember { mutableStateOf(editing == null && candidates.isEmpty()) }
     var newAccountName by remember { mutableStateOf("") }
-    var newAccountDebt by remember { mutableStateOf("") }
+    var newAccountDebt by remember { mutableStateOf<Long?>(null) }
 
     var bank by remember { mutableStateOf(existingTerms?.bank ?: "") }
-    var principal by remember { mutableStateOf(existingTerms?.principal?.toString() ?: "") }
+    var principal by remember { mutableStateOf(existingTerms?.principal) }
+    // F23: la tasa aceptaba "12%" y no se leía como número — el filtro de abajo (solo dígitos y
+    // un único punto) hace que el "%" nunca llegue a este estado; el campo lo pinta aparte.
     var rateEa by remember { mutableStateOf(existingTerms?.rateEa?.toString() ?: "") }
     var termMonths by remember { mutableStateOf(existingTerms?.termMonths?.toString() ?: "") }
-    var installment by remember { mutableStateOf(existingTerms?.installment?.toString() ?: "") }
+    var installment by remember { mutableStateOf(existingTerms?.installment) }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
+    // F23: aceptaba cualquier cosa como fecha — el filtro de abajo (solo dígitos y guiones) más
+    // isValidCreditDate son la validación real hasta que exista un selector de calendario
+    // (pendiente, anotado en el KDoc de más abajo).
     var startDate by remember { mutableStateOf(existingTerms?.startDate ?: "") }
     var notes by remember { mutableStateOf(existingTerms?.notes ?: "") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val termsValid = bank.isNotBlank() &&
-        (principal.toLongOrNull() ?: 0L) > 0L &&
+        (principal ?: 0L) > 0L &&
         (rateEa.toDoubleOrNull() != null) &&
         (termMonths.toIntOrNull() ?: 0) > 0 &&
-        (installment.toLongOrNull() ?: 0L) > 0L &&
+        (installment ?: 0L) > 0L &&
         (dayOfMonth.toIntOrNull() in 1..31) &&
-        startDate.isNotBlank()
+        isValidCreditDate(startDate)
     val accountValid = if (editing != null) true
-        else if (newAccountMode) newAccountName.isNotBlank() && (newAccountDebt.toLongOrNull() ?: 0L) > 0L
+        else if (newAccountMode) newAccountName.isNotBlank() && (newAccountDebt ?: 0L) > 0L
         else selectedAccountId != null
     val canSave = termsValid && accountValid && !saving
+
+    // F24: el botón se ponía gris sin decir por qué. Debajo, la PRIMERA cosa que falta, en el
+    // mismo orden en que aparecen los campos en la hoja.
+    val missingFieldMessage = when {
+        editing == null && newAccountMode && newAccountName.isBlank() -> "Falta el nombre de la cuenta"
+        editing == null && newAccountMode && (newAccountDebt ?: 0L) <= 0L -> "Falta la deuda actual"
+        editing == null && !newAccountMode && selectedAccountId == null -> "Elige una cuenta"
+        bank.isBlank() -> "Falta el banco"
+        (principal ?: 0L) <= 0L -> "Falta el capital original"
+        rateEa.toDoubleOrNull() == null -> "La tasa tiene que ser un número"
+        (termMonths.toIntOrNull() ?: 0) <= 0 -> "Falta el plazo en meses"
+        (installment ?: 0L) <= 0L -> "Falta la cuota mensual"
+        dayOfMonth.toIntOrNull() !in 1..31 -> "El día de pago tiene que estar entre 1 y 31"
+        startDate.isBlank() -> "Falta la fecha de desembolso"
+        !isValidCreditDate(startDate) -> "La fecha de desembolso tiene que ser AAAA-MM-DD"
+        else -> null
+    }
 
     fun save() {
         if (!canSave) return
@@ -83,10 +105,10 @@ fun CreditTermsSheet(
                 val terms = CreditTerms(
                     accountId = "",
                     bank = bank.trim(),
-                    principal = principal.toLong(),
+                    principal = principal!!,
                     rateEa = rateEa.toDouble(),
                     termMonths = termMonths.toInt(),
-                    installment = installment.toLong(),
+                    installment = installment!!,
                     dayOfMonth = dayOfMonth.toInt(),
                     startDate = startDate.trim(),
                     notes = notes.trim().ifBlank { null },
@@ -97,7 +119,7 @@ fun CreditTermsSheet(
                     Repositories.wallets.createCredit(
                         CreateCreditRequest(
                             name = newAccountName.trim(),
-                            initialDebt = newAccountDebt.toLong(),
+                            initialDebt = newAccountDebt!!,
                             terms = terms,
                         )
                     )
@@ -171,7 +193,7 @@ fun CreditTermsSheet(
                         Spacer(Modifier.height(10.dp))
                         FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
                         Spacer(Modifier.height(8.dp))
-                        FieldBox("Deuda actual (COP)", newAccountDebt, { newAccountDebt = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number)
+                        MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP)")
                     }
                     Spacer(Modifier.height(16.dp))
                 }
@@ -180,19 +202,25 @@ fun CreditTermsSheet(
                 Spacer(Modifier.height(8.dp))
                 FieldBox("Banco", bank, { bank = it })
                 Spacer(Modifier.height(8.dp))
-                FieldBox("Capital original (COP)", principal, { principal = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number)
+                MoneyField(principal, { principal = it }, placeholder = "Capital original (COP)")
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) { FieldBox("Tasa % EA", rateEa, { rateEa = it }, KeyboardType.Decimal) }
+                    Box(Modifier.weight(1f)) {
+                        // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
+                        // nunca lo escribe la persona.
+                        RateFieldBox("Tasa % EA", rateEa, { rateEa = filterRateInput(it) })
+                    }
                     Box(Modifier.weight(1f)) { FieldBox("Plazo (meses)", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) { FieldBox("Cuota mensual (COP)", installment, { installment = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
+                    Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, placeholder = "Cuota mensual (COP)") }
                     Box(Modifier.weight(1f)) { FieldBox("Día de pago", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
                 }
                 Spacer(Modifier.height(8.dp))
-                FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = it })
+                // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
+                // (pendiente, ver KDoc de isValidCreditDate más abajo).
+                FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = filterDateInput(it) })
                 Spacer(Modifier.height(8.dp))
                 FieldBox("Notas (opcional)", notes, { notes = it })
 
@@ -213,6 +241,17 @@ fun CreditTermsSheet(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(if (saving) "Guardando…" else "Guardar crédito", color = MinBg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+            // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
+            if (!canSave && !saving && missingFieldMessage != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = missingFieldMessage,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             if (editing?.terms != null) {
                 Spacer(Modifier.height(8.dp))
@@ -282,4 +321,71 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(label, fontSize = 13.5.sp, color = MinText, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
+}
+
+/**
+ * Como [FieldBox], pero para la tasa: pinta un "%" fijo después del número — la persona nunca
+ * lo escribe, así que nunca puede terminar en el estado ("12%") que rompía el parseo (F23/F24).
+ */
+@Composable
+private fun RateFieldBox(placeholder: String, value: String, onValueChange: (String) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MinSurfaceContainerLow)
+            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = MinTextFaint)
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    textStyle = TextStyle(fontSize = 14.sp, color = MinText),
+                    cursorBrush = SolidColor(MinText),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (value.isNotEmpty()) Text("%", fontSize = 14.sp, color = MinTextMute)
+        }
+    }
+}
+
+/**
+ * F23: la tasa aceptaba "12%" y no se leía como número. Filtra todo lo que no sea dígito o un
+ * único punto decimal — el "%" queda a cargo de [RateFieldBox], nunca del texto escrito.
+ */
+fun filterRateInput(input: String): String {
+    var sawDot = false
+    return input.filter { ch ->
+        when {
+            ch.isDigit() -> true
+            ch == '.' && !sawDot -> { sawDot = true; true }
+            else -> false
+        }
+    }
+}
+
+/** F23: la fecha de desembolso aceptaba cualquier texto. Deja pasar solo dígitos y guiones. */
+fun filterDateInput(input: String): String = input.filter { it.isDigit() || it == '-' }
+
+/**
+ * F23/F24: AAAA-MM-DD con año/mes/día en rango razonable — la validación real hasta que exista
+ * un selector de calendario (pendiente; anotado en el ítem F23 del plan, no se agregó acá).
+ * No valida días por mes (el 31 de febrero pasa) a propósito: es un chequeo de forma para que
+ * el botón no se quede en gris sin explicar por qué, no una validación de calendario completa.
+ */
+fun isValidCreditDate(input: String): Boolean {
+    val parts = input.split("-")
+    if (parts.size != 3) return false
+    val (y, m, d) = parts
+    if (y.length != 4 || m.isEmpty() || m.length > 2 || d.isEmpty() || d.length > 2) return false
+    val year = y.toIntOrNull() ?: return false
+    val month = m.toIntOrNull() ?: return false
+    val day = d.toIntOrNull() ?: return false
+    return year in 1900..2100 && month in 1..12 && day in 1..31
 }

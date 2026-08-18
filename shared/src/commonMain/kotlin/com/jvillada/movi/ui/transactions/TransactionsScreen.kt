@@ -28,12 +28,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 
 @Composable
@@ -48,6 +50,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // F10: el estado vacío necesita saber si hay cuentas para elegir entre "+ Registrar el
+    // primero" y "Crear una cuenta primero" — sin esto no hay forma de saber si el problema es
+    // "no hay movimientos" o "no hay dónde anotarlos".
+    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
+    var showCreateSheet by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshKey) {
+        runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
+    }
 
     // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
     // fallo al traerlos no debe tapar Movimientos con un snackbar.
@@ -115,13 +126,17 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "Movimientos",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-                letterSpacing = (-0.8).sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // F41: mismo componente que Inicio y Presupuestos.
+                AvatarButton(onClick = { onNavigate(Screen.Profile) })
+                Text(
+                    text = "Movimientos",
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.8).sp,
+                )
+            }
             Icon(imageVector = Icons.Filled.Search, contentDescription = "Buscar", tint = MinTextDim, modifier = Modifier.size(22.dp))
         }
 
@@ -197,11 +212,32 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         ) {
             if (!loading && visibleDays.isEmpty()) {
                 item {
-                    Box(
+                    // F10: el estado vacío ofrece la acción — registrar si ya hay dónde anotar,
+                    // crear una cuenta primero si no.
+                    Column(
                         modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
-                        contentAlignment = Alignment.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(MinPrimaryContainer)
+                                .clickable {
+                                    if (accounts.isNotEmpty()) onNavigate(Screen.QuickAdd())
+                                    else showCreateSheet = true
+                                }
+                                .padding(horizontal = 20.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = if (accounts.isNotEmpty()) "+ Registrar el primero" else "Crear una cuenta primero",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MinOnPrimaryContainer,
+                            )
+                        }
                     }
                 }
             }
@@ -296,7 +332,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         MinBottomNav(active = NavTab.TRANSACTIONS) { tab ->
             when (tab) {
                 NavTab.HOME    -> onNavigate(Screen.Dashboard)
-                NavTab.ADD     -> onNavigate(Screen.QuickAdd)
+                NavTab.ADD     -> onNavigate(Screen.QuickAdd())
                 NavTab.BUDGETS -> onNavigate(Screen.Budgets)
                 NavTab.MORE    -> onNavigate(Screen.Mas)
                 else -> {}
@@ -323,6 +359,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             onDismiss = { showCandidatesSheet = false },
             onConfirmed = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
             onDismissedCandidate = { id -> resolvedIds = resolvedIds + id; refreshKey++ },
+        )
+    }
+
+    if (showCreateSheet) {
+        CreateAccountSheet(
+            onDismiss = { showCreateSheet = false },
+            onAccountCreated = { showCreateSheet = false; refreshKey++ },
         )
     }
     }

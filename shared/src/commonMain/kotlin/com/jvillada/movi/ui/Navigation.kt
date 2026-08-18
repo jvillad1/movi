@@ -7,7 +7,10 @@ sealed class Screen {
     data object OnboardingProfile : Screen()
     data object Dashboard : Screen()
     data object Transactions : Screen()
-    data object QuickAdd : Screen()
+    // F10: cuando se abre "para registrar el primero" desde el detalle de una cuenta puntual,
+    // esa cuenta viene preseleccionada — sin esto QuickAdd caía siempre en la primera cuenta de
+    // la lista, sin importar desde dónde se entró.
+    data class QuickAdd(val presetAccountId: String? = null) : Screen()
     data object Profile : Screen()
     data object AIChat : Screen()
     data object Analisis : Screen()

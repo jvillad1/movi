@@ -305,7 +305,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 when (tab) {
                     NavTab.HOME         -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                 }

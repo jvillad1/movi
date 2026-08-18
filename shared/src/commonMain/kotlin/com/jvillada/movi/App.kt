@@ -116,7 +116,7 @@ fun App() {
                                 when (tab) {
                                     NavTab.HOME -> Screen.Dashboard
                                     NavTab.TRANSACTIONS -> Screen.Transactions
-                                    NavTab.ADD -> Screen.QuickAdd
+                                    NavTab.ADD -> Screen.QuickAdd()
                                     NavTab.BUDGETS -> Screen.Budgets
                                     NavTab.MORE -> Screen.Mas
                                 }
@@ -137,7 +137,11 @@ fun App() {
                     Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
                     Screen.Dashboard         -> DashboardScreen(navigate)
                     Screen.Transactions      -> TransactionsScreen(navigate)
-                    Screen.QuickAdd          -> QuickAddScreen(onDismiss = goBack, onNavigate = navigate)
+                    is Screen.QuickAdd       -> QuickAddScreen(
+                        onDismiss = goBack,
+                        onNavigate = navigate,
+                        presetAccountId = currentScreen.presetAccountId,
+                    )
                     Screen.Profile           -> PerfilScreen(
                         onNavigate = navigate,
                         onLogout = {

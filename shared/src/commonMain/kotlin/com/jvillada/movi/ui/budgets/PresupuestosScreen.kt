@@ -95,6 +95,8 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                     color = MinText,
                     modifier = Modifier.clickable { onNavigate(Screen.Analisis) },
                 )
+                // F41: mismo componente que Inicio y Movimientos — Perfil alcanzable desde acá.
+                AvatarButton(onClick = { onNavigate(Screen.Profile) })
                 Text(
                     text = "Presupuestos",
                     fontSize = 17.sp,
@@ -170,7 +172,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 when (tab) {
                     NavTab.HOME         -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                     else -> {}
                 }
@@ -336,6 +338,12 @@ private fun BudgetSheet(
 
     val parsedAmount = amount.toLongOrNull() ?: 0L
     val canSave = category.isNotBlank() && parsedAmount > 0L
+    // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta.
+    val missingFieldMessage = when {
+        category.isBlank() -> "Falta la categoría"
+        parsedAmount <= 0L -> "Falta el monto"
+        else -> null
+    }
 
     Column(
         modifier = Modifier
@@ -422,7 +430,8 @@ private fun BudgetSheet(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "$${amount.ifEmpty { "0" }}",
+                    // F14: separador de miles mientras se escribe, no solo al guardar.
+                    text = "$" + formatAmountKeypadDisplay(amount),
                     fontSize = 48.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Normal,
@@ -507,6 +516,16 @@ private fun BudgetSheet(
                         color = if (canSave) MinOnPrimaryContainer else MinTextDim,
                     )
                 }
+            }
+            if (!canSave && missingFieldMessage != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = missingFieldMessage,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
             }
 
             Spacer(Modifier.height(14.dp))

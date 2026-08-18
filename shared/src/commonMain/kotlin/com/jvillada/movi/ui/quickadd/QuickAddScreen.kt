@@ -50,14 +50,16 @@ private sealed class Picker {
 }
 
 @Composable
-fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}) {
+fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, presetAccountId: String? = null) {
     val coroutine = rememberCoroutineScope()
     var typeIndex by remember { mutableStateOf(0) }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(EXPENSE_CATEGORIES.first()) }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
-    var selectedAccountId by remember { mutableStateOf<String?>(null) }
+    // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
+    // si no existiera (borrada entre medio) el efecto de abajo cae al primer accountId disponible.
+    var selectedAccountId by remember { mutableStateOf(presetAccountId) }
     var picker by remember { mutableStateOf<Picker>(Picker.None) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -254,7 +256,9 @@ private fun EditorBody(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "$${amount.ifEmpty { "0" }}",
+            // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
+            // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
+            text = "$" + formatAmountKeypadDisplay(amount),
             fontSize = 56.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Normal,
@@ -283,7 +287,10 @@ private fun EditorBody(
             left = { Text("Cuenta", fontSize = 14.5.sp, color = MinTextMute) },
             right = { Text(walletLabel, fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) },
             showChevron = true,
-            onClick = onPickWallet,
+            // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
+            // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
+            // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
+            onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
         CardRow(
             left = { Text("Nota", fontSize = 14.5.sp, color = MinTextMute) },
@@ -345,9 +352,10 @@ private fun EditorBody(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                "Primero creá una cuenta",
+                "Primero crea una cuenta donde anotar este movimiento",
                 fontSize = 13.sp,
                 color = MinTextMute,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             Box(
                 modifier = Modifier
@@ -464,7 +472,9 @@ private fun WalletPicker(
     Column(modifier = Modifier.fillMaxWidth()) {
         PickerHeader("Cuenta", onClose)
         if (accounts.isEmpty()) {
-            Text("Cargando cuentas…", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
+            // F10: este picker ya no debería ser alcanzable sin cuentas (ver el onClick de la
+            // fila "Cuenta" en EditorBody), pero el texto no miente si de todos modos se llega.
+            Text("No tienes cuentas todavía.", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
         } else {
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                 items(accounts) { account ->

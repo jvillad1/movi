@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -212,13 +214,32 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 // Empty state
                 if (!loading && days.isEmpty()) {
                     item(key = "empty-state") {
-                        Box(
+                        // F10: la acción registra directo en esta cuenta — no en la primera de
+                        // la lista, que es lo que pasaba antes de que QuickAdd aceptara un
+                        // accountId preseleccionado.
+                        Column(
                             modifier = Modifier
                                 .fillParentMaxWidth()
                                 .padding(top = 60.dp),
-                            contentAlignment = Alignment.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(MinPrimaryContainer)
+                                    .clickable { onNavigate(Screen.QuickAdd(presetAccountId = accountId)) }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "+ Registrar el primero",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MinOnPrimaryContainer,
+                                )
+                            }
                         }
                     }
                 }
@@ -321,7 +342,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 when (tab) {
                     NavTab.HOME         -> onNavigate(Screen.Dashboard)
                     NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd)
+                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                     NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                     NavTab.MORE         -> onNavigate(Screen.Mas)
                 }
