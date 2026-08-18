@@ -33,10 +33,24 @@ class CreditTermsSheetTest {
     }
 
     @Test
-    fun `filterDateInput saca cualquier otro caracter, no inserta guiones`() {
-        // El filtro no reformatea, solo descarta lo que no sea dígito o guión — las barras
-        // desaparecen sin dejar rastro, no se convierten en guiones.
-        assertEquals("20260617", filterDateInput("2026/06/17"))
+    fun `filterDateInput acepta barras como guiones y descarta el resto`() {
+        // «2026/06/17» era el caso exacto que dejaba el botón en gris (F24): la barra pasa a
+        // guion en vez de desaparecer, así la persona no tiene que borrar y reescribir.
+        assertEquals("2026-06-17", filterDateInput("2026/06/17"))
+        assertEquals("2026-06-17", filterDateInput("2026-06-17abc"))
+    }
+
+    @Test
+    fun `filterRateInput acepta la coma como decimal`() {
+        // «12,5» tecleado a la colombiana no puede convertirse en 125 en silencio.
+        assertEquals("12.5", filterRateInput("12,5"))
+        assertEquals("12.53", filterRateInput("12,5,3")) // el segundo separador se descarta, los dígitos quedan
+    }
+
+    @Test
+    fun `isValidCreditDate exige mes y dia de dos digitos`() {
+        assertFalse(isValidCreditDate("2026-6-7"))
+        assertTrue(isValidCreditDate("2026-06-07"))
     }
 
     @Test

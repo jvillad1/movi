@@ -87,7 +87,7 @@ fun CreditTermsSheet(
         editing == null && !newAccountMode && selectedAccountId == null -> "Elige una cuenta"
         bank.isBlank() -> "Falta el banco"
         (principal ?: 0L) <= 0L -> "Falta el capital original"
-        rateEa.toDoubleOrNull() == null -> "La tasa tiene que ser un número"
+        rateEa.toDoubleOrNull() == null -> "Falta la tasa"
         (termMonths.toIntOrNull() ?: 0) <= 0 -> "Falta el plazo en meses"
         (installment ?: 0L) <= 0L -> "Falta la cuota mensual"
         dayOfMonth.toIntOrNull() !in 1..31 -> "El día de pago tiene que estar entre 1 y 31"
@@ -361,7 +361,10 @@ private fun RateFieldBox(placeholder: String, value: String, onValueChange: (Str
  */
 fun filterRateInput(input: String): String {
     var sawDot = false
-    return input.filter { ch ->
+    // La coma cuenta como punto decimal: en Colombia se escribe «12,5», y el teclado decimal de
+    // Android en español muestra «,». Descartarla en silencio convertía «12,5» en «125» — una
+    // tasa diez veces mayor, guardada sin aviso. Justo el número que miente que esta ola vino a matar.
+    return input.replace(',', '.').filter { ch ->
         when {
             ch.isDigit() -> true
             ch == '.' && !sawDot -> { sawDot = true; true }
@@ -371,7 +374,8 @@ fun filterRateInput(input: String): String {
 }
 
 /** F23: la fecha de desembolso aceptaba cualquier texto. Deja pasar solo dígitos y guiones. */
-fun filterDateInput(input: String): String = input.filter { it.isDigit() || it == '-' }
+// La barra cuenta como guion: «2026/06/17» era el caso exacto que dejaba el botón en gris (F24).
+fun filterDateInput(input: String): String = input.replace('/', '-').filter { it.isDigit() || it == '-' }
 
 /**
  * F23/F24: AAAA-MM-DD con año/mes/día en rango razonable — la validación real hasta que exista
@@ -383,7 +387,9 @@ fun isValidCreditDate(input: String): Boolean {
     val parts = input.split("-")
     if (parts.size != 3) return false
     val (y, m, d) = parts
-    if (y.length != 4 || m.isEmpty() || m.length > 2 || d.isEmpty() || d.length > 2) return false
+    // Mes y día de dos dígitos exactos: el server guarda el texto tal cual (varchar), así que
+    // «2026-6-7» quedaría almacenado en un formato que después nadie parsea igual.
+    if (y.length != 4 || m.length != 2 || d.length != 2) return false
     val year = y.toIntOrNull() ?: return false
     val month = m.toIntOrNull() ?: return false
     val day = d.toIntOrNull() ?: return false

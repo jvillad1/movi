@@ -74,8 +74,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     text = "‹",
                     fontSize = 22.sp,
                     color = MinText,
-                    // F22 (pila de navegación) es Ola 2 — hasta entonces, hardcodeado a Más:
-                    // hoy se entra acá siempre desde Más (F19), nunca desde Inicio directo.
+                    // F22 (pila de navegación) es Ola 2 — hasta entonces, hardcodeado a Más.
+                    // Ojo: acá también se llega desde el Inicio («Ver todas +» y las filas de
+                    // cuentas), y en ese caso la flecha te deja en Más en vez de en Inicio.
+                    // Es el defecto conocido que F22 cierra; se prefirió Más porque es el
+                    // acceso permanente (F19).
                     modifier = Modifier.clickable { onNavigate(Screen.Mas) },
                 )
                 Text(

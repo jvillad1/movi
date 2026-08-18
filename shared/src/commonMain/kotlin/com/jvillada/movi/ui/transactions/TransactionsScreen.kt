@@ -55,9 +55,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // primero" y "Crear una cuenta primero" — sin esto no hay forma de saber si el problema es
     // "no hay movimientos" o "no hay dónde anotarlos".
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
+    // Solo se ofrece «Crear una cuenta primero» cuando la lista llegó y vino vacía; mientras
+    // carga (o si falló) se ofrece registrar, que es la acción segura.
+    var accountsLoaded by remember { mutableStateOf(false) }
     var showCreateSheet by remember { mutableStateOf(false) }
     LaunchedEffect(refreshKey) {
-        runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
+        runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it; accountsLoaded = true }
     }
 
     // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
@@ -225,14 +228,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(MinPrimaryContainer)
                                 .clickable {
-                                    if (accounts.isNotEmpty()) onNavigate(Screen.QuickAdd())
+                                    if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
                                     else showCreateSheet = true
                                 }
                                 .padding(horizontal = 20.dp, vertical = 10.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (accounts.isNotEmpty()) "+ Registrar el primero" else "Crear una cuenta primero",
+                                text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MinOnPrimaryContainer,

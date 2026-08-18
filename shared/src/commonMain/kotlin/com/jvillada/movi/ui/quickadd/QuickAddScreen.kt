@@ -65,10 +65,15 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     var error by remember { mutableStateOf<String?>(null) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var accountsRefreshKey by remember { mutableStateOf(0) }
+    // «No tienes cuentas» solo se afirma cuando la lista llegó y vino vacía. Antes de eso —o si
+    // la llamada falló— no se sabe, y decírselo a alguien con cinco cuentas porque el server
+    // tardó es la clase de mentira que esta ola vino a sacar.
+    var accountsLoaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(accountsRefreshKey) {
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { list ->
+                accountsLoaded = true
                 accounts = list
                 if (selectedAccountId == null || list.none { it.id == selectedAccountId }) {
                     selectedAccountId = list.firstOrNull()?.id
@@ -84,7 +89,6 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     fun onKey(key: String) {
         amount = when (key) {
             "⌫" -> if (amount.isNotEmpty()) amount.dropLast(1) else amount
-            "." -> if ("." !in amount) amount + key else amount
             else -> if (amount.length < 12) amount + key else amount
         }
     }
@@ -181,7 +185,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                         saving = saving,
                         error = error,
                         onSave = ::save,
-                        hasNoAccounts = accounts.isEmpty(),
+                        hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                         onCreateAccount = { showCreateSheet = true },
                     )
                 }
@@ -319,7 +323,9 @@ private fun EditorBody(
             listOf("1", "2", "3"),
             listOf("4", "5", "6"),
             listOf("7", "8", "9"),
-            listOf(".", "0", "⌫"),
+            // Sin tecla decimal: en COP no hay centavos, y «2500.5» pasaba la validación como 2500.5
+            // pero se guardaba como $0 (toLongOrNull). Ver revisión de la Ola 1.
+            listOf("000", "0", "⌫"),
         ).forEach { row ->
             Row(modifier = Modifier.fillMaxWidth()) {
                 row.forEach { key ->
