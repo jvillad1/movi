@@ -20,9 +20,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.components.CategoryField
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.toUserMessage
@@ -212,24 +214,17 @@ fun CreateRecurringRuleSheet(
             Spacer(Modifier.height(18.dp))
 
             // --- CATEGORÍA ---
-            SheetSectionLabel("CATEGORÍA")
-            Spacer(Modifier.height(8.dp))
-            SheetInputBox {
-                BasicTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (category.isEmpty()) {
-                            Text("Ej: Vivienda, Suscripción, Salud", fontSize = 14.sp, color = MinTextMute)
-                        }
-                        inner()
-                    },
-                )
-            }
+            // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
+            // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
+            // una regla de gasto.
+            CategoryField(
+                value = category,
+                onValueChange = { category = it },
+                type = selectedType,
+                usedCategories = UsedCategoriesCache.categories,
+                label = "CATEGORÍA",
+                placeholder = "Ej: Vivienda, Suscripción, Salud",
+            )
 
             // Inline error display
             if (error != null) {

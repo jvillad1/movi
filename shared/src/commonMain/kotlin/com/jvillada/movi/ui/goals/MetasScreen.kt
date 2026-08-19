@@ -29,11 +29,13 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun MetasScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var goals by remember { mutableStateOf<List<Goal>>(emptyList()) }
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getGoals() }
@@ -45,7 +47,9 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.Dashboard) })
+            // F22: vuelve a donde estabas de verdad (Inicio o Más); Metas vive en
+            // Más, así que ese es el destino de reserva si no hay historial.
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Text("Metas de ahorro", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
             Text("+", fontSize = 22.sp, color = MinTextDim)
         }

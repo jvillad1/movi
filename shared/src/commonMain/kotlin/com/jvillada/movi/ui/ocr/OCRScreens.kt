@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
@@ -128,13 +129,16 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
 
 @Composable
 fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.OCRCapture) })
+            // F22: normalmente vuelve a la cámara (paso anterior real); si entraste
+            // directo a confirmar (poco probable, pero por si acaso) cae a Inicio.
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Dashboard) })
             Text("Confirma el recibo", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 

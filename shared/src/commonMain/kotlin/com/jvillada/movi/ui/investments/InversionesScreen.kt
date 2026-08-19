@@ -26,11 +26,13 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun InversionesScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var holdings by remember { mutableStateOf<List<Holding>>(emptyList()) }
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getHoldings() }
@@ -48,7 +50,9 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.Dashboard) })
+            // F22: Inversiones vive en Más — destino de reserva si no hay historial
+            // (antes caía siempre en Inicio, aunque entraras desde Más).
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Text("Inversiones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp, modifier = Modifier.weight(1f))
             Text("+", fontSize = 22.sp, color = MinTextDim)
         }

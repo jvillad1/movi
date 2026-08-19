@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Backspace
@@ -17,17 +16,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -55,18 +54,27 @@ private sealed class Sheet {
 
 @Composable
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
-        runCatching { Repositories.wallets.getBudgets() }.onSuccess { budgets = it }
+        // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
+        // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
+        runCatching { Repositories.wallets.getBudgets() }.onSuccess {
+            budgets = it
+            UsedCategoriesCache.record(it.map { b -> b.category })
+        }
     }
 
     LaunchedEffect(Unit) {
         reload()
-        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess { days = it }
+        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
+            days = it
+            UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
+        }
     }
 
     val progresses = remember(budgets, days) {
@@ -97,7 +105,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "Volver",
                     tint = MinText,
-                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Analisis) },
+                    // F22: Presupuestos es una pestaña de primer nivel — Inicio como destino
+                    // de reserva si no hay historial (antes caía siempre en Análisis).
+                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Dashboard) },
                 )
                 // F41: mismo componente que Inicio y Movimientos — Perfil alcanzable desde acá.
                 AvatarButton(onClick = { onNavigate(Screen.Profile) })
@@ -384,37 +394,22 @@ private fun BudgetSheet(
             )
 
             // Category
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Categoría", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-                Spacer(Modifier.height(8.dp))
-                if (categoryEditable) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MinSurfaceContainerLow)
-                            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    ) {
-                        BasicTextField(
-                            value = category,
-                            onValueChange = { category = it },
-                            singleLine = true,
-                            cursorBrush = SolidColor(MinText),
-                            textStyle = TextStyle(
-                                color = MinText,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            decorationBox = { inner ->
-                                if (category.isEmpty()) {
-                                    Text("Mercado, Salud, Restaurantes…", fontSize = 15.sp, color = MinTextFaint)
-                                }
-                                inner()
-                            },
-                        )
-                    }
-                } else {
+            if (categoryEditable) {
+                // F35: crear presupuesto — campo libre con sugerencias en vez de texto libre a
+                // ciegas. Solo EXPENSE: no tiene sentido presupuestar una categoría de ingreso.
+                CategoryField(
+                    value = category,
+                    onValueChange = { category = it },
+                    type = TransactionType.EXPENSE,
+                    usedCategories = UsedCategoriesCache.categories,
+                    label = "Categoría",
+                    placeholder = "Mercado, Salud, Restaurantes…",
+                )
+            } else {
+                // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Categoría", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = category,
                         fontSize = 16.sp,

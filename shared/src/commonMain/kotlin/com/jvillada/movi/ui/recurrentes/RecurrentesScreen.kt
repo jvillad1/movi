@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.PaymentStatus
@@ -33,6 +34,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
@@ -41,6 +43,7 @@ private val MinAmber = MinWarn
 
 @Composable
 fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var rules by remember { mutableStateOf<List<RecurringRule>>(emptyList()) }
     var upcoming by remember { mutableStateOf<List<UpcomingPayment>>(emptyList()) }
     // loadKey increments after every create/update/delete to trigger a reload.
@@ -57,7 +60,12 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(loadKey) {
         loading = true
-        runCatching { Repositories.wallets.getRecurringRules() }.onSuccess { rules = it }
+        // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
+        // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
+        runCatching { Repositories.wallets.getRecurringRules() }.onSuccess {
+            rules = it
+            UsedCategoriesCache.record(it.map { r -> r.category })
+        }
         runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { upcoming = it }
         loading = false
     }
@@ -93,7 +101,8 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "Volver",
                     tint = MinText,
-                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Analisis) },
+                    // F22: Recurrentes vive en Más — destino de reserva si no hay historial.
+                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
                 )
                 Text(
                     text = "Recurrentes",

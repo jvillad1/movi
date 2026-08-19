@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ fun StatementReviewScreen(
     onNavigate: (Screen) -> Unit,
     result: StatementParseResult,
 ) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var accounts by remember { mutableStateOf(emptyList<Account>()) }
     var selectedIds by remember { mutableStateOf(result.newTransactions.map { it.id }.toSet()) }
@@ -92,7 +94,8 @@ fun StatementReviewScreen(
             Icon(
                 Icons.Rounded.ArrowBackIosNew, "Volver",
                 tint = MinTextDim,
-                modifier = Modifier.size(20.dp).clickable { onNavigate(Screen.Extractos) },
+                // F22: vuelve a la lista de Extractos si no hay historial.
+                modifier = Modifier.size(20.dp).clickable { goBack(Screen.Extractos) },
             )
             Spacer(Modifier.width(12.dp))
             Column {

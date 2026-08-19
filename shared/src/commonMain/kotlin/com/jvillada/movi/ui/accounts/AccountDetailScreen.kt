@@ -37,6 +37,7 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
@@ -46,6 +47,7 @@ import kotlinx.datetime.toLocalDateTime
 
 @Composable
 fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
+    val goBack = LocalGoBack.current
     var account by remember { mutableStateOf<Account?>(null) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -117,7 +119,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "Volver",
                     tint = MinText,
-                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Accounts) },
+                    // F22: el detalle vuelve a Mis cuentas si no hay historial.
+                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Accounts) },
                 )
                 Text(
                     text = account?.name ?: "",

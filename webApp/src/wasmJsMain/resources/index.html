@@ -47,6 +47,11 @@
             background: none; border: none; color: #C9B8FF; font-size: 13px; text-align: center; cursor: pointer;
         }
         .lg-hidden { display: none; }
+        .lg-check {
+            display: flex; align-items: center; gap: 8px; margin: -6px 0 18px;
+            color: #9b9b9b; font-size: 13px; cursor: pointer; user-select: none;
+        }
+        .lg-check input { width: 16px; height: 16px; accent-color: #C9B8FF; cursor: pointer; }
         .lg-note { color: #9b9b9b; font-size: 13px; line-height: 1.45; margin-bottom: 16px; }
         .lg-ok { color: #A8E6A1; font-size: 13px; line-height: 1.45; }
         .lg-ok:not(:empty) { margin-bottom: 14px; }
@@ -71,6 +76,10 @@
                         <label class="lg-label" for="login-password">Contraseña</label>
                         <input class="lg-input" id="login-password" name="password" type="password"
                                autocomplete="current-password" placeholder="••••••" required>
+                        <label class="lg-check" for="login-remember">
+                            <input type="checkbox" id="login-remember" checked>
+                            Recordar mi correo en este dispositivo
+                        </label>
                         <div class="lg-err" id="login-err"></div>
                         <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
                     </form>
@@ -145,10 +154,22 @@
                 var form = document.getElementById('login-form');
                 var btn = document.getElementById('login-btn');
                 var err = document.getElementById('login-err');
+                var rememberEl = document.getElementById('login-remember');
 
                 // Pre-fill remembered email (survives logout via a dedicated key).
                 var remembered = localStorage.getItem('remembered_email') || localStorage.getItem('user_email');
                 if (remembered && emailEl) emailEl.value = remembered;
+
+                // F1: "Recordar mi correo" — elección explícita, marcada por defecto. Se
+                // persiste sola (no espera al submit) para que sobreviva a un F5 antes de
+                // entrar. Ausente en localStorage == primera vez == por defecto marcada.
+                function rememberPref() { return localStorage.getItem('remember_email_pref') !== '0'; }
+                if (rememberEl) {
+                    rememberEl.checked = rememberPref();
+                    rememberEl.addEventListener('change', function () {
+                        localStorage.setItem('remember_email_pref', rememberEl.checked ? '1' : '0');
+                    });
+                }
 
                 // ── Recuperación de contraseña ─────────────────────────────
                 // El enlace del correo apunta a la raíz de la PWA con ?reset=TOKEN. Si está,
@@ -215,7 +236,13 @@
                         localStorage.setItem('user_id', data.userId);
                         localStorage.setItem('user_email', data.email);
                         localStorage.setItem('user_name', data.name);
-                        localStorage.setItem('remembered_email', data.email);
+                        // F1: solo se guarda el correo para la próxima vez si la persona lo
+                        // pidió con la casilla; si no, se borra un recuerdo previo.
+                        if (rememberEl && rememberEl.checked) {
+                            localStorage.setItem('remembered_email', data.email);
+                        } else {
+                            localStorage.removeItem('remembered_email');
+                        }
                         // Reload so the browser offers to save the password and the
                         // wasm app boots straight into the dashboard with the session.
                         window.location.reload();
@@ -318,7 +345,10 @@
                                 .forEach(function (k) { localStorage.removeItem(k); });
                             // `remembered_email` se conserva a propósito: no es credencial ni
                             // sesión, es el correo para prellenar el formulario de entrada —
-                            // justo lo que la persona necesita en el paso siguiente.
+                            // justo lo que la persona necesita en el paso siguiente. F1: pero
+                            // solo si la persona había elegido que se recordara (misma regla
+                            // que un logout normal — ver SessionManager.clear()).
+                            if (!rememberPref()) localStorage.removeItem('remembered_email');
                             resetPassEl.value = ''; resetPass2El.value = '';
                             backToLogin('Listo, tu contraseña quedó actualizada. Entra con la nueva.');
                         } else if (res.status === 429) {

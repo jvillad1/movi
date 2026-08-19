@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.ScreenTaxonomy
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -105,6 +106,7 @@ private fun sectionsHaveInvalidUrl(sections: List<ScreenSection>): Boolean {
 
 @Composable
 fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
 
     var sections by remember { mutableStateOf<List<ScreenSection>>(emptyList()) }
@@ -203,7 +205,8 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
             Icon(
                 Icons.Rounded.ArrowBackIosNew, "Volver",
                 tint = MinTextDim,
-                modifier = Modifier.clickable { onNavigate(Screen.Mas) }.padding(12.dp).size(20.dp),
+                // F22: el editor vive en Más — destino de reserva si no hay historial.
+                modifier = Modifier.clickable { goBack(Screen.Mas) }.padding(12.dp).size(20.dp),
             )
             Spacer(Modifier.width(12.dp))
             Text("Editor de pantallas", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MinText, modifier = Modifier.weight(1f))

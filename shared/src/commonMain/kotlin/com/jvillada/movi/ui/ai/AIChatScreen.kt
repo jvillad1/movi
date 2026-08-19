@@ -29,12 +29,14 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun AIChatScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     val messages = remember {
         mutableStateListOf<ChatMessage>(
@@ -76,7 +78,9 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = "Volver",
                 tint = MinText,
-                modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Dashboard) },
+                // F22: Movi AI vive en Más (así la resalta su propia barra inferior) —
+                // destino de reserva si no hay historial.
+                modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
             )
             Column(modifier = Modifier.weight(1f)) {
                 Row(

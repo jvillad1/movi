@@ -22,12 +22,14 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var result by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
     var scanning by remember { mutableStateOf(false) }
@@ -71,7 +73,8 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Mas) })
+            // F22: ya volvía a Más a mano (era la única correcta) — ahora usa la pila real igual.
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) })
             Text("Suscripciones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
             Text(
                 if (scanning) "Escaneando…" else "Re-escanear",

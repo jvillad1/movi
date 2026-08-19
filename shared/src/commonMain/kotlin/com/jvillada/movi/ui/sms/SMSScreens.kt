@@ -35,6 +35,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -42,6 +43,7 @@ import kotlinx.datetime.Clock
 
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
     var syncWorking by remember { mutableStateOf(false) }
@@ -70,7 +72,8 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.Dashboard) })
+            // F22: SMS vive en Más — ese es el destino de reserva si no hay historial.
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Column(modifier = Modifier.weight(1f)) {
                 Text("Mensajes del banco", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
                 Text("$pendingCount por confirmar", fontSize = 12.sp, color = MinTextMute)
@@ -229,6 +232,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
 
 @Composable
 fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var sms by remember { mutableStateOf<SmsMessage?>(null) }
     var parsed by remember { mutableStateOf<ParsedSms?>(null) }
@@ -310,7 +314,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.SMSInbox) })
+            // F22: el detalle vuelve a la bandeja si no hay historial (ese es su padre lógico).
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.SMSInbox) })
             Text("Reconciliar movimiento", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 

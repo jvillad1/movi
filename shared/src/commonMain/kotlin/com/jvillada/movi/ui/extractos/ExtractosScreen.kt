@@ -26,6 +26,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinBottomNav
@@ -42,6 +43,7 @@ import kotlinx.serialization.json.Json
 
 @Composable
 fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var uploading by remember { mutableStateOf(false) }
     var uploadingFileName by remember { mutableStateOf("") }
@@ -84,7 +86,8 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
             Icon(
                 Icons.Rounded.ArrowBackIosNew, "Volver",
                 tint = MinTextDim,
-                modifier = Modifier.size(20.dp).clickable { onNavigate(Screen.Mas) },
+                // F22: Extractos vive en Más — destino de reserva si no hay historial.
+                modifier = Modifier.size(20.dp).clickable { goBack(Screen.Mas) },
             )
             Spacer(Modifier.width(12.dp))
             Text("Extractos", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MinText)

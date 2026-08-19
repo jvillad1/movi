@@ -96,6 +96,13 @@ private fun CategoryRow(icon: String, name: String, selected: Boolean, enabled: 
  * cambiar un gasto a una categoría de ingreso no significa nada en Movi. Elegir una llama a
  * [com.jvillada.movi.shared.repository.WalletRepository.updateEventCategory] — el server
  * recalcula `countsAsCashFlow`, esta hoja nunca lo manda.
+ *
+ * F35: a propósito NO usa [com.jvillada.movi.ui.components.CategoryField] (texto libre con
+ * sugerencias), aunque las otras tres hojas de categoría de la app sí — acá se elige entre el
+ * catálogo para recategorizar UN movimiento que ya existe, no se escribe una categoría nueva.
+ * Además ya resuelve un caso que el campo libre no cubre: la categoría actual del movimiento
+ * cuando no está en el catálogo (viene de un extracto importado, ver `currentIsKnown` abajo) se
+ * agrega como opción marcada, algo que no tendría sentido en un campo de texto.
  */
 @Composable
 fun ChangeCategorySheet(

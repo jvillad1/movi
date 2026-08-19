@@ -28,9 +28,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.newId
@@ -39,12 +41,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-
-private val EXPENSE_CATEGORIES = listOf(
-    "Mercado", "Restaurantes", "Transporte", "Salud",
-    "Suscripción", "Servicios", "Hogar", "Entretenimiento", "Otro",
-)
-private val INCOME_CATEGORIES = listOf("Nómina", "Transferencia", "Reembolso", "Otro")
 
 private sealed class Picker {
     data object None : Picker()
@@ -59,7 +55,9 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     var typeIndex by remember { mutableStateOf(0) }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(EXPENSE_CATEGORIES.first()) }
+    // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
+    // "Mercado" — ahora es texto libre con sugerencias (CategoryField), no una lista fija.
+    var category by remember { mutableStateOf(PREDEFINED_CATEGORIES.first { it.type == "EXPENSE" }.name) }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
     // si no existiera (borrada entre medio) el efecto de abajo cae al primer accountId disponible.
@@ -86,8 +84,16 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     }
 
     LaunchedEffect(typeIndex) {
-        val available = if (typeIndex == 0) EXPENSE_CATEGORIES else INCOME_CATEGORIES
-        if (category !in available) category = available.first()
+        // Con categoría libre (F35) ya no hay una lista fija de la que "salirse" al cambiar de
+        // tipo — pero si la categoría actual SÍ es una predefinida del otro tipo (p. ej.
+        // "Salario" al pasar a Gasto), seguir mostrándola confundiría. Una categoría escrita a
+        // mano, o "BOTH", se deja tal cual: no hay forma de saber si tiene sentido para el
+        // nuevo tipo.
+        val newType = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+        val matched = PREDEFINED_CATEGORIES.find { it.name == category }
+        if (matched != null && matched.type != newType.name && matched.type != "BOTH") {
+            category = PREDEFINED_CATEGORIES.first { it.type == newType.name }.name
+        }
     }
 
     fun onKey(key: String) {
@@ -127,7 +133,9 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
-            result.onSuccess { onDismiss() }
+            // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
+            // "usada" en el resto de la sesión sin esperar a que otra pantalla la cargue.
+            result.onSuccess { UsedCategoriesCache.record(listOf(category)); onDismiss() }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -153,12 +161,21 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                 SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
                 when (picker) {
-                    Picker.Category -> CategoryPicker(
-                        options = if (typeIndex == 0) EXPENSE_CATEGORIES else INCOME_CATEGORIES,
-                        selected = category,
-                        onPick = { category = it; picker = Picker.None },
-                        onClose = { picker = Picker.None },
-                    )
+                    // F35: campo libre con sugerencias en vez de una lista fija — tocar una
+                    // sugerencia cierra el sub-picker igual que antes (onSuggestionPicked);
+                    // escribir una categoría nueva la deja tal cual, sin forzar a elegir.
+                    Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
+                        PickerHeader("Categoría", onClose = { picker = Picker.None })
+                        CategoryField(
+                            value = category,
+                            onValueChange = { category = it },
+                            type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                            usedCategories = UsedCategoriesCache.categories,
+                            label = null,
+                            onSuggestionPicked = { picker = Picker.None },
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
                     Picker.Wallet -> WalletPicker(
                         accounts = accounts,
                         selectedId = selectedAccountId,
@@ -437,38 +454,6 @@ private fun PickerHeader(title: String, onClose: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = MinText, modifier = Modifier.size(16.dp))
-        }
-    }
-}
-
-@Composable
-private fun CategoryPicker(
-    options: List<String>,
-    selected: String,
-    onPick: (String) -> Unit,
-    onClose: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        PickerHeader("Categoría", onClose)
-        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-            items(options) { opt ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(opt) }
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        opt,
-                        fontSize = 15.sp,
-                        color = MinText,
-                        fontWeight = if (opt == selected) FontWeight.Medium else FontWeight.Normal,
-                    )
-                    Box(modifier = Modifier.weight(1f))
-                    if (opt == selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinText, modifier = Modifier.size(16.dp))
-                }
-            }
         }
     }
 }

@@ -31,11 +31,13 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -75,12 +77,10 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "Volver",
                     tint = MinText,
-                    // F22 (pila de navegación) es Ola 2 — hasta entonces, hardcodeado a Más.
-                    // Ojo: acá también se llega desde el Inicio («Ver todas +» y las filas de
-                    // cuentas), y en ese caso la flecha te deja en Más en vez de en Inicio.
-                    // Es el defecto conocido que F22 cierra; se prefirió Más porque es el
-                    // acceso permanente (F19).
-                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Mas) },
+                    // F22: se llega tanto desde Inicio («Ver todas +», filas de cuentas) como
+                    // desde Más — ahora vuelve a donde de verdad estabas; Más queda como
+                    // destino de reserva (acceso permanente, F19) si no hay historial.
+                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
                 )
                 Text(
                     text = "Mis cuentas",

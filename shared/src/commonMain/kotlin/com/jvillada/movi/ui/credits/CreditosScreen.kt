@@ -25,11 +25,13 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     var showSheet by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<CreditSummary?>(null) }
@@ -48,7 +50,9 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.Dashboard) })
+                // F22: Créditos vive en Más — destino de reserva si no hay historial
+                // (antes caía siempre en Inicio, aunque entraras desde Más).
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
                 Text("Créditos", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
                 // F18: compacto arriba a la derecha cuando ya hay créditos; vacío, el botón de
                 // abajo (ver el bloque bajo el header) es la acción principal.
