@@ -30,20 +30,10 @@ import com.jvillada.movi.theme.*
  * Destinos de la navegación principal. En el teléfono la barra muestra cinco
  * (Inicio · Movimientos · + · Cuentas · Más); en pantalla ancha el rail muestra además
  * Créditos y Presupuestos como entradas propias. Una pantalla declara UN destino
- * (ver `screenNavTab` en App.kt) y cada superficie decide cómo lo resalta: la barra del
+ * (ver `navTabFor` en Navigation.kt) y cada superficie decide cómo lo resalta: la barra del
  * teléfono pinta CREDITS y BUDGETS como "Más", que es por donde se llega a ellos ahí.
  */
 enum class NavTab { HOME, TRANSACTIONS, ADD, ACCOUNTS, CREDITS, BUDGETS, MORE }
-
-/**
- * Ola 4: la barra la pinta App.kt UNA sola vez, debajo de la pantalla activa (igual que el
- * rail en pantalla ancha). Este local vale `true` dentro del subárbol de las pantallas, y
- * hace que las llamadas a [MinBottomNav] que todavía queden dentro de una pantalla no
- * dibujen nada — así una pantalla que aún no se limpió no pinta una segunda barra.
- * Hoy quedan dos (Movimientos y Presupuestos, que se editan en paralelo en otra tarea);
- * cuando se borren esas llamadas, este local y su guarda se van con ellas.
- */
-val LocalBottomNavAtRoot = staticCompositionLocalOf { false }
 
 /** Qué ítem de la barra del teléfono se resalta para un destino dado. */
 fun NavTab.asBottomBarTab(): NavTab = when (this) {
@@ -56,10 +46,10 @@ fun MinBottomNav(
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
 ) {
-    // On wide windows the root-level MinNavRail takes over; calls inside a screen render
-    // nothing because App.kt already drew the bar (ver LocalBottomNavAtRoot).
+    // En pantalla ancha el rail de la raíz (MinNavRail) toma el lugar de la barra.
+    // Desde la Ola 4 esta barra la pinta SOLO App.kt, una vez, debajo de la pantalla activa;
+    // ninguna pantalla la llama por su cuenta.
     if (LocalWindowWidthClass.current == WindowWidthClass.Expanded) return
-    if (LocalBottomNavAtRoot.current) return
     val highlighted = active?.asBottomBarTab()
     Box(
         modifier = Modifier

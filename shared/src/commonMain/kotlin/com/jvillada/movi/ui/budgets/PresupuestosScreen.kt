@@ -29,6 +29,8 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.dashboard.currentMonthPrefixUtc
+import com.jvillada.movi.ui.dashboard.spentByCategoryForMonth
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Month
@@ -110,10 +112,11 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin él, un ajuste de
         // saldo de un crédito caía en la categoría "Otros" y ponía en OVER al instante a un
         // presupuesto con ese nombre.
-        val spentByCategory = days.flatMap { it.items }
-            .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow }
-            .groupBy { it.category }
-            .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+        // Misma regla que el acceso «Presupuestos» del Inicio y que la alerta de sobrepasado
+        // (spentByCategoryForMonth): solo el mes en curso y solo COP. Antes esta pantalla sumaba
+        // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
+        // Presupuestos daban cifras distintas para el mismo presupuesto.
+        val spentByCategory = spentByCategoryForMonth(days, currentMonthPrefixUtc())
         budgets.map { b -> BudgetProgress(b, spentByCategory[b.category] ?: 0L) }
             .sortedByDescending { it.pctRaw }
     }

@@ -52,7 +52,6 @@ import com.jvillada.movi.ui.extractos.StatementReviewScreen
 import com.jvillada.movi.ui.extractos.ImportDetailScreen
 import com.jvillada.movi.ui.sdui.editor.ScreenEditorScreen
 import com.jvillada.movi.shared.model.StatementParseResult
-import com.jvillada.movi.ui.components.LocalBottomNavAtRoot
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
@@ -145,57 +144,55 @@ fun App() {
                 ) {
                 Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                CompositionLocalProvider(LocalBottomNavAtRoot provides true) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 CompositionLocalProvider(LocalGoBack provides goBackTo) {
                 when (currentScreen) {
-                    Screen.Login             -> LoginScreen(navigate)
-                    Screen.Register          -> RegisterScreen(navigate)
-                    Screen.OnboardingWelcome -> WelcomeScreen(navigate)
-                    Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
-                    Screen.Dashboard         -> DashboardScreen(navigate)
-                    Screen.Transactions      -> TransactionsScreen(navigate)
-                    is Screen.QuickAdd       -> QuickAddScreen(
-                        onDismiss = goBack,
-                        onNavigate = navigate,
-                        presetAccountId = currentScreen.presetAccountId,
-                    )
-                    Screen.Profile           -> PerfilScreen(
-                        onNavigate = navigate,
-                        onLogout = {
-                            SessionManager.clear()
-                            backStack.clear()
-                            backStack.add(Screen.Login)
-                        },
-                    )
-                    Screen.AIChat            -> AIChatScreen(navigate)
-                    Screen.Investments       -> InversionesScreen(navigate)
-                    Screen.Credits           -> CreditosScreen(navigate)
-                    Screen.Goals             -> MetasScreen(navigate)
-                    Screen.Budgets           -> PresupuestosScreen(navigate)
-                    Screen.Recurrentes       -> RecurrentesScreen(navigate)
-                    Screen.Subscriptions     -> SuscripcionesScreen(navigate)
-                    Screen.OCRCapture        -> OCRCaptureScreen(navigate)
-                    Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
-                    Screen.SMSInbox          -> SMSInboxScreen(navigate)
-                    is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
-                    Screen.Mas               -> MasScreen(navigate)
-                    Screen.Extractos         -> ExtractosScreen(navigate)
-                    Screen.Accounts         -> AccountsScreen(navigate)
-                    is Screen.AccountDetail -> AccountDetailScreen(navigate, currentScreen.accountId)
-                    is Screen.StatementReview -> StatementReviewScreen(
-                        onNavigate = navigate,
-                        result = Json.decodeFromString(currentScreen.resultJson),
-                    )
-                    is Screen.ImportDetail -> ImportDetailScreen(
-                        onNavigate = navigate,
-                        importId = currentScreen.importId,
-                    )
-                    Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
+                Screen.Login             -> LoginScreen(navigate)
+                Screen.Register          -> RegisterScreen(navigate)
+                Screen.OnboardingWelcome -> WelcomeScreen(navigate)
+                Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
+                Screen.Dashboard         -> DashboardScreen(navigate)
+                Screen.Transactions      -> TransactionsScreen(navigate)
+                is Screen.QuickAdd       -> QuickAddScreen(
+                    onDismiss = goBack,
+                    onNavigate = navigate,
+                    presetAccountId = currentScreen.presetAccountId,
+                )
+                Screen.Profile           -> PerfilScreen(
+                    onNavigate = navigate,
+                    onLogout = {
+                        SessionManager.clear()
+                        backStack.clear()
+                        backStack.add(Screen.Login)
+                    },
+                )
+                Screen.AIChat            -> AIChatScreen(navigate)
+                Screen.Investments       -> InversionesScreen(navigate)
+                Screen.Credits           -> CreditosScreen(navigate)
+                Screen.Goals             -> MetasScreen(navigate)
+                Screen.Budgets           -> PresupuestosScreen(navigate)
+                Screen.Recurrentes       -> RecurrentesScreen(navigate)
+                Screen.Subscriptions     -> SuscripcionesScreen(navigate)
+                Screen.OCRCapture        -> OCRCaptureScreen(navigate)
+                Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
+                Screen.SMSInbox          -> SMSInboxScreen(navigate)
+                is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, currentScreen.smsId)
+                Screen.Mas               -> MasScreen(navigate)
+                Screen.Extractos         -> ExtractosScreen(navigate)
+                Screen.Accounts         -> AccountsScreen(navigate)
+                is Screen.AccountDetail -> AccountDetailScreen(navigate, currentScreen.accountId)
+                is Screen.StatementReview -> StatementReviewScreen(
+                    onNavigate = navigate,
+                    result = Json.decodeFromString(currentScreen.resultJson),
+                )
+                is Screen.ImportDetail -> ImportDetailScreen(
+                    onNavigate = navigate,
+                    importId = currentScreen.importId,
+                )
+                Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
                 }
                 } // CompositionLocalProvider(LocalGoBack)
                 } // SaveableStateProvider
-                } // CompositionLocalProvider(LocalBottomNavAtRoot)
                 } // screen slot
                 if (showBottomNav) {
                     MinBottomNav(active = activeTab, onTabSelected = onTabSelected)

@@ -1,5 +1,7 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.ui.dashboard.DashboardDataCache
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -83,6 +85,11 @@ object SessionManager {
             settings.remove(KEY_REMEMBERED_EMAIL)
         }
         consecutive401s = 0
+        // Lo que el Inicio tenía cacheado es de la sesión que se va: sin esto, en Android/iOS
+        // (donde no se recarga la página) el próximo usuario vería por un instante el balance y
+        // las alertas del anterior, y si alguna carga fallara en silencio, se quedarían.
+        ScreenDefCache.dashboard = null
+        DashboardDataCache.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

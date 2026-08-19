@@ -39,8 +39,10 @@ import kotlinx.coroutines.launch
  * al instante con lo que ya había mientras llega lo nuevo, en vez de arrancar en blanco
  * cada vez. Misma idea (y mismas limitaciones) que [ScreenDefCache].
  */
-internal object DashboardDataCache {
+object DashboardDataCache {
     var data: DashboardData? = null
+    /** Al cerrar sesión: lo cacheado es del usuario que se va (ver SessionManager.clear). */
+    fun clear() { data = null }
 }
 
 @Composable

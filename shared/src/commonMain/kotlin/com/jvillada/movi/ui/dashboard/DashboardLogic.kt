@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -159,8 +160,16 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
     }
     "subscriptions" -> {
         val subs = data.subscriptions
-        if (subs == null || subs.subscriptions.isEmpty()) LinkFigure(sub = "Sin suscripciones")
-        else LinkFigure(formatCOP(subs.monthlyTotalCop), plural(subs.subscriptions.size, "suscripción", "suscripciones") + " al mes")
+        // Solo las activas (AUTO/CONFIRMED) — es lo que suma monthlyTotalCop y lo que la pantalla
+        // de Suscripciones llama «activas». Las candidatas y las descartadas no son suscripciones
+        // todavía (o ya no): contarlas acá daba «$0 · 4 suscripciones al mes» con cero activas.
+        val active = subs?.subscriptions?.count { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED } ?: 0
+        val candidates = subs?.subscriptions?.count { it.status == SubStatus.CANDIDATE } ?: 0
+        when {
+            subs == null || (active == 0 && candidates == 0) -> LinkFigure(sub = "Sin suscripciones")
+            active == 0 -> LinkFigure(sub = plural(candidates, "por confirmar", "por confirmar"))
+            else -> LinkFigure(formatCOP(subs.monthlyTotalCop), plural(active, "suscripción", "suscripciones") + " al mes")
+        }
     }
     else -> LinkFigure()
 }
