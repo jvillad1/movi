@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
+import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -22,9 +23,24 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import java.util.UUID
 import kotlin.math.roundToLong
+
+// F38: prefijo que separa las suscripciones de alta manual del dominio del detector.
+// `normalizeMerchant` (SubscriptionDetector.kt) deriva su `merchantKey` de la descripción del
+// EVENTO bancario — nunca antepone este prefijo — así que una fila "manual_*" queda
+// estructuralmente fuera de lo que `runSubscriptionDetection` puede generar o re-escribir
+// (ver `upsertDetected`/`applyExisting` en SubscriptionSync.kt): un re-scan nunca la toca ni la
+// duplica, sin necesidad de un caso especial ahí.
+private const val MANUAL_MERCHANT_PREFIX = "manual_"
+
+private fun manualMerchantKey(displayName: String): String {
+    val normalized = displayName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
+    return (MANUAL_MERCHANT_PREFIX + normalized.ifBlank { "sub" }).take(80)
+}
 
 fun Route.subscriptionRoutes() {
     route("/api/subscriptions") {
@@ -37,6 +53,55 @@ fun Route.subscriptionRoutes() {
             val uid = call.userId()
             runSubscriptionDetection(uid)
             call.respond(resultFor(uid))
+        }
+
+        // F38: alta manual — la creó el dueño, así que nace CONFIRMED (no CANDIDATE: no hay
+        // nada que confirmar). `confidence` no aplica a un alta manual; HIGH es el valor menos
+        // falso de los tres (no hay "sin confianza" en el enum) y no se lee para nada en este
+        // camino (resultFor solo filtra por status).
+        post {
+            val uid = call.userId()
+            val body = call.receive<CreateSubscriptionRequest>()
+            val name = body.displayName.trim()
+            if (name.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
+            if (body.amount <= 0L) return@post call.respond(HttpStatusCode.BadRequest, "Falta el monto")
+            if (body.currency != "COP" && body.currency != "USD") {
+                return@post call.respond(HttpStatusCode.BadRequest, "Moneda inválida — usa COP o USD")
+            }
+            val day = body.dayOfMonth.coerceIn(1, 31)
+            val key = manualMerchantKey(name)
+            val now = System.currentTimeMillis()
+
+            val newId = "sub_${UUID.randomUUID()}"
+            val created = dbQuery {
+                val exists = Subscriptions.selectAll()
+                    .where { (Subscriptions.userId eq uid) and (Subscriptions.merchantKey eq key) and (Subscriptions.currency eq body.currency) }
+                    .count() > 0
+                if (exists) return@dbQuery false
+                Subscriptions.insert {
+                    it[id]          = newId
+                    it[userId]      = uid
+                    it[merchantKey] = key
+                    it[displayName] = name
+                    it[amount]      = body.amount
+                    it[currency]    = body.currency
+                    it[dayOfMonth]  = day
+                    it[status]      = SubStatus.CONFIRMED.name
+                    it[confidence]  = SubConfidence.HIGH.name
+                    it[firstSeen]   = now
+                    it[lastSeen]    = now
+                    it[occurrences] = 0
+                    it[accountId]   = null
+                }
+                true
+            }
+            if (!created) {
+                return@post call.respond(HttpStatusCode.Conflict, "Ya tienes una suscripción llamada \"$name\" en ${body.currency}")
+            }
+            val row = dbQuery {
+                Subscriptions.selectAll().where { Subscriptions.id eq newId }.first()
+            }
+            call.respond(HttpStatusCode.Created, row.toSubscription())
         }
 
         put("/{id}") {

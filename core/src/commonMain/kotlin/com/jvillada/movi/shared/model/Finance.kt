@@ -105,13 +105,21 @@ data class AdjustCreditBalanceRequest(
  */
 const val MAX_CREDIT_DEBT_COP = 1_000_000_000_000L // un billón de pesos
 
+/**
+ * F26: nace con el alta manual (nombre, objetivo, cuenta donde se ahorra, fecha opcional) — antes
+ * el modelo existía pero no había forma de crear una. [saved] es SIEMPRE derivado del saldo de
+ * [accountId] (ver `GET /api/goals` en `GoalRoutes.kt`), nunca un aporte manual: si la plata está
+ * en la cuenta, cuenta. El cliente lo manda en 0 al crear/editar y el server lo ignora — el campo
+ * solo tiene sentido en la respuesta.
+ */
 @Serializable
 data class Goal(
+    val id: String = "",
     val name: String,
     val target: Long,
-    val saved: Long,
-    val deadline: String,
-    val monthly: Long,
+    val accountId: String,
+    val targetDate: String? = null,   // ISO "2027-01-01", opcional
+    val saved: Long = 0,
 )
 
 @Serializable

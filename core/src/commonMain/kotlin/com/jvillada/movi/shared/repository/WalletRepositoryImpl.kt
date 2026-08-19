@@ -10,6 +10,7 @@ import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
+import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.EventDay
@@ -143,8 +144,49 @@ class WalletRepositoryImpl(
         client.delete("$baseUrl/api/subscriptions/$id")
     }
 
+    // Mismo idioma que createCard: un nombre repetido da 409 con texto del server — se pierde
+    // si se deserializa a ciegas sobre el 4xx.
+    override suspend fun createSubscription(request: CreateSubscriptionRequest): Subscription {
+        val response = client.post("$baseUrl/api/subscriptions") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun getGoals(): List<Goal> =
         client.get("$baseUrl/api/goals").body()
+
+    // Mismo idioma que createCard/createSubscription: 404 (cuenta ajena) y 422 (cuenta de
+    // deuda) traen su propio texto del server.
+    override suspend fun createGoal(goal: Goal): Goal {
+        val response = client.post("$baseUrl/api/goals") {
+            contentType(ContentType.Application.Json)
+            setBody(goal)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun updateGoal(id: String, goal: Goal): Goal {
+        val response = client.put("$baseUrl/api/goals/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(goal)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun deleteGoal(id: String) {
+        client.delete("$baseUrl/api/goals/$id")
+    }
 
     override suspend fun getSmsMessages(): List<SmsMessage> =
         client.get("$baseUrl/api/sms").body()

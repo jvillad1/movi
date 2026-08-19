@@ -117,7 +117,7 @@ class DashboardLogicTest {
         credits = listOf(CreditSummary(Account("l1", "Carro", AccountType.LOAN, 10_000_000), terms = null, paidPct = null)),
         budgets = listOf(Budget("Mercado", 400_000)),
         spentByCategory = mapOf("Mercado" to 250_000L),
-        goals = listOf(Goal("Viaje", 5_000_000, 1_200_000, "2027-01-01", 300_000)),
+        goals = listOf(Goal(id = "g1", name = "Viaje", target = 5_000_000, accountId = "a1", targetDate = "2027-01-01", saved = 1_200_000)),
     )
 
     @Test

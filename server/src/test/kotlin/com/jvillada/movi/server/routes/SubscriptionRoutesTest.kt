@@ -373,4 +373,88 @@ class SubscriptionRoutesTest {
         assertEquals(HttpStatusCode.NotFound,
             client.delete("/api/subscriptions/$id") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.status)
     }
+
+    // ── F38: alta manual ─────────────────────────────────────────────────────
+
+    @Test
+    fun `POST creates a manual subscription that is CONFIRMED and counts in the monthly total`() = testApplication {
+        wireApp()
+        val post = client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"displayName":"Gimnasio","amount":90000,"currency":"COP","dayOfMonth":3}""")
+        }
+        assertEquals(HttpStatusCode.Created, post.status)
+        val created = Json.parseToJsonElement(post.bodyAsText()).jsonObject
+        assertEquals("CONFIRMED", created["status"]!!.jsonPrimitive.content, "la creó el dueño — no hay nada que confirmar")
+        assertEquals("manual_gimnasio", created["merchantKey"]!!.jsonPrimitive.content)
+
+        val body = Json.parseToJsonElement(
+            client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
+        ).jsonObject
+        val subs = body["subscriptions"]!!.jsonArray
+        val gym = subs.first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "manual_gimnasio" }.jsonObject
+        assertEquals("Gimnasio", gym["displayName"]!!.jsonPrimitive.content)
+        assertEquals(90_000L, body["monthlyTotalCop"]!!.jsonPrimitive.long, "activa desde el alta — cuenta en el total mensual")
+    }
+
+    @Test
+    fun `a re-scan does not touch or duplicate a manual subscription`() = testApplication {
+        wireApp()
+        client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"displayName":"Gimnasio","amount":90000,"currency":"COP","dayOfMonth":3}""")
+        }
+        // Re-escanea (también detecta netflix/youtube desde los eventos sembrados en setUp).
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+
+        val subs = Json.parseToJsonElement(
+            client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
+        ).jsonObject["subscriptions"]!!.jsonArray
+        val gymRows = subs.filter { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "manual_gimnasio" }
+        assertEquals(1, gymRows.size, "el detector no debe crear una segunda fila")
+        val gym = gymRows[0].jsonObject
+        assertEquals("CONFIRMED", gym["status"]!!.jsonPrimitive.content, "el re-scan no la degrada a CANDIDATE")
+        assertEquals(90_000L, gym["amount"]!!.jsonPrimitive.long, "el re-scan no le pisa el monto que puso el dueño")
+    }
+
+    @Test
+    fun `POST rejects a blank name, non-positive amount and unknown currency`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        assertEquals(HttpStatusCode.BadRequest, client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"displayName":"  ","amount":90000,"currency":"COP","dayOfMonth":3}""")
+        }.status)
+        assertEquals(HttpStatusCode.BadRequest, client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"displayName":"Gimnasio","amount":0,"currency":"COP","dayOfMonth":3}""")
+        }.status)
+        assertEquals(HttpStatusCode.BadRequest, client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"displayName":"Gimnasio","amount":90000,"currency":"EUR","dayOfMonth":3}""")
+        }.status)
+    }
+
+    @Test
+    fun `POST with a repeated name and currency is 409`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val body = """{"displayName":"Gimnasio","amount":90000,"currency":"COP","dayOfMonth":3}"""
+        client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        val second = client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.Conflict, second.status)
+    }
 }

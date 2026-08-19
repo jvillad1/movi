@@ -23,6 +23,7 @@ fun Application.configureRouting() {
             creditRoutes()
             cardRoutes()
             subscriptionRoutes()
+            goalRoutes()
             screenRoutes()
             pushRoutes()
             reminderRoutes()

@@ -35,6 +35,7 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
     var scanning by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    var sheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(reloadKey) {
         runCatching { Repositories.wallets.getSubscriptions() }
@@ -67,6 +68,7 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
         .filter { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED }
         .sortedBy { it.dayOfMonth }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
@@ -76,11 +78,26 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
             // F22: ya volvía a Más a mano (era la única correcta) — ahora usa la pila real igual.
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) })
             Text("Suscripciones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
+            // F38: el alta manual junto al re-escaneo — mismo componente que Recurrentes.
+            if (active.isNotEmpty()) {
+                NewItemButton(
+                    label = "Nueva suscripción",
+                    onClick = { sheetOpen = true },
+                )
+            }
             Text(
                 if (scanning) "Escaneando…" else "Re-escanear",
                 fontSize = 13.sp, fontWeight = FontWeight.Medium,
                 color = if (scanning) MinTextMute else MinText,
                 modifier = Modifier.clickable(enabled = !scanning) { rescan() },
+            )
+        }
+        if (active.isEmpty()) {
+            NewItemButton(
+                label = "Nueva suscripción",
+                onClick = { sheetOpen = true },
+                modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                full = true,
             )
         }
 
@@ -191,6 +208,14 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+    }
+
+    if (sheetOpen) {
+        CreateSubscriptionSheet(
+            onDismiss = { sheetOpen = false },
+            onSaved = { sheetOpen = false; reloadKey++ },
+        )
+    }
     }
 }
 

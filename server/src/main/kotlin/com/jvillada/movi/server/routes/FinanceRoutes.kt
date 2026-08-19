@@ -13,7 +13,6 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.FinanceSummary
-import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.RenameBudgetRequest
@@ -38,7 +37,7 @@ fun Route.financeRoutes() {
     // INVESTMENT en vez de "posiciones" (un modelo que nunca tuvo alta). Se deja el endpoint
     // porque no rompe nada mantenerlo, pero WalletRepository (:core) ya no expone getHoldings.
     get("/api/holdings") { call.respond(emptyList<Holding>()) }
-    get("/api/goals") { call.respond(emptyList<Goal>()) }
+    // F26: /api/goals se mudó a GoalRoutes.kt — acá era un `[]` hardcodeado (no había ni tabla).
 
     // ── Budgets — per-user, DB-backed ─────────────────────────────────────────
 
