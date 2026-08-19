@@ -5,6 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
+import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
@@ -77,13 +78,13 @@ class AccountRoutesTest {
         )
 
         transaction {
-            SchemaUtils.drop(
+            SchemaUtils.drop(Cards, 
                 Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals,
+                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards,
             )
 
             Users.insert {
@@ -290,6 +291,15 @@ class AccountRoutesTest {
                 it[VoidEvents.originalEventId] = "$accountId-ev-anulado"
                 it[VoidEvents.timestamp]       = 0
             }
+            // card_terms nació en esta misma ola, DESPUÉS del DELETE: la revisión encontró que
+            // quedaba huérfano. Se siembra aunque la cuenta sea LOAN — al DELETE le da igual,
+            // barre por accountId.
+            Cards.insert {
+                it[Cards.accountId]  = accountId
+                it[Cards.userId]     = uid
+                it[Cards.bank]       = "Banco"
+                it[Cards.paymentDay] = 15
+            }
             Events.insert {
                 it[Events.id]        = "$accountId-ev-tc"
                 it[Events.userId]    = uid
@@ -329,22 +339,23 @@ class AccountRoutesTest {
                 dismissals = if (eventIds.isEmpty()) 0 else
                     CardPaymentDismissals.selectAll().where { CardPaymentDismissals.eventId inList eventIds }.count().toInt(),
                 credits = Credits.selectAll().where { Credits.accountId eq accountId }.count().toInt(),
+                cards = Cards.selectAll().where { Cards.accountId eq accountId }.count().toInt(),
             )
         }
 
-    private data class Quintuple(val accounts: Int, val events: Int, val voidEvents: Int, val dismissals: Int, val credits: Int)
+    private data class Quintuple(val accounts: Int, val events: Int, val voidEvents: Int, val dismissals: Int, val credits: Int, val cards: Int)
 
     @Test
     fun `DELETE borra la cuenta, sus eventos, anulaciones, dismissals y terminos de credito en una sola pasada`() = testApplication {
         wireApp()
         val accId = "acc-full-a"
         seedAccountWithEverything(accId, userId)
-        assertEquals(Quintuple(1, 3, 1, 1, 1), rowCounts(accId), "el seed dejó todo lo que el DELETE tiene que barrer")
+        assertEquals(Quintuple(1, 3, 1, 1, 1, 1), rowCounts(accId), "el seed dejó todo lo que el DELETE tiene que barrer")
 
         val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }
         assertEquals(HttpStatusCode.NoContent, res.status)
 
-        assertEquals(Quintuple(0, 0, 0, 0, 0), rowCounts(accId), "no debe quedar NADA de la cuenta borrada")
+        assertEquals(Quintuple(0, 0, 0, 0, 0, 0), rowCounts(accId), "no debe quedar NADA de la cuenta borrada")
     }
 
     @Test
@@ -384,7 +395,7 @@ class AccountRoutesTest {
         val otherToken = tokenFor(otherUserId, "b@accounts.test")
         val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $otherToken") }
         assertEquals(HttpStatusCode.NotFound, res.status)
-        assertEquals(Quintuple(1, 3, 1, 1, 1), rowCounts(accId), "el intento de B no debe tocar nada de A")
+        assertEquals(Quintuple(1, 3, 1, 1, 1, 1), rowCounts(accId), "el intento de B no debe tocar nada de A")
 
         // A sí puede borrar la suya — y lo de B (si tuviera algo) quedaría intacto; acá alcanza
         // con confirmar que A borra la suya sin problema.

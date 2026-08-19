@@ -54,7 +54,6 @@ fun CreateAccountSheet(
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(initialType) }
-    var selectedCurrency by remember { mutableStateOf("COP") }
     var initialBalance by remember { mutableStateOf<Long?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -92,7 +91,10 @@ fun CreateAccountSheet(
                 // F51: la moneda ya no es exclusiva de tarjeta (que salió del selector) — una
                 // cuenta de Inversión en USD existe de verdad (un CDT en dólares); Dinero se
                 // queda fijo en COP porque es efectivo/ahorros/corriente de acá.
-                currency = if (selectedType == AccountType.INVESTMENT) selectedCurrency else "COP",
+                // COP fijo por ahora: el display de saldos solo entiende COP (`balance` es el
+                // componente COP) — un CDT en USD se mostraría como $0 en la web y como pesos
+                // en Android. El selector de moneda vuelve cuando exista display multimoneda.
+                currency = "COP",
             )
             val result = runCatching {
                 // La cuenta se crea SIEMPRE en $0 — el saldo/deuda inicial que el dueño tipeó
@@ -186,7 +188,6 @@ fun CreateAccountSheet(
                             selectedType = option.type
                             // El selector de moneda es solo de Inversión; cualquier otro tipo
                             // (Dinero) queda fijo en COP.
-                            if (option.type != AccountType.INVESTMENT) selectedCurrency = "COP"
                         },
                     )
                 }
@@ -209,24 +210,6 @@ fun CreateAccountSheet(
                 onValueChange = { initialBalance = it },
             )
 
-            // --- MONEDA (solo Inversión — un CDT en USD existe; Dinero se queda en COP) ---
-            if (selectedType == AccountType.INVESTMENT) {
-                Spacer(Modifier.height(18.dp))
-                SectionLabel("MONEDA")
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    for (cur in listOf("COP", "USD")) {
-                        Chip(
-                            label = cur,
-                            selected = selectedCurrency == cur,
-                            onClick = { selectedCurrency = cur },
-                        )
-                    }
-                }
-            }
 
             // Inline error display
             if (error != null) {

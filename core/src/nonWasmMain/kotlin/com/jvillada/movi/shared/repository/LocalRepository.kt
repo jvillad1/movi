@@ -143,6 +143,9 @@ class LocalRepository(
         remote.deleteAccount(id)
         val uid = userId()
         db.transaction {
+            // Los voids ANTES que los eventos: la subconsulta de deleteByAccount los encuentra
+            // por el accountId de sus eventos, que después de la línea siguiente ya no existen.
+            db.voidEventQueries.deleteByAccount(id, uid)
             db.financialEventQueries.deleteByAccount(id, uid)
             db.accountQueries.deleteById(id)
         }

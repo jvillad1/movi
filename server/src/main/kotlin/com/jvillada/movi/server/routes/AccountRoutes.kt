@@ -5,6 +5,7 @@ import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.CardPaymentDismissals
+import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -115,6 +116,10 @@ fun Route.accountRoutes() {
                 }
                 Events.deleteWhere { (Events.accountId eq id) and (Events.userId eq uid) }
                 Credits.deleteWhere { (Credits.accountId eq id) and (Credits.userId eq uid) }
+                // Y los términos de tarjeta (card_terms nació en esta misma ola, después de que
+                // este DELETE se escribiera): sin esto, borrar una tarjeta dejaba la fila de
+                // términos huérfana para siempre — justo lo que este comentario promete que no pasa.
+                Cards.deleteWhere { (Cards.accountId eq id) and (Cards.userId eq uid) }
                 Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
                 true
             }

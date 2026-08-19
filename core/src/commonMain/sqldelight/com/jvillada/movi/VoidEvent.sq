@@ -15,3 +15,10 @@ VALUES (?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE void_event SET syncedAt = :syncedAt WHERE id = :id;
+
+-- Al eliminar una cuenta: sin esto, una anulación local sin sincronizar de un evento de esa
+-- cuenta quedaba zombi y el SyncEngine la empujaba contra un 404 eterno cada 30 segundos.
+deleteByAccount:
+DELETE FROM void_event WHERE originalEventId IN (
+    SELECT id FROM financial_event WHERE accountId = :accountId AND userId = :userId
+);

@@ -84,6 +84,8 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
+    // Error de guardar/renombrar que la hoja tiene que mostrar (409 del server, red).
+    var sheetError by remember { mutableStateOf<String?>(null) }
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los presupuestos reales.
     var loading by remember { mutableStateOf(true) }
@@ -229,6 +231,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
 
         when (val s = sheet) {
             is Sheet.Edit -> BudgetSheet(
+                error = sheetError,
                 title = "Editar presupuesto",
                 initialCategory = s.current.category,
                 // F17: la categoría dejó de ser de solo lectura — antes era una limitación
@@ -236,7 +239,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 // PUT /api/budgets/{category}/rename la resuelve del lado del servidor.
                 categoryEditable = true,
                 initialAmount = s.current.monthlyLimit,
-                onDismiss = { sheet = null },
+                onDismiss = { sheet = null; sheetError = null },
                 onDelete = {
                     scope.launch {
                         runCatching { Repositories.wallets.deleteBudget(s.current.category) }
@@ -246,7 +249,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 },
                 onSave = { cat, amt ->
                     scope.launch {
-                        runCatching {
+                        val result = runCatching {
                             // F17: renombrar y cambiar el monto son dos llamadas separadas
                             // porque son dos endpoints separados — rename conserva el límite
                             // viejo, así que si además cambió el monto hay que pisarlo después.
@@ -260,17 +263,21 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                                 Repositories.wallets.updateBudget(finalCategory, Budget(finalCategory, amt))
                             }
                         }
-                        reload()
-                        sheet = null
+                        // El 409 del server («Ya existe un presupuesto llamado…») tiene que
+                        // llegarle a la persona: cerrar la hoja en silencio era decirle que se
+                        // guardó cuando no. La hoja queda abierta con el mensaje; reintenta o cierra.
+                        result.onSuccess { reload(); sheet = null }
+                            .onFailure { sheetError = it.toUserMessage() }
                     }
                 },
             )
             Sheet.Add -> BudgetSheet(
+                error = sheetError,
                 title = "Nuevo presupuesto",
                 initialCategory = "",
                 categoryEditable = true,
                 initialAmount = 0,
-                onDismiss = { sheet = null },
+                onDismiss = { sheet = null; sheetError = null },
                 onDelete = null,
                 onSave = { cat, amt ->
                     if (cat.isBlank() || amt <= 0L) return@BudgetSheet
@@ -391,6 +398,7 @@ private fun BudgetSheet(
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (String, Long) -> Unit,
+    error: String? = null,
 ) {
     var category by remember { mutableStateOf(initialCategory) }
     var amount by remember { mutableStateOf(if (initialAmount > 0L) initialAmount.toString() else "") }
@@ -542,6 +550,10 @@ private fun BudgetSheet(
                 }
             }
 
+            error?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, fontSize = 12.sp, color = MinExpense)
+            }
             Spacer(Modifier.height(12.dp))
 
             // Actions
