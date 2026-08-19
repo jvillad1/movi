@@ -289,7 +289,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 Repositories.wallets.confirmSms(smsId)
             }.onSuccess {
                 working = false
-                onNavigate(Screen.SMSInbox)
+                sms = sms?.copy(state = "confirmed")
+                // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
+                // a este detalle ya confirmado (evita duplicar el movimiento).
+                goBack(Screen.SMSInbox)
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
@@ -303,7 +306,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         coroutine.launch {
             val result = runCatching { Repositories.wallets.ignoreSms(smsId) }
             working = false
-            result.onSuccess { onNavigate(Screen.SMSInbox) }
+            result.onSuccess {
+                sms = sms?.copy(state = "ignored")
+                goBack(Screen.SMSInbox)
+            }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -444,9 +450,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     Spacer(Modifier.height(10.dp))
                     Text(error!!, fontSize = 12.sp, color = MinExpense)
                 }
+
+                // Ola 2 #1: red de seguridad — si la pila de navegación rota trae de vuelta a
+                // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
+                if (currentSms != null && currentSms.state != "pending") {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Este mensaje ya se confirmó", fontSize = 12.sp, color = MinTextMute)
+                }
             }
         }
 
+        val alreadyResolved = currentSms != null && currentSms.state != "pending"
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -457,12 +471,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     .height(50.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .border(1.dp, MinBorderStrong, RoundedCornerShape(14.dp))
-                    .clickable(enabled = !working) { ignore() },
+                    .clickable(enabled = !working && !alreadyResolved) { ignore() },
                 contentAlignment = Alignment.Center,
             ) {
                 Text("Ignorar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
             }
-            val canConfirm = parsed != null && resolvedAccount != null && !working
+            val canConfirm = parsed != null && resolvedAccount != null && !working && !alreadyResolved
             Box(
                 modifier = Modifier
                     .weight(1.7f)

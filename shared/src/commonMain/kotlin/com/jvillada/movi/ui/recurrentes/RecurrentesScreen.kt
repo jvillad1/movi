@@ -115,14 +115,14 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 // el botón se muestra a todo el ancho debajo del encabezado (más abajo).
                 if (rules.isNotEmpty()) {
                     NewItemButton(
-                        label = "+ Nuevo pago",
+                        label = "Nuevo pago",
                         onClick = { sheetRule = null; sheetOpen = true },
                     )
                 }
             }
             if (rules.isEmpty() && !loading) {
                 NewItemButton(
-                    label = "+ Nuevo pago",
+                    label = "Nuevo pago",
                     onClick = { sheetRule = null; sheetOpen = true },
                     modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
                     full = true,

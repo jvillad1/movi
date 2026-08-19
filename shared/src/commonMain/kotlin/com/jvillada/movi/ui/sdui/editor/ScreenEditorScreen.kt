@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -339,19 +341,21 @@ private fun SectionHeader(
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-        Text(
-            "↑", fontSize = 15.sp, fontWeight = FontWeight.Medium,
-            color = if (canMoveUp) MinTextDim else MinTextFaint,
-            modifier = Modifier.clickable(enabled = canMoveUp, onClick = onMoveUp).padding(6.dp),
+        // Ola 2 #5 (F11): glifos escritos como texto → íconos Material (salían como ▯ en la web).
+        Icon(
+            Icons.Rounded.ArrowUpward, contentDescription = "Subir",
+            tint = if (canMoveUp) MinTextDim else MinTextFaint,
+            modifier = Modifier.size(15.dp).clickable(enabled = canMoveUp, onClick = onMoveUp).padding(6.dp),
         )
-        Text(
-            "↓", fontSize = 15.sp, fontWeight = FontWeight.Medium,
-            color = if (canMoveDown) MinTextDim else MinTextFaint,
-            modifier = Modifier.clickable(enabled = canMoveDown, onClick = onMoveDown).padding(6.dp),
+        Icon(
+            Icons.Rounded.ArrowDownward, contentDescription = "Bajar",
+            tint = if (canMoveDown) MinTextDim else MinTextFaint,
+            modifier = Modifier.size(15.dp).clickable(enabled = canMoveDown, onClick = onMoveDown).padding(6.dp),
         )
-        Text(
-            "✕", fontSize = 14.sp, color = MinExpense,
-            modifier = Modifier.clickable(onClick = onRemove).padding(6.dp),
+        Icon(
+            Icons.Rounded.Close, contentDescription = "Quitar",
+            tint = MinExpense,
+            modifier = Modifier.size(14.dp).clickable(onClick = onRemove).padding(6.dp),
         )
     }
 }

@@ -37,9 +37,14 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var editing by remember { mutableStateOf<CreditSummary?>(null) }
     var adjusting by remember { mutableStateOf<CreditSummary?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
+    // parpadeaba un instante antes de que llegaran los créditos reales.
+    var loading by remember { mutableStateOf(true) }
     LaunchedEffect(reloadKey) {
+        loading = true
         runCatching { Repositories.wallets.getCredits() }
             .onSuccess { credits = it }
+        loading = false
     }
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -57,12 +62,12 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 // F18: compacto arriba a la derecha cuando ya hay créditos; vacío, el botón de
                 // abajo (ver el bloque bajo el header) es la acción principal.
                 if (credits.isNotEmpty()) {
-                    NewItemButton(label = "+ Nuevo crédito", onClick = { editing = null; showSheet = true })
+                    NewItemButton(label = "Nuevo crédito", onClick = { editing = null; showSheet = true })
                 }
             }
-            if (credits.isEmpty()) {
+            if (credits.isEmpty() && !loading) {
                 NewItemButton(
-                    label = "+ Nuevo crédito",
+                    label = "Nuevo crédito",
                     onClick = { editing = null; showSheet = true },
                     modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
                     full = true,

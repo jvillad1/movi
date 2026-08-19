@@ -16,16 +16,22 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -101,9 +107,43 @@ fun CategoryField(
     /** Además de [onValueChange]: se dispara solo al tocar una sugerencia, nunca al tipear —
      *  para que quien tiene un sub-picker de pantalla completa (QuickAdd) pueda cerrarlo solo. */
     onSuggestionPicked: () -> Unit = {},
+    /** Ola 2 #3: si se pasa, QuickAdd la usa para pedir foco al abrir el sub-picker (el campo
+     *  arranca prellenado — sin esto nunca se veía el teclado ni la lista de sugerencias). */
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val matches = remember(value, type, usedCategories) { suggestCategoryMatches(value, type, usedCategories) }
+    val focusManager = LocalFocusManager.current
+    // Estado interno de texto+selección: separado de [value] para poder seleccionar todo el
+    // texto al enfocar (Ola 2 #3b) sin pelearse con el `value: String` que ya usan las 3
+    // pantallas que llaman a este campo. Solo se resincroniza con [value] cuando el cambio vino
+    // de AFUERA (p. ej. QuickAdd reseteando la categoría al cambiar Gasto/Ingreso) — si viene de
+    // nuestro propio tipeo, `textFieldValue.text` ya coincide y no hace falta tocar el cursor.
+    var textFieldValue by remember { mutableStateOf(TextFieldValue(value, selection = TextRange(value.length))) }
+    LaunchedEffect(value) {
+        if (value != textFieldValue.text) {
+            textFieldValue = TextFieldValue(value, selection = TextRange(value.length))
+        }
+    }
+
+    // Ola 2 #3a: con el campo prellenado (QuickAdd arranca en "Comida", Recurrentes en "Otros"),
+    // la única sugerencia visible era la misma categoría ya escrita. Si lo que hay en el campo
+    // coincide EXACTAMENTE con una sugerencia, o está vacío, se listan TODAS las disponibles.
+    val allMatches = remember(type, usedCategories) { suggestCategoryMatches("", type, usedCategories) }
+    val isExactMatch = value.isBlank() || allMatches.any { normalizeForMatch(it) == normalizeForMatch(value) }
+    val matches = if (isExactMatch) allMatches else remember(value, type, usedCategories) {
+        suggestCategoryMatches(value, type, usedCategories)
+    }
+
+    fun pick(name: String) {
+        onValueChange(name)
+        textFieldValue = TextFieldValue(name, selection = TextRange(name.length))
+        // Ola 2 #3d: antes esto ponía `focused = false` a mano sin soltar el foco real del
+        // campo — el cursor seguía ahí, así que un onFocusChanged posterior nunca volvía a
+        // dispararse y las sugerencias no reaparecían al seguir tipeando. clearFocus() sí baja
+        // el foco de verdad; `focused` se actualiza solo, vía onFocusChanged.
+        focusManager.clearFocus()
+        onSuggestionPicked()
+    }
 
     Column(modifier = modifier) {
         if (label != null) {
@@ -119,12 +159,26 @@ fun CategoryField(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+                value = textFieldValue,
+                onValueChange = {
+                    textFieldValue = it
+                    onValueChange(it.text)
+                },
                 singleLine = true,
                 cursorBrush = SolidColor(MinText),
                 textStyle = TextStyle(color = MinText, fontSize = 15.sp, fontWeight = FontWeight.Medium),
-                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .onFocusChanged { state ->
+                        // Ola 2 #3b: al ganar el foco (no en cada recomposición), seleccionar
+                        // todo el texto — con el campo prellenado, tipear reemplaza en vez de
+                        // insertarse en medio de "Comida".
+                        if (state.isFocused && !focused) {
+                            textFieldValue = textFieldValue.copy(selection = TextRange(0, textFieldValue.text.length))
+                        }
+                        focused = state.isFocused
+                    },
                 decorationBox = { inner ->
                     if (value.isEmpty()) Text(placeholder, fontSize = 15.sp, color = MinTextFaint)
                     inner()
@@ -150,11 +204,7 @@ fun CategoryField(
                         color = MinText,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                onValueChange(name)
-                                focused = false
-                                onSuggestionPicked()
-                            }
+                            .clickable { pick(name) }
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     )
                     if (i < matches.size - 1) Hairline()

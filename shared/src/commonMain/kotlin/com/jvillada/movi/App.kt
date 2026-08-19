@@ -91,11 +91,18 @@ fun App() {
             // estabas); si la pila tiene un solo elemento (deep link, recarga de
             // la web en una pantalla que no es Inicio), cae al destino de reserva
             // que pasa cada pantalla.
-            val goBackTo: (Screen) -> Unit = { fallback ->
-                when (val result = NavStack.back(backStack, fallback)) {
-                    NavStack.BackResult.Pop -> backStack.removeLast()
-                    is NavStack.BackResult.Fallback ->
-                        if (backStack.last() != result.screen) backStack[backStack.lastIndex] = result.screen
+            // Ola 2 #8: `remember` — sin esto la lambda se creaba de nuevo en CADA
+            // recomposición y, como LocalGoBack es un staticCompositionLocalOf, un valor
+            // "nuevo" (aunque haga lo mismo) invalida TODO el subárbol que lo consume, no
+            // solo lo que de verdad cambió. `backStack` es estable (viene de un `remember`
+            // de arriba), así que la lambda puede vivir una sola vez por toda la composición.
+            val goBackTo: (Screen) -> Unit = remember {
+                { fallback ->
+                    when (val result = NavStack.back(backStack, fallback)) {
+                        NavStack.BackResult.Pop -> backStack.removeLast()
+                        is NavStack.BackResult.Fallback ->
+                            if (backStack.last() != result.screen) backStack[backStack.lastIndex] = result.screen
+                    }
                 }
             }
 

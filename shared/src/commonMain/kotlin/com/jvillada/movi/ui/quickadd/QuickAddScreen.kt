@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -104,13 +105,24 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
-    val canSave = parsedAmount > 0 && selectedAccountId != null && !saving
+    // Ola 2 #2: canSave no miraba la categoría — se podía guardar con la caja vacía.
+    val canSave = parsedAmount > 0 && category.isNotBlank() && selectedAccountId != null && !saving
+    // F24: mismo patrón que Presupuestos/Recurrentes — la primera cosa que falta.
+    val missingFieldMessage = when {
+        parsedAmount <= 0 -> "Falta el monto"
+        category.isBlank() -> "Falta la categoría"
+        selectedAccountId == null -> "Falta la cuenta"
+        else -> null
+    }
     val selectedAccount = accounts.firstOrNull { it.id == selectedAccountId }
 
     fun save() {
         if (!canSave) return
         saving = true
         error = null
+        // Ola 2 #2: recortada — canSave ya exige no-vacío, pero "  Comida  " pasaba esa guarda
+        // y se guardaba con espacios.
+        val trimmedCategory = category.trim()
         coroutine.launch {
             val event = FinancialEvent(
                 // Generado acá, no en blanco: en Android/iOS Repositories.wallets es
@@ -121,8 +133,8 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                 accountId = selectedAccountId ?: accounts.firstOrNull()?.id ?: "acc_1",
                 type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                 amount = amount.toLongOrNull() ?: 0L,
-                category = category,
-                description = note.ifBlank { category },
+                category = trimmedCategory,
+                description = note.ifBlank { trimmedCategory },
                 source = EventSource.MANUAL,
                 // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es
                 // solo para lo que entra solo (SMS, OCR, extracto), no para lo que el usuario
@@ -135,7 +147,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
             saving = false
             // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
             // "usada" en el resto de la sesión sin esperar a que otra pantalla la cargue.
-            result.onSuccess { UsedCategoriesCache.record(listOf(category)); onDismiss() }
+            result.onSuccess { UsedCategoriesCache.record(listOf(trimmedCategory)); onDismiss() }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -166,6 +178,11 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                     // escribir una categoría nueva la deja tal cual, sin forzar a elegir.
                     Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
                         PickerHeader("Categoría", onClose = { picker = Picker.None })
+                        // Ola 2 #3c: sin esto el sub-picker se abría con el campo prellenado
+                        // ("Comida") pero sin foco — había que tocarlo a mano para ver las
+                        // sugerencias o poder escribir.
+                        val categoryFocusRequester = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { categoryFocusRequester.requestFocus() }
                         CategoryField(
                             value = category,
                             onValueChange = { category = it },
@@ -173,6 +190,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                             usedCategories = UsedCategoriesCache.categories,
                             label = null,
                             onSuggestionPicked = { picker = Picker.None },
+                            focusRequester = categoryFocusRequester,
                         )
                         Spacer(Modifier.height(4.dp))
                     }
@@ -200,6 +218,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                         onEditNote = { picker = Picker.Note },
                         onOcr = { onNavigate(Screen.OCRCapture) },
                         canSave = canSave,
+                        missingFieldMessage = missingFieldMessage,
                         saving = saving,
                         error = error,
                         onSave = ::save,
@@ -235,6 +254,7 @@ private fun EditorBody(
     onEditNote: () -> Unit,
     onOcr: () -> Unit,
     canSave: Boolean,
+    missingFieldMessage: String? = null,
     saving: Boolean,
     error: String?,
     onSave: () -> Unit,
@@ -433,6 +453,16 @@ private fun EditorBody(
                     color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
                 )
             }
+        }
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
+                fontSize = 12.sp,
+                color = MinTextMute,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

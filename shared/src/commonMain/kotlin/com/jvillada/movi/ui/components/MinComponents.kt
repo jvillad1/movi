@@ -5,7 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -150,12 +153,13 @@ fun MonoText(
 
 @Composable
 fun ChevronRight() {
-    // Simple > indicator using Text as substitute for SVG
-    Text(
-        text = "›",
-        fontSize = 18.sp,
-        color = MinTextFaint,
-        fontWeight = FontWeight.Light,
+    // Ola 2 #5 (F11): "›" como texto suelto salía roto (▯) en la web — ícono Material en vez
+    // de un glifo que depende de que la fuente del sistema lo tenga.
+    Icon(
+        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+        contentDescription = null,
+        tint = MinTextFaint,
+        modifier = Modifier.size(18.dp),
     )
 }
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -157,12 +158,17 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     .clickable(enabled = canSend) { send() },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = if (loading) "…" else "›",
-                    fontSize = 20.sp,
-                    color = if (canSend) MinBg else MinTextMute,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (loading) {
+                    Text(text = "…", fontSize = 20.sp, color = if (canSend) MinBg else MinTextMute, fontWeight = FontWeight.Bold)
+                } else {
+                    // Ola 2 #5 (F11): "›" como texto suelto salía roto en la web, igual que "‹".
+                    Icon(
+                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = "Enviar",
+                        tint = if (canSend) MinBg else MinTextMute,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             }
         }
 

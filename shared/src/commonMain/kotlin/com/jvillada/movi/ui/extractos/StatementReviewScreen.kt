@@ -8,9 +8,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +45,9 @@ fun StatementReviewScreen(
     val reconciliations = remember { mutableStateMapOf<String, ReconciliationDecision>() }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Ola 2 #1: red de seguridad — si la pila de navegación vuelve a esta pantalla ya
+    // importada (mismo defecto que el de SMS), no se puede reimportar el mismo extracto.
+    var imported by remember { mutableStateOf(false) }
 
     // Load accounts to determine destination
     LaunchedEffect(Unit) {
@@ -58,7 +64,7 @@ fun StatementReviewScreen(
 
     val confirmedCount = reconciliations.values.count { it.confirm }
     val importCount = selectedIds.size + confirmedCount
-    val canImport = importCount > 0 && !working && destinationAccount != null
+    val canImport = importCount > 0 && !working && !imported && destinationAccount != null
 
     fun import() {
         val acct = destinationAccount ?: return
@@ -77,7 +83,10 @@ fun StatementReviewScreen(
                 Repositories.wallets.importStatement(decision)
             }.onSuccess {
                 working = false
-                onNavigate(Screen.Transactions)
+                imported = true
+                // Ola 2 #1: pop, no push — coherente con SMS (evita reimportar el mismo extracto
+                // si la ‹ de Transacciones vuelve acá).
+                goBack(Screen.Transactions)
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
@@ -213,6 +222,13 @@ fun StatementReviewScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
+        if (imported) {
+            Text(
+                "Este extracto ya se importó",
+                fontSize = 12.sp, color = MinTextMute,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
 
         // Sticky bottom bar
         Box(
@@ -306,10 +322,14 @@ private fun ReconciliationCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "⚠ POSIBLE DUPLICADO",
-                fontSize = 9.sp, color = MinAmber, letterSpacing = 0.5.sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Ola 2 #5 (F11): glifo escrito como texto → ícono Material (salía como ▯ en la web).
+                Icon(Icons.Rounded.Warning, contentDescription = null, tint = MinAmber, modifier = Modifier.size(11.dp))
+                Text(
+                    "POSIBLE DUPLICADO",
+                    fontSize = 9.sp, color = MinAmber, letterSpacing = 0.5.sp,
+                )
+            }
             val amtColor = if (match.parsed.type == TransactionType.INCOME) MinIncome else MinExpense
             val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
             Text(
@@ -410,12 +430,20 @@ private fun ReconciliationCard(
                 }
             }
         } else {
-            Text(
-                if (decision!!.confirm) "✓ Reconciliado" else "→ Se importará como nuevo",
-                fontSize = 11.sp,
-                color = if (decision.confirm) MinIncome else MinTextMute,
-                fontWeight = FontWeight.Medium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Ola 2 #5 (F11): "✓"/"→" como texto suelto → íconos Material.
+                if (decision!!.confirm) {
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = MinIncome, modifier = Modifier.size(13.dp))
+                } else {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(13.dp))
+                }
+                Text(
+                    if (decision.confirm) "Reconciliado" else "Se importará como nuevo",
+                    fontSize = 11.sp,
+                    color = if (decision.confirm) MinIncome else MinTextMute,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
     }
 }

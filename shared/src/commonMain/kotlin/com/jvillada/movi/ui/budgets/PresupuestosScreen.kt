@@ -58,6 +58,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
+    // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
+    // parpadeaba un instante antes de que llegaran los presupuestos reales.
+    var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
@@ -70,11 +73,13 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     }
 
     LaunchedEffect(Unit) {
+        loading = true
         reload()
         runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
             days = it
             UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
         }
+        loading = false
     }
 
     val progresses = remember(budgets, days) {
@@ -120,12 +125,12 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 )
                 // F18: compacto arriba a la derecha cuando ya hay presupuestos.
                 if (budgets.isNotEmpty()) {
-                    NewItemButton(label = "+ Nuevo presupuesto", onClick = { sheet = Sheet.Add })
+                    NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add })
                 }
             }
-            if (budgets.isEmpty()) {
+            if (budgets.isEmpty() && !loading) {
                 NewItemButton(
-                    label = "+ Nuevo presupuesto",
+                    label = "Nuevo presupuesto",
                     onClick = { sheet = Sheet.Add },
                     modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
                     full = true,
@@ -508,7 +513,9 @@ private fun BudgetSheet(
                         .height(50.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
-                        .clickable(enabled = canSave) { onSave(category, parsedAmount) },
+                        // Ola 2 #2: recorte al guardar — canSave ya exige no-vacío, pero
+                        // "  Comida  " pasaba esa guarda y se guardaba con espacios.
+                        .clickable(enabled = canSave) { onSave(category.trim(), parsedAmount) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

@@ -228,7 +228,9 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Text("Reescanear", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText) }
             Box(
-                modifier = Modifier.weight(1.7f).height(50.dp).clip(RoundedCornerShape(14.dp)).background(MinText).clickable { onNavigate(Screen.Dashboard) },
+                // Ola 2 #1: pop, no push — coherente con SMS/Extractos (evita que un segundo
+                // tap desde Inicio vuelva a este "guardado" y lo repita).
+                modifier = Modifier.weight(1.7f).height(50.dp).clip(RoundedCornerShape(14.dp)).background(MinText).clickable { goBack(Screen.Dashboard) },
                 contentAlignment = Alignment.Center,
             ) { Text("Guardar movimiento", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinBg) }
         }
