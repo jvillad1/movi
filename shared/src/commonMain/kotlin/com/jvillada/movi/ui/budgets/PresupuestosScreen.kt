@@ -222,15 +222,6 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
-            MinBottomNav(active = NavTab.BUDGETS) { tab ->
-                when (tab) {
-                    NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                    NavTab.MORE         -> onNavigate(Screen.Mas)
-                    else -> {}
-                }
-            }
         }
 
         when (val s = sheet) {
