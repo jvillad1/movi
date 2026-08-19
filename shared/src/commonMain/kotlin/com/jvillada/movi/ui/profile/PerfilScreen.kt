@@ -156,7 +156,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             item {
                 Spacer(Modifier.height(14.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Meta principal", action = "Editar")
+                    MinSectionHeader(title = "Meta principal", action = "Ver metas", onAction = { onNavigate(Screen.Goals) })
                     MinCard(
                         modifier = Modifier.fillMaxWidth(),
                         variant = MinCardVariant.Elevated,
@@ -183,6 +183,27 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             // afirmaban cosas falsas — se sacan enteras. "Notificaciones push", que sí
             // funciona, se queda arriba, en su propia sección.
 
+
+            // Logout button
+            item {
+                Spacer(Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MinSurfaceContainer)
+                        .clickable { onLogout() }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Cerrar sesión", fontSize = 14.sp, color = MinExpense, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            // Va DESPUÉS de «Cerrar sesión» a propósito: `isAdmin` llega async, y si esta sección
+            // se pintara antes del botón, al aparecer lo empujaría hacia abajo en cada visita (salto de
+            // layout). Al final de la lista solo alarga el scroll — nada se mueve bajo el dedo.
             // F47 · F48: sección de administración — solo para quien administra el Inicio
             // (SDUI). Ver comentario junto a `isAdmin` arriba.
             if (isAdmin == true) {
@@ -204,23 +225,6 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             )
                         }
                     }
-                }
-            }
-
-            // Logout button
-            item {
-                Spacer(Modifier.height(24.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MinSurfaceContainer)
-                        .clickable { onLogout() }
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Cerrar sesión", fontSize = 14.sp, color = MinExpense, fontWeight = FontWeight.Medium)
                 }
             }
         }
