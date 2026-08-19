@@ -21,6 +21,7 @@ import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
@@ -188,6 +189,20 @@ class WalletRepositoryImpl(
         client.delete("$baseUrl/api/budgets/$category")
     }
 
+    // Mismo idioma que adjustCreditBalance/updateEventCategory: 404 (no existe) y 409 (el
+    // nombre nuevo ya está en uso) traen su propio texto del server y se pierden si se
+    // deserializa a ciegas.
+    override suspend fun renameBudget(category: String, newCategory: String): Budget {
+        val response = client.put("$baseUrl/api/budgets/$category/rename") {
+            contentType(ContentType.Application.Json)
+            setBody(RenameBudgetRequest(newCategory))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()
 
@@ -227,6 +242,16 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(account)
         }.body()
+
+    // Mismo idioma que updateEventCategory/adjustCreditBalance: 404 (cuenta inexistente o de
+    // otro usuario) trae su propio texto y se pierde si se deserializa a ciegas — acá además
+    // no hay body que deserializar (204), así que sin esto un 404 pasaría desapercibido.
+    override suspend fun deleteAccount(id: String) {
+        val response = client.delete("$baseUrl/api/accounts/$id")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent =
         client.post("$baseUrl/api/events") {

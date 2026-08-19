@@ -14,6 +14,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -243,5 +244,151 @@ class AccountRoutesTest {
         postOpeningEvent("acc-savings", "INCOME", 1_000_000L, "Saldo inicial")
 
         assertEquals(1, eventsInDb(), "solo el evento que posteó el cliente — ninguno fabricado por el server")
+    }
+
+    // ── F55: DELETE /api/accounts/{id} ──────────────────────────────────────────
+
+    /**
+     * Arma una cuenta LOAN con de todo lo que F55 tiene que barrer: un evento normal, un
+     * evento anulado (deja fila en void_events), un evento marcado "No es pago de tarjeta"
+     * (deja fila en card_payment_dismissals) y términos de crédito. Todo tiene que
+     * desaparecer en un solo DELETE.
+     */
+    private fun seedAccountWithEverything(accountId: String, uid: String) {
+        transaction {
+            Accounts.insert {
+                it[id]       = accountId
+                it[userId]   = uid
+                it[name]     = "Libranza"
+                it[type]     = "LOAN"
+                it[balance]  = 0
+                it[currency] = "COP"
+            }
+            Events.insert {
+                it[Events.id]        = "$accountId-ev-normal"
+                it[Events.userId]    = uid
+                it[Events.accountId] = accountId
+                it[Events.type]      = "EXPENSE"
+                it[Events.amount]    = 10_000
+                it[Events.category]  = "Otros"
+                it[Events.description] = "Cuota"
+                it[Events.timestamp] = 0
+            }
+            Events.insert {
+                it[Events.id]        = "$accountId-ev-anulado"
+                it[Events.userId]    = uid
+                it[Events.accountId] = accountId
+                it[Events.type]      = "EXPENSE"
+                it[Events.amount]    = 5_000
+                it[Events.category]  = "Otros"
+                it[Events.description] = "Duplicado"
+                it[Events.timestamp] = 0
+            }
+            VoidEvents.insert {
+                it[VoidEvents.id]              = "$accountId-void"
+                it[VoidEvents.userId]          = uid
+                it[VoidEvents.originalEventId] = "$accountId-ev-anulado"
+                it[VoidEvents.timestamp]       = 0
+            }
+            Events.insert {
+                it[Events.id]        = "$accountId-ev-tc"
+                it[Events.userId]    = uid
+                it[Events.accountId] = accountId
+                it[Events.type]      = "EXPENSE"
+                it[Events.amount]    = 300_000
+                it[Events.category]  = "Otros"
+                it[Events.description] = "Parece pago de tarjeta"
+                it[Events.timestamp] = 0
+            }
+            CardPaymentDismissals.insert {
+                it[CardPaymentDismissals.userId]  = uid
+                it[CardPaymentDismissals.eventId] = "$accountId-ev-tc"
+            }
+            Credits.insert {
+                it[Credits.accountId]   = accountId
+                it[Credits.userId]      = uid
+                it[Credits.bank]        = "Banco"
+                it[Credits.principal]   = 1_000_000
+                it[Credits.rateEa]      = 1.5
+                it[Credits.termMonths]  = 12
+                it[Credits.installment] = 90_000
+                it[Credits.dayOfMonth]  = 5
+                it[Credits.startDate]   = "2026-01-01"
+            }
+        }
+    }
+
+    private fun rowCounts(accountId: String): Quintuple =
+        transaction {
+            val eventIds = Events.selectAll().where { Events.accountId eq accountId }.map { it[Events.id] }
+            Quintuple(
+                accounts = Accounts.selectAll().where { Accounts.id eq accountId }.count().toInt(),
+                events = eventIds.size,
+                voidEvents = if (eventIds.isEmpty()) 0 else
+                    VoidEvents.selectAll().where { VoidEvents.originalEventId inList eventIds }.count().toInt(),
+                dismissals = if (eventIds.isEmpty()) 0 else
+                    CardPaymentDismissals.selectAll().where { CardPaymentDismissals.eventId inList eventIds }.count().toInt(),
+                credits = Credits.selectAll().where { Credits.accountId eq accountId }.count().toInt(),
+            )
+        }
+
+    private data class Quintuple(val accounts: Int, val events: Int, val voidEvents: Int, val dismissals: Int, val credits: Int)
+
+    @Test
+    fun `DELETE borra la cuenta, sus eventos, anulaciones, dismissals y terminos de credito en una sola pasada`() = testApplication {
+        wireApp()
+        val accId = "acc-full-a"
+        seedAccountWithEverything(accId, userId)
+        assertEquals(Quintuple(1, 3, 1, 1, 1), rowCounts(accId), "el seed dejó todo lo que el DELETE tiene que barrer")
+
+        val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.NoContent, res.status)
+
+        assertEquals(Quintuple(0, 0, 0, 0, 0), rowCounts(accId), "no debe quedar NADA de la cuenta borrada")
+    }
+
+    @Test
+    fun `DELETE de una cuenta inexistente es 404`() = testApplication {
+        wireApp()
+        val res = client.delete("/api/accounts/no-existe") { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.NotFound, res.status)
+    }
+
+    @Test
+    fun `el segundo DELETE sobre la misma cuenta es 404`() = testApplication {
+        wireApp()
+        val accId = "acc-twice"
+        createAccount(accId, "SAVINGS", 0)
+        assertEquals(HttpStatusCode.NoContent,
+            client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }.status)
+        assertEquals(HttpStatusCode.NotFound,
+            client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }.status)
+    }
+
+    @Test
+    fun `DELETE no borra cuentas de otro usuario ni deja borrar las propias de otro`() = testApplication {
+        wireApp()
+        val otherUserId = "user-b-accounts"
+        transaction {
+            Users.insert {
+                it[id]           = otherUserId
+                it[email]        = "b@accounts.test"
+                it[name]         = "User B"
+                it[passwordHash] = "hash-b"
+            }
+        }
+        val accId = "acc-full-a"
+        seedAccountWithEverything(accId, userId)
+
+        // User B intenta borrar la cuenta de A: 404 (no la ve, no es suya) y no toca nada.
+        val otherToken = tokenFor(otherUserId, "b@accounts.test")
+        val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $otherToken") }
+        assertEquals(HttpStatusCode.NotFound, res.status)
+        assertEquals(Quintuple(1, 3, 1, 1, 1), rowCounts(accId), "el intento de B no debe tocar nada de A")
+
+        // A sí puede borrar la suya — y lo de B (si tuviera algo) quedaría intacto; acá alcanza
+        // con confirmar que A borra la suya sin problema.
+        assertEquals(HttpStatusCode.NoContent,
+            client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }.status)
     }
 }

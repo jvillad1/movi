@@ -177,7 +177,9 @@ class StatementRoutesTest {
         assertEquals(1, subs.size)
         val netflix = subs[0].jsonObject
         assertEquals("netflix", netflix["merchantKey"]!!.jsonPrimitive.content)
-        assertEquals("AUTO", netflix["status"]!!.jsonPrimitive.content)
+        // F39: nada nace activo — ni siquiera HIGH confidence salta a AUTO. La detección
+        // disparada por el import deja la fila CANDIDATE, igual que el /detect manual.
+        assertEquals("CANDIDATE", netflix["status"]!!.jsonPrimitive.content)
     }
 
     @Test

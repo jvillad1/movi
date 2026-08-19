@@ -61,6 +61,16 @@ interface WalletRepository {
     suspend fun createBudget(budget: Budget): Budget
     suspend fun updateBudget(category: String, budget: Budget): Budget
     suspend fun deleteBudget(category: String)
+
+    /**
+     * F17: la categoría es la PK de un presupuesto, así que renombrarlo no es un campo más de
+     * [updateBudget] — es su propia operación server-side (borra e inserta conservando el
+     * límite, ver `PUT /api/budgets/{category}/rename`). El gasto se cruza por NOMBRE de
+     * categoría con los movimientos (`spentByCategoryForMonth`), así que renombrar acá deja de
+     * contar los movimientos que llevaban el nombre viejo — la hoja de edición avisa esto antes
+     * de guardar.
+     */
+    suspend fun renameBudget(category: String, newCategory: String): Budget
     suspend fun getRecurringRules(): List<RecurringRule>
     suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
@@ -70,6 +80,14 @@ interface WalletRepository {
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account
     suspend fun createAccount(account: Account): Account
+
+    /**
+     * F55: borra la cuenta y TODO lo que le pertenece (sus movimientos, anulaciones, dismissals
+     * de pago de tarjeta y términos de crédito si es un LOAN) — el server lo hace en una sola
+     * transacción (ver `AccountRoutes.kt` DELETE). No hay deshacer: es responsabilidad de la UI
+     * mostrar la consecuencia real antes de llamar esto (ver `AccountDetailScreen`).
+     */
+    suspend fun deleteAccount(id: String)
     suspend fun postEvent(event: FinancialEvent): FinancialEvent
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>

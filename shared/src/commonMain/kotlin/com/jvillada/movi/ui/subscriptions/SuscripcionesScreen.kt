@@ -114,7 +114,11 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Candidatos a revisar", count = candidates.size)
+                        // F39: nada nace activo — todo lo que el escaneo detecta (sin importar
+                        // la confianza) cae acá primero. El dueño confirma o dice "No es" de a
+                        // una; lo que se descarta no vuelve a proponerse (ver SubscriptionSync,
+                        // que respeta DISMISSED en cada re-scan).
+                        MinSectionHeader(title = "Detectadas · por confirmar", count = candidates.size)
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             candidates.forEach { s ->
                                 MinCard(
@@ -134,7 +138,7 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
                                     Spacer(Modifier.height(12.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         ActionChip("Confirmar", primary = true) { setStatus(s, SubStatus.CONFIRMED) }
-                                        ActionChip("Descartar", primary = false) { setStatus(s, SubStatus.DISMISSED) }
+                                        ActionChip("No es", primary = false) { setStatus(s, SubStatus.DISMISSED) }
                                     }
                                 }
                             }

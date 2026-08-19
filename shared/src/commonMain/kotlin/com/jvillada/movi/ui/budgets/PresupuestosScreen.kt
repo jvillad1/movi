@@ -231,7 +231,10 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             is Sheet.Edit -> BudgetSheet(
                 title = "Editar presupuesto",
                 initialCategory = s.current.category,
-                categoryEditable = false,
+                // F17: la categoría dejó de ser de solo lectura — antes era una limitación
+                // técnica filtrada a la pantalla (la categoría es la PK en el server), ahora
+                // PUT /api/budgets/{category}/rename la resuelve del lado del servidor.
+                categoryEditable = true,
                 initialAmount = s.current.monthlyLimit,
                 onDismiss = { sheet = null },
                 onDelete = {
@@ -241,13 +244,21 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                         sheet = null
                     }
                 },
-                onSave = { _, amt ->
+                onSave = { cat, amt ->
                     scope.launch {
                         runCatching {
-                            Repositories.wallets.updateBudget(
-                                s.current.category,
-                                Budget(s.current.category, amt),
-                            )
+                            // F17: renombrar y cambiar el monto son dos llamadas separadas
+                            // porque son dos endpoints separados — rename conserva el límite
+                            // viejo, así que si además cambió el monto hay que pisarlo después.
+                            val renamed = cat != s.current.category
+                            val finalCategory = if (renamed) {
+                                Repositories.wallets.renameBudget(s.current.category, cat).category
+                            } else {
+                                s.current.category
+                            }
+                            if (!renamed || amt != s.current.monthlyLimit) {
+                                Repositories.wallets.updateBudget(finalCategory, Budget(finalCategory, amt))
+                            }
                         }
                         reload()
                         sheet = null
@@ -430,8 +441,9 @@ private fun BudgetSheet(
 
             // Category
             if (categoryEditable) {
-                // F35: crear presupuesto — campo libre con sugerencias en vez de texto libre a
-                // ciegas. Solo EXPENSE: no tiene sentido presupuestar una categoría de ingreso.
+                // F35/F17: campo libre con sugerencias en vez de texto libre a ciegas — el
+                // mismo campo sirve para crear (categoría nueva) y para editar (renombrar).
+                // Solo EXPENSE: no tiene sentido presupuestar una categoría de ingreso.
                 CategoryField(
                     value = category,
                     onValueChange = { category = it },
@@ -440,6 +452,22 @@ private fun BudgetSheet(
                     label = "Categoría",
                     placeholder = "Mercado, Salud, Restaurantes…",
                 )
+                // F17: onDelete solo viene no-nulo al editar un presupuesto EXISTENTE (Sheet.Add
+                // lo manda null) — ahí es donde "cambiar el nombre" significa renombrar una
+                // categoría que ya tiene gasto acumulado, así que solo ahí hace falta la
+                // advertencia. El cruce presupuesto↔gasto es por NOMBRE de categoría
+                // (spentByCategoryForMonth), no por un id estable — renombrar corta ese cruce
+                // para los movimientos viejos.
+                if (onDelete != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "El gasto se cruza por nombre: si renombras \"$initialCategory\" a otra cosa, " +
+                            "los movimientos que digan \"$initialCategory\" dejan de contar aquí.",
+                        fontSize = 11.5.sp,
+                        color = MinTextMute,
+                        lineHeight = 15.sp,
+                    )
+                }
             } else {
                 // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
                 Column(modifier = Modifier.fillMaxWidth()) {

@@ -124,6 +124,30 @@ class LocalRepository(
         }
     }
 
+    /**
+     * F55: a diferencia de [createAccount] arriba, ACÁ no hay fallback local silencioso ante un
+     * fallo de red. Un borrado que solo pasara local sería un borrado a medias: la fila local
+     * quedaría con `syncedAt` no-nulo (nunca "pendiente de subir", porque no es una creación),
+     * así que [com.jvillada.movi.shared.SyncEngine] jamás la volvería a intentar — y la próxima
+     * vez que el server devolviera esa cuenta en un GET (porque en el server nunca se borró),
+     * la app la resucitaría con todos sus movimientos, como si el borrado nunca hubiera pasado.
+     * Eso es peor que no borrar nada: el dueño cree que borró y en algún momento la cuenta
+     * vuelve a aparecer sola.
+     *
+     * Por eso: `remote.deleteAccount` primero, y si falla (sin red o el server rechaza) la
+     * excepción se propaga tal cual — no se atrapa acá — para que la UI la traduzca a un
+     * mensaje claro ("No se pudo eliminar — revisa tu conexión", ver `AccountDetailScreen`) en
+     * vez de fingir que el borrado ocurrió.
+     */
+    override suspend fun deleteAccount(id: String) {
+        remote.deleteAccount(id)
+        val uid = userId()
+        db.transaction {
+            db.financialEventQueries.deleteByAccount(id, uid)
+            db.accountQueries.deleteById(id)
+        }
+    }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
@@ -376,6 +400,10 @@ class LocalRepository(
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)
     override suspend fun updateBudget(category: String, budget: Budget): Budget = remote.updateBudget(category, budget)
     override suspend fun deleteBudget(category: String) = remote.deleteBudget(category)
+    // Los presupuestos no tienen tabla local (a diferencia de accounts/financial_event) — se
+    // leen siempre del server, así que renombrar es delegar y ya, igual que create/update/delete.
+    override suspend fun renameBudget(category: String, newCategory: String): Budget =
+        remote.renameBudget(category, newCategory)
     override suspend fun getRecurringRules(): List<RecurringRule> = remote.getRecurringRules()
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = remote.createRecurringRule(rule)
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)

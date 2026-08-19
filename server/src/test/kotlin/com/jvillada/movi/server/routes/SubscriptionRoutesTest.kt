@@ -189,8 +189,11 @@ class SubscriptionRoutesTest {
 
     // ── Tests ──────────────────────────────────────────────────────────────────
 
+    // F39: nada nace activo — ni siquiera la confianza HIGH de netflix (3 ocurrencias) lo
+    // salta directo a AUTO como pasaba antes. Las dos entran CANDIDATE y el total mensual
+    // arranca en 0 hasta que el dueño confirma alguna desde SuscripcionesScreen.
     @Test
-    fun `detect creates AUTO and CANDIDATE subscriptions from events`() = testApplication {
+    fun `detect creates only CANDIDATE subscriptions, regardless of confidence`() = testApplication {
         wireApp()
         val res = client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
         assertEquals(HttpStatusCode.OK, res.status)
@@ -198,10 +201,41 @@ class SubscriptionRoutesTest {
         val subs = body["subscriptions"]!!.jsonArray
         assertEquals(2, subs.size)
         val byKey = subs.associateBy { it.jsonObject["merchantKey"]!!.jsonPrimitive.content }
-        assertEquals("AUTO",      byKey["netflix"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertEquals("CANDIDATE", byKey["netflix"]!!.jsonObject["status"]!!.jsonPrimitive.content, "HIGH confidence ya no salta a AUTO")
         assertEquals("CANDIDATE", byKey["youtube"]!!.jsonObject["status"]!!.jsonPrimitive.content)
-        // total mensual = solo AUTO+CONFIRMED → netflix
-        assertEquals(44_900L, body["monthlyTotalCop"]!!.jsonPrimitive.long)
+        // total mensual = solo AUTO+CONFIRMED → ninguna todavía
+        assertEquals(0L, body["monthlyTotalCop"]!!.jsonPrimitive.long)
+    }
+
+    // Blinda que una fila AUTO vieja (de antes de este cambio, sembrada directo en la DB
+    // porque ya no hay forma de producirla vía detect) no se resetea a CANDIDATE en el
+    // próximo scan — se sigue tratando como confirmada, igual que CONFIRMED.
+    @Test
+    fun `a legacy AUTO row survives re-detect without downgrading to CANDIDATE`() = testApplication {
+        wireApp()
+        transaction {
+            Subscriptions.insert {
+                it[id]          = "sub-legacy-netflix"
+                it[userId]      = userAId
+                it[merchantKey] = "netflix"
+                it[displayName] = "Netflix"
+                it[amount]      = 44_900
+                it[currency]    = "COP"
+                it[dayOfMonth]  = 14
+                it[status]      = "AUTO"
+                it[confidence]  = "HIGH"
+                it[firstSeen]   = 0
+                it[lastSeen]    = 0
+                it[occurrences] = 3
+                it[accountId]   = accountAId
+            }
+        }
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val subs = Json.parseToJsonElement(
+            client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
+        ).jsonObject["subscriptions"]!!.jsonArray
+        val netflix = subs.first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }.jsonObject
+        assertEquals("AUTO", netflix["status"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -283,7 +317,9 @@ class SubscriptionRoutesTest {
         val after = body["subscriptions"]!!.jsonArray
             .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "youtube" }.jsonObject
         assertEquals("CONFIRMED", after["status"]!!.jsonPrimitive.content)
-        assertEquals(44_900L + 26_900L, body["monthlyTotalCop"]!!.jsonPrimitive.long)
+        // F39: netflix (HIGH) ya no salta a AUTO — se queda CANDIDATE hasta que alguien la
+        // confirme, así que el total acá es SOLO youtube (la única CONFIRMED).
+        assertEquals(26_900L, body["monthlyTotalCop"]!!.jsonPrimitive.long)
     }
 
     @Test
