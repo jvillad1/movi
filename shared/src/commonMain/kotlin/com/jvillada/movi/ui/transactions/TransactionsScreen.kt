@@ -10,9 +10,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -23,7 +25,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,9 +46,46 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 
+/**
+ * F13: filtro puro detrás de la búsqueda de Movimientos, separado del `@Composable` para poder
+ * testearlo en `:shared:commonTest` sin arrancar Compose. Compara sin acentos ni mayúsculas
+ * (mismo criterio que `CategoryField`, ver [normalizeForMatch]) contra descripción, comercio
+ * (si lo hay) y categoría. Una consulta en blanco matchea todo — así el filtro es un no-op
+ * mientras el campo de búsqueda está vacío.
+ */
+fun matchesQuery(event: FinancialEvent, query: String): Boolean {
+    val q = normalizeForMatch(query.trim())
+    if (q.isEmpty()) return true
+    return normalizeForMatch(event.description).contains(q) ||
+        event.merchant?.let { normalizeForMatch(it).contains(q) } == true ||
+        normalizeForMatch(event.category).contains(q)
+}
+
+/**
+ * Minúsculas y sin tildes/eñe — mismo criterio que usa `CategoryField` (F35) para sus
+ * sugerencias, pero definido acá aparte: esta pantalla no puede tocar `CategoryField.kt` en esta
+ * tarea (Ola 4 la reserva para otro trabajo en paralelo), así que se duplica el normalizador en
+ * vez de extraerlo a un helper compartido.
+ */
+private fun normalizeForMatch(s: String): String = buildString(s.length) {
+    for (c in s.lowercase()) {
+        append(
+            when (c) {
+                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ñ' -> 'n'
+                else -> c
+            },
+        )
+    }
+}
+
 @Composable
 fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var activeFilter by remember { mutableStateOf(0) }
+    // F13: la lupa era un dibujo sin acción — ahora despliega un campo que filtra en memoria
+    // mientras se escribe (no hay ida al servidor: la lista ya está en pantalla).
+    var searchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val searchFocusRequester = remember { FocusRequester() }
     // F12: "Pendientes" no decía qué es — son los movimientos que entraron solos (SMS, OCR,
     // extracto) y esperan que confirmes monto y categoría. "Por confirmar" sí lo dice.
     val filters = listOf("Todo", "Egresos", "Ingresos", "Por confirmar")
@@ -108,14 +151,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     fun signedAmount(tx: FinancialEvent): Long =
         if (tx.type == TransactionType.EXPENSE) -tx.amount else tx.amount
 
-    val visibleDays = remember(activeFilter, allDays) {
+    val visibleDays = remember(activeFilter, allDays, searchQuery) {
         allDays.mapNotNull { day ->
             val filtered = when (activeFilter) {
                 1 -> day.items.filter { it.type == TransactionType.EXPENSE && it.reconciliationStatus != ReconciliationStatus.UNCONFIRMED }
                 2 -> day.items.filter { it.type == TransactionType.INCOME }
                 3 -> day.items.filter { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED }
                 else -> day.items
-            }
+            }.filter { matchesQuery(it, searchQuery) }
             if (filtered.isEmpty()) null
             // El total recalculado sigue el mismo criterio que el del server (ver EventRoutes
             // /by-day): countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin
@@ -147,7 +190,56 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                     letterSpacing = (-0.8).sp,
                 )
             }
-            Icon(imageVector = Icons.Filled.Search, contentDescription = "Buscar", tint = MinTextDim, modifier = Modifier.size(22.dp))
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = "Buscar",
+                tint = MinTextDim,
+                modifier = Modifier.size(22.dp).clickable {
+                    searchActive = !searchActive
+                    if (!searchActive) searchQuery = ""
+                },
+            )
+        }
+
+        // F13: campo de búsqueda, debajo del encabezado — solo aparece al tocar la lupa.
+        if (searchActive) {
+            LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MinSurfaceContainerLow)
+                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Filled.Search, contentDescription = null, tint = MinTextFaint, modifier = Modifier.size(16.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    if (searchQuery.isEmpty()) {
+                        Text("Descripción, comercio o categoría", fontSize = 14.sp, color = MinTextFaint)
+                    }
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                        cursorBrush = SolidColor(MinText),
+                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "Cerrar búsqueda",
+                    tint = MinTextMute,
+                    modifier = Modifier.size(16.dp).clickable {
+                        searchActive = false
+                        searchQuery = ""
+                    },
+                )
+            }
         }
 
         // Filter chips
@@ -222,31 +314,46 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         ) {
             if (!loading && visibleDays.isEmpty()) {
                 item {
-                    // F10: el estado vacío ofrece la acción — registrar si ya hay dónde anotar,
-                    // crear una cuenta primero si no.
-                    Column(
-                        modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(MinPrimaryContainer)
-                                .clickable {
-                                    if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
-                                    else showCreateSheet = true
-                                }
-                                .padding(horizontal = 20.dp, vertical = 10.dp),
-                            contentAlignment = Alignment.Center,
+                    if (searchQuery.isNotBlank()) {
+                        // F13: nada que ver acá con "no hay dónde anotar" — la búsqueda no dio
+                        // resultados, así que el texto buscado es la pista que hace falta.
+                        Column(
+                            modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
-                                text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MinOnPrimaryContainer,
+                                text = "Nada coincide con \"${searchQuery.trim()}\"",
+                                fontSize = 14.sp,
+                                color = MinTextMute,
                             )
+                        }
+                    } else {
+                        // F10: el estado vacío ofrece la acción — registrar si ya hay dónde
+                        // anotar, crear una cuenta primero si no.
+                        Column(
+                            modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(MinPrimaryContainer)
+                                    .clickable {
+                                        if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
+                                        else showCreateSheet = true
+                                    }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MinOnPrimaryContainer,
+                                )
+                            }
                         }
                     }
                 }
