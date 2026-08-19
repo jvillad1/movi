@@ -137,4 +137,12 @@ open class NoOpRepository(
     override suspend fun restoreScreen(slug: String) =
         ScreenDefinition(slug = slug, version = 1, sections = emptyList())
     override suspend fun isScreenAdmin() = false
+    override suspend fun getUserProfile() = UserProfile(id = "usr-stub", email = "stub@movi.test", name = "Stub", avatarColor = AvatarPalette.DEFAULT)
+    override suspend fun updateUserProfile(request: UpdateProfileRequest) = UserProfile(
+        id = "usr-stub",
+        email = "stub@movi.test",
+        name = request.name ?: "Stub",
+        avatarColor = request.avatarColor ?: AvatarPalette.DEFAULT,
+    )
+    override suspend fun changePassword(request: ChangePasswordRequest) {}
 }

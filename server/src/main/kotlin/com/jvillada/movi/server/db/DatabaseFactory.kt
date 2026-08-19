@@ -32,7 +32,8 @@ object DatabaseFactory {
             SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals)
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens)
+            // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users)
         }
         seedScreens()
     }

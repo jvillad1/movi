@@ -34,6 +34,9 @@ import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpdateEventCategoryRequest
+import com.jvillada.movi.shared.model.ChangePasswordRequest
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -363,4 +366,28 @@ class WalletRepositoryImpl(
         runCatching {
             client.get("$baseUrl/api/screens/admin/status").body<Map<String, Boolean>>()["isAdmin"] == true
         }.getOrDefault(false)
+
+    override suspend fun getUserProfile(): UserProfile =
+        client.get("$baseUrl/api/users/me").body()
+
+    override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile {
+        val response = client.put("$baseUrl/api/users/me") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun changePassword(request: ChangePasswordRequest) {
+        val response = client.put("$baseUrl/api/users/me/password") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
 }

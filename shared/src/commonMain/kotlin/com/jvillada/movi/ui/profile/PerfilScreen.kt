@@ -19,18 +19,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.platform.PushOptIn
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
+    // F42 · F46: perfil real, leído del server — antes esta pantalla solo mostraba lo que
+    // SessionManager tenía cacheado desde el login (nombre y correo, nada de color). `profile`
+    // arranca en `null` y la tarjeta de identidad se pinta igual mientras tanto con lo cacheado,
+    // así que no hay parpadeo — solo se actualiza cuando la respuesta llega, y de paso deja
+    // SessionManager al día (ver el bloque de abajo) para que AvatarButton en otras pantallas
+    // también tenga el color correcto.
+    var profile by remember { mutableStateOf<UserProfile?>(null) }
+    var showEditProfile by remember { mutableStateOf(false) }
+    var showChangePassword by remember { mutableStateOf(false) }
+    var profileReloadKey by remember { mutableStateOf(0) }
+    LaunchedEffect(profileReloadKey) {
+        runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
+            profile = it
+            SessionManager.userName = it.name
+            SessionManager.avatarColor = it.avatarColor
+        }
+    }
+
     // F47 · F48: "Editor de pantallas" vivía en Más, agregado a la grilla después de que
     // isScreenAdmin() resolvía — eso hacía que la grilla "saltara" al cargar. Se muda acá,
     // al final de Perfil, en su propia sección "Administración" (es una herramienta de
@@ -43,6 +63,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         isAdmin = runCatching { Repositories.wallets.isScreenAdmin() }.getOrDefault(false)
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -72,25 +93,60 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     padding = PaddingValues(20.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        val displayName = SessionManager.userName ?: "Usuario"
+                        // F42 · F46: mientras `profile` no llegó del server se usa lo que
+                        // SessionManager ya tenía cacheado del login — no hay pantalla vacía
+                        // ni parpadeo, y cuando la respuesta llega ambas fuentes coinciden
+                        // (el LaunchedEffect de arriba las sincroniza).
+                        val displayName = profile?.name ?: SessionManager.userName ?: "Usuario"
+                        val avatarColor = avatarColorOrDefault(profile?.avatarColor ?: SessionManager.avatarColor)
                         val initials = displayName.split(" ").take(2)
                             .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
                         Box(
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(CircleShape)
-                                .background(MinSurfaceContainerHigh),
+                                .background(avatarColor),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(initials.ifEmpty { "U" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.5).sp)
+                            Text(initials.ifEmpty { "U" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, letterSpacing = (-0.5).sp)
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(displayName, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
                             Text(SessionManager.userEmail ?: "", fontSize = 12.5.sp, color = MinTextMute)
                             // F44: "PREMIUM · FAMILIAR" estaba fijo en el código — no existen
                             // planes ni tipos de cuenta, así que la etiqueta mentía. Se saca;
                             // vuelve con significado real si algún día hay planes o familia (F8).
                         }
+                        // F42 · F46: antes esta tarjeta era de solo lectura — nada acá abría
+                        // nada. Un solo "Editar" alcanza para las dos cosas que se pueden
+                        // cambiar (alias y color), en vez de dos afordancias separadas.
+                        Text(
+                            "Editar",
+                            fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MinPrimary,
+                            modifier = Modifier.clickable { showEditProfile = true },
+                        )
+                    }
+                }
+            }
+
+            // Cuenta
+            item {
+                Spacer(Modifier.height(14.dp))
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    MinSectionHeader(title = "Cuenta")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        // F42: reemplaza la sección "Cuenta" que F45 había sacado entera por
+                        // ser puro decorado — esta fila sí tiene algo real detrás.
+                        CardRow(
+                            left = { Text("Cambiar contraseña", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                            showChevron = true,
+                            isLast = true,
+                            onClick = { showChangePassword = true },
+                        )
                     }
                 }
             }
@@ -228,5 +284,21 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showEditProfile) {
+        EditProfileSheet(
+            initialName = profile?.name ?: SessionManager.userName ?: "",
+            initialColor = profile?.avatarColor ?: SessionManager.avatarColor,
+            onDismiss = { showEditProfile = false },
+            onSaved = { showEditProfile = false; profileReloadKey++ },
+        )
+    }
+    if (showChangePassword) {
+        ChangePasswordSheet(
+            onDismiss = { showChangePassword = false },
+            onSaved = { showChangePassword = false },
+        )
+    }
     }
 }

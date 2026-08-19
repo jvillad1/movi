@@ -16,6 +16,7 @@ fun Application.configureRouting() {
         smsFilterConfigRoutes()           // public — no auth required
 
         authenticate("jwt") {
+            userRoutes()
             accountRoutes()
             eventRoutes()
             financeRoutes()

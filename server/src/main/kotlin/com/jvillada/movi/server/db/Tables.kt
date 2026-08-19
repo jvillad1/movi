@@ -7,6 +7,10 @@ object Users : Table("users") {
     val email        = varchar("email", 255).uniqueIndex()
     val name         = varchar("name", 100)
     val passwordHash = varchar("password_hash", 255)
+    // F42 · F46: color del avatar de iniciales, uno de AvatarPalette.COLORS (:core). Nullable
+    // porque toda cuenta existente hoy no tiene ninguno — `UserRoutes.kt` cae a
+    // AvatarPalette.DEFAULT en la lectura, así que el cliente nunca ve `null`.
+    val avatarColor  = varchar("avatar_color", 7).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

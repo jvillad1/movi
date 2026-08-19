@@ -18,6 +18,11 @@ object SessionManager {
     private const val KEY_USER_ID = "user_id"
     private const val KEY_NAME    = "user_name"
     private const val KEY_EMAIL   = "user_email"
+    // F42 · F46: color elegido para el avatar de iniciales — se llena la primera vez que
+    // PerfilScreen pide el perfil (GET /api/users/me) y se actualiza tras cada edición. Vive en
+    // Settings (no solo en memoria) para que sobreviva un reinicio de la app en Android/iOS,
+    // igual que userName/userEmail.
+    private const val KEY_AVATAR_COLOR = "avatar_color"
     private const val KEY_REMEMBERED_EMAIL = "remembered_email"
     // F1: preferencia explícita de la casilla "Recordar mi correo en este dispositivo"
     // del login web (index.html). "0" = no recordar; ausente o "1" = sí (por defecto,
@@ -39,6 +44,17 @@ object SessionManager {
     var userEmail: String?
         get() = settings.getStringOrNull(KEY_EMAIL)
         set(v) { if (v == null) settings.remove(KEY_EMAIL) else settings[KEY_EMAIL] = v }
+
+    /**
+     * `null` hasta que PerfilScreen haga su primer `GET /api/users/me` en esta sesión — no en el
+     * login, que no lo devuelve (AuthResponse no cambió: register/login son ajenos a esta
+     * tarea). [com.jvillada.movi.ui.components.AvatarButton] cae a
+     * [com.jvillada.movi.shared.model.AvatarPalette.DEFAULT] mientras tanto, que es exactamente
+     * lo que el server devuelve para una cuenta que nunca eligió color — no hay descalce.
+     */
+    var avatarColor: String?
+        get() = settings.getStringOrNull(KEY_AVATAR_COLOR)
+        set(v) { if (v == null) settings.remove(KEY_AVATAR_COLOR) else settings[KEY_AVATAR_COLOR] = v }
 
     /** Last email used to log in. Persists across logout so the login form can pre-fill it. */
     var rememberedEmail: String?
@@ -78,6 +94,7 @@ object SessionManager {
         settings.remove(KEY_USER_ID)
         settings.remove(KEY_NAME)
         settings.remove(KEY_EMAIL)
+        settings.remove(KEY_AVATAR_COLOR)
         // F1: el correo recordado solo sobrevive al logout si la persona lo eligió con
         // la casilla del login web. Sin esa preferencia (Android/iOS, o quien nunca la
         // vio) se preserva como siempre — no forzamos un opt-in donde no hay casilla.

@@ -37,6 +37,9 @@ import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.ChangePasswordRequest
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
@@ -432,6 +435,13 @@ class LocalRepository(
         remote.restoreScreen(slug)
     override suspend fun isScreenAdmin(): Boolean =
         remote.isScreenAdmin()
+
+    // F42 · F46: sin espejo, a propósito — el perfil se lee siempre del server, igual que
+    // register/login arriba. No hay tabla local de usuario ni razón para tenerla: es una fila
+    // por persona, no datos que necesiten funcionar offline.
+    override suspend fun getUserProfile(): UserProfile = remote.getUserProfile()
+    override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
+    override suspend fun changePassword(request: ChangePasswordRequest) = remote.changePassword(request)
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

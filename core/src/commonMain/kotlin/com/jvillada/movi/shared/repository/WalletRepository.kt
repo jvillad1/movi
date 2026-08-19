@@ -31,6 +31,9 @@ import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.ChangePasswordRequest
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 
 interface WalletRepository {
@@ -121,6 +124,19 @@ interface WalletRepository {
     suspend fun dismissCardPaymentCandidate(id: String)
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
+
+    /** F42 · F46: perfil editable — `GET /api/users/me`. `avatarColor` nunca llega `null`. */
+    suspend fun getUserProfile(): UserProfile
+
+    /** `PUT /api/users/me`. Campos opcionales — solo se toca lo que viene en [request]. */
+    suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile
+
+    /**
+     * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]
+     * no coincide, o 400 si [ChangePasswordRequest.new] no cumple [com.jvillada.movi.shared.model.PasswordPolicy]
+     * — el servidor es la autoridad, la validación del cliente es solo cortesía.
+     */
+    suspend fun changePassword(request: ChangePasswordRequest)
 
     /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un
