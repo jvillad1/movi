@@ -47,6 +47,11 @@
             background: none; border: none; color: #C9B8FF; font-size: 13px; text-align: center; cursor: pointer;
         }
         .lg-hidden { display: none; }
+        .lg-check {
+            display: flex; align-items: center; gap: 8px; margin: -6px 0 18px;
+            color: #9b9b9b; font-size: 13px; cursor: pointer; user-select: none;
+        }
+        .lg-check input { width: 16px; height: 16px; accent-color: #C9B8FF; cursor: pointer; }
         .lg-note { color: #9b9b9b; font-size: 13px; line-height: 1.45; margin-bottom: 16px; }
         .lg-ok { color: #A8E6A1; font-size: 13px; line-height: 1.45; }
         .lg-ok:not(:empty) { margin-bottom: 14px; }
@@ -71,16 +76,20 @@
                         <label class="lg-label" for="login-password">Contraseña</label>
                         <input class="lg-input" id="login-password" name="password" type="password"
                                autocomplete="current-password" placeholder="••••••" required>
+                        <label class="lg-check" for="login-remember">
+                            <input type="checkbox" id="login-remember" checked>
+                            Recordar mi correo en este dispositivo
+                        </label>
                         <div class="lg-err" id="login-err"></div>
                         <button class="lg-btn" id="login-btn" type="submit">Entrar</button>
                     </form>
                     <button class="lg-alt" id="forgot-link" type="button">¿Olvidaste tu contraseña?</button>
-                    <button class="lg-alt" id="register-link" type="button">¿No tenés cuenta? Registrate</button>
+                    <button class="lg-alt" id="register-link" type="button">¿No tienes cuenta? Regístrate</button>
                 </div>
 
                 <!-- Panel 2: pedir el enlace de recuperación -->
                 <div id="forgot-panel" class="lg-hidden">
-                    <div class="lg-note">Te enviamos un enlace para elegir una contraseña nueva. Vence en 1 hora y sirve una sola vez.</div>
+                    <div class="lg-note" id="forgot-note">Escribe tu correo y te mandamos un enlace para elegir una contraseña nueva. Vence en 1 hora y sirve una sola vez.</div>
                     <form id="forgot-form" autocomplete="on">
                         <label class="lg-label" for="forgot-email">Correo</label>
                         <input class="lg-input" id="forgot-email" name="email" type="email"
@@ -89,23 +98,23 @@
                         <div class="lg-ok" id="forgot-ok"></div>
                         <button class="lg-btn" id="forgot-btn" type="submit">Enviar enlace</button>
                     </form>
-                    <button class="lg-alt" id="forgot-back" type="button">Volver a entrar</button>
+                    <button class="lg-alt" id="forgot-back" type="button">← Volver al ingreso</button>
                 </div>
 
                 <!-- Panel 3: elegir contraseña nueva (solo con ?reset=… en la URL) -->
                 <div id="reset-panel" class="lg-hidden">
-                    <div class="lg-note">Elegí tu contraseña nueva.</div>
+                    <div class="lg-note">Elige tu contraseña nueva.</div>
                     <form id="reset-form" autocomplete="on">
                         <label class="lg-label" for="reset-password">Contraseña nueva</label>
                         <input class="lg-input" id="reset-password" name="new-password" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
-                        <label class="lg-label" for="reset-password2">Repetila</label>
+                        <label class="lg-label" for="reset-password2">Repítela</label>
                         <input class="lg-input" id="reset-password2" name="new-password-confirm" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
                         <div class="lg-err" id="reset-err"></div>
                         <button class="lg-btn" id="reset-btn" type="submit">Guardar contraseña</button>
                     </form>
-                    <button class="lg-alt" id="reset-back" type="button">Volver a entrar</button>
+                    <button class="lg-alt" id="reset-back" type="button">← Volver al ingreso</button>
                 </div>
 
                 <!-- Panel 4: crear cuenta. Vive acá, no en el Compose de abajo, por la misma
@@ -113,7 +122,7 @@
                      username, new-password) es lo único que hace que el gestor de
                      contraseñas del navegador ofrezca guardar la cuenta recién creada. -->
                 <div id="register-panel" class="lg-hidden">
-                    <div class="lg-note">Creá tu cuenta para empezar a usar Movi.</div>
+                    <div class="lg-note">Crea tu cuenta para empezar a usar Movi.</div>
                     <form id="register-form" autocomplete="on">
                         <label class="lg-label" for="register-name">Nombre</label>
                         <input class="lg-input" id="register-name" name="name" type="text"
@@ -124,13 +133,13 @@
                         <label class="lg-label" for="register-password">Contraseña</label>
                         <input class="lg-input" id="register-password" name="new-password" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
-                        <label class="lg-label" for="register-password2">Repetila</label>
+                        <label class="lg-label" for="register-password2">Repítela</label>
                         <input class="lg-input" id="register-password2" name="new-password-confirm" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
                         <div class="lg-err" id="register-err"></div>
                         <button class="lg-btn" id="register-btn" type="submit">Crear cuenta</button>
                     </form>
-                    <button class="lg-alt" id="register-back" type="button">¿Ya tenés cuenta? Entrá</button>
+                    <button class="lg-alt" id="register-back" type="button">¿Ya tienes cuenta? Entra</button>
                 </div>
             </div>
         </div>
@@ -145,10 +154,22 @@
                 var form = document.getElementById('login-form');
                 var btn = document.getElementById('login-btn');
                 var err = document.getElementById('login-err');
+                var rememberEl = document.getElementById('login-remember');
 
                 // Pre-fill remembered email (survives logout via a dedicated key).
                 var remembered = localStorage.getItem('remembered_email') || localStorage.getItem('user_email');
                 if (remembered && emailEl) emailEl.value = remembered;
+
+                // F1: "Recordar mi correo" — elección explícita, marcada por defecto. Se
+                // persiste sola (no espera al submit) para que sobreviva a un F5 antes de
+                // entrar. Ausente en localStorage == primera vez == por defecto marcada.
+                function rememberPref() { return localStorage.getItem('remember_email_pref') !== '0'; }
+                if (rememberEl) {
+                    rememberEl.checked = rememberPref();
+                    rememberEl.addEventListener('change', function () {
+                        localStorage.setItem('remember_email_pref', rememberEl.checked ? '1' : '0');
+                    });
+                }
 
                 // ── Recuperación de contraseña ─────────────────────────────
                 // El enlace del correo apunta a la raíz de la PWA con ?reset=TOKEN. Si está,
@@ -215,12 +236,18 @@
                         localStorage.setItem('user_id', data.userId);
                         localStorage.setItem('user_email', data.email);
                         localStorage.setItem('user_name', data.name);
-                        localStorage.setItem('remembered_email', data.email);
+                        // F1: solo se guarda el correo para la próxima vez si la persona lo
+                        // pidió con la casilla; si no, se borra un recuerdo previo.
+                        if (rememberEl && rememberEl.checked) {
+                            localStorage.setItem('remembered_email', data.email);
+                        } else {
+                            localStorage.removeItem('remembered_email');
+                        }
                         // Reload so the browser offers to save the password and the
                         // wasm app boots straight into the dashboard with the session.
                         window.location.reload();
                     } catch (ex) {
-                        err.textContent = 'No se pudo conectar. Probá de nuevo.';
+                        err.textContent = 'No se pudo conectar. Prueba de nuevo.';
                         btn.disabled = false; btn.textContent = 'Entrar';
                     }
                 });
@@ -230,10 +257,16 @@
                 var forgotBtn = document.getElementById('forgot-btn');
                 var forgotErr = document.getElementById('forgot-err');
                 var forgotOk = document.getElementById('forgot-ok');
+                var forgotNote = document.getElementById('forgot-note');
+                var forgotForm = document.getElementById('forgot-form');
+                var FORGOT_NOTE_DEFAULT = 'Escribe tu correo y te mandamos un enlace para elegir una contraseña nueva. Vence en 1 hora y sirve una sola vez.';
 
                 document.getElementById('forgot-link').addEventListener('click', function () {
                     forgotEmailEl.value = (emailEl.value || '').trim() || remembered || '';
                     forgotErr.textContent = ''; forgotOk.textContent = '';
+                    // Por si el panel quedó en el estado "ya se envió" de una vuelta anterior.
+                    forgotNote.textContent = FORGOT_NOTE_DEFAULT;
+                    forgotForm.classList.remove('lg-hidden');
                     showPanel('forgot');
                     setTimeout(function () { forgotEmailEl.focus(); }, 50);
                 });
@@ -252,17 +285,20 @@
                         // 202 es la MISMA respuesta exista o no el correo — a propósito, para no
                         // convertir esto en un buscador de cuentas. 503 es el servidor diciendo
                         // que no tiene cómo mandar correo; se muestra tal cual en vez de fingir.
+                        // Una sola cosa en pantalla a la vez: la nota de arriba pasa a ser la
+                        // confirmación y el formulario (campo + botón) se oculta.
                         if (res.status === 202) {
-                            forgotOk.textContent = await serverMessage(res, 'Si el correo está registrado, te enviamos un enlace.');
+                            forgotNote.textContent = await serverMessage(res, 'Si el correo está registrado, te enviamos un enlace. Revisa tu bandeja.');
+                            forgotForm.classList.add('lg-hidden');
                         } else if (res.status === 503) {
                             forgotErr.textContent = await serverMessage(res, 'El envío de correo no está configurado en este servidor.');
                         } else if (res.status === 429) {
-                            forgotErr.textContent = 'Demasiados pedidos. Esperá unos minutos.';
+                            forgotErr.textContent = 'Demasiados pedidos. Espera unos minutos.';
                         } else {
                             forgotErr.textContent = 'No se pudo pedir el enlace (' + res.status + ')';
                         }
                     } catch (ex) {
-                        forgotErr.textContent = 'No se pudo conectar. Probá de nuevo.';
+                        forgotErr.textContent = 'No se pudo conectar. Prueba de nuevo.';
                     }
                     forgotBtn.disabled = false; forgotBtn.textContent = 'Enviar enlace';
                 });
@@ -309,18 +345,21 @@
                                 .forEach(function (k) { localStorage.removeItem(k); });
                             // `remembered_email` se conserva a propósito: no es credencial ni
                             // sesión, es el correo para prellenar el formulario de entrada —
-                            // justo lo que la persona necesita en el paso siguiente.
+                            // justo lo que la persona necesita en el paso siguiente. F1: pero
+                            // solo si la persona había elegido que se recordara (misma regla
+                            // que un logout normal — ver SessionManager.clear()).
+                            if (!rememberPref()) localStorage.removeItem('remembered_email');
                             resetPassEl.value = ''; resetPass2El.value = '';
-                            backToLogin('Listo, tu contraseña quedó actualizada. Entrá con la nueva.');
+                            backToLogin('Listo, tu contraseña quedó actualizada. Entra con la nueva.');
                         } else if (res.status === 429) {
-                            resetErr.textContent = 'Demasiados intentos. Esperá unos minutos.';
+                            resetErr.textContent = 'Demasiados intentos. Espera unos minutos.';
                         } else {
                             // El servidor es la autoridad sobre el mínimo de caracteres y sobre
                             // si el enlace sirve: se muestra su mensaje, no uno inventado acá.
                             resetErr.textContent = await serverMessage(res, 'No se pudo guardar la contraseña (' + res.status + ')');
                         }
                     } catch (ex) {
-                        resetErr.textContent = 'No se pudo conectar. Probá de nuevo.';
+                        resetErr.textContent = 'No se pudo conectar. Prueba de nuevo.';
                     }
                     resetBtn.disabled = false; resetBtn.textContent = 'Guardar contraseña';
                 });
@@ -372,9 +411,9 @@
                                 // El servidor manda "Email already registered" en inglés (ver
                                 // AuthRoutes.kt) — no se repite tal cual, se traduce, igual que
                                 // el panel de login nunca muestra el "Invalid credentials" del 401.
-                                registerErr.textContent = 'Ese correo ya tiene una cuenta. Entrá con tu contraseña.';
+                                registerErr.textContent = 'Ese correo ya tiene una cuenta. Entra con tu contraseña.';
                             } else if (res.status === 429) {
-                                registerErr.textContent = await serverMessage(res, 'Demasiados intentos. Esperá unos minutos.');
+                                registerErr.textContent = await serverMessage(res, 'Demasiados intentos. Espera unos minutos.');
                             } else {
                                 // 400 trae el mensaje de PasswordPolicy (:core, mínimo 12
                                 // caracteres) — el servidor es la autoridad, se muestra tal cual
@@ -394,7 +433,7 @@
                         // el navegador ofrezca guardar la contraseña recién creada.
                         window.location.reload();
                     } catch (ex) {
-                        registerErr.textContent = 'No se pudo conectar. Probá de nuevo.';
+                        registerErr.textContent = 'No se pudo conectar. Prueba de nuevo.';
                         registerBtn.disabled = false; registerBtn.textContent = 'Crear cuenta';
                     }
                 });

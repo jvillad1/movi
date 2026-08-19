@@ -7,6 +7,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Upload
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +35,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -36,6 +43,7 @@ import kotlinx.datetime.Clock
 
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
     var syncWorking by remember { mutableStateOf(false) }
@@ -64,16 +72,17 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.Dashboard) })
+            // F22: SMS vive en Más — ese es el destino de reserva si no hay historial.
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Column(modifier = Modifier.weight(1f)) {
                 Text("Mensajes del banco", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
                 Text("$pendingCount por confirmar", fontSize = 12.sp, color = MinTextMute)
             }
-            Text(
-                "↻",
-                fontSize = 18.sp,
-                color = MinTextDim,
-                modifier = Modifier.clickableSimple { refreshKey++ },
+            Icon(
+                Icons.Rounded.Refresh,
+                contentDescription = "Actualizar",
+                tint = MinTextDim,
+                modifier = Modifier.size(20.dp).clickableSimple { refreshKey++ },
             )
         }
 
@@ -137,11 +146,11 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                                     modifier = Modifier.padding(top = 2.dp),
                                 )
                             }
-                            Text(
-                                if (syncWorking) "…" else "↑",
-                                fontSize = 18.sp,
-                                color = if (syncWorking) MinTextFaint else MinPrimary,
-                            )
+                            if (syncWorking) {
+                                Text("…", fontSize = 18.sp, color = MinTextFaint)
+                            } else {
+                                Icon(Icons.Rounded.Upload, contentDescription = "Sincronizar", tint = MinPrimary, modifier = Modifier.size(20.dp))
+                            }
                         }
                         if (syncError != null) {
                             Spacer(Modifier.height(8.dp))
@@ -207,11 +216,23 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+
+        // F29: era la única sección de Más que se quedaba sin la barra al navegar acá.
+        MinBottomNav(active = NavTab.MORE) { tab ->
+            when (tab) {
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
+            }
+        }
     }
 }
 
 @Composable
 fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var sms by remember { mutableStateOf<SmsMessage?>(null) }
     var parsed by remember { mutableStateOf<ParsedSms?>(null) }
@@ -268,7 +289,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 Repositories.wallets.confirmSms(smsId)
             }.onSuccess {
                 working = false
-                onNavigate(Screen.SMSInbox)
+                sms = sms?.copy(state = "confirmed")
+                // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
+                // a este detalle ya confirmado (evita duplicar el movimiento).
+                goBack(Screen.SMSInbox)
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
@@ -282,7 +306,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         coroutine.launch {
             val result = runCatching { Repositories.wallets.ignoreSms(smsId) }
             working = false
-            result.onSuccess { onNavigate(Screen.SMSInbox) }
+            result.onSuccess {
+                sms = sms?.copy(state = "ignored")
+                goBack(Screen.SMSInbox)
+            }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -293,7 +320,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.SMSInbox) })
+            // F22: el detalle vuelve a la bandeja si no hay historial (ese es su padre lógico).
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.SMSInbox) })
             Text("Reconciliar movimiento", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 
@@ -422,9 +450,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     Spacer(Modifier.height(10.dp))
                     Text(error!!, fontSize = 12.sp, color = MinExpense)
                 }
+
+                // Ola 2 #1: red de seguridad — si la pila de navegación rota trae de vuelta a
+                // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
+                if (currentSms != null && currentSms.state != "pending") {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Este mensaje ya se confirmó", fontSize = 12.sp, color = MinTextMute)
+                }
             }
         }
 
+        val alreadyResolved = currentSms != null && currentSms.state != "pending"
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -435,12 +471,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     .height(50.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .border(1.dp, MinBorderStrong, RoundedCornerShape(14.dp))
-                    .clickable(enabled = !working) { ignore() },
+                    .clickable(enabled = !working && !alreadyResolved) { ignore() },
                 contentAlignment = Alignment.Center,
             ) {
                 Text("Ignorar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
             }
-            val canConfirm = parsed != null && resolvedAccount != null && !working
+            val canConfirm = parsed != null && resolvedAccount != null && !working && !alreadyResolved
             Box(
                 modifier = Modifier
                     .weight(1.7f)
@@ -456,6 +492,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     fontWeight = FontWeight.Medium,
                     color = if (canConfirm) MinBg else MinTextFaint,
                 )
+            }
+        }
+
+        // F29: la pantalla de detalle también se quedaba sin la barra.
+        MinBottomNav(active = NavTab.MORE) { tab ->
+            when (tab) {
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
             }
         }
     }
@@ -475,7 +522,11 @@ private fun Detail(ok: Boolean, label: String, value: String, isLast: Boolean = 
                 .background(if (ok) MinIncome.copy(alpha = 0.16f) else MinWarn.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(if (ok) "✓" else "?", fontSize = 10.sp, color = if (ok) MinIncome else MinWarn, fontWeight = FontWeight.Bold)
+            if (ok) {
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = MinIncome, modifier = Modifier.size(12.dp))
+            } else {
+                Text("?", fontSize = 10.sp, color = MinWarn, fontWeight = FontWeight.Bold)
+            }
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(label.uppercase(), fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)

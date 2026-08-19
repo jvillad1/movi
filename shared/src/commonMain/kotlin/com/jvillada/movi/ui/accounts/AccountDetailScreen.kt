@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
@@ -36,6 +37,7 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
@@ -45,6 +47,7 @@ import kotlinx.datetime.toLocalDateTime
 
 @Composable
 fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
+    val goBack = LocalGoBack.current
     var account by remember { mutableStateOf<Account?>(null) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -112,11 +115,12 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "‹",
-                    fontSize = 22.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Accounts) },
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MinText,
+                    // F22: el detalle vuelve a Mis cuentas si no hay historial.
+                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Accounts) },
                 )
                 Text(
                     text = account?.name ?: "",

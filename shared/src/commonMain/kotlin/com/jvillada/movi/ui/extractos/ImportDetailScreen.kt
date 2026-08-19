@@ -25,6 +25,7 @@ import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
@@ -34,6 +35,7 @@ import kotlinx.datetime.toLocalDateTime
 
 @Composable
 fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
+    val goBack = LocalGoBack.current
     var detail by remember { mutableStateOf<StatementImportDetail?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -58,7 +60,8 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
             Icon(
                 Icons.Rounded.ArrowBackIosNew, "Volver",
                 tint = MinTextDim,
-                modifier = Modifier.clickable { onNavigate(Screen.Extractos) }.padding(12.dp).size(20.dp),
+                // F22: el detalle vuelve a la lista de Extractos si no hay historial.
+                modifier = Modifier.clickable { goBack(Screen.Extractos) }.padding(12.dp).size(20.dp),
             )
             Spacer(Modifier.width(12.dp))
             Text("Detalle de importación", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MinText)

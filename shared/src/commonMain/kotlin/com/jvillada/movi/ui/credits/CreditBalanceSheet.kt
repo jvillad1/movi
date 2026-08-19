@@ -82,14 +82,8 @@ fun CreditBalanceSheet(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint),
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SectionLabel("AJUSTAR SALDO")
@@ -122,8 +116,8 @@ fun CreditBalanceSheet(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text = when {
-                        overCap        -> "Saldo fuera de rango — revisá el monto."
-                        parsed == null -> "Copiá el saldo que muestra la banca en línea hoy."
+                        overCap        -> "Saldo fuera de rango — revisa el monto."
+                        parsed == null -> "Copia el saldo que muestra la banca en línea hoy."
                         delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
                         delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."
                         else           -> "Se registrará un abono de ${formatCOP(-delta)} para bajar la deuda."

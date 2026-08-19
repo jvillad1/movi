@@ -95,11 +95,11 @@ private const val WINDOW_RESET_MS = 15 * 60_000L
 /** Respuesta única del pedido de reset. Idéntica exista o no el correo — es el punto. */
 private const val RESET_REQUEST_ACK =
     "Si el correo está registrado, te enviamos un enlace para restablecer la contraseña. " +
-        "Revisá tu bandeja; el enlace vence en 1 hora."
+        "Revisa tu bandeja; el enlace vence en 1 hora."
 
 /** Respuesta única de un confirm que no prospera: no distingue inexistente de usado de vencido. */
 private const val RESET_TOKEN_REJECTED =
-    "El enlace no es válido, ya se usó o venció. Pedí uno nuevo desde \"¿Olvidaste tu contraseña?\"."
+    "El enlace no es válido, ya se usó o venció. Pide uno nuevo desde \"¿Olvidaste tu contraseña?\"."
 
 fun Route.authRoutes() {
     route("/api/auth") {
@@ -113,7 +113,7 @@ fun Route.authRoutes() {
             // puede tener uno — no hay cuenta todavía. Con el registro abierto, este es el
             // único freno a la creación masiva de cuentas.
             if (!RateLimiter.allow("register:global:$ip", maxAttempts = 10, windowMs = WINDOW_LOGIN_MS)) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
             val req = call.receive<RegisterRequest>()
             if (req.email.isBlank() || req.name.isBlank()) {
@@ -158,7 +158,7 @@ fun Route.authRoutes() {
         post("/login") {
             val ip = call.request.origin.remoteHost
             if (!RateLimiter.allow("login:global:$ip", maxAttempts = 60, windowMs = WINDOW_LOGIN_MS)) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
             val req = call.receive<LoginRequest>()
             val email = req.email.lowercase().trim()
@@ -167,7 +167,7 @@ fun Route.authRoutes() {
             // y este es el único balde que en producción no es global. La clave es la cadena
             // pedida, exista o no la cuenta, así que no distingue registrado de desconocido.
             if (!RateLimiter.allow("login:email:$email", maxAttempts = 10, windowMs = WINDOW_LOGIN_MS)) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
 
             // OJO: acá NO se aplica el PISO de PasswordPolicy, y es a propósito. El mínimo solo
@@ -235,7 +235,7 @@ fun Route.authRoutes() {
             // proteger (no inundar la casilla de nadie). Ver el bloque de arriba.
             val ip = call.request.origin.remoteHost
             if (!RateLimiter.allow("pwreset-req:global:$ip", maxAttempts = 30, windowMs = WINDOW_RESET_MS)) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados pedidos, esperá unos minutos")
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados pedidos, espera unos minutos")
             }
             val req = call.receive<PasswordResetRequest>()
             val email = req.email.lowercase().trim()
@@ -243,7 +243,7 @@ fun Route.authRoutes() {
             // El 429 depende solo de la cadena pedida, no de si existe la cuenta: un correo
             // desconocido consume su balde igual, así que esto tampoco enumera.
             if (!RateLimiter.allow("pwreset-req:email:$email", maxAttempts = 5, windowMs = WINDOW_RESET_MS)) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados pedidos, esperá unos minutos")
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados pedidos, espera unos minutos")
             }
 
             // Sin clave de Resend no hay forma de que llegue ningún correo. Se decide ANTES de
@@ -261,7 +261,7 @@ fun Route.authRoutes() {
                 return@post call.respond(
                     HttpStatusCode.ServiceUnavailable,
                     "El envío de correo no está configurado en este servidor, así que no se puede " +
-                        "enviar el enlace de recuperación. Contactá a quien administra movi.",
+                        "enviar el enlace de recuperación. Contacta a quien administra movi.",
                 )
             }
 
@@ -327,7 +327,7 @@ fun Route.authRoutes() {
             // por la misma razón que los otros: en producción es un balde para todo el mundo.
             // Lo que de verdad protege este endpoint es la entropía del token, no el limitador.
             if (!RateLimiter.allow("pwreset-confirm:global:$ip", maxAttempts = 60, windowMs = WINDOW_RESET_MS)) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, esperá unos minutos")
+                return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
             val req = call.receive<PasswordResetConfirmRequest>()
 
@@ -384,7 +384,7 @@ fun Route.authRoutes() {
             }
 
             call.application.log.info("password-reset: contraseña restablecida para $userId")
-            call.respond(HttpStatusCode.OK, "Listo, tu contraseña quedó actualizada. Ya podés entrar con la nueva.")
+            call.respond(HttpStatusCode.OK, "Listo, tu contraseña quedó actualizada. Ya puedes entrar con la nueva.")
         }
     }
 }

@@ -53,17 +53,50 @@ private val anthropicClient: AnthropicClient? by lazy {
     runCatching { AnthropicOkHttpClient.builder().apiKey(key).build() }.getOrNull()
 }
 
-private val PERSONA = """Sos Movi AI, un copiloto financiero personal y familiar para usuarios en Colombia.
+private val PERSONA = """Eres Movi AI, un copiloto financiero personal y familiar para usuarios en Colombia.
 
-Hablás en español relajado y directo, sin jerga financiera innecesaria. Tuteás al usuario, no uses "usted".
+Hablas en español relajado y directo, sin jerga financiera innecesaria. Tuteas al usuario, no uses "usted".
+Habla en español neutro latinoamericano, de tú, sin voseo.
 Montos siempre en pesos colombianos con formato ${'$'}X.XXX.XXX.
 
-Cuando el usuario te pregunte sobre su plata, basate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO".
-Si la pregunta no se puede contestar con esos datos, decilo claramente y sugerí qué información faltaría.
+Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO".
+Si la pregunta no se puede contestar con esos datos, dilo claramente y sugiere qué información faltaría.
 
 Tono: directo, empático, accionable. No moralices sobre el gasto.
-Estructura: respondé en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, mostralo en una línea separada.
+Estructura: responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
+No uses emojis ni símbolos decorativos: la interfaz no los renderiza.
 """
+
+/**
+ * Red de seguridad de F31: el [PERSONA] ya le pide al modelo que no mande emojis, pero esto
+ * filtra lo que se cuele antes de que llegue al cliente — la fuente que usa la web no los
+ * renderiza (cuadrados vacíos).
+ *
+ * Dos categorías, deliberadamente angostas para no tocar el resto de Unicode "normal"
+ * (tildes, ñ, signos de puntuación en español, comillas «»):
+ *  - Todo lo fuera del BMP (code point > 0xFFFF): ahí vive la gran mayoría del emoji moderno
+ *    (🎉 💰 🚀…), los modificadores de tono de piel y las banderas.
+ *  - Los bloques BMP de símbolos misceláneos que sí caben dentro del BMP (☀ ✨ ✅ ❤ ⌚ ⭐…),
+ *    más el selector de variación U+FE0F y el ZWJ U+200D que arman emoji compuestos.
+ */
+internal fun stripEmojis(text: String): String {
+    val sb = StringBuilder(text.length)
+    var i = 0
+    while (i < text.length) {
+        val codePoint = text.codePointAt(i)
+        val charCount = Character.charCount(codePoint)
+        val isBmpMiscSymbol = codePoint in 0x2600..0x27BF || // Misc Symbols + Dingbats (☀✨✅❤️✂…)
+            codePoint in 0x2300..0x23FF || // Misc Technical (⌚⌛⏰…)
+            codePoint in 0x2B00..0x2BFF || // Misc Symbols and Arrows (⭐⬛…)
+            codePoint == 0xFE0F || // variation selector-16 (fuerza presentación emoji)
+            codePoint == 0x200D // zero-width joiner (arma emoji compuestos)
+        if (codePoint <= 0xFFFF && !isBmpMiscSymbol) {
+            sb.appendCodePoint(codePoint)
+        }
+        i += charCount
+    }
+    return sb.toString()
+}
 
 fun Route.aiRoutes() {
     post("/api/ai/chat") {
@@ -73,7 +106,7 @@ fun Route.aiRoutes() {
             call.respond(
                 HttpStatusCode.ServiceUnavailable,
                 AiChatResponse(
-                    text = "ANTHROPIC_API_KEY no está configurada en el server. Setealo y reiniciá: export ANTHROPIC_API_KEY=sk-ant-... && ./gradlew :server:run",
+                    text = "ANTHROPIC_API_KEY no está configurada en el server. Configúrala y reinicia: export ANTHROPIC_API_KEY=sk-ant-... && ./gradlew :server:run",
                 ),
             )
             return@post
@@ -117,7 +150,7 @@ fun Route.aiRoutes() {
                     .ifBlank { "(sin respuesta)" }
             }
         }
-        reply.onSuccess { call.respond(AiChatResponse(text = it)) }
+        reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it))) }
             .onFailure {
                 call.respond(
                     HttpStatusCode.InternalServerError,

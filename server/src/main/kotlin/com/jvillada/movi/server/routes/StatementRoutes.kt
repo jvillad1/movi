@@ -78,7 +78,7 @@ fun Route.statementRoutes() {
             if (imageMime == null) {
                 call.respond(
                     HttpStatusCode.UnprocessableEntity,
-                    "Formato de imagen no soportado. Subí PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
+                    "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
                 )
                 return@post
             }

@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.LocalGoBack
+import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.auth.LoginScreen
 import com.jvillada.movi.ui.auth.RegisterScreen
@@ -79,10 +81,29 @@ fun App() {
             val currentScreen = backStack.last()
 
             val navigate: (Screen) -> Unit = { screen ->
-                if (backStack.last() != screen) backStack.add(screen)
+                if (NavStack.shouldPush(backStack, screen)) backStack.add(screen)
             }
             val goBack: () -> Unit = {
                 if (backStack.size > 1) backStack.removeLast()
+            }
+            // F22: «volver» real para las flechas ‹ de cada pantalla. Si hay
+            // historial, saca el tope de la pila (vuelve a donde de verdad
+            // estabas); si la pila tiene un solo elemento (deep link, recarga de
+            // la web en una pantalla que no es Inicio), cae al destino de reserva
+            // que pasa cada pantalla.
+            // Ola 2 #8: `remember` — sin esto la lambda se creaba de nuevo en CADA
+            // recomposición y, como LocalGoBack es un staticCompositionLocalOf, un valor
+            // "nuevo" (aunque haga lo mismo) invalida TODO el subárbol que lo consume, no
+            // solo lo que de verdad cambió. `backStack` es estable (viene de un `remember`
+            // de arriba), así que la lambda puede vivir una sola vez por toda la composición.
+            val goBackTo: (Screen) -> Unit = remember {
+                { fallback ->
+                    when (val result = NavStack.back(backStack, fallback)) {
+                        NavStack.BackResult.Pop -> backStack.removeLast()
+                        is NavStack.BackResult.Fallback ->
+                            if (backStack.last() != result.screen) backStack[backStack.lastIndex] = result.screen
+                    }
+                }
             }
 
             BackHandlerEffect(enabled = backStack.size > 1, onBack = goBack)
@@ -130,6 +151,7 @@ fun App() {
                 ) {
                 Box(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
+                CompositionLocalProvider(LocalGoBack provides goBackTo) {
                 when (currentScreen) {
                     Screen.Login             -> LoginScreen(navigate)
                     Screen.Register          -> RegisterScreen(navigate)
@@ -176,6 +198,7 @@ fun App() {
                     )
                     Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
                 }
+                } // CompositionLocalProvider(LocalGoBack)
                 } // SaveableStateProvider
                 } // inner Box (max-width container)
                 } // content area

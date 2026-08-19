@@ -11,12 +11,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -25,9 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.newId
@@ -36,12 +42,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-
-private val EXPENSE_CATEGORIES = listOf(
-    "Mercado", "Restaurantes", "Transporte", "Salud",
-    "Suscripción", "Servicios", "Hogar", "Entretenimiento", "Otro",
-)
-private val INCOME_CATEGORIES = listOf("Nómina", "Transferencia", "Reembolso", "Otro")
 
 private sealed class Picker {
     data object None : Picker()
@@ -56,7 +56,9 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     var typeIndex by remember { mutableStateOf(0) }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(EXPENSE_CATEGORIES.first()) }
+    // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
+    // "Mercado" — ahora es texto libre con sugerencias (CategoryField), no una lista fija.
+    var category by remember { mutableStateOf(PREDEFINED_CATEGORIES.first { it.type == "EXPENSE" }.name) }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
     // si no existiera (borrada entre medio) el efecto de abajo cae al primer accountId disponible.
@@ -83,8 +85,16 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     }
 
     LaunchedEffect(typeIndex) {
-        val available = if (typeIndex == 0) EXPENSE_CATEGORIES else INCOME_CATEGORIES
-        if (category !in available) category = available.first()
+        // Con categoría libre (F35) ya no hay una lista fija de la que "salirse" al cambiar de
+        // tipo — pero si la categoría actual SÍ es una predefinida del otro tipo (p. ej.
+        // "Salario" al pasar a Gasto), seguir mostrándola confundiría. Una categoría escrita a
+        // mano, o "BOTH", se deja tal cual: no hay forma de saber si tiene sentido para el
+        // nuevo tipo.
+        val newType = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+        val matched = PREDEFINED_CATEGORIES.find { it.name == category }
+        if (matched != null && matched.type != newType.name && matched.type != "BOTH") {
+            category = PREDEFINED_CATEGORIES.first { it.type == newType.name }.name
+        }
     }
 
     fun onKey(key: String) {
@@ -95,13 +105,24 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
-    val canSave = parsedAmount > 0 && selectedAccountId != null && !saving
+    // Ola 2 #2: canSave no miraba la categoría — se podía guardar con la caja vacía.
+    val canSave = parsedAmount > 0 && category.isNotBlank() && selectedAccountId != null && !saving
+    // F24: mismo patrón que Presupuestos/Recurrentes — la primera cosa que falta.
+    val missingFieldMessage = when {
+        parsedAmount <= 0 -> "Falta el monto"
+        category.isBlank() -> "Falta la categoría"
+        selectedAccountId == null -> "Falta la cuenta"
+        else -> null
+    }
     val selectedAccount = accounts.firstOrNull { it.id == selectedAccountId }
 
     fun save() {
         if (!canSave) return
         saving = true
         error = null
+        // Ola 2 #2: recortada — canSave ya exige no-vacío, pero "  Comida  " pasaba esa guarda
+        // y se guardaba con espacios.
+        val trimmedCategory = category.trim()
         coroutine.launch {
             val event = FinancialEvent(
                 // Generado acá, no en blanco: en Android/iOS Repositories.wallets es
@@ -112,8 +133,8 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                 accountId = selectedAccountId ?: accounts.firstOrNull()?.id ?: "acc_1",
                 type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                 amount = amount.toLongOrNull() ?: 0L,
-                category = category,
-                description = note.ifBlank { category },
+                category = trimmedCategory,
+                description = note.ifBlank { trimmedCategory },
                 source = EventSource.MANUAL,
                 // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es
                 // solo para lo que entra solo (SMS, OCR, extracto), no para lo que el usuario
@@ -124,7 +145,9 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
-            result.onSuccess { onDismiss() }
+            // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
+            // "usada" en el resto de la sesión sin esperar a que otra pantalla la cargue.
+            result.onSuccess { UsedCategoriesCache.record(listOf(trimmedCategory)); onDismiss() }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -134,7 +157,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.6f))
-                .clickable(onClick = onDismiss),
+                .clickable(enabled = !saving, onClick = onDismiss),
         ) {
             Box(modifier = Modifier.weight(1f))
 
@@ -146,23 +169,31 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                     .padding(horizontal = 20.dp)
                     .clickable(enabled = false) {},
             ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(vertical = 12.dp)
-                        .width(32.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MinTextFaint),
-                )
+                // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+                SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
                 when (picker) {
-                    Picker.Category -> CategoryPicker(
-                        options = if (typeIndex == 0) EXPENSE_CATEGORIES else INCOME_CATEGORIES,
-                        selected = category,
-                        onPick = { category = it; picker = Picker.None },
-                        onClose = { picker = Picker.None },
-                    )
+                    // F35: campo libre con sugerencias en vez de una lista fija — tocar una
+                    // sugerencia cierra el sub-picker igual que antes (onSuggestionPicked);
+                    // escribir una categoría nueva la deja tal cual, sin forzar a elegir.
+                    Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
+                        PickerHeader("Categoría", onClose = { picker = Picker.None })
+                        // Ola 2 #3c: sin esto el sub-picker se abría con el campo prellenado
+                        // ("Comida") pero sin foco — había que tocarlo a mano para ver las
+                        // sugerencias o poder escribir.
+                        val categoryFocusRequester = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { categoryFocusRequester.requestFocus() }
+                        CategoryField(
+                            value = category,
+                            onValueChange = { category = it },
+                            type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                            usedCategories = UsedCategoriesCache.categories,
+                            label = null,
+                            onSuggestionPicked = { picker = Picker.None },
+                            focusRequester = categoryFocusRequester,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
                     Picker.Wallet -> WalletPicker(
                         accounts = accounts,
                         selectedId = selectedAccountId,
@@ -187,6 +218,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                         onEditNote = { picker = Picker.Note },
                         onOcr = { onNavigate(Screen.OCRCapture) },
                         canSave = canSave,
+                        missingFieldMessage = missingFieldMessage,
                         saving = saving,
                         error = error,
                         onSave = ::save,
@@ -222,6 +254,7 @@ private fun EditorBody(
     onEditNote: () -> Unit,
     onOcr: () -> Unit,
     canSave: Boolean,
+    missingFieldMessage: String? = null,
     saving: Boolean,
     error: String?,
     onSave: () -> Unit,
@@ -341,13 +374,17 @@ private fun EditorBody(
                             .clickable { onKey(key) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = key,
-                            fontSize = 22.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Normal,
-                            color = MinText,
-                        )
+                        if (key == "⌫") {
+                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = MinText, modifier = Modifier.size(22.dp))
+                        } else {
+                            Text(
+                                text = key,
+                                fontSize = 22.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Normal,
+                                color = MinText,
+                            )
+                        }
                     }
                 }
             }
@@ -417,6 +454,16 @@ private fun EditorBody(
                 )
             }
         }
+        if (!canSave && !saving && missingFieldMessage != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = missingFieldMessage,
+                fontSize = 12.sp,
+                color = MinTextMute,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -436,39 +483,7 @@ private fun PickerHeader(title: String, onClose: () -> Unit) {
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
-            Text("×", fontSize = 18.sp, color = MinText)
-        }
-    }
-}
-
-@Composable
-private fun CategoryPicker(
-    options: List<String>,
-    selected: String,
-    onPick: (String) -> Unit,
-    onClose: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        PickerHeader("Categoría", onClose)
-        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-            items(options) { opt ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(opt) }
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        opt,
-                        fontSize = 15.sp,
-                        color = MinText,
-                        fontWeight = if (opt == selected) FontWeight.Medium else FontWeight.Normal,
-                    )
-                    Box(modifier = Modifier.weight(1f))
-                    if (opt == selected) Text("✓", fontSize = 14.sp, color = MinText)
-                }
-            }
+            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = MinText, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -509,7 +524,7 @@ private fun WalletPicker(
                                 color = MinTextMute,
                             )
                         }
-                        if (account.id == selectedId) Text("✓", fontSize = 14.sp, color = MinText)
+                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinText, modifier = Modifier.size(16.dp))
                     }
                 }
             }

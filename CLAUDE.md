@@ -156,3 +156,4 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
 - **New shared models** go in `core/src/commonMain/.../shared/model/` and must be annotated with `@Serializable`.
 - **Platform-specific Ktor engine wiring** belongs in each `:shared` source set's dependency block, not in `commonMain`.
 - The iOS Xcode project (`iosApp/iosApp.xcodeproj`) references the `ComposeApp` XCFramework at `shared/build/XCFrameworks/debug/ComposeApp.xcframework`. Always run `./gradlew :shared:assembleComposeAppDebugXCFramework` before building the iOS app — the Xcode build will fail if the framework is missing.
+- **Todo texto visible por el usuario va en español neutro latinoamericano (tuteo), sin voseo.** Los comentarios de código pueden seguir en rioplatense. `core/src/jvmTest/kotlin/com/jvillada/movi/shared/quality/VoseoScanTest.kt` protege `shared/src/commonMain/.../ui` contra regresiones (lista negra de formas voseantes dentro de literales de string).

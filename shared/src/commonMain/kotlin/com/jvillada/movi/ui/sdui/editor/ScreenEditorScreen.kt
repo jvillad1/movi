@@ -11,6 +11,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -31,6 +34,7 @@ import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.ScreenTaxonomy
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -104,6 +108,7 @@ private fun sectionsHaveInvalidUrl(sections: List<ScreenSection>): Boolean {
 
 @Composable
 fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
 
     var sections by remember { mutableStateOf<List<ScreenSection>>(emptyList()) }
@@ -202,7 +207,8 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
             Icon(
                 Icons.Rounded.ArrowBackIosNew, "Volver",
                 tint = MinTextDim,
-                modifier = Modifier.clickable { onNavigate(Screen.Mas) }.padding(12.dp).size(20.dp),
+                // F22: el editor vive en Más — destino de reserva si no hay historial.
+                modifier = Modifier.clickable { goBack(Screen.Mas) }.padding(12.dp).size(20.dp),
             )
             Spacer(Modifier.width(12.dp))
             Text("Editor de pantallas", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MinText, modifier = Modifier.weight(1f))
@@ -335,19 +341,21 @@ private fun SectionHeader(
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-        Text(
-            "↑", fontSize = 15.sp, fontWeight = FontWeight.Medium,
-            color = if (canMoveUp) MinTextDim else MinTextFaint,
-            modifier = Modifier.clickable(enabled = canMoveUp, onClick = onMoveUp).padding(6.dp),
+        // Ola 2 #5 (F11): glifos escritos como texto → íconos Material (salían como ▯ en la web).
+        Icon(
+            Icons.Rounded.ArrowUpward, contentDescription = "Subir",
+            tint = if (canMoveUp) MinTextDim else MinTextFaint,
+            modifier = Modifier.size(15.dp).clickable(enabled = canMoveUp, onClick = onMoveUp).padding(6.dp),
         )
-        Text(
-            "↓", fontSize = 15.sp, fontWeight = FontWeight.Medium,
-            color = if (canMoveDown) MinTextDim else MinTextFaint,
-            modifier = Modifier.clickable(enabled = canMoveDown, onClick = onMoveDown).padding(6.dp),
+        Icon(
+            Icons.Rounded.ArrowDownward, contentDescription = "Bajar",
+            tint = if (canMoveDown) MinTextDim else MinTextFaint,
+            modifier = Modifier.size(15.dp).clickable(enabled = canMoveDown, onClick = onMoveDown).padding(6.dp),
         )
-        Text(
-            "✕", fontSize = 14.sp, color = MinExpense,
-            modifier = Modifier.clickable(onClick = onRemove).padding(6.dp),
+        Icon(
+            Icons.Rounded.Close, contentDescription = "Quitar",
+            tint = MinExpense,
+            modifier = Modifier.size(14.dp).clickable(onClick = onRemove).padding(6.dp),
         )
     }
 }
@@ -412,7 +420,7 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Tarjeta ${index + 1}", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Text("✕", fontSize = 13.sp, color = MinExpense, modifier = Modifier.clickable(onClick = onRemove).padding(4.dp))
+            Icon(Icons.Rounded.Close, contentDescription = "Quitar", tint = MinExpense, modifier = Modifier.size(15.dp).clickable(onClick = onRemove).padding(4.dp))
         }
         Spacer(Modifier.height(8.dp))
         FieldBox("Título", card.title, { onUpdate(card.copy(title = it)) })

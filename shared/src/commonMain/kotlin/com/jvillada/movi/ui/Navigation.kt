@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui
 
+import androidx.compose.runtime.staticCompositionLocalOf
+
 sealed class Screen {
     data object Login            : Screen()
     data object Register         : Screen()
@@ -32,3 +34,36 @@ sealed class Screen {
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
 }
+
+/**
+ * Reglas puras de la pila de navegación (sin Compose), extraídas para poder
+ * testearlas en :shared:commonTest (App.kt las aplica sobre un
+ * SnapshotStateList<Screen> para que Compose observe los cambios).
+ */
+object NavStack {
+    /** true si `screen` debe apilarse — evita duplicar la pantalla de arriba. */
+    fun shouldPush(stack: List<Screen>, screen: Screen): Boolean =
+        stack.isEmpty() || stack.last() != screen
+
+    /**
+     * Resultado de pedir "volver": si hay historial, se saca el tope (Pop); si la
+     * pila tiene un solo elemento hace falta un destino de reserva (Fallback) —
+     * por ejemplo, entraste directo por deep link o recargaste la web en una
+     * pantalla que no es Inicio.
+     */
+    sealed class BackResult {
+        data object Pop : BackResult()
+        data class Fallback(val screen: Screen) : BackResult()
+    }
+
+    fun back(stack: List<Screen>, fallback: Screen): BackResult =
+        if (stack.size > 1) BackResult.Pop else BackResult.Fallback(fallback)
+}
+
+/**
+ * «Volver» real, expuesto a las pantallas: recibe el destino de reserva (F22) y
+ * decide adentro si hay historial al que volver o si hay que caer a ese destino.
+ * App.kt provee la implementación de verdad alrededor del `when(currentScreen)`;
+ * el default es un no-op para que un preview o test aislado no explote.
+ */
+val LocalGoBack = staticCompositionLocalOf<(Screen) -> Unit> { {} }

@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,19 +25,26 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     var showSheet by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<CreditSummary?>(null) }
     var adjusting by remember { mutableStateOf<CreditSummary?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
+    // parpadeaba un instante antes de que llegaran los créditos reales.
+    var loading by remember { mutableStateOf(true) }
     LaunchedEffect(reloadKey) {
+        loading = true
         runCatching { Repositories.wallets.getCredits() }
             .onSuccess { credits = it }
+        loading = false
     }
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -45,9 +55,23 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.Dashboard) })
+                // F22: Créditos vive en Más — destino de reserva si no hay historial
+                // (antes caía siempre en Inicio, aunque entraras desde Más).
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
                 Text("Créditos", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-                Text("+", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { editing = null; showSheet = true })
+                // F18: compacto arriba a la derecha cuando ya hay créditos; vacío, el botón de
+                // abajo (ver el bloque bajo el header) es la acción principal.
+                if (credits.isNotEmpty()) {
+                    NewItemButton(label = "Nuevo crédito", onClick = { editing = null; showSheet = true })
+                }
+            }
+            if (credits.isEmpty() && !loading) {
+                NewItemButton(
+                    label = "Nuevo crédito",
+                    onClick = { editing = null; showSheet = true },
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    full = true,
+                )
             }
 
             val totalDebt = credits.sumOf { it.account.balance }
@@ -76,7 +100,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                             ) {
                                 Text(
-                                    "Sin créditos registrados — toca + para agregar el primero",
+                                    "Sin créditos registrados",
                                     fontSize = 14.sp, color = MinTextMute,
                                 )
                             }

@@ -6,24 +6,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -51,18 +54,32 @@ private sealed class Sheet {
 
 @Composable
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
+    // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
+    // parpadeaba un instante antes de que llegaran los presupuestos reales.
+    var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
-        runCatching { Repositories.wallets.getBudgets() }.onSuccess { budgets = it }
+        // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
+        // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
+        runCatching { Repositories.wallets.getBudgets() }.onSuccess {
+            budgets = it
+            UsedCategoriesCache.record(it.map { b -> b.category })
+        }
     }
 
     LaunchedEffect(Unit) {
+        loading = true
         reload()
-        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess { days = it }
+        runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
+            days = it
+            UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
+        }
+        loading = false
     }
 
     val progresses = remember(budgets, days) {
@@ -89,11 +106,13 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(
-                    text = "‹",
-                    fontSize = 22.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Analisis) },
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MinText,
+                    // F22: Presupuestos es una pestaña de primer nivel — Inicio como destino
+                    // de reserva si no hay historial (antes caía siempre en Análisis).
+                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Dashboard) },
                 )
                 // F41: mismo componente que Inicio y Movimientos — Perfil alcanzable desde acá.
                 AvatarButton(onClick = { onNavigate(Screen.Profile) })
@@ -104,11 +123,17 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                     color = MinText,
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = "+",
-                    fontSize = 24.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { sheet = Sheet.Add },
+                // F18: compacto arriba a la derecha cuando ya hay presupuestos.
+                if (budgets.isNotEmpty()) {
+                    NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add })
+                }
+            }
+            if (budgets.isEmpty() && !loading) {
+                NewItemButton(
+                    label = "Nuevo presupuesto",
+                    onClick = { sheet = Sheet.Add },
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    full = true,
                 )
             }
 
@@ -361,15 +386,8 @@ private fun BudgetSheet(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint)
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss)
 
             Text(
                 text = title,
@@ -381,37 +399,22 @@ private fun BudgetSheet(
             )
 
             // Category
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Categoría", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-                Spacer(Modifier.height(8.dp))
-                if (categoryEditable) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MinSurfaceContainerLow)
-                            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    ) {
-                        BasicTextField(
-                            value = category,
-                            onValueChange = { category = it },
-                            singleLine = true,
-                            cursorBrush = SolidColor(MinText),
-                            textStyle = TextStyle(
-                                color = MinText,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            decorationBox = { inner ->
-                                if (category.isEmpty()) {
-                                    Text("Mercado, Salud, Restaurantes…", fontSize = 15.sp, color = MinTextFaint)
-                                }
-                                inner()
-                            },
-                        )
-                    }
-                } else {
+            if (categoryEditable) {
+                // F35: crear presupuesto — campo libre con sugerencias en vez de texto libre a
+                // ciegas. Solo EXPENSE: no tiene sentido presupuestar una categoría de ingreso.
+                CategoryField(
+                    value = category,
+                    onValueChange = { category = it },
+                    type = TransactionType.EXPENSE,
+                    usedCategories = UsedCategoriesCache.categories,
+                    label = "Categoría",
+                    placeholder = "Mercado, Salud, Restaurantes…",
+                )
+            } else {
+                // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Categoría", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = category,
                         fontSize = 16.sp,
@@ -462,13 +465,17 @@ private fun BudgetSheet(
                                     .clickable { onKey(key) },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = key,
-                                    fontSize = 20.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MinText,
-                                )
+                                if (key == "⌫") {
+                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = MinText, modifier = Modifier.size(20.dp))
+                                } else {
+                                    Text(
+                                        text = key,
+                                        fontSize = 20.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Normal,
+                                        color = MinText,
+                                    )
+                                }
                             }
                         }
                     }
@@ -506,7 +513,9 @@ private fun BudgetSheet(
                         .height(50.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
-                        .clickable(enabled = canSave) { onSave(category, parsedAmount) },
+                        // Ola 2 #2: recorte al guardar — canSave ya exige no-vacío, pero
+                        // "  Comida  " pasaba esa guarda y se guardaba con espacios.
+                        .clickable(enabled = canSave) { onSave(category.trim(), parsedAmount) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

@@ -30,12 +30,12 @@ object PasswordResetMailer {
 <head><meta charset="UTF-8"><title>Restablecer tu contraseña de movi</title></head>
 <body style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#1f2937">
   <h2 style="margin-bottom:4px">🔑 Restablecer tu contraseña</h2>
-  <p style="color:#4b5563">Pediste restablecer la contraseña de tu cuenta de movi. Abrí este enlace para elegir una nueva:</p>
+  <p style="color:#4b5563">Pediste restablecer la contraseña de tu cuenta de movi. Abre este enlace para elegir una nueva:</p>
   <p style="margin:24px 0">
     <a href="$link" style="background:#C9B8FF;color:#1a1226;padding:14px 22px;border-radius:999px;text-decoration:none;font-weight:600">Elegir contraseña nueva</a>
   </p>
   <p style="color:#6b7280;font-size:0.9em">El enlace vence en 1 hora y sirve una sola vez.</p>
-  <p style="color:#9ca3af;font-size:0.8em;margin-top:24px">Si no pediste esto, ignorá este correo: tu contraseña actual sigue funcionando.</p>
+  <p style="color:#9ca3af;font-size:0.8em;margin-top:24px">Si no pediste esto, ignora este correo: tu contraseña actual sigue funcionando.</p>
 </body>
 </html>"""
 }

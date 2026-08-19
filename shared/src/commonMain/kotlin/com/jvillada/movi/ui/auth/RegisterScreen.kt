@@ -78,7 +78,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Crear cuenta", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MinText)
-        Text("Ingresá tus datos para empezar", fontSize = 14.sp, color = MinTextMute)
+        Text("Ingresa tus datos para empezar", fontSize = 14.sp, color = MinTextMute)
         Spacer(Modifier.height(32.dp))
 
         MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
@@ -151,7 +151,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Text("¿Ya tenés cuenta? Entrá", fontSize = 13.sp, color = MinPrimary,
+        Text("¿Ya tienes cuenta? Entra", fontSize = 13.sp, color = MinPrimary,
             modifier = Modifier.noRippleClickable { onNavigate(Screen.Login) })
     }
 }

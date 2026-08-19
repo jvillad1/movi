@@ -9,6 +9,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,12 +30,14 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun AIChatScreen(onNavigate: (Screen) -> Unit) {
+    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     val messages = remember {
         mutableStateListOf<ChatMessage>(
@@ -68,11 +75,13 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                "‹",
-                fontSize = 22.sp,
-                color = MinText,
-                modifier = Modifier.clickable { onNavigate(Screen.Dashboard) },
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "Volver",
+                tint = MinText,
+                // F22: Movi AI vive en Más (así la resalta su propia barra inferior) —
+                // destino de reserva si no hay historial.
+                modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
             )
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -149,12 +158,29 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     .clickable(enabled = canSend) { send() },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = if (loading) "…" else "›",
-                    fontSize = 20.sp,
-                    color = if (canSend) MinBg else MinTextMute,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (loading) {
+                    Text(text = "…", fontSize = 20.sp, color = if (canSend) MinBg else MinTextMute, fontWeight = FontWeight.Bold)
+                } else {
+                    // Ola 2 #5 (F11): "›" como texto suelto salía roto en la web, igual que "‹".
+                    Icon(
+                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = "Enviar",
+                        tint = if (canSend) MinBg else MinTextMute,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+        }
+
+        // F30: era, junto con SMS, la única pantalla de Más sin la barra. Va debajo del campo
+        // de texto (arriba) para no taparlo; en web/escritorio ancho MinBottomNav no pinta nada.
+        MinBottomNav(active = NavTab.MORE) { tab ->
+            when (tab) {
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
             }
         }
     }
@@ -192,7 +218,7 @@ private fun AIMsgAI(text: String) {
                 .background(MinSurfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
-            Text("✦", fontSize = 11.sp, color = MinText)
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinText, modifier = Modifier.size(12.dp))
         }
         Spacer(Modifier.width(10.dp))
         Box(modifier = Modifier.widthIn(max = 290.dp)) {

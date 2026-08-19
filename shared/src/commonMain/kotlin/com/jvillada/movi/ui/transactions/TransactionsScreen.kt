@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -81,7 +83,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getEventsByDay() }
-            .onSuccess { allDays = it }
+            .onSuccess {
+                allDays = it
+                // F35: de paso, alimenta el caché de "categorías ya usadas" que lee
+                // CategoryField — esta pantalla ya carga los movimientos.
+                UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
+            }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
     }
@@ -168,7 +175,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     if (isActive) {
-                        Text("✓", fontSize = 13.sp, color = MinPrimary, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(14.dp))
                     }
                     Text(
                         text = f,

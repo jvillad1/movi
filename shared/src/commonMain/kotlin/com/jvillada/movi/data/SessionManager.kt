@@ -17,6 +17,10 @@ object SessionManager {
     private const val KEY_NAME    = "user_name"
     private const val KEY_EMAIL   = "user_email"
     private const val KEY_REMEMBERED_EMAIL = "remembered_email"
+    // F1: preferencia explícita de la casilla "Recordar mi correo en este dispositivo"
+    // del login web (index.html). "0" = no recordar; ausente o "1" = sí (por defecto,
+    // y también el comportamiento de siempre en Android/iOS, que no tienen la casilla).
+    private const val KEY_REMEMBER_PREF = "remember_email_pref"
 
     var token: String?
         get() = settings.getStringOrNull(KEY_TOKEN)
@@ -72,6 +76,12 @@ object SessionManager {
         settings.remove(KEY_USER_ID)
         settings.remove(KEY_NAME)
         settings.remove(KEY_EMAIL)
+        // F1: el correo recordado solo sobrevive al logout si la persona lo eligió con
+        // la casilla del login web. Sin esa preferencia (Android/iOS, o quien nunca la
+        // vio) se preserva como siempre — no forzamos un opt-in donde no hay casilla.
+        if (settings.getStringOrNull(KEY_REMEMBER_PREF) == "0") {
+            settings.remove(KEY_REMEMBERED_EMAIL)
+        }
         consecutive401s = 0
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el

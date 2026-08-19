@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.automirrored.rounded.Label
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -27,8 +32,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
- * clickeable para cerrar, panel con esquinas redondeadas arriba y el "handle" de 32×4.dp. Se
- * duplica acá en vez de importarse — mismo criterio que [com.jvillada.movi.ui.accounts.CreateAccountSheet],
+ * clickeable para cerrar, panel con esquinas redondeadas arriba y [SheetHandleWithClose] (F37).
+ * Se duplica acá en vez de importarse — mismo criterio que [com.jvillada.movi.ui.accounts.CreateAccountSheet],
  * cada pantalla trae sus propios helpers de hoja.
  */
 @Composable
@@ -52,14 +57,8 @@ private fun BottomSheetScaffold(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint),
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled)
             content()
         }
     }
@@ -77,7 +76,7 @@ private fun SheetLabel(text: String) {
 }
 
 @Composable
-private fun CategoryRow(icon: String, name: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun CategoryRow(name: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -86,9 +85,12 @@ private fun CategoryRow(icon: String, name: String, selected: Boolean, enabled: 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(icon, fontSize = 18.sp)
+        // Ola 2 #5 (F11): el catálogo solo trae un emoji por categoría (Category.icon) — en la
+        // web sale como ▯. No hay un mapa a íconos Material por categoría, así que se usa uno
+        // genérico y uniforme en vez de intentar mapear 15+ emojis uno a uno.
+        Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(18.dp))
         Text(name, fontSize = 14.5.sp, color = MinText, modifier = Modifier.weight(1f))
-        if (selected) Text("✓", fontSize = 15.sp, color = MinPrimary, fontWeight = FontWeight.Bold)
+        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -99,6 +101,14 @@ private fun CategoryRow(icon: String, name: String, selected: Boolean, enabled: 
  * cambiar un gasto a una categoría de ingreso no significa nada en Movi. Elegir una llama a
  * [com.jvillada.movi.shared.repository.WalletRepository.updateEventCategory] — el server
  * recalcula `countsAsCashFlow`, esta hoja nunca lo manda.
+ *
+ * Ola 2 #7: la lista del catálogo sigue arriba como atajo, PERO abajo también hay un
+ * [com.jvillada.movi.ui.components.CategoryField] (texto libre con sugerencias) — si el dueño
+ * ya creó "Colegio" a mano desde QuickAdd, tiene que poder mover ahí un gasto que entró por SMS
+ * o extracto, no solo elegir entre el catálogo fijo. Elegir de la lista o escribir en el campo
+ * hacen lo mismo ([choose]). El caso que el campo libre no resuelve solo — la categoría actual
+ * del movimiento cuando no está en el catálogo (viene de un extracto importado, ver
+ * `currentIsKnown` abajo) — lo sigue resolviendo la lista, agregándola como opción marcada.
  */
 @Composable
 fun ChangeCategorySheet(
@@ -109,6 +119,10 @@ fun ChangeCategorySheet(
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Ola 2 #7: el campo libre de abajo no comete nada al tipear — recién se guarda con el
+    // botón "Usar esta categoría" (mismo criterio que la lista de arriba, que sí guarda al
+    // toque porque ahí elegir ES la acción completa).
+    var freeText by remember { mutableStateOf("") }
 
     val options = remember(event.type) {
         PREDEFINED_CATEGORIES.filter { it.type == event.type.name || it.type == "BOTH" }
@@ -137,18 +151,51 @@ fun ChangeCategorySheet(
             Spacer(Modifier.height(16.dp))
 
             if (!currentIsKnown) {
-                CategoryRow(icon = "🏷️", name = event.category, selected = true, enabled = false, onClick = {})
+                CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
                 Hairline()
             }
             options.forEachIndexed { i, cat ->
                 CategoryRow(
-                    icon = cat.icon,
                     name = cat.name,
                     selected = cat.name == event.category,
                     enabled = !saving,
                     onClick = { choose(cat.name) },
                 )
                 if (i < options.size - 1) Hairline()
+            }
+
+            Spacer(Modifier.height(16.dp))
+            SheetLabel("O ESCRIBE OTRA")
+            Spacer(Modifier.height(8.dp))
+            // Ola 2 #7: campo libre con sugerencias, para categorías propias del dueño (creadas
+            // a mano en QuickAdd/Presupuestos/Recurrentes) que no están en el catálogo de arriba.
+            CategoryField(
+                value = freeText,
+                onValueChange = { freeText = it },
+                type = event.type,
+                usedCategories = UsedCategoriesCache.categories,
+                label = null,
+                placeholder = "Ej: Colegio",
+            )
+            val trimmedFreeText = freeText.trim()
+            if (trimmedFreeText.isNotEmpty() && trimmedFreeText != event.category) {
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (!saving) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .clickable(enabled = !saving) { choose(trimmedFreeText) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "Usar \"$trimmedFreeText\"",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (!saving) MinOnPrimaryContainer else MinTextFaint,
+                    )
+                }
             }
 
             if (saving) {
