@@ -20,7 +20,6 @@ open class NoOpRepository(
     /** Ids que pasaron por [dismissCardPaymentCandidate] — lo que un test de delegación verifica. */
     val dismissedCandidateIds = mutableListOf<String>()
 
-    override suspend fun getHoldings() = emptyList<Holding>()
     override suspend fun getCredits() = emptyList<CreditSummary>()
     override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
     override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(
@@ -50,6 +49,18 @@ open class NoOpRepository(
             reconciliationStatus = ReconciliationStatus.RECONCILED,
         ),
     )
+    override suspend fun getCards() = emptyList<CardSummary>()
+    override suspend fun createCard(request: CreateCardRequest) = CardSummary(
+        account = Account(id = "acc-card-stub", name = request.name, type = AccountType.CREDIT_CARD, balance = request.initialDebt, currency = request.currency),
+        terms = request.terms.copy(accountId = "acc-card-stub"),
+        available = request.terms.creditLimit?.let { it - request.initialDebt },
+    )
+    override suspend fun putCardTerms(terms: CardTerms) = CardSummary(
+        account = Account(id = terms.accountId, name = "", type = AccountType.CREDIT_CARD, balance = 0),
+        terms = terms,
+        available = terms.creditLimit,
+    )
+    override suspend fun deleteCardTerms(accountId: String) {}
     override suspend fun getSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun detectSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun updateSubscription(id: String, subscription: Subscription) = subscription
@@ -66,6 +77,7 @@ open class NoOpRepository(
     override suspend fun createBudget(budget: Budget) = budget
     override suspend fun updateBudget(category: String, budget: Budget) = budget
     override suspend fun deleteBudget(category: String) {}
+    override suspend fun renameBudget(category: String, newCategory: String) = Budget(newCategory, 0)
     override suspend fun getRecurringRules() = emptyList<RecurringRule>()
     override suspend fun createRecurringRule(rule: RecurringRule) = rule
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule
@@ -75,6 +87,7 @@ open class NoOpRepository(
     override suspend fun getAccounts() = emptyList<Account>()
     override suspend fun getAccount(id: String) = error("stub")
     override suspend fun createAccount(account: Account) = account
+    override suspend fun deleteAccount(id: String) {}
     override suspend fun postEvent(event: FinancialEvent) = event
     override suspend fun getEvents(accountId: String?) = emptyList<FinancialEvent>()
     override suspend fun getEventsByDay() = emptyList<EventDay>()

@@ -52,3 +52,9 @@ UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id AND category = :c
 
 updateCategory:
 UPDATE financial_event SET category = :category WHERE id = :id AND userId = :userId;
+
+-- F55: espejo local de DELETE /api/accounts/{id} — borra los movimientos locales de la cuenta
+-- borrada, mismo criterio que `selectByAccount` (accountId + userId, la cuenta es de un solo
+-- usuario en este dispositivo).
+deleteByAccount:
+DELETE FROM financial_event WHERE accountId = :accountId AND userId = :userId;

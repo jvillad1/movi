@@ -3,7 +3,6 @@ package com.jvillada.movi.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -35,36 +34,6 @@ fun SimpleSparkline(
     }
 }
 
-@Composable
-fun InvestmentSparkline(modifier: Modifier, hasData: Boolean = true, color: Color = MinText) {
-    val points = listOf(
-        Offset(0f, 0.7f), Offset(0.12f, 0.68f), Offset(0.22f, 0.56f),
-        Offset(0.31f, 0.62f), Offset(0.44f, 0.5f), Offset(0.56f, 0.39f),
-        Offset(0.69f, 0.42f), Offset(0.81f, 0.27f), Offset(0.94f, 0.19f), Offset(1f, 0.11f),
-    )
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        if (!hasData) {
-            drawLine(
-                color = color.copy(alpha = 0.25f),
-                start = Offset(0f, h / 2),
-                end = Offset(w, h / 2),
-                strokeWidth = 2.8f,
-                cap = StrokeCap.Round,
-            )
-            return@Canvas
-        }
-        val path = Path()
-        points.forEachIndexed { i, pt ->
-            val x = pt.x * w
-            val y = pt.y * h
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        drawPath(
-            path = path,
-            color = color.copy(alpha = 0.92f),
-            style = Stroke(width = 2.8f, cap = StrokeCap.Round, join = StrokeJoin.Round),
-        )
-    }
-}
+// F50: acá vivía `InvestmentSparkline`, el gráfico por período de Inversiones. Se borró por el
+// mismo motivo que el de arriba — una curva FIJA inventada, no datos reales — al sacar el
+// modelo de "posiciones" de esa pantalla (ver InversionesScreen.kt).

@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
@@ -33,6 +34,9 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 fun Route.financeRoutes() {
+    // F50: ya no tiene consumidor — Inversiones (:shared) pasó a mostrar cuentas tipo
+    // INVESTMENT en vez de "posiciones" (un modelo que nunca tuvo alta). Se deja el endpoint
+    // porque no rompe nada mantenerlo, pero WalletRepository (:core) ya no expone getHoldings.
     get("/api/holdings") { call.respond(emptyList<Holding>()) }
     get("/api/goals") { call.respond(emptyList<Goal>()) }
 
@@ -88,6 +92,46 @@ fun Route.financeRoutes() {
         }
         if (deleted == 0) call.respond(HttpStatusCode.NotFound)
         else call.respond(HttpStatusCode.NoContent)
+    }
+
+    // F17: la categoría es la PK de budgets (userId+category), así que "renombrar" no es un
+    // UPDATE — es borrar la fila vieja e insertar una con el nombre nuevo, conservando el
+    // límite. Todo en una transacción para que un fallo a mitad de camino no deje ni el
+    // presupuesto viejo ni el nuevo. A propósito NO toca `financial_event`: el cruce entre
+    // presupuesto y gasto es por nombre de categoría (ver `spentByCategoryForMonth` del lado
+    // del cliente), así que renombrar acá deja de "ver" los movimientos con el nombre viejo —
+    // es la advertencia que la hoja de edición le muestra al dueño antes de guardar.
+    put("/api/budgets/{category}/rename") {
+        val uid = call.userId()
+        val cat = call.parameters["category"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+        val newCategory = call.receive<RenameBudgetRequest>().newCategory.trim()
+        if (newCategory.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Falta el nombre nuevo")
+
+        val outcome = dbQuery<RenameOutcome> {
+            val current = Budgets.selectAll()
+                .where { (Budgets.userId eq uid) and (Budgets.category eq cat) }
+                .firstOrNull() ?: return@dbQuery RenameOutcome.NotFound
+            if (newCategory != cat) {
+                val taken = Budgets.selectAll()
+                    .where { (Budgets.userId eq uid) and (Budgets.category eq newCategory) }
+                    .count() > 0
+                if (taken) return@dbQuery RenameOutcome.Conflict
+            }
+            val limit = current[Budgets.monthlyLimit]
+            Budgets.deleteWhere { (Budgets.userId eq uid) and (Budgets.category eq cat) }
+            Budgets.insert {
+                it[userId]       = uid
+                it[category]     = newCategory
+                it[monthlyLimit] = limit
+            }
+            RenameOutcome.Ok(Budget(newCategory, limit))
+        }
+
+        when (outcome) {
+            RenameOutcome.NotFound -> call.respond(HttpStatusCode.NotFound)
+            RenameOutcome.Conflict -> call.respond(HttpStatusCode.Conflict, "Ya existe un presupuesto llamado \"$newCategory\"")
+            is RenameOutcome.Ok    -> call.respond(outcome.budget)
+        }
     }
 
     // ── Finance summary — computed from real Events ────────────────────────────
@@ -167,4 +211,15 @@ fun Route.financeRoutes() {
         }
         call.respond(summary)
     }
+}
+
+/**
+ * Resultado de PUT /api/budgets/{category}/rename, decidido dentro de la transacción y
+ * respondido fuera — mismo idioma que `AdjustOutcome` en CreditRoutes.kt: `call.respond` es
+ * suspend y `dbQuery` no lo es.
+ */
+private sealed interface RenameOutcome {
+    data object NotFound : RenameOutcome
+    data object Conflict : RenameOutcome
+    data class Ok(val budget: Budget) : RenameOutcome
 }

@@ -6,6 +6,9 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
@@ -13,12 +16,12 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
+import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
@@ -55,9 +58,6 @@ class WalletRepositoryImpl(
     private val baseUrl: String,
 ) : WalletRepository {
 
-    override suspend fun getHoldings(): List<Holding> =
-        client.get("$baseUrl/api/holdings").body()
-
     override suspend fun getCredits(): List<CreditSummary> =
         client.get("$baseUrl/api/credits").body()
 
@@ -90,6 +90,38 @@ class WalletRepositoryImpl(
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
         return response.body()
+    }
+
+    override suspend fun getCards(): List<CardSummary> =
+        client.get("$baseUrl/api/cards").body()
+
+    // Mismo idioma que adjustCreditBalance: estos dos son los que tienen rechazos legibles del
+    // server (400 nombre/deuda/moneda, 404 ajena, 422 no-tarjeta) y el usuario necesita leerlos
+    // en la hoja — `.body()` directo sobre un 4xx de texto perdía el mensaje deserializando.
+    override suspend fun createCard(request: CreateCardRequest): CardSummary {
+        val response = client.post("$baseUrl/api/cards") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun putCardTerms(terms: CardTerms): CardSummary {
+        val response = client.put("$baseUrl/api/cards/${terms.accountId}") {
+            contentType(ContentType.Application.Json)
+            setBody(terms)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun deleteCardTerms(accountId: String) {
+        client.delete("$baseUrl/api/cards/$accountId")
     }
 
     override suspend fun getSubscriptions(): SubscriptionsResult =
@@ -157,6 +189,20 @@ class WalletRepositoryImpl(
         client.delete("$baseUrl/api/budgets/$category")
     }
 
+    // Mismo idioma que adjustCreditBalance/updateEventCategory: 404 (no existe) y 409 (el
+    // nombre nuevo ya está en uso) traen su propio texto del server y se pierden si se
+    // deserializa a ciegas.
+    override suspend fun renameBudget(category: String, newCategory: String): Budget {
+        val response = client.put("$baseUrl/api/budgets/$category/rename") {
+            contentType(ContentType.Application.Json)
+            setBody(RenameBudgetRequest(newCategory))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()
 
@@ -196,6 +242,16 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(account)
         }.body()
+
+    // Mismo idioma que updateEventCategory/adjustCreditBalance: 404 (cuenta inexistente o de
+    // otro usuario) trae su propio texto y se pierde si se deserializa a ciegas — acá además
+    // no hay body que deserializar (204), así que sin esto un 404 pasaría desapercibido.
+    override suspend fun deleteAccount(id: String) {
+        val response = client.delete("$baseUrl/api/accounts/$id")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent =
         client.post("$baseUrl/api/events") {

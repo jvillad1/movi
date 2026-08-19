@@ -130,6 +130,14 @@ data class Budget(
     val monthlyLimit: Long,
 )
 
+// F17: cuerpo de PUT /api/budgets/{category}/rename — la categoría vieja va en la URL, la
+// nueva en el body. Tipo propio (no reusar Budget) porque el monto no se manda: el server
+// conserva el límite existente, renombrar y cambiar el monto son dos operaciones separadas.
+@Serializable
+data class RenameBudgetRequest(
+    val newCategory: String,
+)
+
 @Serializable
 data class SmsMessage(
     val id: String,

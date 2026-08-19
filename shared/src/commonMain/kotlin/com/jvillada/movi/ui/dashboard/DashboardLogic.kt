@@ -2,13 +2,15 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.SubscriptionsResult
@@ -18,6 +20,7 @@ import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.credits.totalDebtCop
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
@@ -32,6 +35,8 @@ data class DashboardData(
     val summary: FinanceSummary? = null,
     val accounts: List<Account> = emptyList(),
     val credits: List<CreditSummary> = emptyList(),
+    /** F20: las tarjetas también son deuda — el acceso «Créditos» las suma junto a los préstamos. */
+    val cards: List<CardSummary> = emptyList(),
     val upcoming: List<UpcomingPayment> = emptyList(),
     val budgets: List<Budget> = emptyList(),
     /** Gasto del mes en curso por categoría (ver [spentByCategoryForMonth]). */
@@ -39,19 +44,22 @@ data class DashboardData(
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
     val goals: List<Goal> = emptyList(),
-    val holdings: List<Holding> = emptyList(),
     val subscriptions: SubscriptionsResult? = null,
 ) {
     val hasAccount: Boolean get() = accounts.isNotEmpty()
-    val hasCredit: Boolean get() = credits.isNotEmpty()
+    /** F20: una tarjeta registrada también tilda el paso de Créditos — es una deuda como cualquier préstamo. */
+    val hasCredit: Boolean get() = credits.isNotEmpty() || cards.isNotEmpty()
     /** F54: el evento de apertura no cuenta — ver KDoc de `FinanceSummary.eventCount`. */
     val hasMovement: Boolean get() = (summary?.eventCount ?: 0) > 0
     /**
      * F6: "Anota tus pagos fijos" se tilda con una regla recurrente REAL. `getUpcomingPayments`
-     * también trae las cuotas sintéticas de los créditos (id con [CREDIT_RULE_PREFIX]); esas
-     * tildan el paso de Créditos, no este.
+     * también trae las cuotas sintéticas de los créditos (id con [CREDIT_RULE_PREFIX]) y, desde
+     * F20, los pagos de tarjeta (id con [CARD_RULE_PREFIX]); esas tildan el paso de Créditos,
+     * no este.
      */
-    val hasRecurringRule: Boolean get() = upcoming.any { !it.rule.id.startsWith(CREDIT_RULE_PREFIX) }
+    val hasRecurringRule: Boolean get() = upcoming.any {
+        !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX)
+    }
 }
 
 // ── Próximos pagos ─────────────────────────────────────────────────────────────────
@@ -139,8 +147,12 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else LinkFigure(formatCOP(activos), plural(data.accounts.size, "cuenta", "cuentas"))
     }
     "credits" -> {
-        if (data.credits.isEmpty()) LinkFigure(sub = "Sin créditos")
-        else LinkFigure(formatCOP(data.credits.sumOf { it.account.balance }), plural(data.credits.size, "crédito", "créditos"))
+        // F20: préstamos + tarjetas, con la MISMA función que usa la pantalla de Créditos para
+        // su «Deuda total» — hallazgo de la Ola 4: la pantalla y el Inicio daban números
+        // distintos (acá se sumaba solo LOAN).
+        val count = data.credits.size + data.cards.size
+        if (count == 0) LinkFigure(sub = "Sin créditos")
+        else LinkFigure(formatCOP(totalDebtCop(data.credits, data.cards)), plural(count, "crédito", "créditos"))
     }
     "budgets" -> {
         if (data.budgets.isEmpty()) LinkFigure(sub = "Sin presupuestos")
@@ -155,8 +167,11 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else LinkFigure(formatCOP(data.goals.sumOf { it.saved }), plural(data.goals.size, "meta", "metas"))
     }
     "investments" -> {
-        if (data.holdings.isEmpty()) LinkFigure(sub = "Sin inversiones")
-        else LinkFigure(formatCOP(data.holdings.sumOf { it.amount }), plural(data.holdings.size, "posición", "posiciones"))
+        // F50: misma fuente que la pantalla Inversiones — cuentas tipo INVESTMENT, no el
+        // modelo de "posiciones" (holdings) que el server siempre devolvía vacío.
+        val investmentAccounts = data.accounts.filter { it.type == AccountType.INVESTMENT }
+        if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
+        else LinkFigure(formatCOP(investmentAccounts.sumOf { it.balance }), plural(investmentAccounts.size, "cuenta", "cuentas"))
     }
     "subscriptions" -> {
         val subs = data.subscriptions

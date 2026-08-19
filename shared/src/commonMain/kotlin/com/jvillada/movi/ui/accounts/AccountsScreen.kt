@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
@@ -221,7 +222,12 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
                             accounts.forEachIndexed { index, account ->
-                                val (icon, typeLabel) = accountTypeInfo(account.type)
+                                val icon = accountTypeIcon(account.type)
+                                // F56: el subtítulo ya no repite el tipo crudo ("Ahorros",
+                                // "Corriente"…) — son el mismo grupo (Dinero) en todos los
+                                // cálculos, así que muestran su grupo; el nombre que puso el
+                                // dueño es lo que de verdad distingue una cuenta de otra.
+                                val typeLabel = account.type.groupLabel
                                 CardRow(
                                     left = {
                                         Row(
@@ -289,11 +295,13 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
-private fun accountTypeInfo(type: AccountType): Pair<ImageVector, String> = when (type) {
-    AccountType.CASH        -> Icons.Filled.Payments to "Efectivo"
-    AccountType.SAVINGS     -> Icons.Filled.AccountBalance to "Ahorros"
-    AccountType.CHECKING    -> Icons.Filled.AccountBalanceWallet to "Corriente"
-    AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp to "Inversión"
-    AccountType.CREDIT_CARD -> Icons.Filled.CreditCard to "Crédito"
-    AccountType.LOAN        -> Icons.Filled.RequestQuote to "Préstamo"
+// El ícono se queda por tipo específico (glifo, no texto — no repite "Ahorros"/"Corriente" en
+// palabras); el texto que ve el dueño es [AccountType.groupLabel] (ver arriba).
+private fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
+    AccountType.CASH        -> Icons.Filled.Payments
+    AccountType.SAVINGS     -> Icons.Filled.AccountBalance
+    AccountType.CHECKING    -> Icons.Filled.AccountBalanceWallet
+    AccountType.INVESTMENT  -> Icons.AutoMirrored.Filled.TrendingUp
+    AccountType.CREDIT_CARD -> Icons.Filled.CreditCard
+    AccountType.LOAN        -> Icons.Filled.RequestQuote
 }

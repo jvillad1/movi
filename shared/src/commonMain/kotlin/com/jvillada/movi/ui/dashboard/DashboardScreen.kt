@@ -92,6 +92,8 @@ fun DashboardScreen(
                     .onFailure { e -> if (error == null) error = e.toUserMessage() }
             }
             launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { c -> data = data.copy(credits = c) } }
+            // F20: la cifra del acceso «Créditos» suma préstamos + tarjetas.
+            launch { runCatching { Repositories.wallets.getCards() }.onSuccess { c -> data = data.copy(cards = c) } }
             launch { runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { u -> data = data.copy(upcoming = u) } }
             launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
             launch {
@@ -101,7 +103,8 @@ fun DashboardScreen(
             launch { runCatching { Repositories.wallets.getCardPaymentCandidates() }.onSuccess { c -> data = data.copy(cardCandidates = c.size) } }
             launch { runCatching { Repositories.wallets.getSmsMessages() }.onSuccess { m -> data = data.copy(pendingSms = m.count { it.state == "pending" }) } }
             launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }
-            launch { runCatching { Repositories.wallets.getHoldings() }.onSuccess { h -> data = data.copy(holdings = h) } }
+            // F50: la cifra de "investments" ahora sale de `data.accounts` (cuentas tipo
+            // INVESTMENT) — ya no hace falta este fetch aparte de holdings.
             launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
         }
         DashboardDataCache.data = data

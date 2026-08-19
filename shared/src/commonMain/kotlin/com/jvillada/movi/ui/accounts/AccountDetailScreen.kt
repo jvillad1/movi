@@ -54,6 +54,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    var showDeleteAccount by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(refreshKey) {
@@ -340,6 +341,29 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                         }
                     }
                 }
+
+                // F55: al final de la pantalla, en rojo — mismo lugar donde el dueño esperaba
+                // encontrarlo cuando pidió "ayúdame a eliminarla" y no había nada acá. Solo
+                // aparece una vez que la cuenta cargó (necesita accountName real para la hoja).
+                account?.let { acc ->
+                    item(key = "delete-account") {
+                        Spacer(Modifier.height(28.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showDeleteAccount = true }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Eliminar cuenta",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MinExpense,
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -361,6 +385,25 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                     refreshKey++
                 },
             )
+        }
+
+        if (showDeleteAccount) {
+            account?.let { acc ->
+                DeleteAccountSheet(
+                    accountId = acc.id,
+                    accountName = acc.name,
+                    eventCount = totalEvents,
+                    onDismiss = { showDeleteAccount = false },
+                    onDeleted = {
+                        // F22: mismo destino de reserva que la flecha de volver de acá arriba —
+                        // AccountsScreen recarga sola al re-entrar (LaunchedEffect(refreshKey)
+                        // con estado fresco, ver App.kt: cada pantalla se descompone del todo al
+                        // salir de su rama del `when`), así que no hace falta pedirle un refresh.
+                        showDeleteAccount = false
+                        goBack(Screen.Accounts)
+                    },
+                )
+            }
         }
     }
 }

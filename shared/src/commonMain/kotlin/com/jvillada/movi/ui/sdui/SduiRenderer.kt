@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.ScreenAction
 import com.jvillada.movi.shared.model.ScreenCard
@@ -200,7 +201,8 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
         ) {
             rows.forEachIndexed { i, p ->
-                val isCredit = p.rule.id.startsWith(CREDIT_RULE_PREFIX)
+                // F20: la regla sintética de una tarjeta (card_) también se gestiona en Créditos.
+                val isCredit = p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)
                 val urgent = p.daysUntil <= 0
                 CardRow(
                     left = { Text(p.rule.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },

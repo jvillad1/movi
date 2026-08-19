@@ -27,8 +27,10 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.platform.rememberSmsSync
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
@@ -241,7 +243,11 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
 
     val currentSms = sms
     val resolvedAccount = accounts.firstOrNull { currentSms != null && it.name.contains(currentSms.bank, ignoreCase = true) }
-        ?: accounts.firstOrNull { it.type != AccountType.CASH }
+        // F56: antes era "cualquier cuenta que no sea Efectivo" — con Inversión y Deuda ahora
+        // nombradas aparte, ese fallback también podía caer en un CDT o en una tarjeta, que no
+        // tiene sentido como destino por defecto de un SMS bancario. Se acota a Dinero (sin
+        // contar Efectivo, que ya se probó arriba y descartó).
+        ?: accounts.firstOrNull { it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH }
         ?: accounts.firstOrNull()
 
     val categoryOptions: List<String> = run {

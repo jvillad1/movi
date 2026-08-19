@@ -31,3 +31,10 @@ UPDATE account SET balance = :balance WHERE id = :id;
 
 markSynced:
 UPDATE account SET syncedAt = :syncedAt WHERE id = :id;
+
+-- F55: espejo local de DELETE /api/accounts/{id}. Sin userId acá porque `id` ya es la PK y el
+-- server es quien decide "de quién es la cuenta" antes de borrar — este delete corre DESPUÉS
+-- de que el server confirmó el borrado (ver LocalRepository.deleteAccount), así que filtrar de
+-- nuevo por userId sería redundante.
+deleteById:
+DELETE FROM account WHERE id = :id;

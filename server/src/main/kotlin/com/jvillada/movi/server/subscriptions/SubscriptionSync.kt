@@ -48,8 +48,15 @@ private const val UNIQUE_VIOLATION_SQLSTATE = "23505"
 // discriminador fijo y determinístico para todos los eventos de este origen.
 private const val FAMIRIOS_STAMP_PREFIX = "Famirios · "
 
-private fun statusForNew(d: DetectedSub): SubStatus =
-    if (d.confidence == SubConfidence.HIGH) SubStatus.AUTO else SubStatus.CANDIDATE
+// F39: antes, confianza HIGH entraba directo como AUTO (activa, sin que el dueño la viera ni
+// la confirmara) — justo lo que el feedback pidió cambiar ("nada nace activo"). Ahora TODO lo
+// detectado nace CANDIDATE sin importar la confianza; el dueño confirma o descarta desde
+// SuscripcionesScreen (sección "Detectadas · por confirmar"), igual que ya pasaba con
+// confianza media/baja. SubStatus.AUTO deja de producirse acá, pero el enum se queda: las
+// filas AUTO que ya existían de antes de este cambio se tratan como confirmadas en todos
+// lados (ver `resultFor` en SubscriptionRoutes.kt, que ya sumaba AUTO+CONFIRMED) — no hay
+// migración de datos, simplemente se las deja de fabricar.
+private fun statusForNew(@Suppress("UNUSED_PARAMETER") d: DetectedSub): SubStatus = SubStatus.CANDIDATE
 
 // Check-then-insert de por sí no es atómico: dos detects concurrentes (doble tap en
 // "Re-escanear") pueden ver `row == null` a la vez y ambos intentar el mismo
@@ -89,16 +96,21 @@ private fun Transaction.upsertDetected(uid: String, d: DetectedSub, row: ResultR
 }
 
 private fun applyExisting(row: ResultRow, d: DetectedSub) {
-    when {
-        row[Subscriptions.status] == SubStatus.DISMISSED.name -> Unit  // el usuario dijo que no
-        row[Subscriptions.status] == SubStatus.CONFIRMED.name ->
+    when (row[Subscriptions.status]) {
+        SubStatus.DISMISSED.name -> Unit  // el usuario dijo que no
+        // F39: AUTO se trata igual que CONFIRMED acá — son las filas AUTO que quedaron de
+        // antes de este cambio (ya no se fabrican nuevas). Sin este caso, refreshRow las
+        // bajaría a CANDIDATE en cada re-scan (porque statusForNew ahora siempre devuelve
+        // CANDIDATE) y una suscripción que el dueño nunca vio como "pendiente" reaparecería
+        // pidiendo confirmación — exactamente lo que el enum congelado busca evitar.
+        SubStatus.CONFIRMED.name, SubStatus.AUTO.name ->
             Subscriptions.update({ Subscriptions.id eq row[Subscriptions.id] }) {
                 it[amount]      = d.amount
                 it[lastSeen]    = d.lastSeen
                 it[occurrences] = d.occurrences
                 it[confidence]  = d.confidence.name
             }
-        else -> refreshRow(row[Subscriptions.id], d)  // AUTO o CANDIDATE: refrescar todo y re-evaluar estado
+        else -> refreshRow(row[Subscriptions.id], d)  // CANDIDATE: refrescar todo (status se queda en CANDIDATE)
     }
 }
 

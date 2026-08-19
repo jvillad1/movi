@@ -7,6 +7,9 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
@@ -15,7 +18,6 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.newId
@@ -119,6 +121,33 @@ class LocalRepository(
                 null,
             )
             resolved
+        }
+    }
+
+    /**
+     * F55: a diferencia de [createAccount] arriba, ACÁ no hay fallback local silencioso ante un
+     * fallo de red. Un borrado que solo pasara local sería un borrado a medias: la fila local
+     * quedaría con `syncedAt` no-nulo (nunca "pendiente de subir", porque no es una creación),
+     * así que [com.jvillada.movi.shared.SyncEngine] jamás la volvería a intentar — y la próxima
+     * vez que el server devolviera esa cuenta en un GET (porque en el server nunca se borró),
+     * la app la resucitaría con todos sus movimientos, como si el borrado nunca hubiera pasado.
+     * Eso es peor que no borrar nada: el dueño cree que borró y en algún momento la cuenta
+     * vuelve a aparecer sola.
+     *
+     * Por eso: `remote.deleteAccount` primero, y si falla (sin red o el server rechaza) la
+     * excepción se propaga tal cual — no se atrapa acá — para que la UI la traduzca a un
+     * mensaje claro ("No se pudo eliminar — revisa tu conexión", ver `AccountDetailScreen`) en
+     * vez de fingir que el borrado ocurrió.
+     */
+    override suspend fun deleteAccount(id: String) {
+        remote.deleteAccount(id)
+        val uid = userId()
+        db.transaction {
+            // Los voids ANTES que los eventos: la subconsulta de deleteByAccount los encuentra
+            // por el accountId de sus eventos, que después de la línea siguiente ya no existen.
+            db.voidEventQueries.deleteByAccount(id, uid)
+            db.financialEventQueries.deleteByAccount(id, uid)
+            db.accountQueries.deleteById(id)
         }
     }
 
@@ -266,11 +295,46 @@ class LocalRepository(
 
     // ── Delegate everything else to remote ────────────────────────────────────
 
-    override suspend fun getHoldings(): List<Holding> = remote.getHoldings()
     override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()
-    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
+
+    /**
+     * Crea contra el server y **espeja la cuenta devuelta en la DB local** (F20, Ola 5).
+     *
+     * Antes delegaba y ya, y la cuenta LOAN que `POST /api/credits` creaba solo existía en el
+     * server: la pantalla de Cuentas en Android lee [getAccounts] → SQLDelight, y el
+     * [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae — así que un crédito creado
+     * desde la app nunca aparecía en Cuentas del teléfono (sí en Créditos, que lee remoto).
+     * Mismo espejo que ya hacía [adjustCreditBalance] para el caso "el crédito nació en el
+     * server": la fila local se escribe con lo que el server devolvió, `syncedAt = ahora` para
+     * que el SyncEngine no la vuelva a subir.
+     *
+     * El evento de apertura ("Deuda inicial") NO se espeja: el server no lo devuelve en el
+     * summary (solo lo insertó en su transacción), así que en Movimientos del teléfono no se ve
+     * — pero el saldo espejado ya lo incluye, que es lo que Cuentas muestra. Traerlo requeriría
+     * ampliar el wire (como `adjustmentEvent`); queda anotado como deferido, no como olvido.
+     */
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary =
+        remote.createCredit(request).also { mirrorAccountLocally(it.account) }
+
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
+
+    override suspend fun getCards(): List<CardSummary> = remote.getCards()
+    /** Mismo espejo (y mismo porqué) que [createCredit]: sin él la tarjeta no aparece en Cuentas de Android. */
+    override suspend fun createCard(request: CreateCardRequest): CardSummary =
+        remote.createCard(request).also { mirrorAccountLocally(it.account) }
+    // Los términos de tarjeta no viven en la DB local: se leen siempre del server, como los créditos.
+    override suspend fun putCardTerms(terms: CardTerms): CardSummary = remote.putCardTerms(terms)
+    override suspend fun deleteCardTerms(accountId: String) = remote.deleteCardTerms(accountId)
+
+    /** Upsert local (INSERT OR REPLACE) de una cuenta que nació en el server, marcada como sincronizada. */
+    private fun mirrorAccountLocally(account: Account) {
+        db.accountQueries.insert(
+            account.id, account.name, account.type.name,
+            account.balance, account.currency, userId(),
+            Clock.System.now().toEpochMilliseconds(),
+        )
+    }
     /**
      * Ajusta contra el server y **espeja el resultado en la DB local**.
      *
@@ -339,6 +403,10 @@ class LocalRepository(
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)
     override suspend fun updateBudget(category: String, budget: Budget): Budget = remote.updateBudget(category, budget)
     override suspend fun deleteBudget(category: String) = remote.deleteBudget(category)
+    // Los presupuestos no tienen tabla local (a diferencia de accounts/financial_event) — se
+    // leen siempre del server, así que renombrar es delegar y ya, igual que create/update/delete.
+    override suspend fun renameBudget(category: String, newCategory: String): Budget =
+        remote.renameBudget(category, newCategory)
     override suspend fun getRecurringRules(): List<RecurringRule> = remote.getRecurringRules()
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = remote.createRecurringRule(rule)
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)

@@ -12,7 +12,6 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
@@ -23,6 +22,9 @@ import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
@@ -32,13 +34,17 @@ import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.VoidEvent
 
 interface WalletRepository {
-    suspend fun getHoldings(): List<Holding>
     suspend fun getCredits(): List<CreditSummary>
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary
     suspend fun deleteCreditTerms(accountId: String)
     /** Deja la deuda del crédito en [targetBalance] registrando el movimiento de ajuste server-side. */
     suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
+    // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
+    suspend fun getCards(): List<CardSummary>
+    suspend fun createCard(request: CreateCardRequest): CardSummary
+    suspend fun putCardTerms(terms: CardTerms): CardSummary
+    suspend fun deleteCardTerms(accountId: String)
     suspend fun getSubscriptions(): SubscriptionsResult
     suspend fun detectSubscriptions(): SubscriptionsResult
     suspend fun updateSubscription(id: String, subscription: Subscription): Subscription
@@ -55,6 +61,16 @@ interface WalletRepository {
     suspend fun createBudget(budget: Budget): Budget
     suspend fun updateBudget(category: String, budget: Budget): Budget
     suspend fun deleteBudget(category: String)
+
+    /**
+     * F17: la categoría es la PK de un presupuesto, así que renombrarlo no es un campo más de
+     * [updateBudget] — es su propia operación server-side (borra e inserta conservando el
+     * límite, ver `PUT /api/budgets/{category}/rename`). El gasto se cruza por NOMBRE de
+     * categoría con los movimientos (`spentByCategoryForMonth`), así que renombrar acá deja de
+     * contar los movimientos que llevaban el nombre viejo — la hoja de edición avisa esto antes
+     * de guardar.
+     */
+    suspend fun renameBudget(category: String, newCategory: String): Budget
     suspend fun getRecurringRules(): List<RecurringRule>
     suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
@@ -64,6 +80,14 @@ interface WalletRepository {
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account
     suspend fun createAccount(account: Account): Account
+
+    /**
+     * F55: borra la cuenta y TODO lo que le pertenece (sus movimientos, anulaciones, dismissals
+     * de pago de tarjeta y términos de crédito si es un LOAN) — el server lo hace en una sola
+     * transacción (ver `AccountRoutes.kt` DELETE). No hay deshacer: es responsabilidad de la UI
+     * mostrar la consecuencia real antes de llamar esto (ver `AccountDetailScreen`).
+     */
+    suspend fun deleteAccount(id: String)
     suspend fun postEvent(event: FinancialEvent): FinancialEvent
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>

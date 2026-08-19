@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.reminders.upcomingPayments
 import com.jvillada.movi.shared.model.RecurringRule
@@ -93,6 +94,8 @@ fun Route.reminderRoutes() {
             RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
         }
         val creditRules = loadCreditRulePairs(uid).map { it.first }
-        call.respond(upcomingPayments(rules + creditRules, LocalDate.now(ZoneOffset.UTC), leadDays))
+        // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
+        val cardRules = loadCardRulePairs(uid).map { it.first }
+        call.respond(upcomingPayments(rules + creditRules + cardRules, LocalDate.now(ZoneOffset.UTC), leadDays))
     }
 }

@@ -4,6 +4,11 @@ import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.CardPaymentDismissals
+import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
@@ -13,10 +18,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 
@@ -72,6 +81,50 @@ fun Route.accountRoutes() {
                 }
             }
             call.respond(HttpStatusCode.Created, account)
+        }
+
+        // F55: borrar una cuenta no existía en ninguna capa — lo único que la app ofrecía era
+        // anular el "Saldo inicial", que deja la cuenta en $0 pero SIGUE existiendo. Acá sí se
+        // borra todo lo que le pertenece, en UNA transacción (dbQuery ya envuelve el bloque en
+        // una transacción de Exposed): primero lo que referencia a los eventos de la cuenta
+        // (dismissals de pago de tarjeta, anulaciones), después los eventos mismos, después los
+        // términos de crédito si es un LOAN, y al final la cuenta. Ese orden importa porque
+        // credit_terms/void_events/card_payment_dismissals no tienen FK con ON DELETE CASCADE —
+        // si se borrara la cuenta primero y algo de abajo fallara, quedarían filas huérfanas
+        // apuntando a una cuenta que ya no existe.
+        delete("/{id}") {
+            val id = call.parameters["id"]
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val deleted = dbQuery {
+                val exists = Accounts.selectAll()
+                    .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+                    .firstOrNull() != null
+                if (!exists) return@dbQuery false
+
+                val eventIds = Events.selectAll()
+                    .where { (Events.accountId eq id) and (Events.userId eq uid) }
+                    .map { it[Events.id] }
+
+                if (eventIds.isNotEmpty()) {
+                    CardPaymentDismissals.deleteWhere {
+                        (CardPaymentDismissals.userId eq uid) and (CardPaymentDismissals.eventId inList eventIds)
+                    }
+                    VoidEvents.deleteWhere {
+                        (VoidEvents.userId eq uid) and (VoidEvents.originalEventId inList eventIds)
+                    }
+                }
+                Events.deleteWhere { (Events.accountId eq id) and (Events.userId eq uid) }
+                Credits.deleteWhere { (Credits.accountId eq id) and (Credits.userId eq uid) }
+                // Y los términos de tarjeta (card_terms nació en esta misma ola, después de que
+                // este DELETE se escribiera): sin esto, borrar una tarjeta dejaba la fila de
+                // términos huérfana para siempre — justo lo que este comentario promete que no pasa.
+                Cards.deleteWhere { (Cards.accountId eq id) and (Cards.userId eq uid) }
+                Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
+                true
+            }
+            if (!deleted) call.respond(HttpStatusCode.NotFound)
+            else call.respond(HttpStatusCode.NoContent)
         }
     }
 }
