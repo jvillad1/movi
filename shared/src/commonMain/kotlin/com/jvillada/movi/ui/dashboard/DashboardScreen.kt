@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
@@ -477,7 +478,7 @@ private fun ColumnScope.DashboardFallback(
                             .background(MinPrimaryContainer),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("✦", fontSize = 15.sp, color = MinOnPrimaryContainer)
+                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinOnPrimaryContainer, modifier = Modifier.size(16.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(

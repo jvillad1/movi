@@ -9,6 +9,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,11 +72,11 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                "‹",
-                fontSize = 22.sp,
-                color = MinText,
-                modifier = Modifier.clickable { onNavigate(Screen.Dashboard) },
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "Volver",
+                tint = MinText,
+                modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Dashboard) },
             )
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -157,6 +161,18 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 )
             }
         }
+
+        // F30: era, junto con SMS, la única pantalla de Más sin la barra. Va debajo del campo
+        // de texto (arriba) para no taparlo; en web/escritorio ancho MinBottomNav no pinta nada.
+        MinBottomNav(active = NavTab.MORE) { tab ->
+            when (tab) {
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
+            }
+        }
     }
 }
 
@@ -192,7 +208,7 @@ private fun AIMsgAI(text: String) {
                 .background(MinSurfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
-            Text("✦", fontSize = 11.sp, color = MinText)
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinText, modifier = Modifier.size(12.dp))
         }
         Spacer(Modifier.width(10.dp))
         Box(modifier = Modifier.widthIn(max = 290.dp)) {

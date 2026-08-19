@@ -5,6 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +48,7 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.Dashboard) })
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.Dashboard) })
             Text("Inversiones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp, modifier = Modifier.weight(1f))
             Text("+", fontSize = 22.sp, color = MinTextDim)
         }
@@ -149,7 +153,7 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                         Box(
                             modifier = Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MinSurfaceContainerHigh),
                             contentAlignment = Alignment.Center,
-                        ) { Text("✦", fontSize = 13.sp, color = MinText) }
+                        ) { Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinText, modifier = Modifier.size(14.dp)) }
                         Text(
                             text = "Registra tus inversiones para recibir sugerencias de diversificación personalizadas.",
                             fontSize = 13.sp,

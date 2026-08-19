@@ -11,6 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -134,7 +137,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.6f))
-                .clickable(onClick = onDismiss),
+                .clickable(enabled = !saving, onClick = onDismiss),
         ) {
             Box(modifier = Modifier.weight(1f))
 
@@ -146,15 +149,8 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                     .padding(horizontal = 20.dp)
                     .clickable(enabled = false) {},
             ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(vertical = 12.dp)
-                        .width(32.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MinTextFaint),
-                )
+                // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+                SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
                 when (picker) {
                     Picker.Category -> CategoryPicker(
@@ -341,13 +337,17 @@ private fun EditorBody(
                             .clickable { onKey(key) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = key,
-                            fontSize = 22.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Normal,
-                            color = MinText,
-                        )
+                        if (key == "⌫") {
+                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = MinText, modifier = Modifier.size(22.dp))
+                        } else {
+                            Text(
+                                text = key,
+                                fontSize = 22.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Normal,
+                                color = MinText,
+                            )
+                        }
                     }
                 }
             }
@@ -436,7 +436,7 @@ private fun PickerHeader(title: String, onClose: () -> Unit) {
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
-            Text("×", fontSize = 18.sp, color = MinText)
+            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = MinText, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -466,7 +466,7 @@ private fun CategoryPicker(
                         fontWeight = if (opt == selected) FontWeight.Medium else FontWeight.Normal,
                     )
                     Box(modifier = Modifier.weight(1f))
-                    if (opt == selected) Text("✓", fontSize = 14.sp, color = MinText)
+                    if (opt == selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinText, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -509,7 +509,7 @@ private fun WalletPicker(
                                 color = MinTextMute,
                             )
                         }
-                        if (account.id == selectedId) Text("✓", fontSize = 14.sp, color = MinText)
+                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinText, modifier = Modifier.size(16.dp))
                     }
                 }
             }

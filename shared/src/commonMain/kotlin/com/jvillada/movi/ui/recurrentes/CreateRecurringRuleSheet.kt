@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MoneyField
+import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 
@@ -109,16 +110,8 @@ fun CreateRecurringRuleSheet(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            // Drag handle
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint),
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
             // Title row: sheet title + optional delete action in edit mode
             Row(

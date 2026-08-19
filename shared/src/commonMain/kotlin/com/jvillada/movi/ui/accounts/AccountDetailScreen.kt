@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
@@ -112,11 +113,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "‹",
-                    fontSize = 22.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Accounts) },
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MinText,
+                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Accounts) },
                 )
                 Text(
                     text = account?.name ?: "",

@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -412,7 +413,7 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Tarjeta ${index + 1}", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Text("✕", fontSize = 13.sp, color = MinExpense, modifier = Modifier.clickable(onClick = onRemove).padding(4.dp))
+            Icon(Icons.Rounded.Close, contentDescription = "Quitar", tint = MinExpense, modifier = Modifier.size(15.dp).clickable(onClick = onRemove).padding(4.dp))
         }
         Spacer(Modifier.height(8.dp))
         FieldBox("Título", card.title, { onUpdate(card.copy(title = it)) })

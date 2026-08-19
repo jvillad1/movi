@@ -7,6 +7,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Upload
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -64,16 +70,16 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.Dashboard) })
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.Dashboard) })
             Column(modifier = Modifier.weight(1f)) {
                 Text("Mensajes del banco", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
                 Text("$pendingCount por confirmar", fontSize = 12.sp, color = MinTextMute)
             }
-            Text(
-                "↻",
-                fontSize = 18.sp,
-                color = MinTextDim,
-                modifier = Modifier.clickableSimple { refreshKey++ },
+            Icon(
+                Icons.Rounded.Refresh,
+                contentDescription = "Actualizar",
+                tint = MinTextDim,
+                modifier = Modifier.size(20.dp).clickableSimple { refreshKey++ },
             )
         }
 
@@ -137,11 +143,11 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                                     modifier = Modifier.padding(top = 2.dp),
                                 )
                             }
-                            Text(
-                                if (syncWorking) "…" else "↑",
-                                fontSize = 18.sp,
-                                color = if (syncWorking) MinTextFaint else MinPrimary,
-                            )
+                            if (syncWorking) {
+                                Text("…", fontSize = 18.sp, color = MinTextFaint)
+                            } else {
+                                Icon(Icons.Rounded.Upload, contentDescription = "Sincronizar", tint = MinPrimary, modifier = Modifier.size(20.dp))
+                            }
                         }
                         if (syncError != null) {
                             Spacer(Modifier.height(8.dp))
@@ -205,6 +211,17 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         }
                     }
                 }
+            }
+        }
+
+        // F29: era la única sección de Más que se quedaba sin la barra al navegar acá.
+        MinBottomNav(active = NavTab.MORE) { tab ->
+            when (tab) {
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
             }
         }
     }
@@ -293,7 +310,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.SMSInbox) })
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.SMSInbox) })
             Text("Reconciliar movimiento", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 
@@ -458,6 +475,17 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 )
             }
         }
+
+        // F29: la pantalla de detalle también se quedaba sin la barra.
+        MinBottomNav(active = NavTab.MORE) { tab ->
+            when (tab) {
+                NavTab.HOME         -> onNavigate(Screen.Dashboard)
+                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
+                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
+                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
+                NavTab.MORE         -> onNavigate(Screen.Mas)
+            }
+        }
     }
 }
 
@@ -475,7 +503,11 @@ private fun Detail(ok: Boolean, label: String, value: String, isLast: Boolean = 
                 .background(if (ok) MinIncome.copy(alpha = 0.16f) else MinWarn.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(if (ok) "✓" else "?", fontSize = 10.sp, color = if (ok) MinIncome else MinWarn, fontWeight = FontWeight.Bold)
+            if (ok) {
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = MinIncome, modifier = Modifier.size(12.dp))
+            } else {
+                Text("?", fontSize = 10.sp, color = MinWarn, fontWeight = FontWeight.Bold)
+            }
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(label.uppercase(), fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)

@@ -8,8 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -132,7 +134,7 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText, modifier = Modifier.clickableSimple { onNavigate(Screen.OCRCapture) })
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { onNavigate(Screen.OCRCapture) })
             Text("Confirma el recibo", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
         }
 
@@ -144,7 +146,7 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                     padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("✓", fontSize = 14.sp, color = MinIncome, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = MinIncome, modifier = Modifier.size(16.dp))
                         Row {
                             Text("Recibo leído. ", fontSize = 13.sp, color = MinText)
                             Text("Revisa antes de guardar.", fontSize = 13.sp, color = MinTextMute)

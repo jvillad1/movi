@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
@@ -70,16 +71,16 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "‹",
-                    fontSize = 22.sp,
-                    color = MinText,
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MinText,
                     // F22 (pila de navegación) es Ola 2 — hasta entonces, hardcodeado a Más.
                     // Ojo: acá también se llega desde el Inicio («Ver todas +» y las filas de
                     // cuentas), y en ese caso la flecha te deja en Más en vez de en Inicio.
                     // Es el defecto conocido que F22 cierra; se prefirió Más porque es el
                     // acceso permanente (F19).
-                    modifier = Modifier.clickable { onNavigate(Screen.Mas) },
+                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Mas) },
                 )
                 Text(
                     text = "Mis cuentas",

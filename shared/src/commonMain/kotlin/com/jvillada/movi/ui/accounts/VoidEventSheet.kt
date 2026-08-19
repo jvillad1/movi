@@ -72,16 +72,8 @@ fun VoidEventSheet(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            // Drag handle
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint),
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss, enabled = !voiding)
 
             // Event summary card
             MinCard(

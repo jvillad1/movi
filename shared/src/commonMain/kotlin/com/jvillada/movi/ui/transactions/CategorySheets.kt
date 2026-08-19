@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,8 +30,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
- * clickeable para cerrar, panel con esquinas redondeadas arriba y el "handle" de 32×4.dp. Se
- * duplica acá en vez de importarse — mismo criterio que [com.jvillada.movi.ui.accounts.CreateAccountSheet],
+ * clickeable para cerrar, panel con esquinas redondeadas arriba y [SheetHandleWithClose] (F37).
+ * Se duplica acá en vez de importarse — mismo criterio que [com.jvillada.movi.ui.accounts.CreateAccountSheet],
  * cada pantalla trae sus propios helpers de hoja.
  */
 @Composable
@@ -52,14 +55,8 @@ private fun BottomSheetScaffold(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint),
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled)
             content()
         }
     }
@@ -88,7 +85,7 @@ private fun CategoryRow(icon: String, name: String, selected: Boolean, enabled: 
     ) {
         Text(icon, fontSize = 18.sp)
         Text(name, fontSize = 14.5.sp, color = MinText, modifier = Modifier.weight(1f))
-        if (selected) Text("✓", fontSize = 15.sp, color = MinPrimary, fontWeight = FontWeight.Bold)
+        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
     }
 }
 

@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -89,11 +93,11 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(
-                    text = "‹",
-                    fontSize = 22.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Analisis) },
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MinText,
+                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Analisis) },
                 )
                 // F41: mismo componente que Inicio y Movimientos — Perfil alcanzable desde acá.
                 AvatarButton(onClick = { onNavigate(Screen.Profile) })
@@ -104,11 +108,17 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                     color = MinText,
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = "+",
-                    fontSize = 24.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { sheet = Sheet.Add },
+                // F18: compacto arriba a la derecha cuando ya hay presupuestos.
+                if (budgets.isNotEmpty()) {
+                    NewItemButton(label = "+ Nuevo presupuesto", onClick = { sheet = Sheet.Add })
+                }
+            }
+            if (budgets.isEmpty()) {
+                NewItemButton(
+                    label = "+ Nuevo presupuesto",
+                    onClick = { sheet = Sheet.Add },
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    full = true,
                 )
             }
 
@@ -361,15 +371,8 @@ private fun BudgetSheet(
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 12.dp)
-                    .width(32.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MinTextFaint)
-            )
+            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+            SheetHandleWithClose(onClose = onDismiss)
 
             Text(
                 text = title,
@@ -462,13 +465,17 @@ private fun BudgetSheet(
                                     .clickable { onKey(key) },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = key,
-                                    fontSize = 20.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MinText,
-                                )
+                                if (key == "⌫") {
+                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = MinText, modifier = Modifier.size(20.dp))
+                                } else {
+                                    Text(
+                                        text = key,
+                                        fontSize = 20.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Normal,
+                                        color = MinText,
+                                    )
+                                }
                             }
                         }
                     }

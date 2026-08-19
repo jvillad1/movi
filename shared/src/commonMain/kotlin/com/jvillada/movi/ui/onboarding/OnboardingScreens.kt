@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -206,7 +209,7 @@ fun OnboardingProfileScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("‹", fontSize = 22.sp, color = MinText)
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = MinText, modifier = Modifier.size(22.dp))
             OnboardingDots(step = 6)
             Spacer(Modifier.weight(1f))
             Text("6/6", fontSize = 12.sp, color = MinTextMute, fontFamily = FontFamily.Monospace)

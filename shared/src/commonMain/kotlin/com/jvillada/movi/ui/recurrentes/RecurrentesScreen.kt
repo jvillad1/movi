@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,11 +89,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(
-                    text = "‹",
-                    fontSize = 22.sp,
-                    color = MinText,
-                    modifier = Modifier.clickable { onNavigate(Screen.Analisis) },
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MinText,
+                    modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Analisis) },
                 )
                 Text(
                     text = "Recurrentes",
@@ -99,14 +102,21 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     color = MinText,
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = "+",
-                    fontSize = 22.sp,
-                    color = MinPrimary,
-                    modifier = Modifier.clickable {
-                        sheetRule = null
-                        sheetOpen = true
-                    },
+                // F18: con reglas ya creadas, el "+" pasa a botón compacto con texto acá; vacío,
+                // el botón se muestra a todo el ancho debajo del encabezado (más abajo).
+                if (rules.isNotEmpty()) {
+                    NewItemButton(
+                        label = "+ Nuevo pago",
+                        onClick = { sheetRule = null; sheetOpen = true },
+                    )
+                }
+            }
+            if (rules.isEmpty() && !loading) {
+                NewItemButton(
+                    label = "+ Nuevo pago",
+                    onClick = { sheetRule = null; sheetOpen = true },
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    full = true,
                 )
             }
 
