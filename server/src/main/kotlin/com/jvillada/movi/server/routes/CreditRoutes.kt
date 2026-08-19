@@ -140,7 +140,7 @@ fun Route.creditRoutes() {
                 return@post call.respond(HttpStatusCode.BadRequest, "La deuda no puede ser negativa")
             }
             if (target > MAX_CREDIT_DEBT_COP) {
-                return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisá el monto")
+                return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisa el monto")
             }
             // Fuera de la transacción a propósito: pega contra la red y no debe alargar el lock.
             val rate = FxRateService.usdToCop()

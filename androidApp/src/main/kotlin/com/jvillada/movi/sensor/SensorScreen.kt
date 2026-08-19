@@ -214,7 +214,7 @@ private fun SessionCard() {
         } else {
             if (SmsFilterConfigStore.isSessionExpired(authErrorAt, loggedIn)) {
                 Text(
-                    "Sesión vencida — volvé a entrar. Los SMS que lleguen hasta entonces se pierden: " +
+                    "Sesión vencida — vuelve a entrar. Los SMS que lleguen hasta entonces se pierden: " +
                         "el sensor no los guarda para subirlos después.",
                     fontSize = 13.sp,
                     color = ErrorColor,
@@ -435,7 +435,7 @@ private fun PermissionsCard(context: Context, installSource: InstallSource) {
                 PermissionButton("Abrir ajustes de la app") { openAppSettings(context) }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Android ya no muestra el diálogo: concedé SMS en Permisos, dentro de los ajustes de la app.",
+                    "Android ya no muestra el diálogo: concede SMS en Permisos, dentro de los ajustes de la app.",
                     fontSize = 12.sp,
                     color = TextMutedColor,
                 )
@@ -518,7 +518,7 @@ private fun HibernationCard(context: Context) {
             // Sin nombrar la hibernación: desde Android 11 se revocan los permisos, y desde
             // Android 13 además se detiene la app. La consecuencia es la misma en ambos y es
             // lo único que le importa a quien lee esto.
-            "Si no abrís esta app durante unos meses, Android le revoca los permisos: " +
+            "Si no abres esta app durante unos meses, Android le revoca los permisos: " +
                 "el sensor deja de capturar SMS y no avisa.",
             fontSize = 13.sp,
             color = ErrorColor,
@@ -542,8 +542,8 @@ private fun HibernationCard(context: Context) {
             // El texto exacto del interruptor cambia por versión de Android ("Administrar la
             // app si no se usa" en 13+, "Pausar actividad de la app si no se usa" antes), así
             // que nombramos la sección, que sí es estable.
-            "Se abre la ficha de la app: hasta abajo, en «Apps sin usar», apagá el " +
-                "interruptor. Al volver acá, este aviso desaparece.",
+            "Se abre la ficha de la app: hasta abajo, en «Apps sin usar», apaga el " +
+                "interruptor. Al volver aquí, este aviso desaparece.",
             fontSize = 12.sp,
             color = TextMutedColor,
         )
@@ -653,13 +653,13 @@ private fun BackfillCard(context: Context, installSource: InstallSource, onSynce
         }
         if (!loggedIn) {
             Spacer(Modifier.height(8.dp))
-            Text("Entrá arriba para poder subir el historial.", fontSize = 12.sp, color = TextMutedColor)
+            Text("Entra arriba para poder subir el historial.", fontSize = 12.sp, color = TextMutedColor)
         }
         if (toSettings) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "Falta el permiso de lectura de SMS y Android ya no muestra el diálogo: " +
-                    "concedelo en Permisos, dentro de los ajustes de la app.",
+                    "concédelo en Permisos, dentro de los ajustes de la app.",
                 fontSize = 12.sp,
                 color = TextMutedColor,
             )

@@ -61,7 +61,7 @@ object SmsBackfill {
  * el chequeo de la UI y esta llamada — exactamente lo que el auto-revoke por hibernación le
  * hace a esta app. Distinguirla de cualquier otra falla de lectura importa: [NoPermission]
  * ya tiene la copia correcta ("sin el permiso...") y, vía OnResume en la pantalla, la ruta a
- * ajustes — mientras que [Failed] dice "revisá la conexión", que es un consejo falso y sin
+ * ajustes — mientras que [Failed] dice "revisa la conexión", que es un consejo falso y sin
  * salida para este caso. Función pura para poder testearla sin mockear Android.
  */
 internal fun outcomeForReadFailure(t: Throwable): BackfillOutcome =
@@ -95,10 +95,10 @@ internal fun backfillMessage(outcome: BackfillOutcome): String = when (outcome) 
         else -> "${outcome.found} mensajes bancarios encontrados · ${outcome.synced} nuevos subidos."
     }
     BackfillOutcome.NothingFound -> "No hay SMS bancarios en los últimos 30 días del teléfono."
-    BackfillOutcome.NoSession -> "Entrá primero: sin sesión no se puede subir nada."
+    BackfillOutcome.NoSession -> "Entra primero: sin sesión no se puede subir nada."
     BackfillOutcome.NoPermission -> "Sin el permiso de lectura de SMS no se puede recuperar el historial."
-    BackfillOutcome.SessionExpired -> "Sesión vencida — volvé a entrar y probá de nuevo."
-    BackfillOutcome.Failed -> "No se pudo sincronizar. Revisá la conexión y probá de nuevo."
+    BackfillOutcome.SessionExpired -> "Sesión vencida — vuelve a entrar y prueba de nuevo."
+    BackfillOutcome.Failed -> "No se pudo sincronizar. Revisa la conexión y prueba de nuevo."
 }
 
 /** Solo [BackfillOutcome.Uploaded] con algo subido es un final feliz; el resto avisa en rojo. */

@@ -550,21 +550,21 @@ private fun PrimerosPasosCard(
 
         PasoRow(
             done = hasAccount,
-            title = "Creá tu primera cuenta",
-            subtitle = "Es donde va a vivir cada movimiento que registrés",
+            title = "Crea tu primera cuenta",
+            subtitle = "Es donde va a vivir cada movimiento que registres",
             onClick = onShowCreateSheet,
         )
         Hairline()
         PasoRow(
             done = hasCredit,
-            title = "Si tenés préstamos o tarjetas, cargalos acá",
-            subtitle = "Movi calcula cuotas e intereses por vos",
+            title = "Si tienes préstamos o tarjetas, cárgalos aquí",
+            subtitle = "Movi calcula cuotas e intereses por ti",
             onClick = { onNavigate(Screen.Credits) },
         )
         Hairline()
         PasoRow(
             done = hasMovement,
-            title = "Registrá un movimiento",
+            title = "Registra un movimiento",
             subtitle = "El primer ingreso o gasto arranca el historial",
             onClick = { onNavigate(Screen.QuickAdd()) },
         )
@@ -574,13 +574,13 @@ private fun PrimerosPasosCard(
         // todas las plataformas, SMS del banco solo en Android (no existe en iOS/web).
         Column(modifier = Modifier.padding(vertical = 14.dp)) {
             Text(
-                text = "Dejá que la app se llene sola",
+                text = "Deja que la app se llene sola",
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = MinText,
             )
             Text(
-                text = "Subí un extracto o conectá el SMS del banco",
+                text = "Sube un extracto o conecta el SMS del banco",
                 fontSize = 12.5.sp,
                 color = MinTextMute,
                 modifier = Modifier.padding(top = 2.dp),

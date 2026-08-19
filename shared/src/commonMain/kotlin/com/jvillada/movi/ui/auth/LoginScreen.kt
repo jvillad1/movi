@@ -82,7 +82,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         if (loading) return
         val trimmed = email.trim()
         if (trimmed.isBlank()) {
-            error = "Escribí tu correo y volvé a tocar «¿Olvidaste tu contraseña?»"
+            error = "Escribe tu correo y vuelve a tocar «¿Olvidaste tu contraseña?»"
             return
         }
         loading = true
@@ -95,16 +95,16 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             }.onSuccess { status ->
                 when (status) {
                     // 202 es idéntico exista o no el correo — la app no sabe (ni debe saber) cuál fue.
-                    202  -> notice = "Si el correo está registrado, te enviamos un enlace. Abrilo desde el correo para elegir una contraseña nueva."
+                    202  -> notice = "Si el correo está registrado, te enviamos un enlace. Ábrelo desde el correo para elegir una contraseña nueva."
                     // El servidor no tiene cómo mandar correo. Se dice, en vez de prometer un
                     // mensaje que nunca va a llegar.
                     503  -> error = "El envío de correo no está configurado en el servidor, así que no se puede recuperar la contraseña por ahí."
-                    429  -> error = "Demasiados pedidos. Esperá unos minutos."
+                    429  -> error = "Demasiados pedidos. Espera unos minutos."
                     else -> error = "No se pudo pedir el enlace ($status)"
                 }
                 loading = false
             }.onFailure {
-                error = "No se pudo conectar. Probá de nuevo."
+                error = "No se pudo conectar. Prueba de nuevo."
                 loading = false
             }
         }
@@ -188,7 +188,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
 
         Spacer(Modifier.height(16.dp))
         Text(
-            "¿No tenés cuenta? Registrate",
+            "¿No tienes cuenta? Regístrate",
             fontSize = 13.sp, color = MinPrimary,
             modifier = Modifier.noRippleClickable { onNavigate(Screen.Register) }
         )

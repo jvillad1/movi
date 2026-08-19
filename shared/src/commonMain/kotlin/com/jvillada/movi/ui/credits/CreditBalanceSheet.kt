@@ -122,8 +122,8 @@ fun CreditBalanceSheet(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text = when {
-                        overCap        -> "Saldo fuera de rango — revisá el monto."
-                        parsed == null -> "Copiá el saldo que muestra la banca en línea hoy."
+                        overCap        -> "Saldo fuera de rango — revisa el monto."
+                        parsed == null -> "Copia el saldo que muestra la banca en línea hoy."
                         delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
                         delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."
                         else           -> "Se registrará un abono de ${formatCOP(-delta)} para bajar la deuda."
