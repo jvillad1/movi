@@ -13,7 +13,6 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
@@ -54,9 +53,6 @@ class WalletRepositoryImpl(
     private val client: HttpClient,
     private val baseUrl: String,
 ) : WalletRepository {
-
-    override suspend fun getHoldings(): List<Holding> =
-        client.get("$baseUrl/api/holdings").body()
 
     override suspend fun getCredits(): List<CreditSummary> =
         client.get("$baseUrl/api/credits").body()

@@ -12,7 +12,6 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
@@ -32,7 +31,6 @@ import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.VoidEvent
 
 interface WalletRepository {
-    suspend fun getHoldings(): List<Holding>
     suspend fun getCredits(): List<CreditSummary>
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary

@@ -132,6 +132,22 @@ class DashboardLogicTest {
     }
 
     @Test
+    fun `investments toma cuentas tipo INVESTMENT, no el modelo de posiciones retirado`() {
+        // F50: Inversiones (y su acceso con cifra en el Inicio) dejaron de leer holdings —
+        // ese modelo se retiró — y pasaron a leer cuentas de tipo INVESTMENT, igual que
+        // Cuentas. Una cuenta de Dinero (SAVINGS) no debe sumar acá.
+        val withInvestments = data.copy(
+            accounts = data.accounts + listOf(
+                Account("i1", "CDT Bancolombia", AccountType.INVESTMENT, 3_000_000),
+                Account("i2", "Fondo Nu", AccountType.INVESTMENT, 700_000),
+            ),
+        )
+        val figure = quickLinkFigure("investments", withInvestments)
+        assertEquals("$3.700.000", figure.value)
+        assertEquals("2 cuentas", figure.sub)
+    }
+
+    @Test
     fun `sin datos el acceso no inventa una cifra`() {
         val empty = DashboardData()
         assertNull(quickLinkFigure("accounts", empty).value)

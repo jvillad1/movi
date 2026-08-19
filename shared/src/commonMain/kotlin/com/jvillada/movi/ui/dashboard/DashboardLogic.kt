@@ -2,13 +2,13 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.SubscriptionsResult
@@ -39,7 +39,6 @@ data class DashboardData(
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
     val goals: List<Goal> = emptyList(),
-    val holdings: List<Holding> = emptyList(),
     val subscriptions: SubscriptionsResult? = null,
 ) {
     val hasAccount: Boolean get() = accounts.isNotEmpty()
@@ -155,8 +154,11 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else LinkFigure(formatCOP(data.goals.sumOf { it.saved }), plural(data.goals.size, "meta", "metas"))
     }
     "investments" -> {
-        if (data.holdings.isEmpty()) LinkFigure(sub = "Sin inversiones")
-        else LinkFigure(formatCOP(data.holdings.sumOf { it.amount }), plural(data.holdings.size, "posición", "posiciones"))
+        // F50: misma fuente que la pantalla Inversiones — cuentas tipo INVESTMENT, no el
+        // modelo de "posiciones" (holdings) que el server siempre devolvía vacío.
+        val investmentAccounts = data.accounts.filter { it.type == AccountType.INVESTMENT }
+        if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
+        else LinkFigure(formatCOP(investmentAccounts.sumOf { it.balance }), plural(investmentAccounts.size, "cuenta", "cuentas"))
     }
     "subscriptions" -> {
         val subs = data.subscriptions

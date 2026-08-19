@@ -58,7 +58,9 @@ fun StatementReviewScreen(
 
     val destinationAccount = remember(accounts, result.bankName) {
         accounts.firstOrNull { it.name.contains(result.bankName, ignoreCase = true) }
-            ?: accounts.firstOrNull { it.type != AccountType.CASH }
+            // F56: mismo criterio que SMSScreens — Dinero sin Efectivo, no "cualquier cosa que
+            // no sea Efectivo" (que antes también podía caer en Inversión o en una deuda).
+            ?: accounts.firstOrNull { it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH }
             ?: accounts.firstOrNull()
     }
 

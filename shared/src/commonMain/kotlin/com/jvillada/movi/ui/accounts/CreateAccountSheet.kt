@@ -8,11 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.RequestQuote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -36,22 +32,28 @@ import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
-private data class TypeOption(val type: AccountType, val label: String, val icon: ImageVector)
+private data class TypeOption(val type: AccountType, val label: String, val description: String, val icon: ImageVector)
 
+// F56: dos tipos, no seis. Efectivo/Ahorros/Corriente se tratan idéntico en todos los cálculos
+// (verificado contra Balance.kt) — "Dinero" los cubre a todos, y el nombre que escribe el
+// dueño ("Bancolombia Ahorros", "Nequi") dice el resto. Tarjeta y Préstamo salen del selector
+// (F51/F52): son deuda, no plata tuya, y se crean desde Créditos con sus términos.
 private val TYPE_OPTIONS = listOf(
-    TypeOption(AccountType.CASH, "Efectivo", Icons.Filled.Payments),
-    TypeOption(AccountType.SAVINGS, "Ahorros", Icons.Filled.AccountBalance),
-    TypeOption(AccountType.CHECKING, "Corriente", Icons.Filled.AccountBalanceWallet),
-    TypeOption(AccountType.INVESTMENT, "Inversión", Icons.AutoMirrored.Filled.TrendingUp),
-    TypeOption(AccountType.CREDIT_CARD, "Crédito", Icons.Filled.CreditCard),
-    TypeOption(AccountType.LOAN, "Préstamo", Icons.Filled.RequestQuote),
+    TypeOption(AccountType.SAVINGS, "Dinero", "La plata disponible: ahorros, corriente, efectivo", Icons.Filled.AccountBalanceWallet),
+    TypeOption(AccountType.INVESTMENT, "Inversión", "Plata guardada: CDT, fondos", Icons.AutoMirrored.Filled.TrendingUp),
 )
 
 @Composable
-fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
+fun CreateAccountSheet(
+    onDismiss: () -> Unit,
+    onAccountCreated: () -> Unit,
+    // F50: Inversiones abre esta hoja con el tipo ya elegido — el dueño no tiene que
+    // volver a seleccionar "Inversión" a mano después de tocar el "+" de esa pantalla.
+    initialType: AccountType = AccountType.SAVINGS,
+) {
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(AccountType.CASH) }
+    var selectedType by remember { mutableStateOf(initialType) }
     var selectedCurrency by remember { mutableStateOf("COP") }
     var initialBalance by remember { mutableStateOf<Long?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -87,7 +89,10 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
                 name = name.trim(),
                 type = selectedType,
                 balance = initialBalance ?: 0L,
-                currency = if (selectedType == AccountType.CREDIT_CARD) selectedCurrency else "COP",
+                // F51: la moneda ya no es exclusiva de tarjeta (que salió del selector) — una
+                // cuenta de Inversión en USD existe de verdad (un CDT en dólares); Dinero se
+                // queda fijo en COP porque es efectivo/ahorros/corriente de acá.
+                currency = if (selectedType == AccountType.INVESTMENT) selectedCurrency else "COP",
             )
             val result = runCatching {
                 // La cuenta se crea SIEMPRE en $0 — el saldo/deuda inicial que el dueño tipeó
@@ -169,52 +174,43 @@ fun CreateAccountSheet(onDismiss: () -> Unit, onAccountCreated: () -> Unit) {
             // --- TIPO ---
             SectionLabel("TIPO")
             Spacer(Modifier.height(8.dp))
-            // 2×2 chip grid
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                for (row in TYPE_OPTIONS.chunked(2)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        row.forEach { option ->
-                            Chip(
-                                label = option.label,
-                                icon = option.icon,
-                                selected = selectedType == option.type,
-                                onClick = {
-                                    val wasDebt = isDebtAccount(selectedType)
-                                    val willBeDebt = isDebtAccount(option.type)
-                                    val willBeCard = option.type == AccountType.CREDIT_CARD
-                                    selectedType = option.type
-                                    // Currency selector is card-only; any non-card type is COP.
-                                    if (!willBeCard) selectedCurrency = "COP"
-                                    // Crossing the debt↔asset boundary flips the amount's meaning;
-                                    // clear it so a debt isn't silently kept as a positive balance.
-                                    if (wasDebt != willBeDebt) initialBalance = null
-                                },
-                            )
-                        }
-                    }
+                TYPE_OPTIONS.forEach { option ->
+                    TypeCard(
+                        option = option,
+                        selected = selectedType == option.type,
+                        onClick = {
+                            selectedType = option.type
+                            // El selector de moneda es solo de Inversión; cualquier otro tipo
+                            // (Dinero) queda fijo en COP.
+                            if (option.type != AccountType.INVESTMENT) selectedCurrency = "COP"
+                        },
+                    )
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            // F52: nota, no botón — Créditos vive en Más, no acá.
+            Text(
+                text = "¿Tarjetas o préstamos? Se cargan en Créditos",
+                fontSize = 12.sp,
+                color = MinTextMute,
+            )
 
             Spacer(Modifier.height(18.dp))
 
-            // --- SALDO / DEUDA INICIAL ---
-            val isCard = selectedType == AccountType.CREDIT_CARD
-            val isDebt = isDebtAccount(selectedType)
-            SectionLabel(if (isDebt) "DEUDA INICIAL" else "SALDO INICIAL")
+            // --- SALDO INICIAL --- (ya no hay tipo de deuda en este selector, ver F51/F52)
+            SectionLabel("SALDO INICIAL")
             Spacer(Modifier.height(8.dp))
             MoneyField(
                 value = initialBalance,
                 onValueChange = { initialBalance = it },
             )
 
-            // --- MONEDA (solo tarjeta de crédito) ---
-            if (isCard) {
+            // --- MONEDA (solo Inversión — un CDT en USD existe; Dinero se queda en COP) ---
+            if (selectedType == AccountType.INVESTMENT) {
                 Spacer(Modifier.height(18.dp))
                 SectionLabel("MONEDA")
                 Spacer(Modifier.height(8.dp))
@@ -328,5 +324,49 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
                 color = if (selected) MinOnPrimaryContainer else MinTextDim,
             )
         }
+    }
+}
+
+/**
+ * F56: cada uno de los dos tipos ahora trae una línea explicando qué va ahí — antes eran 6
+ * chips de una sola palabra ("Crédito", "Préstamo"…) que el dueño no podía distinguir de las
+ * secciones del mismo nombre (F50/F51). Full width, no comparten fila.
+ */
+@Composable
+private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .then(
+                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(12.dp)) else Modifier,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = option.icon,
+                contentDescription = null,
+                tint = if (selected) MinOnPrimaryContainer else MinTextDim,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = option.label,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) MinOnPrimaryContainer else MinText,
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = option.description,
+            fontSize = 12.sp,
+            color = if (selected) MinOnPrimaryContainer else MinTextMute,
+        )
     }
 }

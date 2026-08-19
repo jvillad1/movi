@@ -15,7 +15,6 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.newId
@@ -266,7 +265,6 @@ class LocalRepository(
 
     // ── Delegate everything else to remote ────────────────────────────────────
 
-    override suspend fun getHoldings(): List<Holding> = remote.getHoldings()
     override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()
     override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)

@@ -17,27 +17,41 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.shared.model.Holding
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 
+/**
+ * F50: Inversiones y una cuenta tipo Inversión (CDT, fondo, cajita) eran "dos formas de la
+ * misma idea que crecieron por separado" — una cuenta con saldo real y alta; la otra, un
+ * modelo de "posiciones" sin forma de crearlas (F21) que el server siempre devolvía vacío
+ * (ver `GET /api/holdings`, ahora sin consumidor). Se unifican: esta pantalla ya no lee
+ * holdings, lee las cuentas de tipo [AccountType.INVESTMENT] — mismas que Cuentas — y el "+"
+ * abre la misma hoja de alta que Cuentas, con el tipo ya elegido.
+ */
 @Composable
 fun InversionesScreen(onNavigate: (Screen) -> Unit) {
     val goBack = LocalGoBack.current
-    var holdings by remember { mutableStateOf<List<Holding>>(emptyList()) }
-    LaunchedEffect(Unit) {
-        runCatching { Repositories.wallets.getHoldings() }
-            .onSuccess { holdings = it }
+    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var showCreateSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(refreshKey) {
+        runCatching { Repositories.wallets.getAccounts() }
+            .onSuccess { accounts = it }
     }
-    val total = holdings.sumOf { it.amount }
+
+    val investmentAccounts = accounts.filter { it.type == AccountType.INVESTMENT }
+    val total = investmentAccounts.sumOf { it.balance }
 
     Column(
         modifier = Modifier
@@ -53,28 +67,29 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
             // (antes caía siempre en Inicio, aunque entraras desde Más).
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Text("Inversiones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp, modifier = Modifier.weight(1f))
-            // F21: acá había un "+" sin acción — no existe ni la hoja de alta ni el endpoint
-            // para crear una inversión, solo el de listar. Se saca en vez de prometer un alta
-            // que no hay; vuelve cuando se construya (anotado en el plan, Ola posterior).
+            // F21/F50: el "+" volvió — ahora sí crea algo real, una cuenta de Inversión (misma
+            // hoja que Cuentas, con el tipo ya elegido).
+            Text(
+                text = "+ Nueva",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MinText,
+                modifier = Modifier.clickableSimple { showCreateSheet = true },
+            )
         }
 
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 80.dp),
         ) {
-            if (holdings.isEmpty()) {
-                // F21: sin posiciones, la tarjeta "Patrimonio invertido" solo mostraba un
-                // gráfico vacío (una línea plana) y "$0" — nada de eso es información, es
-                // decorado que simula haber algo. Un único estado vacío honesto en su lugar,
-                // sin la tarjeta de sugerencias de diversificación (esa también prometía algo
-                // — "recibe sugerencias" — que no hay detrás sin datos que analizar).
+            if (investmentAccounts.isEmpty()) {
                 item {
                     MinCard(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                     ) {
-                        Text("Aún no hay inversiones registradas", fontSize = 14.sp, color = MinTextMute)
+                        Text("Aún no tienes cuentas de inversión", fontSize = 14.sp, color = MinTextMute)
                     }
                 }
             } else {
@@ -95,58 +110,38 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                             letterSpacing = (-1.4).sp,
                             lineHeight = 38.sp,
                         )
-                        Spacer(Modifier.height(18.dp))
-                        InvestmentSparkline(modifier = Modifier.fillMaxWidth().height(56.dp), hasData = true)
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                            listOf("1M", "3M", "6M", "1A", "Todo").forEachIndexed { i, p ->
-                                val active = i == 3
-                                Column {
-                                    Text(
-                                        text = p,
-                                        fontSize = 12.sp,
-                                        color = if (active) MinText else MinTextMute,
-                                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    if (active) {
-                                        Box(modifier = Modifier.width(20.dp).height(1.5.dp).clip(RoundedCornerShape(1.dp)).background(MinText))
-                                    }
-                                }
-                            }
-                        }
+                        // F50: el gráfico por período que había acá dibujaba una curva fija
+                        // inventada, no datos reales (mismo defecto que ya se sacó del Balance
+                        // del Inicio en la Ola 4) — se va sin reemplazo hasta que haya una
+                        // serie real que mostrar.
                     }
                 }
 
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Mis posiciones", count = holdings.size)
+                        MinSectionHeader(title = "Mis cuentas de inversión", count = investmentAccounts.size)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
-                            holdings.forEachIndexed { i, h ->
+                            investmentAccounts.forEachIndexed { i, account ->
                                 CardRow(
-                                    left = { Text(h.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                    sub = h.sub,
+                                    left = { Text(account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                                     right = {
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text(formatCOP(h.amount), fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                                            Text(
-                                                text = "${if (h.change > 0) "+" else ""}${formatOneDecimal(h.change)}%",
-                                                fontSize = 11.sp,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = when {
-                                                    h.change > 0 -> MinIncome
-                                                    h.change < 0 -> MinExpense
-                                                    else -> MinTextMute
-                                                },
-                                            )
-                                        }
+                                        Text(
+                                            text = formatCOP(account.balance),
+                                            fontSize = 14.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MinText,
+                                            letterSpacing = (-0.3).sp,
+                                        )
                                     },
-                                    isLast = i == holdings.size - 1,
+                                    isLast = i == investmentAccounts.size - 1,
+                                    showChevron = true,
+                                    onClick = { onNavigate(Screen.AccountDetail(account.id)) },
                                 )
                             }
                         }
@@ -154,13 +149,18 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
-    }
-}
 
-private fun formatOneDecimal(v: Double): String {
-    val intPart = v.toLong()
-    val frac = kotlin.math.abs((v - intPart) * 10).toLong()
-    return "$intPart.$frac"
+        if (showCreateSheet) {
+            CreateAccountSheet(
+                onDismiss = { showCreateSheet = false },
+                onAccountCreated = {
+                    showCreateSheet = false
+                    refreshKey++
+                },
+                initialType = AccountType.INVESTMENT,
+            )
+        }
+    }
 }
 
 private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(

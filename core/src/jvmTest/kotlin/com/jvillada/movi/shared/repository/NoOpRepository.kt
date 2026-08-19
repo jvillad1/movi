@@ -20,7 +20,6 @@ open class NoOpRepository(
     /** Ids que pasaron por [dismissCardPaymentCandidate] — lo que un test de delegación verifica. */
     val dismissedCandidateIds = mutableListOf<String>()
 
-    override suspend fun getHoldings() = emptyList<Holding>()
     override suspend fun getCredits() = emptyList<CreditSummary>()
     override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
     override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(

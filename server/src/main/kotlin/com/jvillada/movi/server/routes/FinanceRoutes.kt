@@ -33,6 +33,9 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 fun Route.financeRoutes() {
+    // F50: ya no tiene consumidor — Inversiones (:shared) pasó a mostrar cuentas tipo
+    // INVESTMENT en vez de "posiciones" (un modelo que nunca tuvo alta). Se deja el endpoint
+    // porque no rompe nada mantenerlo, pero WalletRepository (:core) ya no expone getHoldings.
     get("/api/holdings") { call.respond(emptyList<Holding>()) }
     get("/api/goals") { call.respond(emptyList<Goal>()) }
 
