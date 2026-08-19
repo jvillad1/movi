@@ -3,7 +3,9 @@ package com.jvillada.movi.ui.dashboard
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -15,6 +17,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.credits.totalDebtCop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -129,6 +132,47 @@ class DashboardLogicTest {
         assertEquals(false, b.isAlert)
         assertEquals("$1.200.000", quickLinkFigure("goals", data).value)
         assertEquals("1 meta", quickLinkFigure("goals", data).sub)
+    }
+
+    @Test
+    fun `credits suma prestamos y tarjetas con la misma funcion que la pantalla de Creditos`() {
+        // F20 (hallazgo Ola 4): el acceso del Inicio y la «Deuda total» de la pantalla tienen
+        // que dar el mismo número — acá se verifica que ambos salen de totalDebtCop.
+        val withCards = data.copy(
+            cards = listOf(
+                CardSummary(Account("c1", "Visa", AccountType.CREDIT_CARD, 500_000), terms = null),
+                // Tarjeta USD: entra por su estimado en COP, no por su componente COP (que es $0).
+                CardSummary(
+                    Account("c2", "Mastercard USD", AccountType.CREDIT_CARD, 0, currency = "USD", estimatedTotalCop = 4_000_000),
+                    terms = null,
+                ),
+            ),
+        )
+        val fig = quickLinkFigure("credits", withCards)
+        assertEquals("$14.500.000", fig.value)  // 10M préstamo + 500K Visa + 4M estimado USD
+        assertEquals("3 créditos", fig.sub)
+        assertEquals(14_500_000L, totalDebtCop(withCards.credits, withCards.cards))
+    }
+
+    @Test
+    fun `hasCredit se tilda tambien con una tarjeta sola`() {
+        val onlyCard = DashboardData(
+            cards = listOf(CardSummary(Account("c1", "Visa", AccountType.CREDIT_CARD, 500_000), terms = null)),
+        )
+        assertTrue(onlyCard.hasCredit)
+    }
+
+    @Test
+    fun `hasRecurringRule ignora las reglas sinteticas de credito y de tarjeta`() {
+        val synthetic = DashboardData(
+            upcoming = listOf(
+                upcoming("${CREDIT_RULE_PREFIX}acc-1", "Cuota Carro", 1_000_000, daysUntil = 3),
+                upcoming("${CARD_RULE_PREFIX}acc-2", "Pago tarjeta Visa", 500_000, daysUntil = 5),
+            ),
+        )
+        assertEquals(false, synthetic.hasRecurringRule)
+        val real = synthetic.copy(upcoming = synthetic.upcoming + upcoming("rr_1", "Arriendo", 2_000_000, daysUntil = 8))
+        assertTrue(real.hasRecurringRule)
     }
 
     @Test

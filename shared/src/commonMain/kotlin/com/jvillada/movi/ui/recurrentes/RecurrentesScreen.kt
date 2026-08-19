@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.platform.PushOptIn
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
@@ -230,7 +231,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                     UpcomingPaymentRow(
                                         payment = payment,
                                         onClick = {
-                                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX)) {
+                                            // F20: el pago de una tarjeta (card_) no es una regla
+                                            // editable acá — se gestiona en Créditos, como las cuotas.
+                                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX) ||
+                                                payment.rule.id.startsWith(CARD_RULE_PREFIX)
+                                            ) {
                                                 onNavigate(Screen.Credits)
                                             } else {
                                                 sheetRule = payment.rule

@@ -153,6 +153,25 @@ object Credits : Table("credit_terms") {
     init { index("idx_credit_terms_user_id", false, userId) }
 }
 
+/**
+ * F20 — términos de tarjeta de crédito, 1:1 con su cuenta CREDIT_CARD. Tabla aparte de
+ * `credit_terms` a propósito: una tarjeta no tiene capital, tasa ni plazo — tiene cupo, corte y
+ * día de pago. `credit_limit` y `cutoff_day` nullable (no todo el mundo se los sabe);
+ * `payment_day` obligatorio porque alimenta el recordatorio de pago.
+ */
+object Cards : Table("card_terms") {
+    val accountId          = varchar("account_id", 50)   // 1:1 con cuenta CREDIT_CARD
+    val userId             = varchar("user_id", 50)
+    val bank               = varchar("bank", 80)
+    val creditLimit        = long("credit_limit").nullable()   // cupo (moneda de la cuenta)
+    val cutoffDay          = integer("cutoff_day").nullable()
+    val paymentDay         = integer("payment_day")
+    val notes              = varchar("notes", 300).nullable()
+    val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
+    override val primaryKey = PrimaryKey(accountId)
+    init { index("idx_card_terms_user_id", false, userId) }
+}
+
 object Subscriptions : Table("subscriptions") {
     val id          = varchar("id", 50)
     val userId      = varchar("user_id", 50)

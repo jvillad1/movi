@@ -7,6 +7,9 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
@@ -266,9 +269,45 @@ class LocalRepository(
     // ── Delegate everything else to remote ────────────────────────────────────
 
     override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()
-    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = remote.createCredit(request)
+
+    /**
+     * Crea contra el server y **espeja la cuenta devuelta en la DB local** (F20, Ola 5).
+     *
+     * Antes delegaba y ya, y la cuenta LOAN que `POST /api/credits` creaba solo existía en el
+     * server: la pantalla de Cuentas en Android lee [getAccounts] → SQLDelight, y el
+     * [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae — así que un crédito creado
+     * desde la app nunca aparecía en Cuentas del teléfono (sí en Créditos, que lee remoto).
+     * Mismo espejo que ya hacía [adjustCreditBalance] para el caso "el crédito nació en el
+     * server": la fila local se escribe con lo que el server devolvió, `syncedAt = ahora` para
+     * que el SyncEngine no la vuelva a subir.
+     *
+     * El evento de apertura ("Deuda inicial") NO se espeja: el server no lo devuelve en el
+     * summary (solo lo insertó en su transacción), así que en Movimientos del teléfono no se ve
+     * — pero el saldo espejado ya lo incluye, que es lo que Cuentas muestra. Traerlo requeriría
+     * ampliar el wire (como `adjustmentEvent`); queda anotado como deferido, no como olvido.
+     */
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary =
+        remote.createCredit(request).also { mirrorAccountLocally(it.account) }
+
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
+
+    override suspend fun getCards(): List<CardSummary> = remote.getCards()
+    /** Mismo espejo (y mismo porqué) que [createCredit]: sin él la tarjeta no aparece en Cuentas de Android. */
+    override suspend fun createCard(request: CreateCardRequest): CardSummary =
+        remote.createCard(request).also { mirrorAccountLocally(it.account) }
+    // Los términos de tarjeta no viven en la DB local: se leen siempre del server, como los créditos.
+    override suspend fun putCardTerms(terms: CardTerms): CardSummary = remote.putCardTerms(terms)
+    override suspend fun deleteCardTerms(accountId: String) = remote.deleteCardTerms(accountId)
+
+    /** Upsert local (INSERT OR REPLACE) de una cuenta que nació en el server, marcada como sincronizada. */
+    private fun mirrorAccountLocally(account: Account) {
+        db.accountQueries.insert(
+            account.id, account.name, account.type.name,
+            account.balance, account.currency, userId(),
+            Clock.System.now().toEpochMilliseconds(),
+        )
+    }
     /**
      * Ajusta contra el server y **espeja el resultado en la DB local**.
      *

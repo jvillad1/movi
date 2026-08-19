@@ -1,11 +1,13 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildPushPayload
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -96,7 +98,7 @@ private suspend fun processUser(
             .where { RecurringRules.userId eq userId }
             .map { row -> row.toRulePair() }
     }
-    val allPairs = rulePairs + loadCreditRulePairs(userId)
+    val allPairs = rulePairs + loadCreditRulePairs(userId) + loadCardRulePairs(userId)
 
     val selected = selectDueForReminder(allPairs, today, leadDays)
 
@@ -130,6 +132,12 @@ private suspend fun processUser(
                     Credits.update({
                         (Credits.accountId eq rule.id.removePrefix(CREDIT_RULE_PREFIX)) and (Credits.userId eq userId)
                     }) { it[Credits.lastRemindedPeriod] = duePeriod }
+                } else if (rule.id.startsWith(CARD_RULE_PREFIX)) {
+                    // F20: la regla sintética de una tarjeta se sella en card_terms — mismo
+                    // criterio de dedupe (reminderKeyFor) que créditos y reglas reales.
+                    Cards.update({
+                        (Cards.accountId eq rule.id.removePrefix(CARD_RULE_PREFIX)) and (Cards.userId eq userId)
+                    }) { it[Cards.lastRemindedPeriod] = duePeriod }
                 } else {
                     RecurringRules.update({
                         (RecurringRules.id eq rule.id) and (RecurringRules.userId eq userId)

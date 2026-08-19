@@ -358,6 +358,46 @@ class LocalRepositoryTest {
         assertEquals(300_000L, repoOffline.getAccount("acc-offline-saldo").balance)
     }
 
+    /**
+     * F20 (Ola 5): la cuenta que `POST /api/credits` crea nace en el server, pero Cuentas en
+     * Android lee de esta DB y el SyncEngine solo empuja — sin espejo, el crédito recién creado
+     * no aparece en Cuentas del teléfono.
+     */
+    @Test
+    fun createCredit_mirrors_the_server_account_locally() = runBlocking {
+        val summary = repo.createCredit(
+            com.jvillada.movi.shared.model.CreateCreditRequest(
+                name = "Crédito Vehículo",
+                initialDebt = 50_000_000L,
+                terms = com.jvillada.movi.shared.model.CreditTerms(
+                    accountId = "acc-loan-server", bank = "Santander", principal = 60_000_000L,
+                    rateEa = 18.0, termMonths = 60, installment = 1_500_000L,
+                    dayOfMonth = 25, startDate = "2026-01-15",
+                ),
+            ),
+        )
+        val local = repo.getAccounts().single { it.id == summary.account.id }
+        assertEquals(AccountType.LOAN, local.type)
+    }
+
+    /** Mismo espejo que createCredit, para `POST /api/cards`. */
+    @Test
+    fun createCard_mirrors_the_server_account_locally() = runBlocking {
+        val summary = repo.createCard(
+            com.jvillada.movi.shared.model.CreateCardRequest(
+                name = "Visa Bancolombia",
+                initialDebt = 2_000_000L,
+                terms = com.jvillada.movi.shared.model.CardTerms(
+                    accountId = "", bank = "Bancolombia", creditLimit = 10_000_000L,
+                    cutoffDay = 10, paymentDay = 25,
+                ),
+            ),
+        )
+        val local = repo.getAccounts().single { it.id == summary.account.id }
+        assertEquals(AccountType.CREDIT_CARD, local.type)
+        assertEquals(2_000_000L, local.balance)
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

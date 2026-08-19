@@ -22,6 +22,9 @@ import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
@@ -37,6 +40,11 @@ interface WalletRepository {
     suspend fun deleteCreditTerms(accountId: String)
     /** Deja la deuda del crédito en [targetBalance] registrando el movimiento de ajuste server-side. */
     suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
+    // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
+    suspend fun getCards(): List<CardSummary>
+    suspend fun createCard(request: CreateCardRequest): CardSummary
+    suspend fun putCardTerms(terms: CardTerms): CardSummary
+    suspend fun deleteCardTerms(accountId: String)
     suspend fun getSubscriptions(): SubscriptionsResult
     suspend fun detectSubscriptions(): SubscriptionsResult
     suspend fun updateSubscription(id: String, subscription: Subscription): Subscription

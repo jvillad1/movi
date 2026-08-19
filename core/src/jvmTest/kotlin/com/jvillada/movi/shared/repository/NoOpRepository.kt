@@ -49,6 +49,18 @@ open class NoOpRepository(
             reconciliationStatus = ReconciliationStatus.RECONCILED,
         ),
     )
+    override suspend fun getCards() = emptyList<CardSummary>()
+    override suspend fun createCard(request: CreateCardRequest) = CardSummary(
+        account = Account(id = "acc-card-stub", name = request.name, type = AccountType.CREDIT_CARD, balance = request.initialDebt, currency = request.currency),
+        terms = request.terms.copy(accountId = "acc-card-stub"),
+        available = request.terms.creditLimit?.let { it - request.initialDebt },
+    )
+    override suspend fun putCardTerms(terms: CardTerms) = CardSummary(
+        account = Account(id = terms.accountId, name = "", type = AccountType.CREDIT_CARD, balance = 0),
+        terms = terms,
+        available = terms.creditLimit,
+    )
+    override suspend fun deleteCardTerms(accountId: String) {}
     override suspend fun getSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun detectSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun updateSubscription(id: String, subscription: Subscription) = subscription

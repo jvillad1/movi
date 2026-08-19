@@ -92,6 +92,8 @@ fun DashboardScreen(
                     .onFailure { e -> if (error == null) error = e.toUserMessage() }
             }
             launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { c -> data = data.copy(credits = c) } }
+            // F20: la cifra del acceso «Créditos» suma préstamos + tarjetas.
+            launch { runCatching { Repositories.wallets.getCards() }.onSuccess { c -> data = data.copy(cards = c) } }
             launch { runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { u -> data = data.copy(upcoming = u) } }
             launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
             launch {

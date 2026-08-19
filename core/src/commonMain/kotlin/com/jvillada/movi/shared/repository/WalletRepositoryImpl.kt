@@ -6,6 +6,9 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
@@ -86,6 +89,38 @@ class WalletRepositoryImpl(
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
         return response.body()
+    }
+
+    override suspend fun getCards(): List<CardSummary> =
+        client.get("$baseUrl/api/cards").body()
+
+    // Mismo idioma que adjustCreditBalance: estos dos son los que tienen rechazos legibles del
+    // server (400 nombre/deuda/moneda, 404 ajena, 422 no-tarjeta) y el usuario necesita leerlos
+    // en la hoja — `.body()` directo sobre un 4xx de texto perdía el mensaje deserializando.
+    override suspend fun createCard(request: CreateCardRequest): CardSummary {
+        val response = client.post("$baseUrl/api/cards") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun putCardTerms(terms: CardTerms): CardSummary {
+        val response = client.put("$baseUrl/api/cards/${terms.accountId}") {
+            contentType(ContentType.Application.Json)
+            setBody(terms)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun deleteCardTerms(accountId: String) {
+        client.delete("$baseUrl/api/cards/$accountId")
     }
 
     override suspend fun getSubscriptions(): SubscriptionsResult =
