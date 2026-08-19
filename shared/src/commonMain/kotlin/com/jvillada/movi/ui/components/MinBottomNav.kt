@@ -6,14 +6,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,16 +26,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
-enum class NavTab { HOME, TRANSACTIONS, ADD, BUDGETS, MORE }
+/**
+ * Destinos de la navegación principal. En el teléfono la barra muestra cinco
+ * (Inicio · Movimientos · + · Cuentas · Más); en pantalla ancha el rail muestra además
+ * Créditos y Presupuestos como entradas propias. Una pantalla declara UN destino
+ * (ver `navTabFor` en Navigation.kt) y cada superficie decide cómo lo resalta: la barra del
+ * teléfono pinta CREDITS y BUDGETS como "Más", que es por donde se llega a ellos ahí.
+ */
+enum class NavTab { HOME, TRANSACTIONS, ADD, ACCOUNTS, CREDITS, BUDGETS, MORE }
+
+/** Qué ítem de la barra del teléfono se resalta para un destino dado. */
+fun NavTab.asBottomBarTab(): NavTab = when (this) {
+    NavTab.CREDITS, NavTab.BUDGETS -> NavTab.MORE
+    else -> this
+}
 
 @Composable
 fun MinBottomNav(
-    active: NavTab,
+    active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
 ) {
-    // On wide windows the root-level MinNavRail takes over; the 14 screens
-    // that embed this bar keep calling it and it simply renders nothing.
+    // En pantalla ancha el rail de la raíz (MinNavRail) toma el lugar de la barra.
+    // Desde la Ola 4 esta barra la pinta SOLO App.kt, una vez, debajo de la pantalla activa;
+    // ninguna pantalla la llama por su cuenta.
     if (LocalWindowWidthClass.current == WindowWidthClass.Expanded) return
+    val highlighted = active?.asBottomBarTab()
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -48,8 +64,8 @@ fun MinBottomNav(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NavItem(NavTab.HOME, "Inicio", Icons.Rounded.Home, active, onTabSelected)
-            NavItem(NavTab.TRANSACTIONS, "Movs", Icons.Rounded.SwapVert, active, onTabSelected)
+            NavItem(NavTab.HOME, "Inicio", Icons.Rounded.Home, highlighted, onTabSelected)
+            NavItem(NavTab.TRANSACTIONS, "Movs", Icons.Rounded.SwapVert, highlighted, onTabSelected)
 
             // Center FAB
             Box(
@@ -69,8 +85,10 @@ fun MinBottomNav(
                 )
             }
 
-            NavItem(NavTab.BUDGETS, "Presupuesto", Icons.Rounded.PieChart, active, onTabSelected)
-            NavItem(NavTab.MORE, "Más", Icons.Rounded.GridView, active, onTabSelected)
+            // F19: Cuentas entra a la barra — antes el único camino era un "Ver todas +" del
+            // Inicio que solo aparecía con al menos una cuenta creada. Presupuestos pasó a Más.
+            NavItem(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet, highlighted, onTabSelected)
+            NavItem(NavTab.MORE, "Más", Icons.Rounded.GridView, highlighted, onTabSelected)
         }
     }
 }
@@ -80,7 +98,7 @@ private fun NavItem(
     tab: NavTab,
     label: String,
     icon: ImageVector,
-    active: NavTab,
+    active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
 ) {
     val isActive = tab == active

@@ -180,6 +180,11 @@ object Screens : Table("screen_definitions") {
     val sectionsJson = text("sections_json")
     val active       = bool("active").default(true)
     val updatedAt    = long("updated_at")
+    // Generación del seed que esta fila ya incorporó (ver seedScreens). Distinta de `version`:
+    // `version` sube con cada edición del Editor y sirve para el If-None-Match del cliente;
+    // `seed_version` solo sube cuando el server reemplaza el contenido por un seed más nuevo.
+    // default(0) = "nunca recibió un seed con generación" → la primera vez se actualiza.
+    val seedVersion  = integer("seed_version").default(0)
     override val primaryKey = PrimaryKey(slug)
 }
 

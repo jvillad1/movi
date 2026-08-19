@@ -1,8 +1,11 @@
 package com.jvillada.movi.ui
 
+import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.asBottomBarTab
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 /**
  * F22: la flecha ‹ debe volver a la pantalla anterior de verdad, no a un destino
@@ -57,5 +60,32 @@ class NavStackTest {
         val result = NavStack.back(listOf(Screen.Investments), fallback = Screen.Dashboard)
         assertIs<NavStack.BackResult.Fallback>(result)
         assertEquals(Screen.Dashboard, (result as NavStack.BackResult.Fallback).screen)
+    }
+
+    // ── Ola 4: pestaña activa por pantalla (barra y rail) ─────────────────────
+
+    @Test
+    fun `Cuentas y el detalle de cuenta marcan la pestaña Cuentas`() {
+        assertEquals(NavTab.ACCOUNTS, navTabFor(Screen.Accounts))
+        assertEquals(NavTab.ACCOUNTS, navTabFor(Screen.AccountDetail("acc-1")))
+    }
+
+    @Test
+    fun `Presupuestos y Creditos tienen destino propio y en la barra se resaltan como Mas`() {
+        assertEquals(NavTab.BUDGETS, navTabFor(Screen.Budgets))
+        assertEquals(NavTab.CREDITS, navTabFor(Screen.Credits))
+        assertEquals(NavTab.MORE, NavTab.BUDGETS.asBottomBarTab())
+        assertEquals(NavTab.MORE, NavTab.CREDITS.asBottomBarTab())
+        assertEquals(NavTab.ACCOUNTS, NavTab.ACCOUNTS.asBottomBarTab())
+    }
+
+    @Test
+    fun `las pantallas de Mas marcan Mas y los flujos a pantalla completa no tienen barra`() {
+        listOf(Screen.Mas, Screen.Profile, Screen.Goals, Screen.Investments, Screen.Subscriptions,
+            Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
+            .forEach { assertEquals(NavTab.MORE, navTabFor(it), "$it") }
+        listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,
+            Screen.StatementReview("{}"), Screen.ImportDetail("i1"))
+            .forEach { assertNull(navTabFor(it), "$it") }
     }
 }

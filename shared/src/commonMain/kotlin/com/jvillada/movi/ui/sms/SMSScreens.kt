@@ -216,17 +216,6 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
-
-        // F29: era la única sección de Más que se quedaba sin la barra al navegar acá.
-        MinBottomNav(active = NavTab.MORE) { tab ->
-            when (tab) {
-                NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                NavTab.MORE         -> onNavigate(Screen.Mas)
-            }
-        }
     }
 }
 
@@ -492,17 +481,6 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     fontWeight = FontWeight.Medium,
                     color = if (canConfirm) MinBg else MinTextFaint,
                 )
-            }
-        }
-
-        // F29: la pantalla de detalle también se quedaba sin la barra.
-        MinBottomNav(active = NavTab.MORE) { tab ->
-            when (tab) {
-                NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                NavTab.MORE         -> onNavigate(Screen.Mas)
             }
         }
     }

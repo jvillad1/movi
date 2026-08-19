@@ -154,16 +154,6 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
-
-        MinBottomNav(active = NavTab.MORE) { tab ->
-            when (tab) {
-                NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                NavTab.MORE         -> onNavigate(Screen.Mas)
-            }
-        }
     }
 }
 

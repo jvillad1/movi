@@ -18,7 +18,7 @@ data class ScreenDefinition(
 data class ScreenSection(
     val type: String,                          // uno de ScreenTaxonomy.SECTION_TYPES
     val title: String? = null,
-    val cards: List<ScreenCard> = emptyList(), // CARD_ROW / CARD_LIST / LINK_LIST
+    val cards: List<ScreenCard> = emptyList(), // CARD_ROW / CARD_LIST / LINK_LIST / QUICK_LINKS_WITH_TOTALS
     val text: String? = null,                  // BANNER
 )
 
@@ -35,13 +35,24 @@ data class ScreenCard(
 data class ScreenAction(val type: String, val target: String) // NAVIGATE | OPEN_URL
 
 object ScreenTaxonomy {
+    /**
+     * Tipos que el renderer sabe dibujar. Los tres primeros "de datos" (HERO_BALANCE,
+     * UPCOMING_PAYMENTS, ALERTS) no llevan cards: el cliente los llena con lo que carga del
+     * server. QUICK_LINKS_WITH_TOTALS lleva cards con acción NAVIGATE y el cliente le pone a
+     * cada una la cifra que corresponde a su destino (total de cuentas, deuda, etc.).
+     *
+     * Ola 4 (F9/F40): ACCOUNTS_SUMMARY ("Mis cuentas") se fue — la lista de cuentas vive en
+     * la pestaña Cuentas; una definición vieja que todavía lo traiga simplemente lo omite.
+     */
     val SECTION_TYPES = listOf(
-        "HERO_BALANCE", "ACCOUNTS_SUMMARY", "CARD_ROW", "CARD_LIST", "LINK_LIST", "BANNER",
+        "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS",
+        "CARD_ROW", "CARD_LIST", "LINK_LIST", "BANNER",
     )
     val ACTION_TYPES = listOf("NAVIGATE", "OPEN_URL")
+    // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.
     val NAVIGATE_TARGETS = listOf(
         "dashboard", "transactions", "quickadd", "budgets", "mas", "accounts", "credits",
-        "goals", "investments", "subscriptions", "recurrentes", "analisis", "extractos",
+        "goals", "investments", "subscriptions", "recurrentes", "extractos",
         "aichat", "profile",
     )
 }

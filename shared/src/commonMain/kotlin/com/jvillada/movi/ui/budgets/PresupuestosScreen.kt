@@ -29,7 +29,13 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.dashboard.currentMonthPrefixUtc
+import com.jvillada.movi.ui.dashboard.spentByCategoryForMonth
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Month
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 private data class BudgetProgress(
     val budget: Budget,
@@ -46,6 +52,26 @@ private data class BudgetProgress(
 }
 
 private enum class AlertState { OK, WARN, OVER }
+
+/**
+ * F16: el encabezado y cada tarjeta necesitan decir "de qué mes" es el gasto — kotlinx-datetime
+ * da el [Month] del sistema, pero no en español, así que se mapea a mano. Minúscula porque así
+ * va en el encabezado ("Gastado en agosto"), sin punto porque no es abreviatura.
+ */
+private fun Month.spanishName(): String = when (this) {
+    Month.JANUARY -> "enero"
+    Month.FEBRUARY -> "febrero"
+    Month.MARCH -> "marzo"
+    Month.APRIL -> "abril"
+    Month.MAY -> "mayo"
+    Month.JUNE -> "junio"
+    Month.JULY -> "julio"
+    Month.AUGUST -> "agosto"
+    Month.SEPTEMBER -> "septiembre"
+    Month.OCTOBER -> "octubre"
+    Month.NOVEMBER -> "noviembre"
+    Month.DECEMBER -> "diciembre"
+}
 
 private sealed class Sheet {
     data class Edit(val current: Budget) : Sheet()
@@ -86,12 +112,18 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin él, un ajuste de
         // saldo de un crédito caía en la categoría "Otros" y ponía en OVER al instante a un
         // presupuesto con ese nombre.
-        val spentByCategory = days.flatMap { it.items }
-            .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow }
-            .groupBy { it.category }
-            .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+        // Misma regla que el acceso «Presupuestos» del Inicio y que la alerta de sobrepasado
+        // (spentByCategoryForMonth): solo el mes en curso y solo COP. Antes esta pantalla sumaba
+        // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
+        // Presupuestos daban cifras distintas para el mismo presupuesto.
+        val spentByCategory = spentByCategoryForMonth(days, currentMonthPrefixUtc())
         budgets.map { b -> BudgetProgress(b, spentByCategory[b.category] ?: 0L) }
             .sortedByDescending { it.pctRaw }
+    }
+
+    // F16: "Gastado del mes" no decía CUÁL mes — el nombre del mes en curso lo hace explícito.
+    val monthName = remember {
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).month.spanishName()
     }
 
     val totalLimit = budgets.sumOf { it.monthlyLimit }
@@ -147,7 +179,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(22.dp),
                     ) {
-                        Text("Gastado del mes", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                        Text("Gastado en $monthName", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(10.dp))
                         Text(
                             text = formatCOP(totalSpent),
@@ -193,15 +225,6 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
-            MinBottomNav(active = NavTab.BUDGETS) { tab ->
-                when (tab) {
-                    NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                    NavTab.MORE         -> onNavigate(Screen.Mas)
-                    else -> {}
-                }
-            }
         }
 
         when (val s = sheet) {
@@ -297,13 +320,18 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                 color = MinText,
                 letterSpacing = (-0.1).sp,
             )
-            Text(
-                text = "${p.pct}%",
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                color = pctColor,
-                fontWeight = FontWeight.Medium,
-            )
+            // F15: el chevron es lo que insinúa que la tarjeta se toca — mismo ícono que usa la
+            // guía de primeros pasos del Inicio (ver ChevronRight).
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "${p.pct}%",
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = pctColor,
+                    fontWeight = FontWeight.Medium,
+                )
+                ChevronRight()
+            }
         }
         Spacer(Modifier.height(10.dp))
         Row(
@@ -313,7 +341,9 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
         ) {
             Row {
                 Text(formatCOP(p.spent), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                Text(" / ${formatCOP(p.budget.monthlyLimit)}", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinTextMute, letterSpacing = (-0.3).sp)
+                // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
+                // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
+                Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinTextMute, letterSpacing = (-0.3).sp)
             }
             val tail = when (p.state) {
                 AlertState.OVER -> "Sobrepasado · ${formatCOP(-p.remaining)}"
@@ -443,7 +473,9 @@ private fun BudgetSheet(
                     lineHeight = 48.sp,
                 )
                 Spacer(Modifier.height(6.dp))
-                Text("Límite mensual · COP", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
+                // F16: decía "Límite mensual · COP" — la moneda ya es obvia en toda la app, pero
+                // que se reinicia cada mes no, y es la pregunta real ("¿por cuánto tiempo?").
+                Text("Límite mensual · se reinicia cada mes", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
             }
 
             Spacer(Modifier.height(14.dp))

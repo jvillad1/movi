@@ -341,23 +341,15 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
                     }
                 }
             }
-
-            MinBottomNav(active = NavTab.HOME) { tab ->
-                when (tab) {
-                    NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                    NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                    NavTab.MORE         -> onNavigate(Screen.Mas)
-                }
-            }
         }
 
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp),
+                // La barra inferior ya no vive dentro de esta pantalla (la pinta App.kt debajo),
+                // así que el snackbar solo necesita separarse del borde.
+                .padding(bottom = 16.dp),
         )
 
         selectedEvent?.let { event ->

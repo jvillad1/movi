@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PieChart
@@ -26,7 +28,8 @@ import com.jvillada.movi.theme.*
 
 /**
  * Wide-window counterpart of MinBottomNav: a left rail rendered once at the
- * App root. Same five destinations, same active-pill language.
+ * App root. Same active-pill language; en pantalla ancha hay lugar para mostrar
+ * además Créditos y Presupuestos como entradas propias (en el teléfono viven en Más).
  */
 @Composable
 fun MinNavRail(
@@ -52,6 +55,8 @@ fun MinNavRail(
 
         RailItem(NavTab.HOME, "Inicio", Icons.Rounded.Home, active, onTabSelected)
         RailItem(NavTab.TRANSACTIONS, "Movimientos", Icons.Rounded.SwapVert, active, onTabSelected)
+        RailItem(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet, active, onTabSelected)
+        RailItem(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard, active, onTabSelected)
         RailItem(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart, active, onTabSelected)
         RailItem(NavTab.MORE, "Más", Icons.Rounded.GridView, active, onTabSelected)
 

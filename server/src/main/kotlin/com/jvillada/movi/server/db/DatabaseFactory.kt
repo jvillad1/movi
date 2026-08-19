@@ -28,9 +28,11 @@ object DatabaseFactory {
             // SchemaUtils.create emite CREATE TABLE IF NOT EXISTS: una tabla nueva se crea sola
             // al arrancar y las existentes quedan intactas. No hay archivos de migración en este
             // proyecto; createMissingTablesAndColumns está abajo y solo cubre COLUMNAS nuevas de
-            // las dos tablas que las tuvieron. Una tabla nueva basta con agregarla acá.
+            // las tablas que las tuvieron. Una tabla nueva basta con agregarla acá.
             SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals)
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules)
+            // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
+            // no podría recibir la generación nueva del Inicio.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens)
         }
         seedScreens()
     }

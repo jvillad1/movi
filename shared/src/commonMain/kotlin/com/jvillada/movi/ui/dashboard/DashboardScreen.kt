@@ -3,11 +3,7 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
@@ -19,8 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,12 +22,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.isAndroid
-import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.CreditSummary
-import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -43,24 +34,28 @@ import com.jvillada.movi.ui.sdui.SduiRenderer
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
+/**
+ * Último [DashboardData] cargado, en memoria y por proceso: al volver al Inicio se pinta
+ * al instante con lo que ya había mientras llega lo nuevo, en vez de arrancar en blanco
+ * cada vez. Misma idea (y mismas limitaciones) que [ScreenDefCache].
+ */
+object DashboardDataCache {
+    var data: DashboardData? = null
+    /** Al cerrar sesión: lo cacheado es del usuario que se va (ver SessionManager.clear). */
+    fun clear() { data = null }
+}
+
 @Composable
 fun DashboardScreen(
     onNavigate: (Screen) -> Unit,
 ) {
-    // F8: el selector Individual/Familiar se ocultó (ver más abajo, en el top bar) porque
-    // "familiar" no existe todavía — no hay cuentas compartidas ni una segunda persona con
-    // acceso, así que el toggle no cambiaba nada. `scope` se queda fijo en SELF; el modelo
-    // `Scope` y el parámetro que recibe el servidor NO se tocan, para que el día que exista
-    // familia esto vuelva a tener un selector con significado real.
-    var scope by remember { mutableStateOf(Scope.SELF) }
-    val isFamily = scope == Scope.FAMILY
+    // F8: el selector Individual/Familiar se ocultó porque "familiar" no existe todavía — no
+    // hay cuentas compartidas ni una segunda persona con acceso. `scope` queda fijo en SELF; el
+    // modelo `Scope` y el parámetro que recibe el servidor NO se tocan, para que el día que
+    // exista familia esto vuelva a tener un selector con significado real.
+    val scope = Scope.SELF
 
-    var summary by remember { mutableStateOf<FinanceSummary?>(null) }
-    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
-    // Solo para la guía de "Primeros pasos" — no se pinta nada más con esto, así que no
-    // hace falta que bloquee `loading` ni que su fetch falle silenciosamente distinto de
-    // los otros: si falla, la guía simplemente no tilda ese paso, error inofensivo.
-    var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
+    var data by remember { mutableStateOf(DashboardDataCache.data ?: DashboardData()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -68,44 +63,48 @@ fun DashboardScreen(
     var screenDef by remember { mutableStateOf<ScreenDefinition?>(ScreenDefCache.dashboard) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(scope, refreshKey) {
+    LaunchedEffect(refreshKey) {
         loading = true
         error = null
-        // SDUI: server-driven definition for this screen, fetched FIRST so the SDUI
-        // dashboard (when available) is already in place before the fallback would
-        // otherwise render — avoids a visible fallback→SDUI flip on every cold load.
-        // Silent on failure — anti-rotura layer 2 (ScreenDefCache) keeps the last
-        // valid one; layer 3 (DashboardFallback) covers a cold start with no cache
-        // and no successful fetch yet.
+        // SDUI: la definición del server se pide PRIMERO, así el Inicio ya está en su lugar
+        // antes de que se pinte el fallback — evita el parpadeo fallback→SDUI en cada arranque
+        // frío. Silencioso si falla: capa 2 (ScreenDefCache) conserva la última válida; capa 3
+        // (defaultDashboardDefinition, idéntica al seed) cubre un arranque sin caché.
         runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
             .onSuccess {
-                // Capa 4 anti-rotura: una definición que no renderiza nada equivale a
-                // no tener definición — evita un dashboard en blanco por typos en los
-                // section types.
+                // Capa 4: una definición que no renderiza nada equivale a no tener definición —
+                // evita un Inicio en blanco por typos en los tipos de sección.
                 it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
             }
-        // Estos tres no tienen la restricción de orden de arriba (screenDef tiene que
-        // resolverse primero para no parpadear fallback→SDUI) — van en paralelo para que
-        // `credits` no llegue último y la guía de "Primeros pasos" no parpadee con pasos
-        // sin tildar mientras carga.
+        // El resto va en paralelo. Solo resumen y cuentas (el Balance) avisan con snackbar si
+        // fallan; lo demás alimenta secciones secundarias (próximos pagos, alertas, cifras de
+        // los accesos, guía) y si falla simplemente no se pinta esta vez — un snackbar de
+        // reintento por un dato secundario sería más ruido que ayuda.
         coroutineScope {
             launch {
                 runCatching { Repositories.wallets.getFinanceSummary(scope) }
-                    .onSuccess { summary = it }
+                    .onSuccess { s -> data = data.copy(summary = s) }
                     .onFailure { e -> error = e.toUserMessage() }
             }
             launch {
                 runCatching { Repositories.wallets.getAccounts() }
-                    .onSuccess { accounts = it }
+                    .onSuccess { a -> data = data.copy(accounts = a) }
                     .onFailure { e -> if (error == null) error = e.toUserMessage() }
             }
-            // Guía "Primeros pasos": silencioso a propósito, sin tocar `error` — un fallo
-            // acá no debe mostrar un snackbar de reintento sobre datos que son secundarios;
-            // en el peor caso el paso correspondiente simplemente no se tilda esta vez.
+            launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { c -> data = data.copy(credits = c) } }
+            launch { runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { u -> data = data.copy(upcoming = u) } }
+            launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
             launch {
-                runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it }
+                runCatching { Repositories.wallets.getEventsByDay() }
+                    .onSuccess { days -> data = data.copy(spentByCategory = spentByCategoryForMonth(days, currentMonthPrefixUtc())) }
             }
+            launch { runCatching { Repositories.wallets.getCardPaymentCandidates() }.onSuccess { c -> data = data.copy(cardCandidates = c.size) } }
+            launch { runCatching { Repositories.wallets.getSmsMessages() }.onSuccess { m -> data = data.copy(pendingSms = m.count { it.state == "pending" }) } }
+            launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }
+            launch { runCatching { Repositories.wallets.getHoldings() }.onSuccess { h -> data = data.copy(holdings = h) } }
+            launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
         }
+        DashboardDataCache.data = data
         loading = false
     }
 
@@ -115,11 +114,6 @@ fun DashboardScreen(
         error = null
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
-
-    val (_, _, totalBalance) = assetsDebtsNet(accounts)
-    val ingresos = summary?.ingresos ?: 0L
-    val egresos  = summary?.egresos  ?: 0L
-    val flujo    = ingresos - egresos
 
     Box(
         modifier = Modifier
@@ -145,76 +139,42 @@ fun DashboardScreen(
                     AvatarButton(onClick = { onNavigate(Screen.Profile) })
                     Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                 }
-                // F5: la campana se saca por completo. Antes disparaba siempre un snackbar
+                // F5: la campana se sacó por completo. Antes disparaba siempre un snackbar
                 // "Sin notificaciones por ahora" y mostraba un punto rojo fijo aunque nunca
-                // hubiera nada nuevo — un ícono que promete un panel de notificaciones que no
-                // existe. Vuelve cuando exista el panel (Ola 6): recién ahí el punto rojo puede
-                // significar algo real.
+                // hubiera nada nuevo. Vuelve cuando exista el panel (Ola 6).
             }
 
-            // F8: acá vivía el ScopeToggle (Individual/Familiar) — se sacó, ver el comentario
-            // junto a `scope` más arriba.
             Spacer(Modifier.height(8.dp))
 
             if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
-            // Guía "Primeros pasos" — vive acá, fuera de la definición SDUI, a propósito:
-            // así existe siempre, sin depender de tocar `screen_definitions` en producción
-            // ni de que el server esté al día. Se apaga sola cuando ya hay cuenta y
-            // movimiento — sin flag ni columna nueva, los datos son el estado. Créditos NO
-            // condiciona el apagado (ver KDoc de `PrimerosPasosCard`): alguien sin deuda no
-            // tiene por qué ver esta guía para siempre.
-            val hasAccount = accounts.isNotEmpty()
-            val hasCredit = credits.isNotEmpty()
-            val hasMovement = (summary?.eventCount ?: 0) > 0
-            if (!(hasAccount && hasMovement)) {
-                PrimerosPasosCard(
-                    hasAccount = hasAccount,
-                    hasCredit = hasCredit,
-                    hasMovement = hasMovement,
-                    onNavigate = onNavigate,
-                    onShowCreateSheet = { showCreateSheet = true },
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-
-            // SDUI: render from the server-provided definition when we have one; otherwise
-            // fall back to the hardcoded, byte-identical body (anti-rotura layer 3).
-            screenDef?.let { def ->
-                SduiRenderer(
-                    definition = def,
-                    summary = summary,
-                    accounts = accounts,
-                    isFamily = isFamily,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    onNavigate = onNavigate,
-                    onShowCreateSheet = { showCreateSheet = true },
-                )
-            } ?: DashboardFallback(
-                totalBalance = totalBalance,
-                ingresos = ingresos,
-                egresos = egresos,
-                flujo = flujo,
-                isFamily = isFamily,
-                accounts = accounts,
+            // Guía "Primeros pasos": chrome nativo, fuera de la definición SDUI a propósito —
+            // así existe siempre, sin depender de tocar `screen_definitions` en producción.
+            // Se apaga sola cuando ya hay cuenta y movimiento (los datos son el estado).
+            // F7: va como primer ítem del scroll, no pegada arriba — antes tapaba el resto.
+            val showGuide = !(data.hasAccount && data.hasMovement)
+            // SDUI: la definición del server si la hay; si no, la misma lista que el server
+            // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
+            SduiRenderer(
+                definition = screenDef ?: defaultDashboardDefinition(),
+                data = data,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 onNavigate = onNavigate,
-                onShowCreateSheet = { showCreateSheet = true },
+                header = if (showGuide) {
+                    {
+                        PrimerosPasosCard(
+                            data = data,
+                            onNavigate = onNavigate,
+                            onShowCreateSheet = { showCreateSheet = true },
+                        )
+                    }
+                } else null,
             )
-
-            MinBottomNav(active = NavTab.HOME) { tab ->
-                when (tab) {
-                    NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                    NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                    NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                    NavTab.MORE         -> onNavigate(Screen.Mas)
-                    else -> {}
-                }
-            }
         }
 
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
         )
 
         if (showCreateSheet) {
@@ -227,354 +187,67 @@ fun DashboardScreen(
 }
 
 /**
- * The Dashboard body as it was hardcoded before SDUI (Task 3) — renamed, byte-identical,
- * no refactor, and shares nothing with `SduiRenderer`: this is the anti-rotura insurance
- * policy for when there is no server definition (cold start, no cache, failed fetch).
- * Declared as a `ColumnScope` extension so the `Modifier.weight(1f)` below — same as
- * the original inline `LazyColumn` — keeps working unchanged inside DashboardScreen's
- * chrome `Column`. Top bar, snackbar, bottom nav and sheets stay outside, as chrome,
- * in both the SDUI and fallback paths.
- */
-@Composable
-private fun ColumnScope.DashboardFallback(
-    totalBalance: Long,
-    ingresos: Long,
-    egresos: Long,
-    flujo: Long,
-    isFamily: Boolean,
-    accounts: List<Account>,
-    onNavigate: (Screen) -> Unit,
-    onShowCreateSheet: () -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth(),
-        contentPadding = PaddingValues(bottom = 80.dp),
-    ) {
-        // Hero card
-        item {
-            MinCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(22.dp),
-            ) {
-                Text(
-                    text = "Balance",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinTextMute,
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = formatCOP(totalBalance), // formatCOP ya trae el signo (F36) — no duplicarlo acá
-                    fontSize = 44.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Normal,
-                    color = if (totalBalance < 0) MinExpense else MinText,
-                    letterSpacing = (-1.6).sp,
-                    lineHeight = 44.sp,
-                )
-                Spacer(Modifier.height(18.dp))
-                Sparkline(
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    family = isFamily,
-                    hasData = totalBalance != 0L || ingresos != 0L || egresos != 0L,
-                )
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(18.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    listOf(
-                        Pair("Ingresos", formatMillions(ingresos)),
-                        Pair("Egresos",  formatMillions(egresos)),
-                        Pair("Flujo",    formatMillions(flujo)),
-                    ).forEach { (label, value) ->
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
-                            Spacer(Modifier.height(6.dp))
-                            Text(value, fontSize = 14.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Mis cuentas section
-        item {
-            Spacer(Modifier.height(20.dp))
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                MinSectionHeader(
-                    title = "Mis cuentas",
-                    count = if (accounts.isNotEmpty()) accounts.size else null,
-                    action = if (accounts.isNotEmpty()) "Ver todas +" else null,
-                    onAction = if (accounts.isNotEmpty()) { { onNavigate(Screen.Accounts) } } else null,
-                )
-                if (accounts.isEmpty()) {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(18.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text("Sin cuentas aún", fontSize = 14.sp, color = MinTextMute)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(MinPrimaryContainer)
-                                    .clickable { onShowCreateSheet() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    "+ Crear primera cuenta",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MinOnPrimaryContainer,
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        val typeLabel: (AccountType) -> String = { type ->
-                            when (type) {
-                                AccountType.CASH        -> "Efectivo"
-                                AccountType.SAVINGS     -> "Ahorros"
-                                AccountType.CHECKING    -> "Corriente"
-                                AccountType.INVESTMENT  -> "Inversión"
-                                AccountType.CREDIT_CARD -> "Crédito"
-                                AccountType.LOAN        -> "Préstamo"
-                            }
-                        }
-                        accounts.take(3).forEachIndexed { i, account ->
-                            CardRow(
-                                left = { Text(account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                                sub = typeLabel(account.type),
-                                right = {
-                                    if (isDebtAccount(account.type)) {
-                                        val (debt, isEstimate) = cardDebt(account)
-                                        MonoText(
-                                            // debt < 0 es saldo a favor: signo invertido a propósito, así
-                                            // que se le pasa el valor absoluto — si no, formatCOP (F36) le
-                                            // pondría su propio "−" encima del "+" de acá.
-                                            "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(kotlin.math.abs(debt))}",
-                                            14.5f,
-                                            color = if (debt < 0) MinIncome else MinExpense,
-                                        )
-                                    } else {
-                                        MonoText(formatCOP(account.balance), 14.5f)
-                                    }
-                                },
-                                isLast = i == minOf(accounts.size, 3) - 1,
-                                onClick = { onNavigate(Screen.Accounts) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-
-        // Alertas
-        item {
-            Spacer(Modifier.height(20.dp))
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                MinSectionHeader(title = "Alertas")
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-                ) {
-                    Text("Sin alertas por ahora", fontSize = 14.sp, color = MinTextMute)
-                }
-            }
-        }
-
-        // Patrimonio
-        item {
-            Spacer(Modifier.height(20.dp))
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                MinSectionHeader(
-                    title = if (isFamily) "Patrimonio familiar" else "Patrimonio",
-                    action = "Ver todo",
-                    onAction = { onNavigate(Screen.Mas) },
-                )
-                MinCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                ) {
-                    CardRow(
-                        left = { Text("Inversiones", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                        showChevron = true,
-                        isLast = false,
-                        onClick = { onNavigate(Screen.Investments) },
-                    )
-                    CardRow(
-                        left = { Text("Créditos", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                        showChevron = true,
-                        isLast = false,
-                        onClick = { onNavigate(Screen.Credits) },
-                    )
-                    CardRow(
-                        left = { Text("Metas", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                        showChevron = true,
-                        isLast = true,
-                        onClick = { onNavigate(Screen.Goals) },
-                    )
-                }
-            }
-        }
-
-        // AI prompt card
-        item {
-            Spacer(Modifier.height(20.dp))
-            MinCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                variant = MinCardVariant.Default,
-                padding = PaddingValues(16.dp),
-                onClick = { onNavigate(Screen.AIChat) },
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(MinPrimaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinOnPrimaryContainer, modifier = Modifier.size(16.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Pregúntale a Movi",
-                            fontSize = 13.5.sp,
-                            color = MinTextDim,
-                        )
-                        Text(
-                            text = "\"¿puedo comprar X?\"",
-                            fontSize = 13.5.sp,
-                            color = MinText,
-                        )
-                    }
-                    ChevronRight()
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-/**
- * Guía de arranque para una instancia recién vaciada: cero cuentas, cero créditos, cero
- * movimientos. Vive en `DashboardScreen`, no en la definición SDUI — así sobrevive a
- * cualquier cambio de `screen_definitions` en producción y no requiere tocar el server.
+ * Guía de arranque compacta (F6 · F7): una línea por paso, sin subtítulos largos, y el
+ * paso 2 es el que faltaba — "Anota tus pagos fijos" (colegio, arriendo, gimnasio, cuotas),
+ * que es donde van las obligaciones que no son ni préstamo ni tarjeta (F6 preguntaba dónde
+ * cargar el colegio o el gimnasio: en Recurrentes).
  *
- * Se apaga sola sin flag ni columna nueva: cada vez que el Dashboard carga, recalcula el
- * estado a partir de los datos reales (cuentas, movimientos). El día que haya cuenta Y
- * movimiento, la tarjeta entera deja de renderizarse — y si el dueño vacía la instancia de
- * nuevo, vuelve a aparecer sola, que es lo correcto.
+ * Se apaga sola sin flag ni columna nueva: cada vez que el Inicio carga, recalcula el estado
+ * a partir de los datos reales. El día que haya cuenta Y movimiento, la tarjeta entera deja
+ * de renderizarse — y si el dueño vacía la instancia de nuevo, vuelve a aparecer sola.
  *
- * Créditos (paso 2) NO condiciona el apagado — a propósito. Es un paso *ofrecido*, no
- * *requerido*: se tilda si hay créditos cargados, pero alguien con una cuenta de ahorros y
- * gastos que nunca va a tener un préstamo o tarjeta no tiene por qué ver esta guía para
- * siempre esperando un tercer casillero que jamás se cumple. Cuando la tarjeta se apaga
- * (cuenta + movimiento), se apaga entera, paso 2 incluido, tenga o no créditos.
+ * Pagos fijos (paso 2) y créditos (paso 3) NO condicionan el apagado — a propósito. Son
+ * pasos *ofrecidos*, no *requeridos*: se tildan si existe algo, pero alguien sin préstamos
+ * ni cuotas no tiene por qué ver esta guía para siempre esperando un casillero que jamás se
+ * cumple. Cuando la tarjeta se apaga (cuenta + movimiento), se apaga entera.
  *
- * El paso 1 abre la misma hoja de crear cuenta que ya dispara la tarjeta "Sin cuentas aún"
- * de la sección "Mis cuentas" — decisión consciente, no un descuido: esa tarjeta vive más
- * abajo, dentro de otra sección, y esta guía está pensada para ser el primer contacto
- * arriba de todo. No son dos botones pegados haciendo lo mismo; son el mismo atajo
- * ofrecido en dos momentos distintos del scroll, y el de acá es el que de verdad importa
- * antes de que exista una sola cuenta.
- *
- * El paso 4 ("dejar que la app se llene sola") tampoco tiene un "hecho" propio, por la
- * misma razón que créditos: no es una acción puntual sino un hábito (conectar extractos /
- * dejar el SMS corriendo). Usar el paso 3 como proxy sería engañoso — alguien puede cargar
- * un movimiento a mano sin haber configurado nunca el llenado automático. Se muestra sin
- * tilde, como acceso puro.
+ * El pie ("Deja que la app se llene sola") no tiene "hecho" propio: no es una acción puntual
+ * sino un hábito (subir extractos / dejar el SMS corriendo). Se muestra como acceso puro.
  */
 @Composable
 private fun PrimerosPasosCard(
-    hasAccount: Boolean,
-    hasCredit: Boolean,
-    hasMovement: Boolean,
+    data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onShowCreateSheet: () -> Unit,
 ) {
+    val steps = listOf(data.hasAccount, data.hasRecurringRule, data.hasCredit, data.hasMovement)
     MinCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+        padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
     ) {
-        Text("Primeros pasos", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MinText)
-        Spacer(Modifier.height(3.dp))
-        Text("Así se va llenando Movi solo", fontSize = 12.5.sp, color = MinTextMute)
-        Spacer(Modifier.height(6.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Primeros pasos", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MinText, modifier = Modifier.weight(1f))
+            Text("${steps.count { it }} de ${steps.size}", fontSize = 12.sp, color = MinTextMute)
+        }
+        Spacer(Modifier.height(2.dp))
 
-        PasoRow(
-            done = hasAccount,
-            title = "Crea tu primera cuenta",
-            subtitle = "Es donde va a vivir cada movimiento que registres",
-            onClick = onShowCreateSheet,
-        )
+        PasoRow(done = data.hasAccount, title = "Crea tu primera cuenta", onClick = onShowCreateSheet)
         Hairline()
         PasoRow(
-            done = hasCredit,
-            title = "Si tienes préstamos o tarjetas, cárgalos aquí",
-            subtitle = "Movi calcula cuotas e intereses por ti",
-            onClick = { onNavigate(Screen.Credits) },
+            done = data.hasRecurringRule,
+            title = "Anota tus pagos fijos",
+            subtitle = "Colegio, arriendo, gimnasio, cuotas",
+            onClick = { onNavigate(Screen.Recurrentes) },
         )
         Hairline()
-        PasoRow(
-            done = hasMovement,
-            title = "Registra un movimiento",
-            subtitle = "El primer ingreso o gasto arranca el historial",
-            onClick = { onNavigate(Screen.QuickAdd()) },
-        )
+        PasoRow(done = data.hasCredit, title = "Si tienes préstamos o tarjetas, cárgalos", onClick = { onNavigate(Screen.Credits) })
+        Hairline()
+        PasoRow(done = data.hasMovement, title = "Registra un movimiento", onClick = { onNavigate(Screen.QuickAdd()) })
         Hairline()
 
-        // Paso 4 — sin tilde a propósito (ver KDoc de la card). Dos accesos: Extractos en
-        // todas las plataformas, SMS del banco solo en Android (no existe en iOS/web).
-        Column(modifier = Modifier.padding(vertical = 14.dp)) {
-            Text(
-                text = "Deja que la app se llene sola",
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-            )
-            Text(
-                text = "Sube un extracto o conecta el SMS del banco",
-                fontSize = 12.5.sp,
-                color = MinTextMute,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AccesoChip("Extractos") { onNavigate(Screen.Extractos) }
-                if (isAndroid) {
-                    AccesoChip("SMS del banco") { onNavigate(Screen.SMSInbox) }
-                }
-            }
+        // Pie — sin tilde a propósito (ver KDoc). Extractos en todas las plataformas; el SMS
+        // del banco solo en Android (no existe en iOS/web).
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Deja que la app se llene sola", fontSize = 12.5.sp, color = MinTextMute, modifier = Modifier.weight(1f))
+            AccesoLink("Extractos") { onNavigate(Screen.Extractos) }
+            if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.SMSInbox) }
         }
     }
 }
@@ -583,14 +256,14 @@ private fun PrimerosPasosCard(
 private fun PasoRow(
     done: Boolean,
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -598,35 +271,30 @@ private fun PasoRow(
             imageVector = if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
             contentDescription = if (done) "Hecho" else "Pendiente",
             tint = if (done) MinIncome else MinTextFaint,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(18.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 14.5.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (done) MinTextMute else MinText,
             )
-            Text(
-                text = subtitle,
-                fontSize = 12.5.sp,
-                color = MinTextMute,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            if (subtitle != null) {
+                Text(text = subtitle, fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 1.dp))
+            }
         }
         if (!done) ChevronRight()
     }
 }
 
 @Composable
-private fun AccesoChip(label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(MinSurfaceContainerHigh)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-    ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = MinText)
-    }
+private fun AccesoLink(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        fontSize = 12.5.sp,
+        fontWeight = FontWeight.Medium,
+        color = MinPrimary,
+        modifier = Modifier.clickable(onClick = onClick).padding(vertical = 4.dp),
+    )
 }

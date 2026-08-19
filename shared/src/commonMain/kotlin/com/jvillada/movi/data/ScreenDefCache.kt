@@ -7,7 +7,8 @@ import com.jvillada.movi.shared.model.ScreenDefinition
  * the lifetime of the process (no persistence — movi's real surface is the wasm PWA,
  * which has no SQLDelight). This is anti-rotura layer 2: if a later fetch fails or the
  * server returns something invalid, the UI keeps rendering the last good definition
- * instead of falling all the way back to [com.jvillada.movi.ui.dashboard.DashboardFallback].
+ * instead of falling all the way back to `defaultDashboardDefinition()` (core) — the same list
+ * the server seeds.
  */
 object ScreenDefCache {
     var dashboard: ScreenDefinition? = null
