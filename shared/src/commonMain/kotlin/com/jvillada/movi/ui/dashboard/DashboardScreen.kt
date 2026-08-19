@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
@@ -48,6 +47,11 @@ import kotlinx.coroutines.launch
 fun DashboardScreen(
     onNavigate: (Screen) -> Unit,
 ) {
+    // F8: el selector Individual/Familiar se ocultó (ver más abajo, en el top bar) porque
+    // "familiar" no existe todavía — no hay cuentas compartidas ni una segunda persona con
+    // acceso, así que el toggle no cambiaba nada. `scope` se queda fijo en SELF; el modelo
+    // `Scope` y el parámetro que recibe el servidor NO se tocan, para que el día que exista
+    // familia esto vuelva a tener un selector con significado real.
     var scope by remember { mutableStateOf(Scope.SELF) }
     val isFamily = scope == Scope.FAMILY
 
@@ -63,7 +67,6 @@ fun DashboardScreen(
     var showCreateSheet by remember { mutableStateOf(false) }
     var screenDef by remember { mutableStateOf<ScreenDefinition?>(ScreenDefCache.dashboard) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutine = rememberCoroutineScope()
 
     LaunchedEffect(scope, refreshKey) {
         loading = true
@@ -142,37 +145,16 @@ fun DashboardScreen(
                     AvatarButton(onClick = { onNavigate(Screen.Profile) })
                     Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                 }
-                // Bell with dot
-                Box(
-                    modifier = Modifier.clickable {
-                        coroutine.launch { snackbarHostState.showSnackbar("Sin notificaciones por ahora") }
-                    },
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Notifications,
-                        contentDescription = "Notificaciones",
-                        tint = MinTextDim,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(MinExpense)
-                            .align(Alignment.TopEnd)
-                    )
-                }
+                // F5: la campana se saca por completo. Antes disparaba siempre un snackbar
+                // "Sin notificaciones por ahora" y mostraba un punto rojo fijo aunque nunca
+                // hubiera nada nuevo — un ícono que promete un panel de notificaciones que no
+                // existe. Vuelve cuando exista el panel (Ola 6): recién ahí el punto rojo puede
+                // significar algo real.
             }
 
-            // Scope toggle
-            ScopeToggle(
-                value = scope,
-                onChange = { scope = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-            )
+            // F8: acá vivía el ScopeToggle (Individual/Familiar) — se sacó, ver el comentario
+            // junto a `scope` más arriba.
+            Spacer(Modifier.height(8.dp))
 
             if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 

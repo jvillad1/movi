@@ -51,7 +51,9 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             // Más, así que ese es el destino de reserva si no hay historial.
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Text("Metas de ahorro", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-            Text("+", fontSize = 22.sp, color = MinTextDim)
+            // F26: acá había un "+" sin acción — el repositorio solo sabe listar metas, no
+            // crear. Se saca en vez de prometer un alta que no hay; crear metas llega en la
+            // Ola 6 (ver plan).
         }
 
         val totalSaved  = goals.sumOf { it.saved }
@@ -114,7 +116,10 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                         ) {
-                            Text("Sin metas de ahorro aún", fontSize = 14.sp, color = MinTextMute)
+                            // F26: estado vacío honesto, sin prometer nada ("Pronto vas a poder
+                            // crearlas aquí" quedó afuera a propósito) — crear metas llega en
+                            // la Ola 6.
+                            Text("Aún no hay metas de ahorro", fontSize = 14.sp, color = MinTextMute)
                         }
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

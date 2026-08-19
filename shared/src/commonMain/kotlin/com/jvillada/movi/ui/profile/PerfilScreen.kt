@@ -19,10 +19,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.theme.*
@@ -31,6 +31,18 @@ import com.jvillada.movi.ui.components.*
 
 @Composable
 fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
+    // F47 · F48: "Editor de pantallas" vivía en Más, agregado a la grilla después de que
+    // isScreenAdmin() resolvía — eso hacía que la grilla "saltara" al cargar. Se muda acá,
+    // al final de Perfil, en su propia sección "Administración" (es una herramienta de
+    // administración, no algo de uso diario, así que no tiene sentido mezclada con Créditos
+    // y Metas). `isAdmin` arranca en null ("todavía no sé") y la sección de abajo no se
+    // pinta ni en null ni en false — solo cuando la respuesta llega y es true. Sin eso habría
+    // el mismo salto que tenía en Más, solo que acá abajo.
+    var isAdmin by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) {
+        isAdmin = runCatching { Repositories.wallets.isScreenAdmin() }.getOrDefault(false)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -75,14 +87,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         Column {
                             Text(displayName, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
                             Text(SessionManager.userEmail ?: "", fontSize = 12.5.sp, color = MinTextMute)
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "PREMIUM · FAMILIAR",
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = MinTextMute,
-                                letterSpacing = 0.4.sp,
-                            )
+                            // F44: "PREMIUM · FAMILIAR" estaba fijo en el código — no existen
+                            // planes ni tipos de cuenta, así que la etiqueta mentía. Se saca;
+                            // vuelve con significado real si algún día hay planes o familia (F8).
                         }
                     }
                 }
@@ -90,28 +97,16 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
 
             // Archetype card
             item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Mi perfil financiero")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(22.dp),
-                    ) {
-                        Text("TU ARQUETIPO", fontSize = 11.sp, color = MinTextMute, letterSpacing = 1.4.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Por definir", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = (-0.7).sp)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Completa el cuestionario financiero para descubrir tu arquetipo.",
-                            fontSize = 13.sp,
-                            color = MinTextDim,
-                            lineHeight = 19.sp,
-                        )
-                    }
-
-                    if (PushOptIn.supported) {
-                        Spacer(Modifier.height(14.dp))
+                // F43: acá vivía la tarjeta "Tu arquetipo / Por definir / Completa el
+                // cuestionario financiero…" — el cuestionario no existe en ninguna parte de la
+                // app, así que era una promesa sin nada detrás. Se saca entera (no solo el
+                // texto) en vez de dejar un cuestionario que nunca se puede completar; la
+                // sección "Mi perfil financiero" se va con ella. Si algún día se construye el
+                // cuestionario, vuelve con contenido real.
+                if (PushOptIn.supported) {
+                    Spacer(Modifier.height(14.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MinSectionHeader(title = "Notificaciones")
                         var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
                         var refreshTick by remember { mutableStateOf(0) }
                         LaunchedEffect(refreshTick) {
@@ -161,15 +156,19 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             item {
                 Spacer(Modifier.height(14.dp))
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Meta principal", action = "Editar")
+                    MinSectionHeader(title = "Meta principal", action = "Ver metas", onAction = { onNavigate(Screen.Goals) })
                     MinCard(
                         modifier = Modifier.fillMaxWidth(),
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                     ) {
+                        // F45: "Sin meta definida" + "Ve a Metas para crear tu primera meta"
+                        // prometía un alta que Metas todavía no tiene (F26 — llega en la Ola
+                        // 6). El texto ya no promete: solo dice que no hay meta y enlaza a
+                        // Metas.
                         CardRow(
-                            left = { Text("Sin meta definida", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinTextMute) },
-                            sub = "Ve a Metas para crear tu primera meta",
+                            left = { Text("Aún sin meta", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinTextMute) },
+                            sub = "Ver Metas de ahorro",
                             isLast = true,
                             onClick = { onNavigate(Screen.Goals) },
                         )
@@ -177,35 +176,13 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 }
             }
 
-            // Cuenta
-            item {
-                Spacer(Modifier.height(14.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Cuenta")
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Elevated,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                    ) {
-                        CardRow(
-                            left = { Text("Familia", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                            showChevron = true,
-                        )
-                        CardRow(
-                            left = { Text("Privacidad y datos", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                            sub = "SMS y extractos cifrados",
-                            showChevron = true,
-                            onClick = { onNavigate(Screen.SMSInbox) },
-                        )
-                        CardRow(
-                            left = { Text("Notificaciones", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
-                            sub = "Alertas inteligentes activas",
-                            showChevron = true,
-                            isLast = true,
-                        )
-                    }
-                }
-            }
+            // F45: acá vivía la sección "Cuenta" con las filas "Familia" (sin acción),
+            // "Privacidad y datos · SMS y extractos cifrados" (no hay cifrado propio en el
+            // servidor — viaja por HTTPS y queda en Postgres tal cual) y "Notificaciones ·
+            // Alertas inteligentes activas" (no existen). Las tres eran decorado, y dos
+            // afirmaban cosas falsas — se sacan enteras. "Notificaciones push", que sí
+            // funciona, se queda arriba, en su propia sección.
+
 
             // Logout button
             item {
@@ -223,6 +200,33 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     Text("Cerrar sesión", fontSize = 14.sp, color = MinExpense, fontWeight = FontWeight.Medium)
                 }
             }
+
+            // Va DESPUÉS de «Cerrar sesión» a propósito: `isAdmin` llega async, y si esta sección
+            // se pintara antes del botón, al aparecer lo empujaría hacia abajo en cada visita (salto de
+            // layout). Al final de la lista solo alarga el scroll — nada se mueve bajo el dedo.
+            // F47 · F48: sección de administración — solo para quien administra el Inicio
+            // (SDUI). Ver comentario junto a `isAdmin` arriba.
+            if (isAdmin == true) {
+                item {
+                    Spacer(Modifier.height(14.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MinSectionHeader(title = "Administración")
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                        ) {
+                            CardRow(
+                                left = { Text("Editor de pantallas", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                                sub = "Reordena y edita las secciones del Inicio sin desplegar",
+                                showChevron = true,
+                                isLast = true,
+                                onClick = { onNavigate(Screen.ScreenEditor) },
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         MinBottomNav(active = NavTab.MORE) { tab ->
@@ -232,35 +236,6 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 NavTab.ADD          -> onNavigate(Screen.QuickAdd())
                 NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
                 NavTab.MORE         -> onNavigate(Screen.Mas)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScaleRow(label: String, value: Int, hint: String, max: Int = 5) {
-    Column(modifier = Modifier.padding(vertical = 14.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = MinText)
-            Text(hint, fontSize = 12.sp, color = MinTextMute, fontFamily = FontFamily.Monospace)
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            (0 until max).forEach { i ->
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(if (i < value) MinPrimary else MinSurfaceContainerHigh)
-                )
             }
         }
     }

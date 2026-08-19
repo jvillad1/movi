@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,66 +53,75 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
             // (antes caía siempre en Inicio, aunque entraras desde Más).
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
             Text("Inversiones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp, modifier = Modifier.weight(1f))
-            Text("+", fontSize = 22.sp, color = MinTextDim)
+            // F21: acá había un "+" sin acción — no existe ni la hoja de alta ni el endpoint
+            // para crear una inversión, solo el de listar. Se saca en vez de prometer un alta
+            // que no hay; vuelve cuando se construya (anotado en el plan, Ola posterior).
         }
 
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 80.dp),
         ) {
-            item {
-                MinCard(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(22.dp),
-                ) {
-                    Text("Patrimonio invertido", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = formatCOP(total),
-                        fontSize = 38.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Normal,
-                        color = MinText,
-                        letterSpacing = (-1.4).sp,
-                        lineHeight = 38.sp,
-                    )
-                    Spacer(Modifier.height(18.dp))
-                    InvestmentSparkline(modifier = Modifier.fillMaxWidth().height(56.dp), hasData = holdings.isNotEmpty())
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                        listOf("1M", "3M", "6M", "1A", "Todo").forEachIndexed { i, p ->
-                            val active = i == 3
-                            Column {
-                                Text(
-                                    text = p,
-                                    fontSize = 12.sp,
-                                    color = if (active) MinText else MinTextMute,
-                                    fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                if (active) {
-                                    Box(modifier = Modifier.width(20.dp).height(1.5.dp).clip(RoundedCornerShape(1.dp)).background(MinText))
+            if (holdings.isEmpty()) {
+                // F21: sin posiciones, la tarjeta "Patrimonio invertido" solo mostraba un
+                // gráfico vacío (una línea plana) y "$0" — nada de eso es información, es
+                // decorado que simula haber algo. Un único estado vacío honesto en su lugar,
+                // sin la tarjeta de sugerencias de diversificación (esa también prometía algo
+                // — "recibe sugerencias" — que no hay detrás sin datos que analizar).
+                item {
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                    ) {
+                        Text("Aún no hay inversiones registradas", fontSize = 14.sp, color = MinTextMute)
+                    }
+                }
+            } else {
+                item {
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(22.dp),
+                    ) {
+                        Text("Patrimonio invertido", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = formatCOP(total),
+                            fontSize = 38.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Normal,
+                            color = MinText,
+                            letterSpacing = (-1.4).sp,
+                            lineHeight = 38.sp,
+                        )
+                        Spacer(Modifier.height(18.dp))
+                        InvestmentSparkline(modifier = Modifier.fillMaxWidth().height(56.dp), hasData = true)
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                            listOf("1M", "3M", "6M", "1A", "Todo").forEachIndexed { i, p ->
+                                val active = i == 3
+                                Column {
+                                    Text(
+                                        text = p,
+                                        fontSize = 12.sp,
+                                        color = if (active) MinText else MinTextMute,
+                                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    if (active) {
+                                        Box(modifier = Modifier.width(20.dp).height(1.5.dp).clip(RoundedCornerShape(1.dp)).background(MinText))
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            item {
-                Spacer(Modifier.height(20.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    MinSectionHeader(title = "Mis posiciones", count = if (holdings.isNotEmpty()) holdings.size else null)
-                    if (holdings.isEmpty()) {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-                        ) {
-                            Text("Sin posiciones registradas", fontSize = 14.sp, color = MinTextMute)
-                        }
-                    } else {
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MinSectionHeader(title = "Mis posiciones", count = holdings.size)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -142,29 +150,6 @@ fun InversionesScreen(onNavigate: (Screen) -> Unit) {
                                 )
                             }
                         }
-                    }
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(20.dp))
-                MinCard(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    variant = MinCardVariant.Elevated,
-                    padding = PaddingValues(18.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(
-                            modifier = Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MinSurfaceContainerHigh),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinText, modifier = Modifier.size(14.dp)) }
-                        Text(
-                            text = "Registra tus inversiones para recibir sugerencias de diversificación personalizadas.",
-                            fontSize = 13.sp,
-                            color = MinTextDim,
-                            lineHeight = 19.sp,
-                            modifier = Modifier.weight(1f),
-                        )
                     }
                 }
             }
