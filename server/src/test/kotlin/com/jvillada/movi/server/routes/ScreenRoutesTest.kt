@@ -18,6 +18,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.screens.SCREEN_SEED
 import com.jvillada.movi.server.screens.seedScreens
+import com.jvillada.movi.shared.model.DASHBOARD_LAYOUT_VERSION
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -52,13 +53,9 @@ import kotlin.test.assertTrue
  * (`screens_routes_test`), a test-local JWT secret/verifier, and the full
  * serialization+jwt+routing plugin chain wired through wireApp().
  *
- * NOTE on section count: the design spec
- * (docs/superpowers/specs/2026-07-26-sdui-movi-design.md) enumerates the seed
- * as HERO_BALANCE -> ACCOUNTS_SUMMARY -> BANNER(Alertas) -> LINK_LIST(Explora)
- * -> BANNER(IA) -- five sections, matching the five items of the current
- * hardcoded Dashboard (Balance, Mis cuentas, Alertas, Patrimonio, AI prompt).
- * Some plan prose calls this "6 secciones"; that count does not match the
- * spec's own explicit, locked list, so these tests assert 5 (see task report).
+ * Ola 4 (F9/F40): el seed es `defaultDashboardDefinition()` de `:core` (generación 2 —
+ * HERO_BALANCE -> UPCOMING_PAYMENTS -> ALERTS -> QUICK_LINKS_WITH_TOTALS -> BANNER(IA)), y
+ * `seedScreens` ahora también ACTUALIZA filas de una generación anterior (ver el último test).
  */
 class ScreenRoutesTest {
 
@@ -144,7 +141,7 @@ class ScreenRoutesTest {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    fun `200 with seeded dashboard has 5 sections starting with HERO_BALANCE`() = testApplication {
+    fun `200 with seeded dashboard serves the Ola 4 layout (generation 2)`() = testApplication {
         transaction { seedScreens() }
         wireApp()
 
@@ -155,21 +152,21 @@ class ScreenRoutesTest {
 
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals("dashboard", body["slug"]!!.jsonPrimitive.content)
-        assertEquals(1, body["version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val sections = body["sections"]!!.jsonArray
-        assertEquals(5, sections.size)
-        assertEquals("HERO_BALANCE", sections[0].jsonObject["type"]!!.jsonPrimitive.content)
-        assertEquals("ACCOUNTS_SUMMARY", sections[1].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS", "BANNER"),
+            sections.map { it.jsonObject["type"]!!.jsonPrimitive.content },
+        )
 
-        val explora = sections[3].jsonObject
-        assertEquals("LINK_LIST", explora["type"]!!.jsonPrimitive.content)
-        assertEquals("Explora", explora["title"]!!.jsonPrimitive.content)
-        val exploraTitles = explora["cards"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content }
-        assertEquals(listOf("Inversiones", "Créditos", "Metas", "Suscripciones"), exploraTitles)
+        val links = sections[3].jsonObject
+        assertEquals("Explora", links["title"]!!.jsonPrimitive.content)
+        val linkTitles = links["cards"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content }
+        assertEquals(listOf("Cuentas", "Créditos", "Presupuestos", "Metas", "Inversiones", "Suscripciones"), linkTitles)
 
         val aiBanner = sections[4].jsonObject
         assertEquals("BANNER", aiBanner["type"]!!.jsonPrimitive.content)
-        assertEquals("✦ Pregúntale a Movi AI", aiBanner["text"]!!.jsonPrimitive.content)
+        assertEquals("Pregúntale a Movi AI", aiBanner["text"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -179,7 +176,7 @@ class ScreenRoutesTest {
 
         val res = client.get("/api/screens/dashboard") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
-            header(HttpHeaders.IfNoneMatch, "1")
+            header(HttpHeaders.IfNoneMatch, DASHBOARD_LAYOUT_VERSION.toString())
         }
         assertEquals(HttpStatusCode.NotModified, res.status)
     }
@@ -270,5 +267,40 @@ class ScreenRoutesTest {
         }
         assertEquals(HttpStatusCode.OK, phantomRes.status)
         assertTrue(Json.parseToJsonElement(phantomRes.bodyAsText()).jsonObject.containsKey("sections"))
+    }
+
+    @Test
+    fun `seed upgrades a row from an older generation and bumps version`() = testApplication {
+        // Fila "vieja": layout de la generación 1 (ACCOUNTS_SUMMARY y compañía), editada tres
+        // veces desde el Editor (version 3) pero nunca marcada con seed_version (default 0) —
+        // exactamente lo que hay en una instalación desplegada antes de la Ola 4.
+        transaction {
+            Screens.insert {
+                it[slug] = "dashboard"
+                it[version] = 3
+                it[sectionsJson] = """[{"type":"HERO_BALANCE"},{"type":"ACCOUNTS_SUMMARY"}]"""
+                it[active] = true
+                it[updatedAt] = 0L
+            }
+        }
+        transaction { seedScreens() }
+        wireApp()
+
+        val res = client.get("/api/screens/dashboard") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        // Sube por encima de la versión editada: un cliente con "3" en caché no recibe 304.
+        assertEquals(4, body["version"]!!.jsonPrimitive.content.toInt())
+        val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
+        assertEquals(SCREEN_SEED.first().sections.map { it.type }, types)
+
+        // Un segundo boot con el mismo seed ya no toca nada (seed_version al día).
+        transaction { seedScreens() }
+        val again = client.get("/api/screens/dashboard") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(4, Json.parseToJsonElement(again.bodyAsText()).jsonObject["version"]!!.jsonPrimitive.content.toInt())
     }
 }

@@ -11,59 +11,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.jvillada.movi.theme.MinText
 
-private val dataIndividual = floatArrayOf(
-    0f, 0.2f, 0.3f, 0.25f, 0.4f, 0.5f, 0.45f, 0.6f, 0.7f, 0.65f,
-    0.7f, 0.85f, 0.9f, 0.85f, 1.0f, 1.1f, 1.0f, 1.15f, 1.3f, 1.4f,
-    1.35f, 1.45f, 1.55f, 1.6f, 1.5f, 1.65f, 1.7f, 1.65f, 1.75f, 1.84f,
-)
-
-private val dataFamily = floatArrayOf(
-    0f, 0.4f, 0.6f, 0.5f, 0.8f, 1.1f, 1.0f, 1.3f, 1.6f, 1.4f,
-    1.5f, 1.9f, 2.2f, 2.0f, 2.4f, 2.6f, 2.4f, 2.7f, 3.1f, 3.4f,
-    3.2f, 3.5f, 3.8f, 4.0f, 3.7f, 4.2f, 4.4f, 4.3f, 4.6f, 4.9f,
-)
-
-@Composable
-fun Sparkline(
-    modifier: Modifier,
-    family: Boolean = false,
-    hasData: Boolean = true,
-    color: Color = MinText,
-    strokeWidth: Float = 3f,
-) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val pad = 2f
-        if (!hasData) {
-            drawLine(
-                color = color.copy(alpha = 0.25f),
-                start = Offset(pad, h / 2),
-                end = Offset(w - pad, h / 2),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round,
-            )
-            return@Canvas
-        }
-        val data = if (family) dataFamily else dataIndividual
-        val max = data.max()
-        val path = Path()
-        data.forEachIndexed { i, v ->
-            val x = pad + i * (w - pad * 2) / (data.size - 1)
-            val y = h - pad - (v / max) * (h - pad * 2)
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        drawPath(
-            path = path,
-            color = color.copy(alpha = 0.92f),
-            style = Stroke(
-                width = strokeWidth,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            ),
-        )
-    }
-}
+// Ola 4: acá vivía `Sparkline`, la curva del Balance del Inicio. Se borró porque dibujaba
+// una serie FIJA inventada (no salía de ningún dato) — "el sparkline de mentira" (F9).
 
 @Composable
 fun SimpleSparkline(

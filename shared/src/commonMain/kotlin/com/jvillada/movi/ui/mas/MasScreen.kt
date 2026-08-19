@@ -23,8 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.MinBottomNav
-import com.jvillada.movi.ui.components.NavTab
 
 private data class MasItem(
     val label: String,
@@ -38,6 +36,8 @@ private val items = listOf(
     // F19: Cuentas era invisible sin al menos una cuenta ya creada (el "Ver todas +" del Inicio
     // solo aparece con la lista no vacía) — entra acá como primer acceso, incondicional.
     MasItem("Cuentas",      Icons.Rounded.AccountBalanceWallet, Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Accounts),
+    // Ola 4: Presupuestos dejó su lugar en la barra inferior a Cuentas y entra acá, justo después.
+    MasItem("Presupuestos", Icons.Rounded.PieChart,         Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Budgets),
     MasItem("Inversiones",  Icons.AutoMirrored.Rounded.TrendingUp, Color(0xFF7DDDB0), Color(0x247DDDB0), Screen.Investments),
     MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),
     MasItem("Metas",        Icons.Rounded.Flag,             Color(0xFFFFD479), Color(0x24FFD479), Screen.Goals),
@@ -46,7 +46,7 @@ private val items = listOf(
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
     MasItem("Recurrentes",  Icons.Rounded.Repeat,           Color(0xFFFFD479), Color(0x1AFFD479), Screen.Recurrentes),
     MasItem("Suscripciones", Icons.Rounded.Autorenew,       Color(0xFF81D4FA), Color(0x2481D4FA), Screen.Subscriptions),
-    MasItem("Análisis",     Icons.Rounded.BarChart,         Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Analisis),
+    // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio.
     MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
 )
 
@@ -79,16 +79,6 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
         ) {
             items(items) { item ->
                 MasCard(item, onNavigate)
-            }
-        }
-
-        MinBottomNav(active = NavTab.MORE) { tab ->
-            when (tab) {
-                NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                NavTab.MORE         -> Unit
             }
         }
     }

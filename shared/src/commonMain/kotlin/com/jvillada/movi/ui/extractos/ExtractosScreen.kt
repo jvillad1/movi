@@ -29,10 +29,8 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.Hairline
-import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
-import com.jvillada.movi.ui.components.NavTab
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
@@ -255,16 +253,6 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
             }
 
             item(key = "bottom-spacer") { Spacer(Modifier.height(24.dp)) }
-        }
-
-        MinBottomNav(active = NavTab.MORE) { tab ->
-            when (tab) {
-                NavTab.HOME         -> onNavigate(Screen.Dashboard)
-                NavTab.TRANSACTIONS -> onNavigate(Screen.Transactions)
-                NavTab.ADD          -> onNavigate(Screen.QuickAdd())
-                NavTab.BUDGETS      -> onNavigate(Screen.Budgets)
-                NavTab.MORE         -> onNavigate(Screen.Mas)
-            }
         }
     }
 }

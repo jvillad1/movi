@@ -51,8 +51,10 @@ import kotlinx.serialization.json.jsonPrimitive
 private const val SLUG = "dashboard"
 
 private val SECTION_TYPE_LABELS = mapOf(
-    "HERO_BALANCE" to "Balance",
-    "ACCOUNTS_SUMMARY" to "Cuentas",
+    "HERO_BALANCE" to "Balance neto",
+    "UPCOMING_PAYMENTS" to "Próximos pagos",
+    "ALERTS" to "Alertas",
+    "QUICK_LINKS_WITH_TOTALS" to "Accesos con cifra",
     "CARD_ROW" to "Fila de tarjetas",
     "CARD_LIST" to "Lista de tarjetas",
     "LINK_LIST" to "Lista de enlaces",
@@ -71,7 +73,6 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     "investments" to "Inversiones",
     "subscriptions" to "Suscripciones",
     "recurrentes" to "Recurrentes",
-    "analisis" to "Análisis",
     "extractos" to "Extractos",
     "aichat" to "Movi AI",
     "profile" to "Perfil",
@@ -375,7 +376,16 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             }
         }
 
-        "CARD_ROW", "CARD_LIST", "LINK_LIST" -> {
+        "CARD_ROW", "CARD_LIST", "LINK_LIST", "QUICK_LINKS_WITH_TOTALS" -> {
+            if (section.type == "QUICK_LINKS_WITH_TOTALS") {
+                FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
+                Spacer(Modifier.height(8.dp))
+                // La cifra de cada tarjeta la calcula el cliente según el destino de su acción
+                // (Cuentas → activos, Créditos → deuda, Presupuestos → gastado del mes…); acá solo
+                // se eligen y ordenan las tarjetas. Un subtítulo escrito acá reemplaza al calculado.
+                Text("La cifra de cada acceso sale de su destino; no se edita.", fontSize = 12.sp, color = MinTextMute)
+                Spacer(Modifier.height(10.dp))
+            }
             section.cards.forEachIndexed { cardIndex, card ->
                 if (cardIndex > 0) Spacer(Modifier.height(12.dp))
                 CardEditor(
@@ -399,8 +409,19 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             )
         }
 
-        "HERO_BALANCE", "ACCOUNTS_SUMMARY" -> {
-            Text("Esta sección no tiene campos editables", fontSize = 13.sp, color = MinTextMute)
+        "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS" -> {
+            // Secciones de datos: el contenido lo pone el cliente con lo que carga del server;
+            // solo el título se ajusta desde acá (vacío = el nombre por defecto).
+            FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
+            Spacer(Modifier.height(8.dp))
+            Text(
+                when (section.type) {
+                    "UPCOMING_PAYMENTS" -> "Se muestra solo cuando hay pagos en los próximos 7 días."
+                    "ALERTS" -> "Se muestra solo cuando hay algo por resolver."
+                    else -> "Balance neto, ingresos, egresos y flujo del mes: sin más campos."
+                },
+                fontSize = 12.sp, color = MinTextMute,
+            )
         }
 
         else -> {

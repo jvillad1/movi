@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.jvillada.movi.ui.components.NavTab
 
 sealed class Screen {
     data object Login            : Screen()
@@ -15,7 +16,6 @@ sealed class Screen {
     data class QuickAdd(val presetAccountId: String? = null) : Screen()
     data object Profile : Screen()
     data object AIChat : Screen()
-    data object Analisis : Screen()
     data object Investments : Screen()
     data object Credits : Screen()
     data object Goals : Screen()
@@ -33,6 +33,26 @@ sealed class Screen {
     data class StatementReview(val resultJson: String) : Screen()
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
+}
+
+/**
+ * A qué destino de la navegación principal pertenece cada pantalla; null = sin chrome de
+ * navegación (auth, onboarding, flujos a pantalla completa). App.kt lo usa para resaltar el
+ * ítem activo en la barra (teléfono) y en el rail (pantalla ancha), que son los únicos
+ * lugares donde se pinta la navegación — ninguna pantalla arma su propia barra.
+ *
+ * Ola 4: Cuentas y el detalle de una cuenta marcan la pestaña Cuentas (antes, Inicio);
+ * Presupuestos y Créditos tienen destino propio (en el teléfono se resaltan como Más).
+ */
+fun navTabFor(screen: Screen): NavTab? = when (screen) {
+    Screen.Dashboard -> NavTab.HOME
+    Screen.Transactions -> NavTab.TRANSACTIONS
+    Screen.Accounts, is Screen.AccountDetail -> NavTab.ACCOUNTS
+    Screen.Credits -> NavTab.CREDITS
+    Screen.Budgets -> NavTab.BUDGETS
+    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Investments, Screen.Subscriptions,
+    Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
+    else -> null
 }
 
 /**

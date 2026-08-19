@@ -3,9 +3,11 @@ package com.jvillada.movi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.*
@@ -22,10 +24,10 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.navTabFor
 import com.jvillada.movi.ui.auth.LoginScreen
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
-import com.jvillada.movi.ui.analisis.AnalisisScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
@@ -50,22 +52,23 @@ import com.jvillada.movi.ui.extractos.StatementReviewScreen
 import com.jvillada.movi.ui.extractos.ImportDetailScreen
 import com.jvillada.movi.ui.sdui.editor.ScreenEditorScreen
 import com.jvillada.movi.shared.model.StatementParseResult
+import com.jvillada.movi.ui.components.LocalBottomNavAtRoot
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
+import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
 import kotlinx.serialization.json.Json
 
-// Which tab (if any) a screen belongs to; null = no navigation chrome
-// (auth, onboarding, full-screen flows). Mirrors the per-screen MinBottomNav
-// call sites.
-private fun screenNavTab(screen: Screen): NavTab? = when (screen) {
-    Screen.Dashboard, Screen.Accounts, is Screen.AccountDetail -> NavTab.HOME
-    Screen.Transactions -> NavTab.TRANSACTIONS
-    Screen.Budgets -> NavTab.BUDGETS
-    Screen.Mas, Screen.Analisis, Screen.Profile, Screen.Goals, Screen.Credits,
-    Screen.Investments, Screen.Subscriptions, Screen.Recurrentes, Screen.Extractos -> NavTab.MORE
-    else -> null
+/** Pantalla principal de cada destino de la barra/rail. */
+private fun screenForTab(tab: NavTab): Screen = when (tab) {
+    NavTab.HOME -> Screen.Dashboard
+    NavTab.TRANSACTIONS -> Screen.Transactions
+    NavTab.ADD -> Screen.QuickAdd()
+    NavTab.ACCOUNTS -> Screen.Accounts
+    NavTab.CREDITS -> Screen.Credits
+    NavTab.BUDGETS -> Screen.Budgets
+    NavTab.MORE -> Screen.Mas
 }
 
 @Composable
@@ -118,38 +121,31 @@ fun App() {
             val saveableStateHolder = rememberSaveableStateHolder()
             // Outer Box paints the background full-bleed across desktop.
             // Compact (< 840dp): the classic centered "phone column" capped at
-            // 600dp; screens draw their own MinBottomNav. Expanded: a root
-            // MinNavRail on the left (per-screen bottom navs render nothing)
-            // with the same capped column centered in the remaining space.
+            // 600dp, with ONE MinBottomNav drawn here under the active screen
+            // (Ola 4: the screens no longer draw their own). Expanded: a root
+            // MinNavRail on the left with the same capped column centered in the
+            // remaining space. Both read the active tab from navTabFor().
             BoxWithConstraints(
                 modifier = Modifier.fillMaxSize().background(MinBg),
             ) {
                 val widthClass = if (maxWidth < 840.dp) WindowWidthClass.Compact else WindowWidthClass.Expanded
-                val showRail = widthClass == WindowWidthClass.Expanded && screenNavTab(currentScreen) != null
+                val activeTab = navTabFor(currentScreen)
+                val showRail = widthClass == WindowWidthClass.Expanded && activeTab != null
+                val showBottomNav = widthClass == WindowWidthClass.Compact && activeTab != null
+                val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 
                 CompositionLocalProvider(LocalWindowWidthClass provides widthClass) {
                 Row(modifier = Modifier.fillMaxSize()) {
                 if (showRail) {
-                    MinNavRail(
-                        active = screenNavTab(currentScreen),
-                        onTabSelected = { tab ->
-                            navigate(
-                                when (tab) {
-                                    NavTab.HOME -> Screen.Dashboard
-                                    NavTab.TRANSACTIONS -> Screen.Transactions
-                                    NavTab.ADD -> Screen.QuickAdd()
-                                    NavTab.BUDGETS -> Screen.Budgets
-                                    NavTab.MORE -> Screen.Mas
-                                }
-                            )
-                        },
-                    )
+                    MinNavRail(active = activeTab, onTabSelected = onTabSelected)
                 }
                 Box(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                Box(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
+                Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                CompositionLocalProvider(LocalBottomNavAtRoot provides true) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 CompositionLocalProvider(LocalGoBack provides goBackTo) {
                 when (currentScreen) {
@@ -173,7 +169,6 @@ fun App() {
                         },
                     )
                     Screen.AIChat            -> AIChatScreen(navigate)
-                    Screen.Analisis          -> AnalisisScreen(navigate)
                     Screen.Investments       -> InversionesScreen(navigate)
                     Screen.Credits           -> CreditosScreen(navigate)
                     Screen.Goals             -> MetasScreen(navigate)
@@ -200,7 +195,12 @@ fun App() {
                 }
                 } // CompositionLocalProvider(LocalGoBack)
                 } // SaveableStateProvider
-                } // inner Box (max-width container)
+                } // CompositionLocalProvider(LocalBottomNavAtRoot)
+                } // screen slot
+                if (showBottomNav) {
+                    MinBottomNav(active = activeTab, onTabSelected = onTabSelected)
+                }
+                } // inner Column (max-width container + bottom nav)
                 } // content area
                 } // Row (rail + content)
                 } // CompositionLocalProvider

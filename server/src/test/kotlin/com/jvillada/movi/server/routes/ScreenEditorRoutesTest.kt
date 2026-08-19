@@ -18,6 +18,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.screens.SCREEN_SEED
 import com.jvillada.movi.server.screens.seedScreens
+import com.jvillada.movi.shared.model.DASHBOARD_LAYOUT_VERSION
 import com.jvillada.movi.shared.model.ScreenAction
 import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -199,7 +200,7 @@ class ScreenEditorRoutesTest {
 
         val putBody = Json.parseToJsonElement(put.bodyAsText()).jsonObject
         assertEquals("dashboard", putBody["slug"]!!.jsonPrimitive.content)
-        assertEquals(2, putBody["version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(DASHBOARD_LAYOUT_VERSION + 1, putBody["version"]!!.jsonPrimitive.content.toInt())
         assertEquals(2, putBody["sections"]!!.jsonArray.size)
 
         val get = client.get("/api/screens/dashboard") {
@@ -207,7 +208,7 @@ class ScreenEditorRoutesTest {
         }
         assertEquals(HttpStatusCode.OK, get.status)
         val getBody = Json.parseToJsonElement(get.bodyAsText()).jsonObject
-        assertEquals(2, getBody["version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(DASHBOARD_LAYOUT_VERSION + 1, getBody["version"]!!.jsonPrimitive.content.toInt())
         val sections = getBody["sections"]!!.jsonArray
         assertEquals(2, sections.size)
         assertEquals("HERO_BALANCE", sections[0].jsonObject["type"]!!.jsonPrimitive.content)
