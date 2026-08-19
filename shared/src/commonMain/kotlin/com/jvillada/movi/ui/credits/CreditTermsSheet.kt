@@ -34,7 +34,10 @@ import kotlinx.coroutines.launch
 /**
  * Crea o edita los términos de un crédito.
  * - [editing] != null → modo edición sobre ese crédito (cuenta fija, campos precargados, permite eliminar).
- * - [editing] == null → modo creación: elegir una cuenta LOAN sin términos de [candidates] o crear cuenta nueva.
+ * - [editing] == null → modo creación: **nombre y deuda actual son los primeros campos**, sin
+ *   sección aparte (F25) — crear una cuenta nueva es el flujo por defecto. Solo si existen
+ *   cuentas LOAN sin términos en [candidates] aparece, arriba, una línea discreta que ofrece
+ *   adjuntar los términos a una de esas cuentas en vez de crear una nueva.
  */
 @Composable
 fun CreditTermsSheet(
@@ -46,8 +49,12 @@ fun CreditTermsSheet(
     val coroutine = rememberCoroutineScope()
     val existingTerms = editing?.terms
 
-    var selectedAccountId by remember { mutableStateOf(editing?.account?.id ?: candidates.firstOrNull()?.id) }
-    var newAccountMode by remember { mutableStateOf(editing == null && candidates.isEmpty()) }
+    var selectedAccountId by remember { mutableStateOf<String?>(editing?.account?.id) }
+    // F25: antes el default era "elegir una cuenta existente" cuando había candidatas, y solo
+    // caía en "cuenta nueva" si no había ninguna — así que quien creaba un crédito por primera
+    // vez veía primero un selector de cuentas que ni sabía que existían. Ahora "cuenta nueva"
+    // es SIEMPRE el default al crear; las candidatas, si existen, se ofrecen aparte y discretas.
+    var newAccountMode by remember { mutableStateOf(editing == null) }
     var newAccountName by remember { mutableStateOf("") }
     var newAccountDebt by remember { mutableStateOf<Long?>(null) }
 
@@ -168,23 +175,40 @@ fun CreditTermsSheet(
                     Text(editing.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
                     Spacer(Modifier.height(16.dp))
                 } else {
-                    SectionLabel("CUENTA DEL PRÉSTAMO")
-                    Spacer(Modifier.height(8.dp))
-                    candidates.forEach { acc ->
-                        SelectRow(
-                            label = acc.name,
-                            selected = !newAccountMode && selectedAccountId == acc.id,
-                            onClick = { newAccountMode = false; selectedAccountId = acc.id },
+                    // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
+                    // desapareció del flujo normal — era la estructura interna (cuenta +
+                    // términos) asomándose, ruido para quien solo quiere anotar un crédito
+                    // nuevo. Nombre y deuda actual pasan a ser los primeros campos, sin
+                    // sección aparte. Solo si existen cuentas LOAN sin términos aparece,
+                    // arriba y discreta, la opción de adjuntar los términos a una de ellas.
+                    if (candidates.isNotEmpty()) {
+                        Text(
+                            "Ya tienes una deuda cargada como cuenta, ¿es esta?",
+                            fontSize = 12.sp,
+                            color = MinTextMute,
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(8.dp))
+                        candidates.forEach { acc ->
+                            SelectRow(
+                                label = acc.name,
+                                selected = !newAccountMode && selectedAccountId == acc.id,
+                                onClick = {
+                                    if (!newAccountMode && selectedAccountId == acc.id) {
+                                        // Tocar de nuevo la ya elegida vuelve a "cuenta nueva" —
+                                        // sin esto no había forma de deshacer la selección.
+                                        newAccountMode = true
+                                        selectedAccountId = null
+                                    } else {
+                                        newAccountMode = false
+                                        selectedAccountId = acc.id
+                                    }
+                                },
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Spacer(Modifier.height(8.dp))
                     }
-                    SelectRow(
-                        label = "+ Nueva cuenta de préstamo",
-                        selected = newAccountMode,
-                        onClick = { newAccountMode = true },
-                    )
                     if (newAccountMode) {
-                        Spacer(Modifier.height(10.dp))
                         FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
                         Spacer(Modifier.height(8.dp))
                         MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP)")
