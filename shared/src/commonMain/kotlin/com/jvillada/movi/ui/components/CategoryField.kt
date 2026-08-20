@@ -42,6 +42,7 @@ import com.jvillada.movi.theme.MinSurfaceContainerLow
 import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
 import com.jvillada.movi.theme.MinTextMute
+import kotlinx.coroutines.delay
 
 /**
  * F35: filtra y ordena las sugerencias de categoría para [CategoryField]. Separada del
@@ -112,6 +113,21 @@ fun CategoryField(
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // F62: la lista NO puede desmontarse en el mismo frame en que el campo pierde el foco.
+    // En táctil (web/PWA), el down del tap sobre una sugerencia desenfoca el campo ANTES de
+    // que llegue el up: si la lista se condiciona a `focused` a secas, se desmonta entre el
+    // down y el up y el tap muere en la nada — "toco la sugerencia y no pasa nada" (con
+    // mouse no se reproduce porque el click no roba el foco en el down). La lista se oculta
+    // con una pequeña demora tras perder el foco, para que el tap en vuelo se complete.
+    var suggestionsVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(focused) {
+        if (focused) {
+            suggestionsVisible = true
+        } else if (suggestionsVisible) {
+            delay(350)
+            suggestionsVisible = false
+        }
+    }
     val focusManager = LocalFocusManager.current
     // Estado interno de texto+selección: separado de [value] para poder seleccionar todo el
     // texto al enfocar (Ola 2 #3b) sin pelearse con el `value: String` que ya usan las 3
@@ -142,6 +158,8 @@ fun CategoryField(
         // dispararse y las sugerencias no reaparecían al seguir tipeando. clearFocus() sí baja
         // el foco de verdad; `focused` se actualiza solo, vía onFocusChanged.
         focusManager.clearFocus()
+        // F62: al elegir sí se cierra al instante — la demora es solo para taps en vuelo.
+        suggestionsVisible = false
         onSuggestionPicked()
     }
 
@@ -185,8 +203,9 @@ fun CategoryField(
                 },
             )
         }
-        // Solo mientras el campo tiene foco: tocar una sugerencia ya lo quita del medio.
-        if (focused && matches.isNotEmpty()) {
+        // Visible mientras el campo tiene foco (más la demora de gracia de F62): tocar una
+        // sugerencia la elige y lo quita del medio.
+        if (suggestionsVisible && matches.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Column(
                 modifier = Modifier
