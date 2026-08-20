@@ -36,6 +36,16 @@
             color: #EDEDED; font-size: 15px; padding: 14px; margin-bottom: 18px; outline: none;
         }
         .lg-input:focus { border-color: #C9B8FF; }
+        /* F57: mostrar/ocultar contraseña. El botón vive DENTRO del campo (wrapper relativo)
+           y alterna type password/text — puro atributo, no toca el valor ni el autocompletado. */
+        .lg-pwwrap { position: relative; }
+        .lg-pwwrap .lg-input { padding-right: 46px; }
+        .lg-eye {
+            position: absolute; right: 6px; top: 7px; width: 34px; height: 34px;
+            background: none; border: none; cursor: pointer; color: #8a8a8a;
+            font-size: 17px; line-height: 1; padding: 0;
+        }
+        .lg-eye:hover, .lg-eye:focus-visible { color: #EDEDED; outline: none; }
         .lg-err { color: #FFB4AB; font-size: 13px; min-height: 18px; margin-bottom: 8px; }
         .lg-btn {
             width: 100%; background: #C9B8FF; color: #1a1226; border: none; border-radius: 999px;
@@ -74,8 +84,11 @@
                         <input class="lg-input" id="login-email" name="email" type="email"
                                autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
                         <label class="lg-label" for="login-password">Contraseña</label>
-                        <input class="lg-input" id="login-password" name="password" type="password"
+                        <div class="lg-pwwrap">
+                            <input class="lg-input" id="login-password" name="password" type="password"
                                autocomplete="current-password" placeholder="••••••" required>
+                            <button type="button" class="lg-eye" data-eye="login-password" aria-label="Mostrar contraseña" tabindex="-1">&#128065;&#65038;</button>
+                        </div>
                         <label class="lg-check" for="login-remember">
                             <input type="checkbox" id="login-remember" checked>
                             Recordar mi correo en este dispositivo
@@ -106,11 +119,17 @@
                     <div class="lg-note">Elige tu contraseña nueva.</div>
                     <form id="reset-form" autocomplete="on">
                         <label class="lg-label" for="reset-password">Contraseña nueva</label>
-                        <input class="lg-input" id="reset-password" name="new-password" type="password"
+                        <div class="lg-pwwrap">
+                            <input class="lg-input" id="reset-password" name="new-password" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
+                            <button type="button" class="lg-eye" data-eye="reset-password" aria-label="Mostrar contraseña" tabindex="-1">&#128065;&#65038;</button>
+                        </div>
                         <label class="lg-label" for="reset-password2">Repítela</label>
-                        <input class="lg-input" id="reset-password2" name="new-password-confirm" type="password"
+                        <div class="lg-pwwrap">
+                            <input class="lg-input" id="reset-password2" name="new-password-confirm" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
+                            <button type="button" class="lg-eye" data-eye="reset-password2" aria-label="Mostrar contraseña" tabindex="-1">&#128065;&#65038;</button>
+                        </div>
                         <div class="lg-err" id="reset-err"></div>
                         <button class="lg-btn" id="reset-btn" type="submit">Guardar contraseña</button>
                     </form>
@@ -131,11 +150,17 @@
                         <input class="lg-input" id="register-email" name="email" type="email"
                                autocomplete="username" placeholder="tu@correo.com" required autocapitalize="none" spellcheck="false">
                         <label class="lg-label" for="register-password">Contraseña</label>
-                        <input class="lg-input" id="register-password" name="new-password" type="password"
+                        <div class="lg-pwwrap">
+                            <input class="lg-input" id="register-password" name="new-password" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
+                            <button type="button" class="lg-eye" data-eye="register-password" aria-label="Mostrar contraseña" tabindex="-1">&#128065;&#65038;</button>
+                        </div>
                         <label class="lg-label" for="register-password2">Repítela</label>
-                        <input class="lg-input" id="register-password2" name="new-password-confirm" type="password"
+                        <div class="lg-pwwrap">
+                            <input class="lg-input" id="register-password2" name="new-password-confirm" type="password"
                                autocomplete="new-password" placeholder="••••••••••••" required>
+                            <button type="button" class="lg-eye" data-eye="register-password2" aria-label="Mostrar contraseña" tabindex="-1">&#128065;&#65038;</button>
+                        </div>
                         <div class="lg-err" id="register-err"></div>
                         <button class="lg-btn" id="register-btn" type="submit">Crear cuenta</button>
                     </form>
@@ -436,6 +461,18 @@
                         registerErr.textContent = 'No se pudo conectar. Prueba de nuevo.';
                         registerBtn.disabled = false; registerBtn.textContent = 'Crear cuenta';
                     }
+                });
+                // F57: mostrar/ocultar contraseña. tabindex=-1 para no meterse en el orden de
+                // tab del formulario; el foco vuelve al campo al alternar.
+                document.querySelectorAll('.lg-eye').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var input = document.getElementById(btn.getAttribute('data-eye'));
+                        if (!input) return;
+                        var show = input.type === 'password';
+                        input.type = show ? 'text' : 'password';
+                        btn.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+                        input.focus();
+                    });
                 });
             } catch (ex) {
                 // Red de seguridad, no el segundo login: si algo de este script explota (un
