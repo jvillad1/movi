@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
@@ -78,13 +79,13 @@ class AccountRoutesTest {
         )
 
         transaction {
-            SchemaUtils.drop(Cards, 
+            SchemaUtils.drop(Cards, Goals, 
                 Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards,
+                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals,
             )
 
             Users.insert {
@@ -300,6 +301,15 @@ class AccountRoutesTest {
                 it[Cards.bank]       = "Banco"
                 it[Cards.paymentDay] = 15
             }
+            // goals nació en la Ola 6, también después del DELETE — mismo patrón que card_terms.
+            Goals.insert {
+                it[Goals.id]        = "$accountId-meta"
+                it[Goals.userId]    = uid
+                it[Goals.name]      = "Viaje"
+                it[Goals.target]    = 1_000_000
+                it[Goals.accountId] = accountId
+                it[Goals.createdAt] = 0
+            }
             Events.insert {
                 it[Events.id]        = "$accountId-ev-tc"
                 it[Events.userId]    = uid
@@ -340,22 +350,23 @@ class AccountRoutesTest {
                     CardPaymentDismissals.selectAll().where { CardPaymentDismissals.eventId inList eventIds }.count().toInt(),
                 credits = Credits.selectAll().where { Credits.accountId eq accountId }.count().toInt(),
                 cards = Cards.selectAll().where { Cards.accountId eq accountId }.count().toInt(),
+                goals = Goals.selectAll().where { Goals.accountId eq accountId }.count().toInt(),
             )
         }
 
-    private data class Quintuple(val accounts: Int, val events: Int, val voidEvents: Int, val dismissals: Int, val credits: Int, val cards: Int)
+    private data class Quintuple(val accounts: Int, val events: Int, val voidEvents: Int, val dismissals: Int, val credits: Int, val cards: Int, val goals: Int)
 
     @Test
     fun `DELETE borra la cuenta, sus eventos, anulaciones, dismissals y terminos de credito en una sola pasada`() = testApplication {
         wireApp()
         val accId = "acc-full-a"
         seedAccountWithEverything(accId, userId)
-        assertEquals(Quintuple(1, 3, 1, 1, 1, 1), rowCounts(accId), "el seed dejó todo lo que el DELETE tiene que barrer")
+        assertEquals(Quintuple(1, 3, 1, 1, 1, 1, 1), rowCounts(accId), "el seed dejó todo lo que el DELETE tiene que barrer")
 
         val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }
         assertEquals(HttpStatusCode.NoContent, res.status)
 
-        assertEquals(Quintuple(0, 0, 0, 0, 0, 0), rowCounts(accId), "no debe quedar NADA de la cuenta borrada")
+        assertEquals(Quintuple(0, 0, 0, 0, 0, 0, 0), rowCounts(accId), "no debe quedar NADA de la cuenta borrada")
     }
 
     @Test
@@ -395,7 +406,7 @@ class AccountRoutesTest {
         val otherToken = tokenFor(otherUserId, "b@accounts.test")
         val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $otherToken") }
         assertEquals(HttpStatusCode.NotFound, res.status)
-        assertEquals(Quintuple(1, 3, 1, 1, 1, 1), rowCounts(accId), "el intento de B no debe tocar nada de A")
+        assertEquals(Quintuple(1, 3, 1, 1, 1, 1, 1), rowCounts(accId), "el intento de B no debe tocar nada de A")
 
         // A sí puede borrar la suya — y lo de B (si tuviera algo) quedaría intacto; acá alcanza
         // con confirmar que A borra la suya sin problema.

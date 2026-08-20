@@ -164,9 +164,9 @@ fun ChevronRight() {
 }
 
 @Composable
-fun StatusDot(color: Color, size: Dp = 5.dp) {
+fun StatusDot(color: Color, size: Dp = 5.dp, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .clip(CircleShape)
             .background(color)

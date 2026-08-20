@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CreateCreditRequest
+import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.EventDay
@@ -31,6 +32,9 @@ import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.ChangePasswordRequest
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 
 interface WalletRepository {
@@ -49,7 +53,19 @@ interface WalletRepository {
     suspend fun detectSubscriptions(): SubscriptionsResult
     suspend fun updateSubscription(id: String, subscription: Subscription): Subscription
     suspend fun deleteSubscription(id: String)
+
+    /** F38: alta manual — nace CONFIRMED, ver KDoc de [CreateSubscriptionRequest]. */
+    suspend fun createSubscription(request: CreateSubscriptionRequest): Subscription
     suspend fun getGoals(): List<Goal>
+
+    /**
+     * F26: alta de una meta de ahorro. `saved` viaja en 0 y se ignora — el server lo deriva
+     * siempre del saldo de la cuenta elegida. 404 si la cuenta no es del usuario, 422 si es una
+     * cuenta de deuda (solo Dinero/Inversión pueden ahorrar).
+     */
+    suspend fun createGoal(goal: Goal): Goal
+    suspend fun updateGoal(id: String, goal: Goal): Goal
+    suspend fun deleteGoal(id: String)
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getSms(id: String): SmsMessage
     suspend fun parseSms(id: String): ParsedSms
@@ -121,6 +137,19 @@ interface WalletRepository {
     suspend fun dismissCardPaymentCandidate(id: String)
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
+
+    /** F42 · F46: perfil editable — `GET /api/users/me`. `avatarColor` nunca llega `null`. */
+    suspend fun getUserProfile(): UserProfile
+
+    /** `PUT /api/users/me`. Campos opcionales — solo se toca lo que viene en [request]. */
+    suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile
+
+    /**
+     * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]
+     * no coincide, o 400 si [ChangePasswordRequest.new] no cumple [com.jvillada.movi.shared.model.PasswordPolicy]
+     * — el servidor es la autoridad, la validación del cliente es solo cortesía.
+     */
+    suspend fun changePassword(request: ChangePasswordRequest)
 
     /**
      * Pide un enlace de recuperación por correo. Devuelve el CÓDIGO HTTP crudo en vez de un

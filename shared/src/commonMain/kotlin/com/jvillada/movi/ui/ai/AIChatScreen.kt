@@ -12,7 +12,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -33,8 +36,15 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.launch
 
+/** F32: lo que espera a ser enviado — foto de un recibo, extracto u oferta del banco. */
+private data class PendingImage(val fileName: String, val bytes: ByteArray, val mimeType: String)
+
+@OptIn(ExperimentalEncodingApi::class)
 @Composable
 fun AIChatScreen(onNavigate: (Screen) -> Unit) {
     val goBack = LocalGoBack.current
@@ -46,13 +56,40 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
     }
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var pendingImage by remember { mutableStateOf<PendingImage?>(null) }
+    var attachError by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+
+    // F32: el picker de la Ola 1 (extractos) acepta cualquier archivo — acá se filtra por
+    // mime de imagen en el cliente, sin tocar el picker en sí.
+    val launchPicker = rememberFilePicker { fileName, bytes, mimeType ->
+        if (!mimeType.startsWith("image/")) {
+            attachError = "Por ahora solo imágenes"
+        } else if (bytes.size > 5 * 1024 * 1024) {
+            // El mismo techo que valida el server. Rechazar acá y no allá importa: el server
+            // rechaza el HISTORIAL completo en cada envío, así que una imagen grande que llegara
+            // a entrar al chat lo dejaba respondiendo el mismo 422 para siempre.
+            attachError = "La imagen pesa más de 5 MB — prueba con una captura más liviana"
+        } else {
+            attachError = null
+            pendingImage = PendingImage(fileName, bytes, mimeType)
+        }
+    }
 
     fun send() {
         val text = input.trim()
-        if (text.isEmpty() || loading) return
-        messages.add(ChatMessage(ChatRole.USER, text))
+        val image = pendingImage
+        if ((text.isEmpty() && image == null) || loading) return
+        messages.add(
+            ChatMessage(
+                role = ChatRole.USER,
+                content = text,
+                imageBase64 = image?.let { Base64.encode(it.bytes) },
+                imageMime = image?.mimeType,
+            ),
+        )
         input = ""
+        pendingImage = null
         loading = true
         coroutine.launch {
             val history = messages.filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }
@@ -110,7 +147,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
         ) {
             items(messages) { msg ->
                 if (msg.role == ChatRole.USER) {
-                    AIMsgUser(msg.content)
+                    AIMsgUser(msg.content, hasImage = msg.imageBase64 != null)
                 } else {
                     AIMsgAI(msg.content)
                 }
@@ -118,6 +155,35 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             if (loading) {
                 item { AIMsgAI("…") }
             }
+        }
+
+        // F32: nombre del adjunto + X para quitarlo, o el aviso de "por ahora solo imágenes"
+        // si eligieron otra cosa (p.ej. un PDF) — visible arriba de la barra de escribir.
+        if (pendingImage != null || attachError != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (pendingImage != null) {
+                    Icon(Icons.Rounded.Image, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(16.dp))
+                    Text(
+                        text = pendingImage?.fileName ?: "",
+                        fontSize = 12.sp,
+                        color = MinTextMute,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "Quitar imagen",
+                        tint = MinTextMute,
+                        modifier = Modifier.size(16.dp).clickable { pendingImage = null },
+                    )
+                } else {
+                    Text(text = attachError ?: "", fontSize = 12.sp, color = MinExpense, modifier = Modifier.weight(1f))
+                }
+            }
+            Spacer(Modifier.height(6.dp))
         }
 
         Row(
@@ -130,6 +196,13 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // F32: clip para adjuntar una foto (recibo, extracto, oferta del banco).
+            Icon(
+                Icons.Rounded.AttachFile,
+                contentDescription = "Adjuntar imagen",
+                tint = MinTextMute,
+                modifier = Modifier.size(20.dp).clickable(enabled = !loading) { attachError = null; launchPicker() },
+            )
             Box(modifier = Modifier.weight(1f)) {
                 BasicTextField(
                     value = input,
@@ -149,7 +222,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     },
                 )
             }
-            val canSend = input.trim().isNotEmpty() && !loading
+            val canSend = (input.trim().isNotEmpty() || pendingImage != null) && !loading
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -175,7 +248,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
 }
 
 @Composable
-private fun AIMsgUser(text: String) {
+private fun AIMsgUser(text: String, hasImage: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.End,
@@ -187,7 +260,18 @@ private fun AIMsgUser(text: String) {
                 .background(MinText)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Text(text = text, fontSize = 13.5.sp, color = MinBg, lineHeight = 20.sp)
+            Column {
+                if (hasImage) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Rounded.Image, contentDescription = null, tint = MinBg, modifier = Modifier.size(13.dp))
+                        Text("Imagen adjunta", fontSize = 11.sp, color = MinBg)
+                    }
+                    if (text.isNotBlank()) Spacer(Modifier.height(4.dp))
+                }
+                if (text.isNotBlank()) {
+                    Text(text = text, fontSize = 13.5.sp, color = MinBg, lineHeight = 20.sp)
+                }
+            }
         }
     }
 }

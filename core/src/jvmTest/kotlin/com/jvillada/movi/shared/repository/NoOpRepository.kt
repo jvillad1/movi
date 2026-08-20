@@ -65,7 +65,23 @@ open class NoOpRepository(
     override suspend fun detectSubscriptions() = SubscriptionsResult(emptyList(), 0)
     override suspend fun updateSubscription(id: String, subscription: Subscription) = subscription
     override suspend fun deleteSubscription(id: String) {}
+    override suspend fun createSubscription(request: CreateSubscriptionRequest) = Subscription(
+        id = "sub-stub",
+        merchantKey = "manual_stub",
+        displayName = request.displayName,
+        amount = request.amount,
+        currency = request.currency,
+        dayOfMonth = request.dayOfMonth,
+        status = SubStatus.CONFIRMED,
+        confidence = SubConfidence.HIGH,
+        firstSeen = 0,
+        lastSeen = 0,
+        occurrences = 0,
+    )
     override suspend fun getGoals() = emptyList<Goal>()
+    override suspend fun createGoal(goal: Goal) = goal.copy(id = goal.id.ifBlank { "goal-stub" })
+    override suspend fun updateGoal(id: String, goal: Goal) = goal.copy(id = id)
+    override suspend fun deleteGoal(id: String) {}
     override suspend fun getSmsMessages() = emptyList<SmsMessage>()
     override suspend fun getSms(id: String) = error("stub")
     override suspend fun parseSms(id: String) = error("stub")
@@ -137,4 +153,12 @@ open class NoOpRepository(
     override suspend fun restoreScreen(slug: String) =
         ScreenDefinition(slug = slug, version = 1, sections = emptyList())
     override suspend fun isScreenAdmin() = false
+    override suspend fun getUserProfile() = UserProfile(id = "usr-stub", email = "stub@movi.test", name = "Stub", avatarColor = AvatarPalette.DEFAULT)
+    override suspend fun updateUserProfile(request: UpdateProfileRequest) = UserProfile(
+        id = "usr-stub",
+        email = "stub@movi.test",
+        name = request.name ?: "Stub",
+        avatarColor = request.avatarColor ?: AvatarPalette.DEFAULT,
+    )
+    override suspend fun changePassword(request: ChangePasswordRequest) {}
 }

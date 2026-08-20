@@ -2,7 +2,10 @@ package com.jvillada.movi.server.routes
 
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
+import com.anthropic.models.messages.Base64ImageSource
 import com.anthropic.models.messages.CacheControlEphemeral
+import com.anthropic.models.messages.ContentBlockParam
+import com.anthropic.models.messages.ImageBlockParam
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
@@ -16,10 +19,12 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
+import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
@@ -65,7 +70,12 @@ Si la pregunta no se puede contestar con esos datos, dilo claramente y sugiere q
 Tono: directo, empático, accionable. No moralices sobre el gasto.
 Estructura: responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
 No uses emojis ni símbolos decorativos: la interfaz no los renderiza.
+
+F32: si el usuario te manda una foto de un recibo, un extracto o una oferta del banco, extrae lo relevante (montos, fechas, comercio o condiciones) y opina usando los datos del usuario en "DATOS DEL USUARIO".
 """
+
+/** F32: tope de peso decodificado de una imagen adjunta al chat (Claude cobra por tokens de imagen). */
+private const val MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024
 
 /**
  * Red de seguridad de F31: el [PERSONA] ya le pide al modelo que no mande emojis, pero esto
@@ -101,6 +111,15 @@ internal fun stripEmojis(text: String): String {
 fun Route.aiRoutes() {
     post("/api/ai/chat") {
         val body = call.receive<AiChatRequest>()
+
+        // F32: valida cualquier imagen adjunta ANTES de tocar el cliente de Claude o la DB —
+        // así el camino de error (mime malo, imagen muy grande) es testeable sin red ni
+        // ANTHROPIC_API_KEY, y el usuario se entera al toque en vez de esperar la llamada.
+        validateChatImages(body.messages)?.let { message ->
+            call.respond(HttpStatusCode.UnprocessableEntity, AiChatResponse(text = message))
+            return@post
+        }
+
         val client = anthropicClient
         if (client == null) {
             call.respond(
@@ -113,13 +132,7 @@ fun Route.aiRoutes() {
         }
 
         val context = buildUserContext(call.userId())
-        val messageParams = body.messages.map { m ->
-            val role = when (m.role) {
-                ChatRole.USER -> MessageParam.Role.USER
-                ChatRole.ASSISTANT -> MessageParam.Role.ASSISTANT
-            }
-            MessageParam.builder().role(role).content(m.content).build()
-        }
+        val messageParams = body.messages.map(::toMessageParam)
         if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
             call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
             return@post
@@ -158,6 +171,57 @@ fun Route.aiRoutes() {
                 )
             }
     }
+}
+
+/**
+ * F32: recorre los mensajes buscando adjuntos y devuelve el primer problema encontrado (o
+ * null si todo está bien). Mismos límites que /api/statements/upload: png/jpeg/webp/gif,
+ * máx. 5 MB ya decodificados — ahí Claude también cobra por tokens de imagen, así que el
+ * tope evita una llamada carísima además de un adjunto ilegible.
+ */
+internal fun validateChatImages(messages: List<ChatMessage>): String? {
+    for (m in messages) {
+        val b64 = m.imageBase64 ?: continue
+        val mime = m.imageMime
+        if (mime.isNullOrBlank()) return "Falta el tipo de la imagen adjunta."
+        if (ClaudeStatementParser.supportedImageMime(mime, "") == null) {
+            return "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP."
+        }
+        val bytes = runCatching { java.util.Base64.getDecoder().decode(b64) }.getOrNull()
+            ?: return "No pude leer la imagen adjunta."
+        if (bytes.size > MAX_CHAT_IMAGE_BYTES) {
+            return "La imagen pesa más de 5 MB. Sube una más liviana."
+        }
+    }
+    return null
+}
+
+/**
+ * Arma el [MessageParam] para un [ChatMessage]: si trae imagen (ya validada por
+ * [validateChatImages]), el bloque de imagen va primero y el texto después solo si el
+ * usuario escribió algo — mismo patrón que [ClaudeStatementParser.parseImage]. Sin imagen,
+ * el comportamiento es idéntico al de antes de F32 (contenido de solo texto).
+ */
+internal fun toMessageParam(m: ChatMessage): MessageParam {
+    val role = when (m.role) {
+        ChatRole.USER -> MessageParam.Role.USER
+        ChatRole.ASSISTANT -> MessageParam.Role.ASSISTANT
+    }
+    val builder = MessageParam.builder().role(role)
+    val mime = m.imageMime?.let { ClaudeStatementParser.supportedImageMime(it, "") }
+    val b64 = m.imageBase64
+    if (b64 == null || mime == null) {
+        return builder.content(m.content).build()
+    }
+    val imageSource = Base64ImageSource.builder()
+        .data(b64)
+        .mediaType(Base64ImageSource.MediaType.of(mime))
+        .build()
+    val blocks = buildList {
+        add(ContentBlockParam.ofImage(ImageBlockParam.builder().source(imageSource).build()))
+        if (m.content.isNotBlank()) add(ContentBlockParam.ofText(TextBlockParam.builder().text(m.content).build()))
+    }
+    return builder.contentOfBlockParams(blocks).build()
 }
 
 private suspend fun buildUserContext(uid: String): String {

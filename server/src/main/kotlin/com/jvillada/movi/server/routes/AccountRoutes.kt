@@ -6,6 +6,7 @@ import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
@@ -120,6 +121,10 @@ fun Route.accountRoutes() {
                 // este DELETE se escribiera): sin esto, borrar una tarjeta dejaba la fila de
                 // términos huérfana para siempre — justo lo que este comentario promete que no pasa.
                 Cards.deleteWhere { (Cards.accountId eq id) and (Cards.userId eq uid) }
+                // Y las metas ancladas a esta cuenta (goals nació en la Ola 6, después que este
+                // DELETE): una meta cuyo «ahorrado» sale del saldo de una cuenta borrada no
+                // significa nada — se va con ella.
+                Goals.deleteWhere { (Goals.accountId eq id) and (Goals.userId eq uid) }
                 Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
                 true
             }

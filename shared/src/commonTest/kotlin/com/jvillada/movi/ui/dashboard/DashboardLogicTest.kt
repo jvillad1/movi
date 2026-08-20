@@ -117,7 +117,7 @@ class DashboardLogicTest {
         credits = listOf(CreditSummary(Account("l1", "Carro", AccountType.LOAN, 10_000_000), terms = null, paidPct = null)),
         budgets = listOf(Budget("Mercado", 400_000)),
         spentByCategory = mapOf("Mercado" to 250_000L),
-        goals = listOf(Goal("Viaje", 5_000_000, 1_200_000, "2027-01-01", 300_000)),
+        goals = listOf(Goal(id = "g1", name = "Viaje", target = 5_000_000, accountId = "a1", targetDate = "2027-01-01", saved = 1_200_000)),
     )
 
     @Test
@@ -240,5 +240,40 @@ class DashboardLogicTest {
         assertEquals(false, onlyCredit.hasRecurringRule)
         val real = DashboardData(upcoming = listOf(upcoming("rr_1", "Colegio", 1, 3)))
         assertEquals(true, real.hasRecurringRule)
+    }
+
+    // ── F5: panel de notificaciones ─────────────────────────────────────────────
+
+    @Test
+    fun `sin nada pendiente el panel de notificaciones queda vacio`() {
+        assertTrue(notificationRows(DashboardData()).isEmpty())
+    }
+
+    @Test
+    fun `el panel combina pagos proximos y alertas, cada uno a su destino`() {
+        val d = DashboardData(
+            upcoming = listOf(
+                upcoming("rr_1", "Colegio", 700_000, daysUntil = 2),
+                upcoming("${CREDIT_RULE_PREFIX}l1", "Cuota Carro", 800_000, daysUntil = -1),
+                upcoming("${CARD_RULE_PREFIX}c1", "Pago Visa", 500_000, daysUntil = 0),
+                upcoming("r-lejos", "Gimnasio", 90_000, daysUntil = 20), // fuera de la ventana de 7 días
+            ),
+            budgets = listOf(Budget("Mercado", 100_000)),
+            spentByCategory = mapOf("Mercado" to 150_000L),
+            cardCandidates = 1,
+            pendingSms = 2,
+        )
+        val rows = notificationRows(d)
+        assertEquals(
+            listOf(
+                "Cuota Carro · Vencido ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
+                "Pago Visa · Vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
+                "Colegio · Vence en 2 días" to Screen.Recurrentes,    // regla real -> Recurrentes
+                "Presupuesto de Mercado superado" to Screen.Budgets,
+                "1 pago de tarjeta por confirmar" to Screen.Transactions,
+                "2 mensajes del banco por confirmar" to Screen.SMSInbox,
+            ),
+            rows.map { it.text to it.target },
+        )
     }
 }

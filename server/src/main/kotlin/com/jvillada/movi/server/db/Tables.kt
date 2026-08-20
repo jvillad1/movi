@@ -7,6 +7,10 @@ object Users : Table("users") {
     val email        = varchar("email", 255).uniqueIndex()
     val name         = varchar("name", 100)
     val passwordHash = varchar("password_hash", 255)
+    // F42 · F46: color del avatar de iniciales, uno de AvatarPalette.COLORS (:core). Nullable
+    // porque toda cuenta existente hoy no tiene ninguno — `UserRoutes.kt` cae a
+    // AvatarPalette.DEFAULT en la lectura, así que el cliente nunca ve `null`.
+    val avatarColor  = varchar("avatar_color", 7).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -191,6 +195,24 @@ object Subscriptions : Table("subscriptions") {
         index("idx_subscriptions_user_id", false, userId)
         uniqueIndex("uq_subscriptions_user_merchant_currency", userId, merchantKey, currency)
     }
+}
+
+/**
+ * F26 — metas de ahorro. `saved` NO vive acá: se deriva siempre del saldo de `account_id` (ver
+ * `GoalRoutes.kt` GET, que usa el mismo `accountCopValue` que ya calcula el balance de cuentas).
+ * Guardar un "ahorrado" aparte habría permitido que se desincronizara del saldo real — justo lo
+ * que el plan pidió evitar ("nada de aportes manuales: si la plata está en la cuenta, cuenta").
+ */
+object Goals : Table("goals") {
+    val id         = varchar("id", 50)
+    val userId     = varchar("user_id", 50)
+    val name       = varchar("name", 100)
+    val target     = long("target")
+    val accountId  = varchar("account_id", 50)
+    val targetDate = varchar("target_date", 10).nullable()   // ISO "2027-01-01"
+    val createdAt  = long("created_at")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_goals_user_id", false, userId) }
 }
 
 object Screens : Table("screen_definitions") {

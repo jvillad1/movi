@@ -191,6 +191,36 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
 
 private fun plural(n: Int, singular: String, plural: String) = "$n ${if (n == 1) singular else plural}"
 
+// ── F5: panel de notificaciones ────────────────────────────────────────────────────
+
+/** Una fila del panel de la campana: el texto y a dónde lleva tocarla. */
+data class NotificationRow(val text: String, val target: Screen)
+
+/**
+ * Todo lo que la campana muestra — una vista DERIVADA de los datos que el Inicio ya carga,
+ * sin modelo de notificaciones persistente ni "marcar leído". Combina los pagos que vencen
+ * pronto (cada uno a su propio destino, Recurrentes o Créditos según de qué regla venga) con
+ * las mismas alertas que ya calcula [dashboardAlerts] — candidatos de pago de tarjeta, SMS
+ * pendientes y presupuestos superados —, así el punto rojo y el panel nunca dicen algo que la
+ * campana no pueda resolver.
+ */
+fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
+    upcomingPaymentsWithin(data.upcoming).forEach { p ->
+        // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos (UpcomingPayment
+        // generado por el server, no una regla que viva en Recurrentes) — se resuelven en
+        // Créditos, no en Recurrentes.
+        val target = if (p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)) {
+            Screen.Credits
+        } else {
+            Screen.Recurrentes
+        }
+        add(NotificationRow("${p.rule.name} · ${dueLabel(p.daysUntil)}", target))
+    }
+    dashboardAlerts(
+        overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
+    ).forEach { add(NotificationRow(it.text, it.target)) }
+}
+
 // ── Secciones visibles ─────────────────────────────────────────────────────────────
 
 /**

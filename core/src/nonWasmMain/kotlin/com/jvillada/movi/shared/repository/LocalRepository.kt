@@ -11,6 +11,7 @@ import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
+import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.EventDay
@@ -37,6 +38,9 @@ import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.ChangePasswordRequest
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
@@ -384,6 +388,8 @@ class LocalRepository(
     override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
     override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = remote.updateSubscription(id, subscription)
     override suspend fun deleteSubscription(id: String) = remote.deleteSubscription(id)
+    // F38: alta manual — sin espejo local, misma razón que el resto de esta sección.
+    override suspend fun createSubscription(request: CreateSubscriptionRequest): Subscription = remote.createSubscription(request)
     // Propuesta de solo lectura, sin efecto secundario que espejar (a diferencia de
     // updateEventCategory/adjustCreditBalance arriba): delega directo, igual que el resto de
     // esta sección.
@@ -392,6 +398,11 @@ class LocalRepository(
     // toca la categoría del evento, así que no hay ninguna fila local que quedaría desactualizada.
     override suspend fun dismissCardPaymentCandidate(id: String) = remote.dismissCardPaymentCandidate(id)
     override suspend fun getGoals(): List<Goal> = remote.getGoals()
+    // F26: metas remote-only, igual que presupuestos/recurrentes — no hay flujo offline que
+    // las necesite todavía.
+    override suspend fun createGoal(goal: Goal): Goal = remote.createGoal(goal)
+    override suspend fun updateGoal(id: String, goal: Goal): Goal = remote.updateGoal(id, goal)
+    override suspend fun deleteGoal(id: String) = remote.deleteGoal(id)
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)
@@ -432,6 +443,13 @@ class LocalRepository(
         remote.restoreScreen(slug)
     override suspend fun isScreenAdmin(): Boolean =
         remote.isScreenAdmin()
+
+    // F42 · F46: sin espejo, a propósito — el perfil se lee siempre del server, igual que
+    // register/login arriba. No hay tabla local de usuario ni razón para tenerla: es una fila
+    // por persona, no datos que necesiten funcionar offline.
+    override suspend fun getUserProfile(): UserProfile = remote.getUserProfile()
+    override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
+    override suspend fun changePassword(request: ChangePasswordRequest) = remote.changePassword(request)
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
