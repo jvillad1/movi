@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -25,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.isAndroid
-import com.jvillada.movi.platform.rememberSmsSync
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -48,20 +46,6 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
     val goBack = LocalGoBack.current
     var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
-    var syncWorking by remember { mutableStateOf(false) }
-    var syncError by remember { mutableStateOf<String?>(null) }
-    val coroutine = rememberCoroutineScope()
-
-    val smsSync = rememberSmsSync { messages ->
-        coroutine.launch {
-            syncWorking = true
-            syncError = null
-            runCatching { Repositories.wallets.syncSms(messages) }
-                .onSuccess { refreshKey++ }
-                .onFailure { syncError = it.toUserMessage() }
-            syncWorking = false
-        }
-    }
 
     LaunchedEffect(refreshKey) {
         runCatching { Repositories.wallets.getSmsMessages() }
@@ -120,46 +104,12 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         )
                     }
                 }
-                if (smsSync.available) {
-                    Spacer(Modifier.height(10.dp))
-                    MinCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = MinCardVariant.Default,
-                        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-                        onClick = if (!syncWorking) smsSync.requestAndRead else null,
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    if (syncWorking) "Sincronizando…" else "Sincronizar SMS del teléfono",
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (syncWorking) MinTextMute else MinText,
-                                    letterSpacing = (-0.1).sp,
-                                )
-                                Text(
-                                    "Últimos 30 días · solo lectura",
-                                    fontSize = 11.5.sp,
-                                    color = MinTextMute,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                            if (syncWorking) {
-                                Text("…", fontSize = 18.sp, color = MinTextFaint)
-                            } else {
-                                Icon(Icons.Rounded.Upload, contentDescription = "Sincronizar", tint = MinPrimary, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        if (syncError != null) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(syncError!!, fontSize = 11.5.sp, color = MinExpense)
-                        }
-                    }
-                }
+                // Solo Android pinta algo acá: la configuración de la captura de SMS (permisos,
+                // hibernación, historial) que antes vivía en la pantalla del APK sensor.
+                // Reemplaza también a la vieja tarjeta "Sincronizar SMS del teléfono", que subía
+                // el inbox SIN el filtro bancario — el historial de la sección sí lo aplica, así
+                // que lo que no matchea nunca sale del teléfono.
+                SmsSensorSetupSection(onSynced = { refreshKey++ })
 
                 Spacer(Modifier.height(14.dp))
                 MinSectionHeader(title = "Bandeja", count = smsItems.size)

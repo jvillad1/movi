@@ -16,8 +16,9 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         // El APK es de instalación única pero sideloaded: sin bump, un instalador
         // consciente de versiones rechaza la actualización por "misma versión".
-        versionCode = 3
-        versionName = "1.2"
+        // 1.3: la app deja de ser solo el sensor — MainActivity monta la app completa.
+        versionCode = 4
+        versionName = "1.3"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -56,8 +57,7 @@ dependencies {
     implementation(compose.ui)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.work.runtime.ktx)
+    // Los tests del sensor se mudaron a :shared (androidUnitTest) junto con el código;
+    // acá solo quedan receivers/workers sin tests propios.
     testImplementation(kotlin("test"))
-    // JVM unit tests only (not shipped in the APK): AGP's mockable android.jar stubs
-    // org.json to throw at runtime, so real parsing needs the real implementation here.
-    testImplementation(libs.org.json)
 }

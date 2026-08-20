@@ -91,9 +91,14 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         // Tests JVM de los `actual` de Android (p.ej. el reloj del backfill de SMS en
-        // platform/SmsReader.android.kt). Corren con ./gradlew :shared:testDebugUnitTest.
+        // platform/SmsReader.android.kt y el subsistema del sensor en sms/ y sensor/).
+        // Corren con ./gradlew :shared:testDebugUnitTest.
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
+            // Solo para los tests (no viaja en el AAR): el android.jar mockeable de AGP
+            // stubbea org.json para tirar en runtime, así que parsear de verdad
+            // (SmsSync/SmsFilterConfigStore) necesita la implementación real.
+            implementation(libs.org.json)
         }
     }
 }

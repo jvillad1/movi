@@ -1,18 +1,9 @@
 package com.jvillada.movi.platform
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.provider.Telephony
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.jvillada.movi.shared.model.SmsMessage
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -216,38 +207,4 @@ suspend fun readDeviceSms(context: Context): List<SmsMessage> = withContext(Disp
         }
     }
     results
-}
-
-// ── Composable actual ──────────────────────────────────────────────────────────
-
-@Composable
-actual fun rememberSmsSync(onResult: (List<SmsMessage>) -> Unit): SmsSyncController {
-    val context = LocalContext.current
-    val scope   = rememberCoroutineScope()
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            scope.launch {
-                val messages = readDeviceSms(context)
-                onResult(messages)
-            }
-        }
-    }
-
-    val requestAndRead = {
-        val already = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS)
-        if (already == PackageManager.PERMISSION_GRANTED) {
-            scope.launch {
-                val messages = readDeviceSms(context)
-                onResult(messages)
-            }
-        } else {
-            permissionLauncher.launch(Manifest.permission.READ_SMS)
-        }
-        Unit
-    }
-
-    return SmsSyncController(available = true, requestAndRead = requestAndRead)
 }

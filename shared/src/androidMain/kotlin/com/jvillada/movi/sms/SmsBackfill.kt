@@ -46,7 +46,7 @@ object SmsBackfill {
             }
             SmsSyncResult.Unauthorized -> {
                 // Mismo tratamiento que el Worker: marcamos el vencimiento y cerramos
-                // sesión para que la tarjeta de SESIÓN muestre el aviso y el login.
+                // sesión — la app navega sola a LoginScreen al ver loggedIn=false.
                 SmsFilterConfigStore.markAuthExpired(context)
                 SessionManager.clear()
                 BackfillOutcome.SessionExpired
