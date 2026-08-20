@@ -3,7 +3,7 @@
 #
 # El nombre incluye versión, build y commit para que mirando el archivo se sepa
 # exactamente qué código corre en el teléfono:
-#   movi-sensor-1.2-build3-47634b4.apk
+#   movi-1.2-dea0d20.apk  (nombre de app + versión + commit; «-sucio» si hay cambios sin commitear)
 #
 # Uso:
 #   ./scripts/build-apk.sh          # compila y copia a Drive
@@ -23,7 +23,9 @@ SHA=$(git rev-parse --short HEAD)
 DIRTY=""
 [ -n "$(git status --porcelain -- androidApp shared core server 2>/dev/null)" ] && DIRTY="-sucio"
 
-NAME="movi-sensor-${VERSION}-build${BUILD}-${SHA}${DIRTY}.apk"
+# Sin «sensor» (reliquia de cuando el APK era solo la app del sensor de SMS) y sin
+# «buildN» (el versionCode casi nunca cambia; el commit es la trazabilidad real).
+NAME="movi-${VERSION}-${SHA}${DIRTY}.apk"
 
 echo "Compilando ${NAME}…"
 ./gradlew :androidApp:assembleDebug -q
