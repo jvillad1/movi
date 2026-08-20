@@ -171,6 +171,11 @@ enum class ChatRole { USER, ASSISTANT }
 data class ChatMessage(
     val role: ChatRole,
     val content: String,
+    // F32: adjunto opcional — foto de un recibo, extracto u oferta del banco. Nulo en casi
+    // todos los mensajes; el default mantiene compatibilidad de red con clientes viejos que
+    // solo mandan role+content (ver ChatModelTest).
+    val imageBase64: String? = null,
+    val imageMime: String? = null,
 )
 
 @Serializable

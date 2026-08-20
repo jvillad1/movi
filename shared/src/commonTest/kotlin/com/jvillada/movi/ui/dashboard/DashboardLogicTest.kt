@@ -241,4 +241,39 @@ class DashboardLogicTest {
         val real = DashboardData(upcoming = listOf(upcoming("rr_1", "Colegio", 1, 3)))
         assertEquals(true, real.hasRecurringRule)
     }
+
+    // ── F5: panel de notificaciones ─────────────────────────────────────────────
+
+    @Test
+    fun `sin nada pendiente el panel de notificaciones queda vacio`() {
+        assertTrue(notificationRows(DashboardData()).isEmpty())
+    }
+
+    @Test
+    fun `el panel combina pagos proximos y alertas, cada uno a su destino`() {
+        val d = DashboardData(
+            upcoming = listOf(
+                upcoming("rr_1", "Colegio", 700_000, daysUntil = 2),
+                upcoming("${CREDIT_RULE_PREFIX}l1", "Cuota Carro", 800_000, daysUntil = -1),
+                upcoming("${CARD_RULE_PREFIX}c1", "Pago Visa", 500_000, daysUntil = 0),
+                upcoming("r-lejos", "Gimnasio", 90_000, daysUntil = 20), // fuera de la ventana de 7 días
+            ),
+            budgets = listOf(Budget("Mercado", 100_000)),
+            spentByCategory = mapOf("Mercado" to 150_000L),
+            cardCandidates = 1,
+            pendingSms = 2,
+        )
+        val rows = notificationRows(d)
+        assertEquals(
+            listOf(
+                "Cuota Carro · Vencido ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
+                "Pago Visa · Vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
+                "Colegio · Vence en 2 días" to Screen.Recurrentes,    // regla real -> Recurrentes
+                "Presupuesto de Mercado superado" to Screen.Budgets,
+                "1 pago de tarjeta por confirmar" to Screen.Transactions,
+                "2 mensajes del banco por confirmar" to Screen.SMSInbox,
+            ),
+            rows.map { it.text to it.target },
+        )
+    }
 }

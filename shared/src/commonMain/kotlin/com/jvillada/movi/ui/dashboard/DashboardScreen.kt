@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -30,6 +31,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.notifications.NotificationsPanel
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -60,8 +62,11 @@ fun DashboardScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
     var screenDef by remember { mutableStateOf<ScreenDefinition?>(ScreenDefCache.dashboard) }
     val snackbarHostState = remember { SnackbarHostState() }
+    // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
+    val notifications = notificationRows(data)
 
     LaunchedEffect(refreshKey) {
         loading = true
@@ -142,9 +147,24 @@ fun DashboardScreen(
                     AvatarButton(onClick = { onNavigate(Screen.Profile) })
                     Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                 }
-                // F5: la campana se sacó por completo. Antes disparaba siempre un snackbar
-                // "Sin notificaciones por ahora" y mostraba un punto rojo fijo aunque nunca
-                // hubiera nada nuevo. Vuelve cuando exista el panel (Ola 6).
+                // F5: la campana vuelve con contenido real — antes disparaba siempre un
+                // snackbar "Sin notificaciones por ahora" y el punto rojo era fijo, sin
+                // relación con si de verdad había algo. Ahora el punto solo aparece cuando
+                // `notifications` no está vacío.
+                Box {
+                    Icon(
+                        Icons.Rounded.Notifications,
+                        contentDescription = "Notificaciones",
+                        tint = MinText,
+                        modifier = Modifier.size(22.dp).clickable { showNotifications = true },
+                    )
+                    if (notifications.isNotEmpty()) {
+                        StatusDot(
+                            color = MinExpense,
+                            modifier = Modifier.align(Alignment.TopEnd),
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(8.dp))
@@ -184,6 +204,14 @@ fun DashboardScreen(
             CreateAccountSheet(
                 onDismiss = { showCreateSheet = false },
                 onAccountCreated = { showCreateSheet = false; refreshKey++ },
+            )
+        }
+
+        if (showNotifications) {
+            NotificationsPanel(
+                rows = notifications,
+                onDismiss = { showNotifications = false },
+                onRowClick = onNavigate,
             )
         }
     }
