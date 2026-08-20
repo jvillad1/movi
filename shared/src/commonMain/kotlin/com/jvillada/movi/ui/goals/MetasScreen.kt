@@ -83,7 +83,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
 
         val totalSaved  = goals.sumOf { it.saved }
         val totalTarget = goals.sumOf { it.target }
-        val overallPct  = if (totalTarget > 0) (totalSaved.toFloat() / totalTarget.toFloat()).coerceAtMost(1f) else 0f
+        val overallPct  = if (totalTarget > 0) (totalSaved.toFloat() / totalTarget.toFloat()).coerceIn(0f, 1f) else 0f
         val pctLabel    = "${(overallPct * 100).toInt()}%"
 
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
@@ -146,7 +146,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         goals.forEach { g ->
-                            val pct = if (g.target > 0) (g.saved.toFloat() / g.target.toFloat()).coerceAtMost(1f) else 0f
+                            val pct = if (g.target > 0) (g.saved.toFloat() / g.target.toFloat()).coerceIn(0f, 1f) else 0f
                             val done = g.target > 0 && g.saved >= g.target
                             MinCard(
                                 modifier = Modifier.fillMaxWidth().clickable {

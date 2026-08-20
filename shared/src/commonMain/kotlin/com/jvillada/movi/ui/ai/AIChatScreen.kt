@@ -65,6 +65,11 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
     val launchPicker = rememberFilePicker { fileName, bytes, mimeType ->
         if (!mimeType.startsWith("image/")) {
             attachError = "Por ahora solo imágenes"
+        } else if (bytes.size > 5 * 1024 * 1024) {
+            // El mismo techo que valida el server. Rechazar acá y no allá importa: el server
+            // rechaza el HISTORIAL completo en cada envío, así que una imagen grande que llegara
+            // a entrar al chat lo dejaba respondiendo el mismo 422 para siempre.
+            attachError = "La imagen pesa más de 5 MB — prueba con una captura más liviana"
         } else {
             attachError = null
             pendingImage = PendingImage(fileName, bytes, mimeType)
