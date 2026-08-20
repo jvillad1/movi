@@ -3,7 +3,7 @@
 #
 # El nombre incluye versión, build y commit para que mirando el archivo se sepa
 # exactamente qué código corre en el teléfono:
-#   movi-1.2-dea0d20.apk  (nombre de app + versión + commit; «-sucio» si hay cambios sin commitear)
+#   movi-debug-1.2.apk  (app + buildType + versión; «-sucio» si hay cambios sin commitear)
 #
 # Uso:
 #   ./scripts/build-apk.sh          # compila y copia a Drive
@@ -23,11 +23,12 @@ SHA=$(git rev-parse --short HEAD)
 DIRTY=""
 [ -n "$(git status --porcelain -- androidApp shared core server 2>/dev/null)" ] && DIRTY="-sucio"
 
-# Sin «sensor» (reliquia de cuando el APK era solo la app del sensor de SMS) y sin
-# «buildN» (el versionCode casi nunca cambia; el commit es la trazabilidad real).
-NAME="movi-${VERSION}-${SHA}${DIRTY}.apk"
+# Esquema elegido por el dueño (2026-08-20): app + buildType + versión. El commit ya no va en
+# el nombre — queda impreso abajo al compilar, así la trazabilidad vive en el log y en git.
+BUILD_TYPE="debug"
+NAME="movi-${BUILD_TYPE}-${VERSION}${DIRTY}.apk"
 
-echo "Compilando ${NAME}…"
+echo "Compilando ${NAME}… (commit ${SHA})"
 ./gradlew :androidApp:assembleDebug -q
 SRC=androidApp/build/outputs/apk/debug/androidApp-debug.apk
 OUT="androidApp/build/outputs/apk/debug/${NAME}"
