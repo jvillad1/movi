@@ -53,6 +53,7 @@ import com.jvillada.movi.sms.BackfillOutcome
 import com.jvillada.movi.sms.SmsBackfill
 import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.backfillMessage
+import com.jvillada.movi.sms.captureOutageNotice
 import com.jvillada.movi.sms.isBackfillError
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MinExpense
@@ -61,6 +62,7 @@ import com.jvillada.movi.theme.MinPrimary
 import com.jvillada.movi.theme.MinSurfaceContainerHigh
 import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextMute
+import com.jvillada.movi.theme.MinWarn
 import com.jvillada.movi.ui.auth.noRippleClickable
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -84,10 +86,13 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
     // necesitan.
     val installSource = remember(context) { readInstallSource(context) }
 
-    // La marca de "sesión vencida" apuntaba al login propio del sensor. Esta sección solo
-    // se pinta con sesión activa (la app sin sesión vive en LoginScreen), así que llegar
-    // acá logueado ya es la prueba de que se volvió a entrar: se limpia la marca, como
-    // hacía el login del sensor.
+    // La marca de 401 (KEY_AUTH_ERROR_AT) se lee ANTES de limpiarla: es el "desde cuándo"
+    // del aviso de pausa que muestra la tarjeta de historial. Esta sección solo se pinta
+    // con sesión activa (la app sin sesión vive en LoginScreen), así que llegar acá
+    // logueado ya es la prueba de que se volvió a entrar: la marca se limpia para la
+    // próxima, pero el aviso queda en pantalla lo que dure esta composición — sin el
+    // remember, limpiar la marca lo apagaría antes de que alguien lo lea.
+    val outageSince = remember { SmsFilterConfigStore.authErrorAt(context) }
     LaunchedEffect(Unit) {
         if (SessionManager.loggedIn) SmsFilterConfigStore.clearAuthExpired(context)
     }
@@ -99,7 +104,7 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
     // dejar un hueco doble cuando la app ya está exenta.
     SensorHibernationCard()
     Spacer(Modifier.height(10.dp))
-    SensorBackfillCard(installSource, onSynced)
+    SensorBackfillCard(installSource, outageSince, onSynced)
 }
 
 @Composable
@@ -254,7 +259,7 @@ private fun SensorHibernationCard() {
  * del teléfono.
  */
 @Composable
-private fun SensorBackfillCard(installSource: InstallSource, onSynced: () -> Unit) {
+private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, onSynced: () -> Unit) {
     val context = LocalContext.current
     val activity = remember(context) { context.findComponentActivity() }
     val scope = rememberCoroutineScope()
@@ -316,6 +321,13 @@ private fun SensorBackfillCard(installSource: InstallSource, onSynced: () -> Uni
     val toSettings = !canRead && (activity == null || shouldOpenSettings(asked, rationale))
 
     MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+        if (outageSince > 0L) {
+            // m2: quien fue deslogueado por el Worker aterrizó en un login genérico sin
+            // saber que la captura estuvo muda. Este es el único lector de la marca, y el
+            // remedio (el historial) está justo abajo.
+            Text(captureOutageNotice(outageSince), fontSize = 12.5.sp, color = MinWarn)
+            Spacer(Modifier.height(10.dp))
+        }
         Text(
             "Sube los SMS bancarios de los últimos 30 días que sigan en el teléfono. " +
                 "Sirve para recuperar lo que la captura automática no alcanzó a mandar.",
@@ -412,3 +424,18 @@ private fun SensorButton(
 private fun formatCaptureDate(millis: Long, vacio: String = "nunca"): String =
     if (millis <= 0L) vacio
     else SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(millis))
+
+/**
+ * Actual Android: el permiso de SMS es la única condición que puede faltar acá — la
+ * pantalla que consume esto ya exige sesión, y una revocación por hibernación también se
+ * manifiesta como permiso ausente. Se relee al volver a la pantalla por la misma razón que
+ * las tarjetas de la sección: lo concedido en ajustes del sistema no avisa.
+ */
+@Composable
+actual fun rememberSmsCaptureReady(): Boolean {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findComponentActivity() }
+    var granted by remember { mutableStateOf(hasSmsPermissions(context)) }
+    OnResume(activity) { granted = hasSmsPermissions(context) }
+    return granted
+}

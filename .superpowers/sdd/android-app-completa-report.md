@@ -105,3 +105,33 @@ Verificado con capturas (`/tmp/movi-*.png`, copias en `.superpowers/sdd/movi-*.p
   alineado con el dedupe del server.
 - Durante la sesión el árbol compartido cambió de rama un momento (stash de coordinación); las
   movidas se rehicieron y el commit incluye SOLO los archivos de esta tarea, por nombre.
+
+## Correcciones de la revisión (commit posterior)
+
+- **M1** — El 401 del sync en background ya no cierra sesión directo: `SmsSyncWorker` y
+  `SmsBackfill` rutean por `SessionManager.onUnauthorized()` (racha de 3), manteniendo
+  `markAuthExpired`. En el Worker, mientras la sesión sobreviva, `Result.retry()` acotado
+  (`runAttemptCount < MAX_AUTH_ATTEMPTS = 5` — el tope importa porque la racha vive en
+  memoria y un proceso nuevo la reinicia) para no perder ese SMS. En el backfill, un 401
+  con sesión viva devuelve el outcome nuevo `AuthRetry` («El servidor rechazó la sesión
+  esta vez — prueba de nuevo en un momento»); `SessionExpired` queda solo para cuando la
+  racha de verdad cerró la sesión. Además el branch Success del Worker limpia
+  `KEY_AUTH_ERROR_AT`: si la captura volvió a subir, la pausa terminó.
+- **m2** — La marca ganó su lector: la sección lee `authErrorAt` ANTES de limpiarla
+  (`remember`, así el texto sobrevive a la limpieza durante la composición) y la tarjeta
+  de historial muestra «La captura estuvo pausada por un problema de sesión desde el
+  dd/MM/yyyy HH:mm — sincroniza el historial para recuperar lo que haya llegado en ese
+  tiempo» (`captureOutageNotice`, función pura con test).
+- **m3** — Comentario del Worker actualizado: ya no promete una SensorScreen que no
+  existe; describe la racha y el logout global real.
+- **m4** — «AUTO-LECTURA ACTIVA» condicionado al estado real vía nuevo expect/actual
+  `rememberSmsCaptureReady()` (Android: permiso de SMS releído OnResume; iOS/wasm: false,
+  nunca visible porque el rótulo solo se pinta con `isAndroid`). Sin permiso el rótulo
+  dice «CAPTURA PENDIENTE DE PERMISO» (MinWarn) y el cuerpo manda a la sección de abajo.
+- TDD: los dos tests nuevos de `BackfillMessageTest` (AuthRetry y aviso de pausa) se
+  escribieron primero y fallaron en rojo antes de implementar.
+- Verificación: `:shared:testDebugUnitTest` (7 casos en BackfillMessageTest, todos verdes),
+  `:core:jvmTest` (VoseoScan sobre los textos nuevos), `:webApp:compileKotlinWasmJs`,
+  `:shared:compileKotlinIosSimulatorArm64`, `:androidApp:assembleDebug` — BUILD SUCCESSFUL.
+  No se repitió la prueba de emulador para estas correcciones (lógica fina cubierta por
+  tests; la UI nueva es un texto condicional).

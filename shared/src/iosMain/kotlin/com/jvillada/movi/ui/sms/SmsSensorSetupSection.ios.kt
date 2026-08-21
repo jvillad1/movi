@@ -6,3 +6,6 @@ import androidx.compose.runtime.Composable
 @Composable
 actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
 }
+
+@Composable
+actual fun rememberSmsCaptureReady(): Boolean = false

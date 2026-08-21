@@ -87,10 +87,25 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                     // no hay ninguna lectura pasando, solo la revisión de lo que el teléfono ya
                     // subió.
                     if (isAndroid) {
-                        Text("AUTO-LECTURA ACTIVA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 1.4.sp, fontWeight = FontWeight.Medium)
+                        // m4: el rótulo responde al estado real. Con sesión garantizada
+                        // por la pantalla, lo único que puede faltar es el permiso de SMS
+                        // — y si falta, afirmar "ACTIVA" contradiría a la sección de
+                        // captura de abajo, que es donde se arregla.
+                        val captureReady = rememberSmsCaptureReady()
+                        Text(
+                            if (captureReady) "AUTO-LECTURA ACTIVA" else "CAPTURA PENDIENTE DE PERMISO",
+                            fontSize = 11.sp,
+                            color = if (captureReady) MinTextMute else MinWarn,
+                            letterSpacing = 1.4.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Movi lee tus SMS bancarios automáticamente. Revisa los pendientes para confirmar comercios o categoría.",
+                            if (captureReady) {
+                                "Movi lee tus SMS bancarios automáticamente. Revisa los pendientes para confirmar comercios o categoría."
+                            } else {
+                                "Movi puede leer tus SMS bancarios automáticamente, pero falta el permiso: concédelo en la sección de abajo para activar la captura."
+                            },
                             fontSize = 13.5.sp,
                             color = MinText,
                             lineHeight = 19.sp,

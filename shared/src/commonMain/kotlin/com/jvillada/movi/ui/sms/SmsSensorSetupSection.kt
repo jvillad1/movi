@@ -17,3 +17,13 @@ import androidx.compose.runtime.Composable
  */
 @Composable
 expect fun SmsSensorSetupSection(onSynced: () -> Unit)
+
+/**
+ * ¿La captura automática puede correr AHORA en esta plataforma? Solo Android puede decir
+ * que sí (permiso de SMS concedido, releído al volver de ajustes); iOS/web devuelven false
+ * siempre — pero ahí [SMSInboxScreen] ni siquiera pinta el rótulo de auto-lectura, así que
+ * ese false nunca llega a una pantalla. Existe para que la tarjeta de arriba no afirme
+ * «AUTO-LECTURA ACTIVA» mientras la sección de abajo dice que falta el permiso.
+ */
+@Composable
+expect fun rememberSmsCaptureReady(): Boolean
