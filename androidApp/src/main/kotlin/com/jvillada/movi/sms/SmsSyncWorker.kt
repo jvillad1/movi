@@ -31,6 +31,12 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
         when (val result = postSmsSync(token, payload)) {
             is SmsSyncResult.Success -> {
+                // Reset de la racha de 401: este camino sube por HttpURLConnection, no por
+                // el pipeline Ktor que llama onAuthSuccess() solo. Sin esto, dos 401s
+                // transitorios recuperados con semanas de distancia contarían como
+                // "consecutivos" y desloguearían por sorpresa — justo el perfil del
+                // teléfono-sensor que vive semanas sin abrir la app.
+                SessionManager.onAuthSuccess()
                 SmsFilterConfigStore.markLastCapture(applicationContext)
                 // La captura volvió a subir: si quedó una marca de 401 de un episodio
                 // anterior, ya no describe la realidad — sin esto, la sección de captura

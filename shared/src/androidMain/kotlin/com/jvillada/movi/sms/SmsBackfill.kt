@@ -36,6 +36,10 @@ object SmsBackfill {
         )
         when (val result = postSmsSync(token, payload)) {
             is SmsSyncResult.Success -> {
+                // Mismo reset que el Worker: fuera del pipeline Ktor nadie más corta la
+                // racha de 401, y una racha que no se corta convierte transitorios viejos
+                // en un logout "consecutivo".
+                SessionManager.onAuthSuccess()
                 // OJO: NO markLastCapture acá. Esa marca significa "el receiver en tiempo
                 // real anduvo" — es el indicador de que el sensor sigue mudo (token vencido,
                 // force-stop, hibernación). Si el backfill la pisara, una sincronización

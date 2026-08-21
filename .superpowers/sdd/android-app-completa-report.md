@@ -135,3 +135,17 @@ Verificado con capturas (`/tmp/movi-*.png`, copias en `.superpowers/sdd/movi-*.p
   `:shared:compileKotlinIosSimulatorArm64`, `:androidApp:assembleDebug` — BUILD SUCCESSFUL.
   No se repitió la prueba de emulador para estas correcciones (lógica fina cubierta por
   tests; la UI nueva es un texto condicional).
+
+## Seguimientos del re-review (commit posterior)
+
+- `SessionManager.onAuthSuccess()` en los branch Success de `SmsSyncWorker` y `SmsBackfill`:
+  el camino HttpURLConnection no pasa por el pipeline Ktor, así que nadie cortaba la racha
+  de 401 — dos transitorios recuperados con semanas de distancia contaban como
+  "consecutivos" y deslogueaban por sorpresa (el perfil exacto del teléfono-sensor).
+- `rememberSaveable` (no `remember`) para `authErrorAt` en la sección: vive en un `item{}`
+  de la LazyColumn y con bandeja larga el scroll la descarta; un `remember` pelado se
+  re-ejecutaba contra la pref ya limpiada y el aviso moría en mitad de la visita.
+- `markAuthExpired` first-write-wins (escribe solo si la marca está en 0): el «desde
+  dd/MM/yyyy HH:mm» ahora es el inicio real de la pausa, no el último 401 del episodio —
+  Success y re-login limpian la marca, así que la próxima escritura vuelve a ser un inicio.
+- Verificación: `:shared:testDebugUnitTest` y `:androidApp:assembleDebug` — BUILD SUCCESSFUL.

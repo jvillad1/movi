@@ -138,8 +138,17 @@ object SmsFilterConfigStore {
 
     fun lastBackfillAt(context: Context): Long = prefs(context).getLong(KEY_LAST_BACKFILL_AT, 0L)
 
+    /**
+     * First-write-wins: la marca es el INICIO de la pausa — es lo que
+     * `captureOutageNotice` muestra como «desde dd/MM/yyyy HH:mm». Cada 401 posterior del
+     * mismo episodio NO debe correrla hacia adelante; como el Success del Worker y el
+     * re-login la limpian, la próxima escritura vuelve a ser un inicio real.
+     */
     fun markAuthExpired(context: Context) {
-        prefs(context).edit().putLong(KEY_AUTH_ERROR_AT, System.currentTimeMillis()).apply()
+        val p = prefs(context)
+        if (p.getLong(KEY_AUTH_ERROR_AT, 0L) == 0L) {
+            p.edit().putLong(KEY_AUTH_ERROR_AT, System.currentTimeMillis()).apply()
+        }
     }
 
     fun clearAuthExpired(context: Context) {

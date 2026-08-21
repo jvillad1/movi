@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,9 +91,11 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
     // del aviso de pausa que muestra la tarjeta de historial. Esta sección solo se pinta
     // con sesión activa (la app sin sesión vive en LoginScreen), así que llegar acá
     // logueado ya es la prueba de que se volvió a entrar: la marca se limpia para la
-    // próxima, pero el aviso queda en pantalla lo que dure esta composición — sin el
-    // remember, limpiar la marca lo apagaría antes de que alguien lo lea.
-    val outageSince = remember { SmsFilterConfigStore.authErrorAt(context) }
+    // próxima, pero el aviso queda en pantalla lo que dure esta visita. rememberSaveable,
+    // no remember: la sección vive en un item{} de la LazyColumn y con bandeja larga el
+    // scroll la descarta — un remember pelado se re-ejecutaría contra la pref ya limpiada
+    // y el aviso desaparecería en mitad de la misma visita.
+    val outageSince = rememberSaveable { SmsFilterConfigStore.authErrorAt(context) }
     LaunchedEffect(Unit) {
         if (SessionManager.loggedIn) SmsFilterConfigStore.clearAuthExpired(context)
     }
