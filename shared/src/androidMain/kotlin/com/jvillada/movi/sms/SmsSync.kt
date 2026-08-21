@@ -23,12 +23,13 @@ import java.util.Locale
  * `Telephony.Sms.DATE_SENT` cuando es creíble contra `Telephony.Sms.DATE`, cayendo a
  * `DATE` si no lo es (`effectiveSmsTime` en `SmsReader.android.kt`) — así que los dos
  * caminos apuntan al mismo reloj, el del banco, cuando `DATE_SENT` está poblado y es
- * plausible. La tolerancia del server (`SMS_DEDUPE_TOLERANCE`) sigue existiendo para
+ * plausible. Los tipos y funciones de este archivo son públicos porque uno de esos dos
+ * llamadores (SmsSyncWorker) vive en :androidApp, al otro lado de la frontera del módulo. La tolerancia del server (`SMS_DEDUPE_TOLERANCE`) sigue existiendo para
  * cuando eso no pasa (`DATE_SENT` ausente o descartado) además del truncado a minuto — si
  * cambiás cualquiera de los dos relojes o la guarda de cordura, hay que revisarla. No
  * agregar un segundo uploader.
  */
-internal data class SmsSyncItem(
+data class SmsSyncItem(
     val id: String,
     /** Formato del wire: "yyyy-MM-dd HH:mm". */
     val time: String,
@@ -37,7 +38,7 @@ internal data class SmsSyncItem(
 )
 
 /** Item del camino de captura: normaliza timestamp y remitente al formato del wire. */
-internal fun captureItem(id: String, sender: String, body: String, ts: Long) = SmsSyncItem(
+fun captureItem(id: String, sender: String, body: String, ts: Long) = SmsSyncItem(
     id = id,
     time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ts)),
     // SimpleDateFormat no es thread-safe: se construye por llamada a propósito.
@@ -49,7 +50,7 @@ internal fun captureItem(id: String, sender: String, body: String, ts: Long) = S
  * Serializa el lote. `bank` en blanco → "SMS": el remitente vacío del inbox y el del
  * broadcast tienen que verse igual del lado del server.
  */
-internal fun buildSmsSyncPayload(items: List<SmsSyncItem>): String {
+fun buildSmsSyncPayload(items: List<SmsSyncItem>): String {
     val array = JSONArray()
     for (item in items) {
         array.put(
@@ -65,7 +66,7 @@ internal fun buildSmsSyncPayload(items: List<SmsSyncItem>): String {
     return array.toString()
 }
 
-internal sealed interface SmsSyncResult {
+sealed interface SmsSyncResult {
     /** [synced] es lo que el server dice haber insertado; null si la respuesta no se pudo leer. */
     data class Success(val synced: Int?) : SmsSyncResult
 
@@ -87,7 +88,7 @@ internal fun parseSyncedCount(body: String?): Int? =
     body?.let { runCatching { JSONObject(it).getInt("synced") }.getOrNull() }
 
 /** POST bloqueante — llamar SIEMPRE desde un hilo de IO. */
-internal fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
+fun postSmsSync(token: String, payload: String): SmsSyncResult = try {
     val conn = URL("$apiBaseUrl/api/sms/sync").openConnection() as HttpURLConnection
     try {
         conn.requestMethod = "POST"

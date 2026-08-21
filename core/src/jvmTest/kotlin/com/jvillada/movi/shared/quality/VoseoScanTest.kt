@@ -17,8 +17,9 @@ import kotlin.test.fail
  *   Compose).
  * - `server/src/main/kotlin` (mensajes de error/éxito en las rutas y los correos que arma
  *   `PasswordResetMailer`; el usuario los ve igual que un texto de la UI).
- * - `androidApp/src/main/kotlin` (SensorScreen, SmsBackfill — la app sensor que corre en
- *   segundo plano).
+ * - `androidApp/src/main/kotlin` (receivers/workers de la captura de SMS).
+ * - `shared/src/androidMain/kotlin` (la sección «Captura de SMS» y los textos del backfill,
+ *   que se mudaron ahí desde androidApp cuando la app completa pasó a correr en el teléfono).
  * - `core/.../PasswordPolicy.kt` (el único mensaje de política de contraseña, compartido por
  *   servidor y clientes).
  *
@@ -143,6 +144,7 @@ class VoseoScanTest {
         scanHtmlFile(File(root, "webApp/src/wasmJsMain/resources/index.html"), root, violations)
         scanKotlinTree(File(root, "server/src/main/kotlin"), root, violations)
         scanKotlinTree(File(root, "androidApp/src/main/kotlin"), root, violations)
+        scanKotlinTree(File(root, "shared/src/androidMain/kotlin"), root, violations)
         scanKotlinFile(
             File(root, "core/src/commonMain/kotlin/com/jvillada/movi/shared/model/PasswordPolicy.kt"),
             root,

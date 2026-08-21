@@ -121,7 +121,7 @@ Targets: `android`, `iosX64/Arm64/SimulatorArm64`, `wasmJs`, `jvm`. Pure Kotlin 
 
 The Compose Multiplatform UI library. Source sets:
 - `commonMain` — all Compose UI screens and `App.kt` entry point. Uses `:core` for data types.
-- `androidMain` — Android `actual`s (`Platform.android`, `BackHandler.android`, `FilePicker`) using `ktor-client-android` + `activity-compose`. (The Android *application* — `MainActivity` — lives in `:androidApp`.)
+- `androidMain` — Android `actual`s (`Platform.android`, `BackHandler.android`, `FilePicker`, `SmsSensorSetupSection`) using `ktor-client-android` + `activity-compose`, plus the SMS-capture subsystem (`sms/` — bank filter, filter-config store, uploader, backfill — and `sensor/` — permission/hibernation helpers) shared with the receivers/workers in `:androidApp`. (The Android *application* — `MainActivity` — lives in `:androidApp`.)
 - `iosMain` — `MainViewController()` bridges to `ComposeUIViewController`; the iOS XCFramework (`baseName = "ComposeApp"`) is built from this module.
 - `wasmJsMain` — wasm `actual`s + `ktor-client-js`. (The wasm executable `main()` lives in `:webApp`.)
 
@@ -129,7 +129,7 @@ Ktor HTTP engine is platform-specific: `ktor-client-android` for Android, `ktor-
 
 ### androidApp module
 
-`com.android.application` (NOT multiplatform). Holds `MainActivity`, the `AndroidManifest.xml`, and `res/` (launcher icons, strings). `applicationId = com.jvillada.movi`; module `namespace = com.jvillada.movi.app`. `MainActivity` (Kotlin package `com.jvillada.movi`) calls `App()` from `:shared` and `DatabaseDriverFactory.init` from `:core`.
+`com.android.application` (NOT multiplatform). Holds `MainActivity`, the `AndroidManifest.xml`, `res/` (launcher icons, strings), and the SMS-capture receivers/workers (`SmsRealtimeReceiver`, `SmsSyncWorker`, `SmsFilterRefreshWorker`), which reuse the `sms/` logic that lives in `:shared`'s `androidMain`. `applicationId = com.jvillada.movi`; module `namespace = com.jvillada.movi.app`. `MainActivity` (Kotlin package `com.jvillada.movi`) calls `App()` from `:shared` and `DatabaseDriverFactory.init` from `:core` — the phone runs the full Movi app; the SMS-capture setup UI lives inside it (Mensajes del banco → «Captura en este teléfono»), not in a separate sensor screen.
 
 ### webApp module
 

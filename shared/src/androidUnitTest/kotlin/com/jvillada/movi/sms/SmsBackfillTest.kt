@@ -45,6 +45,27 @@ class SmsBackfillFilterTest {
 class BackfillMessageTest {
 
     @Test
+    fun `un 401 que no cerro la sesion avisa sin mandar a loguearse de nuevo`() {
+        // M1: con la racha de SessionManager, un 401 suelto ya no desloguea. El mensaje
+        // no puede decir "vuelve a entrar" (la sesión sigue viva) ni culpar a la conexión.
+        val text = backfillMessage(BackfillOutcome.AuthRetry)
+        assertTrue("prueba de nuevo" in text, text)
+        assertFalse("vuelve a entrar" in text, text)
+        assertFalse("conexión" in text, text)
+        assertTrue(isBackfillError(BackfillOutcome.AuthRetry))
+    }
+
+    @Test
+    fun `el aviso de pausa dice desde cuando y como recuperar`() {
+        // m2: quien fue deslogueado por el worker aterriza en un login genérico; al volver,
+        // la sección le cuenta que la captura estuvo muda y cuál es el remedio.
+        val text = captureOutageNotice(1755730860000L) // 2026-08-20 (hora local)
+        assertTrue("pausada" in text, text)
+        assertTrue(Regex("\\d{2}/\\d{2}/\\d{4}").containsMatchIn(text), text)
+        assertTrue("historial" in text.lowercase(), text)
+    }
+
+    @Test
     fun `subida con novedades dice cuantos encontro y cuantos eran nuevos`() {
         val text = backfillMessage(BackfillOutcome.Uploaded(found = 12, synced = 3))
         assertTrue("12" in text && "3" in text, text)
