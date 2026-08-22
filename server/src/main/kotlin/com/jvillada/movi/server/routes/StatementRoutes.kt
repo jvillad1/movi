@@ -40,9 +40,10 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.math.abs
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.appDateToEpochMillis
 
 fun Route.statementRoutes() {
 
@@ -101,7 +102,7 @@ fun Route.statementRoutes() {
             bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
             parsed = if (isFamirios) {
                 WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
-                    FamiriosParser.parse(wb, LocalDate.now(ZoneOffset.UTC))
+                    FamiriosParser.parse(wb, AppClock.today())
                 }
             } else {
                 ClaudeStatementParser.parse(text, Stores.merchantRules.getRules(uid))
@@ -132,7 +133,7 @@ fun Route.statementRoutes() {
 
         for (tx in parsed) {
             val parsedEpoch = runCatching {
-                LocalDate.parse(tx.date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+                appDateToEpochMillis(LocalDate.parse(tx.date))
             }.getOrNull()
 
             val match = if (parsedEpoch != null) {
@@ -303,8 +304,10 @@ fun Route.statementRoutes() {
 
 private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String, importId: String) {
     val eventId = "ev_${UUID.randomUUID()}"
+    // La fecha del extracto es un día civil de Bogotá: se sella a SU medianoche (no a la de
+    // UTC), para que al agrupar por día/mes vuelva a caer en el mismo día.
     val ts = runCatching {
-        LocalDate.parse(tx.date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        appDateToEpochMillis(LocalDate.parse(tx.date))
     }.getOrElse { System.currentTimeMillis() }
     dbQuery {
         Events.insert {
