@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
@@ -74,7 +75,7 @@ fun Route.dashboardRoutes() {
                 spentByCategory = spentByCategory,
                 cardPaymentCandidates = cardPaymentCandidateCount(uid, voidedIds, accountTypeById),
                 pendingSms = SmsMessages.select(SmsMessages.id.count())
-                    .where { (SmsMessages.userId eq uid) and (SmsMessages.state eq "pending") }
+                    .where { (SmsMessages.userId eq uid) and (SmsMessages.state eq SMS_STATE_PENDING) }
                     .single()[SmsMessages.id.count()].toInt(),
             )
         }

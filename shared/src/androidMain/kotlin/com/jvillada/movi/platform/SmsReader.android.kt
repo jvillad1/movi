@@ -2,6 +2,7 @@ package com.jvillada.movi.platform
 
 import android.content.Context
 import android.provider.Telephony
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -161,7 +162,7 @@ fun rowToSmsMessage(address: String?, date: Long, dateSent: Long, body: String?)
         time  = smsWireTime(effectiveSmsTime(dateSent = dateSent, date = date)),
         bank  = addr,
         text  = text,
-        state = "new",
+        state = SMS_STATE_PENDING,
         det   = "",
     )
 }

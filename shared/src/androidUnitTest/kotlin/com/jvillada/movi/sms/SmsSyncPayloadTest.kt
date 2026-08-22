@@ -1,5 +1,6 @@
 package com.jvillada.movi.sms
 
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import org.json.JSONArray
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,7 +15,9 @@ class SmsSyncPayloadTest {
         assertEquals("sms_rt_abc", obj.getString("id"))
         assertEquals("85540", obj.getString("bank"))
         assertEquals("Compra por \$1.000", obj.getString("text"))
-        assertEquals("new", obj.getString("state"))
+        // El server pisa el `state` que venga (es el dueño del estado), pero el payload manda el
+        // mismo nombre que usa todo el sistema: nada del lado del cliente habla de "new".
+        assertEquals(SMS_STATE_PENDING, obj.getString("state"))
         assertEquals("", obj.getString("det"))
     }
 

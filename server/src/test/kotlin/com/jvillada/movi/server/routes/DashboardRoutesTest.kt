@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
@@ -20,11 +21,18 @@ import com.jvillada.movi.server.time.currentMonthWindow
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
@@ -33,6 +41,7 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
@@ -50,7 +59,7 @@ import kotlin.test.assertEquals
  * todos los candidatos a pago de tarjeta, todos los eventos de la historia) para sacar un
  * número. Estos tests fijan que los números del resumen son EXACTAMENTE los que la pantalla
  * calculaba antes del lado del cliente — misma regla `isCashFlow` (apertura y pago de tarjeta
- * fuera, LOAN fuera, solo COP), mismo `looksLikeCardPayment`, mismo "pending" del inbox —
+ * fuera, LOAN fuera, solo COP), mismo `looksLikeCardPayment`, mismo `SMS_STATE_PENDING` del inbox —
  * y que todo queda aislado por usuario.
  *
  * Mismo arnés que AccountRoutesTest/FinanceRoutesTest: H2 en memoria (compat PostgreSQL),
@@ -80,11 +89,11 @@ class DashboardRoutesTest {
         transaction {
             SchemaUtils.drop(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals,
+                Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals,
+                Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
             )
             listOf(userId to "a@dashboard.test", otherUserId to "b@dashboard.test").forEach { (id, mail) ->
                 Users.insert {
@@ -276,13 +285,50 @@ class DashboardRoutesTest {
     @Test
     fun `cuenta solo los SMS en estado pending`() = testApplication {
         wireApp()
-        sms("s-1", "pending")
-        sms("s-2", "pending")
-        sms("s-3", "confirmed")
-        sms("s-4", "ignored")
-        sms("s-5", "new")
+        sms("s-1", SMS_STATE_PENDING)
+        sms("s-2", SMS_STATE_PENDING)
+        sms("s-3", SMS_STATE_CONFIRMED)
+        sms("s-4", SMS_STATE_IGNORED)
 
         assertEquals(2L, summary().long("pendingSms"))
+    }
+
+    /**
+     * El bug que cerró este test: la ingesta escribía `"new"` y todos los lectores filtraban
+     * por `"pending"`, así que un SMS capturado de verdad nunca disparaba la alerta del Inicio
+     * ni se podía abrir en la bandeja. Se ejercita el camino COMPLETO — sync real, no un insert
+     * a mano — porque el bug vivía justo en la costura entre quien escribe y quien lee.
+     */
+    @Test
+    fun `un SMS recien sincronizado cuenta en pendingSms y deja de contar al confirmarlo`() = testApplication {
+        wireApp()
+        val id = "sms_rt_deadbeefdeadbeef"
+        val body = """[{"id":"$id","time":"2026-08-01 10:00","bank":"Bancolombia",""" +
+            """"text":"Compra por ${'$'}50.000 en Netflix","state":"","det":""}]"""
+
+        val sync = client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.OK, sync.status, sync.bodyAsText())
+
+        // 1. El Inicio lo cuenta.
+        assertEquals(1L, summary().long("pendingSms"), "el SMS recién capturado tiene que contar como pendiente")
+
+        // 2. La bandeja lo muestra en el estado que habilita «Revisar».
+        val inbox = client.get("/api/sms") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}") }
+        assertEquals(HttpStatusCode.OK, inbox.status)
+        val row = Json.parseToJsonElement(inbox.bodyAsText()).jsonArray.single().jsonObject
+        assertEquals(id, row["id"]!!.jsonPrimitive.content)
+        assertEquals(SMS_STATE_PENDING, row["state"]!!.jsonPrimitive.content)
+
+        // 3. Tras confirmarlo deja de contar.
+        val confirm = client.post("/api/sms/$id/confirm") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        assertEquals(HttpStatusCode.OK, confirm.status)
+        assertEquals(0L, summary().long("pendingSms"))
     }
 
     @Test
@@ -290,7 +336,7 @@ class DashboardRoutesTest {
         wireApp()
         event("b-spent", "acc-b", "EXPENSE", 40_000L, uid = otherUserId)
         event("b-cand", "acc-b", "EXPENSE", 40_000L, category = "Otros", description = "Pago tarjeta", uid = otherUserId)
-        sms("b-sms", "pending", uid = otherUserId)
+        sms("b-sms", SMS_STATE_PENDING, uid = otherUserId)
 
         val a = summary()
         assertEquals(0L, a.long("monthSpent"))

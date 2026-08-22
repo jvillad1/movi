@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.rem
 import org.jetbrains.exposed.sql.Transaction
@@ -10,6 +12,9 @@ import org.jetbrains.exposed.sql.update
 private const val BOGOTA_OFFSET_MS = 5L * 3_600_000L
 private const val DAY_MS = 86_400_000L
 
+/** Nombre viejo del SMS recién llegado, reemplazado por `SMS_STATE_PENDING`. Solo lo usa la migración. */
+private const val LEGACY_SMS_STATE_NEW = "new"
+
 /**
  * Migraciones de datos que corren al arrancar, después del schema. Todas deben ser
  * idempotentes por construcción (correrlas dos veces no cambia nada la segunda).
@@ -17,6 +22,7 @@ private const val DAY_MS = 86_400_000L
 object Migrations {
     fun Transaction.runAll() {
         restampStatementEventsToBogota()
+        renameLegacyNewSmsStateToPending()
     }
 
     /**
@@ -34,5 +40,25 @@ object Migrations {
     fun Transaction.restampStatementEventsToBogota(): Int =
         Events.update({ (Events.eventSource eq "STATEMENT") and ((Events.timestamp rem DAY_MS) eq 0L) }) {
             it[timestamp] = timestamp + BOGOTA_OFFSET_MS
+        }
+
+    /**
+     * El SMS recién capturado tenía dos nombres: la ingesta (`POST /api/sms/sync`) escribía
+     * `"new"` y TODOS los lectores filtraban por `"pending"` — el contador del Inicio, el
+     * subtítulo de la bandeja y el botón «Revisar» de cada tarjeta. Resultado: los SMS
+     * capturados de verdad nunca disparaban la alerta «mensajes del banco por confirmar» y
+     * ni siquiera se podían abrir para conciliarlos.
+     *
+     * Ahora el único nombre es [SMS_STATE_PENDING]; esta migración pone al día las filas que
+     * quedaron con el nombre viejo. `"confirmed"` e `"ignored"` no se tocan: esos ya los
+     * decidió el dueño.
+     *
+     * Idempotente: la segunda corrida no encuentra ninguna fila en `"new"`.
+     *
+     * @return filas actualizadas
+     */
+    fun Transaction.renameLegacyNewSmsStateToPending(): Int =
+        SmsMessages.update({ SmsMessages.state eq LEGACY_SMS_STATE_NEW }) {
+            it[state] = SMS_STATE_PENDING
         }
 }

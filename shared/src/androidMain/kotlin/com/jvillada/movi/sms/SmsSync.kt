@@ -1,6 +1,7 @@
 package com.jvillada.movi.sms
 
 import com.jvillada.movi.data.apiBaseUrl
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -61,7 +62,7 @@ fun buildSmsSyncPayload(items: List<SmsSyncItem>): String {
                 .put("time", item.time)
                 .put("bank", item.bank.ifBlank { "SMS" })
                 .put("text", item.text)
-                .put("state", "new")
+                .put("state", SMS_STATE_PENDING)
                 .put("det", "")
         )
     }

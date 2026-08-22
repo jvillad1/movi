@@ -10,6 +10,9 @@ import com.jvillada.movi.server.sms.SmsDedupeIndex
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
@@ -115,7 +118,7 @@ fun Route.smsRoutes() {
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
         val updated = dbQuery {
             SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
-                it[state] = "confirmed"
+                it[state] = SMS_STATE_CONFIRMED
             }
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.OK)
@@ -126,7 +129,7 @@ fun Route.smsRoutes() {
         val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
         val updated = dbQuery {
             SmsMessages.update({ (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }) {
-                it[state] = "ignored"
+                it[state] = SMS_STATE_IGNORED
             }
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
@@ -188,7 +191,10 @@ fun Route.smsRoutes() {
                     it[time]   = msg.time
                     it[bank]   = msg.bank
                     it[text]   = msg.text
-                    it[state]  = "new" // server owns state; /confirm + /ignore transition it. Never trust client.
+                    // El server es dueño del estado: /confirm y /ignore lo mueven, el cliente
+                    // nunca lo decide. "pending" es el nombre único del recién llegado en todo
+                    // el sistema (ver SmsMessages en Tables.kt).
+                    it[state]  = SMS_STATE_PENDING
                     it[det]    = msg.det
                 }
                 dedupe.add(key)
