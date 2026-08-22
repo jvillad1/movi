@@ -162,7 +162,7 @@ class ScreenRoutesTest {
         val links = sections[3].jsonObject
         assertEquals("Explora", links["title"]!!.jsonPrimitive.content)
         val linkTitles = links["cards"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content }
-        assertEquals(listOf("Cuentas", "Créditos", "Presupuestos", "Metas", "Inversiones", "Suscripciones"), linkTitles)
+        assertEquals(listOf("Cuentas", "Créditos", "Presupuestos", "Metas", "Suscripciones"), linkTitles)
 
         val aiBanner = sections[4].jsonObject
         assertEquals("BANNER", aiBanner["type"]!!.jsonPrimitive.content)

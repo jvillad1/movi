@@ -50,6 +50,8 @@ object ScreenTaxonomy {
     )
     val ACTION_TYPES = listOf("NAVIGATE", "OPEN_URL")
     // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.
+    // "investments" se queda (F61): ya no hay pantalla Inversiones, pero una definición guardada
+    // puede traerlo todavía — el cliente lo manda a Cuentas en vez de strippearlo.
     val NAVIGATE_TARGETS = listOf(
         "dashboard", "transactions", "quickadd", "budgets", "mas", "accounts", "credits",
         "goals", "investments", "subscriptions", "recurrentes", "extractos",

@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
@@ -34,9 +33,10 @@ import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.ScreenTaxonomy
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinCard
+import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.toUserMessage
 import io.ktor.client.plugins.ResponseException
@@ -70,7 +70,8 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     "accounts" to "Cuentas",
     "credits" to "Créditos",
     "goals" to "Metas",
-    "investments" to "Inversiones",
+    // F61: sin pantalla propia — el cliente lo manda a Cuentas (ver SduiRenderer.screenForTarget).
+    "investments" to "Cuentas (inversión)",
     "subscriptions" to "Suscripciones",
     "recurrentes" to "Recurrentes",
     "extractos" to "Extractos",
@@ -109,7 +110,6 @@ private fun sectionsHaveInvalidUrl(sections: List<ScreenSection>): Boolean {
 
 @Composable
 fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
 
     var sections by remember { mutableStateOf<List<ScreenSection>>(emptyList()) }
@@ -201,20 +201,14 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
-        ) {
-            Icon(
-                Icons.Rounded.ArrowBackIosNew, "Volver",
-                tint = MinTextDim,
-                // F22: el editor vive en Más — destino de reserva si no hay historial.
-                modifier = Modifier.clickable { goBack(Screen.Mas) }.padding(12.dp).size(20.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Text("Editor de pantallas", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MinText, modifier = Modifier.weight(1f))
-            if (saved) Text("Guardado", fontSize = 12.sp, color = MinIncome, fontWeight = FontWeight.Medium)
-        }
+        // F60 · F22: encabezado único; el editor se abre desde Perfil (F47/F48) — Perfil como
+        // destino de reserva si no hay historial.
+        MinScreenHeader(
+            title = "Editor de pantallas",
+            leading = HeaderLeading.Back(fallback = Screen.Profile),
+            action = { if (saved) Text("Guardado", fontSize = 12.sp, color = MinIncome, fontWeight = FontWeight.Medium) },
+        )
+        Spacer(Modifier.height(12.dp))
 
         if (loading) {
             LinearProgressIndicator(

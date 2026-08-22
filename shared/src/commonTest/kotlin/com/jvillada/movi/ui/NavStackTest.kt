@@ -57,7 +57,7 @@ class NavStackTest {
 
     @Test
     fun `back sin historial con fallback distinto para pantallas de primer nivel`() {
-        val result = NavStack.back(listOf(Screen.Investments), fallback = Screen.Dashboard)
+        val result = NavStack.back(listOf(Screen.Goals), fallback = Screen.Dashboard)
         assertIs<NavStack.BackResult.Fallback>(result)
         assertEquals(Screen.Dashboard, (result as NavStack.BackResult.Fallback).screen)
     }
@@ -81,7 +81,7 @@ class NavStackTest {
 
     @Test
     fun `las pantallas de Mas marcan Mas y los flujos a pantalla completa no tienen barra`() {
-        listOf(Screen.Mas, Screen.Profile, Screen.Goals, Screen.Investments, Screen.Subscriptions,
+        listOf(Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
             Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
             .forEach { assertEquals(NavTab.MORE, navTabFor(it), "$it") }
         listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,

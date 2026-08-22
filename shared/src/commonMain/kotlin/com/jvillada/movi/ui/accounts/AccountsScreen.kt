@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
@@ -29,16 +28,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -65,48 +64,13 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header row: back arrow + title + "+ Nueva" pill
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 8.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = MinText,
-                    // F22: se llega tanto desde Inicio («Ver todas +», filas de cuentas) como
-                    // desde Más — ahora vuelve a donde de verdad estabas; Más queda como
-                    // destino de reserva (acceso permanente, F19) si no hay historial.
-                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
-                )
-                Text(
-                    text = "Mis cuentas",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    letterSpacing = (-0.4).sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(MinPrimaryContainer)
-                        .clickable { showCreateSheet = true }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "+ Nueva",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MinOnPrimaryContainer,
-                    )
-                }
-            }
+            // F60: encabezado único — Cuentas es raíz (está en la barra y en el rail), así que
+            // lleva avatar y el MISMO rótulo que el menú («Cuentas», ya no «Mis cuentas»).
+            MinScreenHeader(
+                title = "Cuentas",
+                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
+            )
 
             // Linear progress indicator below header while loading
             if (loading) {
@@ -209,66 +173,17 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(20.dp))
                     }
 
-                    // Section header
-                    item {
-                        MinSectionHeader(title = "Cuentas", count = accounts.size)
-                    }
+                    // F61: Inversiones dejó de ser sección — Cuentas muestra DOS grupos con
+                    // subtotal (Dinero e Inversión, según AccountGroup). Las deudas viven en
+                    // Créditos, así que acá no se listan (aunque sigan sumando en el
+                    // patrimonio neto de arriba).
+                    val dinero = accounts.filter { it.type.group == AccountGroup.DINERO }
+                    val inversion = accounts.filter { it.type.group == AccountGroup.INVERSION }
 
-                    // Accounts card
+                    item { AccountsGroup(title = "Dinero", accounts = dinero, onNavigate = onNavigate) }
                     item {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                        ) {
-                            accounts.forEachIndexed { index, account ->
-                                val icon = accountTypeIcon(account.type)
-                                // F56: el subtítulo ya no repite el tipo crudo ("Ahorros",
-                                // "Corriente"…) — son el mismo grupo (Dinero) en todos los
-                                // cálculos, así que muestran su grupo; el nombre que puso el
-                                // dueño es lo que de verdad distingue una cuenta de otra.
-                                val typeLabel = account.type.groupLabel
-                                CardRow(
-                                    left = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            Icon(imageVector = icon, contentDescription = typeLabel, tint = MinTextDim, modifier = Modifier.size(20.dp))
-                                            Text(
-                                                text = account.name,
-                                                fontSize = 14.5.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MinText,
-                                            )
-                                        }
-                                    },
-                                    sub = typeLabel,
-                                    right = {
-                                        if (isDebtAccount(account.type)) {
-                                            val (debt, isEstimate) = cardDebt(account)
-                                            MonoText(
-                                                // debt < 0 es saldo a favor: signo invertido a propósito, así
-                                                // que se le pasa el valor absoluto — si no, formatCOP (F36) le
-                                                // pondría su propio "−" encima del "+" de acá.
-                                                text = "${if (debt < 0) "+" else "−"}${if (isEstimate) "≈" else ""}${formatCOP(kotlin.math.abs(debt))}",
-                                                fontSize = 14.5f,
-                                                color = if (debt < 0) MinIncome else MinExpense,
-                                            )
-                                        } else {
-                                            MonoText(
-                                                text = formatCOP(account.balance),
-                                                fontSize = 14.5f,
-                                                color = MinIncome,
-                                            )
-                                        }
-                                    },
-                                    isLast = index == accounts.size - 1,
-                                    showChevron = true,
-                                    onClick = { onNavigate(Screen.AccountDetail(account.id)) },
-                                )
-                            }
-                        }
+                        Spacer(Modifier.height(20.dp))
+                        AccountsGroup(title = "Inversión", accounts = inversion, onNavigate = onNavigate)
                     }
                 }
             }
@@ -291,6 +206,82 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     refreshKey++
                 },
             )
+        }
+    }
+}
+
+/**
+ * F61: un grupo de cuentas (Dinero o Inversión) con su subtotal en el encabezado de sección y
+ * la lista debajo. Vacío, dice que no hay cuentas de ese grupo en lugar de desaparecer — así
+ * el dueño ve que el grupo existe y dónde va a caer lo que cree.
+ */
+@Composable
+private fun AccountsGroup(
+    title: String,
+    accounts: List<Account>,
+    onNavigate: (Screen) -> Unit,
+) {
+    Column {
+        // Mismo lenguaje que MinSectionHeader (rótulo en mayúsculas + conteo), con el subtotal
+        // del grupo a la derecha en mono — no es una acción, así que no va en MinPrimary.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row {
+                Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = 0.5.sp)
+                Text(" · ${accounts.size}", fontSize = 11.sp, color = MinTextFaint)
+            }
+            MonoText(formatCOP(accounts.sumOf { it.balance }), 12f, color = MinTextDim)
+        }
+        MinCard(
+            modifier = Modifier.fillMaxWidth(),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+        ) {
+            if (accounts.isEmpty()) {
+                Text(
+                    text = "Sin cuentas de ${title.lowercase()} aún",
+                    fontSize = 13.sp,
+                    color = MinTextMute,
+                    modifier = Modifier.padding(vertical = 14.dp),
+                )
+            }
+            accounts.forEachIndexed { index, account ->
+                val icon = accountTypeIcon(account.type)
+                // F56: el subtítulo ya no repite el tipo crudo ("Ahorros", "Corriente"…) — son
+                // el mismo grupo (Dinero) en todos los cálculos, así que muestran su grupo; el
+                // nombre que puso el dueño es lo que de verdad distingue una cuenta de otra.
+                val typeLabel = account.type.groupLabel
+                CardRow(
+                    left = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(imageVector = icon, contentDescription = typeLabel, tint = MinTextDim, modifier = Modifier.size(20.dp))
+                            Text(
+                                text = account.name,
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MinText,
+                            )
+                        }
+                    },
+                    sub = typeLabel,
+                    right = {
+                        MonoText(
+                            text = formatCOP(account.balance),
+                            fontSize = 14.5f,
+                            color = MinIncome,
+                        )
+                    },
+                    isLast = index == accounts.size - 1,
+                    showChevron = true,
+                    onClick = { onNavigate(Screen.AccountDetail(account.id)) },
+                )
+            }
         }
     }
 }

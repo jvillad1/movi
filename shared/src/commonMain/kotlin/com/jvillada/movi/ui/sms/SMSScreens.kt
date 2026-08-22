@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
@@ -43,7 +42,6 @@ import kotlinx.datetime.Clock
 
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
 
@@ -53,24 +51,21 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
     }
     val pendingCount = smsItems.count { it.state == "pending" }
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // F22: SMS vive en Más — ese es el destino de reserva si no hay historial.
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Mensajes del banco", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                Text("$pendingCount por confirmar", fontSize = 12.sp, color = MinTextMute)
-            }
-            Icon(
-                Icons.Rounded.Refresh,
-                contentDescription = "Actualizar",
-                tint = MinTextDim,
-                modifier = Modifier.size(20.dp).clickableSimple { refreshKey++ },
-            )
-        }
+        // F60: encabezado único — se abre desde Más (flecha, F22); la cuenta de pendientes
+        // va como subtítulo y «Actualizar» es la acción propia.
+        MinScreenHeader(
+            title = "Mensajes del banco",
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            subtitle = "$pendingCount por confirmar",
+            action = {
+                Icon(
+                    Icons.Rounded.Refresh,
+                    contentDescription = "Actualizar",
+                    tint = MinTextDim,
+                    modifier = Modifier.size(20.dp).clickableSimple { refreshKey++ },
+                )
+            },
+        )
 
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -275,15 +270,12 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // F22: el detalle vuelve a la bandeja si no hay historial (ese es su padre lógico).
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.SMSInbox) })
-            Text("Reconciliar movimiento", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-        }
+        // F60 · F22: el detalle vuelve a la bandeja si no hay historial (su padre lógico).
+        MinScreenHeader(
+            title = "Reconciliar movimiento",
+            leading = HeaderLeading.Back(fallback = Screen.SMSInbox),
+        )
+        Spacer(Modifier.height(14.dp))
 
         LazyColumn(
             modifier = Modifier.weight(1f),

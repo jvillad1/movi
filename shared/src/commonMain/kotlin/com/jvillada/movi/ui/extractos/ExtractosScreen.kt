@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Icon
@@ -26,9 +25,10 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.Hairline
+import com.jvillada.movi.ui.components.HeaderLeading
+import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import kotlinx.coroutines.CancellationException
@@ -41,7 +41,6 @@ import kotlinx.serialization.json.Json
 
 @Composable
 fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var uploading by remember { mutableStateOf(false) }
     var uploadingFileName by remember { mutableStateOf("") }
@@ -76,20 +75,12 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        // Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
-        ) {
-            Icon(
-                Icons.Rounded.ArrowBackIosNew, "Volver",
-                tint = MinTextDim,
-                // F22: Extractos vive en Más — destino de reserva si no hay historial.
-                modifier = Modifier.size(20.dp).clickable { goBack(Screen.Mas) },
-            )
-            Spacer(Modifier.width(12.dp))
-            Text("Extractos", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MinText)
-        }
+        // F60: encabezado único — Extractos se abre desde Más (flecha, F22).
+        MinScreenHeader(
+            title = "Extractos",
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
+        )
+        Spacer(Modifier.height(16.dp))
 
         LazyColumn(
             modifier = Modifier.weight(1f).padding(horizontal = 20.dp),

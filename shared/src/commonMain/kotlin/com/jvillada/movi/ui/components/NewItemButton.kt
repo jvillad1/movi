@@ -29,8 +29,7 @@ import com.jvillada.movi.theme.MinText
  * Recurrentes y Créditos, y no se leía como botón. Un mismo componente con dos formas:
  * [full] cuando la lista está vacía (es cuando más falta la acción, así que va abajo del
  * encabezado, a todo el ancho) y compacto (ícono + texto) arriba a la derecha cuando ya hay
- * elementos. Metas e Inversiones NO lo reciben: su "+" todavía no crea nada (F21/F26,
- * pendiente de Ola 3) — ponerles este botón prometería una acción que no existe.
+ * elementos. (Metas lo recibió en F26; Inversiones dejó de existir como pantalla en la Ola 7.)
  */
 @Composable
 fun NewItemButton(

@@ -117,7 +117,10 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     "accounts" -> Screen.Accounts
     "credits" -> Screen.Credits
     "goals" -> Screen.Goals
-    "investments" -> Screen.Investments
+    // F61: Inversiones dejó de ser pantalla. Una definición guardada (o el Editor) puede seguir
+    // trayendo este target — se manda a Cuentas, que es donde ahora viven las cuentas de
+    // inversión. Nunca un crash por destino desconocido.
+    "investments" -> Screen.Accounts
     "subscriptions" -> Screen.Subscriptions
     "recurrentes" -> Screen.Recurrentes
     "extractos" -> Screen.Extractos

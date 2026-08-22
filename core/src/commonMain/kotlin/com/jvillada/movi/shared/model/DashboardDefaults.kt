@@ -14,7 +14,9 @@ package com.jvillada.movi.shared.model
  * Ola 4 (F9/F40): generación 2 = Inicio de alto nivel. Balance neto + flujo del mes, próximos
  * pagos, alertas (solo cuando hay), accesos con cifra (lo que antes era Análisis) y Movi AI.
  */
-const val DASHBOARD_LAYOUT_VERSION = 2
+// F61 (Ola 7): generación 3 = sale el acceso «Inversiones» del Inicio — Inversiones ya no es
+// pantalla; sus cuentas se ven en Cuentas, que ya tiene su acceso acá.
+const val DASHBOARD_LAYOUT_VERSION = 3
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
@@ -31,7 +33,6 @@ fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
                 ScreenCard(title = "Créditos", action = ScreenAction("NAVIGATE", "credits")),
                 ScreenCard(title = "Presupuestos", action = ScreenAction("NAVIGATE", "budgets")),
                 ScreenCard(title = "Metas", action = ScreenAction("NAVIGATE", "goals")),
-                ScreenCard(title = "Inversiones", action = ScreenAction("NAVIGATE", "investments")),
                 ScreenCard(title = "Suscripciones", action = ScreenAction("NAVIGATE", "subscriptions")),
             ),
         ),

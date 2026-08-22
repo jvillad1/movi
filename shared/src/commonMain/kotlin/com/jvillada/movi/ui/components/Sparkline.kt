@@ -36,4 +36,4 @@ fun SimpleSparkline(
 
 // F50: acá vivía `InvestmentSparkline`, el gráfico por período de Inversiones. Se borró por el
 // mismo motivo que el de arriba — una curva FIJA inventada, no datos reales — al sacar el
-// modelo de "posiciones" de esa pantalla (ver InversionesScreen.kt).
+// modelo de "posiciones" de esa pantalla (Inversiones; la pantalla misma salió en la Ola 7, F61).

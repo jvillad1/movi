@@ -8,11 +8,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +23,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.HeaderLeading
+import com.jvillada.movi.ui.components.LocalWindowWidthClass
+import com.jvillada.movi.ui.components.MinScreenHeader
+import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.railDestinations
+import com.jvillada.movi.ui.screenForTab
 
 private data class MasItem(
     val label: String,
@@ -38,11 +44,12 @@ private val items = listOf(
     MasItem("Cuentas",      Icons.Rounded.AccountBalanceWallet, Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Accounts),
     // Ola 4: Presupuestos dejó su lugar en la barra inferior a Cuentas y entra acá, justo después.
     MasItem("Presupuestos", Icons.Rounded.PieChart,         Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Budgets),
-    MasItem("Inversiones",  Icons.AutoMirrored.Rounded.TrendingUp, Color(0xFF7DDDB0), Color(0x247DDDB0), Screen.Investments),
     MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),
+    // F61: Inversiones ya no es sección — las cuentas de inversión se ven en Cuentas.
     MasItem("Metas",        Icons.Rounded.Flag,             Color(0xFFFFD479), Color(0x24FFD479), Screen.Goals),
     MasItem("Extractos",    Icons.Rounded.UploadFile,       Color(0xFFC7BCFF), Color(0x24C7BCFF), Screen.Extractos),
-    MasItem("SMS",          Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
+    // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
+    MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
     MasItem("Recurrentes",  Icons.Rounded.Repeat,           Color(0xFFFFD479), Color(0x1AFFD479), Screen.Recurrentes),
     MasItem("Suscripciones", Icons.Rounded.Autorenew,       Color(0xFF81D4FA), Color(0x2481D4FA), Screen.Subscriptions),
@@ -57,27 +64,36 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
     // una herramienta de administración mezclada con Créditos y Metas. Se mudó al final de
     // Perfil, en una sección "Administración" visible solo para quien administra el Inicio.
 
+    // F59: en pantalla ancha el rail de la izquierda ya muestra Inicio, Movimientos, Cuentas,
+    // Créditos, Presupuestos y Más — repetirlos acá era ruido. La lista sale de la MISMA
+    // fuente que pinta el rail (railDestinations), no de una copia a mano. En el teléfono la
+    // barra tiene menos destinos, así que Más sigue completo.
+    val widthClass = LocalWindowWidthClass.current
+    val visibleItems = remember(widthClass) {
+        if (widthClass == WindowWidthClass.Expanded) {
+            val railScreens = railDestinations.map { screenForTab(it.tab) }
+            items.filterNot { it.screen in railScreens }
+        } else items
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MinBg),
     ) {
-        Text(
-            text = "Más",
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            color = MinText,
-            modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 16.dp),
+        MinScreenHeader(
+            title = "Más",
+            leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
         )
 
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.weight(1f),
         ) {
-            items(items) { item ->
+            items(visibleItems) { item ->
                 MasCard(item, onNavigate)
             }
         }

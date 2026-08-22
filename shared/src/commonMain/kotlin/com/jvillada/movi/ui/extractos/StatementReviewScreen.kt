@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
@@ -97,31 +96,13 @@ fun StatementReviewScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        // Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
-        ) {
-            Icon(
-                Icons.Rounded.ArrowBackIosNew, "Volver",
-                tint = MinTextDim,
-                // F22: vuelve a la lista de Extractos si no hay historial.
-                modifier = Modifier.size(20.dp).clickable { goBack(Screen.Extractos) },
-            )
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "${result.bankName.uppercase()} · ${result.period.uppercase()}",
-                    fontSize = 10.sp, color = MinTextMute, letterSpacing = 1.sp,
-                )
-                val newCount = result.newTransactions.size
-                val matchCount = result.matches.size
-                Text(
-                    text = "$newCount nuevas · $matchCount coincidencias",
-                    fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MinText,
-                )
-            }
-        }
+        // F60 · F22: encabezado único; vuelve a la lista de Extractos si no hay historial.
+        MinScreenHeader(
+            title = "${result.bankName} · ${result.period}",
+            leading = HeaderLeading.Back(fallback = Screen.Extractos),
+            subtitle = "${result.newTransactions.size} nuevas · ${result.matches.size} coincidencias",
+        )
+        Spacer(Modifier.height(12.dp))
 
         // Account destination chip
         destinationAccount?.let { acct ->
