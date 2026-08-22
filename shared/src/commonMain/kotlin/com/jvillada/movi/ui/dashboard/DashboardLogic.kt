@@ -167,8 +167,8 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else LinkFigure(formatCOP(data.goals.sumOf { it.saved }), plural(data.goals.size, "meta", "metas"))
     }
     "investments" -> {
-        // F50: misma fuente que la pantalla Inversiones — cuentas tipo INVESTMENT, no el
-        // modelo de "posiciones" (holdings) que el server siempre devolvía vacío.
+        // F50: cuentas tipo INVESTMENT, no el modelo de "posiciones" (holdings) que el server
+        // siempre devolvía vacío. F61: el target abre Cuentas (grupo Inversión).
         val investmentAccounts = data.accounts.filter { it.type == AccountType.INVESTMENT }
         if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
         else LinkFigure(formatCOP(investmentAccounts.sumOf { it.balance }), plural(investmentAccounts.size, "cuenta", "cuentas"))

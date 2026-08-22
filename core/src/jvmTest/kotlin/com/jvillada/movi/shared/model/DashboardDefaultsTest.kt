@@ -28,7 +28,8 @@ class DashboardDefaultsTest {
             def.sections.map { it.type },
         )
         val links = def.sections.first { it.type == "QUICK_LINKS_WITH_TOTALS" }.cards.map { it.action!!.target }
-        assertEquals(listOf("accounts", "credits", "budgets", "goals", "investments", "subscriptions"), links)
+        // F61: sin "investments" — Inversiones ya no es pantalla.
+        assertEquals(listOf("accounts", "credits", "budgets", "goals", "subscriptions"), links)
     }
 
     @Test
