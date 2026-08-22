@@ -43,8 +43,8 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
+import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -136,7 +136,7 @@ class SubscriptionRoutesTest {
             it[Events.currency]             = "COP"
             it[Events.category]             = "Otros"
             it[Events.description]          = desc
-            it[Events.timestamp]            = LocalDate.parse(tsIso).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            it[Events.timestamp]            = appDateToEpochMillis(LocalDate.parse(tsIso))
             it[Events.eventSource]          = "STATEMENT"
             it[Events.reconciliationStatus] = "UNCONFIRMED"
         }
