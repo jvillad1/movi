@@ -101,12 +101,22 @@ fun DashboardScreen(
             launch { runCatching { Repositories.wallets.getCards() }.onSuccess { c -> data = data.copy(cards = c) } }
             launch { runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { u -> data = data.copy(upcoming = u) } }
             launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
+            // Gasto del mes por categoría, candidatos a pago de tarjeta y SMS pendientes vienen ya
+            // reducidos del server (GET /api/dashboard/summary) en vez de bajar todos los eventos,
+            // todos los candidatos y todos los SMS para sacar tres números — con meses de uso
+            // real eso crecía lineal y hacía lenta la pantalla más usada, sobre todo en el
+            // teléfono. Mismas reglas del lado del server (isCashFlow, looksLikeCardPayment,
+            // estado "pending"); si falla, quedan las cifras de la última carga (caché).
             launch {
-                runCatching { Repositories.wallets.getEventsByDay() }
-                    .onSuccess { days -> data = data.copy(spentByCategory = spentByCategoryForMonth(days, currentMonthPrefixUtc())) }
+                runCatching { Repositories.wallets.getDashboardSummary(scope) }
+                    .onSuccess { s ->
+                        data = data.copy(
+                            spentByCategory = s.spentByCategory,
+                            cardCandidates = s.cardPaymentCandidates,
+                            pendingSms = s.pendingSms,
+                        )
+                    }
             }
-            launch { runCatching { Repositories.wallets.getCardPaymentCandidates() }.onSuccess { c -> data = data.copy(cardCandidates = c.size) } }
-            launch { runCatching { Repositories.wallets.getSmsMessages() }.onSuccess { m -> data = data.copy(pendingSms = m.count { it.state == "pending" }) } }
             launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }
             // F50: la cifra de "investments" ahora sale de `data.accounts` (cuentas tipo
             // INVESTMENT) — ya no hace falta este fetch aparte de holdings.
