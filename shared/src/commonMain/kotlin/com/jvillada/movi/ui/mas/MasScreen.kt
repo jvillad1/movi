@@ -48,7 +48,8 @@ private val items = listOf(
     // F61: Inversiones ya no es sección — las cuentas de inversión se ven en Cuentas.
     MasItem("Metas",        Icons.Rounded.Flag,             Color(0xFFFFD479), Color(0x24FFD479), Screen.Goals),
     MasItem("Extractos",    Icons.Rounded.UploadFile,       Color(0xFFC7BCFF), Color(0x24C7BCFF), Screen.Extractos),
-    MasItem("SMS",          Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
+    // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
+    MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
     MasItem("Recurrentes",  Icons.Rounded.Repeat,           Color(0xFFFFD479), Color(0x1AFFD479), Screen.Recurrentes),
     MasItem("Suscripciones", Icons.Rounded.Autorenew,       Color(0xFF81D4FA), Color(0x2481D4FA), Screen.Subscriptions),

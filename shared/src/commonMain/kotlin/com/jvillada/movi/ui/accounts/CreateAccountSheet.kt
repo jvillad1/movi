@@ -47,13 +47,10 @@ private val TYPE_OPTIONS = listOf(
 fun CreateAccountSheet(
     onDismiss: () -> Unit,
     onAccountCreated: () -> Unit,
-    // F50: Inversiones abre esta hoja con el tipo ya elegido — el dueño no tiene que
-    // volver a seleccionar "Inversión" a mano después de tocar el "+" de esa pantalla.
-    initialType: AccountType = AccountType.SAVINGS,
 ) {
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(initialType) }
+    var selectedType by remember { mutableStateOf(AccountType.SAVINGS) }
     var initialBalance by remember { mutableStateOf<Long?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }

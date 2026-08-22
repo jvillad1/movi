@@ -16,12 +16,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.screenForTab
 
 /**
  * Qué va a la izquierda del título (F60):
@@ -33,6 +36,24 @@ import com.jvillada.movi.ui.Screen
 sealed class HeaderLeading {
     data class Avatar(val onClick: () -> Unit) : HeaderLeading()
     data class Back(val fallback: Screen) : HeaderLeading()
+}
+
+/**
+ * Regla única para el leading (revisión Ola 7): una pantalla lleva avatar solo cuando ES un
+ * destino que el layout actual pinta como pestaña propia — en pantalla ancha, las entradas
+ * del rail ([railDestinations]); en el teléfono, las de la barra (`asBottomBarTab()` no la
+ * funde en Más). Si no, flecha atrás hacia [fallback]. Así Créditos y Presupuestos llevan
+ * avatar en ancho (están en el rail) y flecha a Más en el teléfono (se llega por Más).
+ */
+@Composable
+fun leadingFor(screen: Screen, onProfile: () -> Unit, fallback: Screen): HeaderLeading {
+    val tab = navTabFor(screen) ?: return HeaderLeading.Back(fallback)
+    if (screenForTab(tab) != screen) return HeaderLeading.Back(fallback)
+    val shownAsOwnTab = when (LocalWindowWidthClass.current) {
+        WindowWidthClass.Expanded -> railDestinations.any { it.tab == tab }
+        WindowWidthClass.Compact -> tab.asBottomBarTab() == tab
+    }
+    return if (shownAsOwnTab) HeaderLeading.Avatar(onProfile) else HeaderLeading.Back(fallback)
 }
 
 /**
@@ -52,10 +73,13 @@ fun MinScreenHeader(
     subtitle: String? = null,
     action: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    // La flecha lleva 11.dp de padding alrededor (área tocable ≈44dp); el padding horizontal
+    // del Row se reduce en la misma medida para que el título no se corra respecto del avatar.
+    val backInset = if (leading is HeaderLeading.Back) 11.dp else 0.dp
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
+            .padding(start = 20.dp - backInset, end = 20.dp)
             .padding(top = 8.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -68,7 +92,10 @@ fun MinScreenHeader(
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "Volver",
                     tint = MinText,
-                    modifier = Modifier.size(22.dp).clickable { goBack(leading.fallback) },
+                    modifier = Modifier
+                        .clickable { goBack(leading.fallback) }
+                        .padding(11.dp)
+                        .size(22.dp),
                 )
             }
         }
@@ -80,9 +107,10 @@ fun MinScreenHeader(
                 color = MinText,
                 letterSpacing = (-0.3).sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
-                Text(subtitle, fontSize = 12.sp, color = MinTextMute, maxLines = 1)
+                Text(subtitle, fontSize = 12.sp, color = MinTextMute, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (action != null) action()

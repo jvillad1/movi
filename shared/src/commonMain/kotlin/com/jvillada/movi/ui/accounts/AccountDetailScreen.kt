@@ -29,7 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -107,10 +109,12 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
 
             // Header
             val accountTypePair = account?.let { accountTypeIcon(it.type) }
-            // F60 · F22: encabezado único; el detalle vuelve a Cuentas si no hay historial.
+            // F60 · F22: encabezado único; sin historial, el detalle vuelve a donde vive la
+            // cuenta: Créditos si es deuda (Ola 7: tarjetas y préstamos ya no se listan en
+            // Cuentas), Cuentas en cualquier otro caso.
             MinScreenHeader(
                 title = account?.name ?: "",
-                leading = HeaderLeading.Back(fallback = Screen.Accounts),
+                leading = HeaderLeading.Back(fallback = homeScreenFor(account)),
                 action = if (accountTypePair != null) {
                     {
                         Icon(
@@ -404,3 +408,11 @@ private fun accountTypeIcon(type: AccountType): Pair<ImageVector, String> = when
     AccountType.CREDIT_CARD -> Icons.Filled.CreditCard to "Crédito"
     AccountType.LOAN        -> Icons.Filled.RequestQuote to "Préstamo"
 }
+
+/**
+ * Ola 7 (F61): dónde «vive» una cuenta en la navegación — destino de reserva del «volver» del
+ * detalle cuando no hay historial. Las deudas se listan en Créditos; el resto, en Cuentas.
+ * Mientras la cuenta no cargó, Cuentas (lo más probable).
+ */
+private fun homeScreenFor(account: Account?): Screen =
+    if (account != null && account.type.group == AccountGroup.DEUDA) Screen.Credits else Screen.Accounts

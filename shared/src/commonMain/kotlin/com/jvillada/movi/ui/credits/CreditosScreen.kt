@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,11 +63,12 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         Column(
             modifier = Modifier.fillMaxSize().background(MinBg)
         ) {
-            // F60: encabezado único — Créditos se abre desde Más: flecha atrás (F22: Más como
-            // reserva si no hay historial) y, con deudas ya creadas, el alta compacta (F18).
+            // F60: encabezado único — avatar en ancho (Créditos está en el rail), flecha a Más
+            // en el teléfono (se llega por Más; F22: reserva si no hay historial). Con deudas ya
+            // creadas, el alta compacta a la derecha (F18).
             MinScreenHeader(
                 title = "Créditos",
-                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                leading = leadingFor(Screen.Credits, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
                 action = if (!isEmpty) {
                     { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
                 } else null,
@@ -124,6 +126,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                 credits.forEach { c ->
                                     LoanCard(
                                         credit = c,
+                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id)) },
                                         onEdit = { editingLoan = c; showLoanSheet = true },
                                         onAdjust = { adjusting = c },
                                     )
@@ -140,7 +143,11 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                             MinSectionHeader(title = "Tarjetas", count = cards.size)
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 cards.forEach { c ->
-                                    CreditCardCard(card = c, onEdit = { editingCard = c; showCardSheet = true })
+                                    CreditCardCard(
+                                        card = c,
+                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id)) },
+                                        onEdit = { editingCard = c; showCardSheet = true },
+                                    )
                                 }
                             }
                         }
@@ -180,10 +187,15 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
-/** Tarjeta de un préstamo: cuota, tasa, plazo y progreso — lo que Créditos mostraba desde siempre. */
+/**
+ * Tarjeta de un préstamo: cuota, tasa, plazo y progreso — lo que Créditos mostraba desde siempre.
+ * Ola 7 (F61): como las deudas ya no se listan en Cuentas, tocar la tarjeta abre el historial
+ * de la cuenta ([onOpen] → AccountDetail); editar términos pasa a ser el lápiz de la derecha.
+ */
 @Composable
 private fun LoanCard(
     credit: CreditSummary,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
     onAdjust: () -> Unit,
 ) {
@@ -192,15 +204,16 @@ private fun LoanCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(18.dp),
-        onClick = onEdit,
+        onClick = onOpen,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(credit.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp)
+            Text(credit.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
             Text(credit.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+            EditTermsIcon(onEdit)
         }
         Text(credit.terms?.bank ?: "Sin términos registrados", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
 
@@ -268,26 +281,28 @@ private fun LoanCard(
  * debe dólares, y su componente COP sería $0, un número que miente.
  */
 @Composable
-private fun CreditCardCard(card: CardSummary, onEdit: () -> Unit) {
+private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> Unit) {
     val currency = card.account.currency
     val debt = card.account.balancesByCurrency[currency] ?: card.account.balance
+    // Ola 7 (F61): tocar la tarjeta abre su historial (AccountDetail); el lápiz edita corte y pago.
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(18.dp),
-        onClick = onEdit,
+        onClick = onOpen,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(card.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp)
+            Text(card.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
             if (currency != "COP") {
                 Text(currency, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
             }
+            EditTermsIcon(onEdit)
         }
-        Text(card.terms?.bank ?: "Sin corte ni pago — tócala para completarlos", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        Text(card.terms?.bank ?: "Sin corte ni pago — edítalos con el lápiz", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -373,6 +388,22 @@ private fun DebtTypeOption(title: String, subtitle: String, onClick: () -> Unit)
         Spacer(Modifier.height(2.dp))
         Text(subtitle, fontSize = 12.sp, color = MinTextMute)
     }
+}
+
+/** Lápiz de «editar términos» a la derecha de la fila — acción secundaria explícita (Ola 7). */
+@Composable
+private fun EditTermsIcon(onEdit: () -> Unit) {
+    Icon(
+        Icons.Rounded.Edit,
+        contentDescription = "Editar términos",
+        tint = MinTextMute,
+        modifier = Modifier
+            .padding(start = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickableSimple(onEdit)
+            .padding(6.dp)
+            .size(16.dp),
+    )
 }
 
 private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(

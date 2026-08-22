@@ -142,11 +142,12 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // F60: encabezado único — Presupuestos es raíz (vive en Más y en el rail): avatar,
-            // rótulo del menú y, con presupuestos ya creados, el alta compacta a la derecha (F18).
+            // F60: encabezado único — avatar en ancho (Presupuestos está en el rail), flecha a
+            // Más en el teléfono (se llega por Más). Con presupuestos ya creados, el alta
+            // compacta a la derecha (F18).
             MinScreenHeader(
                 title = "Presupuestos",
-                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                leading = leadingFor(Screen.Budgets, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
                 action = if (budgets.isNotEmpty()) {
                     { NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add }) }
                 } else null,
