@@ -1,9 +1,11 @@
 package com.jvillada.movi.shared.time
 
 import kotlinx.datetime.Clock
+import kotlinx.datetime.FixedOffsetTimeZone
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.UtcOffset
 import kotlinx.datetime.toLocalDateTime
 
 /**
@@ -22,8 +24,26 @@ import kotlinx.datetime.toLocalDateTime
 object AppTimeZone {
     const val DEFAULT_ID: String = "America/Bogota"
 
-    /** Zona por defecto (Bogotá). */
-    val zone: TimeZone = TimeZone.of(DEFAULT_ID)
+    /**
+     * Bogotá como offset fijo: UTC-5 todo el año (Colombia no tiene horario de verano), así que
+     * es exacto. Es el plan B cuando la plataforma no tiene la base de datos de zonas IANA —
+     * en wasmJs kotlinx-datetime delega a js-joda y el bundle solo trae `@js-joda/core`
+     * (sin `@js-joda/timezone`, que pesa ~1 MB), donde `TimeZone.of("America/Bogota")` lanza.
+     */
+    val fixedBogota: TimeZone = FixedOffsetTimeZone(UtcOffset(hours = -5))
+
+    /**
+     * Zona por defecto (Bogotá). La inicialización NUNCA lanza: si la plataforma no conoce el
+     * id IANA cae a [fixedBogota]. Un `object` cuyo init falla deja Inicio y Presupuestos
+     * muertos en la PWA, así que esto no puede depender de la tabla de zonas.
+     */
+    val zone: TimeZone = zoneOrFixed(DEFAULT_ID)
+
+    /**
+     * `TimeZone.of(id)` o, si la plataforma no lo resuelve, [fixedBogota]. Nunca lanza.
+     */
+    fun zoneOrFixed(id: String): TimeZone =
+        runCatching { TimeZone.of(id) }.getOrElse { fixedBogota }
 
     /**
      * Resuelve un id de zona (p.ej. el valor de `APP_TIMEZONE`). Un id vacío, nulo o inválido

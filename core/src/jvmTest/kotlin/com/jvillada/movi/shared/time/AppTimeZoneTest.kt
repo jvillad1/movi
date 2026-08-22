@@ -22,6 +22,16 @@ class AppTimeZoneTest {
     }
 
     @Test
+    fun `si la plataforma no conoce el id IANA, la zona cae a UTC-5 fijo sin lanzar`() {
+        val fallback = AppTimeZone.zoneOrFixed("No/Existe")
+        assertEquals(AppTimeZone.fixedBogota, fallback)
+        // El offset fijo da la misma fecha civil que la zona IANA (Colombia no tiene DST).
+        val ms = lateAugustBogota.toEpochMilliseconds()
+        assertEquals(LocalDate(2026, 8, 31), epochMillisToAppDate(ms, fallback))
+        assertEquals(epochMillisToAppDate(ms, TimeZone.of("America/Bogota")), epochMillisToAppDate(ms, fallback))
+    }
+
+    @Test
     fun `un movimiento a las 11 30 pm del 31 cuenta en agosto, no en septiembre`() {
         val ms = lateAugustBogota.toEpochMilliseconds()
         assertEquals(LocalDate(2026, 9, 1), epochMillisToAppDate(ms, TimeZone.UTC))
