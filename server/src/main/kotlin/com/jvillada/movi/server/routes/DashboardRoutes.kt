@@ -15,6 +15,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.monthWindowOf
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.Transaction
@@ -26,8 +28,6 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
 
 /**
  * `GET /api/dashboard/summary?scope=SELF|FAMILY` — los números del Inicio, ya reducidos.
@@ -50,13 +50,11 @@ fun Route.dashboardRoutes() {
         val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()
             ?: return@get call.respond(HttpStatusCode.BadRequest, "Unknown scope: $raw")
 
-        // Misma convención de mes que `finance-summary` (FinanceRoutes.kt): UTC, primer
-        // milisegundo del mes hasta el primero del siguiente. Si la zona cambia allá tiene que
-        // cambiar acá — son el mismo "mes" para el usuario.
-        val now = ZonedDateTime.now(ZoneOffset.UTC)
-        val monthStartZdt = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
-        val monthStart = monthStartZdt.toInstant().toEpochMilli()
-        val monthEnd = monthStartZdt.plusMonths(1).toInstant().toEpochMilli()
+        // Misma convención de mes que `finance-summary` (FinanceRoutes.kt): el mes civil en la
+        // zona de la app (AppClock, Bogotá), del primer milisegundo del mes al primero del
+        // siguiente. Las dos rutas pasan por currentMonthWindow(): es el mismo "mes" para el usuario.
+        val now = AppClock.now()
+        val (monthStart, monthEnd) = monthWindowOf(now)
         val month = "${now.year}-${now.monthValue.toString().padStart(2, '0')}"
 
         val summary = dbQuery {
