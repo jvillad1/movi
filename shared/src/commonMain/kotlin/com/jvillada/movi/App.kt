@@ -25,6 +25,7 @@ import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
+import com.jvillada.movi.ui.screenForTab
 import com.jvillada.movi.ui.auth.LoginScreen
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
@@ -32,7 +33,6 @@ import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.goals.MetasScreen
-import com.jvillada.movi.ui.investments.InversionesScreen
 import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.ocr.OCRCaptureScreen
@@ -58,17 +58,6 @@ import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
 import kotlinx.serialization.json.Json
-
-/** Pantalla principal de cada destino de la barra/rail. */
-private fun screenForTab(tab: NavTab): Screen = when (tab) {
-    NavTab.HOME -> Screen.Dashboard
-    NavTab.TRANSACTIONS -> Screen.Transactions
-    NavTab.ADD -> Screen.QuickAdd()
-    NavTab.ACCOUNTS -> Screen.Accounts
-    NavTab.CREDITS -> Screen.Credits
-    NavTab.BUDGETS -> Screen.Budgets
-    NavTab.MORE -> Screen.Mas
-}
 
 @Composable
 fun App() {
@@ -167,7 +156,6 @@ fun App() {
                     },
                 )
                 Screen.AIChat            -> AIChatScreen(navigate)
-                Screen.Investments       -> InversionesScreen(navigate)
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)

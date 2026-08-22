@@ -26,6 +26,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
+/** Un destino del rail: pestaña + rótulo + ícono. */
+data class RailDestination(val tab: NavTab, val label: String, val icon: ImageVector)
+
+/**
+ * Lo que el rail muestra, en orden. Es la ÚNICA fuente: el rail la pinta y Más (F59) la usa
+ * para no repetir en pantalla ancha los destinos que ya están a la izquierda. Agregar una
+ * entrada acá alcanza para que aparezca en el rail y desaparezca de Más.
+ */
+val railDestinations: List<RailDestination> = listOf(
+    RailDestination(NavTab.HOME, "Inicio", Icons.Rounded.Home),
+    RailDestination(NavTab.TRANSACTIONS, "Movimientos", Icons.Rounded.SwapVert),
+    RailDestination(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet),
+    RailDestination(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard),
+    RailDestination(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart),
+    RailDestination(NavTab.MORE, "Más", Icons.Rounded.GridView),
+)
+
 /**
  * Wide-window counterpart of MinBottomNav: a left rail rendered once at the
  * App root. Same active-pill language; en pantalla ancha hay lugar para mostrar
@@ -53,12 +70,9 @@ fun MinNavRail(
             modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
         )
 
-        RailItem(NavTab.HOME, "Inicio", Icons.Rounded.Home, active, onTabSelected)
-        RailItem(NavTab.TRANSACTIONS, "Movimientos", Icons.Rounded.SwapVert, active, onTabSelected)
-        RailItem(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet, active, onTabSelected)
-        RailItem(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard, active, onTabSelected)
-        RailItem(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart, active, onTabSelected)
-        RailItem(NavTab.MORE, "Más", Icons.Rounded.GridView, active, onTabSelected)
+        railDestinations.forEach { dest ->
+            RailItem(dest.tab, dest.label, dest.icon, active, onTabSelected)
+        }
 
         Spacer(Modifier.height(12.dp))
 

@@ -16,7 +16,6 @@ sealed class Screen {
     data class QuickAdd(val presetAccountId: String? = null) : Screen()
     data object Profile : Screen()
     data object AIChat : Screen()
-    data object Investments : Screen()
     data object Credits : Screen()
     data object Goals : Screen()
     data object Budgets : Screen()
@@ -43,6 +42,7 @@ sealed class Screen {
  *
  * Ola 4: Cuentas y el detalle de una cuenta marcan la pestaña Cuentas (antes, Inicio);
  * Presupuestos y Créditos tienen destino propio (en el teléfono se resaltan como Más).
+ * F61: Inversiones dejó de ser pantalla — las cuentas de inversión se ven en Cuentas.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOME
@@ -50,9 +50,20 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Accounts, is Screen.AccountDetail -> NavTab.ACCOUNTS
     Screen.Credits -> NavTab.CREDITS
     Screen.Budgets -> NavTab.BUDGETS
-    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Investments, Screen.Subscriptions,
+    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
     Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
     else -> null
+}
+
+/** Pantalla principal de cada destino de la barra/rail (inversa de [navTabFor]). */
+fun screenForTab(tab: NavTab): Screen = when (tab) {
+    NavTab.HOME -> Screen.Dashboard
+    NavTab.TRANSACTIONS -> Screen.Transactions
+    NavTab.ADD -> Screen.QuickAdd()
+    NavTab.ACCOUNTS -> Screen.Accounts
+    NavTab.CREDITS -> Screen.Credits
+    NavTab.BUDGETS -> Screen.Budgets
+    NavTab.MORE -> Screen.Mas
 }
 
 /**
