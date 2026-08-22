@@ -2,6 +2,7 @@ package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -409,6 +410,11 @@ class LocalRepository(
     override suspend fun confirmSms(id: String) = remote.confirmSms(id)
     override suspend fun ignoreSms(id: String) = remote.ignoreSms(id)
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = remote.getFinanceSummary(scope)
+    // Igual que getFinanceSummary: es un agregado que solo el server puede calcular con todo lo
+    // que sabe (SMS, descartes de candidatos, eventos de todos los dispositivos). Sin red falla
+    // y el Inicio conserva lo último que tenía en DashboardDataCache — igual que hacían las
+    // tres llamadas remotas que este resumen reemplaza.
+    override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = remote.getDashboardSummary(scope)
     override suspend fun getBudgets(): List<Budget> = remote.getBudgets()
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)
     override suspend fun updateBudget(category: String, budget: Budget): Budget = remote.updateBudget(category, budget)

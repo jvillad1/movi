@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
@@ -72,6 +73,12 @@ interface WalletRepository {
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
+    /**
+     * Cifras del Inicio ya reducidas en el server (`GET /api/dashboard/summary`): gasto del mes
+     * por categoría, candidatos a pago de tarjeta y SMS pendientes — sin bajar las colecciones
+     * enteras. Ver [DashboardSummary].
+     */
+    suspend fun getDashboardSummary(scope: Scope): DashboardSummary
     suspend fun getBudgets(): List<Budget>
     suspend fun createBudget(budget: Budget): Budget
     suspend fun updateBudget(category: String, budget: Budget): Budget
