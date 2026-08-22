@@ -57,7 +57,4 @@ dependencies {
     implementation(compose.ui)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.work.runtime.ktx)
-    // Los tests del sensor se mudaron a :shared (androidUnitTest) junto con el código;
-    // acá solo quedan receivers/workers sin tests propios.
-    testImplementation(kotlin("test"))
 }
