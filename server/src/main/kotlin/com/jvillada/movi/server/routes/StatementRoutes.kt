@@ -44,6 +44,7 @@ import java.util.UUID
 import kotlin.math.abs
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.server.time.epochMillisToAppDate
 
 fun Route.statementRoutes() {
 
@@ -145,8 +146,9 @@ fun Route.statementRoutes() {
             } else null
 
             if (match != null) {
+                // Mismo día civil de Bogotá, no mismo bucket de 24 h desde la época (UTC).
                 val sameDay = parsedEpoch != null &&
-                    parsedEpoch / 86_400_000L == match.timestamp / 86_400_000L
+                    epochMillisToAppDate(parsedEpoch) == epochMillisToAppDate(match.timestamp)
                 matches += ReconciliationMatch(
                     parsed = tx,
                     existingEventId = match.id,
