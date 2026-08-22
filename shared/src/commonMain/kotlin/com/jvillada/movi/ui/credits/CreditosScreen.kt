@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
@@ -126,7 +127,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                 credits.forEach { c ->
                                     LoanCard(
                                         credit = c,
-                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id)) },
+                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
                                         onEdit = { editingLoan = c; showLoanSheet = true },
                                         onAdjust = { adjusting = c },
                                     )
@@ -145,7 +146,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                 cards.forEach { c ->
                                     CreditCardCard(
                                         card = c,
-                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id)) },
+                                        onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
                                         onEdit = { editingCard = c; showCardSheet = true },
                                     )
                                 }

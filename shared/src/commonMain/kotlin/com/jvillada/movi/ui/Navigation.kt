@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 
 sealed class Screen {
@@ -28,7 +29,15 @@ sealed class Screen {
     data object Mas : Screen()
     data object Extractos : Screen()
     data object Accounts : Screen()
-    data class AccountDetail(val accountId: String) : Screen()
+    /**
+     * Detalle de una cuenta. Lleva el grupo de la cuenta además del id porque la navegación
+     * necesita saber DÓNDE vive esa cuenta antes de cargarla del repositorio: una tarjeta o un
+     * préstamo se abren desde Créditos (Ola 7) y una cuenta de dinero desde Cuentas, y de eso
+     * dependen tanto la pestaña resaltada ([navTabFor]) como el destino de reserva de la flecha
+     * ‹ ([homeScreenFor]). El grupo es obligatorio a propósito: quien navega acá ya tiene la
+     * cuenta en la mano, y así ningún llamador nuevo puede olvidarse del dato.
+     */
+    data class AccountDetail(val accountId: String, val group: AccountGroup) : Screen()
     data class StatementReview(val resultJson: String) : Screen()
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
@@ -40,20 +49,32 @@ sealed class Screen {
  * ítem activo en la barra (teléfono) y en el rail (pantalla ancha), que son los únicos
  * lugares donde se pinta la navegación — ninguna pantalla arma su propia barra.
  *
- * Ola 4: Cuentas y el detalle de una cuenta marcan la pestaña Cuentas (antes, Inicio);
+ * Ola 4: Cuentas marca la pestaña Cuentas (antes, Inicio); el detalle de una cuenta marca la
+ * pestaña de donde vive esa cuenta (Créditos si es deuda, ver [homeScreenFor]);
  * Presupuestos y Créditos tienen destino propio (en el teléfono se resaltan como Más).
  * F61: Inversiones dejó de ser pantalla — las cuentas de inversión se ven en Cuentas.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOME
     Screen.Transactions -> NavTab.TRANSACTIONS
-    Screen.Accounts, is Screen.AccountDetail -> NavTab.ACCOUNTS
+    Screen.Accounts -> NavTab.ACCOUNTS
+    // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
+    // «volver» no pueden contradecirse (una tarjeta abierta desde Créditos marca Créditos).
+    is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
     Screen.Credits -> NavTab.CREDITS
     Screen.Budgets -> NavTab.BUDGETS
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
     Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
     else -> null
 }
+
+/**
+ * Ola 7 (F61): dónde «vive» una cuenta en la navegación — la pantalla que la lista. Las deudas
+ * (tarjetas y préstamos) se listan en Créditos; el resto, en Cuentas. Es la única regla: la usan
+ * el destino de reserva del «volver» del detalle y [navTabFor] para la pestaña resaltada.
+ */
+fun homeScreenFor(group: AccountGroup): Screen =
+    if (group == AccountGroup.DEUDA) Screen.Credits else Screen.Accounts
 
 /** Pantalla principal de cada destino de la barra/rail (inversa de [navTabFor]). */
 fun screenForTab(tab: NavTab): Screen = when (tab) {

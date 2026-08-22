@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui
 
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.asBottomBarTab
 import kotlin.test.Test
@@ -65,9 +66,37 @@ class NavStackTest {
     // ── Ola 4: pestaña activa por pantalla (barra y rail) ─────────────────────
 
     @Test
-    fun `Cuentas y el detalle de cuenta marcan la pestaña Cuentas`() {
+    fun `Cuentas y el detalle de una cuenta de dinero marcan la pestaña Cuentas`() {
         assertEquals(NavTab.ACCOUNTS, navTabFor(Screen.Accounts))
-        assertEquals(NavTab.ACCOUNTS, navTabFor(Screen.AccountDetail("acc-1")))
+        assertEquals(NavTab.ACCOUNTS, navTabFor(Screen.AccountDetail("acc-1", AccountGroup.DINERO)))
+        assertEquals(NavTab.ACCOUNTS, navTabFor(Screen.AccountDetail("acc-2", AccountGroup.INVERSION)))
+    }
+
+    @Test
+    fun `el detalle de una tarjeta o prestamo marca la pestaña Creditos`() {
+        // Ola 7: las deudas se listan en Créditos, y el detalle se abre desde ahí — la
+        // pestaña resaltada tiene que decir Créditos, no Cuentas.
+        assertEquals(NavTab.CREDITS, navTabFor(Screen.AccountDetail("acc-3", AccountGroup.DEUDA)))
+    }
+
+    @Test
+    fun `la reserva del volver y la pestaña resaltada del detalle no se contradicen`() {
+        // Si la flecha ‹ sin historial cae en Créditos, la pestaña activa mientras se ve el
+        // detalle también tiene que ser Créditos (y lo mismo con Cuentas).
+        AccountGroup.entries.forEach { group ->
+            assertEquals(
+                navTabFor(homeScreenFor(group)),
+                navTabFor(Screen.AccountDetail("acc-1", group)),
+                "$group",
+            )
+        }
+    }
+
+    @Test
+    fun `las deudas viven en Creditos y el resto en Cuentas`() {
+        assertEquals(Screen.Credits, homeScreenFor(AccountGroup.DEUDA))
+        assertEquals(Screen.Accounts, homeScreenFor(AccountGroup.DINERO))
+        assertEquals(Screen.Accounts, homeScreenFor(AccountGroup.INVERSION))
     }
 
     @Test
