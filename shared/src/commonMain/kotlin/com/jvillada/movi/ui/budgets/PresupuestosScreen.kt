@@ -24,6 +24,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
@@ -83,6 +84,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     val goBack = LocalGoBack.current
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
+    // Gasto del mes por categoría según el server (la misma fuente que el Inicio); null hasta
+    // que llegue o si no hay red — ver `progresses`.
+    var serverSpent by remember { mutableStateOf<Map<String, Long>?>(null) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     // Error de guardar/renombrar que la hoja tiene que mostrar (409 del server, red).
     var sheetError by remember { mutableStateOf<String?>(null) }
@@ -107,10 +111,15 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             days = it
             UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
         }
+        // Misma cifra que el Inicio: el server suma con TODO lo que sabe (todos los dispositivos,
+        // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
+        // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
+        // pantalla no. Si falla (sin red) queda el cálculo local de abajo como fallback.
+        runCatching { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { serverSpent = it.spentByCategory }
         loading = false
     }
 
-    val progresses = remember(budgets, days) {
+    val progresses = remember(budgets, days, serverSpent) {
         // countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin él, un ajuste de
         // saldo de un crédito caía en la categoría "Otros" y ponía en OVER al instante a un
         // presupuesto con ese nombre.
@@ -118,7 +127,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // (spentByCategoryForMonth): solo el mes en curso y solo COP. Antes esta pantalla sumaba
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
-        val spentByCategory = spentByCategoryForMonth(days, currentMonthPrefixUtc())
+        val spentByCategory = serverSpent ?: spentByCategoryForMonth(days, currentMonthPrefixUtc())
         budgets.map { b -> BudgetProgress(b, spentByCategory[b.category] ?: 0L) }
             .sortedByDescending { it.pctRaw }
     }
