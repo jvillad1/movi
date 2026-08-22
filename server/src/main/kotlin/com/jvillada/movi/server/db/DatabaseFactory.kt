@@ -34,6 +34,8 @@ object DatabaseFactory {
             // no podría recibir la generación nueva del Inicio.
             // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users)
+            // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
+            with(Migrations) { runAll() }
         }
         seedScreens()
     }
