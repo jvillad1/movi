@@ -139,43 +139,29 @@ fun DashboardScreen(
             .background(MinBg)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.clickable { onNavigate(Screen.Profile) },
-                ) {
-                    // F41: mismo componente que Movimientos y Presupuestos — el borde sutil es
-                    // lo que antes faltaba para que se viera tocable, no solo lo fuera.
-                    AvatarButton(onClick = { onNavigate(Screen.Profile) })
-                    Text(SessionManager.userName?.substringBefore(" ") ?: "Usuario", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
-                }
-                // F5: la campana vuelve con contenido real — antes disparaba siempre un
-                // snackbar "Sin notificaciones por ahora" y el punto rojo era fijo, sin
-                // relación con si de verdad había algo. Ahora el punto solo aparece cuando
-                // `notifications` no está vacío.
-                Box {
-                    Icon(
-                        Icons.Rounded.Notifications,
-                        contentDescription = "Notificaciones",
-                        tint = MinText,
-                        modifier = Modifier.size(22.dp).clickable { showNotifications = true },
-                    )
-                    if (notifications.isNotEmpty()) {
-                        StatusDot(
-                            color = MinExpense,
-                            modifier = Modifier.align(Alignment.TopEnd),
+            // F60: encabezado único — Inicio es raíz: avatar + el rótulo del menú + la campana.
+            // F5: la campana tiene contenido real — el punto solo aparece cuando `notifications`
+            // no está vacío.
+            MinScreenHeader(
+                title = "Inicio",
+                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                action = {
+                    Box {
+                        Icon(
+                            Icons.Rounded.Notifications,
+                            contentDescription = "Notificaciones",
+                            tint = MinText,
+                            modifier = Modifier.size(22.dp).clickable { showNotifications = true },
                         )
+                        if (notifications.isNotEmpty()) {
+                            StatusDot(
+                                color = MinExpense,
+                                modifier = Modifier.align(Alignment.TopEnd),
+                            )
+                        }
                     }
-                }
-            }
+                },
+            )
 
             Spacer(Modifier.height(8.dp))
 

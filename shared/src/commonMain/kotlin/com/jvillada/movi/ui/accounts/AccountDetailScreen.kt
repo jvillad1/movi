@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CreditCard
@@ -108,38 +107,21 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
 
             // Header
             val accountTypePair = account?.let { accountTypeIcon(it.type) }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 8.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = MinText,
-                    // F22: el detalle vuelve a Mis cuentas si no hay historial.
-                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Accounts) },
-                )
-                Text(
-                    text = account?.name ?: "",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    letterSpacing = (-0.4).sp,
-                    modifier = Modifier.weight(1f),
-                )
-                if (accountTypePair != null) {
-                    Icon(
-                        imageVector = accountTypePair.first,
-                        contentDescription = accountTypePair.second,
-                        tint = MinTextDim,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
+            // F60 · F22: encabezado único; el detalle vuelve a Cuentas si no hay historial.
+            MinScreenHeader(
+                title = account?.name ?: "",
+                leading = HeaderLeading.Back(fallback = Screen.Accounts),
+                action = if (accountTypePair != null) {
+                    {
+                        Icon(
+                            imageVector = accountTypePair.first,
+                            contentDescription = accountTypePair.second,
+                            tint = MinTextDim,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                } else null,
+            )
 
             if (loading) {
                 LinearProgressIndicator(

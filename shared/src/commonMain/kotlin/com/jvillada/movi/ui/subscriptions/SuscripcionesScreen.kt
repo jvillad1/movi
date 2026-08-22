@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -22,14 +21,12 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     var result by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
     var scanning by remember { mutableStateOf(false) }
@@ -70,33 +67,28 @@ fun SuscripcionesScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // F22: ya volvía a Más a mano (era la única correcta) — ahora usa la pila real igual.
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) })
-            Text("Suscripciones", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-            // F38: el alta manual junto al re-escaneo — mismo componente que Recurrentes.
-            if (active.isNotEmpty()) {
-                NewItemButton(
-                    label = "Nueva suscripción",
-                    onClick = { sheetOpen = true },
+        // F60: encabezado único — se abre desde Más (flecha, F22). Acciones propias: el alta
+        // manual (F38, solo con activas) y el re-escaneo.
+        MinScreenHeader(
+            title = "Suscripciones",
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            action = {
+                if (active.isNotEmpty()) {
+                    NewItemButton(label = "Nueva suscripción", onClick = { sheetOpen = true })
+                }
+                Text(
+                    if (scanning) "Escaneando…" else "Re-escanear",
+                    fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    color = if (scanning) MinTextMute else MinText,
+                    modifier = Modifier.clickable(enabled = !scanning) { rescan() },
                 )
-            }
-            Text(
-                if (scanning) "Escaneando…" else "Re-escanear",
-                fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                color = if (scanning) MinTextMute else MinText,
-                modifier = Modifier.clickable(enabled = !scanning) { rescan() },
-            )
-        }
+            },
+        )
         if (active.isEmpty()) {
             NewItemButton(
                 label = "Nueva suscripción",
                 onClick = { sheetOpen = true },
-                modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                 full = true,
             )
         }

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,13 +29,11 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
 @Composable
 fun MetasScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     var goals by remember { mutableStateOf<List<Goal>>(emptyList()) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     // loadKey incrementa tras cada crear/editar/borrar para forzar la recarga.
@@ -54,29 +51,20 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
     }
     Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // F22: vuelve a donde estabas de verdad (Inicio o Más); Metas vive en
-            // Más, así que ese es el destino de reserva si no hay historial.
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
-            Text("Metas de ahorro", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-            // F26: el "+" decorativo se reemplaza por el alta real — mismo componente que
-            // Recurrentes/Presupuestos/Créditos.
-            if (goals.isNotEmpty()) {
-                NewItemButton(
-                    label = "Nueva meta",
-                    onClick = { sheetGoal = null; sheetOpen = true },
-                )
-            }
-        }
+        // F60: encabezado único — Metas se abre desde Más (flecha, F22) y lleva el mismo
+        // rótulo que su acceso («Metas»); el alta compacta a la derecha cuando ya hay (F26).
+        MinScreenHeader(
+            title = "Metas",
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            action = if (goals.isNotEmpty()) {
+                { NewItemButton(label = "Nueva meta", onClick = { sheetGoal = null; sheetOpen = true }) }
+            } else null,
+        )
         if (goals.isEmpty()) {
             NewItemButton(
                 label = "Nueva meta",
                 onClick = { sheetGoal = null; sheetOpen = true },
-                modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                 full = true,
             )
         }

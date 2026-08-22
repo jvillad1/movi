@@ -170,36 +170,23 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 8.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // F41: mismo componente que Inicio y Presupuestos.
-                AvatarButton(onClick = { onNavigate(Screen.Profile) })
-                Text(
-                    text = "Movimientos",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    letterSpacing = (-0.8).sp,
+        // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
+        MinScreenHeader(
+            title = "Movimientos",
+            leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+            action = {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "Buscar",
+                    tint = MinTextDim,
+                    modifier = Modifier.size(22.dp).clickable {
+                        searchActive = !searchActive
+                        if (!searchActive) searchQuery = ""
+                    },
                 )
-            }
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = "Buscar",
-                tint = MinTextDim,
-                modifier = Modifier.size(22.dp).clickable {
-                    searchActive = !searchActive
-                    if (!searchActive) searchQuery = ""
-                },
-            )
-        }
+            },
+        )
+        Spacer(Modifier.height(12.dp))
 
         // F13: campo de búsqueda, debajo del encabezado — solo aparece al tocar la lupa.
         if (searchActive) {

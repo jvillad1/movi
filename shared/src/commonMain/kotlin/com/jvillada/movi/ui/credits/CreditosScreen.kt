@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,7 +26,6 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -39,7 +37,6 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     var cards by remember { mutableStateOf<List<CardSummary>>(emptyList()) }
     var showTypeChooser by remember { mutableStateOf(false) }
@@ -65,28 +62,24 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         Column(
             modifier = Modifier.fillMaxSize().background(MinBg)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                // F22: Créditos vive en Más — destino de reserva si no hay historial
-                // (antes caía siempre en Inicio, aunque entraras desde Más).
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Mas) })
-                Text("Créditos", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-                // F18: compacto arriba a la derecha cuando ya hay deudas; vacío, el botón de
-                // abajo (ver el bloque bajo el header) es la acción principal.
-                if (!isEmpty) {
-                    NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true })
-                }
-            }
+            // F60: encabezado único — Créditos se abre desde Más: flecha atrás (F22: Más como
+            // reserva si no hay historial) y, con deudas ya creadas, el alta compacta (F18).
+            MinScreenHeader(
+                title = "Créditos",
+                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                action = if (!isEmpty) {
+                    { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
+                } else null,
+            )
             if (isEmpty && !loading) {
                 NewItemButton(
                     label = "Nuevo crédito",
                     onClick = { showTypeChooser = true },
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                     full = true,
                 )
+            } else {
+                Spacer(Modifier.height(14.dp))
             }
 
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {

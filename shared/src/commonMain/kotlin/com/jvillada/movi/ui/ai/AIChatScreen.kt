@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -33,7 +32,6 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.extractos.rememberFilePicker
@@ -47,7 +45,6 @@ private data class PendingImage(val fileName: String, val bytes: ByteArray, val 
 @OptIn(ExperimentalEncodingApi::class)
 @Composable
 fun AIChatScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     val coroutine = rememberCoroutineScope()
     val messages = remember {
         mutableStateListOf<ChatMessage>(
@@ -107,38 +104,23 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(
-                Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "Volver",
-                tint = MinText,
-                // F22: Movi AI vive en Más (así la resalta su propia barra inferior) —
-                // destino de reserva si no hay historial.
-                modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("Movi AI", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
-                    Text(
-                        "BETA",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MinTextMute,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 0.6.sp,
-                    )
-                }
-                Text("Conoce tus finanzas", fontSize = 11.sp, color = MinTextMute)
-            }
-        }
-        Hairline()
+        // F60 · F22: encabezado único; Movi AI se abre desde Más — destino de reserva si no
+        // hay historial. El «BETA» pasa a la derecha, como marca, no como parte del título.
+        MinScreenHeader(
+            title = "Movi AI",
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            subtitle = "Conoce tus finanzas",
+            action = {
+                Text(
+                    "BETA",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinTextMute,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 0.6.sp,
+                )
+            },
+        )
 
         LazyColumn(
             modifier = Modifier.weight(1f),

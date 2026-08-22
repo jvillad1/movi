@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,7 +34,6 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
@@ -44,7 +42,6 @@ private val MinAmber = MinWarn
 
 @Composable
 fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     var rules by remember { mutableStateOf<List<RecurringRule>>(emptyList()) }
     var upcoming by remember { mutableStateOf<List<UpcomingPayment>>(emptyList()) }
     // loadKey increments after every create/update/delete to trigger a reload.
@@ -93,39 +90,20 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = MinText,
-                    // F22: Recurrentes vive en Más — destino de reserva si no hay historial.
-                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Mas) },
-                )
-                Text(
-                    text = "Recurrentes",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    modifier = Modifier.weight(1f),
-                )
-                // F18: con reglas ya creadas, el "+" pasa a botón compacto con texto acá; vacío,
-                // el botón se muestra a todo el ancho debajo del encabezado (más abajo).
-                if (rules.isNotEmpty()) {
-                    NewItemButton(
-                        label = "Nuevo pago",
-                        onClick = { sheetRule = null; sheetOpen = true },
-                    )
-                }
-            }
+            // F60: encabezado único — se abre desde Más (flecha, F22); con reglas ya creadas el
+            // alta pasa a botón compacto a la derecha (F18), vacío va a todo el ancho debajo.
+            MinScreenHeader(
+                title = "Recurrentes",
+                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                action = if (rules.isNotEmpty()) {
+                    { NewItemButton(label = "Nuevo pago", onClick = { sheetRule = null; sheetOpen = true }) }
+                } else null,
+            )
             if (rules.isEmpty() && !loading) {
                 NewItemButton(
                     label = "Nuevo pago",
                     onClick = { sheetRule = null; sheetOpen = true },
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                     full = true,
                 )
             }

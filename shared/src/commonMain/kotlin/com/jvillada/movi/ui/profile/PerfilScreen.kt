@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,17 +68,14 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             .fillMaxSize()
             .background(MinBg)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 8.dp, bottom = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Perfil", fontSize = 26.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.8).sp)
-            Icon(imageVector = Icons.Filled.Settings, contentDescription = "Ajustes", tint = MinTextDim, modifier = Modifier.size(22.dp))
-        }
+        // F60: encabezado único — Perfil es subpantalla (se abre desde el avatar o desde Más):
+        // flecha atrás con Más como reserva. El engranaje que había a la derecha no hacía nada
+        // (sin onClick), así que no se conserva como «acción».
+        MinScreenHeader(
+            title = "Perfil",
+            leading = HeaderLeading.Back(fallback = Screen.Mas),
+        )
+        Spacer(Modifier.height(14.dp))
 
         LazyColumn(
             modifier = Modifier.weight(1f),

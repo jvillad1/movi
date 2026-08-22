@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -27,7 +26,6 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.dashboard.currentMonthPrefixApp
@@ -81,7 +79,6 @@ private sealed class Sheet {
 
 @Composable
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
-    val goBack = LocalGoBack.current
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     // Gasto del mes por categoría según el server (la misma fuente que el Inicio); null hasta
@@ -145,40 +142,24 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Volver",
-                    tint = MinText,
-                    // F22: Presupuestos es una pestaña de primer nivel — Inicio como destino
-                    // de reserva si no hay historial (antes caía siempre en Análisis).
-                    modifier = Modifier.size(22.dp).clickable { goBack(Screen.Dashboard) },
-                )
-                // F41: mismo componente que Inicio y Movimientos — Perfil alcanzable desde acá.
-                AvatarButton(onClick = { onNavigate(Screen.Profile) })
-                Text(
-                    text = "Presupuestos",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    modifier = Modifier.weight(1f),
-                )
-                // F18: compacto arriba a la derecha cuando ya hay presupuestos.
-                if (budgets.isNotEmpty()) {
-                    NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add })
-                }
-            }
+            // F60: encabezado único — Presupuestos es raíz (vive en Más y en el rail): avatar,
+            // rótulo del menú y, con presupuestos ya creados, el alta compacta a la derecha (F18).
+            MinScreenHeader(
+                title = "Presupuestos",
+                leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
+                action = if (budgets.isNotEmpty()) {
+                    { NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add }) }
+                } else null,
+            )
             if (budgets.isEmpty() && !loading) {
                 NewItemButton(
                     label = "Nuevo presupuesto",
                     onClick = { sheet = Sheet.Add },
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                     full = true,
                 )
+            } else {
+                Spacer(Modifier.height(14.dp))
             }
 
             LazyColumn(

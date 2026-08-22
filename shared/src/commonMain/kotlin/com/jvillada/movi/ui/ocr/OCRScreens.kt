@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.rounded.Check
@@ -131,16 +130,13 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
 fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
     val goBack = LocalGoBack.current
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // F22: normalmente vuelve a la cámara (paso anterior real); si entraste
-            // directo a confirmar (poco probable, pero por si acaso) cae a Inicio.
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Volver", tint = MinText, modifier = Modifier.size(22.dp).clickableSimple { goBack(Screen.Dashboard) })
-            Text("Confirma el recibo", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
-        }
+        // F60 · F22: normalmente vuelve a la cámara (paso anterior real); si entraste directo a
+        // confirmar (poco probable, pero por si acaso) cae a Inicio.
+        MinScreenHeader(
+            title = "Confirma el recibo",
+            leading = HeaderLeading.Back(fallback = Screen.Dashboard),
+        )
+        Spacer(Modifier.height(14.dp))
 
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {

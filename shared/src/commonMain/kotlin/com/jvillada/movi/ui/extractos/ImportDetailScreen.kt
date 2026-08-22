@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -25,7 +24,6 @@ import com.jvillada.movi.shared.model.StatementImport
 import com.jvillada.movi.shared.model.StatementImportDetail
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
@@ -35,7 +33,6 @@ import kotlinx.datetime.toLocalDateTime
 
 @Composable
 fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
-    val goBack = LocalGoBack.current
     var detail by remember { mutableStateOf<StatementImportDetail?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -53,19 +50,12 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
-        ) {
-            Icon(
-                Icons.Rounded.ArrowBackIosNew, "Volver",
-                tint = MinTextDim,
-                // F22: el detalle vuelve a la lista de Extractos si no hay historial.
-                modifier = Modifier.clickable { goBack(Screen.Extractos) }.padding(12.dp).size(20.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Text("Detalle de importación", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MinText)
-        }
+        // F60 · F22: encabezado único; el detalle vuelve a la lista de Extractos si no hay historial.
+        MinScreenHeader(
+            title = "Detalle de importación",
+            leading = HeaderLeading.Back(fallback = Screen.Extractos),
+        )
+        Spacer(Modifier.height(12.dp))
 
         when {
             loading -> LinearProgressIndicator(
