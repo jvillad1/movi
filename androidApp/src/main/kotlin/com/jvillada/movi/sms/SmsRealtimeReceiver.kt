@@ -21,10 +21,13 @@ class SmsRealtimeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
-        // Multiparte: agrupar por remitente y concatenar cuerpos en orden
+        // Multiparte: agrupar por remitente y reensamblar los cuerpos en orden. El reensamblado
+        // vive en :shared (joinMultipartBody) porque tiene que dar EXACTAMENTE el mismo texto
+        // que la columna `body` del inbox, que es lo que sube el backfill — el dedupe del
+        // server compara (texto, tiempo), no ids. Ver SmsMultipartTest.
         val bySender = messages.filterNotNull().groupBy { it.originatingAddress }
         for ((sender, parts) in bySender) {
-            val body = parts.joinToString("") { it.messageBody.orEmpty() }
+            val body = joinMultipartBody(parts.map { it.messageBody })
             if (body.isBlank() || !BankSenderFilter.matches(sender, body, SmsFilterConfigStore.load(context))) continue
             val ts = parts.first().timestampMillis
             val id = smsRealtimeId(sender, ts, body)
