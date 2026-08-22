@@ -1,0 +1,312 @@
+package com.jvillada.movi.server.routes
+
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
+import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.CardPaymentDismissals
+import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.Goals
+import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.SmsMessages
+import com.jvillada.movi.server.db.StatementImports
+import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.plugins.configureRouting
+import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
+import io.ktor.server.auth.authentication
+import io.ktor.server.auth.jwt.JWTPrincipal
+import io.ktor.server.auth.jwt.jwt
+import io.ktor.server.testing.ApplicationTestBuilder
+import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.util.Date
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+/**
+ * `GET /api/dashboard/summary`: el Inicio deja de bajarse colecciones enteras (todos los SMS,
+ * todos los candidatos a pago de tarjeta, todos los eventos de la historia) para sacar un
+ * número. Estos tests fijan que los números del resumen son EXACTAMENTE los que la pantalla
+ * calculaba antes del lado del cliente — misma regla `isCashFlow` (apertura y pago de tarjeta
+ * fuera, LOAN fuera, solo COP), mismo `looksLikeCardPayment`, mismo "pending" del inbox —
+ * y que todo queda aislado por usuario.
+ *
+ * Mismo arnés que AccountRoutesTest/FinanceRoutesTest: H2 en memoria (compat PostgreSQL),
+ * JWT local, cadena completa de plugins vía `wireApp()`.
+ */
+class DashboardRoutesTest {
+
+    private val testSecret = "test-secret-for-dashboard-routes-tests-min-32-chars"
+    private val issuer   = "movi"
+    private val audience = "movi-client"
+
+    private val userId = "user-a-dashboard"
+    private val otherUserId = "user-b-dashboard"
+
+    private val savings = "acc-savings"
+    private val card    = "acc-card"
+    private val loan    = "acc-loan"
+
+    // ── DB bootstrap ─────────────────────────────────────────────────────────
+
+    @BeforeTest
+    fun setUp() {
+        Database.connect(
+            url    = "jdbc:h2:mem:dashboard_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
+            driver = "org.h2.Driver",
+        )
+        transaction {
+            SchemaUtils.drop(
+                Users, Accounts, StatementImports, Events, VoidEvents,
+                Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals,
+            )
+            SchemaUtils.create(
+                Users, Accounts, StatementImports, Events, VoidEvents,
+                Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals,
+            )
+            listOf(userId to "a@dashboard.test", otherUserId to "b@dashboard.test").forEach { (id, mail) ->
+                Users.insert {
+                    it[Users.id]     = id
+                    it[email]        = mail
+                    it[name]         = id
+                    it[passwordHash] = "hash"
+                }
+            }
+            account(savings, "SAVINGS", userId)
+            account(card, "CREDIT_CARD", userId)
+            account(loan, "LOAN", userId)
+            account("acc-b", "SAVINGS", otherUserId)
+        }
+    }
+
+    private fun account(id: String, type: String, uid: String) {
+        Accounts.insert {
+            it[Accounts.id]     = id
+            it[Accounts.userId] = uid
+            it[name]            = id
+            it[Accounts.type]   = type
+            it[balance]         = 0L
+        }
+    }
+
+    private fun event(
+        id: String,
+        accountId: String,
+        type: String,
+        amount: Long,
+        category: String = "Comida",
+        description: String = "Almuerzo",
+        currency: String = "COP",
+        timestamp: Long = System.currentTimeMillis(),
+        uid: String = userId,
+    ) = transaction {
+        Events.insert {
+            it[Events.id]          = id
+            it[Events.userId]      = uid
+            it[Events.accountId]   = accountId
+            it[Events.type]        = type
+            it[Events.amount]      = amount
+            it[Events.currency]    = currency
+            it[Events.category]    = category
+            it[Events.description] = description
+            it[Events.timestamp]   = timestamp
+        }
+    }
+
+    private fun voidEvent(eventId: String, uid: String = userId) = transaction {
+        VoidEvents.insert {
+            it[id]              = "void_$eventId"
+            it[VoidEvents.userId] = uid
+            it[originalEventId] = eventId
+            it[timestamp]       = System.currentTimeMillis()
+        }
+    }
+
+    private fun sms(id: String, state: String, uid: String = userId) = transaction {
+        SmsMessages.insert {
+            it[SmsMessages.id]     = id
+            it[SmsMessages.userId] = uid
+            it[time]               = "2026-08-01T10:00:00"
+            it[bank]               = "Bancolombia"
+            it[text]               = "Compra \$50.000 en Netflix"
+            it[SmsMessages.state]  = state
+            it[det]                = ""
+        }
+    }
+
+    /** Primer milisegundo del mes anterior en UTC — la misma zona que usa `finance-summary`. */
+    private fun lastMonthMillis(): Long =
+        ZonedDateTime.now(ZoneOffset.UTC).withDayOfMonth(1).minusMonths(1).plusDays(10)
+            .toInstant().toEpochMilli()
+
+    // ── JWT helpers ───────────────────────────────────────────────────────────
+
+    private fun tokenFor(userId: String): String =
+        JWT.create()
+            .withIssuer(issuer)
+            .withAudience(audience)
+            .withClaim("userId", userId)
+            .withClaim("email", "$userId@dashboard.test")
+            .withExpiresAt(Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
+            .sign(Algorithm.HMAC256(testSecret))
+
+    private fun Application.testModule() {
+        configureSerialization()
+        val verifier = JWT.require(Algorithm.HMAC256(testSecret))
+            .withIssuer(issuer)
+            .withAudience(audience)
+            .build()
+        authentication {
+            jwt("jwt") {
+                this.verifier(verifier)
+                validate { credential ->
+                    if (credential.payload.getClaim("userId").asString() != null) JWTPrincipal(credential.payload) else null
+                }
+            }
+        }
+        configureRouting()
+    }
+
+    private fun ApplicationTestBuilder.wireApp() {
+        application { testModule() }
+    }
+
+    private suspend fun ApplicationTestBuilder.summary(uid: String = userId, query: String = ""): JsonObject {
+        val res = client.get("/api/dashboard/summary$query") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(uid)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        return Json.parseToJsonElement(res.bodyAsText()).jsonObject
+    }
+
+    // El Json del server tiene encodeDefaults=false: un cero no viaja. Misma convención que
+    // FinanceRoutesTest.eventCount().
+    private fun JsonObject.long(key: String): Long = this[key]?.jsonPrimitive?.long ?: 0L
+    private fun JsonObject.spentByCategory(): Map<String, Long> =
+        this["spentByCategory"]?.jsonObject?.mapValues { it.value.jsonPrimitive.long } ?: emptyMap()
+
+    // ── Tests ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `gasto e ingreso del mes siguen isCashFlow - apertura, pago de tarjeta y LOAN quedan fuera`() = testApplication {
+        wireApp()
+        event("e-income", savings, "INCOME", 3_000_000L, category = "Sueldo")
+        event("e-food", savings, "EXPENSE", 120_000L, category = "Comida")
+        event("e-food-2", savings, "EXPENSE", 30_000L, category = "Comida")
+        event("e-transport", card, "EXPENSE", 50_000L, category = "Transporte")   // compra con tarjeta: sí es gasto
+        event("e-opening", savings, "INCOME", 9_000_000L, category = OPENING_CATEGORY)
+        event("e-card-pay", savings, "EXPENSE", 1_000_000L, category = CARD_PAYMENT_CATEGORY, description = "PAGO AUTOM TC")
+        event("e-card-pay-in", card, "INCOME", 1_000_000L, category = CARD_PAYMENT_CATEGORY)
+        event("e-loan", loan, "INCOME", 60_000_000L, category = "Ajuste")
+        event("e-usd", savings, "EXPENSE", 100L, category = "Comida", currency = "USD")
+
+        val body = summary()
+        assertEquals(3_000_000L, body.long("monthIncome"), "solo el sueldo: ni la apertura ni el ajuste del crédito")
+        assertEquals(200_000L, body.long("monthSpent"), "comida + compra con tarjeta; el pago del extracto no se duplica")
+        assertEquals(mapOf("Comida" to 150_000L, "Transporte" to 50_000L), body.spentByCategory())
+    }
+
+    @Test
+    fun `eventos anulados y de otros meses no cuentan`() = testApplication {
+        wireApp()
+        event("e-this", savings, "EXPENSE", 10_000L)
+        event("e-voided", savings, "EXPENSE", 99_000L)
+        voidEvent("e-voided")
+        event("e-last-month", savings, "EXPENSE", 77_000L, timestamp = lastMonthMillis())
+
+        val body = summary()
+        assertEquals(10_000L, body.long("monthSpent"))
+        assertEquals(mapOf("Comida" to 10_000L), body.spentByCategory())
+        val now = ZonedDateTime.now(ZoneOffset.UTC)
+        assertEquals("${now.year}-${now.monthValue.toString().padStart(2, '0')}", body["month"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `cuenta candidatos a pago de tarjeta con la misma regla que el GET de candidatos`() = testApplication {
+        wireApp()
+        event("c-1", savings, "EXPENSE", 500_000L, category = "Otros", description = "PAGO AUTOM TC VISA")
+        event("c-2", savings, "EXPENSE", 500_000L, category = "Otros", description = "Abono tarjeta Master")
+        event("c-already", savings, "EXPENSE", 500_000L, category = CARD_PAYMENT_CATEGORY, description = "Pago tarjeta") // ya categorizado
+        event("c-qr", savings, "EXPENSE", 20_000L, category = "Otros", description = "PAGO QR tienda")                     // falso positivo que NO debe contar
+        event("c-from-card", card, "EXPENSE", 500_000L, category = "Otros", description = "Pago tarjeta")                   // no sale de una cuenta de activo
+        event("c-income", savings, "INCOME", 500_000L, category = "Otros", description = "Pago tarjeta")                    // no es egreso
+        event("c-voided", savings, "EXPENSE", 500_000L, category = "Otros", description = "Pago tarjeta")
+        voidEvent("c-voided")
+        event("c-dismissed", savings, "EXPENSE", 500_000L, category = "Otros", description = "Pago tarjeta")
+        val uid = userId
+        transaction {
+            CardPaymentDismissals.insert {
+                it[CardPaymentDismissals.userId] = uid
+                it[eventId] = "c-dismissed"
+            }
+        }
+
+        assertEquals(2L, summary().long("cardPaymentCandidates"))
+    }
+
+    @Test
+    fun `cuenta solo los SMS en estado pending`() = testApplication {
+        wireApp()
+        sms("s-1", "pending")
+        sms("s-2", "pending")
+        sms("s-3", "confirmed")
+        sms("s-4", "ignored")
+        sms("s-5", "new")
+
+        assertEquals(2L, summary().long("pendingSms"))
+    }
+
+    @Test
+    fun `todo queda aislado por usuario`() = testApplication {
+        wireApp()
+        event("b-spent", "acc-b", "EXPENSE", 40_000L, uid = otherUserId)
+        event("b-cand", "acc-b", "EXPENSE", 40_000L, category = "Otros", description = "Pago tarjeta", uid = otherUserId)
+        sms("b-sms", "pending", uid = otherUserId)
+
+        val a = summary()
+        assertEquals(0L, a.long("monthSpent"))
+        assertEquals(0L, a.long("cardPaymentCandidates"))
+        assertEquals(0L, a.long("pendingSms"))
+
+        val b = summary(uid = otherUserId)
+        assertEquals(80_000L, b.long("monthSpent"))
+        assertEquals(1L, b.long("cardPaymentCandidates"))
+        assertEquals(1L, b.long("pendingSms"))
+    }
+
+    @Test
+    fun `sin datos responde en ceros y con el scope pedido - un scope desconocido es 400`() = testApplication {
+        wireApp()
+        val body = summary(query = "?scope=family")
+        assertEquals("FAMILY", body["scope"]!!.jsonPrimitive.content)
+        assertEquals(0L, body.long("monthSpent"))
+        assertEquals(emptyMap(), body.spentByCategory())
+
+        val bad = client.get("/api/dashboard/summary?scope=nope") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+    }
+}
