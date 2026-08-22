@@ -86,7 +86,7 @@ fun upcomingPayments(rules: List<RecurringRule>, today: LocalDate, leadDays: Int
  * [ReminderScheduler] sella con [reminderKeyFor], la misma función que filtra aquí.
  *
  * @param rules       pairs of rule + the value of `lastRemindedPeriod` from the DB row
- * @param today       reference date (normally LocalDate.now(UTC))
+ * @param today       reference date (normally AppClock.today(), la fecha civil de Bogotá)
  * @param leadDays    how many days before due is considered DUE_SOON
  */
 fun selectDueForReminder(
