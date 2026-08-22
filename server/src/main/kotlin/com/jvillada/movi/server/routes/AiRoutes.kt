@@ -34,12 +34,11 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import java.io.File
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
+import com.jvillada.movi.server.time.currentMonthWindow
 
 private fun resolveApiKey(): String? {
     System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() && it != "x" }?.let { return it }
@@ -234,12 +233,8 @@ private suspend fun buildUserContext(uid: String): String {
     }
     val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
 
-    // Month window (UTC), same approach as finance-summary
-    val now = ZonedDateTime.now(ZoneOffset.UTC)
-    val monthStart = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
-        .toInstant().toEpochMilli()
-    val monthEnd = now.withDayOfMonth(1).plusMonths(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
-        .toInstant().toEpochMilli()
+    // Ventana del mes en la zona de la app (Bogotá), la misma que usa finance-summary.
+    val (monthStart, monthEnd) = currentMonthWindow()
 
     // Income and expense sums — filter ResultRows directly, same as finance-summary
     val (ingresos, egresos) = dbQuery {
