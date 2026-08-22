@@ -156,7 +156,13 @@ class DashboardRoutesTest {
         }
     }
 
-    /** Primer milisegundo del mes anterior en UTC — la misma zona que usa `finance-summary`. */
+    /** Primer milisegundo del mes en curso en UTC — la misma zona y convención que usa `finance-summary`. */
+    private fun monthStartMillis(): Long =
+        ZonedDateTime.now(ZoneOffset.UTC).withDayOfMonth(1)
+            .withHour(0).withMinute(0).withSecond(0).withNano(0)
+            .toInstant().toEpochMilli()
+
+    /** El día 11 del mes anterior en UTC — bien adentro del mes pasado, lejos del borde. */
     private fun lastMonthMillis(): Long =
         ZonedDateTime.now(ZoneOffset.UTC).withDayOfMonth(1).minusMonths(1).plusDays(10)
             .toInstant().toEpochMilli()
@@ -235,10 +241,14 @@ class DashboardRoutesTest {
         event("e-voided", savings, "EXPENSE", 99_000L)
         voidEvent("e-voided")
         event("e-last-month", savings, "EXPENSE", 77_000L, timestamp = lastMonthMillis())
+        // Bordes de la ventana [monthStart, monthEnd): el último milisegundo del mes anterior
+        // queda FUERA y el primer milisegundo del mes en curso ENTRA.
+        event("e-edge-out", savings, "EXPENSE", 5_000L, timestamp = monthStartMillis() - 1)
+        event("e-edge-in", savings, "EXPENSE", 3_000L, timestamp = monthStartMillis())
 
         val body = summary()
-        assertEquals(10_000L, body.long("monthSpent"))
-        assertEquals(mapOf("Comida" to 10_000L), body.spentByCategory())
+        assertEquals(13_000L, body.long("monthSpent"))
+        assertEquals(mapOf("Comida" to 13_000L), body.spentByCategory())
         val now = ZonedDateTime.now(ZoneOffset.UTC)
         assertEquals("${now.year}-${now.monthValue.toString().padStart(2, '0')}", body["month"]!!.jsonPrimitive.content)
     }
