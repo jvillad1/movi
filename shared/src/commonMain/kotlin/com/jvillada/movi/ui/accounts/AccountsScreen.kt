@@ -279,7 +279,7 @@ private fun AccountsGroup(
                     },
                     isLast = index == accounts.size - 1,
                     showChevron = true,
-                    onClick = { onNavigate(Screen.AccountDetail(account.id)) },
+                    onClick = { onNavigate(Screen.AccountDetail(account.id, account.type.group)) },
                 )
             }
         }

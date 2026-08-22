@@ -31,7 +31,6 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -40,6 +39,7 @@ import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
@@ -47,7 +47,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 @Composable
-fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
+fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: AccountGroup) {
     val goBack = LocalGoBack.current
     var account by remember { mutableStateOf<Account?>(null) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
@@ -111,10 +111,12 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String) {
             val accountTypePair = account?.let { accountTypeIcon(it.type) }
             // F60 · F22: encabezado único; sin historial, el detalle vuelve a donde vive la
             // cuenta: Créditos si es deuda (Ola 7: tarjetas y préstamos ya no se listan en
-            // Cuentas), Cuentas en cualquier otro caso.
+            // Cuentas), Cuentas en cualquier otro caso. El grupo viene en la pantalla, no de la
+            // cuenta cargada: así la reserva es la correcta desde el primer frame (y es el mismo
+            // dato con el que `navTabFor` resalta la pestaña).
             MinScreenHeader(
                 title = account?.name ?: "",
-                leading = HeaderLeading.Back(fallback = homeScreenFor(account)),
+                leading = HeaderLeading.Back(fallback = homeScreenFor(group)),
                 action = if (accountTypePair != null) {
                     {
                         Icon(
@@ -408,11 +410,3 @@ private fun accountTypeIcon(type: AccountType): Pair<ImageVector, String> = when
     AccountType.CREDIT_CARD -> Icons.Filled.CreditCard to "Crédito"
     AccountType.LOAN        -> Icons.Filled.RequestQuote to "Préstamo"
 }
-
-/**
- * Ola 7 (F61): dónde «vive» una cuenta en la navegación — destino de reserva del «volver» del
- * detalle cuando no hay historial. Las deudas se listan en Créditos; el resto, en Cuentas.
- * Mientras la cuenta no cargó, Cuentas (lo más probable).
- */
-private fun homeScreenFor(account: Account?): Screen =
-    if (account != null && account.type.group == AccountGroup.DEUDA) Screen.Credits else Screen.Accounts

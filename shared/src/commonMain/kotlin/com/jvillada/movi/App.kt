@@ -168,7 +168,11 @@ fun App() {
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)
                 Screen.Accounts         -> AccountsScreen(navigate)
-                is Screen.AccountDetail -> AccountDetailScreen(navigate, currentScreen.accountId)
+                is Screen.AccountDetail -> AccountDetailScreen(
+                    onNavigate = navigate,
+                    accountId = currentScreen.accountId,
+                    group = currentScreen.group,
+                )
                 is Screen.StatementReview -> StatementReviewScreen(
                     onNavigate = navigate,
                     result = Json.decodeFromString(currentScreen.resultJson),
