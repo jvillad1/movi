@@ -30,6 +30,9 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
+import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.newId
@@ -49,7 +52,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
         runCatching { Repositories.wallets.getSmsMessages() }
             .onSuccess { smsItems = it }
     }
-    val pendingCount = smsItems.count { it.state == "pending" }
+    val pendingCount = smsItems.count { it.state == SMS_STATE_PENDING }
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
         // F60: encabezado único — se abre desde Más (flecha, F22); la cuenta de pendientes
         // va como subtítulo y «Actualizar» es la acción propia.
@@ -142,9 +145,9 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                             Text(sms.time, fontSize = 11.5.sp, color = MinTextMute)
                             Spacer(Modifier.weight(1f))
                             val (label, color) = when (sms.state) {
-                                "pending" -> "PENDIENTE" to MinWarn
-                                "auto" -> "AUTO" to MinIncome
-                                "ignored" -> "IGNORADO" to MinTextMute
+                                SMS_STATE_PENDING -> "PENDIENTE" to MinWarn
+                                SMS_STATE_CONFIRMED -> "CONFIRMADO" to MinIncome
+                                SMS_STATE_IGNORED -> "IGNORADO" to MinTextMute
                                 else -> sms.state.uppercase() to MinTextMute
                             }
                             Text(label, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = color, letterSpacing = 0.4.sp)
@@ -162,7 +165,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(sms.det, fontSize = 13.sp, color = MinText, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-                            if (sms.state == "pending") {
+                            if (sms.state == SMS_STATE_PENDING) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(999.dp))
@@ -244,7 +247,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                 Repositories.wallets.confirmSms(smsId)
             }.onSuccess {
                 working = false
-                sms = sms?.copy(state = "confirmed")
+                sms = sms?.copy(state = SMS_STATE_CONFIRMED)
                 // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
                 // a este detalle ya confirmado (evita duplicar el movimiento).
                 goBack(Screen.SMSInbox)
@@ -262,7 +265,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             val result = runCatching { Repositories.wallets.ignoreSms(smsId) }
             working = false
             result.onSuccess {
-                sms = sms?.copy(state = "ignored")
+                sms = sms?.copy(state = SMS_STATE_IGNORED)
                 goBack(Screen.SMSInbox)
             }
                 .onFailure { error = it.toUserMessage() }
@@ -405,14 +408,14 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
 
                 // Ola 2 #1: red de seguridad — si la pila de navegación rota trae de vuelta a
                 // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
-                if (currentSms != null && currentSms.state != "pending") {
+                if (currentSms != null && currentSms.state != SMS_STATE_PENDING) {
                     Spacer(Modifier.height(10.dp))
                     Text("Este mensaje ya se confirmó", fontSize = 12.sp, color = MinTextMute)
                 }
             }
         }
 
-        val alreadyResolved = currentSms != null && currentSms.state != "pending"
+        val alreadyResolved = currentSms != null && currentSms.state != SMS_STATE_PENDING
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

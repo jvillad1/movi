@@ -224,7 +224,7 @@ class SmsSyncTest {
     }
 
     /**
-     * Re-syncing after confirm does NOT reset state to "new".
+     * Re-syncing after confirm does NOT reset state to "pending".
      *
      * Steps:
      *  1. Sync message id "msg-confirm-1"

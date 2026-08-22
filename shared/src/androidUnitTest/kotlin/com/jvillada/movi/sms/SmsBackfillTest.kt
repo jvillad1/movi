@@ -1,5 +1,6 @@
 package com.jvillada.movi.sms
 
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -7,7 +8,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private fun sms(id: String, bank: String, text: String) =
-    SmsMessage(id = id, time = "2026-08-01 10:00", bank = bank, text = text, state = "new", det = "")
+    SmsMessage(id = id, time = "2026-08-01 10:00", bank = bank, text = text, state = SMS_STATE_PENDING, det = "")
 
 class SmsBackfillFilterTest {
 

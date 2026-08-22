@@ -146,12 +146,34 @@ data class RenameBudgetRequest(
     val newCategory: String,
 )
 
+/**
+ * Estado de un mensaje del banco. Vocabulario ÚNICO para todo el sistema: la ingesta del
+ * server, la bandeja, el detalle y el contador del Inicio hablan de los mismos tres valores.
+ *
+ * El dueño del estado es el server: la ingesta (`POST /api/sms/sync`) siempre escribe
+ * [SMS_STATE_PENDING] — nunca el `state` que venga en el payload — y solo
+ * `POST /api/sms/{id}/confirm` e `/ignore` lo mueven.
+ *
+ * Hubo un segundo nombre para el recién llegado, `"new"`, que escribía la ingesta mientras
+ * todos los lectores filtraban por `"pending"`: los SMS capturados quedaban invisibles para el
+ * Inicio y sin botón «Revisar» en la bandeja. `Migrations.renameLegacyNewSmsStateToPending()`
+ * convierte las filas viejas; no queda código escribiendo `"new"`.
+ */
+const val SMS_STATE_PENDING = "pending"
+
+/** El dueño lo revisó y lo convirtió en movimiento. */
+const val SMS_STATE_CONFIRMED = "confirmed"
+
+/** El dueño lo descartó: no es un movimiento suyo. */
+const val SMS_STATE_IGNORED = "ignored"
+
 @Serializable
 data class SmsMessage(
     val id: String,
     val time: String,
     val bank: String,
     val text: String,
+    /** Uno de [SMS_STATE_PENDING], [SMS_STATE_CONFIRMED] o [SMS_STATE_IGNORED]. Lo fija el server. */
     val state: String,
     val det: String,
 )
