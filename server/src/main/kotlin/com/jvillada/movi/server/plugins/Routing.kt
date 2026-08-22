@@ -20,6 +20,7 @@ fun Application.configureRouting() {
             accountRoutes()
             eventRoutes()
             financeRoutes()
+            dashboardRoutes()
             creditRoutes()
             cardRoutes()
             subscriptionRoutes()

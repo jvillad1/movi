@@ -78,7 +78,13 @@ object Events : Table("financial_events") {
     val syncedAt             = long("synced_at").nullable()
     val statementImportId    = varchar("statement_import_id", 50).nullable()
     override val primaryKey  = PrimaryKey(id)
-    init { index("idx_events_statement_import_id", false, statementImportId) }
+    init {
+        index("idx_events_statement_import_id", false, statementImportId)
+        // Todo lo que lee el Inicio y el resumen del mes filtra por usuario y rango de fechas
+        // (GET /api/dashboard/summary, finance-summary). Se crea solo al arrancar vía
+        // createMissingTablesAndColumns (DatabaseFactory) — sin migración manual.
+        index("idx_events_user_ts", false, userId, timestamp)
+    }
 }
 
 object VoidEvents : Table("void_events") {
