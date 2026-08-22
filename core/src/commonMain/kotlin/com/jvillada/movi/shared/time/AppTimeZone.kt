@@ -34,6 +34,9 @@ object AppTimeZone {
         if (trimmed.isEmpty()) return zone
         return runCatching { TimeZone.of(trimmed) }.getOrElse { zone }
     }
+
+    /** Igual que [resolve] pero devuelve el id IANA — para quien no tiene kotlinx-datetime (el server usa java.time). */
+    fun resolveId(id: String?): String = resolve(id).id
 }
 
 /** Fecha civil de un epoch-ms en la zona de la app. */
