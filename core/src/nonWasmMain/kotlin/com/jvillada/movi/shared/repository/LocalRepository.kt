@@ -2,7 +2,6 @@ package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -15,6 +14,7 @@ import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -412,8 +412,14 @@ class LocalRepository(
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = remote.getFinanceSummary(scope)
     // Igual que getFinanceSummary: es un agregado que solo el server puede calcular con todo lo
     // que sabe (SMS, descartes de candidatos, eventos de todos los dispositivos). Sin red falla
-    // y el Inicio conserva lo último que tenía en DashboardDataCache — igual que hacían las
-    // tres llamadas remotas que este resumen reemplaza.
+    // y el Inicio conserva lo último que tenía en DashboardDataCache.
+    //
+    // Ojo con lo que reemplaza: getSmsMessages y getCardPaymentCandidates eran remotas, pero
+    // el gasto del mes salía de [getEventsByDay], que acá es LOCAL (SQLDelight: solo los
+    // eventos de este dispositivo, sin excluir anulados, con la zona del sistema). La cifra del
+    // server es más correcta — todos los dispositivos, SMS e importaciones, anulados fuera — y
+    // Presupuestos usa esta misma fuente para que las dos pantallas coincidan; el cálculo local
+    // queda solo como fallback sin red.
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = remote.getDashboardSummary(scope)
     override suspend fun getBudgets(): List<Budget> = remote.getBudgets()
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)

@@ -1,7 +1,6 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
@@ -10,6 +9,7 @@ import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
