@@ -176,6 +176,7 @@ class EventRoutesTest {
         description: String,
         category: String,
         amount: Long = 100_000L,
+        timestamp: Long = System.currentTimeMillis(),
     ) {
         transaction {
             Events.insert {
@@ -187,7 +188,7 @@ class EventRoutesTest {
                 it[Events.currency]             = "COP"
                 it[Events.category]             = category
                 it[Events.description]          = description
-                it[Events.timestamp]            = System.currentTimeMillis()
+                it[Events.timestamp]            = timestamp
                 it[Events.eventSource]          = "STATEMENT"
                 it[Events.reconciliationStatus] = "UNCONFIRMED"
             }
@@ -628,5 +629,27 @@ class EventRoutesTest {
             Events.selectAll().where { Events.accountId eq savingsAccountId }.single()
         }
         assertEquals("UNCONFIRMED", row[Events.reconciliationStatus])
+    }
+
+    // ── Zona horaria ──────────────────────────────────────────────────────────
+
+    /**
+     * El server corre en UTC pero el dueño vive en Bogotá: un movimiento a las 11:30 pm del 31
+     * de agosto (= 04:30Z del 1 de septiembre) tiene que aparecer en el día "2026-08-31" de
+     * /by-day, no en el "2026-09-01". Es la misma fecha civil con la que el cliente arma
+     * "este mes" (AppTimeZone en :core), así Inicio y Presupuestos muestran el mismo número.
+     */
+    @Test
+    fun `by-day fecha los eventos con el día civil de Bogota, no el de UTC`() = testApplication {
+        wireApp()
+        val lateAugustBogota = java.time.Instant.parse("2026-09-01T04:30:00Z").toEpochMilli()
+        seedEvent("ev-late", userAId, savingsAccountId, "EXPENSE", "Cena", "Comida", timestamp = lateAugustBogota)
+
+        val res = client.get("/api/events/by-day") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val days = Json.parseToJsonElement(res.bodyAsText()).jsonArray
+        assertEquals(listOf("2026-08-31"), days.map { it.jsonObject["date"]!!.jsonPrimitive.content })
     }
 }

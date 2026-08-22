@@ -24,9 +24,7 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
+import com.jvillada.movi.server.time.epochMillisToAppDateString
 
 fun Route.eventRoutes() {
     route("/api/events") {
@@ -99,7 +97,7 @@ fun Route.eventRoutes() {
         get("/by-day") {
             val uid = call.userId()
             val result = loadNonVoidedEvents(uid)
-                .groupBy { epochToUtcDate(it.timestamp) }
+                .groupBy { epochMillisToAppDateString(it.timestamp) }
                 .map { (date, items) ->
                     EventDay(
                         // El total del día es flujo de caja, igual que el del mes: los
@@ -263,7 +261,3 @@ fun Route.eventRoutes() {
     }
 }
 
-private fun epochToUtcDate(millis: Long): String =
-    Instant.ofEpochMilli(millis)
-        .atOffset(ZoneOffset.UTC)
-        .format(DateTimeFormatter.ISO_LOCAL_DATE)
