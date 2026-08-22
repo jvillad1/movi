@@ -29,8 +29,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
+import com.jvillada.movi.server.time.currentMonthWindow
 
 fun Route.financeRoutes() {
     // F50: ya no tiene consumidor — Inversiones (:shared) pasó a mostrar cuentas tipo
@@ -141,13 +140,9 @@ fun Route.financeRoutes() {
         val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()
             ?: return@get call.respond(HttpStatusCode.BadRequest, "Unknown scope: $raw")
 
-        val now = ZonedDateTime.now(ZoneOffset.UTC)
-        val monthStart = now.withDayOfMonth(1)
-            .withHour(0).withMinute(0).withSecond(0).withNano(0)
-            .toInstant().toEpochMilli()
-        val monthEnd = now.withDayOfMonth(1).plusMonths(1)
-            .withHour(0).withMinute(0).withSecond(0).withNano(0)
-            .toInstant().toEpochMilli()
+        // "Este mes" es el mes civil de Bogotá (AppClock), no el de UTC: un movimiento a las
+        // 9 pm del 31 sigue siendo de este mes.
+        val (monthStart, monthEnd) = currentMonthWindow()
 
         val rate = FxRateService.usdToCop()
         val accountRows = dbQuery {

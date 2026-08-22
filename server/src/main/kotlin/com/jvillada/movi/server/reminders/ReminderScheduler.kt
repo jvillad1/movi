@@ -22,7 +22,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.io.File
 import java.time.LocalDate
-import java.time.ZoneOffset
+import com.jvillada.movi.server.time.AppClock
 
 /**
  * In-process daily email scheduler for payment reminders.
@@ -63,7 +63,7 @@ fun Application.startReminderScheduler() {
 // ── Sweep ────────────────────────────────────────────────────────────────────
 
 private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
-    val today = LocalDate.now(ZoneOffset.UTC)
+    val today = AppClock.today()
 
     // Load all users (id + email)
     val users = dbQuery {

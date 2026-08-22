@@ -30,13 +30,13 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
-import com.jvillada.movi.ui.dashboard.currentMonthPrefixUtc
+import com.jvillada.movi.ui.dashboard.currentMonthPrefixApp
 import com.jvillada.movi.ui.dashboard.spentByCategoryForMonth
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Month
-import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import com.jvillada.movi.shared.time.AppTimeZone
 
 private data class BudgetProgress(
     val budget: Budget,
@@ -127,14 +127,15 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // (spentByCategoryForMonth): solo el mes en curso y solo COP. Antes esta pantalla sumaba
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
-        val spentByCategory = serverSpent ?: spentByCategoryForMonth(days, currentMonthPrefixUtc())
+        val spentByCategory = serverSpent ?: spentByCategoryForMonth(days, currentMonthPrefixApp())
         budgets.map { b -> BudgetProgress(b, spentByCategory[b.category] ?: 0L) }
             .sortedByDescending { it.pctRaw }
     }
 
     // F16: "Gastado del mes" no decía CUÁL mes — el nombre del mes en curso lo hace explícito.
+    // Misma zona que el prefijo del mes (AppTimeZone): el título y la suma no pueden discrepar.
     val monthName = remember {
-        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).month.spanishName()
+        Clock.System.now().toLocalDateTime(AppTimeZone.zone).month.spanishName()
     }
 
     val totalLimit = budgets.sumOf { it.monthlyLimit }

@@ -13,9 +13,8 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
-import java.time.LocalDate
-import java.time.ZoneOffset
 import java.util.UUID
+import com.jvillada.movi.server.time.AppClock
 
 /**
  * Corre la detección de suscripciones y el upsert por estados para [uid].
@@ -25,7 +24,7 @@ import java.util.UUID
 suspend fun runSubscriptionDetection(uid: String) {
     val events = loadNonVoidedEvents(uid)
         .filterNot { it.description.startsWith(FAMIRIOS_STAMP_PREFIX) }
-    val detected = detectSubscriptions(events, LocalDate.now(ZoneOffset.UTC))
+    val detected = detectSubscriptions(events, AppClock.today())
     dbQuery {
         val existing = Subscriptions.selectAll()
             .where { Subscriptions.userId eq uid }

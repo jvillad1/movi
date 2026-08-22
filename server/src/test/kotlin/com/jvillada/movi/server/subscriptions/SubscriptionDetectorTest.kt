@@ -4,8 +4,8 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -15,8 +15,9 @@ class SubscriptionDetectorTest {
 
     private val today = LocalDate.of(2026, 7, 20)
 
-    private fun at(date: String): Long =
-        LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    // Medianoche de Bogotá (la zona civil de la app), no de UTC: a las 00:00Z del día D en
+    // Bogotá todavía son las 7 pm del día D-1, y el detector fecha con la zona de la app.
+    private fun at(date: String): Long = appDateToEpochMillis(LocalDate.parse(date))
 
     private var seq = 0
     private fun expense(desc: String, amount: Long, date: String, currency: String = "COP") = FinancialEvent(

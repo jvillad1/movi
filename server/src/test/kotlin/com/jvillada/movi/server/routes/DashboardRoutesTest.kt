@@ -15,6 +15,8 @@ import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.currentMonthWindow
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -38,8 +40,6 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
 import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -156,15 +156,12 @@ class DashboardRoutesTest {
         }
     }
 
-    /** Primer milisegundo del mes en curso en UTC — la misma zona y convención que usa `finance-summary`. */
-    private fun monthStartMillis(): Long =
-        ZonedDateTime.now(ZoneOffset.UTC).withDayOfMonth(1)
-            .withHour(0).withMinute(0).withSecond(0).withNano(0)
-            .toInstant().toEpochMilli()
+    /** Primer milisegundo del mes en curso en la zona de la app (Bogotá) — la misma convención que `finance-summary`. */
+    private fun monthStartMillis(): Long = currentMonthWindow().startMillis
 
-    /** El día 11 del mes anterior en UTC — bien adentro del mes pasado, lejos del borde. */
+    /** El día 11 del mes anterior en la zona de la app — bien adentro del mes pasado, lejos del borde. */
     private fun lastMonthMillis(): Long =
-        ZonedDateTime.now(ZoneOffset.UTC).withDayOfMonth(1).minusMonths(1).plusDays(10)
+        AppClock.now().withDayOfMonth(1).minusMonths(1).plusDays(10)
             .toInstant().toEpochMilli()
 
     // ── JWT helpers ───────────────────────────────────────────────────────────
@@ -249,7 +246,7 @@ class DashboardRoutesTest {
         val body = summary()
         assertEquals(13_000L, body.long("monthSpent"))
         assertEquals(mapOf("Comida" to 13_000L), body.spentByCategory())
-        val now = ZonedDateTime.now(ZoneOffset.UTC)
+        val now = AppClock.now()
         assertEquals("${now.year}-${now.monthValue.toString().padStart(2, '0')}", body["month"]!!.jsonPrimitive.content)
     }
 

@@ -21,9 +21,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.credits.totalDebtCop
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.todayIn
+import com.jvillada.movi.shared.time.currentMonthPrefix
 
 /**
  * Todo lo que el Inicio carga del server, junto, para que el renderer SDUI reciba un solo
@@ -97,11 +95,13 @@ fun spentByCategoryForMonth(days: List<EventDay>, monthPrefix: String): Map<Stri
         .groupBy { it.category }
         .mapValues { (_, txs) -> txs.sumOf { it.amount } }
 
-/** "2026-08" del día de hoy en UTC — la misma zona con la que el server fecha `EventDay.date`. */
-fun currentMonthPrefixUtc(): String {
-    val today = Clock.System.todayIn(TimeZone.UTC)
-    return "${today.year}-${today.monthNumber.toString().padStart(2, '0')}"
-}
+/**
+ * "2026-08" del día de hoy en la zona de la app (Bogotá, ver [com.jvillada.movi.shared.time.AppTimeZone])
+ * — la misma zona con la que el server fecha `EventDay.date`. Antes era UTC de los dos lados:
+ * entre las 7 pm y la medianoche del último día del mes, Inicio y Presupuestos ya mostraban
+ * el mes siguiente (vacío) mientras el dueño seguía en el mes viejo.
+ */
+fun currentMonthPrefixApp(): String = currentMonthPrefix()
 
 // ── Alertas ────────────────────────────────────────────────────────────────────────
 

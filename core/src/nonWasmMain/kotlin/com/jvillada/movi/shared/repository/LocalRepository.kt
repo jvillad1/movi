@@ -46,9 +46,7 @@ import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 
 class LocalRepository(
     private val db: MoviDatabase,
@@ -493,7 +491,6 @@ class LocalRepository(
     )
 }
 
-private fun epochMillisToDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date.toString()
+// Misma zona civil que el server (/api/events/by-day) — ver AppTimeZone. Offline y online
+// tienen que agrupar por el mismo día.
+private fun epochMillisToDate(millis: Long): String = epochMillisToAppDate(millis).toString()

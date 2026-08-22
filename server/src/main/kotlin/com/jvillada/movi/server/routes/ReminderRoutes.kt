@@ -22,9 +22,8 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import java.time.LocalDate
-import java.time.ZoneOffset
 import java.util.UUID
+import com.jvillada.movi.server.time.AppClock
 
 private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     id = this[RecurringRules.id],
@@ -96,6 +95,6 @@ fun Route.reminderRoutes() {
         val creditRules = loadCreditRulePairs(uid).map { it.first }
         // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
         val cardRules = loadCardRulePairs(uid).map { it.first }
-        call.respond(upcomingPayments(rules + creditRules + cardRules, LocalDate.now(ZoneOffset.UTC), leadDays))
+        call.respond(upcomingPayments(rules + creditRules + cardRules, AppClock.today(), leadDays))
     }
 }

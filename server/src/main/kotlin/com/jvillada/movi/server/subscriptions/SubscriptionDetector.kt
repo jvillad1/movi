@@ -3,10 +3,9 @@ package com.jvillada.movi.server.subscriptions
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.TransactionType
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import kotlin.math.abs
+import com.jvillada.movi.server.time.epochMillisToAppDate
 
 data class MerchantId(val key: String, val displayName: String, val known: Boolean)
 
@@ -76,8 +75,7 @@ fun normalizeMerchant(description: String): MerchantId? {
 
 private const val DAY_MS = 86_400_000L
 
-private fun dateOf(ts: Long): LocalDate =
-    Instant.ofEpochMilli(ts).atZone(ZoneOffset.UTC).toLocalDate()
+private fun dateOf(ts: Long): LocalDate = epochMillisToAppDate(ts)
 
 /**
  * Detección determinística: agrupa EXPENSE por (merchantKey, currency) y marca como
