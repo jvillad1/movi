@@ -71,7 +71,6 @@ interface WalletRepository {
     suspend fun parseSms(id: String): ParsedSms
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
-    suspend fun syncSms(messages: List<SmsMessage>)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     suspend fun getBudgets(): List<Budget>
     suspend fun createBudget(budget: Budget): Budget

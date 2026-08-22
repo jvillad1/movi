@@ -23,11 +23,13 @@ import java.util.Locale
  * `Telephony.Sms.DATE_SENT` cuando es creíble contra `Telephony.Sms.DATE`, cayendo a
  * `DATE` si no lo es (`effectiveSmsTime` en `SmsReader.android.kt`) — así que los dos
  * caminos apuntan al mismo reloj, el del banco, cuando `DATE_SENT` está poblado y es
- * plausible. Los tipos y funciones de este archivo son públicos porque uno de esos dos
- * llamadores (SmsSyncWorker) vive en :androidApp, al otro lado de la frontera del módulo. La tolerancia del server (`SMS_DEDUPE_TOLERANCE`) sigue existiendo para
+ * plausible. La tolerancia del server (`SMS_DEDUPE_TOLERANCE`) sigue existiendo para
  * cuando eso no pasa (`DATE_SENT` ausente o descartado) además del truncado a minuto — si
  * cambiás cualquiera de los dos relojes o la guarda de cordura, hay que revisarla. No
  * agregar un segundo uploader.
+ *
+ * Los tipos y funciones de este archivo son públicos porque uno de esos dos llamadores
+ * (SmsSyncWorker) vive en :androidApp, al otro lado de la frontera del módulo.
  */
 data class SmsSyncItem(
     val id: String,

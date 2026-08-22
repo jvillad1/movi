@@ -87,7 +87,6 @@ open class NoOpRepository(
     override suspend fun parseSms(id: String) = error("stub")
     override suspend fun confirmSms(id: String) {}
     override suspend fun ignoreSms(id: String) {}
-    override suspend fun syncSms(messages: List<SmsMessage>) {}
     override suspend fun getFinanceSummary(scope: Scope) = error("stub")
     override suspend fun getBudgets() = emptyList<Budget>()
     override suspend fun createBudget(budget: Budget) = budget
