@@ -205,13 +205,6 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/sms/$id/ignore")
     }
 
-    override suspend fun syncSms(messages: List<SmsMessage>) {
-        client.post("$baseUrl/api/sms/sync") {
-            contentType(ContentType.Application.Json)
-            setBody(messages)
-        }
-    }
-
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
         client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
 
