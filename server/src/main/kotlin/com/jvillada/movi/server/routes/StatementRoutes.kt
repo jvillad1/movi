@@ -334,7 +334,14 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[type]                 = tx.type.name
             it[amount]               = tx.amount
             it[Events.currency]      = tx.currency
-            it[category]             = tx.category
+            // La categoría reservada no puede NACER acá. `tx.category` viene del ImportDecision
+            // del cliente o del texto libre con que el parser LLM etiquetó la fila: un
+            // «Traspaso» ahí adentro fabricaba media pata —un gasto real del dueño que
+            // isCashFlow deja fuera del mes— sin ninguna pata hermana que explicara adónde fue
+            // la plata. Se cae a «Otros» en vez de rechazar la importación entera: la fila del
+            // extracto es un gasto real y perderla sería peor que recategorizarla, y el dueño
+            // puede corregirla después desde Movimientos.
+            it[category]             = if (tx.category == TRANSFER_CATEGORY) FALLBACK_CATEGORY else tx.category
             it[description]          = tx.description
             it[merchant]             = tx.merchant
             it[timestamp]            = ts
@@ -374,3 +381,6 @@ private data class ExistingEventFields(
     val merchant: String?,
     val isTransferLeg: Boolean,
 )
+
+/** A dónde va una fila del extracto cuya categoría no se puede usar (ver `createEventFromParsed`). */
+private const val FALLBACK_CATEGORY = "Otros"
