@@ -24,6 +24,21 @@ data class FinancialEvent(
     val reconciliationStatus: ReconciliationStatus = ReconciliationStatus.UNCONFIRMED,
     val syncedAt: Long? = null,
     /**
+     * Enlace entre las **dos patas de un traspaso** (ver [transferLegsFor]): el EXPENSE de la
+     * cuenta de origen y el INCOME de la de destino comparten este id; `null` en cualquier otro
+     * evento, que es la enorme mayoría.
+     *
+     * A diferencia de [countsAsCashFlow], esto **sí se almacena** — es un hecho, no una
+     * derivación: sin él la anulación de una pata no puede encontrar a la otra (y anular una
+     * sola dejaría el saldo mintiendo en una de las dos cuentas), y Movimientos no podría
+     * mostrar el traspaso como un solo hecho en vez de dos renglones sueltos.
+     *
+     * El cliente lo genera junto con los dos ids de evento y los manda en un solo
+     * `POST /api/transfers`, que crea las dos patas en una transacción. Mandarlo en un
+     * `POST /api/events` suelto se rechaza: sería medio traspaso, sin la pata que lo compensa.
+     */
+    val transferId: String? = null,
+    /**
      * ¿Cuenta como ingreso/egreso del mes? **Derivado, nunca almacenado**: sale del tipo de la
      * cuenta a la que pertenece el evento (ver [isCashFlow]) y se recalcula en cada lectura,
      * tanto en el server como en la caché local. Lo que mande un cliente en un POST se ignora.

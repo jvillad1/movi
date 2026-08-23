@@ -115,4 +115,26 @@ class CashFlowTest {
     fun `saldo inicial en efectivo tampoco cuenta`() {
         assertFalse(isCashFlow(AccountType.CASH, TransactionType.INCOME, OPENING_CATEGORY))
     }
+
+    // ── Categoría TRANSFER_CATEGORY: el traspaso mueve saldos, nunca el mes ─────────────────
+
+    @Test
+    fun `un traspaso desde una cuenta de activo no cuenta como egreso del mes`() {
+        assertFalse(isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, TRANSFER_CATEGORY))
+    }
+
+    @Test
+    fun `un traspaso hacia una cuenta de activo no cuenta como ingreso del mes`() {
+        assertFalse(isCashFlow(AccountType.INVESTMENT, TransactionType.INCOME, TRANSFER_CATEGORY))
+    }
+
+    @Test
+    fun `un traspaso hacia efectivo tampoco cuenta`() {
+        assertFalse(isCashFlow(AccountType.CASH, TransactionType.INCOME, TRANSFER_CATEGORY))
+    }
+
+    @Test
+    fun `la categoria de traspaso gana sobre la regla de CREDIT_CARD, que si contaria la compra`() {
+        assertFalse(isCashFlow(AccountType.CREDIT_CARD, TransactionType.EXPENSE, TRANSFER_CATEGORY))
+    }
 }
