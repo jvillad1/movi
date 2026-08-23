@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui
 
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
@@ -152,8 +153,14 @@ object NavStack {
  * Cada pantalla que lee datos lo usa como una key más de su `LaunchedEffect`. Un `Int` que sube
  * y nada más: no hay evento, ni payload, ni quién escucha a quién — la pantalla ya sabe cómo
  * recargarse, lo único que le faltaba era enterarse.
+ *
+ * `compositionLocalOf` y NO `staticCompositionLocalOf`: este valor cambia. Con la variante
+ * estática, Compose no rastrea lecturas y cada guardado invalidaría TODO el subárbol bajo el
+ * provider en vez de solo las pantallas que lo leen — el mismo anti-patrón que el `remember`
+ * de `goBackTo` documenta unas líneas más abajo, pero al revés: aquello es estático porque
+ * nunca cambia, esto cambia y por eso no puede serlo.
  */
-val LocalRefreshTick = staticCompositionLocalOf { 0 }
+val LocalRefreshTick = compositionLocalOf { 0 }
 
 /**
  * «Volver» real, expuesto a las pantallas: recibe el destino de reserva (F22) y

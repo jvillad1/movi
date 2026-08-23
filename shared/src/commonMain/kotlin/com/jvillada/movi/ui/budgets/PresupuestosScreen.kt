@@ -35,6 +35,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Month
 import kotlinx.datetime.toLocalDateTime
 import com.jvillada.movi.shared.time.AppTimeZone
+import com.jvillada.movi.ui.LocalRefreshTick
 
 private data class BudgetProgress(
     val budget: Budget,
@@ -101,7 +102,11 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) {
+    val refreshTick = LocalRefreshTick.current
+    // `refreshTick` y no `Unit`: con Unit esta pantalla no recargaba NUNCA mientras estuviera
+    // compuesta, y desde que Agregar es una modal se puede registrar un gasto parado acá y ver
+    // la barra del presupuesto sin moverse. Ver [LocalRefreshTick].
+    LaunchedEffect(refreshTick) {
         loading = true
         reload()
         runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
