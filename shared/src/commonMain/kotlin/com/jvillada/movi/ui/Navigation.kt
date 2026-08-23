@@ -138,6 +138,24 @@ object NavStack {
 }
 
 /**
+ * Cuántas veces se guardó algo desde una **ventana modal** en esta sesión.
+ *
+ * Existe por lo que el overlay de «Agregar» rompió (ver [opensAsOverlay]): antes, abrir Agregar
+ * apilaba una pantalla y la de atrás salía de la composición, así que al volver reejecutaba su
+ * `LaunchedEffect(refreshKey)` y recargaba sola. Ahora la pantalla de atrás **nunca sale** —esa
+ * es justamente la mejora: conserva su estado— pero eso significa que nadie le avisa que sus
+ * datos quedaron viejos. El síntoma: registrás un movimiento o un traspaso, la hoja se cierra y
+ * Movimientos / Inicio / el detalle de la cuenta siguen mostrando la lista de antes. Peor todavía,
+ * la app parece decir que no pasó nada, y el reflejo es volver a guardar — el mismo reintento a
+ * ciegas que duplicaba traspasos.
+ *
+ * Cada pantalla que lee datos lo usa como una key más de su `LaunchedEffect`. Un `Int` que sube
+ * y nada más: no hay evento, ni payload, ni quién escucha a quién — la pantalla ya sabe cómo
+ * recargarse, lo único que le faltaba era enterarse.
+ */
+val LocalRefreshTick = staticCompositionLocalOf { 0 }
+
+/**
  * «Volver» real, expuesto a las pantallas: recibe el destino de reserva (F22) y
  * decide adentro si hay historial al que volver o si hay que caer a ese destino.
  * App.kt provee la implementación de verdad alrededor del `when(currentScreen)`;

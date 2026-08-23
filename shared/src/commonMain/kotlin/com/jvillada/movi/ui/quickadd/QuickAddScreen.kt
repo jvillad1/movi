@@ -50,8 +50,21 @@ private sealed class Picker {
     data object Note : Picker()
 }
 
+/**
+ * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
+ * @param onSaved se guardó algo. Distinto de [onDismiss] a propósito: la pantalla de atrás sigue
+ *   viva detrás de esta hoja (es una modal, ver `opensAsOverlay`), así que además de cerrar hay
+ *   que avisarle que sus datos quedaron viejos — si no, el movimiento recién registrado no
+ *   aparece y la app parece decir que no se guardó nada. Por defecto cae en [onDismiss] para que
+ *   un llamador viejo siga cerrando igual.
+ */
 @Composable
-fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, presetAccountId: String? = null) {
+fun QuickAddScreen(
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit = onDismiss,
+    onNavigate: (Screen) -> Unit = {},
+    presetAccountId: String? = null,
+) {
     val coroutine = rememberCoroutineScope()
     var typeIndex by remember { mutableStateOf(0) }
     var amount by remember { mutableStateOf("") }
@@ -151,7 +164,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
             saving = false
             // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
             // "usada" en el resto de la sesión sin esperar a que otra pantalla la cargue.
-            result.onSuccess { UsedCategoriesCache.record(listOf(trimmedCategory)); onDismiss() }
+            result.onSuccess { UsedCategoriesCache.record(listOf(trimmedCategory)); onSaved() }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -226,7 +239,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                             TransferBody(
                                 accounts = accounts,
                                 accountsLoaded = accountsLoaded,
-                                onSaved = onDismiss,
+                                onSaved = onSaved,
                             )
                         } else {
                             EditorBody(

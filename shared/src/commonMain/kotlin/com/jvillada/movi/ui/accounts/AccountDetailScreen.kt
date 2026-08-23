@@ -41,6 +41,7 @@ import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -58,7 +59,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     var showDeleteAccount by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(refreshKey) {
+    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
+    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
+    // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
         try {

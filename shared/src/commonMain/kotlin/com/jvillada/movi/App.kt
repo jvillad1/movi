@@ -22,6 +22,7 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalGoBack
+import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
@@ -77,6 +78,10 @@ fun App() {
             // apilarla dejaba la pila en una pantalla sin pestaña (`navTabFor` → null) y App.kt
             // escondía el rail y la barra, así que la hoja quedaba flotando sobre un vacío negro.
             var quickAdd by remember { mutableStateOf<Screen.QuickAdd?>(null) }
+            // Sube cada vez que se guarda algo desde la hoja. Las pantallas que leen datos lo
+            // usan como key de su LaunchedEffect — sin esto, la de atrás (que ahora nunca sale de
+            // la composición) seguiría mostrando la lista de antes de guardar. Ver [LocalRefreshTick].
+            var refreshTick by remember { mutableStateOf(0) }
 
             val navigate: (Screen) -> Unit = { screen ->
                 if (opensAsOverlay(screen)) {
@@ -140,7 +145,10 @@ fun App() {
                 val showBottomNav = widthClass == WindowWidthClass.Compact && activeTab != null
                 val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 
-                CompositionLocalProvider(LocalWindowWidthClass provides widthClass) {
+                CompositionLocalProvider(
+                    LocalWindowWidthClass provides widthClass,
+                    LocalRefreshTick provides refreshTick,
+                ) {
                 Row(modifier = Modifier.fillMaxSize()) {
                 if (showRail) {
                     MinNavRail(active = activeTab, onTabSelected = onTabSelected)
@@ -214,6 +222,10 @@ fun App() {
                     CompositionLocalProvider(LocalGoBack provides goBackTo) {
                         QuickAddScreen(
                             onDismiss = { quickAdd = null },
+                            // Guardar cierra la hoja Y avisa: la pantalla de atrás nunca salió de
+                            // la composición, así que sin este aviso sigue mostrando la lista de
+                            // antes y la app parece decir que no se guardó nada.
+                            onSaved = { refreshTick++; quickAdd = null },
                             onNavigate = navigate,
                             presetAccountId = request.presetAccountId,
                         )
