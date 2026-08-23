@@ -6,6 +6,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.reminders.upcomingPayments
+import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.http.HttpStatusCode
@@ -32,6 +33,7 @@ private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     amount = this[RecurringRules.amount],
     dayOfMonth = this[RecurringRules.dayOfMonth],
     type = TransactionType.valueOf(this[RecurringRules.type]),
+    remindMe = this[RecurringRules.remindMe],
 )
 
 fun Route.reminderRoutes() {
@@ -56,6 +58,9 @@ fun Route.reminderRoutes() {
                 it[amount] = body.amount
                 it[dayOfMonth] = body.dayOfMonth.coerceIn(1, 31)
                 it[type] = body.type.name
+                // El body de un cliente viejo no trae el campo; el default del modelo lo pone
+                // en true, que es el comportamiento que ese cliente espera.
+                it[remindMe] = body.remindMe
             }
         }
         call.respond(HttpStatusCode.Created, body.copy(id = newId))
@@ -72,6 +77,7 @@ fun Route.reminderRoutes() {
                 it[amount] = body.amount
                 it[dayOfMonth] = body.dayOfMonth.coerceIn(1, 31)
                 it[type] = body.type.name
+                it[remindMe] = body.remindMe
             }
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(body.copy(id = id))
@@ -88,7 +94,7 @@ fun Route.reminderRoutes() {
 
     get("/api/payments/upcoming") {
         val uid = call.userId()
-        val leadDays = System.getenv("REMINDER_LEAD_DAYS")?.toIntOrNull() ?: 3
+        val leadDays = System.getenv("REMINDER_LEAD_DAYS")?.toIntOrNull() ?: DEFAULT_REMINDER_LEAD_DAYS
         val rules = dbQuery {
             RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
         }

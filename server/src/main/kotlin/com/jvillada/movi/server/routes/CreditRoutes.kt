@@ -222,6 +222,7 @@ private fun fillTerms(
     it[Credits.dayOfMonth]  = terms.dayOfMonth
     it[Credits.startDate]   = terms.startDate
     it[Credits.notes]       = terms.notes
+    it[Credits.remindMe]    = terms.remindMe
 }
 
 private fun summaryFor(

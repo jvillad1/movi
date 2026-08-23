@@ -23,6 +23,11 @@ data class CardTerms(
     val cutoffDay: Int? = null,     // día de corte (1–31)
     val paymentDay: Int,            // día límite de pago (1–31)
     val notes: String? = null,
+    /**
+     * Ver [com.jvillada.movi.shared.model.RecurringRule.remindMe]: el pago de esta tarjeta entra
+     * (o no) al barrido de avisos. Default `true` — las tarjetas que ya existían siguen avisando.
+     */
+    val remindMe: Boolean = true,
 )
 
 /**

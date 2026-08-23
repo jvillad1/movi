@@ -13,6 +13,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.CardTerms
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -30,6 +31,8 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -342,5 +345,59 @@ class CardRoutesTest {
         val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }
         assertEquals(HttpStatusCode.OK, res.status)
         assertEquals(0, Json.parseToJsonElement(res.bodyAsText()).jsonArray.size)
+    }
+    // ── remindMe: la casilla «Recordarme unos días antes» ─────────────────────
+
+    @Test
+    fun `una tarjeta guardada sin recordatorio se relee sin recordatorio`() = testApplication {
+        wireApp()
+        val put = client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","remindMe":false}""")
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `una tarjeta guardada sin decir nada nace con el recordatorio prendido`() = testApplication {
+        wireApp()
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson)
+        }
+        // Ver el test hermano en CreditRoutesTest: `remindMe: true` es el default del modelo y
+        // kotlinx.serialization no lo emite, así que se afirma sobre el modelo decodificado —
+        // que es lo que efectivamente lee el cliente.
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.decodeFromJsonElement<CardTerms>(
+            Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
+        )
+        assertTrue(terms.remindMe)
+    }
+
+    @Test
+    fun `editar los terminos de la tarjeta conserva el valor del recordatorio`() = testApplication {
+        wireApp()
+        val sinAviso = validTermsJson.dropLast(1) + ""","remindMe":false}"""
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(sinAviso)
+        }
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(sinAviso.replace("\"paymentDay\":25", "\"paymentDay\":18"))
+        }
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean)
+        assertEquals(18L, terms["paymentDay"]!!.jsonPrimitive.long)
     }
 }

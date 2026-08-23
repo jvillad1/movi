@@ -24,4 +24,5 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     dayOfMonth = this[Credits.dayOfMonth],
     startDate  = this[Credits.startDate],
     notes      = this[Credits.notes],
+    remindMe   = this[Credits.remindMe],
 )
