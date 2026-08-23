@@ -51,7 +51,8 @@ sealed class Screen {
  *
  * Ola 4: Cuentas marca la pestaña Cuentas (antes, Inicio); el detalle de una cuenta marca la
  * pestaña de donde vive esa cuenta (Créditos si es deuda, ver [homeScreenFor]);
- * Presupuestos y Créditos tienen destino propio (en el teléfono se resaltan como Más).
+ * Presupuestos, Créditos y Recurrentes tienen destino propio (en el teléfono se resaltan
+ * como Más, que es por donde se llega a ellos ahí).
  * F61: Inversiones dejó de ser pantalla — las cuentas de inversión se ven en Cuentas.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
@@ -63,8 +64,11 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
     Screen.Credits -> NavTab.CREDITS
     Screen.Budgets -> NavTab.BUDGETS
+    // Recurrentes salió de Más y pasó a destino propio: en pantalla ancha es una entrada del
+    // rail; en el teléfono la barra ya está llena y `asBottomBarTab()` lo funde en Más.
+    Screen.Recurrentes -> NavTab.RECURRING
     Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
-    Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
+    Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
     else -> null
 }
 
@@ -84,6 +88,7 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.ACCOUNTS -> Screen.Accounts
     NavTab.CREDITS -> Screen.Credits
     NavTab.BUDGETS -> Screen.Budgets
+    NavTab.RECURRING -> Screen.Recurrentes
     NavTab.MORE -> Screen.Mas
 }
 

@@ -65,7 +65,7 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
     // Perfil, en una sección "Administración" visible solo para quien administra el Inicio.
 
     // F59: en pantalla ancha el rail de la izquierda ya muestra Inicio, Movimientos, Cuentas,
-    // Créditos, Presupuestos y Más — repetirlos acá era ruido. La lista sale de la MISMA
+    // Créditos, Presupuestos, Recurrentes y Más — repetirlos acá era ruido. La lista sale de la MISMA
     // fuente que pinta el rail (railDestinations), no de una copia a mano. En el teléfono la
     // barra tiene menos destinos, así que Más sigue completo.
     val widthClass = LocalWindowWidthClass.current

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PieChart
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -40,13 +41,17 @@ val railDestinations: List<RailDestination> = listOf(
     RailDestination(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet),
     RailDestination(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard),
     RailDestination(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart),
+    // Mismo ícono con el que Recurrentes figuraba en Más — el rótulo y el ícono no cambian
+    // al mudarse de superficie.
+    RailDestination(NavTab.RECURRING, "Recurrentes", Icons.Rounded.Repeat),
     RailDestination(NavTab.MORE, "Más", Icons.Rounded.GridView),
 )
 
 /**
  * Wide-window counterpart of MinBottomNav: a left rail rendered once at the
  * App root. Same active-pill language; en pantalla ancha hay lugar para mostrar
- * además Créditos y Presupuestos como entradas propias (en el teléfono viven en Más).
+ * además Créditos, Presupuestos y Recurrentes como entradas propias (en el teléfono viven
+ * en Más).
  */
 @Composable
 fun MinNavRail(
