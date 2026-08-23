@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.openingEventFor
 import kotlinx.coroutines.runBlocking
@@ -500,6 +501,46 @@ class LocalRepositoryTest {
 
         assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
         assertEquals(0L, repo.getAccount("acc-cdt").balance)
+    }
+
+    // ── M3: la guarda simétrica del server, del lado del cliente ──────────────
+
+    /**
+     * Sin esto, un evento con la categoría reservada entraba al espejo local y el daño era
+     * silencioso y permanente: `isCashFlow` lo deja fuera del mes (el gasto REAL del dueño
+     * desaparece del teléfono), el `SyncEngine` lo empuja, el server contesta 422 (`POST
+     * /api/events` no acepta patas sueltas), el catch se traga el error y la fila se reintenta
+     * cada 30 segundos para siempre.
+     *
+     * Y era alcanzable sin mala fe: Movimientos y Presupuestos metían TODAS las categorías en el
+     * caché de sugerencias, así que «Traspaso» se ofrecía para escribir en Agregar.
+     */
+    @Test
+    fun postEvent_rechaza_la_categoria_reservada_en_vez_de_esconder_el_gasto() = runBlocking {
+        repo.createAccount(Account("acc-guarda", "Ahorros", AccountType.SAVINGS, 100_000L))
+
+        val fallo = runCatching {
+            repo.postEvent(
+                event("ev-falso", "acc-guarda", TransactionType.EXPENSE, 50_000L)
+                    .copy(category = TRANSFER_CATEGORY),
+            )
+        }
+
+        assertTrue(fallo.isFailure)
+        assertTrue(repo.getEvents("acc-guarda").isEmpty(), "no puede quedar ninguna fila local")
+        assertEquals(100_000L, repo.getAccount("acc-guarda").balance, "ni moverse el saldo")
+    }
+
+    /** Y recategorizar HACIA la categoría reservada tampoco: sería fabricar media pata. */
+    @Test
+    fun updateEventCategory_rechaza_la_categoria_reservada_como_destino() = runBlocking {
+        repo.createAccount(Account("acc-dest", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-normal", "acc-dest", TransactionType.EXPENSE, 10_000L))
+
+        val fallo = runCatching { repo.updateEventCategory("ev-normal", TRANSFER_CATEGORY) }
+
+        assertTrue(fallo.isFailure)
+        assertEquals("test", repo.getEvents("acc-dest").single().category)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

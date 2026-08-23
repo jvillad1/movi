@@ -13,6 +13,9 @@ import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
@@ -160,6 +163,19 @@ class LocalRepository(
     // ── Events ────────────────────────────────────────────────────────────────
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+        // La guarda simétrica de la del server (`POST /api/events` rechaza esto con 422), y hace
+        // falta acá porque el espejo local escribe PRIMERO y pregunta después. Sin ella el daño
+        // era silencioso y permanente: `isCashFlow` deja fuera del mes a cualquier evento con la
+        // categoría reservada —o sea, el gasto REAL del dueño desaparecía de Movimientos y de
+        // Presupuestos en el teléfono—, el `SyncEngine` lo empujaba, el server contestaba 422, el
+        // catch se lo tragaba y la fila se reintentaba cada 30 segundos para siempre.
+        //
+        // Y era alcanzable sin mala fe: Movimientos y Presupuestos metían TODAS las categorías
+        // que veían en el caché de sugerencias, patas de traspaso incluidas, así que «Traspaso»
+        // se le ofrecía al dueño para escribirla (eso también se corrigió, en `UsedCategoriesCache`).
+        if (event.category == TRANSFER_CATEGORY || event.transferId != null) {
+            throw ApiException(422, TRANSFER_LEG_NOT_STANDALONE)
+        }
         // Red de seguridad, no la vía principal: la UI ya manda `id = newId("ev")` en los tres
         // call sites (QuickAddScreen, SMSScreens; CreateAccountSheet es para cuentas, no
         // eventos). Nunca insertar con PK "" — con INSERT OR REPLACE, un segundo evento sin id
@@ -342,13 +358,19 @@ class LocalRepository(
         // la fila quedaba sincronizada con la categoría vieja en el server y la nueva solo en
         // local — y como ya no sale en `selectUnsynced`, ningún ciclo futuro la volvía a
         // empujar. La divergencia era silenciosa y permanente.
-        // Una pata de traspaso no se recategoriza por ninguna de las dos vías. El server ya lo
-        // rechaza con este mismo texto (ver PUT /api/events/{id}/category), pero cortar acá le
-        // da la explicación al dueño incluso sin red — y evita que el camino "local, todavía sin
-        // sincronizar" de más abajo la deje pasar en silencio.
-        val esPataDeTraspaso = db.financialEventQueries.selectById(id, uid)
-            .executeAsOneOrNull()?.transferId != null
+        // Nadie sale de la categoría reservada, y nadie entra tampoco. Las dos guardas son
+        // simétricas a las del server (ver PUT /api/events/{id}/category), y hacen falta acá
+        // porque el camino "local, todavía sin sincronizar" de más abajo escribe sin preguntarle
+        // a nadie — así que sin esto la fila local divergía en silencio del server.
+        //
+        // Cortar acá además le da la explicación al dueño incluso sin red, en vez de un error de
+        // conexión que no dice nada.
+        val fila = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+        val esPataDeTraspaso = fila?.transferId != null || fila?.category == TRANSFER_CATEGORY
         if (esPataDeTraspaso) throw ApiException(422, TRANSFER_RECATEGORIZE_BLOCKED)
+        // Y hacia la categoría reservada tampoco: sería fabricar media pata — un movimiento que
+        // se deja de contar en el mes sin ninguna pata del otro lado que explique adónde fue.
+        if (category == TRANSFER_CATEGORY) throw ApiException(422, TRANSFER_CATEGORY_RESERVED)
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
