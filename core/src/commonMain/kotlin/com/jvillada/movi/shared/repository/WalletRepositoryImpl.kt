@@ -11,6 +11,8 @@ import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -309,6 +311,21 @@ class WalletRepositoryImpl(
 
     override suspend fun getEventsByDay(): List<EventDay> =
         client.get("$baseUrl/api/events/by-day").body()
+
+    // Mismo idioma que updateEventCategory/adjustCreditBalance: el server puede rechazar con
+    // 422 (una validación de validateTransfer, con su texto en español ya listo para mostrar),
+    // 404 (cuenta inexistente o de otro usuario) o 409 (traspaso repetido), y ese texto se
+    // pierde si se deserializa a ciegas — que es justo el mensaje que la hoja necesita.
+    override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
+        val response = client.post("$baseUrl/api/transfers") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
 
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
         val url = if (reason != null) "$baseUrl/api/events/$id/void?reason=$reason"

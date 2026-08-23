@@ -23,11 +23,19 @@ class LocalRepositoryTest {
 
     private lateinit var repo: LocalRepository
 
+    /**
+     * La misma DB que usa [repo]. `createDatabase` levanta una SQLite en memoria NUEVA en cada
+     * llamada, así que un test que quiera ejercitar otro remoto (p. ej. "sin red") tiene que
+     * construir su LocalRepository sobre ESTA instancia — si no, escribiría en una base aparte y
+     * la aserción sobre `repo` no probaría nada.
+     */
+    private lateinit var db: com.jvillada.movi.shared.db.MoviDatabase
+
     private val testUserId = "user-test-1"
 
     @BeforeTest
     fun setup() {
-        val db = createDatabase("test.db")
+        db = createDatabase("test.db")
         repo = LocalRepository(
             db = db,
             remote = NoOpRepository(),
@@ -396,6 +404,102 @@ class LocalRepositoryTest {
         val local = repo.getAccounts().single { it.id == summary.account.id }
         assertEquals(AccountType.CREDIT_CARD, local.type)
         assertEquals(2_000_000L, local.balance)
+    }
+
+    // ── Traspasos ─────────────────────────────────────────────────────────────
+
+    private fun transferRequest(amount: Long = 250_000L) = com.jvillada.movi.shared.model.CreateTransferRequest(
+        transferId = "tr-1",
+        fromEventId = "ev-tr-from",
+        toEventId = "ev-tr-to",
+        fromAccountId = "acc-ahorros",
+        toAccountId = "acc-cdt",
+        amount = amount,
+        timestamp = 1_700_000_000_000L,
+    )
+
+    private suspend fun crearCuentasDelTraspaso() {
+        repo.createAccount(Account("acc-ahorros", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.createAccount(Account("acc-cdt", "CDT", AccountType.INVESTMENT, 0L))
+    }
+
+    /**
+     * Las dos patas tienen que quedar en la DB local: en Android, Movimientos y el detalle de
+     * cada cuenta leen de acá, no del server. Sin el espejo el traspaso era invisible en el
+     * teléfono y los dos saldos se quedaban en el valor viejo.
+     */
+    @Test
+    fun createTransfer_espeja_las_dos_patas_y_mueve_los_dos_saldos() = runBlocking {
+        crearCuentasDelTraspaso()
+
+        repo.createTransfer(transferRequest())
+
+        val ahorros = repo.getEvents("acc-ahorros")
+        val cdt = repo.getEvents("acc-cdt")
+        assertEquals(1, ahorros.size)
+        assertEquals(1, cdt.size)
+        assertEquals(TransactionType.EXPENSE, ahorros.single().type)
+        assertEquals(TransactionType.INCOME, cdt.single().type)
+        assertEquals("tr-1", ahorros.single().transferId)
+        assertEquals("tr-1", cdt.single().transferId)
+        // Las dos patas quedan fuera del flujo de caja aunque estén en cuentas de activo.
+        assertFalse(ahorros.single().countsAsCashFlow)
+        assertFalse(cdt.single().countsAsCashFlow)
+
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * El traspaso es remote-first SIN respaldo local (mismo criterio que [LocalRepository.deleteAccount]):
+     * la atomicidad de las dos patas vive en la transacción del server, y el `SyncEngine` empuja
+     * eventos de a uno — un traspaso anotado offline podía llegar por mitades. Si el POST falla,
+     * la excepción sale para que la UI lo diga, y **nada** se escribe local.
+     */
+    @Test
+    fun createTransfer_sin_red_no_deja_medio_traspaso_local() = runBlocking {
+        crearCuentasDelTraspaso()
+        val sinRed = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                error("sin red: el POST /api/transfers no llegó")
+        }
+        val offline = LocalRepository(db = db, remote = sinRed, userId = { testUserId })
+
+        val fallo = runCatching { offline.createTransfer(transferRequest()) }
+
+        assertTrue(fallo.isFailure)
+        assertTrue(repo.getEvents("acc-ahorros").isEmpty())
+        assertTrue(repo.getEvents("acc-cdt").isEmpty())
+        assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
+    }
+
+    /**
+     * Anular una pata anula la otra también en el espejo local: si no, el teléfono mostraría la
+     * plata saliendo de Ahorros sin volver del CDT hasta el próximo arranque.
+     */
+    @Test
+    fun voidEvent_de_una_pata_revierte_los_dos_saldos_locales() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        repo.voidEvent("ev-tr-from")
+
+        assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(0L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * Y al revés: anular la pata de destino también deshace la de origen.
+     */
+    @Test
+    fun voidEvent_de_la_pata_de_destino_tambien_revierte_la_de_origen() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        repo.voidEvent("ev-tr-to")
+
+        assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(0L, repo.getAccount("acc-cdt").balance)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

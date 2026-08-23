@@ -20,6 +20,17 @@ open class NoOpRepository(
     /** Ids que pasaron por [dismissCardPaymentCandidate] — lo que un test de delegación verifica. */
     val dismissedCandidateIds = mutableListOf<String>()
 
+    /**
+     * Imita `POST /api/transfers`: construye las dos patas con la MISMA función que usa el
+     * server ([transferLegsFor]), sobre cuentas de nombre igual a su id — el stub no tiene un
+     * catálogo de cuentas y lo que se ejercita del otro lado es el espejo local, no el texto.
+     */
+    override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
+        fun stub(id: String) = Account(id = id, name = id, type = AccountType.SAVINGS, balance = 0L)
+        val (from, to) = transferLegsFor(request, stub(request.fromAccountId), stub(request.toAccountId))
+        return TransferResult(from = from, to = to)
+    }
+
     override suspend fun getCredits() = emptyList<CreditSummary>()
     override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
     override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(

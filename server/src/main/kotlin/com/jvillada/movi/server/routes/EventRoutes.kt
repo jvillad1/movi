@@ -170,10 +170,7 @@ fun Route.eventRoutes() {
             // "Traspaso" sería medio traspaso — se dejaría de contar en el mes (regla de
             // isCashFlow) sin ninguna pata del otro lado que explique adónde fue la plata.
             if (category == TRANSFER_CATEGORY) {
-                return@put call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "«Traspaso» es una categoría reservada: para mover plata entre tus cuentas usa Agregar → Traspaso.",
-                )
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_CATEGORY_RESERVED)
             }
             // Y nadie sale tampoco: sacar una pata de la categoría reservada la devolvería al
             // flujo de caja del mes —el gasto fantasma que esta feature vino a matar— y dejaría
@@ -185,10 +182,7 @@ fun Route.eventRoutes() {
                     ?.let { it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY } == true
             }
             if (esPataDeTraspaso) {
-                return@put call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "Un traspaso no se puede recategorizar: es plata que se movió entre tus cuentas, no un gasto ni un ingreso. Si te equivocaste, anúlalo y vuelve a hacerlo.",
-                )
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_RECATEGORIZE_BLOCKED)
             }
 
             val updated: FinancialEvent? = dbQuery {

@@ -1,0 +1,15 @@
+-- Migración 2 → 3: agrega financial_event.transferId (el enlace entre las dos patas de un
+-- traspaso, ver transferLegsFor en :core) y su índice.
+--
+-- Mismo mecanismo que 1.sqm: SQLDelight deriva `schemaVersion` del .sqm con el número más alto,
+-- y sin este archivo `AndroidSqliteDriver(MoviDatabase.Schema, ...)` no llamaría a `onUpgrade` —
+-- la tabla `financial_event` ya instalada en cualquier teléfono que tenga la app se quedaría sin
+-- la columna, y el primer `insert` (que ahora la nombra) fallaría con "no such column" en todo
+-- movimiento nuevo, no solo en los traspasos.
+--
+-- No hay datos que migrar: no existen traspasos anteriores a este cambio, así que la columna
+-- arranca en NULL para todas las filas viejas — que es exactamente lo que significa "este
+-- movimiento no es la pata de ningún traspaso".
+ALTER TABLE financial_event ADD COLUMN transferId TEXT;
+
+CREATE INDEX idx_event_transfer ON financial_event(transferId);

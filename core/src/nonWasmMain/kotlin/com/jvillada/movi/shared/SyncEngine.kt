@@ -104,6 +104,14 @@ class SyncEngine(
      * problema es diagnosticable. Arreglar ese reintento de raíz —enseñarle a SyncEngine a
      * distinguir "nunca llegó" de "ya llegó, solo cambió la categoría" y usar
      * `remote.updateEventCategory` en ese segundo caso— queda fuera de este fix.
+     *
+     * **Las patas de un traspaso nunca salen por acá.** `selectUnsynced` las excluye por SQL
+     * (`transferId IS NULL`), y no es una optimización: este ciclo empuja **de a un evento**, así
+     * que subir una pata sola dejaría medio traspaso en el server — plata saliendo de una cuenta
+     * sin la que la compensa del otro lado. Por diseño ninguna pata debería estar pendiente
+     * ([com.jvillada.movi.shared.repository.LocalRepository.createTransfer] es remote-first y las
+     * espeja ya selladas), pero la condición es la red de seguridad de esa promesa para el caso
+     * en que una fila quede a medio escribir o venga de una versión vieja de la app.
      */
     internal suspend fun syncEvents() {
         val unsynced = db.financialEventQueries.selectUnsynced(userId()).executeAsList()

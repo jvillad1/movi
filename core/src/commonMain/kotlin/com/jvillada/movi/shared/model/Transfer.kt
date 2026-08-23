@@ -26,6 +26,21 @@ data class CreateTransferRequest(
     val note: String? = null,
 )
 
+/**
+ * Lo que se le dice a alguien que intenta sacar una pata de [TRANSFER_CATEGORY].
+ *
+ * Vive acá, no en el handler ni en la hoja, porque hacen falta las mismas palabras en tres
+ * lugares: el 422 de `PUT /api/events/{id}/category`, la guarda del espejo local (que responde
+ * sin red) y la hoja de cambiar categoría, que lo muestra en vez de la lista.
+ */
+const val TRANSFER_RECATEGORIZE_BLOCKED =
+    "Un traspaso no se puede recategorizar: es plata que se movió entre tus cuentas, no un gasto " +
+        "ni un ingreso. Si te equivocaste, anúlalo y vuelve a hacerlo."
+
+/** Lo que se le dice a alguien que intenta *entrar* a [TRANSFER_CATEGORY] recategorizando. */
+const val TRANSFER_CATEGORY_RESERVED =
+    "«Traspaso» es una categoría reservada: para mover plata entre tus cuentas usa Agregar → Traspaso."
+
 /** Las dos patas que quedaron creadas, tal como el server las guardó. */
 @Serializable
 data class TransferResult(

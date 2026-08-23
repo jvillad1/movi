@@ -7,6 +7,8 @@ import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -113,7 +115,23 @@ interface WalletRepository {
     suspend fun postEvent(event: FinancialEvent): FinancialEvent
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>
+    /**
+     * Anula un movimiento. Si es una **pata de traspaso**, anula también la otra — un traspaso
+     * anulado a medias deja el saldo de una de las dos cuentas mintiendo. El server lo resuelve
+     * por `transferId` dentro de la misma transacción; el espejo local hace lo propio.
+     */
     suspend fun voidEvent(id: String, reason: String? = null): VoidEvent
+
+    /**
+     * Crea un **traspaso**: mueve plata entre dos cuentas propias en un solo POST, que el server
+     * convierte en las dos patas enlazadas (ver [com.jvillada.movi.shared.model.transferLegsFor]).
+     *
+     * A diferencia de [postEvent], esto **exige conexión**: no hay camino offline. La atomicidad
+     * de las dos patas vive en la transacción del server, y el `SyncEngine` empuja eventos de a
+     * uno — un traspaso anotado sin red podía llegar por mitades. Si el POST falla, la excepción
+     * se propaga para que la UI lo diga con todas las letras, igual que [deleteAccount].
+     */
+    suspend fun createTransfer(request: CreateTransferRequest): TransferResult
 
     /**
      * Cambia la categoría de un movimiento ya registrado. Devuelve el [FinancialEvent]
