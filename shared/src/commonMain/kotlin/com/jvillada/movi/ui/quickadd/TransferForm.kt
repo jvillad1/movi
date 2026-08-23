@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.validateTransfer
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.theme.MinExpense
 import com.jvillada.movi.theme.MinOnPrimaryContainer
@@ -95,6 +96,63 @@ fun transferMissingMessage(from: Account?, to: Account?, amount: Long, date: Str
         ?: if (transferTimestampFor(date) == null) "La fecha tiene que ser AAAA-MM-DD" else null
 
 /**
+ * Los tres ids del traspaso que se está escribiendo. **Se generan una vez por borrador, no una
+ * vez por toque de Guardar.**
+ *
+ * El escenario que esto arregla: el server commitea las dos patas, la respuesta se pierde
+ * (timeout, cambio de red, la app al fondo), el dueño ve «revisa tu conexión» y vuelve a tocar
+ * Guardar. Si el segundo intento lleva ids nuevos, el server no tiene cómo saber que es el mismo
+ * traspaso y crea uno segundo entero: origen −2×monto, destino +2×monto, y el dueño con dos
+ * renglones idénticos que no pidió. Con los mismos ids, el INSERT choca contra la PK de las patas
+ * y el server responde 409 «ya está registrado» — que es la verdad, y por eso
+ * [isAlreadyRegistered] lo trata como éxito.
+ *
+ * Se renuevan **solo después de un éxito**: recién ahí el traspaso siguiente es otro traspaso.
+ */
+data class TransferDraftIds(
+    val transferId: String,
+    val fromEventId: String,
+    val toEventId: String,
+) {
+    companion object {
+        fun new() = TransferDraftIds(
+            transferId = newId("tr"),
+            fromEventId = newId("ev"),
+            toEventId = newId("ev"),
+        )
+    }
+}
+
+/** El pedido que se manda al server. Función aparte para que un reintento sea, literalmente, el mismo pedido. */
+fun transferRequestFor(
+    ids: TransferDraftIds,
+    from: Account,
+    to: Account,
+    amount: Long,
+    timestamp: Long,
+    note: String,
+): CreateTransferRequest = CreateTransferRequest(
+    transferId = ids.transferId,
+    fromEventId = ids.fromEventId,
+    toEventId = ids.toEventId,
+    fromAccountId = from.id,
+    toAccountId = to.id,
+    amount = amount,
+    timestamp = timestamp,
+    note = note.trim().ifBlank { null },
+)
+
+/**
+ * ¿Este fallo de `createTransfer` es en realidad «el traspaso ya está guardado»?
+ *
+ * El 409 del server significa que las dos patas existen — es la respuesta a un reintento con los
+ * mismos ids (ver [TransferDraftIds]). Mostrarlo como error sería mentirle al dueño y empujarlo a
+ * tocar Guardar una tercera vez.
+ */
+fun isAlreadyRegistered(error: Throwable): Boolean =
+    error is ApiException && error.status == 409
+
+/**
  * Cuentas donde tiene sentido mover plata: todo lo que no sea del grupo DEUDA.
  *
  * Se filtran del selector y no solo de la validación: ofrecer una tarjeta para después decir que
@@ -129,6 +187,9 @@ internal fun TransferBody(
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<TransferSide?>(null) }
+    // Los ids viven en el borrador, NO adentro de `save()`: un reintento tras un fallo tiene que
+    // llevar los mismos, o el server crea un traspaso duplicado (ver [TransferDraftIds]).
+    var ids by remember { mutableStateOf(TransferDraftIds.new()) }
 
     val from = elegibles.firstOrNull { it.id == fromId }
     val to = elegibles.firstOrNull { it.id == toId }
@@ -144,23 +205,29 @@ internal fun TransferBody(
         coroutine.launch {
             val result = runCatching {
                 Repositories.wallets.createTransfer(
-                    CreateTransferRequest(
-                        // Los tres ids los genera el cliente, igual que el de un movimiento
-                        // suelto (ver newId): así el traspaso tiene identidad antes de tocar
-                        // ninguna base y un reintento no lo duplica.
-                        transferId = newId("tr"),
-                        fromEventId = newId("ev"),
-                        toEventId = newId("ev"),
-                        fromAccountId = origen.id,
-                        toAccountId = destino.id,
-                        amount = amount ?: 0L,
-                        timestamp = timestamp,
-                        note = note.trim().ifBlank { null },
-                    ),
+                    transferRequestFor(ids, origen, destino, amount ?: 0L, timestamp, note),
                 )
             }
             saving = false
-            result.onSuccess { onSaved() }.onFailure { error = it.toUserMessage() }
+            result
+                .onSuccess {
+                    // Ids nuevos recién ACÁ: el traspaso siguiente es otro traspaso. Mientras el
+                    // anterior no haya llegado, cada reintento tiene que ser el mismo pedido.
+                    ids = TransferDraftIds.new()
+                    onSaved()
+                }
+                .onFailure { fallo ->
+                    // Un 409 no es un fallo: quiere decir que el traspaso YA quedó registrado
+                    // (esta es la respuesta del server a un reintento con los mismos ids). Se
+                    // cierra la hoja igual que en el camino feliz — decirle «revisa tu conexión»
+                    // a alguien cuyo traspaso sí se guardó es lo que lo empuja a guardarlo otra vez.
+                    if (isAlreadyRegistered(fallo)) {
+                        ids = TransferDraftIds.new()
+                        onSaved()
+                    } else {
+                        error = fallo.toUserMessage()
+                    }
+                }
         }
     }
 
