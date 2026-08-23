@@ -327,10 +327,19 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    // Mismo idioma que updateEventCategory: sin mirar el status, un 409 «Already voided» se
+    // deserializaba a ciegas y explotaba como un error de parseo cualquiera — sin código, sin
+    // texto. Eso importa acá más que en otras rutas: el `SyncEngine` no puede distinguir «no
+    // llegó» de «ya estaba anulado», así que reintentaba esa fila cada 30 segundos para siempre.
+    // Con el código a la vista, `syncVoids` sella la fila y deja de insistir.
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
         val url = if (reason != null) "$baseUrl/api/events/$id/void?reason=$reason"
                   else "$baseUrl/api/events/$id/void"
-        return client.post(url).body()
+        val response = client.post(url)
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
     }
 
     // Mismo idioma que adjustCreditBalance: el server puede rechazar con 404 (otro usuario) o
