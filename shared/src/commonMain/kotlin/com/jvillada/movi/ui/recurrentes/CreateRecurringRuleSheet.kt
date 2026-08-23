@@ -44,6 +44,8 @@ fun CreateRecurringRuleSheet(
     var dayOfMonth by remember { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
     var selectedType by remember { mutableStateOf(existing?.type ?: TransactionType.EXPENSE) }
     var category by remember { mutableStateOf(existing?.category ?: "Otros") }
+    // Marcada por defecto al crear; al editar refleja lo que está guardado.
+    var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -72,6 +74,7 @@ fun CreateRecurringRuleSheet(
                 amount = amt,
                 dayOfMonth = day,
                 type = selectedType,
+                remindMe = remindMe,
             )
             val result = if (isEditMode) {
                 runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
@@ -225,6 +228,20 @@ fun CreateRecurringRuleSheet(
                 label = "CATEGORÍA",
                 placeholder = "Ej: Vivienda, Suscripción, Salud",
             )
+
+            Spacer(Modifier.height(18.dp))
+
+            // --- RECORDATORIO ---
+            // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
+            // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
+            // nunca sale. Se muestra solo en Gasto.
+            if (selectedType == TransactionType.EXPENSE) {
+                ReminderOptInField(
+                    checked = remindMe,
+                    onCheckedChange = { remindMe = it },
+                    enabled = !saving,
+                )
+            }
 
             // Inline error display
             if (error != null) {

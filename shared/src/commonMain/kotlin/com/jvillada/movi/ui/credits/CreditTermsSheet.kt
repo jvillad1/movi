@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
@@ -71,6 +72,8 @@ fun CreditTermsSheet(
     // (pendiente, anotado en el KDoc de más abajo).
     var startDate by remember { mutableStateOf(existingTerms?.startDate ?: "") }
     var notes by remember { mutableStateOf(existingTerms?.notes ?: "") }
+    // Marcada por defecto al crear; al editar refleja lo que está guardado.
+    var remindMe by remember { mutableStateOf(existingTerms?.remindMe ?: true) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -119,6 +122,7 @@ fun CreditTermsSheet(
                     dayOfMonth = dayOfMonth.toInt(),
                     startDate = startDate.trim(),
                     notes = notes.trim().ifBlank { null },
+                    remindMe = remindMe,
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos en una
@@ -241,6 +245,15 @@ fun CreditTermsSheet(
                 FieldBox("Desembolso (AAAA-MM-DD)", startDate, { startDate = filterDateInput(it) })
                 Spacer(Modifier.height(8.dp))
                 FieldBox("Notas (opcional)", notes, { notes = it })
+
+                Spacer(Modifier.height(16.dp))
+                // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
+                // diga que no. Casilla, no diálogo: no interrumpe el alta.
+                ReminderOptInField(
+                    checked = remindMe,
+                    onCheckedChange = { remindMe = it },
+                    enabled = !saving,
+                )
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))
