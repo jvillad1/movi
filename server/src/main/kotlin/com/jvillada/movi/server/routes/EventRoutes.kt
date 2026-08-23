@@ -39,10 +39,7 @@ fun Route.eventRoutes() {
             // dejar entrar medio traspaso: plata saliendo de una cuenta sin la pata que la
             // compensa del otro lado, y encima invisible para el mes por la regla de isCashFlow.
             if (body.transferId != null || body.category == TRANSFER_CATEGORY) {
-                return@post call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "Un traspaso se crea completo con POST /api/transfers, no como un movimiento suelto",
-                )
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_LEG_NOT_STANDALONE)
             }
             val event = body.copy(
                 id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
@@ -260,7 +257,15 @@ fun Route.eventRoutes() {
                     .firstOrNull()?.toFinancialEvent()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
 
-            val void: VoidEvent? = dbQuery {
+            // El `try` cubre la carrera real que el chequeo de `alreadyVoided` de adentro NO
+            // puede cerrar: dos dispositivos anulando las dos patas del mismo traspaso a la vez.
+            // Los dos leen "no está anulada", los dos cascadean, y el que commitea segundo choca
+            // contra `uq_void_events_original_user`. Sin este catch eso salía como un 500 sin
+            // atrapar y el cliente perdedor lo reintentaba cada 30 segundos para siempre —
+            // cuando en realidad su anulación YA ocurrió, que es justo lo que quería. Un 409 dice
+            // exactamente eso, y el `SyncEngine` lo sella como resuelto (ver `syncVoids`).
+            val void: VoidEvent? = try {
+                dbQuery {
                 val alreadyVoided = VoidEvents.selectAll()
                     .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
                     .count() > 0
@@ -303,6 +308,12 @@ fun Route.eventRoutes() {
                         timestamp       = now,
                     )
                 }
+                }
+            } catch (e: org.jetbrains.exposed.exceptions.ExposedSQLException) {
+                // La otra punta de la carrera ya insertó esta anulación: el resultado que el
+                // cliente pedía está logrado. Se responde 409, igual que el camino de arriba.
+                println("[void] anulación concurrente de $id: ${e.message}")
+                null
             }
             if (void == null) return@post call.respond(HttpStatusCode.Conflict, "Already voided")
             call.respond(HttpStatusCode.Created, void)

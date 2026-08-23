@@ -18,6 +18,8 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -462,10 +464,7 @@ class TransferRoutesTest {
             setBody("""{"category":"Mercado"}""")
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        assertEquals(
-            "Un traspaso no se puede recategorizar: es plata que se movió entre tus cuentas, no un gasto ni un ingreso. Si te equivocaste, anúlalo y vuelve a hacerlo.",
-            response.bodyAsText(),
-        )
+        assertEquals(TRANSFER_RECATEGORIZE_BLOCKED, response.bodyAsText())
 
         val sigueIgual = transaction {
             Events.selectAll().where { Events.id eq "ev-from-1" }.single()[Events.category]
@@ -482,10 +481,7 @@ class TransferRoutesTest {
             setBody("""{"category":"$TRANSFER_CATEGORY"}""")
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
-        assertEquals(
-            "«Traspaso» es una categoría reservada: para mover plata entre tus cuentas usa Agregar → Traspaso.",
-            response.bodyAsText(),
-        )
+        assertEquals(TRANSFER_CATEGORY_RESERVED, response.bodyAsText())
     }
 
     @Test
@@ -503,5 +499,145 @@ class TransferRoutesTest {
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertEquals(before, eventCount())
+    }
+
+    // ── C1: el reintento del dedo no puede duplicar el traspaso ───────────────
+
+    /**
+     * El escenario: el server commitea, la respuesta se pierde (timeout, cambio de red, la app
+     * al fondo) y el dueño —que vio «revisa tu conexión»— vuelve a tocar Guardar. Con los MISMOS
+     * ids, el segundo POST tiene que rebotar sin escribir nada: dos eventos en total, no cuatro,
+     * y los saldos movidos UNA vez.
+     *
+     * Es la mitad server de la idempotencia; la otra mitad —que el cliente reintente con los
+     * mismos ids en vez de fabricar unos nuevos— vive en `TransferForm`/`TransferIdsTest`.
+     */
+    @Test
+    fun `el mismo traspaso mandado dos veces deja dos eventos, no cuatro`() = testApplication {
+        wireApp()
+        val body = transferBody()
+
+        val primera = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        val segunda = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+
+        assertEquals(HttpStatusCode.Created, primera.status)
+        assertEquals(HttpStatusCode.Conflict, segunda.status)
+
+        val patas = transaction {
+            Events.selectAll().where { Events.transferId eq "tr-1" }.count()
+        }
+        assertEquals(2L, patas, "el reintento no puede agregar un segundo par de patas")
+
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(750_000L, balanceOf(accounts, ahorrosId), "el saldo se movió una sola vez")
+        assertEquals(250_000L, balanceOf(accounts, cdtId))
+    }
+
+    // ── m8: un id inválido se rechaza como tal, no como «ya registrado» ───────
+
+    @Test
+    fun `un id en blanco se rechaza con su motivo, no disfrazado de traspaso repetido`() = testApplication {
+        wireApp()
+        val before = eventCount()
+        val response = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(transferId = ""))
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertEquals(before, eventCount())
+    }
+
+    @Test
+    fun `un id absurdamente largo tampoco pasa por 409`() = testApplication {
+        wireApp()
+        val response = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromEventId = "e".repeat(80)))
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+    }
+
+    // ── m7: anular la pata hermana después de la cascada es 409, nunca 500 ────
+
+    /**
+     * La versión determinística de la carrera: dos dispositivos anulan las dos patas a la vez.
+     * El segundo choca contra `uq_void_events_original_user` — antes eso salía como un 500 sin
+     * atrapar, y el cliente perdedor lo reintentaba cada 30 segundos para siempre porque
+     * `WalletRepositoryImpl.voidEvent` no miraba el status. Ahora es un 409 idempotente: la
+     * anulación YA ocurrió, que es justo lo que el cliente quería.
+     */
+    @Test
+    fun `anular la pata hermana despues de la cascada devuelve conflicto, no un error del server`() = testApplication {
+        wireApp()
+        crearTraspaso()
+        client.post("/api/events/ev-from-1/void") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        val segunda = client.post("/api/events/ev-to-1/void") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        assertEquals(HttpStatusCode.Conflict, segunda.status)
+        val anulaciones = transaction {
+            VoidEvents.selectAll().where { VoidEvents.userId eq userAId }.count()
+        }
+        assertEquals(2L, anulaciones, "la cascada ya las había anulado a las dos; no se agrega una tercera")
+    }
+
+    // ── M2: importar un extracto no puede sacar una pata de la categoría ──────
+
+    /**
+     * El agujero que esto tapa: la reconciliación de extractos escribe la categoría con un
+     * `Events.update` directo, sin pasar por la guarda de `PUT /api/events/{id}/category`. El
+     * matcher empareja por monto + moneda + ±2 días **sin mirar la cuenta**, así que engancha la
+     * pata de un traspaso; con «Confirmar todo» se aplica en bloque y sin que nadie lo lea.
+     *
+     * Si la pata sale de «Traspaso», `isCashFlow` vuelve a decir `true` y el egreso del mes se
+     * infla con plata que nunca salió del bolsillo — con la hermana todavía excluida, así que ni
+     * siquiera se compensa. La categoría de la pata no se toca.
+     */
+    @Test
+    fun `reconciliar un extracto contra una pata de traspaso no le cambia la categoria`() = testApplication {
+        wireApp()
+        crearTraspaso()
+
+        val response = client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"statementId":"st-tr","accountId":"$ahorrosId","bankName":"Bancolombia","period":"2026-08",""" +
+                    """"imports":[],"skipped":[],"reconciliations":[{"parsedId":"p-tr","existingEventId":"ev-from-1",""" +
+                    """"parsed":{"id":"p-tr","date":"2026-08-23","merchant":"Éxito","amount":250000,""" +
+                    """"currency":"COP","type":"EXPENSE","category":"Mercado","description":"COMPRA SUPERMERCADO",""" +
+                    """"rawText":""},""" +
+                    """"categorySource":"STATEMENT","descriptionSource":"STATEMENT","merchantSource":"STATEMENT",""" +
+                    """"confirm":true}]}""",
+            )
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val categoria = transaction {
+            Events.selectAll().where { Events.id eq "ev-from-1" }.single()[Events.category]
+        }
+        assertEquals(TRANSFER_CATEGORY, categoria, "la pata tiene que seguir fuera del flujo de caja")
+
+        // Y el mes sigue sin enterarse, que es lo que en realidad se protege.
+        val summary = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+        assertFalse(summary["spentByCategory"]?.jsonObject.orEmpty().containsKey("Mercado"))
     }
 }

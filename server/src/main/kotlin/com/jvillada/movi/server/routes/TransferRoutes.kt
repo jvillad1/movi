@@ -44,6 +44,14 @@ fun Route.transferRoutes() {
             val uid = call.userId()
             val body = call.receive<CreateTransferRequest>()
 
+            // Los ids se validan ANTES de tocar la base: la columna es varchar(50) y un id vacío
+            // o larguísimo explota adentro del INSERT con una ExposedSQLException que el catch de
+            // más abajo reportaba, sin distinguir, como «Ese traspaso ya está registrado» — un
+            // mensaje que manda al dueño a buscar un traspaso que nunca existió.
+            invalidIdMessage(body)?.let { motivo ->
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, motivo)
+            }
+
             val accounts = dbQuery {
                 Accounts.selectAll()
                     .where { (Accounts.userId eq uid) and (Accounts.id eq body.fromAccountId) }
@@ -78,6 +86,13 @@ fun Route.transferRoutes() {
                 }
                 true
             } catch (e: ExposedSQLException) {
+                // Con los ids ya validados arriba, el caso que de verdad cae acá es el que
+                // importa: el mismo traspaso mandado dos veces (el server commiteó, la respuesta
+                // se perdió, el dueño volvió a tocar Guardar). El 409 es la respuesta correcta
+                // —el traspaso YA está— y el cliente lo trata como éxito idempotente. Se loguea
+                // igual: si algún día cae acá otra cosa, «ya registrado» sin ningún rastro es
+                // indiagnosticable desde afuera, que es justo el agujero que este log tapa.
+                println("[transfers] INSERT falló para transferId=${body.transferId}: ${e.message}")
                 false
             }
             if (!inserted) {
@@ -90,4 +105,31 @@ fun Route.transferRoutes() {
             call.respond(HttpStatusCode.Created, TransferResult(from = fromLeg, to = toLeg))
         }
     }
+}
+
+/** Largo máximo de `financial_events.id` y de `transfer_id` (ver `Tables.kt`). */
+private const val MAX_ID_LENGTH = 50
+
+/**
+ * ¿Alguno de los tres ids que mandó el cliente no sirve? Devuelve el motivo; `null` si están bien.
+ *
+ * En blanco no vale (una fila sin identidad, y del lado del espejo local `INSERT OR REPLACE`
+ * haría que una pata pisara a la otra) y más largo que la columna tampoco. Sin esta validación
+ * los dos casos terminaban en el `catch` de abajo y salían como «Ese traspaso ya está
+ * registrado»: un mensaje que manda al dueño a buscar un traspaso que nunca existió.
+ */
+private fun invalidIdMessage(body: CreateTransferRequest): String? {
+    val ids = listOf(
+        "traspaso" to body.transferId,
+        "movimiento de origen" to body.fromEventId,
+        "movimiento de destino" to body.toEventId,
+    )
+    ids.forEach { (nombre, id) ->
+        if (id.isBlank()) return "Falta el identificador del $nombre"
+        if (id.length > MAX_ID_LENGTH) return "El identificador del $nombre es demasiado largo"
+    }
+    if (body.fromEventId == body.toEventId) {
+        return "Las dos patas del traspaso no pueden compartir el mismo identificador"
+    }
+    return null
 }

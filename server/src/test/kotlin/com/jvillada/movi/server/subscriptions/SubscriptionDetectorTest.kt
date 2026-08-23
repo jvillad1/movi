@@ -3,6 +3,7 @@ package com.jvillada.movi.server.subscriptions
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.SubConfidence
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
@@ -167,5 +168,33 @@ class SubscriptionDetectorTest {
             expense("ANTHROPIC CLAUDE.AI", 90_000, "2026-06-06"),
         )
         assertEquals(2, detectSubscriptions(events, today).size)
+    }
+
+
+    /**
+     * El caso canónico del dueño: «todos los meses paso $500.000 de Ahorros al CDT». Cumple la
+     * heurística completa —mismo «comercio» (la descripción de la pata), monto idéntico, cadencia
+     * mensual clavada— y aparecía como suscripción candidata; confirmada, entraba al total mensual
+     * como un gasto fijo que no existe. Un traspaso no es un gasto: la pata de salida se excluye
+     * del pool por su categoría reservada, mismo criterio que ya se usa para los agregados de
+     * Famirios (ver FAMIRIOS_STAMP_PREFIX en SubscriptionSync).
+     */
+    @Test
+    fun `un traspaso mensual no es una suscripcion`() {
+        val patas = listOf("2026-04-05", "2026-05-05", "2026-06-05", "2026-07-05").map {
+            expense("Traspaso a CDT", 500_000, it).copy(category = TRANSFER_CATEGORY)
+        }
+
+        assertTrue(detectSubscriptions(patas, today).isEmpty())
+    }
+
+    /** Y el mismo movimiento SIN la categoría reservada sí la cumple — o el test de arriba no probaría nada. */
+    @Test
+    fun `el mismo patron con otra categoria si se detecta`() {
+        val gastos = listOf("2026-04-05", "2026-05-05", "2026-06-05", "2026-07-05").map {
+            expense("Gimnasio Bodytech", 500_000, it)
+        }
+
+        assertEquals(1, detectSubscriptions(gastos, today).size)
     }
 }

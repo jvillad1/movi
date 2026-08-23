@@ -208,13 +208,28 @@ fun Route.statementRoutes() {
                     Events.selectAll()
                         .where { (Events.id eq dec.existingEventId) and (Events.userId eq uid) }
                         .firstOrNull()?.let {
-                            Triple(it[Events.category], it[Events.description], it[Events.merchant])
+                            ExistingEventFields(
+                                category   = it[Events.category],
+                                description = it[Events.description],
+                                merchant   = it[Events.merchant],
+                                isTransferLeg = it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY,
+                            )
                         }
                 }
 
                 if (existingEvent != null) {
-                    val (existCat, existDesc, existMerchant) = existingEvent
-                    val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT) dec.parsed.category    else existCat
+                    val (existCat, existDesc, existMerchant, esPataDeTraspaso) = existingEvent
+                    // La categoría de una pata de traspaso NO se toca por esta puerta. Esta
+                    // reconciliación escribe con un `Events.update` directo, sin pasar por la
+                    // guarda de `PUT /api/events/{id}/category` — y el matcher empareja por monto
+                    // + moneda + ±2 días SIN mirar la cuenta, así que engancha la pata de un
+                    // traspaso con cualquier compra del extracto que coincida en plata y fecha.
+                    // Con «Confirmar todo» eso se aplicaba en bloque, sin que nadie lo leyera: la
+                    // pata salía de «Traspaso», isCashFlow volvía a decir `true` y el egreso del
+                    // mes se inflaba con plata que nunca salió del bolsillo — encima con la pata
+                    // hermana todavía excluida, así que ni siquiera se compensaba.
+                    // Descripción y comercio sí se dejan enriquecer: no cambian ningún cálculo.
+                    val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT && !esPataDeTraspaso) dec.parsed.category    else existCat
                     val finalDescription = if (dec.descriptionSource == FieldSource.STATEMENT) dec.parsed.description else existDesc
                     val finalMerchant    = if (dec.merchantSource    == FieldSource.STATEMENT) dec.parsed.merchant    else existMerchant
 
@@ -346,3 +361,16 @@ private fun monthName(month: Int) = listOf(
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 )[month - 1]
+
+/**
+ * Los campos del evento existente que la reconciliación necesita, más si es una **pata de
+ * traspaso** — un `data class` en vez del `Triple` de antes porque un cuarto elemento sin nombre
+ * habría hecho ilegible el destructuring justo en la línea donde se decide si se pisa la
+ * categoría.
+ */
+private data class ExistingEventFields(
+    val category: String,
+    val description: String,
+    val merchant: String?,
+    val isTransferLeg: Boolean,
+)

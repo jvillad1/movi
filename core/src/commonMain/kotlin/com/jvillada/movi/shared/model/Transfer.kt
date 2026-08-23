@@ -37,9 +37,24 @@ const val TRANSFER_RECATEGORIZE_BLOCKED =
     "Un traspaso no se puede recategorizar: es plata que se movió entre tus cuentas, no un gasto " +
         "ni un ingreso. Si te equivocaste, anúlalo y vuelve a hacerlo."
 
-/** Lo que se le dice a alguien que intenta *entrar* a [TRANSFER_CATEGORY] recategorizando. */
+/**
+ * Lo que se le dice a alguien que intenta *entrar* a [TRANSFER_CATEGORY] recategorizando.
+ *
+ * Sin flecha: «→» sale como ▯ en wasm (la fuente del canvas no trae el glifo), y este texto se le
+ * muestra al dueño tal cual.
+ */
 const val TRANSFER_CATEGORY_RESERVED =
-    "«Traspaso» es una categoría reservada: para mover plata entre tus cuentas usa Agregar → Traspaso."
+    "«Traspaso» es una categoría reservada: para mover plata entre tus cuentas abre Agregar y elige Traspaso."
+
+/**
+ * Lo que se le dice a un cliente que intenta crear media pata suelta por `POST /api/events`.
+ *
+ * En castellano de persona, no de ruta HTTP: este texto puede terminar en la pantalla del dueño
+ * (la UI muestra el cuerpo del error del server, ver `toUserMessage`), y «usá POST /api/transfers»
+ * no le dice nada a nadie que no esté leyendo el código.
+ */
+const val TRANSFER_LEG_NOT_STANDALONE =
+    "Un traspaso se registra completo, con sus dos puntas: abre Agregar y elige Traspaso."
 
 /** Las dos patas que quedaron creadas, tal como el server las guardó. */
 @Serializable
