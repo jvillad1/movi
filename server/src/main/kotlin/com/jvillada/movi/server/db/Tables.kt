@@ -77,9 +77,18 @@ object Events : Table("financial_events") {
     val reconciliationStatus = varchar("reconciliation_status", 20).default("UNCONFIRMED")
     val syncedAt             = long("synced_at").nullable()
     val statementImportId    = varchar("statement_import_id", 50).nullable()
+    /**
+     * Enlace entre las dos patas de un traspaso (ver `TransferRoutes.kt` y
+     * [com.jvillada.movi.shared.model.transferLegsFor]). Nullable porque lo es para todo lo
+     * demás — no hay traspasos viejos que migrar, y `createMissingTablesAndColumns(Events)` la
+     * agrega sola al arrancar sobre una base ya desplegada.
+     */
+    val transferId           = varchar("transfer_id", 50).nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)
+        // La anulación en cascada busca la pata hermana por acá (ver POST /api/events/{id}/void).
+        index("idx_events_transfer_id", false, transferId)
         // Todo lo que lee el Inicio y el resumen del mes filtra por usuario y rango de fechas
         // (GET /api/dashboard/summary, finance-summary). Se crea solo al arrancar vía
         // createMissingTablesAndColumns (DatabaseFactory) — sin migración manual.
