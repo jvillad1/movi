@@ -102,6 +102,34 @@ class ReminderSelectionTest {
         assertEquals(1, result.size)
     }
 
+    // ── remindMe: el dueño puede apagar el aviso de UN ítem ───────────────────
+
+    @Test
+    fun `una regla con remindMe apagado nunca entra al barrido`() {
+        // Mismo día 10 que el caso OVERDUE de arriba: lo único distinto es remindMe.
+        val pairs = listOf(expense(10).copy(remindMe = false) to null)
+        assertTrue(
+            selectDueForReminder(pairs, today, leadDays).isEmpty(),
+            "si el dueño desmarcó «Recordarme», ese pago no se avisa aunque esté vencido",
+        )
+    }
+
+    @Test
+    fun `apagar el aviso de una regla no calla a las demas`() {
+        val pairs = listOf(
+            expense(10, name = "Con aviso") to null,
+            expense(13).copy(id = "r13-mudo", remindMe = false) to null,
+        )
+        val ids = selectDueForReminder(pairs, today, leadDays).map { it.id }
+        assertEquals(listOf("r10"), ids)
+    }
+
+    @Test
+    fun `remindMe viene prendido por defecto — el comportamiento de hoy no cambia`() {
+        assertTrue(expense(10).remindMe, "el default del modelo tiene que ser true")
+        assertEquals(1, selectDueForReminder(listOf(expense(10) to null), today, leadDays).size)
+    }
+
     // ── Income rules excluded ─────────────────────────────────────────────────
 
     @Test

@@ -77,8 +77,8 @@ fun upcomingPayments(rules: List<RecurringRule>, today: LocalDate, leadDays: Int
  * Pure sweep-selection filter.
  *
  * Given a list of (RecurringRule, lastRemindedPeriod?) pairs, returns the EXPENSE rules whose
- * due date is OVERDUE, DUE_TODAY, or DUE_SOON AND that have not yet been reminded *for that
- * due date*.
+ * due date is OVERDUE, DUE_TODAY, or DUE_SOON, that have `remindMe` on, AND that have not yet
+ * been reminded *for that due date*.
  *
  * La unidad de deduplicación es el periodo del **vencimiento**, no el de hoy: cerca de fin de
  * mes [dueDateFor] puede devolver una fecha del mes siguiente, y comparar contra el periodo de
@@ -97,7 +97,11 @@ fun selectDueForReminder(
     rules
         .filter { (rule, lastRemindedPeriod) ->
             val due = dueDateFor(rule, today)
-            rule.type == TransactionType.EXPENSE &&
+            // remindMe primero: si el dueño desmarcó «Recordarme unos días antes» para ESTE
+            // pago, no hay nada más que evaluar. El pago sigue existiendo (aparece en Próximos
+            // y en los totales) — lo único que se apaga es el aviso.
+            rule.remindMe &&
+                rule.type == TransactionType.EXPENSE &&
                 lastRemindedPeriod != reminderKeyFor(rule, today) &&
                 statusFor(due, today, leadDays) != PaymentStatus.UPCOMING
         }

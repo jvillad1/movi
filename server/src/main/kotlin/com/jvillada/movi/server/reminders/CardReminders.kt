@@ -29,6 +29,8 @@ fun virtualRuleForCard(terms: CardTerms, accountName: String, currentDebt: Long)
         amount     = currentDebt,
         dayOfMonth = terms.paymentDay,
         type       = TransactionType.EXPENSE,
+        // Igual que en créditos: la decisión de avisar vive en card_terms, no en la regla.
+        remindMe   = terms.remindMe,
     )
 
 /**

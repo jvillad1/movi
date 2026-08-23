@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -30,5 +31,40 @@ class ReminderWarningTest {
     @Test
     fun `denied push with payments due still warns, just with a different fix`() {
         assertTrue(shouldShowReminderWarning(pushStatus = "denied", hasUpcomingPayments = true))
+    }
+
+    // ── La casilla «Recordarme unos días antes» en las hojas de crear/editar ──
+
+    @Test
+    fun `la casilla desmarcada no promete nada, asi que no hay nada que advertir`() {
+        assertFalse(shouldShowReminderOptInWarning(pushStatus = "disabled", remindMe = false))
+        assertFalse(shouldShowReminderOptInWarning(pushStatus = "denied", remindMe = false))
+    }
+
+    @Test
+    fun `la casilla marcada sin canal activo tiene que decir la verdad`() {
+        assertTrue(shouldShowReminderOptInWarning(pushStatus = "disabled", remindMe = true))
+        assertTrue(shouldShowReminderOptInWarning(pushStatus = "denied", remindMe = true))
+    }
+
+    @Test
+    fun `la casilla marcada con push activo no advierte nada`() {
+        assertFalse(shouldShowReminderOptInWarning(pushStatus = "enabled", remindMe = true))
+    }
+
+    @Test
+    fun `sin soporte de push no hay instruccion que dar, asi que no se advierte`() {
+        assertFalse(shouldShowReminderOptInWarning(pushStatus = "unsupported", remindMe = true))
+    }
+
+    @Test
+    fun `la linea chica dice cuantos dias antes avisa, en singular y en plural`() {
+        assertEquals("Te avisamos 3 días antes del vencimiento.", reminderLeadHint(3))
+        assertEquals("Te avisamos 1 día antes del vencimiento.", reminderLeadHint(1))
+    }
+
+    @Test
+    fun `con cero dias de anticipacion la linea no miente — avisa el mismo dia`() {
+        assertEquals("Te avisamos el día del vencimiento.", reminderLeadHint(0))
     }
 }

@@ -13,6 +13,7 @@ fun ResultRow.toCardTerms() = CardTerms(
     cutoffDay   = this[Cards.cutoffDay],
     paymentDay  = this[Cards.paymentDay],
     notes       = this[Cards.notes],
+    remindMe    = this[Cards.remindMe],
 )
 
 /**

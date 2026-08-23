@@ -24,6 +24,8 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         amount     = terms.installment,
         dayOfMonth = terms.dayOfMonth,
         type       = TransactionType.EXPENSE,
+        // La regla es sintética, pero la decisión de avisar es del dueño y vive en credit_terms.
+        remindMe   = terms.remindMe,
     )
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */

@@ -156,4 +156,5 @@ private fun fillCardTerms(
     it[Cards.cutoffDay]   = terms.cutoffDay
     it[Cards.paymentDay]  = terms.paymentDay
     it[Cards.notes]       = terms.notes
+    it[Cards.remindMe]    = terms.remindMe
 }

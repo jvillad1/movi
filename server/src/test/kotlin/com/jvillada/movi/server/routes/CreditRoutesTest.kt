@@ -13,6 +13,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.CreditTerms
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -31,6 +32,8 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -550,5 +553,64 @@ class CreditRoutesTest {
         assertEquals(2L, summaryOf(userAId).eventCount())
         // ...pero no contamina el conteo de userB, que sigue en cero.
         assertEquals(0L, summaryOf(userBId).eventCount())
+    }
+    // ── remindMe: la casilla «Recordarme unos días antes» ─────────────────────
+
+    /** El crédito guardado sin recordatorio se relee sin recordatorio. */
+    @Test
+    fun `un credito guardado sin recordatorio se relee sin recordatorio`() = testApplication {
+        wireApp()
+        val put = client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","remindMe":false}""")
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean)
+    }
+
+    /** Sin decir nada, el crédito nace avisando — el comportamiento de siempre. */
+    @Test
+    fun `un credito guardado sin decir nada nace con el recordatorio prendido`() = testApplication {
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson)
+        }
+        // Se decodifica al modelo en vez de mirar la clave cruda: kotlinx.serialization omite
+        // los valores por defecto en el JSON, así que `remindMe: true` NO viaja por el cable —
+        // y eso está bien, porque el default del modelo lo repone del otro lado. Lo que hay que
+        // afirmar es lo que lee el cliente, no lo que aparece en el texto.
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.decodeFromJsonElement<CreditTerms>(
+            Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
+        )
+        assertTrue(terms.remindMe)
+    }
+
+    /** Editar los términos con la casilla desmarcada no la vuelve a prender. */
+    @Test
+    fun `editar los terminos conserva el valor del recordatorio`() = testApplication {
+        wireApp()
+        val sinAviso = validTermsJson.dropLast(1) + ""","remindMe":false}"""
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(sinAviso)
+        }
+        // Segunda edición: cambia la cuota, manda el mismo remindMe que traía cargado.
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(sinAviso.replace("\"installment\":4888000", "\"installment\":5000000"))
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean)
+        assertEquals(5_000_000L, terms["installment"]!!.jsonPrimitive.long)
     }
 }

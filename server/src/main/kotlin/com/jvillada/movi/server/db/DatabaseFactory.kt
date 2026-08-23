@@ -33,7 +33,11 @@ object DatabaseFactory {
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.
             // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users)
+            // RecurringRules · Credits · Cards: `remind_me` — la casilla «Recordarme unos días
+            // antes». La columna se declara `.default(true)`, así que el ALTER que emite esta
+            // llamada deja en TRUE las filas que ya existían: quien ya recibía recordatorios
+            // los sigue recibiendo, sin migración manual.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

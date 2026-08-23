@@ -50,6 +50,8 @@ data class CreditTerms(
     val dayOfMonth: Int,        // día de pago
     val startDate: String,      // ISO "2026-06-01" (desembolso)
     val notes: String? = null,
+    /** Ver [RecurringRule.remindMe]: la cuota de este crédito entra (o no) al barrido de avisos. */
+    val remindMe: Boolean = true,
 )
 
 @Serializable
@@ -130,6 +132,21 @@ data class RecurringRule(
     val amount: Long,
     val dayOfMonth: Int,
     val type: TransactionType,
+    /**
+     * ¿Este pago entra al barrido de recordatorios? Lo decide el dueño con la casilla
+     * «Recordarme unos días antes» al crear o editar la regla.
+     *
+     * Default `true` a propósito, y en tres lugares que tienen que coincidir: acá (clientes y
+     * server viejos que no mandan el campo siguen deserializando), en la columna
+     * `recurring_rules.remind_me` (`.default(true)`, así las filas que ya existían siguen
+     * avisando) y en la casilla de la UI, que nace marcada. Cualquier otro default cambiaría
+     * en silencio el comportamiento que el dueño ya tiene.
+     *
+     * Apagarlo silencia SOLO este pago: sigue apareciendo en Próximos y en los totales — no es
+     * un "archivar", es "no me avises". El filtro vive en
+     * `com.jvillada.movi.server.reminders.selectDueForReminder`.
+     */
+    val remindMe: Boolean = true,
 )
 
 @Serializable
@@ -205,6 +222,16 @@ data class AiChatRequest(val messages: List<ChatMessage>)
 
 @Serializable
 data class AiChatResponse(val text: String)
+
+/**
+ * Días de anticipación con los que el barrido avisa un vencimiento.
+ *
+ * Vive en `:core` porque lo necesitan los dos lados: el server lo usa como fallback de
+ * `REMINDER_LEAD_DAYS` y la UI lo usa para poder decir, debajo de la casilla «Recordarme unos
+ * días antes», *cuántos* días antes avisa. Sin un número compartido la casilla tendría que
+ * inventarse uno — y prometer algo distinto de lo que hace el barrido.
+ */
+const val DEFAULT_REMINDER_LEAD_DAYS: Int = 3
 
 @Serializable
 enum class PaymentStatus { OVERDUE, DUE_TODAY, DUE_SOON, UPCOMING }

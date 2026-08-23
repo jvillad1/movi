@@ -131,6 +131,12 @@ object RecurringRules : Table("recurring_rules") {
     val dayOfMonth         = integer("day_of_month")
     val type               = varchar("type", 20)
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable()  // "YYYY-MM", server-only
+    /**
+     * ¿Este pago entra al barrido de recordatorios? `.default(true)` no es cosmético: es lo que
+     * hace que `createMissingTablesAndColumns` emita `ADD COLUMN remind_me BOOLEAN DEFAULT TRUE
+     * NOT NULL` y las filas que ya existían queden avisando, igual que antes del cambio.
+     */
+    val remindMe           = bool("remind_me").default(true)
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }
@@ -159,6 +165,8 @@ object Credits : Table("credit_terms") {
     val startDate          = varchar("start_date", 10)    // ISO desembolso
     val notes              = varchar("notes", 300).nullable()
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
+    /** Ver `RecurringRules.remindMe`. */
+    val remindMe           = bool("remind_me").default(true)
     override val primaryKey = PrimaryKey(accountId)
     init { index("idx_credit_terms_user_id", false, userId) }
 }
@@ -178,6 +186,8 @@ object Cards : Table("card_terms") {
     val paymentDay         = integer("payment_day")
     val notes              = varchar("notes", 300).nullable()
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
+    /** Ver `RecurringRules.remindMe`. */
+    val remindMe           = bool("remind_me").default(true)
     override val primaryKey = PrimaryKey(accountId)
     init { index("idx_card_terms_user_id", false, userId) }
 }

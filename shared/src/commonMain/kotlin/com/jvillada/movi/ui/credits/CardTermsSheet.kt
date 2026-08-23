@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +54,8 @@ fun CardTermsSheet(
     var creditLimit by remember { mutableStateOf(existingTerms?.creditLimit) }
     var cutoffDay by remember { mutableStateOf(existingTerms?.cutoffDay?.toString() ?: "") }
     var paymentDay by remember { mutableStateOf(existingTerms?.paymentDay?.toString() ?: "") }
+    // Marcada por defecto al crear; al editar refleja lo que está guardado.
+    var remindMe by remember { mutableStateOf(existingTerms?.remindMe ?: true) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -85,6 +88,7 @@ fun CardTermsSheet(
                     creditLimit = creditLimit,
                     cutoffDay = cutoffDay.toIntOrNull(),
                     paymentDay = paymentDay.toInt(),
+                    remindMe = remindMe,
                 )
                 if (editing == null) {
                     // Alta atómica server-side: cuenta + deuda inicial (si la hay) + términos
@@ -179,6 +183,15 @@ fun CardTermsSheet(
                         FieldBox("Día de pago", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number)
                     }
                 }
+
+                Spacer(Modifier.height(16.dp))
+                // El pago de esta tarjeta entra al barrido de recordatorios salvo que el dueño
+                // diga que no — mismo componente y mismo texto que crédito y recurrente.
+                ReminderOptInField(
+                    checked = remindMe,
+                    onCheckedChange = { remindMe = it },
+                    enabled = !saving,
+                )
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))

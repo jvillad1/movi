@@ -9,6 +9,7 @@ import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildPushPayload
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.server.application.Application
@@ -45,7 +46,7 @@ fun Application.startReminderScheduler() {
     }
 
     val from      = readEnv("REMINDER_FROM") ?: "movi <reminders@movi.app>"
-    val leadDays  = readEnv("REMINDER_LEAD_DAYS")?.toIntOrNull()  ?: 3
+    val leadDays  = readEnv("REMINDER_LEAD_DAYS")?.toIntOrNull()  ?: DEFAULT_REMINDER_LEAD_DAYS
     val sweepHours = readEnv("REMINDER_SWEEP_HOURS")?.toLongOrNull() ?: 12L
 
     log.info("ReminderScheduler: starting (sweepHours=$sweepHours, leadDays=$leadDays, from=$from)")
@@ -237,6 +238,7 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         amount     = this[RecurringRules.amount],
         dayOfMonth = this[RecurringRules.dayOfMonth],
         type       = TransactionType.valueOf(this[RecurringRules.type]),
+        remindMe   = this[RecurringRules.remindMe],
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded

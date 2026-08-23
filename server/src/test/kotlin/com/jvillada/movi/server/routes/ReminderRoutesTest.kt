@@ -45,6 +45,7 @@ import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -225,5 +226,105 @@ class ReminderRoutesTest {
         val body = res.bodyAsText()
         assertTrue(body.contains("credit_acc-loan-up"), "expected virtual credit rule in: $body")
         assertTrue(body.contains("Cuota Crédito Vehículo"))
+    }
+
+    // ── remindMe: la casilla «Recordarme unos días antes» ─────────────────────
+
+    /** Crear con la casilla desmarcada y releer: el valor tiene que sobrevivir el viaje. */
+    @Test
+    fun `una regla creada sin recordatorio se relee sin recordatorio`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val created = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule("ignored", "Gimnasio", "Salud", 120_000, 8, TransactionType.EXPENSE, remindMe = false),
+            )
+        }.body<RecurringRule>()
+        assertFalse(created.remindMe, "la respuesta del POST ya debe reflejar la casilla desmarcada")
+
+        val reread = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>().single { it.id == created.id }
+        assertFalse(reread.remindMe, "el valor guardado tiene que sobrevivir la relectura")
+    }
+
+    /** Sin especificar nada, la regla nace avisando — el comportamiento de siempre. */
+    @Test
+    fun `una regla creada sin decir nada nace con el recordatorio prendido`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val created = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(RecurringRule("ignored", "Internet", "Servicios", 90_000, 20, TransactionType.EXPENSE))
+        }.body<RecurringRule>()
+        assertTrue(created.remindMe)
+
+        val reread = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>().single { it.id == created.id }
+        assertTrue(reread.remindMe)
+    }
+
+    /** Editar otra cosa no puede prender ni apagar el recordatorio por accidente. */
+    @Test
+    fun `editar una regla conserva el valor del recordatorio`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val created = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule("ignored", "Netflix", "Suscripción", 50_000, 15, TransactionType.EXPENSE, remindMe = false),
+            )
+        }.body<RecurringRule>()
+
+        // La hoja de edición manda el valor que tenía cargado: solo cambia el monto.
+        val updated = client.put("/api/recurring-rules/${created.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(created.copy(amount = 60_000))
+        }.body<RecurringRule>()
+        assertFalse(updated.remindMe)
+
+        val reread = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>().single { it.id == created.id }
+        assertFalse(reread.remindMe, "editar el monto no puede reactivar el recordatorio")
+        assertEquals(60_000L, reread.amount)
+    }
+
+    /** Y volver a marcarla lo vuelve a prender. */
+    @Test
+    fun `volver a marcar la casilla reactiva el recordatorio`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val created = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule("ignored", "Gym", "Salud", 100_000, 3, TransactionType.EXPENSE, remindMe = false),
+            )
+        }.body<RecurringRule>()
+
+        client.put("/api/recurring-rules/${created.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(created.copy(remindMe = true))
+        }
+        val reread = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>().single { it.id == created.id }
+        assertTrue(reread.remindMe)
     }
 }
