@@ -337,6 +337,10 @@ class TransferRoutesTest {
      * Atomicidad: la segunda pata choca contra un id que ya existe, así que la primera —que ya
      * se había insertado dentro de la misma transacción— tiene que desaparecer con ella. Sin
      * esto quedaría plata saliendo de Ahorros sin entrar a ningún lado.
+     *
+     * Y la respuesta es un 500, no un 409: el traspaso NO quedó registrado, así que decirle al
+     * cliente «ya está» sería un «guardado» sobre la nada (el cliente trata la respuesta
+     * idempotente como éxito y espeja las patas en su DB local).
      */
     @Test
     fun `si una pata falla no queda ni la otra`() = testApplication {
@@ -364,7 +368,7 @@ class TransferRoutesTest {
             setBody(transferBody(toEventId = "ev-to-choque"))
         }
 
-        assertEquals(HttpStatusCode.Conflict, response.status)
+        assertEquals(HttpStatusCode.InternalServerError, response.status)
         assertEquals(before, eventCount())
         val quedoLaPrimera = transaction {
             Events.selectAll().where { Events.id eq "ev-from-1" }.count() > 0
@@ -529,7 +533,10 @@ class TransferRoutesTest {
         }
 
         assertEquals(HttpStatusCode.Created, primera.status)
-        assertEquals(HttpStatusCode.Conflict, segunda.status)
+        // 200, no 409: el reintento devuelve las patas que ya estaban (idempotencia de verdad,
+        // ver el test de más abajo). Lo que este test protege es lo de siempre — que no aparezca
+        // un segundo par de patas ni se mueva el saldo dos veces.
+        assertEquals(HttpStatusCode.OK, segunda.status)
 
         val patas = transaction {
             Events.selectAll().where { Events.transferId eq "tr-1" }.count()
@@ -639,5 +646,115 @@ class TransferRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
         }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
         assertFalse(summary["spentByCategory"]?.jsonObject.orEmpty().containsKey("Mercado"))
+    }
+
+    /**
+     * La cola de C1, del lado del server: el reintento con los mismos ids no devuelve un 409 seco
+     * sino **las dos patas que ya están** — idempotencia de verdad. Así el cliente puede espejarlas
+     * localmente sin inventar nada, y la app deja de decir «guardado» sobre una DB local vacía.
+     */
+    @Test
+    fun `el reintento devuelve las patas que ya estaban, no un conflicto seco`() = testApplication {
+        wireApp()
+        val body = transferBody()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+
+        val reintento = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+
+        assertEquals(HttpStatusCode.OK, reintento.status)
+        val json = Json.parseToJsonElement(reintento.bodyAsText()).jsonObject
+        assertEquals("ev-from-1", json["from"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+        assertEquals("ev-to-1", json["to"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+        assertEquals("EXPENSE", json["from"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("INCOME", json["to"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+
+        val patas = transaction { Events.selectAll().where { Events.transferId eq "tr-1" }.count() }
+        assertEquals(2L, patas)
+
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(750_000L, balanceOf(accounts, ahorrosId), "el saldo se movió una sola vez")
+    }
+
+    /**
+     * Y un choque que NO deja las dos patas no puede disfrazarse de éxito: antes cualquier
+     * ExposedSQLException —un deadlock, una conexión caída, un serialization failure— salía como
+     * «ya está registrado», y con el cliente tratando el 409 como éxito eso se convertía en un
+     * «guardado» sobre la nada. Acá la pata de destino choca contra un id ajeno, así que el
+     * traspaso NO quedó: tiene que ser un error de verdad.
+     */
+    @Test
+    fun `un choque que no dejo las dos patas es un error, no un exito idempotente`() = testApplication {
+        wireApp()
+        transaction {
+            Events.insert {
+                it[id] = "ev-ocupado"
+                it[userId] = userAId
+                it[accountId] = cdtId
+                it[type] = "INCOME"
+                it[amount] = 1L
+                it[currency] = "COP"
+                it[category] = "Otros"
+                it[description] = "ocupa el id"
+                it[timestamp] = System.currentTimeMillis()
+                it[eventSource] = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+
+        val response = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(toEventId = "ev-ocupado"))
+        }
+
+        assertEquals(HttpStatusCode.InternalServerError, response.status)
+        val quedoAlgo = transaction {
+            Events.selectAll().where { Events.transferId eq "tr-1" }.count()
+        }
+        assertEquals(0L, quedoAlgo, "no puede quedar media transferencia")
+    }
+
+    /**
+     * M2, la otra mitad: **crear** un evento desde un extracto tampoco puede nacer en la categoría
+     * reservada. `parsed.category` viene del cliente o del texto libre del parser LLM, así que un
+     * «Traspaso» ahí dentro fabricaba un gasto real que quedaba fuera del mes sin ninguna pata
+     * hermana que lo compensara.
+     */
+    @Test
+    fun `un evento importado no puede nacer en la categoria reservada`() = testApplication {
+        wireApp()
+        val response = client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"statementId":"st-cat","accountId":"$ahorrosId","bankName":"Bancolombia","period":"2026-08",""" +
+                    """"reconciliations":[],"skipped":[],"imports":[{"id":"p-cat","date":"2026-08-20",""" +
+                    """"merchant":"Éxito","amount":90000,"currency":"COP","type":"EXPENSE",""" +
+                    """"category":"$TRANSFER_CATEGORY","description":"COMPRA","rawText":""}]}""",
+            )
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val categorias = transaction {
+            Events.selectAll().where { Events.description eq "COMPRA" }.map { it[Events.category] }
+        }
+        assertEquals(1, categorias.size)
+        assertTrue(categorias.none { it == TRANSFER_CATEGORY }, "nació en «${categorias.first()}», y eso está bien")
+
+        // Y el gasto sigue contando en el mes, que es lo que se protege.
+        val summary = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+        assertEquals(90_000L, summary["monthSpent"]?.jsonPrimitive?.long ?: 0L)
     }
 }

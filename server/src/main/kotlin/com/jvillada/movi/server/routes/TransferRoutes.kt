@@ -2,11 +2,14 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.TransferResult
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.validateTransfer
 import io.ktor.http.HttpStatusCode
@@ -19,6 +22,7 @@ import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.Transaction
 
 /**
  * `POST /api/transfers` — mover plata entre dos cuentas propias.
@@ -86,17 +90,29 @@ fun Route.transferRoutes() {
                 }
                 true
             } catch (e: ExposedSQLException) {
-                // Con los ids ya validados arriba, el caso que de verdad cae acá es el que
-                // importa: el mismo traspaso mandado dos veces (el server commiteó, la respuesta
-                // se perdió, el dueño volvió a tocar Guardar). El 409 es la respuesta correcta
-                // —el traspaso YA está— y el cliente lo trata como éxito idempotente. Se loguea
-                // igual: si algún día cae acá otra cosa, «ya registrado» sin ningún rastro es
-                // indiagnosticable desde afuera, que es justo el agujero que este log tapa.
                 println("[transfers] INSERT falló para transferId=${body.transferId}: ${e.message}")
                 false
             }
+
             if (!inserted) {
-                return@post call.respond(HttpStatusCode.Conflict, "Ese traspaso ya está registrado")
+                // El INSERT chocó. **No se asume por qué.** El caso probable, con los ids ya
+                // validados arriba, es el reintento del dedo: el server commiteó, la respuesta se
+                // perdió y el dueño volvió a tocar Guardar. Pero un deadlock, una conexión caída o
+                // un serialization failure caen exactamente en el mismo `catch`, y responderles
+                // «ya está registrado» era mentir — más ahora que el cliente trata esa respuesta
+                // como éxito: se convertía en un «guardado» sobre la nada.
+                //
+                // Así que se pregunta en vez de suponer. Si las dos patas están, el traspaso YA
+                // ocurrió y esto es idempotencia de verdad: se devuelven las patas reales (200),
+                // no un conflicto seco — el cliente las necesita para espejarlas en su DB local,
+                // que es de donde leen Movimientos, Cuentas y el detalle en el teléfono.
+                val existentes = dbQuery { transferLegsIn(uid, body.transferId) }
+                if (existentes != null) {
+                    return@post call.respond(HttpStatusCode.OK, existentes)
+                }
+                // No están las dos: el traspaso no quedó. Es un error genuino, y se dice como tal.
+                println("[transfers] el traspaso ${body.transferId} no quedó registrado tras el fallo del INSERT")
+                return@post call.respond(HttpStatusCode.InternalServerError, "No se pudo registrar el traspaso")
             }
 
             // Las patas se devuelven tal como las construyó :core — ya traen la categoría
@@ -132,4 +148,22 @@ private fun invalidIdMessage(body: CreateTransferRequest): String? {
         return "Las dos patas del traspaso no pueden compartir el mismo identificador"
     }
     return null
+}
+
+/**
+ * Las dos patas ya guardadas de [transferId], o `null` si no están las dos.
+ *
+ * "Las dos" es la condición, no "alguna": media transferencia no es un traspaso registrado, y
+ * devolverla como si lo fuera sería justo el saldo mintiendo que toda esta feature evita. La de
+ * origen es el EXPENSE y la de destino el INCOME — el mismo criterio con el que
+ * [transferLegsFor] las construye.
+ */
+private fun Transaction.transferLegsIn(uid: String, transferId: String): TransferResult? {
+    val patas = Events.selectAll()
+        .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
+        .map { it.toFinancialEvent() }
+    if (patas.size != 2) return null
+    val from = patas.firstOrNull { it.type == TransactionType.EXPENSE } ?: return null
+    val to = patas.firstOrNull { it.type == TransactionType.INCOME } ?: return null
+    return TransferResult(from = from, to = to)
 }

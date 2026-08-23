@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.TransferResult
+import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -294,17 +295,63 @@ class LocalRepository(
      * no pueda subir una pata suelta.
      */
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
-        val result = remote.createTransfer(request)
+        val result = try {
+            remote.createTransfer(request)
+        } catch (e: ApiException) {
+            if (e.status != 409) throw e
+            // 409 = «ese traspaso ya está registrado»: es la respuesta a un reintento con los
+            // mismos ids (el server commiteó y la respuesta se perdió). Sin este rescate, la
+            // excepción salía ANTES del espejo y el traspaso quedaba invisible en el teléfono
+            // **para siempre** — el SyncEngine solo empuja, nunca trae, y Movimientos/Cuentas/el
+            // detalle leen de acá. La app decía «guardado», refrescaba, y no había nada; solo
+            // Inicio (que lee remoto) lo contaba. El teléfono contradiciéndose a sí mismo, y el
+            // dueño rehaciendo el traspaso con ids nuevos: el duplicado que todo esto evita.
+            //
+            // Las patas se reconstruyen con `transferLegsFor`, la MISMA función que usó el server
+            // (vive en :core justamente para eso): mismos ids, mismo monto, misma marca de tiempo,
+            // misma descripción. No es una adivinanza — es la única cosa que el server pudo haber
+            // guardado con este request. Si alguna de las dos cuentas no está local, no hay con
+            // qué construirlas y el error sale tal cual.
+            val from = localAccount(request.fromAccountId) ?: throw e
+            val to = localAccount(request.toAccountId) ?: throw e
+            val (fromLeg, toLeg) = transferLegsFor(request, from, to)
+            TransferResult(from = fromLeg, to = toLeg)
+        }
+        mirrorTransferLocally(result, request.transferId)
+        return result
+    }
+
+    /** Una cuenta de la DB local como modelo, o null si este dispositivo todavía no la conoce. */
+    private fun localAccount(id: String): Account? =
+        db.accountQueries.selectById(id).executeAsOneOrNull()?.let { row ->
+            Account(
+                id = row.id, name = row.name,
+                type = AccountType.valueOf(row.type),
+                balance = row.balance, currency = row.currency,
+            )
+        }
+
+    /**
+     * Espeja las dos patas y mueve los dos saldos, **saltándose la pata que ya esté**.
+     *
+     * La guarda de idempotencia no es decorativa: este espejo corre también en el camino del 409,
+     * o sea después de un reintento, y `INSERT OR REPLACE` no duplicaría la fila pero
+     * `updateBalance` sí volvería a descontar. Sin el salto, guardar dos veces dejaba una sola
+     * fila (bien) y el saldo movido dos veces (mal, y en silencio).
+     */
+    private fun mirrorTransferLocally(result: TransferResult, transferId: String) {
         val uid = userId()
         val now = Clock.System.now().toEpochMilliseconds()
         db.transaction {
             listOf(result.from, result.to).forEach { leg ->
+                val yaEstaba = db.financialEventQueries.selectById(leg.id, uid).executeAsOneOrNull() != null
+                if (yaEstaba) return@forEach
                 db.financialEventQueries.insert(
                     leg.id, leg.accountId, leg.type.name, leg.amount,
                     leg.category, leg.description, leg.merchant,
                     leg.timestamp, leg.source.name, leg.rawPayload,
                     leg.reconciliationStatus.name, leg.syncedAt ?: now, uid,
-                    leg.transferId ?: request.transferId,
+                    leg.transferId ?: transferId,
                 )
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
@@ -313,7 +360,6 @@ class LocalRepository(
                 )
             }
         }
-        return result
     }
 
     /**

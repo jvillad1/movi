@@ -503,6 +503,78 @@ class LocalRepositoryTest {
         assertEquals(0L, repo.getAccount("acc-cdt").balance)
     }
 
+    /**
+     * La cola de C1. El escenario completo: (1) el server commitea las dos patas y la respuesta se
+     * pierde; (2) el dueño vuelve a tocar Guardar con los MISMOS ids; (3) el server reconoce el
+     * reintento. Si esa segunda respuesta llega como 409 y `createTransfer` la deja salir como
+     * excepción, el espejo local nunca se escribe — y como el `SyncEngine` solo empuja, jamás
+     * trae, el traspaso queda invisible en el teléfono PARA SIEMPRE: Movimientos, Cuentas y el
+     * detalle leen local, mientras Inicio (que lee remoto) sí lo cuenta. El teléfono se
+     * contradice a sí mismo, y el reflejo del dueño es rehacerlo desde el formulario —ahora con
+     * ids nuevos— que es el duplicado real que C1 vino a evitar.
+     *
+     * Las patas se reconstruyen con `transferLegsFor`, la MISMA función que usó el server: mismos
+     * ids, mismo monto, misma marca de tiempo, misma descripción. No es una adivinanza.
+     */
+    @Test
+    fun createTransfer_ante_un_409_espeja_igual_las_dos_patas() = runBlocking {
+        crearCuentasDelTraspaso()
+        val yaRegistrado = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                throw ApiException(409, "Ese traspaso ya está registrado")
+        }
+        val repoConflicto = LocalRepository(db = db, remote = yaRegistrado, userId = { testUserId })
+
+        val result = repoConflicto.createTransfer(transferRequest())
+
+        assertEquals("ev-tr-from", result.from.id)
+        assertEquals("ev-tr-to", result.to.id)
+        assertEquals(1, repo.getEvents("acc-ahorros").size, "la pata de origen tiene que quedar local")
+        assertEquals(1, repo.getEvents("acc-cdt").size, "y la de destino también")
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * Y el espejo es idempotente: el reintento que termina en 409 no puede volver a mover los
+     * saldos si la primera pasada YA los movió. Sin esta guarda, «guardar dos veces» dejaba dos
+     * filas (bien, por la PK) pero el saldo descontado dos veces (mal, y en silencio).
+     */
+    @Test
+    fun createTransfer_repetido_no_mueve_los_saldos_dos_veces() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        val yaRegistrado = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                throw ApiException(409, "Ese traspaso ya está registrado")
+        }
+        LocalRepository(db = db, remote = yaRegistrado, userId = { testUserId })
+            .createTransfer(transferRequest())
+
+        assertEquals(1, repo.getEvents("acc-ahorros").size)
+        assertEquals(1, repo.getEvents("acc-cdt").size)
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance, "el saldo se movió UNA vez")
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /** Cualquier otro error sigue saliendo: un 500 no puede disfrazarse de «ya estaba guardado». */
+    @Test
+    fun createTransfer_ante_un_error_que_no_es_409_sigue_fallando() = runBlocking {
+        crearCuentasDelTraspaso()
+        val roto = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                throw ApiException(500, "No se pudo registrar el traspaso")
+        }
+
+        val fallo = runCatching {
+            LocalRepository(db = db, remote = roto, userId = { testUserId }).createTransfer(transferRequest())
+        }
+
+        assertTrue(fallo.isFailure)
+        assertTrue(repo.getEvents("acc-ahorros").isEmpty())
+    }
+
     // ── M3: la guarda simétrica del server, del lado del cliente ──────────────
 
     /**
