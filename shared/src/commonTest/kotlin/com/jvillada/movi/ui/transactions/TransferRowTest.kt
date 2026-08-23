@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -33,6 +34,9 @@ class TransferRowTest {
         timestamp = 0L,
         transferId = transferId,
         countsAsCashFlow = transferId == null,
+        // RECONCILED por defecto: lo anotado a mano ya está confirmado (F12), y el chip
+        // «Gastos» excluye a propósito lo que todavía está por confirmar.
+        reconciliationStatus = ReconciliationStatus.RECONCILED,
     )
 
     private fun patas(transferId: String = "tr_1") = listOf(
@@ -147,5 +151,61 @@ class TransferRowTest {
     @Test
     fun `la categoria reservada alcanza para reconocerla aunque falte el transferId`() {
         assertTrue(isTransferLeg(evento("ev_raro", category = TRANSFER_CATEGORY)))
+    }
+
+
+    // ── M5: los chips tampoco pueden mostrar media pareja ─────────────────────
+
+    /**
+     * Son DOS chips, no uno. «Gastos» dejaba pasar la pata de salida y «Ingresos» la de entrada;
+     * como en cada caso queda UNA sola pata a la vista, `collapseTransfers` cae a `Single` y el
+     * traspaso vuelve a leerse como «−$500.000 · Traspaso» — exactamente la lectura que esta
+     * feature vino a eliminar, solo que una pestaña más allá.
+     */
+    @Test
+    fun `el chip de gastos no muestra la pata de salida de un traspaso`() {
+        val salida = patas().first()
+
+        assertFalse(matchesChip(salida, CHIP_GASTOS))
+    }
+
+    @Test
+    fun `el chip de ingresos no muestra la pata de entrada`() {
+        val entrada = patas()[1]
+
+        assertFalse(matchesChip(entrada, CHIP_INGRESOS))
+    }
+
+    @Test
+    fun `en Todo el traspaso si aparece, colapsado en un solo renglon`() {
+        val visibles = patas().filter { matchesChip(it, CHIP_TODO) }
+
+        assertEquals(2, visibles.size)
+        assertIs<MovementRow.Transfer>(collapseTransfers(visibles).single())
+    }
+
+    @Test
+    fun `un gasto normal sigue apareciendo en su chip`() {
+        val gasto = evento("ev_1", type = TransactionType.EXPENSE)
+
+        assertTrue(matchesChip(gasto, CHIP_GASTOS))
+        assertFalse(matchesChip(gasto, CHIP_INGRESOS))
+    }
+
+    @Test
+    fun `un ingreso normal sigue apareciendo en su chip`() {
+        val ingreso = evento("ev_2", type = TransactionType.INCOME)
+
+        assertTrue(matchesChip(ingreso, CHIP_INGRESOS))
+        assertFalse(matchesChip(ingreso, CHIP_GASTOS))
+    }
+
+    /** «Por confirmar» es para lo que entró solo; una pata la anotó el dueño, nunca está ahí. */
+    @Test
+    fun `el chip de por confirmar no cambia de comportamiento`() {
+        val porConfirmar = evento("ev_3").copy(reconciliationStatus = ReconciliationStatus.UNCONFIRMED)
+
+        assertTrue(matchesChip(porConfirmar, CHIP_POR_CONFIRMAR))
+        assertFalse(matchesChip(evento("ev_4"), CHIP_POR_CONFIRMAR))
     }
 }

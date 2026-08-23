@@ -46,6 +46,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.LocalRefreshTick
 
 /**
  * F13: filtro puro detrás de la búsqueda de Movimientos, separado del `@Composable` para poder
@@ -87,6 +88,33 @@ sealed class MovementRow {
 /** ¿Este movimiento es una pata de traspaso? */
 fun isTransferLeg(event: FinancialEvent): Boolean =
     event.transferId != null || event.category == TRANSFER_CATEGORY
+
+// Índices de los chips de arriba de Movimientos, con nombre para que el filtro de abajo (y sus
+// tests) no dependan de recordar qué significaba el 1 y qué el 2.
+const val CHIP_TODO = 0
+const val CHIP_GASTOS = 1
+const val CHIP_INGRESOS = 2
+const val CHIP_POR_CONFIRMAR = 3
+
+/**
+ * ¿Este movimiento entra en el chip [chip]?
+ *
+ * **Las patas de un traspaso no aparecen ni en «Gastos» ni en «Ingresos».** No es un capricho de
+ * pureza contable: son DOS chips y cada uno dejaba pasar UNA sola pata, así que
+ * [collapseTransfers] se quedaba sin la hermana, caía a `Single` y el traspaso volvía a leerse
+ * como «−$500.000 · Traspaso» — exactamente la lectura que esta feature vino a eliminar, una
+ * pestaña más allá. Y es la misma regla que ya aplican el mes y los presupuestos
+ * (`isCashFlow`): un traspaso no es un gasto ni un ingreso. En «Todo» sí aparece, como un solo
+ * renglón, que es donde tiene sentido verlo.
+ */
+fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
+    CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
+        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED &&
+        !isTransferLeg(event)
+    CHIP_INGRESOS -> event.type == TransactionType.INCOME && !isTransferLeg(event)
+    CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
+    else -> true
+}
 
 /**
  * Junta las dos patas de cada traspaso en **un solo renglón**.
@@ -181,7 +209,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // carga (o si falló) se ofrece registrar, que es la acción segura.
     var accountsLoaded by remember { mutableStateOf(false) }
     var showCreateSheet by remember { mutableStateOf(false) }
-    LaunchedEffect(refreshKey) {
+    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
+    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
+    // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(refreshKey, refreshTick) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it; accountsLoaded = true }
     }
     // Los nombres de las cuentas, para que el renglón de un traspaso diga de dónde a dónde fue la
@@ -202,7 +234,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getEventsByDay() }
@@ -216,7 +248,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(refreshKey, refreshTick) {
         runCatching { Repositories.wallets.getCardPaymentCandidates() }
             .onSuccess { candidates = it }
     }
@@ -233,12 +265,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 
     val visibleDays = remember(activeFilter, allDays, searchQuery) {
         allDays.mapNotNull { day ->
-            val filtered = when (activeFilter) {
-                1 -> day.items.filter { it.type == TransactionType.EXPENSE && it.reconciliationStatus != ReconciliationStatus.UNCONFIRMED }
-                2 -> day.items.filter { it.type == TransactionType.INCOME }
-                3 -> day.items.filter { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED }
-                else -> day.items
-            }.filter { matchesQuery(it, searchQuery) }
+            val filtered = day.items
+                .filter { matchesChip(it, activeFilter) }
+                .filter { matchesQuery(it, searchQuery) }
             if (filtered.isEmpty()) null
             // El total recalculado sigue el mismo criterio que el del server (ver EventRoutes
             // /by-day): countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin
