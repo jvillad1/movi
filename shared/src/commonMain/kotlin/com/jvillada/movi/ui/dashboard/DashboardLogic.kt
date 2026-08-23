@@ -50,7 +50,7 @@ data class DashboardData(
     /** F54: el evento de apertura no cuenta — ver KDoc de `FinanceSummary.eventCount`. */
     val hasMovement: Boolean get() = (summary?.eventCount ?: 0) > 0
     /**
-     * F6: "Anota tus pagos fijos" se tilda con una regla recurrente REAL. `getUpcomingPayments`
+     * F6: "Anota tus gastos recurrentes" se tilda con una regla recurrente REAL. `getUpcomingPayments`
      * también trae las cuotas sintéticas de los créditos (id con [CREDIT_RULE_PREFIX]) y, desde
      * F20, los pagos de tarjeta (id con [CARD_RULE_PREFIX]); esas tildan el paso de Créditos,
      * no este.

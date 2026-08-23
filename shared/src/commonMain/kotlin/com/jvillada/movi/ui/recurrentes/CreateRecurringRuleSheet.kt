@@ -121,7 +121,7 @@ fun CreateRecurringRuleSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (isEditMode) "Editar pago" else "Nuevo pago",
+                    text = if (isEditMode) "Editar recurrente" else "Nuevo recurrente",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MinText,
@@ -252,7 +252,7 @@ fun CreateRecurringRuleSheet(
                     text = when {
                         saving       -> if (isEditMode) "Guardando…" else "Creando…"
                         isEditMode   -> "Guardar cambios"
-                        else         -> "Crear pago"
+                        else         -> "Crear recurrente"
                     },
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,

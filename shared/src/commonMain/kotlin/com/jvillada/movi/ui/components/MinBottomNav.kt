@@ -29,15 +29,15 @@ import com.jvillada.movi.theme.*
 /**
  * Destinos de la navegación principal. En el teléfono la barra muestra cinco
  * (Inicio · Movimientos · + · Cuentas · Más); en pantalla ancha el rail muestra además
- * Créditos y Presupuestos como entradas propias. Una pantalla declara UN destino
+ * Créditos, Presupuestos y Recurrentes como entradas propias. Una pantalla declara UN destino
  * (ver `navTabFor` en Navigation.kt) y cada superficie decide cómo lo resalta: la barra del
- * teléfono pinta CREDITS y BUDGETS como "Más", que es por donde se llega a ellos ahí.
+ * teléfono pinta CREDITS, BUDGETS y RECURRING como "Más", que es por donde se llega a ellos ahí.
  */
-enum class NavTab { HOME, TRANSACTIONS, ADD, ACCOUNTS, CREDITS, BUDGETS, MORE }
+enum class NavTab { HOME, TRANSACTIONS, ADD, ACCOUNTS, CREDITS, BUDGETS, RECURRING, MORE }
 
 /** Qué ítem de la barra del teléfono se resalta para un destino dado. */
 fun NavTab.asBottomBarTab(): NavTab = when (this) {
-    NavTab.CREDITS, NavTab.BUDGETS -> NavTab.MORE
+    NavTab.CREDITS, NavTab.BUDGETS, NavTab.RECURRING -> NavTab.MORE
     else -> this
 }
 

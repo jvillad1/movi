@@ -3,6 +3,7 @@ package com.jvillada.movi.ui
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.asBottomBarTab
+import com.jvillada.movi.ui.components.railDestinations
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -100,18 +101,30 @@ class NavStackTest {
     }
 
     @Test
-    fun `Presupuestos y Creditos tienen destino propio y en la barra se resaltan como Mas`() {
+    fun `Presupuestos, Creditos y Recurrentes tienen destino propio y en la barra se resaltan como Mas`() {
         assertEquals(NavTab.BUDGETS, navTabFor(Screen.Budgets))
         assertEquals(NavTab.CREDITS, navTabFor(Screen.Credits))
+        // Recurrentes salió de Más y entró al rail: destino propio en ancho, Más en el teléfono.
+        assertEquals(NavTab.RECURRING, navTabFor(Screen.Recurrentes))
         assertEquals(NavTab.MORE, NavTab.BUDGETS.asBottomBarTab())
         assertEquals(NavTab.MORE, NavTab.CREDITS.asBottomBarTab())
+        assertEquals(NavTab.MORE, NavTab.RECURRING.asBottomBarTab())
         assertEquals(NavTab.ACCOUNTS, NavTab.ACCOUNTS.asBottomBarTab())
+    }
+
+    @Test
+    fun `cada destino del rail vuelve a su pantalla principal`() {
+        // El rail y `screenForTab` no pueden desalinearse: si una entrada del rail no
+        // resolviera a una pantalla que declara ESE destino, el ítem quedaría sin resaltar.
+        railDestinations.forEach { dest ->
+            assertEquals(dest.tab, navTabFor(screenForTab(dest.tab)), dest.label)
+        }
     }
 
     @Test
     fun `las pantallas de Mas marcan Mas y los flujos a pantalla completa no tienen barra`() {
         listOf(Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
-            Screen.Recurrentes, Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
+            Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
             .forEach { assertEquals(NavTab.MORE, navTabFor(it), "$it") }
         listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,
             Screen.StatementReview("{}"), Screen.ImportDetail("i1"))
