@@ -90,6 +90,10 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
         // "Salario" al pasar a Gasto), seguir mostrándola confundiría. Una categoría escrita a
         // mano, o "BOTH", se deja tal cual: no hay forma de saber si tiene sentido para el
         // nuevo tipo.
+        //
+        // La pestaña Traspaso (índice 2) queda fuera: un traspaso no tiene categoría elegible —
+        // la suya es reservada— así que no hay nada que reconciliar al entrar ni al salir.
+        if (typeIndex > 1) return@LaunchedEffect
         val newType = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
         val matched = PREDEFINED_CATEGORIES.find { it.name == category }
         if (matched != null && matched.type != newType.name && matched.type != "BOTH") {
@@ -205,9 +209,24 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                         onSave = { note = it; picker = Picker.None },
                         onClose = { picker = Picker.None },
                     )
-                    Picker.None -> EditorBody(
-                        typeIndex = typeIndex,
-                        onTypeChange = { typeIndex = it },
+                    Picker.None -> Column(modifier = Modifier.fillMaxWidth()) {
+                        // El selector de tipo vive acá y no adentro de EditorBody porque ahora
+                        // elige entre DOS formularios distintos: un movimiento (egreso/ingreso)
+                        // y un traspaso, que no tiene ni categoría ni tipo pero sí dos cuentas.
+                        TypeSegments(
+                            labels = listOf("Egreso", "Ingreso", "Traspaso"),
+                            selected = typeIndex,
+                            onSelect = { typeIndex = it },
+                            enabled = !saving,
+                        )
+                        if (typeIndex == 2) {
+                            TransferBody(
+                                accounts = accounts,
+                                accountsLoaded = accountsLoaded,
+                                onSaved = onDismiss,
+                            )
+                        } else {
+                            EditorBody(
                         amount = amount,
                         onKey = ::onKey,
                         category = category,
@@ -222,9 +241,11 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                         saving = saving,
                         error = error,
                         onSave = ::save,
-                        hasNoAccounts = accountsLoaded && accounts.isEmpty(),
-                        onCreateAccount = { showCreateSheet = true },
-                    )
+                                hasNoAccounts = accountsLoaded && accounts.isEmpty(),
+                                onCreateAccount = { showCreateSheet = true },
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -240,10 +261,53 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
     }
 }
 
+/**
+ * El selector de arriba de la hoja: Egreso · Ingreso · Traspaso.
+ *
+ * Vive fuera de [EditorBody] desde que existe la tercera opción: ya no elige una variante del
+ * mismo formulario sino entre dos formularios distintos (ver [TransferBody]), así que el que lo
+ * dibuja tiene que ser el que decide cuál se muestra.
+ */
+@Composable
+internal fun TypeSegments(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(999.dp))
+            .background(MinSurfaceContainerLow)
+            .border(1.dp, MinBorder, RoundedCornerShape(999.dp))
+            .padding(3.dp),
+    ) {
+        labels.forEachIndexed { i, label ->
+            val isActive = i == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (isActive) MinSurfaceContainerHigh else Color.Transparent)
+                    .clickable(enabled = enabled) { onSelect(i) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isActive) MinText else MinTextDim,
+                    letterSpacing = 0.1.sp,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun EditorBody(
-    typeIndex: Int,
-    onTypeChange: (Int) -> Unit,
     amount: String,
     onKey: (String) -> Unit,
     category: String,
@@ -261,36 +325,6 @@ private fun EditorBody(
     hasNoAccounts: Boolean = false,
     onCreateAccount: () -> Unit = {},
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(999.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(999.dp))
-            .padding(3.dp),
-    ) {
-        listOf("Egreso", "Ingreso").forEachIndexed { i, label ->
-            val isActive = i == typeIndex
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (isActive) MinSurfaceContainerHigh else Color.Transparent)
-                    .clickable { onTypeChange(i) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isActive) MinText else MinTextDim,
-                    letterSpacing = 0.1.sp,
-                )
-            }
-        }
-    }
-
     Spacer(Modifier.height(22.dp))
 
     Column(
@@ -468,7 +502,7 @@ private fun EditorBody(
 }
 
 @Composable
-private fun PickerHeader(title: String, onClose: () -> Unit) {
+internal fun PickerHeader(title: String, onClose: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
