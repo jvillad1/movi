@@ -81,27 +81,29 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    val ingresosFijos = rules.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-    val egresosFijos  = rules.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-    val flujoLibre    = ingresosFijos - egresosFijos
+    val ingresosRecurrentes = rules.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+    val gastosRecurrentes   = rules.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    val flujoLibre          = ingresosRecurrentes - gastosRecurrentes
 
     // Rules sorted by dayOfMonth for the "Por día" list.
     val ordered = remember(rules) { rules.sortedBy { it.dayOfMonth } }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
-            // F60: encabezado único — se abre desde Más (flecha, F22); con reglas ya creadas el
-            // alta pasa a botón compacto a la derecha (F18), vacío va a todo el ancho debajo.
+            // F60: encabezado único; con reglas ya creadas el alta pasa a botón compacto a la
+            // derecha (F18), vacío va a todo el ancho debajo. Recurrentes ya es pestaña propia:
+            // el leading lo decide el layout (avatar en el rail, flecha en el teléfono, donde se
+            // sigue llegando por Más).
             MinScreenHeader(
                 title = "Recurrentes",
-                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                leading = leadingFor(Screen.Recurrentes, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
                 action = if (rules.isNotEmpty()) {
-                    { NewItemButton(label = "Nuevo pago", onClick = { sheetRule = null; sheetOpen = true }) }
+                    { NewItemButton(label = "Nuevo recurrente", onClick = { sheetRule = null; sheetOpen = true }) }
                 } else null,
             )
             if (rules.isEmpty() && !loading) {
                 NewItemButton(
-                    label = "Nuevo pago",
+                    label = "Nuevo recurrente",
                     onClick = { sheetRule = null; sheetOpen = true },
                     modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                     full = true,
@@ -131,7 +133,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "Ingresos fijos − egresos fijos",
+                            text = "Ingresos recurrentes − Gastos recurrentes",
                             fontSize = 12.sp,
                             color = MinTextMute,
                         )
@@ -140,10 +142,10 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Ingresos fijos", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                                Text("Ingresos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = formatCOP(ingresosFijos),
+                                    text = formatCOP(ingresosRecurrentes),
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,
@@ -152,10 +154,10 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 )
                             }
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Egresos fijos", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                                Text("Gastos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = formatCOP(egresosFijos),
+                                    text = formatCOP(gastosRecurrentes),
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,
@@ -183,12 +185,12 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
-                // ── Próximos pagos section ──────────────────────────────────────
+                // ── Próximos section ────────────────────────────────────────────
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         MinSectionHeader(
-                            title = "Próximos pagos",
+                            title = "Próximos",
                             count = if (upcoming.isNotEmpty()) upcoming.size else null,
                         )
                         if (upcoming.isEmpty() && !loading) {
@@ -197,7 +199,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                             ) {
-                                Text("Sin pagos próximos", fontSize = 14.sp, color = MinTextMute)
+                                Text("Sin recurrentes aún", fontSize = 14.sp, color = MinTextMute)
                             }
                         } else {
                             MinCard(
@@ -239,7 +241,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                             ) {
-                                Text("Sin reglas recurrentes", fontSize = 14.sp, color = MinTextMute)
+                                Text("Sin recurrentes aún", fontSize = 14.sp, color = MinTextMute)
                             }
                         } else {
                             MinCard(

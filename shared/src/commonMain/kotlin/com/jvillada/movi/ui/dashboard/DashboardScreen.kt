@@ -215,7 +215,8 @@ fun DashboardScreen(
 
 /**
  * Guía de arranque compacta (F6 · F7): una línea por paso, sin subtítulos largos, y el
- * paso 2 es el que faltaba — "Anota tus pagos fijos" (colegio, arriendo, gimnasio, cuotas),
+ * paso 2 es el que faltaba — "Anota tus gastos recurrentes" (colegio, arriendo, gimnasio,
+ * cuotas),
  * que es donde van las obligaciones que no son ni préstamo ni tarjeta (F6 preguntaba dónde
  * cargar el colegio o el gimnasio: en Recurrentes).
  *
@@ -223,7 +224,7 @@ fun DashboardScreen(
  * a partir de los datos reales. El día que haya cuenta Y movimiento, la tarjeta entera deja
  * de renderizarse — y si el dueño vacía la instancia de nuevo, vuelve a aparecer sola.
  *
- * Pagos fijos (paso 2) y créditos (paso 3) NO condicionan el apagado — a propósito. Son
+ * Gastos recurrentes (paso 2) y créditos (paso 3) NO condicionan el apagado — a propósito. Son
  * pasos *ofrecidos*, no *requeridos*: se tildan si existe algo, pero alguien sin préstamos
  * ni cuotas no tiene por qué ver esta guía para siempre esperando un casillero que jamás se
  * cumple. Cuando la tarjeta se apaga (cuenta + movimiento), se apaga entera.
@@ -255,7 +256,7 @@ private fun PrimerosPasosCard(
         Hairline()
         PasoRow(
             done = data.hasRecurringRule,
-            title = "Anota tus pagos fijos",
+            title = "Anota tus gastos recurrentes",
             subtitle = "Colegio, arriendo, gimnasio, cuotas",
             onClick = { onNavigate(Screen.Recurrentes) },
         )
