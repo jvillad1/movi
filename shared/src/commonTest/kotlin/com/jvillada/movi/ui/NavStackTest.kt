@@ -6,8 +6,10 @@ import com.jvillada.movi.ui.components.asBottomBarTab
 import com.jvillada.movi.ui.components.railDestinations
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * F22: la flecha ‹ debe volver a la pantalla anterior de verdad, no a un destino
@@ -129,5 +131,42 @@ class NavStackTest {
         listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,
             Screen.StatementReview("{}"), Screen.ImportDetail("i1"))
             .forEach { assertNull(navTabFor(it), "$it") }
+    }
+
+    // ── Agregar es una ventana modal, no un destino ───────────────────────────
+
+    @Test
+    fun `Agregar se abre como ventana modal`() {
+        assertTrue(opensAsOverlay(Screen.QuickAdd()))
+        assertTrue(opensAsOverlay(Screen.QuickAdd(presetAccountId = "acc_1")))
+    }
+
+    @Test
+    fun `el resto de las pantallas son destinos, no modales`() {
+        listOf(
+            Screen.Dashboard, Screen.Transactions, Screen.Accounts, Screen.Credits, Screen.Budgets,
+            Screen.Mas, Screen.Profile, Screen.Login, Screen.OCRCapture,
+            Screen.AccountDetail("acc_1", AccountGroup.DINERO),
+        ).forEach { assertFalse(opensAsOverlay(it), "$it") }
+    }
+
+    /**
+     * El bug que esto blinda: «Agregar» se apilaba como una pantalla más, `navTabFor` daba `null`
+     * para ella y App.kt solo pinta el rail/la barra cuando hay pestaña activa — así que abrir
+     * Agregar hacía desaparecer TODO el chrome. En el teléfono se veía como una hoja normal; en
+     * escritorio el rail se esfumaba y la hoja quedaba flotando sobre un vacío negro.
+     */
+    @Test
+    fun `abrir Agregar no cambia la pestaña activa, porque no entra a la pila`() {
+        val pila = listOf<Screen>(Screen.Transactions)
+        val destino = screenForTab(NavTab.ADD)
+
+        val pilaDespues = if (opensAsOverlay(destino)) pila else pila + destino
+
+        assertEquals(pila, pilaDespues, "Agregar no se apila: se dibuja encima de lo que ya estaba")
+        assertEquals(
+            NavTab.TRANSACTIONS, navTabFor(pilaDespues.last()),
+            "la pestaña sigue siendo la de la pantalla de atrás, así que el rail y la barra siguen pintados",
+        )
     }
 }
