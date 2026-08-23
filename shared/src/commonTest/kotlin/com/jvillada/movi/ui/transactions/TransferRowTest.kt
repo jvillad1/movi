@@ -104,9 +104,23 @@ class TransferRowTest {
         val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
 
         assertEquals(
-            "Ahorros → CDT",
+            "De Ahorros a CDT",
             transferRowSubtitle(fila, mapOf("acc_ahorros" to "Ahorros", "acc_cdt" to "CDT")),
         )
+    }
+
+    /**
+     * Con palabras, sin flecha: «→» sale como ▯ en wasm (la fuente del canvas no trae el glifo,
+     * el mismo motivo por el que el «›» ya se había reemplazado por un ícono Material).
+     */
+    @Test
+    fun `el subtitulo no usa ningun glifo que la web no sepa dibujar`() {
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
+        val subtitulo = transferRowSubtitle(fila, mapOf("acc_ahorros" to "Ahorros", "acc_cdt" to "CDT"))
+
+        listOf('→', '›', '⟶', '▶').forEach {
+            assertFalse(subtitulo.contains(it), "el subtítulo no debería traer '$it'")
+        }
     }
 
     /** Sin los nombres cargados todavía, el renglón no inventa ninguno. */
@@ -114,7 +128,7 @@ class TransferRowTest {
     fun `si los nombres de las cuentas no llegaron, el subtitulo no miente`() {
         val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
 
-        assertEquals("Origen → Destino", transferRowSubtitle(fila, emptyMap()))
+        assertEquals("De Origen a Destino", transferRowSubtitle(fila, emptyMap()))
     }
 
     // ── La categoría reservada no se toca desde la UI ─────────────────────────

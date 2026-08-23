@@ -214,7 +214,10 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
                         // elige entre DOS formularios distintos: un movimiento (egreso/ingreso)
                         // y un traspaso, que no tiene ni categoría ni tipo pero sí dos cuentas.
                         TypeSegments(
-                            labels = listOf("Egreso", "Ingreso", "Traspaso"),
+                            // «Gasto», no «Egreso»: es la palabra que la gente usa. El resto de
+                            // la app todavía dice «Egresos» en algún rótulo — el barrido completo
+                            // va aparte, para no mezclarlo con la feature de traspasos.
+                            labels = listOf("Gasto", "Ingreso", "Traspaso"),
                             selected = typeIndex,
                             onSelect = { typeIndex = it },
                             enabled = !saving,
@@ -262,7 +265,7 @@ fun QuickAddScreen(onDismiss: () -> Unit, onNavigate: (Screen) -> Unit = {}, pre
 }
 
 /**
- * El selector de arriba de la hoja: Egreso · Ingreso · Traspaso.
+ * El selector de arriba de la hoja: Gasto · Ingreso · Traspaso.
  *
  * Vive fuera de [EditorBody] desde que existe la tercera opción: ya no elige una variante del
  * mismo formulario sino entre dos formularios distintos (ver [TransferBody]), así que el que lo

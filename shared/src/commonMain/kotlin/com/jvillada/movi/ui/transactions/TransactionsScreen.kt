@@ -122,15 +122,20 @@ fun collapseTransfers(items: List<FinancialEvent>): List<MovementRow> {
 }
 
 /**
- * "Ahorros → CDT": de qué cuenta a qué cuenta se movió la plata.
+ * "De Ahorros a CDT": de qué cuenta a qué cuenta se movió la plata.
+ *
+ * Con palabras y no con una flecha: en wasm «→» sale como ▯ (la fuente del canvas no trae ese
+ * glifo — el mismo problema que ya obligó a reemplazar el «›» por un ícono Material, ver
+ * `ChevronRight`), y verificado en la web local antes de este cambio.
  *
  * Los nombres salen del mapa de cuentas y no de la descripción de las patas: si la lista de
- * cuentas todavía no llegó, se dicen los roles ("Origen → Destino") en vez de inventar un nombre.
+ * cuentas todavía no llegó, se dicen los roles ("De Origen a Destino") en vez de inventar un
+ * nombre que después resulte ser otro.
  */
 fun transferRowSubtitle(row: MovementRow.Transfer, accountNames: Map<String, String>): String {
     val origen = accountNames[row.out.accountId] ?: "Origen"
     val destino = accountNames[row.into.accountId] ?: "Destino"
-    return "$origen → $destino"
+    return "De $origen a $destino"
 }
 
 /**
