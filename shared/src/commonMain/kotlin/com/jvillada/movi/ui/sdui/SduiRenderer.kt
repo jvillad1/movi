@@ -32,7 +32,7 @@ import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.MonoText
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
-import com.jvillada.movi.ui.components.formatMillions
+import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LinkFigure
 import com.jvillada.movi.ui.dashboard.dashboardAlerts
@@ -172,10 +172,10 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData) {
         Spacer(Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf(
-                Triple("Ingresos", formatMillions(ingresos), MinText),
-                Triple("Gastos", formatMillions(egresos), MinText),
+                Triple("Ingresos", formatMoneyCompact(ingresos), MinText),
+                Triple("Gastos", formatMoneyCompact(egresos), MinText),
                 // F36: un mes en rojo se ve en rojo.
-                Triple("Flujo del mes", formatMillions(flujo), if (flujo < 0) MinExpense else MinText),
+                Triple("Flujo del mes", formatMoneyCompact(flujo), if (flujo < 0) MinExpense else MinText),
             ).forEach { (label, value, color) ->
                 Column(modifier = Modifier.weight(1f)) {
                     Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)

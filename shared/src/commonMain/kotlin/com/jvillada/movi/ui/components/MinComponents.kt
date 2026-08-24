@@ -197,12 +197,30 @@ private const val MINUS_SIGN = "−"
  */
 fun formatCOP(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$" + groupThousands(amount)
 
-/** Igual que [formatCOP] pero en millones («$1,25M»); mismo arreglo de signo, mismo motivo (F36). */
-fun formatMillions(amount: Long): String {
+/**
+ * Plata en poco espacio, **sin dejar de leerse como plata**.
+ *
+ * Reemplaza a `formatMillions`, que forzaba la escala de millones a cualquier cifra y por eso
+ * decía «$0,00M» tres veces seguidas en el Inicio de una base vacía (Ola 8 · V5) y convertía
+ * $250.000 en «$0,25M», obligando a hacer la cuenta mental para leer un cuarto de millón. Peor
+ * todavía: la misma tarjeta mostraba «Balance neto» en formato normal («$7.750.000») y las tres
+ * cifras de abajo en millones — dos convenciones a diez píxeles de distancia.
+ *
+ * La regla es la que usa cualquiera al hablar: **por debajo del millón se dicen los pesos**
+ * («$0», «$250.000»), y **de un millón para arriba se dicen millones** con un decimal y sin
+ * ceros de relleno («$1,2M», «$4,5M», «$12M»). Nunca más de 7 caracteres, así entra en las tres
+ * columnas de la tarjeta hasta en un teléfono angosto.
+ *
+ * El signo lo trae el formato, como en [formatCOP] — no lo dupliques afuera (F36).
+ */
+fun formatMoneyCompact(amount: Long): String {
     val abs = kotlin.math.abs(amount)
-    // Round to nearest 0.01M without floating-point error.
-    val hundredths = (abs + 5_000) / 10_000
-    val intPart = hundredths / 100
-    val frac = (hundredths % 100).toString().padStart(2, '0')
-    return (if (amount < 0) MINUS_SIGN else "") + "$$intPart,${frac}M"
+    if (abs < 1_000_000L) return formatCOP(amount)
+    val sign = if (amount < 0) MINUS_SIGN else ""
+    // Décimas de millón, redondeadas sin pasar por coma flotante.
+    val tenths = (abs + 50_000L) / 100_000L
+    val intPart = tenths / 10
+    val frac = tenths % 10
+    // «$12M», no «$12,0M»: el decimal solo aparece cuando dice algo.
+    return if (frac == 0L) "$sign$${groupThousands(intPart)}M" else "$sign$${groupThousands(intPart)},${frac}M"
 }
