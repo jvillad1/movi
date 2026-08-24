@@ -227,7 +227,8 @@ fun collapseTransfers(items: List<FinancialEvent>): List<MovementRow> {
  *
  * Los nombres salen del mapa de cuentas y no de la descripción de las patas: si la lista de
  * cuentas todavía no llegó, se dicen los roles ("De Origen a Destino") en vez de inventar un
- * nombre que después resulte ser otro.
+ * nombre que después resulte ser otro. Desde la Ola 8 (V7) el MISMO mapa alimenta el subtítulo
+ * de un evento suelto — ver [MovementSingleRow]—, que antes no decía de qué cuenta era.
  */
 fun transferRowSubtitle(row: MovementRow.Transfer, accountNames: Map<String, String>): String {
     val origen = accountNames[row.out.accountId] ?: "Origen"

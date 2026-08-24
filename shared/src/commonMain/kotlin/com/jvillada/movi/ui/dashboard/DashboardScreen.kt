@@ -73,6 +73,24 @@ fun DashboardScreen(
     // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
     // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
     val refreshTick = LocalRefreshTick.current
+    // TODO(ola-8, V13): el Inicio repite sus ~10 llamadas CADA VEZ que se entra — se contaron
+    //  4 rondas completas en pocos minutos de uso normal. En el teléfono con datos móviles eso
+    //  es plata del dueño.
+    //
+    //  Diagnóstico (confirmado en la revisión de la Ola 8, no una sospecha): App.kt envuelve
+    //  cada pantalla en `saveableStateHolder.SaveableStateProvider(key = currentScreen)`, así
+    //  que al navegar a otra pantalla DashboardScreen sale de la composición y al volver
+    //  entra de nuevo — con lo cual este `LaunchedEffect` se reejecuta entero. No es un bug
+    //  de esta pantalla: es cómo está montada la navegación.
+    //
+    //  **Deliberadamente NO se arregló en la rama `fix/web-primera-prueba`**, que era una ola
+    //  de presentación. Las salidas posibles —una caché con TTL, subir el estado fuera del
+    //  holder, o un endpoint que traiga el Inicio de una sola vez— cambian cuándo se refrescan
+    //  las cifras del dinero, y eso no se toca de pasada junto con arreglos visuales.
+    //  Mientras tanto [DashboardDataCache] tapa lo peor: al volver se pinta al instante lo
+    //  último que había, en vez de arrancar en blanco.
+    //
+    //  Ya existe una rama para esto: `origin/perf/inicio-endpoints-livianos`.
     LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null

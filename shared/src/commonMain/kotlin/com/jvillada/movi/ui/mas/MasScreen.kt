@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
@@ -140,6 +141,10 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
             // quedar volcado a la izquierda.
             minLines = 2,
             maxLines = 2,
+            // Un rótulo que necesitara TRES renglones se cortaría; con `Ellipsis` al menos lo
+            // dice («Mensajes del ban…») en vez de recortar en silencio, que es lo que hace el
+            // `Clip` por defecto. Hoy el más largo —«Mensajes del banco»— entra en dos.
+            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
     }

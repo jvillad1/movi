@@ -4,12 +4,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * F36: `formatCOP`/`formatMoneyCompact` tiraban el signo — un mes en rojo (egresos > ingresos)
- * se mostraba en positivo en toda la app porque `groupThousands` usaba `abs` y nadie lo volvía
- * a poner. Este test fija que el signo (U+2212, no el guion ASCII) es responsabilidad del
- * formateador, no de cada pantalla.
+ * F36: `formatCOP` y el viejo `formatMillions` tiraban el signo — un mes en rojo (egresos >
+ * ingresos) se mostraba en positivo en toda la app porque `groupThousands` usaba `abs` y nadie
+ * lo volvía a poner. Este test fija que el signo (U+2212, no el guion ASCII) es
+ * responsabilidad del formateador, no de cada pantalla.
  *
- * Ola 8 · V5: y además fija que la notación compacta **se lea como plata** — que no diga
+ * Ola 8 · V5: `formatMillions` fue reemplazado por [formatMoneyCompact], que hereda esa regla
+ * del signo y agrega la suya — que la notación compacta **se lea como plata**: nada de
  * «$0,00M» con la base vacía ni «$0,25M» por $250.000.
  */
 class MinComponentsTest {

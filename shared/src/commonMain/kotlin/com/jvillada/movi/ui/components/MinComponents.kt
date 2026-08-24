@@ -202,14 +202,18 @@ fun formatCOP(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$"
  *
  * Reemplaza a `formatMillions`, que forzaba la escala de millones a cualquier cifra y por eso
  * decía «$0,00M» tres veces seguidas en el Inicio de una base vacía (Ola 8 · V5) y convertía
- * $250.000 en «$0,25M», obligando a hacer la cuenta mental para leer un cuarto de millón. Peor
- * todavía: la misma tarjeta mostraba «Balance neto» en formato normal («$7.750.000») y las tres
- * cifras de abajo en millones — dos convenciones a diez píxeles de distancia.
+ * $250.000 en «$0,25M», obligando a hacer la cuenta mental para leer un cuarto de millón.
  *
  * La regla es la que usa cualquiera al hablar: **por debajo del millón se dicen los pesos**
  * («$0», «$250.000»), y **de un millón para arriba se dicen millones** con un decimal y sin
- * ceros de relleno («$1,2M», «$4,5M», «$12M»). Nunca más de 7 caracteres, así entra en las tres
- * columnas de la tarjeta hasta en un teléfono angosto.
+ * ceros de relleno («$1,2M», «$4,5M», «$12M»). Como mucho 8 caracteres («$999.999», «−$1.500M»),
+ * que es lo que entra en cada una de las tres columnas de la tarjeta en un teléfono angosto.
+ *
+ * **Esto no unifica la tarjeta en un solo formato, y no pretende hacerlo.** Arriba, «Balance
+ * neto» sigue en formato largo («$8.550.000») porque es la cifra principal y tiene toda la
+ * fila para ella; abajo conviven «$4,5M» y «$250.000» en la misma fila, porque cada columna
+ * dice su cifra en la escala en que esa cifra se lee sin traducir. Lo que se arregló es que
+ * ninguna mienta ni obligue a dividir mentalmente, no que todas se vean iguales.
  *
  * El signo lo trae el formato, como en [formatCOP] — no lo dupliques afuera (F36).
  */

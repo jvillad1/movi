@@ -22,11 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -192,26 +195,50 @@ fun QuickAddScreen(
                 // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
                 SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
-                // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER.
+                // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER, Y NINGÚN
+                // CONTROL APARECE DEBAJO DE LA X DEL SUB-PICKER.
                 //
                 // Esta hoja está anclada abajo (el `Box(weight(1f))` de arriba la empuja contra
                 // el borde inferior), así que **cualquier cambio de alto le mueve TODO el
                 // contenido bajo el dedo**. Y los sub-pickers son mucho más bajos que el
                 // editor: abrir «Nota» encogía la hoja a una franja y cerrarla la volvía a
-                // estirar de golpe. Verificado en la web local: la X del diálogo de Nota queda
-                // exactamente sobre la tecla «9» de la hoja restaurada — se ve la tecla
-                // iluminarse bajo el cursor apenas se cierra el diálogo. Un segundo clic ahí
-                // (un doble clic, un toque impaciente) escribe un 9 en el monto **sin ningún
-                // aviso**: así es como se guarda plata mal en silencio.
+                // estirar de golpe, dejando la tecla «9» justo donde estaba la X.
                 //
-                // El arreglo es de raíz y no un margen: se recuerda el alto del editor y se le
-                // pone como alto MÍNIMO al sub-picker, así la hoja mide siempre lo mismo y
-                // nada se teletransporta. Que el editor no esté compuesto durante un picker
-                // (el `when` lo reemplaza) ya garantiza que no haya teclado fantasma debajo:
-                // no hay eventos que atravesar porque no hay nada atrás.
-                var editorHeightPx by remember { mutableStateOf(0) }
+                // Son DOS problemas y hacen falta dos arreglos, porque el primero solo no
+                // alcanza (revisión de la Ola 8, N3):
+                //
+                // 1. **El alto.** Se recuerda el alto del cuerpo y se le pone como alto MÍNIMO
+                //    al sub-picker, así la hoja mide siempre lo mismo y nada se teletransporta.
+                //
+                // 2. **La posición de la X.** Fijar el alto mató el salto pero no el
+                //    solapamiento: la X del `PickerHeader` quedaba sobre la fila
+                //    «Gasto · Ingreso · Traspaso», y un toque impaciente después de cerrar
+                //    saltaba a «Traspaso» y se llevaba el monto de la vista. Por eso
+                //    [TypeSegments] vive AHORA fuera de este `Box`: la franja de arriba es la
+                //    misma en los dos estados, el sub-picker empieza por debajo de ella y su X
+                //    cae sobre el monto — un `Text` sin `clickable`, donde un segundo toque no
+                //    hace nada. Es geometría garantizada, no un margen a ojo: mientras el
+                //    selector de tipo esté afuera, no hay control suyo bajo la X.
+                //
+                // Que el cuerpo no esté compuesto durante un picker (el `when` lo reemplaza)
+                // ya garantiza además que no haya teclado fantasma debajo: no hay eventos que
+                // atravesar porque no hay nada atrás.
+                //
+                // El selector de tipo elige entre DOS formularios distintos: un movimiento
+                // (gasto/ingreso) y un traspaso, que no tiene ni categoría ni tipo pero sí dos
+                // cuentas — por eso decide qué se dibuja abajo en vez de vivir en [EditorBody].
+                TypeSegments(
+                    // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
+                    // habla igual — Inicio y Movimientos también dicen «Gastos».
+                    labels = listOf("Gasto", "Ingreso", "Traspaso"),
+                    selected = typeIndex,
+                    onSelect = { typeIndex = it },
+                    enabled = !saving,
+                )
+
+                var bodyHeightPx by remember { mutableStateOf(0) }
                 val density = LocalDensity.current
-                val pinnedHeight = with(density) { editorHeightPx.toDp() }
+                val pinnedHeight = with(density) { bodyHeightPx.toDp() }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -255,20 +282,9 @@ fun QuickAddScreen(
                             .fillMaxWidth()
                             // El alto que los sub-pickers van a respetar (ver el comentario de
                             // arriba). Se mide acá y no se calcula a mano: así sigue siendo
-                            // correcto si mañana el editor gana o pierde una fila.
-                            .onSizeChanged { editorHeightPx = it.height },
+                            // correcto si mañana el cuerpo gana o pierde una fila.
+                            .onSizeChanged { bodyHeightPx = it.height },
                     ) {
-                        // El selector de tipo vive acá y no adentro de EditorBody porque ahora
-                        // elige entre DOS formularios distintos: un movimiento (gasto/ingreso)
-                        // y un traspaso, que no tiene ni categoría ni tipo pero sí dos cuentas.
-                        TypeSegments(
-                            // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
-                            // habla igual — Inicio y Movimientos también dicen «Gastos».
-                            labels = listOf("Gasto", "Ingreso", "Traspaso"),
-                            selected = typeIndex,
-                            onSelect = { typeIndex = it },
-                            enabled = !saving,
-                        )
                         if (typeIndex == 2) {
                             TransferBody(
                                 accounts = accounts,
@@ -434,9 +450,23 @@ private fun EditorBody(
         )
     }
 
-    if (error != null) {
-        Spacer(Modifier.height(8.dp))
-        Text(error, fontSize = 12.sp, color = MinExpense)
+    // Ola 8 · V2 (N3 de la revisión) — el error de red TAMBIÉN reserva su alto.
+    //
+    // Quedó afuera del primer arreglo por un razonamiento equivocado: «está ARRIBA del teclado,
+    // y en una hoja anclada abajo lo de arriba no mueve lo de abajo». Es cierto solo mientras
+    // la hoja tenga aire por encima. En un teléfono (medido a 375×812) la hoja ya llega casi al
+    // borde superior, así que no puede crecer hacia arriba: el renglón de error empuja el
+    // teclado HACIA ABAJO ~18 dp y «Guardar movimiento» se corre de 683 a 701. Es exactamente
+    // el mismo bug que «Falta el monto», y aparece en el peor momento — justo después de que
+    // un guardado falló y la persona va a reintentar sobre el mismo monto.
+    //
+    // Dos renglones de alto: los mensajes de `toUserMessage()` más largos se parten en dos en
+    // el ancho de un teléfono, y reservar de menos volvería a mover el teclado.
+    Spacer(Modifier.height(8.dp))
+    Box(modifier = Modifier.fillMaxWidth().height(32.dp)) {
+        if (error != null) {
+            Text(error, fontSize = 12.sp, color = MinExpense)
+        }
     }
 
     Spacer(Modifier.height(14.dp))
@@ -633,7 +663,23 @@ private fun WalletPicker(
 
 @Composable
 private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () -> Unit) {
-    var text by remember { mutableStateOf(initial) }
+    // `TextFieldValue` y no `String`: hace falta poder decir DÓNDE queda el cursor.
+    //
+    // Ola 8 · V2 (N1 de la revisión): con un `String` pelado, el `requestFocus()` de abajo deja
+    // el cursor en la posición 0, así que al reabrir una nota ya escrita lo nuevo se metía
+    // ADELANTE de lo viejo. Reproducido: nota «agosto» → guardar → reabrir → tipear «Nomina »
+    // → queda «Nomina agosto». Hay evidencia del bug en la base local de desarrollo: la fila
+    // `AlmuerzoNomina agosto` de `financial_events` se guardó así durante la verificación de
+    // esta misma ola, sin que nadie lo notara.
+    //
+    // Es el mismo problema que `CategoryField` ya tenía resuelto (Ola 2 #3b) y del que acá se
+    // había copiado solo la mitad —el foco— y no la otra —la selección—. Mismo remedio y por
+    // el mismo motivo: al ganar el foco se selecciona todo, así tipear REEMPLAZA en vez de
+    // insertarse en medio de lo que ya había.
+    var value by remember {
+        mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
+    }
+    var focused by remember { mutableStateOf(false) }
     // Ola 8 · V2: sin foco automático había que acertarle al campo con el dedo, y ver más
     // abajo por qué eso era imposible. Es el MISMO arreglo que el sub-picker de Categoría ya
     // tenía documentado (Ola 2 #3c) y que a Nota nunca se le hizo: la hoja se abre lista para
@@ -650,8 +696,8 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 .padding(horizontal = 14.dp, vertical = 14.dp),
         ) {
             BasicTextField(
-                value = text,
-                onValueChange = { text = it },
+                value = value,
+                onValueChange = { value = it },
                 cursorBrush = SolidColor(MinText),
                 textStyle = TextStyle(color = MinText, fontSize = 14.sp),
                 // Ola 8 · V2: **sin `fillMaxWidth` el campo no se podía tocar.** El área
@@ -663,9 +709,19 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 // podía escribir. Las otras siete hojas de la app (CreateAccountSheet,
                 // VoidEventSheet, CreateSubscriptionSheet, CategoryField…) ya traían este
                 // `fillMaxWidth`; esta era la única que se lo había saltado.
-                modifier = Modifier.fillMaxWidth().focusRequester(noteFocusRequester),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(noteFocusRequester)
+                    .onFocusChanged { state ->
+                        // Al GANAR el foco (no en cada recomposición, o sería imposible mover
+                        // el cursor a mano después).
+                        if (state.isFocused && !focused) {
+                            value = value.copy(selection = TextRange(0, value.text.length))
+                        }
+                        focused = state.isFocused
+                    },
                 decorationBox = { inner ->
-                    if (text.isEmpty()) {
+                    if (value.text.isEmpty()) {
                         Text("Concepto del movimiento", fontSize = 14.sp, color = MinTextMute)
                     }
                     inner()
@@ -679,7 +735,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 .height(48.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(MinPrimaryContainer)
-                .clickable { onSave(text.trim()) },
+                .clickable { onSave(value.text.trim()) },
             contentAlignment = Alignment.Center,
         ) {
             Text("Guardar nota", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinOnPrimaryContainer)
