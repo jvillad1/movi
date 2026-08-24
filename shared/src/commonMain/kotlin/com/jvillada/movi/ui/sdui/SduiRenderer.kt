@@ -173,7 +173,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData) {
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf(
                 Triple("Ingresos", formatMillions(ingresos), MinText),
-                Triple("Egresos", formatMillions(egresos), MinText),
+                Triple("Gastos", formatMillions(egresos), MinText),
                 // F36: un mes en rojo se ve en rojo.
                 Triple("Flujo del mes", formatMillions(flujo), if (flujo < 0) MinExpense else MinText),
             ).forEach { (label, value, color) ->

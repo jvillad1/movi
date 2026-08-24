@@ -156,7 +156,7 @@ fun QuickAddScreen(
                 // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es
                 // solo para lo que entra solo (SMS, OCR, extracto), no para lo que el usuario
                 // acaba de escribir con sus propios dedos. Sin esto caía en el default
-                // UNCONFIRMED y desaparecía de "Egresos", que excluye lo pendiente.
+                // UNCONFIRMED y desaparecía de "Gastos", que excluye lo pendiente.
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
                 timestamp = Clock.System.now().toEpochMilliseconds(),
             )
@@ -224,12 +224,11 @@ fun QuickAddScreen(
                     )
                     Picker.None -> Column(modifier = Modifier.fillMaxWidth()) {
                         // El selector de tipo vive acá y no adentro de EditorBody porque ahora
-                        // elige entre DOS formularios distintos: un movimiento (egreso/ingreso)
+                        // elige entre DOS formularios distintos: un movimiento (gasto/ingreso)
                         // y un traspaso, que no tiene ni categoría ni tipo pero sí dos cuentas.
                         TypeSegments(
-                            // «Gasto», no «Egreso»: es la palabra que la gente usa. El resto de
-                            // la app todavía dice «Egresos» en algún rótulo — el barrido completo
-                            // va aparte, para no mezclarlo con la feature de traspasos.
+                            // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
+                            // habla igual — Inicio y Movimientos también dicen «Gastos».
                             labels = listOf("Gasto", "Ingreso", "Traspaso"),
                             selected = typeIndex,
                             onSelect = { typeIndex = it },

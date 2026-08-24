@@ -193,7 +193,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     val searchFocusRequester = remember { FocusRequester() }
     // F12: "Pendientes" no decía qué es — son los movimientos que entraron solos (SMS, OCR,
     // extracto) y esperan que confirmes monto y categoría. "Por confirmar" sí lo dice.
-    val filters = listOf("Todo", "Egresos", "Ingresos", "Por confirmar")
+    val filters = listOf("Todo", "Gastos", "Ingresos", "Por confirmar")
 
     var allDays by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }

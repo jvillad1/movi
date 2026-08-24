@@ -36,7 +36,7 @@ const val TRANSFER_CATEGORY = "Traspaso"
  * - **Categoría [TRANSFER_CATEGORY] → nunca**, sin importar tipo de cuenta ni tipo de
  *   movimiento. Un traspaso es la misma plata cambiando de cuenta: sale de ahorros y entra al
  *   CDT en el mismo instante. Sin esta regla las dos patas se contaban, y una sola movida de
- *   $5.000.000 inflaba a la vez "Ingresos del mes" y "Egresos del mes" en esa cifra —el neto
+ *   $5.000.000 inflaba a la vez "Ingresos del mes" y "Gastos del mes" en esa cifra —el neto
  *   quedaba bien, las dos cifras que el dueño lee estaban mal— y además el presupuesto de la
  *   categoría con la que se hubiera anotado el egreso se comía plata que nunca se gastó. Los
  *   **saldos** sí se mueven, y tienen que moverse: cada pata es un evento normal de su cuenta
@@ -69,7 +69,7 @@ const val TRANSFER_CATEGORY = "Traspaso"
  *
  * - **CREDIT_CARD → solo la compra (EXPENSE).** La compra con tarjeta sí es gasto real:
  *   es el momento en que el hogar consumió, y en Colombia la tarjeta es el instrumento
- *   dominante — excluirla dejaría "Egresos del mes" prácticamente vacío. El **pago** de la
+ *   dominante — excluirla dejaría "Gastos del mes" prácticamente vacío. El **pago** de la
  *   tarjeta, en cambio, entra como INCOME (baja la deuda) y no es ingreso de nadie: es un
  *   traslado que cancela deuda ya contada como gasto cuando se compró. Contarlo inflaba
  *   los ingresos y además duplicaba la salida. (En la práctica esa fila también trae la

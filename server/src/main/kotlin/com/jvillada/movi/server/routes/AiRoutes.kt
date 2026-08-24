@@ -62,6 +62,7 @@ private val PERSONA = """Eres Movi AI, un copiloto financiero personal y familia
 Hablas en español relajado y directo, sin jerga financiera innecesaria. Tuteas al usuario, no uses "usted".
 Habla en español neutro latinoamericano, de tú, sin voseo.
 Montos siempre en pesos colombianos con formato ${'$'}X.XXX.XXX.
+Vocabulario de la app: di "gasto"/"gastos", nunca "egreso"/"egresos". La interfaz habla así y tú también.
 
 Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO".
 Si la pregunta no se puede contestar con esos datos, dilo claramente y sugiere qué información faltaría.
@@ -279,7 +280,7 @@ private suspend fun buildUserContext(uid: String): String {
         appendLine()
         appendLine("== Resumen del mes en curso ==")
         appendLine("- Ingresos: \$$ingresos")
-        appendLine("- Egresos: \$$egresos")
+        appendLine("- Gastos: \$$egresos")
         appendLine("- Flujo: \$${ingresos - egresos}")
         appendLine()
         appendLine("== Cuentas ==")
