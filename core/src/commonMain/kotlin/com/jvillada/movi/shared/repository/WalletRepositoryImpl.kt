@@ -11,6 +11,8 @@ import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -310,10 +312,34 @@ class WalletRepositoryImpl(
     override suspend fun getEventsByDay(): List<EventDay> =
         client.get("$baseUrl/api/events/by-day").body()
 
+    // Mismo idioma que updateEventCategory/adjustCreditBalance: el server puede rechazar con
+    // 422 (una validación de validateTransfer, con su texto en español ya listo para mostrar),
+    // 404 (cuenta inexistente o de otro usuario) o 409 (traspaso repetido), y ese texto se
+    // pierde si se deserializa a ciegas — que es justo el mensaje que la hoja necesita.
+    override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
+        val response = client.post("$baseUrl/api/transfers") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // Mismo idioma que updateEventCategory: sin mirar el status, un 409 «Already voided» se
+    // deserializaba a ciegas y explotaba como un error de parseo cualquiera — sin código, sin
+    // texto. Eso importa acá más que en otras rutas: el `SyncEngine` no puede distinguir «no
+    // llegó» de «ya estaba anulado», así que reintentaba esa fila cada 30 segundos para siempre.
+    // Con el código a la vista, `syncVoids` sella la fila y deja de insistir.
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
         val url = if (reason != null) "$baseUrl/api/events/$id/void?reason=$reason"
                   else "$baseUrl/api/events/$id/void"
-        return client.post(url).body()
+        val response = client.post(url)
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
     }
 
     // Mismo idioma que adjustCreditBalance: el server puede rechazar con 404 (otro usuario) o

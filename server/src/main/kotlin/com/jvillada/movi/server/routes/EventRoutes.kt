@@ -33,6 +33,14 @@ fun Route.eventRoutes() {
             val body = call.receive<FinancialEvent>()
             val uid = call.userId()
             val now = System.currentTimeMillis()
+
+            // Un traspaso son DOS patas que nacen juntas o no nacen (ver TransferRoutes.kt).
+            // Aceptar acá un evento suelto con transferId —o con la categoría reservada— sería
+            // dejar entrar medio traspaso: plata saliendo de una cuenta sin la pata que la
+            // compensa del otro lado, y encima invisible para el mes por la regla de isCashFlow.
+            if (body.transferId != null || body.category == TRANSFER_CATEGORY) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_LEG_NOT_STANDALONE)
+            }
             val event = body.copy(
                 id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
                 timestamp = if (body.timestamp == 0L) now else body.timestamp,
@@ -155,6 +163,24 @@ fun Route.eventRoutes() {
             if (category.length > 60) {
                 return@put call.respond(HttpStatusCode.BadRequest, "La categoría no puede superar 60 caracteres")
             }
+            // Nadie entra a la categoría reservada por esta puerta: un evento recategorizado a
+            // "Traspaso" sería medio traspaso — se dejaría de contar en el mes (regla de
+            // isCashFlow) sin ninguna pata del otro lado que explique adónde fue la plata.
+            if (category == TRANSFER_CATEGORY) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_CATEGORY_RESERVED)
+            }
+            // Y nadie sale tampoco: sacar una pata de la categoría reservada la devolvería al
+            // flujo de caja del mes —el gasto fantasma que esta feature vino a matar— y dejaría
+            // a su hermana adentro, contando la mitad de un movimiento que nunca ocurrió.
+            val esPataDeTraspaso = dbQuery {
+                Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()
+                    ?.let { it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY } == true
+            }
+            if (esPataDeTraspaso) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_RECATEGORIZE_BLOCKED)
+            }
 
             val updated: FinancialEvent? = dbQuery {
                 val event = Events.selectAll()
@@ -231,7 +257,15 @@ fun Route.eventRoutes() {
                     .firstOrNull()?.toFinancialEvent()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
 
-            val void: VoidEvent? = dbQuery {
+            // El `try` cubre la carrera real que el chequeo de `alreadyVoided` de adentro NO
+            // puede cerrar: dos dispositivos anulando las dos patas del mismo traspaso a la vez.
+            // Los dos leen "no está anulada", los dos cascadean, y el que commitea segundo choca
+            // contra `uq_void_events_original_user`. Sin este catch eso salía como un 500 sin
+            // atrapar y el cliente perdedor lo reintentaba cada 30 segundos para siempre —
+            // cuando en realidad su anulación YA ocurrió, que es justo lo que quería. Un 409 dice
+            // exactamente eso, y el `SyncEngine` lo sella como resuelto (ver `syncVoids`).
+            val void: VoidEvent? = try {
+                dbQuery {
                 val alreadyVoided = VoidEvents.selectAll()
                     .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
                     .count() > 0
@@ -240,12 +274,32 @@ fun Route.eventRoutes() {
                 } else {
                     val now = System.currentTimeMillis()
                     val voidId = "void_${java.util.UUID.randomUUID()}"
-                    VoidEvents.insert {
-                        it[VoidEvents.id]              = voidId
-                        it[VoidEvents.userId]          = uid
-                        it[VoidEvents.originalEventId] = id
-                        it[VoidEvents.reason]          = reason
-                        it[VoidEvents.timestamp]       = now
+                    fun anular(eventId: String, thisVoidId: String) {
+                        VoidEvents.insert {
+                            it[VoidEvents.id]              = thisVoidId
+                            it[VoidEvents.userId]          = uid
+                            it[VoidEvents.originalEventId] = eventId
+                            it[VoidEvents.reason]          = reason
+                            it[VoidEvents.timestamp]       = now
+                        }
+                    }
+                    anular(id, voidId)
+                    // Anular una pata de un traspaso anula la otra, en la misma transacción. Si
+                    // no, el saldo miente: la plata desaparecería de la cuenta de destino sin
+                    // volver a la de origen (o al revés). Se resuelve por transferId, no por
+                    // "el otro evento con el mismo monto" — el enlace es explícito justamente
+                    // para que esto no sea una adivinanza.
+                    val transferId = event.transferId
+                    if (transferId != null) {
+                        val yaAnulados = VoidEvents.selectAll()
+                            .where { VoidEvents.userId eq uid }
+                            .map { it[VoidEvents.originalEventId] }
+                            .toSet()
+                        Events.selectAll()
+                            .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
+                            .map { it[Events.id] }
+                            .filter { it != id && it !in yaAnulados }
+                            .forEach { hermana -> anular(hermana, "void_${java.util.UUID.randomUUID()}") }
                     }
                     VoidEvent(
                         id              = voidId,
@@ -254,6 +308,12 @@ fun Route.eventRoutes() {
                         timestamp       = now,
                     )
                 }
+                }
+            } catch (e: org.jetbrains.exposed.exceptions.ExposedSQLException) {
+                // La otra punta de la carrera ya insertó esta anulación: el resultado que el
+                // cliente pedía está logrado. Se responde 409, igual que el camino de arriba.
+                println("[void] anulación concurrente de $id: ${e.message}")
+                null
             }
             if (void == null) return@post call.respond(HttpStatusCode.Conflict, "Already voided")
             call.respond(HttpStatusCode.Created, void)

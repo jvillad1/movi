@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.theme.*
@@ -141,6 +142,24 @@ fun ChangeCategorySheet(
             saving = false
             result.onSuccess { onCategoryChanged(it) }.onFailure { error = it.toUserMessage() }
         }
+    }
+
+    // Un traspaso no se recategoriza: sacarlo de su categoría reservada lo devolvería al gasto
+    // del mes —el gasto fantasma que la feature vino a matar— y dejaría a la otra pata adentro,
+    // contando la mitad de un movimiento que nunca ocurrió. El server también lo rechaza (422);
+    // acá se explica en vez de ofrecer una lista que iba a fallar al tocarla.
+    if (isTransferLeg(event)) {
+        BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = true) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                SheetLabel("TRASPASO")
+                Spacer(Modifier.height(8.dp))
+                Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                Spacer(Modifier.height(16.dp))
+                Text(TRANSFER_RECATEGORIZE_BLOCKED, fontSize = 13.5.sp, color = MinTextMute)
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+        return
     }
 
     BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = !saving) {

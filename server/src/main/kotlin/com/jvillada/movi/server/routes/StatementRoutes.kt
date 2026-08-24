@@ -208,13 +208,28 @@ fun Route.statementRoutes() {
                     Events.selectAll()
                         .where { (Events.id eq dec.existingEventId) and (Events.userId eq uid) }
                         .firstOrNull()?.let {
-                            Triple(it[Events.category], it[Events.description], it[Events.merchant])
+                            ExistingEventFields(
+                                category   = it[Events.category],
+                                description = it[Events.description],
+                                merchant   = it[Events.merchant],
+                                isTransferLeg = it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY,
+                            )
                         }
                 }
 
                 if (existingEvent != null) {
-                    val (existCat, existDesc, existMerchant) = existingEvent
-                    val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT) dec.parsed.category    else existCat
+                    val (existCat, existDesc, existMerchant, esPataDeTraspaso) = existingEvent
+                    // La categoría de una pata de traspaso NO se toca por esta puerta. Esta
+                    // reconciliación escribe con un `Events.update` directo, sin pasar por la
+                    // guarda de `PUT /api/events/{id}/category` — y el matcher empareja por monto
+                    // + moneda + ±2 días SIN mirar la cuenta, así que engancha la pata de un
+                    // traspaso con cualquier compra del extracto que coincida en plata y fecha.
+                    // Con «Confirmar todo» eso se aplicaba en bloque, sin que nadie lo leyera: la
+                    // pata salía de «Traspaso», isCashFlow volvía a decir `true` y el egreso del
+                    // mes se inflaba con plata que nunca salió del bolsillo — encima con la pata
+                    // hermana todavía excluida, así que ni siquiera se compensaba.
+                    // Descripción y comercio sí se dejan enriquecer: no cambian ningún cálculo.
+                    val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT && !esPataDeTraspaso) dec.parsed.category    else existCat
                     val finalDescription = if (dec.descriptionSource == FieldSource.STATEMENT) dec.parsed.description else existDesc
                     val finalMerchant    = if (dec.merchantSource    == FieldSource.STATEMENT) dec.parsed.merchant    else existMerchant
 
@@ -319,7 +334,14 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[type]                 = tx.type.name
             it[amount]               = tx.amount
             it[Events.currency]      = tx.currency
-            it[category]             = tx.category
+            // La categoría reservada no puede NACER acá. `tx.category` viene del ImportDecision
+            // del cliente o del texto libre con que el parser LLM etiquetó la fila: un
+            // «Traspaso» ahí adentro fabricaba media pata —un gasto real del dueño que
+            // isCashFlow deja fuera del mes— sin ninguna pata hermana que explicara adónde fue
+            // la plata. Se cae a «Otros» en vez de rechazar la importación entera: la fila del
+            // extracto es un gasto real y perderla sería peor que recategorizarla, y el dueño
+            // puede corregirla después desde Movimientos.
+            it[category]             = if (tx.category == TRANSFER_CATEGORY) FALLBACK_CATEGORY else tx.category
             it[description]          = tx.description
             it[merchant]             = tx.merchant
             it[timestamp]            = ts
@@ -346,3 +368,19 @@ private fun monthName(month: Int) = listOf(
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 )[month - 1]
+
+/**
+ * Los campos del evento existente que la reconciliación necesita, más si es una **pata de
+ * traspaso** — un `data class` en vez del `Triple` de antes porque un cuarto elemento sin nombre
+ * habría hecho ilegible el destructuring justo en la línea donde se decide si se pisa la
+ * categoría.
+ */
+private data class ExistingEventFields(
+    val category: String,
+    val description: String,
+    val merchant: String?,
+    val isTransferLeg: Boolean,
+)
+
+/** A dónde va una fila del extracto cuya categoría no se puede usar (ver `createEventFromParsed`). */
+private const val FALLBACK_CATEGORY = "Otros"

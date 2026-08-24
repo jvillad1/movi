@@ -40,11 +40,13 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.LocalRefreshTick
 
 /**
  * F13: filtro puro detrás de la búsqueda de Movimientos, separado del `@Composable` para poder
@@ -59,6 +61,109 @@ fun matchesQuery(event: FinancialEvent, query: String): Boolean {
     return normalizeForMatch(event.description).contains(q) ||
         event.merchant?.let { normalizeForMatch(it).contains(q) } == true ||
         normalizeForMatch(event.category).contains(q)
+}
+
+/**
+ * Un renglón de Movimientos. No es siempre un evento: un **traspaso** son dos eventos (ver
+ * [collapseTransfers]) que tienen que leerse como un solo hecho.
+ */
+sealed class MovementRow {
+    /** Clave estable para `key` de la lista — el id del evento, o el del traspaso si son dos. */
+    abstract val key: String
+
+    data class Single(val event: FinancialEvent) : MovementRow() {
+        override val key: String get() = event.id
+    }
+
+    /**
+     * Las dos patas de un traspaso, juntas. [out] es siempre el EXPENSE (de dónde salió la
+     * plata) e [into] el INCOME (a dónde entró) — no el orden en que vinieron en la lista.
+     */
+    data class Transfer(val out: FinancialEvent, val into: FinancialEvent) : MovementRow() {
+        override val key: String get() = out.transferId ?: out.id
+        val amount: Long get() = out.amount
+    }
+}
+
+/** ¿Este movimiento es una pata de traspaso? */
+fun isTransferLeg(event: FinancialEvent): Boolean =
+    event.transferId != null || event.category == TRANSFER_CATEGORY
+
+// Índices de los chips de arriba de Movimientos, con nombre para que el filtro de abajo (y sus
+// tests) no dependan de recordar qué significaba el 1 y qué el 2.
+const val CHIP_TODO = 0
+const val CHIP_GASTOS = 1
+const val CHIP_INGRESOS = 2
+const val CHIP_POR_CONFIRMAR = 3
+
+/**
+ * ¿Este movimiento entra en el chip [chip]?
+ *
+ * **Las patas de un traspaso no aparecen ni en «Gastos» ni en «Ingresos».** No es un capricho de
+ * pureza contable: son DOS chips y cada uno dejaba pasar UNA sola pata, así que
+ * [collapseTransfers] se quedaba sin la hermana, caía a `Single` y el traspaso volvía a leerse
+ * como «−$500.000 · Traspaso» — exactamente la lectura que esta feature vino a eliminar, una
+ * pestaña más allá. Y es la misma regla que ya aplican el mes y los presupuestos
+ * (`isCashFlow`): un traspaso no es un gasto ni un ingreso. En «Todo» sí aparece, como un solo
+ * renglón, que es donde tiene sentido verlo.
+ */
+fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
+    CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
+        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED &&
+        !isTransferLeg(event)
+    CHIP_INGRESOS -> event.type == TransactionType.INCOME && !isTransferLeg(event)
+    CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
+    else -> true
+}
+
+/**
+ * Junta las dos patas de cada traspaso en **un solo renglón**.
+ *
+ * Sin esto, mover $5.000.000 de Ahorros al CDT aparecía en Movimientos como un egreso de
+ * $5.000.000 y un ingreso de $5.000.000 sin ninguna relación visible: dos renglones que se leen
+ * como plata que se gastó y plata que llegó, cuando es la misma plata que cambió de cuenta. Es la
+ * forma más simple de arreglarlo sin inventar una pantalla nueva: la lista sigue siendo una lista
+ * de hechos, y un traspaso es un hecho.
+ *
+ * Se junta **por `transferId`**, no por "un egreso y un ingreso del mismo monto el mismo día":
+ * el enlace es explícito justamente para que esto no sea una adivinanza que un día empareje dos
+ * movimientos que no tenían nada que ver.
+ *
+ * El renglón queda en el lugar de la primera pata que aparecía en la lista, así el orden
+ * cronológico no se altera. Y si de un traspaso solo se ve una pata —porque un chip o la búsqueda
+ * filtró a la otra— se muestra suelta, con su descripción ("Traspaso a CDT"), en vez de
+ * desaparecer: la lista tiene que seguir mostrando lo que el filtro pidió.
+ */
+fun collapseTransfers(items: List<FinancialEvent>): List<MovementRow> {
+    val porTraspaso = items.filter { it.transferId != null }.groupBy { it.transferId!! }
+    val yaEmitidos = mutableSetOf<String>()
+    return items.mapNotNull { event ->
+        val transferId = event.transferId
+        if (transferId == null) return@mapNotNull MovementRow.Single(event)
+        val patas = porTraspaso[transferId].orEmpty()
+        val salida = patas.firstOrNull { it.type == TransactionType.EXPENSE }
+        val entrada = patas.firstOrNull { it.type == TransactionType.INCOME }
+        if (salida == null || entrada == null) return@mapNotNull MovementRow.Single(event)
+        if (!yaEmitidos.add(transferId)) null
+        else MovementRow.Transfer(out = salida, into = entrada)
+    }
+}
+
+/**
+ * "De Ahorros a CDT": de qué cuenta a qué cuenta se movió la plata.
+ *
+ * Con palabras y no con una flecha: en wasm «→» sale como ▯ (la fuente del canvas no trae ese
+ * glifo — el mismo problema que ya obligó a reemplazar el «›» por un ícono Material, ver
+ * `ChevronRight`), y verificado en la web local antes de este cambio.
+ *
+ * Los nombres salen del mapa de cuentas y no de la descripción de las patas: si la lista de
+ * cuentas todavía no llegó, se dicen los roles ("De Origen a Destino") en vez de inventar un
+ * nombre que después resulte ser otro.
+ */
+fun transferRowSubtitle(row: MovementRow.Transfer, accountNames: Map<String, String>): String {
+    val origen = accountNames[row.out.accountId] ?: "Origen"
+    val destino = accountNames[row.into.accountId] ?: "Destino"
+    return "De $origen a $destino"
 }
 
 /**
@@ -104,9 +209,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // carga (o si falló) se ofrece registrar, que es la acción segura.
     var accountsLoaded by remember { mutableStateOf(false) }
     var showCreateSheet by remember { mutableStateOf(false) }
-    LaunchedEffect(refreshKey) {
+    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
+    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
+    // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(refreshKey, refreshTick) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it; accountsLoaded = true }
     }
+    // Los nombres de las cuentas, para que el renglón de un traspaso diga de dónde a dónde fue la
+    // plata (ver [transferRowSubtitle]). Un evento suelto no los necesita: la cuenta no se muestra.
+    val accountNames = remember(accounts) { accounts.associate { it.id to it.name } }
 
     // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
     // fallo al traerlos no debe tapar Movimientos con un snackbar.
@@ -122,7 +234,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getEventsByDay() }
@@ -136,7 +248,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(refreshKey, refreshTick) {
         runCatching { Repositories.wallets.getCardPaymentCandidates() }
             .onSuccess { candidates = it }
     }
@@ -153,12 +265,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 
     val visibleDays = remember(activeFilter, allDays, searchQuery) {
         allDays.mapNotNull { day ->
-            val filtered = when (activeFilter) {
-                1 -> day.items.filter { it.type == TransactionType.EXPENSE && it.reconciliationStatus != ReconciliationStatus.UNCONFIRMED }
-                2 -> day.items.filter { it.type == TransactionType.INCOME }
-                3 -> day.items.filter { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED }
-                else -> day.items
-            }.filter { matchesQuery(it, searchQuery) }
+            val filtered = day.items
+                .filter { matchesChip(it, activeFilter) }
+                .filter { matchesQuery(it, searchQuery) }
             if (filtered.isEmpty()) null
             // El total recalculado sigue el mismo criterio que el del server (ver EventRoutes
             // /by-day): countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin
@@ -372,59 +481,26 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
-                            day.items.forEachIndexed { i, tx ->
-                                val isIncome = tx.type == TransactionType.INCOME
+                            val rows = collapseTransfers(day.items)
+                            rows.forEachIndexed { i, row ->
                                 Column {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedEvent = tx }
-                                            .padding(vertical = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            ) {
-                                                Text(
-                                                    text = tx.description,
-                                                    fontSize = 14.5.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MinText,
-                                                    letterSpacing = (-0.1).sp,
-                                                )
-                                                if (tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
-                                                    StatusDot(MinWarn)
-                                                }
-                                            }
-                                            Spacer(Modifier.height(2.dp))
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            ) {
-                                                Text(tx.category, fontSize = 12.sp, color = MinTextMute)
-                                                StatusDot(MinTextFaint, 2.dp)
-                                                Text(
-                                                    text = tx.source.name,
-                                                    fontSize = 11.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = MinTextMute,
-                                                    letterSpacing = 0.3.sp,
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = "${if (isIncome) "+" else "−"}${formatCOP(tx.amount)}",
-                                            fontSize = 14.5.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontWeight = FontWeight.Medium,
-                                            color = if (isIncome) MinIncome else MinText,
-                                            letterSpacing = (-0.3).sp,
+                                    when (row) {
+                                        is MovementRow.Transfer -> TransferRow(
+                                            row = row,
+                                            accountNames = accountNames,
+                                            // Al tocarlo se abre la hoja de categoría sobre la
+                                            // pata de origen — que se niega a recategorizar y
+                                            // explica por qué. Es la única acción que un traspaso
+                                            // ofrece hoy desde acá, y es mejor que un renglón
+                                            // muerto que no responde al toque.
+                                            onClick = { selectedEvent = row.out },
+                                        )
+                                        is MovementRow.Single -> MovementSingleRow(
+                                            tx = row.event,
+                                            onClick = { selectedEvent = row.event },
                                         )
                                     }
-                                    if (i < day.items.size - 1) Hairline()
+                                    if (i < rows.size - 1) Hairline()
                                 }
                             }
                         }
@@ -463,5 +539,103 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             onAccountCreated = { showCreateSheet = false; refreshKey++ },
         )
     }
+    }
+}
+
+/**
+ * Un traspaso, leído como un solo hecho: "Traspaso · Ahorros → CDT" y el monto **sin signo**.
+ *
+ * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
+ * Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
+ * exactamente la confusión que este renglón viene a sacar. El signo de cada pata sí aparece, con
+ * su cuenta al lado, en el detalle de cada cuenta.
+ */
+@Composable
+private fun TransferRow(
+    row: MovementRow.Transfer,
+    accountNames: Map<String, String>,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Traspaso",
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = MinText,
+                letterSpacing = (-0.1).sp,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(transferRowSubtitle(row, accountNames), fontSize = 12.sp, color = MinTextMute)
+        }
+        Text(
+            text = formatCOP(row.amount),
+            fontSize = 14.5.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Medium,
+            color = MinTextMute,
+            letterSpacing = (-0.3).sp,
+        )
+    }
+}
+
+@Composable
+private fun MovementSingleRow(tx: FinancialEvent, onClick: () -> Unit) {
+    val isIncome = tx.type == TransactionType.INCOME
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = tx.description,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.1).sp,
+                )
+                if (tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
+                    StatusDot(MinWarn)
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(tx.category, fontSize = 12.sp, color = MinTextMute)
+                StatusDot(MinTextFaint, 2.dp)
+                Text(
+                    text = tx.source.name,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = MinTextMute,
+                    letterSpacing = 0.3.sp,
+                )
+            }
+        }
+        Text(
+            text = "${if (isIncome) "+" else "−"}${formatCOP(tx.amount)}",
+            fontSize = 14.5.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Medium,
+            color = if (isIncome) MinIncome else MinText,
+            letterSpacing = (-0.3).sp,
+        )
     }
 }

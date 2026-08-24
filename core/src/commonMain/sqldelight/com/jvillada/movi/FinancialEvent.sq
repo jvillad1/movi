@@ -11,12 +11,18 @@ CREATE TABLE financial_event (
     rawPayload              TEXT,
     reconciliationStatus    TEXT    NOT NULL DEFAULT 'UNCONFIRMED',
     syncedAt                INTEGER,
-    userId                  TEXT    NOT NULL DEFAULT ''
+    userId                  TEXT    NOT NULL DEFAULT '',
+    -- Enlace entre las dos patas de un traspaso (ver transferLegsFor en :core). NULL para todo
+    -- lo demás. Se guarda acá y no solo en el server porque la anulación local tiene que poder
+    -- encontrar a la pata hermana: anular una sola dejaría el saldo de una de las dos cuentas
+    -- mintiendo en el teléfono hasta el próximo arranque. Columna nueva → migración 2.sqm.
+    transferId              TEXT
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
 CREATE INDEX idx_event_timestamp ON financial_event(timestamp DESC);
 CREATE INDEX idx_event_unsynced ON financial_event(syncedAt) WHERE syncedAt IS NULL;
+CREATE INDEX idx_event_transfer ON financial_event(transferId);
 
 selectByAccount:
 SELECT * FROM financial_event
@@ -31,14 +37,23 @@ SELECT * FROM financial_event
 WHERE userId = :userId
 ORDER BY timestamp DESC;
 
+-- Las patas de un traspaso quedan FUERA: se escriben ya selladas (nacen contra el server, ver
+-- LocalRepository.createTransfer), así que nunca deberían salir por acá. La condición es la red
+-- de seguridad de esa promesa — este ciclo empuja de a un evento, y subir una pata sin la otra
+-- dejaría medio traspaso en el server. Ver SyncEngine.syncEvents.
 selectUnsynced:
-SELECT * FROM financial_event WHERE syncedAt IS NULL AND userId = :userId;
+SELECT * FROM financial_event
+WHERE syncedAt IS NULL AND userId = :userId AND transferId IS NULL;
+
+-- Las dos patas de un traspaso, para anular en cascada (ver LocalRepository.voidEvent).
+selectByTransferId:
+SELECT * FROM financial_event WHERE transferId = :transferId AND userId = :userId;
 
 insert:
 INSERT OR REPLACE INTO financial_event(
     id, accountId, type, amount, category, description, merchant,
-    timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;

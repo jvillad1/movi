@@ -195,6 +195,47 @@ class SyncEngineTest {
         )
     }
 
+    /**
+     * El `SyncEngine` empuja eventos **de a uno** (`postEvent`), así que si una pata de traspaso
+     * llegara a quedar pendiente, este ciclo podría subir media transferencia: plata saliendo de
+     * una cuenta sin la pata que la compensa del otro lado, y encima con `transferId` apuntando
+     * a una hermana que el server nunca vio.
+     *
+     * Por diseño eso no debería poder pasar —[com.jvillada.movi.shared.repository.LocalRepository.createTransfer]
+     * es remote-first y espeja las dos patas ya selladas—, pero "no debería poder pasar" no es
+     * una garantía: acá se fuerza el caso escribiendo una pata pendiente a mano en la DB local
+     * (lo que dejaría una versión vieja de la app, o una fila a medio escribir) y se verifica que
+     * el ciclo la deja quieta en vez de subirla sola. Los eventos normales de al lado sí suben:
+     * la guarda es para las patas, no un freno general.
+     */
+    @Test
+    fun syncEvents_nunca_empuja_una_pata_de_traspaso_sola() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val remote = OrderSensitiveRemote()
+        remote.createAccount(Account("acc-tr", "Ahorros", AccountType.SAVINGS, 0L))
+        db.accountQueries.insert("acc-tr", "Ahorros", "SAVINGS", 0L, "COP", testUserId, 1L)
+
+        // Una pata suelta, pendiente de sync (el escenario que no debería existir).
+        db.financialEventQueries.insert(
+            "ev-pata-suelta", "acc-tr", "EXPENSE", 100_000L, "Traspaso", "Traspaso a CDT", null,
+            1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, "tr-huerfano",
+        )
+        // Y un evento normal al lado, para que el test distinga "no empuja la pata" de
+        // "no empuja nada".
+        db.financialEventQueries.insert(
+            "ev-normal", "acc-tr", "EXPENSE", 5_000L, "Mercado", "pan", null,
+            1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, null,
+        )
+
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        assertEquals(listOf("ev-normal"), remote.pushedEventIds)
+        assertNull(
+            db.financialEventQueries.selectById("ev-pata-suelta", testUserId).executeAsOne().syncedAt,
+            "la pata queda sin sellar: pendiente y diagnosticable, no subida a medias",
+        )
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

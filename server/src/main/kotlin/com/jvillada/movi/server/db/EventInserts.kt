@@ -20,5 +20,6 @@ fun insertEventRow(uid: String, event: FinancialEvent) {
         it[rawPayload]           = event.rawPayload
         it[reconciliationStatus] = event.reconciliationStatus.name
         it[syncedAt]             = event.syncedAt
+        it[Events.transferId]    = event.transferId
     }
 }

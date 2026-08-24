@@ -33,6 +33,7 @@ import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
 import com.jvillada.movi.ui.sdui.SduiRenderer
+import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -68,7 +69,11 @@ fun DashboardScreen(
     // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
     val notifications = notificationRows(data)
 
-    LaunchedEffect(refreshKey) {
+    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
+    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
+    // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
         // SDUI: la definición del server se pide PRIMERO, así el Inicio ya está en su lugar

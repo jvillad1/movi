@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.subscriptions
 
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.TransactionType
 import java.time.LocalDate
@@ -88,6 +89,13 @@ private fun dateOf(ts: Long): LocalDate = epochMillisToAppDate(ts)
  */
 fun detectSubscriptions(events: List<FinancialEvent>, today: LocalDate): List<DetectedSub> {
     val expenses = events.asSequence()
+        // Los traspasos quedan fuera del pool, no del resultado: la pata de salida de «paso
+        // $X de Ahorros al CDT todos los meses» cumple la heurística ENTERA —mismo texto, monto
+        // idéntico, cadencia mensual clavada— y aparecía como suscripción candidata; confirmada,
+        // entraba al total mensual como un gasto fijo que no existe. Mover plata entre cuentas
+        // propias no es un gasto, así que no puede ser una suscripción. Mismo criterio (y mismo
+        // lugar en la cadena) que el filtro de los agregados de Famirios en `SubscriptionSync`.
+        .filterNot { it.category == TRANSFER_CATEGORY }
         .filter { it.type == TransactionType.EXPENSE && !dateOf(it.timestamp).isAfter(today) }
         .mapNotNull { ev -> normalizeMerchant(ev.merchant ?: ev.description)?.let { it to ev } }
         .toList()

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui
 
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
@@ -73,6 +74,26 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 }
 
 /**
+ * ¿Esta pantalla se abre como **ventana modal encima** de la actual, en vez de reemplazarla?
+ *
+ * Hoy solo [Screen.QuickAdd]. «Agregar» siempre fue una hoja —fondo oscuro clickeable y un panel
+ * pegado abajo— pero se apilaba como una pantalla más, y ahí estaba el problema: [navTabFor] no
+ * le da pestaña (no es un destino de la navegación), y App.kt solo pinta el rail y la barra
+ * cuando hay pestaña activa. Resultado: abrir Agregar hacía desaparecer TODO el chrome. En el
+ * teléfono se disimulaba (la hoja tapa casi toda la pantalla); en escritorio el rail se esfumaba
+ * y la hoja quedaba flotando sobre un vacío negro, corrida hacia un borde.
+ *
+ * La corrección es de una línea conceptual: App.kt desvía a un estado de overlay cualquier
+ * pantalla que devuelva `true` acá, en vez de apilarla. La pila no se toca, así que la pestaña
+ * activa sigue siendo la de la pantalla de atrás —el rail y la barra siguen pintados— y la hoja
+ * se dibuja adentro del área de contenido, centrada como el resto del contenido y atenuando lo
+ * que hay debajo. Se resolvió así, y no sacando `QuickAdd` de [Screen], para no tocar los cinco
+ * llamadores que ya navegan con `navigate(Screen.QuickAdd(...))`: el tipo sigue siendo la forma
+ * de PEDIR la hoja; lo que cambió es cómo App.kt la atiende.
+ */
+fun opensAsOverlay(screen: Screen): Boolean = screen is Screen.QuickAdd
+
+/**
  * Ola 7 (F61): dónde «vive» una cuenta en la navegación — la pantalla que la lista. Las deudas
  * (tarjetas y préstamos) se listan en Créditos; el resto, en Cuentas. Es la única regla: la usan
  * el destino de reserva del «volver» del detalle y [navTabFor] para la pestaña resaltada.
@@ -116,6 +137,30 @@ object NavStack {
     fun back(stack: List<Screen>, fallback: Screen): BackResult =
         if (stack.size > 1) BackResult.Pop else BackResult.Fallback(fallback)
 }
+
+/**
+ * Cuántas veces se guardó algo desde una **ventana modal** en esta sesión.
+ *
+ * Existe por lo que el overlay de «Agregar» rompió (ver [opensAsOverlay]): antes, abrir Agregar
+ * apilaba una pantalla y la de atrás salía de la composición, así que al volver reejecutaba su
+ * `LaunchedEffect(refreshKey)` y recargaba sola. Ahora la pantalla de atrás **nunca sale** —esa
+ * es justamente la mejora: conserva su estado— pero eso significa que nadie le avisa que sus
+ * datos quedaron viejos. El síntoma: registrás un movimiento o un traspaso, la hoja se cierra y
+ * Movimientos / Inicio / el detalle de la cuenta siguen mostrando la lista de antes. Peor todavía,
+ * la app parece decir que no pasó nada, y el reflejo es volver a guardar — el mismo reintento a
+ * ciegas que duplicaba traspasos.
+ *
+ * Cada pantalla que lee datos lo usa como una key más de su `LaunchedEffect`. Un `Int` que sube
+ * y nada más: no hay evento, ni payload, ni quién escucha a quién — la pantalla ya sabe cómo
+ * recargarse, lo único que le faltaba era enterarse.
+ *
+ * `compositionLocalOf` y NO `staticCompositionLocalOf`: este valor cambia. Con la variante
+ * estática, Compose no rastrea lecturas y cada guardado invalidaría TODO el subárbol bajo el
+ * provider en vez de solo las pantallas que lo leen — el mismo anti-patrón que el `remember`
+ * de `goBackTo` documenta unas líneas más abajo, pero al revés: aquello es estático porque
+ * nunca cambia, esto cambia y por eso no puede serlo.
+ */
+val LocalRefreshTick = compositionLocalOf { 0 }
 
 /**
  * «Volver» real, expuesto a las pantallas: recibe el destino de reserva (F22) y

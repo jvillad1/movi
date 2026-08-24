@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.openingEventFor
 import kotlinx.coroutines.runBlocking
@@ -23,11 +24,19 @@ class LocalRepositoryTest {
 
     private lateinit var repo: LocalRepository
 
+    /**
+     * La misma DB que usa [repo]. `createDatabase` levanta una SQLite en memoria NUEVA en cada
+     * llamada, así que un test que quiera ejercitar otro remoto (p. ej. "sin red") tiene que
+     * construir su LocalRepository sobre ESTA instancia — si no, escribiría en una base aparte y
+     * la aserción sobre `repo` no probaría nada.
+     */
+    private lateinit var db: com.jvillada.movi.shared.db.MoviDatabase
+
     private val testUserId = "user-test-1"
 
     @BeforeTest
     fun setup() {
-        val db = createDatabase("test.db")
+        db = createDatabase("test.db")
         repo = LocalRepository(
             db = db,
             remote = NoOpRepository(),
@@ -396,6 +405,214 @@ class LocalRepositoryTest {
         val local = repo.getAccounts().single { it.id == summary.account.id }
         assertEquals(AccountType.CREDIT_CARD, local.type)
         assertEquals(2_000_000L, local.balance)
+    }
+
+    // ── Traspasos ─────────────────────────────────────────────────────────────
+
+    private fun transferRequest(amount: Long = 250_000L) = com.jvillada.movi.shared.model.CreateTransferRequest(
+        transferId = "tr-1",
+        fromEventId = "ev-tr-from",
+        toEventId = "ev-tr-to",
+        fromAccountId = "acc-ahorros",
+        toAccountId = "acc-cdt",
+        amount = amount,
+        timestamp = 1_700_000_000_000L,
+    )
+
+    private suspend fun crearCuentasDelTraspaso() {
+        repo.createAccount(Account("acc-ahorros", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.createAccount(Account("acc-cdt", "CDT", AccountType.INVESTMENT, 0L))
+    }
+
+    /**
+     * Las dos patas tienen que quedar en la DB local: en Android, Movimientos y el detalle de
+     * cada cuenta leen de acá, no del server. Sin el espejo el traspaso era invisible en el
+     * teléfono y los dos saldos se quedaban en el valor viejo.
+     */
+    @Test
+    fun createTransfer_espeja_las_dos_patas_y_mueve_los_dos_saldos() = runBlocking {
+        crearCuentasDelTraspaso()
+
+        repo.createTransfer(transferRequest())
+
+        val ahorros = repo.getEvents("acc-ahorros")
+        val cdt = repo.getEvents("acc-cdt")
+        assertEquals(1, ahorros.size)
+        assertEquals(1, cdt.size)
+        assertEquals(TransactionType.EXPENSE, ahorros.single().type)
+        assertEquals(TransactionType.INCOME, cdt.single().type)
+        assertEquals("tr-1", ahorros.single().transferId)
+        assertEquals("tr-1", cdt.single().transferId)
+        // Las dos patas quedan fuera del flujo de caja aunque estén en cuentas de activo.
+        assertFalse(ahorros.single().countsAsCashFlow)
+        assertFalse(cdt.single().countsAsCashFlow)
+
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * El traspaso es remote-first SIN respaldo local (mismo criterio que [LocalRepository.deleteAccount]):
+     * la atomicidad de las dos patas vive en la transacción del server, y el `SyncEngine` empuja
+     * eventos de a uno — un traspaso anotado offline podía llegar por mitades. Si el POST falla,
+     * la excepción sale para que la UI lo diga, y **nada** se escribe local.
+     */
+    @Test
+    fun createTransfer_sin_red_no_deja_medio_traspaso_local() = runBlocking {
+        crearCuentasDelTraspaso()
+        val sinRed = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                error("sin red: el POST /api/transfers no llegó")
+        }
+        val offline = LocalRepository(db = db, remote = sinRed, userId = { testUserId })
+
+        val fallo = runCatching { offline.createTransfer(transferRequest()) }
+
+        assertTrue(fallo.isFailure)
+        assertTrue(repo.getEvents("acc-ahorros").isEmpty())
+        assertTrue(repo.getEvents("acc-cdt").isEmpty())
+        assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
+    }
+
+    /**
+     * Anular una pata anula la otra también en el espejo local: si no, el teléfono mostraría la
+     * plata saliendo de Ahorros sin volver del CDT hasta el próximo arranque.
+     */
+    @Test
+    fun voidEvent_de_una_pata_revierte_los_dos_saldos_locales() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        repo.voidEvent("ev-tr-from")
+
+        assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(0L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * Y al revés: anular la pata de destino también deshace la de origen.
+     */
+    @Test
+    fun voidEvent_de_la_pata_de_destino_tambien_revierte_la_de_origen() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        repo.voidEvent("ev-tr-to")
+
+        assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(0L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * La cola de C1. El escenario completo: (1) el server commitea las dos patas y la respuesta se
+     * pierde; (2) el dueño vuelve a tocar Guardar con los MISMOS ids; (3) el server reconoce el
+     * reintento. Si esa segunda respuesta llega como 409 y `createTransfer` la deja salir como
+     * excepción, el espejo local nunca se escribe — y como el `SyncEngine` solo empuja, jamás
+     * trae, el traspaso queda invisible en el teléfono PARA SIEMPRE: Movimientos, Cuentas y el
+     * detalle leen local, mientras Inicio (que lee remoto) sí lo cuenta. El teléfono se
+     * contradice a sí mismo, y el reflejo del dueño es rehacerlo desde el formulario —ahora con
+     * ids nuevos— que es el duplicado real que C1 vino a evitar.
+     *
+     * Las patas se reconstruyen con `transferLegsFor`, la MISMA función que usó el server: mismos
+     * ids, mismo monto, misma marca de tiempo, misma descripción. No es una adivinanza.
+     */
+    @Test
+    fun createTransfer_ante_un_409_espeja_igual_las_dos_patas() = runBlocking {
+        crearCuentasDelTraspaso()
+        val yaRegistrado = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                throw ApiException(409, "Ese traspaso ya está registrado")
+        }
+        val repoConflicto = LocalRepository(db = db, remote = yaRegistrado, userId = { testUserId })
+
+        val result = repoConflicto.createTransfer(transferRequest())
+
+        assertEquals("ev-tr-from", result.from.id)
+        assertEquals("ev-tr-to", result.to.id)
+        assertEquals(1, repo.getEvents("acc-ahorros").size, "la pata de origen tiene que quedar local")
+        assertEquals(1, repo.getEvents("acc-cdt").size, "y la de destino también")
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /**
+     * Y el espejo es idempotente: el reintento que termina en 409 no puede volver a mover los
+     * saldos si la primera pasada YA los movió. Sin esta guarda, «guardar dos veces» dejaba dos
+     * filas (bien, por la PK) pero el saldo descontado dos veces (mal, y en silencio).
+     */
+    @Test
+    fun createTransfer_repetido_no_mueve_los_saldos_dos_veces() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        val yaRegistrado = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                throw ApiException(409, "Ese traspaso ya está registrado")
+        }
+        LocalRepository(db = db, remote = yaRegistrado, userId = { testUserId })
+            .createTransfer(transferRequest())
+
+        assertEquals(1, repo.getEvents("acc-ahorros").size)
+        assertEquals(1, repo.getEvents("acc-cdt").size)
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance, "el saldo se movió UNA vez")
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /** Cualquier otro error sigue saliendo: un 500 no puede disfrazarse de «ya estaba guardado». */
+    @Test
+    fun createTransfer_ante_un_error_que_no_es_409_sigue_fallando() = runBlocking {
+        crearCuentasDelTraspaso()
+        val roto = object : NoOpRepository() {
+            override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
+                throw ApiException(500, "No se pudo registrar el traspaso")
+        }
+
+        val fallo = runCatching {
+            LocalRepository(db = db, remote = roto, userId = { testUserId }).createTransfer(transferRequest())
+        }
+
+        assertTrue(fallo.isFailure)
+        assertTrue(repo.getEvents("acc-ahorros").isEmpty())
+    }
+
+    // ── M3: la guarda simétrica del server, del lado del cliente ──────────────
+
+    /**
+     * Sin esto, un evento con la categoría reservada entraba al espejo local y el daño era
+     * silencioso y permanente: `isCashFlow` lo deja fuera del mes (el gasto REAL del dueño
+     * desaparece del teléfono), el `SyncEngine` lo empuja, el server contesta 422 (`POST
+     * /api/events` no acepta patas sueltas), el catch se traga el error y la fila se reintenta
+     * cada 30 segundos para siempre.
+     *
+     * Y era alcanzable sin mala fe: Movimientos y Presupuestos metían TODAS las categorías en el
+     * caché de sugerencias, así que «Traspaso» se ofrecía para escribir en Agregar.
+     */
+    @Test
+    fun postEvent_rechaza_la_categoria_reservada_en_vez_de_esconder_el_gasto() = runBlocking {
+        repo.createAccount(Account("acc-guarda", "Ahorros", AccountType.SAVINGS, 100_000L))
+
+        val fallo = runCatching {
+            repo.postEvent(
+                event("ev-falso", "acc-guarda", TransactionType.EXPENSE, 50_000L)
+                    .copy(category = TRANSFER_CATEGORY),
+            )
+        }
+
+        assertTrue(fallo.isFailure)
+        assertTrue(repo.getEvents("acc-guarda").isEmpty(), "no puede quedar ninguna fila local")
+        assertEquals(100_000L, repo.getAccount("acc-guarda").balance, "ni moverse el saldo")
+    }
+
+    /** Y recategorizar HACIA la categoría reservada tampoco: sería fabricar media pata. */
+    @Test
+    fun updateEventCategory_rechaza_la_categoria_reservada_como_destino() = runBlocking {
+        repo.createAccount(Account("acc-dest", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-normal", "acc-dest", TransactionType.EXPENSE, 10_000L))
+
+        val fallo = runCatching { repo.updateEventCategory("ev-normal", TRANSFER_CATEGORY) }
+
+        assertTrue(fallo.isFailure)
+        assertEquals("test", repo.getEvents("acc-dest").single().category)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

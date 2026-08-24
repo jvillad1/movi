@@ -12,6 +12,18 @@ const val CARD_PAYMENT_CATEGORY = "Pago de tarjeta"
 const val OPENING_CATEGORY = "Saldo inicial"
 
 /**
+ * Categoría reservada de las **dos patas de un traspaso** (ver [transferLegsFor]): mover plata
+ * entre cuentas propias — ahorros → CDT, ahorros → efectivo — no es ni ingreso ni egreso, pero
+ * los dos saldos sí se mueven.
+ *
+ * Es *reservada*: nadie la escribe a mano. Se crea solo desde `POST /api/transfers`, y ni el POST
+ * de eventos sueltos ni el `PUT /api/events/{id}/category` dejan entrar o salir de ella — sacar
+ * una pata de acá reviviría el gasto fantasma que este cambio vino a matar, y meter un evento
+ * suelto acá fabricaría medio traspaso sin la otra pata que lo compensa.
+ */
+const val TRANSFER_CATEGORY = "Traspaso"
+
+/**
  * ¿Este movimiento es **flujo de caja del mes** — plata que entró o salió del bolsillo?
  *
  * No todo evento es un ingreso o un egreso. El saldo de una cuenta de deuda (LOAN,
@@ -20,6 +32,15 @@ const val OPENING_CATEGORY = "Saldo inicial"
  * en cuánto se debe.
  *
  * Reglas, en orden, y el porqué de cada una:
+ *
+ * - **Categoría [TRANSFER_CATEGORY] → nunca**, sin importar tipo de cuenta ni tipo de
+ *   movimiento. Un traspaso es la misma plata cambiando de cuenta: sale de ahorros y entra al
+ *   CDT en el mismo instante. Sin esta regla las dos patas se contaban, y una sola movida de
+ *   $5.000.000 inflaba a la vez "Ingresos del mes" y "Egresos del mes" en esa cifra —el neto
+ *   quedaba bien, las dos cifras que el dueño lee estaban mal— y además el presupuesto de la
+ *   categoría con la que se hubiera anotado el egreso se comía plata que nunca se gastó. Los
+ *   **saldos** sí se mueven, y tienen que moverse: cada pata es un evento normal de su cuenta
+ *   y `signedDelta`/`computeBalances` no pasan por acá.
  *
  * - **Categoría [OPENING_CATEGORY] → nunca**, sin importar tipo de cuenta ni tipo de movimiento
  *   (F54). Abrir una cuenta con plata que ya tenías no es un ingreso del mes — ni tampoco, para
@@ -62,6 +83,7 @@ const val OPENING_CATEGORY = "Saldo inicial"
  * vía `signedDelta`/`computeBalances`. Esto solo decide qué se suma como ingreso/egreso.
  */
 fun isCashFlow(accountType: AccountType, type: TransactionType, category: String): Boolean = when {
+    category == TRANSFER_CATEGORY -> false
     category == OPENING_CATEGORY -> false
     category == CARD_PAYMENT_CATEGORY -> false
     accountType == AccountType.LOAN        -> false

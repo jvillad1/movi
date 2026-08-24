@@ -12,6 +12,13 @@ import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
+import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
+import com.jvillada.movi.shared.model.TransferResult
+import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -157,6 +164,19 @@ class LocalRepository(
     // ── Events ────────────────────────────────────────────────────────────────
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+        // La guarda simétrica de la del server (`POST /api/events` rechaza esto con 422), y hace
+        // falta acá porque el espejo local escribe PRIMERO y pregunta después. Sin ella el daño
+        // era silencioso y permanente: `isCashFlow` deja fuera del mes a cualquier evento con la
+        // categoría reservada —o sea, el gasto REAL del dueño desaparecía de Movimientos y de
+        // Presupuestos en el teléfono—, el `SyncEngine` lo empujaba, el server contestaba 422, el
+        // catch se lo tragaba y la fila se reintentaba cada 30 segundos para siempre.
+        //
+        // Y era alcanzable sin mala fe: Movimientos y Presupuestos metían TODAS las categorías
+        // que veían en el caché de sugerencias, patas de traspaso incluidas, así que «Traspaso»
+        // se le ofrecía al dueño para escribirla (eso también se corrigió, en `UsedCategoriesCache`).
+        if (event.category == TRANSFER_CATEGORY || event.transferId != null) {
+            throw ApiException(422, TRANSFER_LEG_NOT_STANDALONE)
+        }
         // Red de seguridad, no la vía principal: la UI ya manda `id = newId("ev")` en los tres
         // call sites (QuickAddScreen, SMSScreens; CreateAccountSheet es para cuentas, no
         // eventos). Nunca insertar con PK "" — con INSERT OR REPLACE, un segundo evento sin id
@@ -169,7 +189,10 @@ class LocalRepository(
                 resolved.id, resolved.accountId, resolved.type.name, resolved.amount,
                 resolved.category, resolved.description, resolved.merchant,
                 resolved.timestamp, resolved.source.name, resolved.rawPayload,
-                resolved.reconciliationStatus.name, resolved.syncedAt, userId()
+                resolved.reconciliationStatus.name, resolved.syncedAt, userId(),
+                // Siempre null por esta puerta: un traspaso entra por [createTransfer], nunca
+                // como evento suelto (el server rechaza un POST /api/events con transferId).
+                resolved.transferId,
             )
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
@@ -211,25 +234,133 @@ class LocalRepository(
             }
             .sortedByDescending { it.date }
 
+    /**
+     * Anula un movimiento en el espejo local y deja la anulación encolada para el `SyncEngine`.
+     *
+     * **Si es una pata de traspaso, anula también la otra.** Un traspaso anulado a medias deja el
+     * saldo de una de las dos cuentas mintiendo: la plata saldría de Ahorros sin volver del CDT
+     * hasta el próximo arranque de la app.
+     *
+     * De las dos anulaciones locales, **solo una se encola** (`syncedAt = null`) — la del evento
+     * que el dueño tocó; la de la hermana se escribe ya sellada. El server cascadea por su cuenta
+     * (ver `POST /api/events/{id}/void`), así que empujar las dos haría que la segunda chocara
+     * contra un 409 "Already voided" eterno: quedaría sin sellar y el ciclo de 30s la reintentaría
+     * para siempre, ensuciando el log con un error que no significa nada.
+     */
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
         val now = Clock.System.now().toEpochMilliseconds()
         val voidId = "${now}_${id.take(8)}"
+        val uid = userId()
         db.transaction {
+            val event = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            val hermanas = event?.transferId
+                ?.let { db.financialEventQueries.selectByTransferId(it, uid).executeAsList() }
+                ?.filter { it.id != id }
+                .orEmpty()
+
             db.voidEventQueries.insert(voidId, id, reason, now, null)
-            val event = db.financialEventQueries.selectById(id, userId()).executeAsOneOrNull()
-            if (event != null) {
-                val acct = db.accountQueries.selectById(event.accountId).executeAsOneOrNull()
-                if (acct != null) {
-                    // Reversa exacta de signedDelta (mismo hallazgo que postEvent, arriba):
-                    // anular un evento en una cuenta LOAN/CREDIT_CARD tiene que deshacer el
-                    // efecto con la convención de deuda, no con la de cuenta de activo.
-                    val accountType = AccountType.valueOf(acct.type)
-                    val originalDelta = signedDelta(accountType, TransactionType.valueOf(event.type), event.amount)
-                    db.accountQueries.updateBalance(acct.balance - originalDelta, acct.id)
-                }
+            hermanas.forEach { hermana ->
+                // syncedAt = now: esta anulación NO se empuja, el server la deduce del transferId.
+                db.voidEventQueries.insert("${now}_${hermana.id.take(8)}", hermana.id, reason, now, now)
+            }
+
+            (listOfNotNull(event) + hermanas).forEach { fila ->
+                val acct = db.accountQueries.selectById(fila.accountId).executeAsOneOrNull() ?: return@forEach
+                // Reversa exacta de signedDelta (mismo hallazgo que postEvent, arriba):
+                // anular un evento en una cuenta LOAN/CREDIT_CARD tiene que deshacer el
+                // efecto con la convención de deuda, no con la de cuenta de activo.
+                val accountType = AccountType.valueOf(acct.type)
+                val originalDelta = signedDelta(accountType, TransactionType.valueOf(fila.type), fila.amount)
+                db.accountQueries.updateBalance(acct.balance - originalDelta, acct.id)
             }
         }
         return VoidEvent(id = voidId, originalEventId = id, reason = reason, timestamp = now)
+    }
+
+    /**
+     * Crea el traspaso **contra el server** y espeja las dos patas en la DB local, ya selladas.
+     *
+     * Remote-first sin respaldo offline, a diferencia de [postEvent] y [createAccount] — y es una
+     * decisión, no un olvido. La atomicidad de las dos patas vive en la transacción de
+     * `POST /api/transfers`, y el [com.jvillada.movi.shared.SyncEngine] empuja eventos **de a
+     * uno**: un traspaso anotado sin red podía llegar por mitades al server (una pata sí, la otra
+     * en el próximo ciclo o nunca), que es exactamente el saldo mintiendo que esta feature vino a
+     * evitar. Mismo criterio que [deleteAccount]: la excepción se propaga tal cual para que la UI
+     * la traduzca a un mensaje claro en vez de fingir que el traspaso ocurrió.
+     *
+     * El espejo escribe **lo que devolvió el server** (`result.from`/`result.to`), no las patas
+     * reconstruidas acá: mismo criterio que [adjustCreditBalance]. Y las escribe con
+     * `syncedAt = ahora` — ya están en el server, no hay nada pendiente de empujar; además
+     * `selectUnsynced` deja fuera cualquier fila con `transferId` justamente para que este ciclo
+     * no pueda subir una pata suelta.
+     */
+    override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
+        val result = try {
+            remote.createTransfer(request)
+        } catch (e: ApiException) {
+            if (e.status != 409) throw e
+            // 409 = «ese traspaso ya está registrado». Este server ya no lo usa (relee y devuelve
+            // 200 con las patas reales), pero un server anterior todavía desplegado sí, y significa
+            // lo mismo: las dos patas existen. Sin este rescate, la excepción salía ANTES del
+            // espejo y el traspaso quedaba invisible en el teléfono
+            // **para siempre** — el SyncEngine solo empuja, nunca trae, y Movimientos/Cuentas/el
+            // detalle leen de acá. La app decía «guardado», refrescaba, y no había nada; solo
+            // Inicio (que lee remoto) lo contaba. El teléfono contradiciéndose a sí mismo, y el
+            // dueño rehaciendo el traspaso con ids nuevos: el duplicado que todo esto evita.
+            //
+            // Las patas se reconstruyen con `transferLegsFor`, la MISMA función que usó el server
+            // (vive en :core justamente para eso): mismos ids, mismo monto, misma marca de tiempo,
+            // misma descripción. No es una adivinanza — es la única cosa que el server pudo haber
+            // guardado con este request. Si alguna de las dos cuentas no está local, no hay con
+            // qué construirlas y el error sale tal cual.
+            val from = localAccount(request.fromAccountId) ?: throw e
+            val to = localAccount(request.toAccountId) ?: throw e
+            val (fromLeg, toLeg) = transferLegsFor(request, from, to)
+            TransferResult(from = fromLeg, to = toLeg)
+        }
+        mirrorTransferLocally(result, request.transferId)
+        return result
+    }
+
+    /** Una cuenta de la DB local como modelo, o null si este dispositivo todavía no la conoce. */
+    private fun localAccount(id: String): Account? =
+        db.accountQueries.selectById(id).executeAsOneOrNull()?.let { row ->
+            Account(
+                id = row.id, name = row.name,
+                type = AccountType.valueOf(row.type),
+                balance = row.balance, currency = row.currency,
+            )
+        }
+
+    /**
+     * Espeja las dos patas y mueve los dos saldos, **saltándose la pata que ya esté**.
+     *
+     * La guarda de idempotencia no es decorativa: este espejo corre también en el camino del 409,
+     * o sea después de un reintento, y `INSERT OR REPLACE` no duplicaría la fila pero
+     * `updateBalance` sí volvería a descontar. Sin el salto, guardar dos veces dejaba una sola
+     * fila (bien) y el saldo movido dos veces (mal, y en silencio).
+     */
+    private fun mirrorTransferLocally(result: TransferResult, transferId: String) {
+        val uid = userId()
+        val now = Clock.System.now().toEpochMilliseconds()
+        db.transaction {
+            listOf(result.from, result.to).forEach { leg ->
+                val yaEstaba = db.financialEventQueries.selectById(leg.id, uid).executeAsOneOrNull() != null
+                if (yaEstaba) return@forEach
+                db.financialEventQueries.insert(
+                    leg.id, leg.accountId, leg.type.name, leg.amount,
+                    leg.category, leg.description, leg.merchant,
+                    leg.timestamp, leg.source.name, leg.rawPayload,
+                    leg.reconciliationStatus.name, leg.syncedAt ?: now, uid,
+                    leg.transferId ?: transferId,
+                )
+                val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
+                val accountType = AccountType.valueOf(acct.type)
+                db.accountQueries.updateBalance(
+                    acct.balance + signedDelta(accountType, leg.type, leg.amount), acct.id,
+                )
+            }
+        }
     }
 
     /**
@@ -274,6 +405,20 @@ class LocalRepository(
         // la fila quedaba sincronizada con la categoría vieja en el server y la nueva solo en
         // local — y como ya no sale en `selectUnsynced`, ningún ciclo futuro la volvía a
         // empujar. La divergencia era silenciosa y permanente.
+        // Nadie sale de la categoría reservada, y nadie entra tampoco. Las dos guardas son
+        // simétricas a las del server (ver PUT /api/events/{id}/category), y hacen falta acá
+        // porque el camino "local, todavía sin sincronizar" de más abajo escribe sin preguntarle
+        // a nadie — así que sin esto la fila local divergía en silencio del server.
+        //
+        // Cortar acá además le da la explicación al dueño incluso sin red, en vez de un error de
+        // conexión que no dice nada.
+        val fila = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+        val esPataDeTraspaso = fila?.transferId != null || fila?.category == TRANSFER_CATEGORY
+        if (esPataDeTraspaso) throw ApiException(422, TRANSFER_RECATEGORIZE_BLOCKED)
+        // Y hacia la categoría reservada tampoco: sería fabricar media pata — un movimiento que
+        // se deja de contar en el mes sin ninguna pata del otro lado que explique adónde fue.
+        if (category == TRANSFER_CATEGORY) throw ApiException(422, TRANSFER_CATEGORY_RESERVED)
+
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
             if (local != null && local.syncedAt == null) {
@@ -370,6 +515,7 @@ class LocalRepository(
                     event.reconciliationStatus.name,
                     event.syncedAt ?: Clock.System.now().toEpochMilliseconds(),
                     uid,
+                    event.transferId,
                 )
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
@@ -485,6 +631,7 @@ class LocalRepository(
         rawPayload = rawPayload,
         reconciliationStatus = ReconciliationStatus.valueOf(reconciliationStatus),
         syncedAt = syncedAt,
+        transferId = transferId,
         countsAsCashFlow = typeByAccount[accountId]
             ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,

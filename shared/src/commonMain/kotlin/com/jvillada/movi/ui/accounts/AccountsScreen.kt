@@ -35,6 +35,7 @@ import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.LocalRefreshTick
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
@@ -46,7 +47,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(refreshKey) {
+    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
+    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
+    // así que sin esto seguiría mostrando los datos de antes. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getAccounts() }

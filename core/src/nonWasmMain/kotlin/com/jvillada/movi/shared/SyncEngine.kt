@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.repository.WalletRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +105,14 @@ class SyncEngine(
      * problema es diagnosticable. Arreglar ese reintento de raíz —enseñarle a SyncEngine a
      * distinguir "nunca llegó" de "ya llegó, solo cambió la categoría" y usar
      * `remote.updateEventCategory` en ese segundo caso— queda fuera de este fix.
+     *
+     * **Las patas de un traspaso nunca salen por acá.** `selectUnsynced` las excluye por SQL
+     * (`transferId IS NULL`), y no es una optimización: este ciclo empuja **de a un evento**, así
+     * que subir una pata sola dejaría medio traspaso en el server — plata saliendo de una cuenta
+     * sin la que la compensa del otro lado. Por diseño ninguna pata debería estar pendiente
+     * ([com.jvillada.movi.shared.repository.LocalRepository.createTransfer] es remote-first y las
+     * espeja ya selladas), pero la condición es la red de seguridad de esa promesa para el caso
+     * en que una fila quede a medio escribir o venga de una versión vieja de la app.
      */
     internal suspend fun syncEvents() {
         val unsynced = db.financialEventQueries.selectUnsynced(userId()).executeAsList()
@@ -131,6 +140,16 @@ class SyncEngine(
         }
     }
 
+    /**
+     * Empuja las anulaciones pendientes.
+     *
+     * Un **409 se sella igual que un éxito**: significa que ese evento ya está anulado en el
+     * server, que es exactamente lo que esta fila quería lograr. Pasa de verdad y por dos
+     * caminos: la cascada de un traspaso (anular una pata anula la hermana del lado del server,
+     * ver `POST /api/events/{id}/void`) y la carrera entre dos dispositivos anulando las dos
+     * patas a la vez. Antes eso quedaba sin sellar y el ciclo lo reintentaba cada 30 segundos
+     * para siempre, ensuciando el log con un "error" que en realidad era el resultado buscado.
+     */
     internal suspend fun syncVoids() {
         val unsynced = db.voidEventQueries.selectUnsynced().executeAsList()
         for (row in unsynced) {
@@ -139,6 +158,14 @@ class SyncEngine(
                 db.voidEventQueries.markSynced(
                     Clock.System.now().toEpochMilliseconds(), row.id
                 )
+            } catch (e: ApiException) {
+                if (e.status == 409) {
+                    db.voidEventQueries.markSynced(
+                        Clock.System.now().toEpochMilliseconds(), row.id
+                    )
+                } else {
+                    logSyncFailure("syncVoids", e, id = row.id)
+                }
             } catch (e: Exception) {
                 logSyncFailure("syncVoids", e, id = row.id)
             }
