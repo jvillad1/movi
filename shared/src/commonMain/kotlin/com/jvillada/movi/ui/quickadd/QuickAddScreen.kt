@@ -648,7 +648,10 @@ private fun WalletPicker(
                                 fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                             )
                             Text(
-                                "$${account.balance}",
+                                // Ola 8: iba crudo — «$3500000» en vez de «$3.500.000». Es la
+                                // pantalla donde el dueño elige de qué cuenta sale la plata, así
+                                // que el saldo tiene que leerse de un vistazo.
+                                formatCOP(account.balance),
                                 fontSize = 12.sp,
                                 color = MinTextMute,
                             )
