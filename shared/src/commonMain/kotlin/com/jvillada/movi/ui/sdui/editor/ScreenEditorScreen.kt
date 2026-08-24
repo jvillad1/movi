@@ -72,7 +72,8 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     "goals" to "Metas",
     // F61: sin pantalla propia — el cliente lo manda a Cuentas (ver SduiRenderer.screenForTarget).
     "investments" to "Cuentas (inversión)",
-    "subscriptions" to "Suscripciones",
+    // Ola 8: sin pantalla propia — el cliente lo manda a Recurrentes (ver SduiRenderer.screenForTarget).
+    "subscriptions" to "Recurrentes (suscripciones)",
     "recurrentes" to "Recurrentes",
     "extractos" to "Extractos",
     "aichat" to "Movi AI",

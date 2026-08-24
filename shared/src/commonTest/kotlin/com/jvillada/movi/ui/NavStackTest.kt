@@ -125,7 +125,9 @@ class NavStackTest {
 
     @Test
     fun `las pantallas de Mas marcan Mas y los flujos a pantalla completa no tienen barra`() {
-        listOf(Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
+        // Ola 8: sin Screen.Subscriptions — las suscripciones viven adentro de Recurrentes, que
+        // marca RECURRING (ver el test de arriba), no Más.
+        listOf(Screen.Mas, Screen.Profile, Screen.Goals,
             Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
             .forEach { assertEquals(NavTab.MORE, navTabFor(it), "$it") }
         listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,

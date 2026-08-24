@@ -52,6 +52,10 @@ object ScreenTaxonomy {
     // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.
     // "investments" se queda (F61): ya no hay pantalla Inversiones, pero una definición guardada
     // puede traerlo todavía — el cliente lo manda a Cuentas en vez de strippearlo.
+    // "subscriptions" idem (Ola 8): Suscripciones se plegó dentro de Recurrentes. Sacarlo de esta
+    // lista haría que `isValidAction` le arrancara la acción al acceso «Suscripciones» que YA está
+    // guardado en el Inicio de cada instalación (y que ScreenValidation rechazara con 422 cualquier
+    // guardado del Editor que todavía lo traiga). Se queda, y el cliente lo redirige.
     val NAVIGATE_TARGETS = listOf(
         "dashboard", "transactions", "quickadd", "budgets", "mas", "accounts", "credits",
         "goals", "investments", "subscriptions", "recurrentes", "extractos",

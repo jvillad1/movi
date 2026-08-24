@@ -16,7 +16,12 @@ package com.jvillada.movi.shared.model
  */
 // F61 (Ola 7): generación 3 = sale el acceso «Inversiones» del Inicio — Inversiones ya no es
 // pantalla; sus cuentas se ven en Cuentas, que ya tiene su acceso acá.
-const val DASHBOARD_LAYOUT_VERSION = 3
+// Ola 8: generación 4 = el acceso «Suscripciones» pasa a llamarse «Recurrentes» y apunta ahí.
+// Suscripciones dejó de ser pantalla, y el rótulo viejo mandaba al dueño a una pantalla con otro
+// nombre y otra cifra: tocaba «Suscripciones · $312.000» y aterrizaba en «Recurrentes · Flujo
+// libre», dos números sin relación visible. Ahora el acceso muestra el MISMO flujo libre que la
+// pantalla de destino (ver `quickLinkFigure("recurrentes")`).
+const val DASHBOARD_LAYOUT_VERSION = 4
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
@@ -33,7 +38,7 @@ fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
                 ScreenCard(title = "Créditos", action = ScreenAction("NAVIGATE", "credits")),
                 ScreenCard(title = "Presupuestos", action = ScreenAction("NAVIGATE", "budgets")),
                 ScreenCard(title = "Metas", action = ScreenAction("NAVIGATE", "goals")),
-                ScreenCard(title = "Suscripciones", action = ScreenAction("NAVIGATE", "subscriptions")),
+                ScreenCard(title = "Recurrentes", action = ScreenAction("NAVIGATE", "recurrentes")),
             ),
         ),
         // Sin el "✦" que llevaba antes: en la web salía como ▯ (la fuente no tiene el glifo),

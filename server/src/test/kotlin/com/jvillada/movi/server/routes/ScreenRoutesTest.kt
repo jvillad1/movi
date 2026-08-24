@@ -162,7 +162,9 @@ class ScreenRoutesTest {
         val links = sections[3].jsonObject
         assertEquals("Explora", links["title"]!!.jsonPrimitive.content)
         val linkTitles = links["cards"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content }
-        assertEquals(listOf("Cuentas", "Créditos", "Presupuestos", "Metas", "Suscripciones"), linkTitles)
+        // Ola 8: «Suscripciones» pasó a «Recurrentes» — la pantalla se plegó y el acceso lleva
+        // ahora el nombre y la cifra de su destino real.
+        assertEquals(listOf("Cuentas", "Créditos", "Presupuestos", "Metas", "Recurrentes"), linkTitles)
 
         val aiBanner = sections[4].jsonObject
         assertEquals("BANNER", aiBanner["type"]!!.jsonPrimitive.content)

@@ -4,6 +4,10 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
+import com.jvillada.movi.shared.model.SubConfidence
+import com.jvillada.movi.shared.model.SubStatus
+import com.jvillada.movi.shared.model.Subscription
+import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
@@ -171,7 +175,7 @@ class DashboardLogicTest {
             ),
         )
         assertEquals(false, synthetic.hasRecurringRule)
-        val real = synthetic.copy(upcoming = synthetic.upcoming + upcoming("rr_1", "Arriendo", 2_000_000, daysUntil = 8))
+        val real = synthetic.copy(upcoming = synthetic.upcoming.orEmpty() + upcoming("rr_1", "Arriendo", 2_000_000, daysUntil = 8))
         assertTrue(real.hasRecurringRule)
     }
 
@@ -198,8 +202,84 @@ class DashboardLogicTest {
         assertEquals("Sin cuentas aún", quickLinkFigure("accounts", empty).sub)
         assertNull(quickLinkFigure("investments", empty).value)
         assertNull(quickLinkFigure("subscriptions", empty).value)
+        assertNull(quickLinkFigure("recurrentes", empty).value)
         assertNull(quickLinkFigure("aichat", empty).value)   // destino sin cifra
         assertNull(quickLinkFigure("aichat", empty).sub)
+    }
+
+    // ── El acceso «Recurrentes» (Ola 8) ────────────────────────────────────────
+
+    @Test
+    fun `el acceso Recurrentes muestra el mismo flujo libre que la pantalla`() {
+        val d = DashboardData(
+            upcoming = listOf(
+                upcoming("rr_1", "Sueldo", 5_000_000, daysUntil = 3, type = TransactionType.INCOME),
+                upcoming("rr_2", "Arriendo", 2_000_000, daysUntil = 5),
+            ),
+            subscriptions = SubscriptionsResult(
+                subscriptions = listOf(
+                    Subscription(
+                        id = "s1", merchantKey = "netflix", displayName = "Netflix", amount = 44_900,
+                        currency = "COP", dayOfMonth = 5, status = SubStatus.CONFIRMED,
+                        confidence = SubConfidence.HIGH, firstSeen = 0, lastSeen = 0, occurrences = 3,
+                    ),
+                ),
+                monthlyTotalCop = 44_900,
+            ),
+        )
+        val f = quickLinkFigure("recurrentes", d)
+        assertEquals("$2.955.100", f.value)
+        assertEquals("libre al mes · 3 recurrentes", f.sub)
+        assertEquals(false, f.isAlert)
+    }
+
+    /**
+     * A1 — la regresión que motivó este test. La cifra COMPONE dos fuentes; con una sola sale
+     * plausible y equivocada. Si se cae `/api/payments/upcoming` y responde `/api/subscriptions`,
+     * el sueldo desaparece y «libre al mes» quedaría en −$44.900, en rojo, contra los $2.955.100
+     * que muestra la pantalla de destino. Sin las dos fuentes no se pinta cifra.
+     */
+    @Test
+    fun `con una sola de sus dos fuentes el acceso Recurrentes no inventa nada`() {
+        val subs = SubscriptionsResult(
+            subscriptions = listOf(
+                Subscription(
+                    id = "s1", merchantKey = "netflix", displayName = "Netflix", amount = 44_900,
+                    currency = "COP", dayOfMonth = 5, status = SubStatus.CONFIRMED,
+                    confidence = SubConfidence.HIGH, firstSeen = 0, lastSeen = 0, occurrences = 3,
+                ),
+            ),
+            monthlyTotalCop = 44_900,
+        )
+        // Solo suscripciones: se cayeron las reglas.
+        val soloSubs = DashboardData(subscriptions = subs)
+        assertNull(quickLinkFigure("recurrentes", soloSubs).value)
+        assertNull(quickLinkFigure("recurrentes", soloSubs).sub)
+
+        // Solo reglas: se cayeron las suscripciones.
+        val soloReglas = DashboardData(upcoming = listOf(upcoming("rr_1", "Arriendo", 2_000_000, daysUntil = 5)))
+        assertNull(quickLinkFigure("recurrentes", soloReglas).value)
+
+        // Las dos llegaron y de verdad no hay nada: ahí sí se puede afirmar el vacío.
+        val vacioReal = DashboardData(upcoming = emptyList(), subscriptions = SubscriptionsResult(emptyList(), 0))
+        assertNull(quickLinkFigure("recurrentes", vacioReal).value)
+        assertEquals("Sin recurrentes", quickLinkFigure("recurrentes", vacioReal).sub)
+    }
+
+    @Test
+    fun `el acceso Recurrentes ignora las cuotas sinteticas de creditos y tarjetas`() {
+        val d = DashboardData(
+            upcoming = listOf(
+                upcoming("${CREDIT_RULE_PREFIX}l1", "Cuota del carro", 900_000, daysUntil = 4),
+                upcoming("${CARD_RULE_PREFIX}c1", "Pago tarjeta", 500_000, daysUntil = 6),
+                upcoming("rr_1", "Arriendo", 2_000_000, daysUntil = 5),
+            ),
+            subscriptions = SubscriptionsResult(emptyList(), 0),
+        )
+        val f = quickLinkFigure("recurrentes", d)
+        assertEquals("−$2.000.000", f.value)
+        assertEquals("libre al mes · 1 recurrente", f.sub)
+        assertEquals(true, f.isAlert, "un flujo libre negativo se marca")
     }
 
     @Test
