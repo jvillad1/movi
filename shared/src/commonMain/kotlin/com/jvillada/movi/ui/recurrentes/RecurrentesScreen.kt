@@ -16,6 +16,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import androidx.compose.ui.Alignment
@@ -71,11 +73,26 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // loadKey increments after every create/update/delete to trigger a reload.
     var loadKey by remember { mutableStateOf(0) }
     var loading by remember { mutableStateOf(true) }
-    // ¿Llegaron LAS TRES cargas? De eso depende que se pinte cifra (ver el LaunchedEffect).
-    var datosCompletos by remember { mutableStateOf(false) }
+    // Qué fuentes llegaron alguna vez. Una cifra solo se pinta cuando llegó TODO lo que la
+    // compone; con datos a medias sale plausible y equivocada, que es peor que no salir.
+    //
+    // Son banderas por fuente y no una sola «datosCompletos» porque las cifras no dependen de
+    // las mismas cosas: el flujo libre sale de reglas + cobros, y `/api/payments/upcoming` no
+    // entra ahí — exigirlo escondía un total que se podía calcular perfectamente.
+    //
+    // Solo van de false a true: una recarga posterior NO las vuelve a bajar. Bajarlas hacía
+    // parpadear el número a «—» y desaparecer los conteos después de cada Confirmar, Quitar o
+    // Guardar; mientras se refresca, lo último bueno que se supo sigue siendo lo más cierto que
+    // hay para mostrar.
+    var reglasOk by remember { mutableStateOf(false) }
+    var cobrosOk by remember { mutableStateOf(false) }
+    var vencimientosOk by remember { mutableStateOf(false) }
 
-    // Sheet state: null = closed; non-null = open with optional prefilled rule (edit) or null (create)
-    var sheetRule by remember { mutableStateOf<RecurringRule?>(null) }
+    // Hoja de crear/editar. Guarda el ID y NO la fila: el objeto de una fila puede ser de un
+    // snapshot viejo, y prellenar el formulario con eso hace que «Guardar cambios» reescriba
+    // datos que el dueño ya había corregido. El prellenado se resuelve contra `rules` al
+    // renderizar, y `editar()` se asegura de que `rules` esté al día antes de abrir.
+    var sheetRuleId by remember { mutableStateOf<String?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
 
     // Estado del opt-in de push, para el aviso de "tus recordatorios no te van a llegar".
@@ -84,39 +101,37 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(loadKey) {
         loading = true
-        // Las tres cargas alimentan UNA sola cifra («Flujo libre»), así que ninguna puede fallar
-        // ni tardar en silencio: si se cae la de reglas y no la de suscripciones, el total
-        // quedaría grande y negativo —perfectamente plausible— sin nada que avise que está
-        // incompleto. Antes de la Ola 8 esto daba $0 contra $0, visiblemente vacío; ahora miente.
-        // La primera que falle deja su mensaje y el resto no lo pisa.
-        datosCompletos = false
-        // Se traen las tres ANTES de tocar el estado. Publicarlas de a una hacía que Compose
-        // repintara con datos a medias: entre que llegaban las reglas y llegaban las
-        // suscripciones, la pantalla mostraba «Flujo libre −$1.800.000 · 1» —una cifra formada
-        // y creíble— y un instante después saltaba a −$1.860.962 · 2. Las tres asignaciones de
-        // abajo caen en el mismo snapshot, así que hay una sola repintada y ningún estado
-        // intermedio visible.
-        val porReglas = runCatching { Repositories.wallets.getRecurringRules() }
-        val porVencer = runCatching { Repositories.wallets.getUpcomingPayments() }
-        val porCobros = runCatching { Repositories.wallets.getSubscriptions() }
+        // En PARALELO, como ya las hace el Inicio. En serie eran tres viajes encadenados contra
+        // el server —y el de suscripciones trae la TRM adentro (`FxRateService`), así que puede
+        // incluir una llamada externa—: la ventana de «pantalla a medias» duraba más de un
+        // segundo contra Postgres local, y contra Railway más.
+        //
+        // Cada una publica su resultado apenas vuelve. Retenerlas para asignarlas juntas parecía
+        // más prolijo, pero alargaba la ventana en la que las FILAS visibles eran de un snapshot
+        // viejo — y una fila no es solo texto: es el botón de editar (ver `editar`).
+        coroutineScope {
+            val porReglas = async { runCatching { Repositories.wallets.getRecurringRules() } }
+            val porVencer = async { runCatching { Repositories.wallets.getUpcomingPayments() } }
+            val porCobros = async { runCatching { Repositories.wallets.getSubscriptions() } }
 
-        val fallo = listOf(porReglas, porVencer, porCobros)
-            .firstNotNullOfOrNull { it.exceptionOrNull() }
-            ?.toUserMessage()
-
-        // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
-        // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
-        porReglas.getOrNull()?.let {
-            rules = it
-            UsedCategoriesCache.record(it.map { r -> r.category })
+            var fallo: String? = null
+            // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
+            // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
+            porReglas.await()
+                .onSuccess {
+                    rules = it
+                    UsedCategoriesCache.record(it.map { r -> r.category })
+                    reglasOk = true
+                }
+                .onFailure { fallo = it.toUserMessage() }
+            porVencer.await()
+                .onSuccess { upcoming = it; vencimientosOk = true }
+                .onFailure { if (fallo == null) fallo = it.toUserMessage() }
+            porCobros.await()
+                .onSuccess { subs = it; cobrosOk = true }
+                .onFailure { if (fallo == null) fallo = it.toUserMessage() }
+            error = fallo
         }
-        porVencer.getOrNull()?.let { upcoming = it }
-        porCobros.getOrNull()?.let { subs = it }
-        error = fallo
-        // Las tres alimentan UNA sola cifra: si alguna falta, no hay número que mostrar. Es la
-        // misma regla que ya aplica el acceso «Recurrentes» del Inicio — un total armado con lo
-        // que alcanzó a llegar sale plausible y equivocado, que es peor que no salir.
-        datosCompletos = fallo == null
         loading = false
     }
 
@@ -129,9 +144,48 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
         error = null
         coroutine.launch {
             runCatching { Repositories.wallets.detectSubscriptions() }
-                .onSuccess { subs = it }
+                // `cobrosOk` también se marca acá: un re-escaneo devuelve la lista completa de
+                // cobros, así que sirve igual que la carga normal. Sin esto, quien entraba con
+                // `/api/subscriptions` caído y tocaba «Buscar cobros» veía aparecer los cobros
+                // pero se quedaba con «Flujo libre —» y sin conteos hasta salir y volver.
+                .onSuccess { subs = it; cobrosOk = true; error = null }
                 .onFailure { error = it.toUserMessage() }
             scanning = false
+        }
+    }
+
+    /**
+     * Abrir la hoja para editar una fila.
+     *
+     * Una fila de la lista NO es solo una descripción: es el botón de editar, y su contenido
+     * prellena el formulario. Si la lista visible es de un snapshot viejo —porque hay una
+     * recarga en vuelo— la hoja abre con valores viejos y «Guardar cambios» los vuelve a
+     * escribir: el dueño apaga un recordatorio, toca la fila otra vez para corregir el monto, y
+     * al guardar se le vuelve a encender el recordatorio sin que nada lo diga.
+     *
+     * Con los datos al día se abre directo (el caso normal, sin ningún viaje extra). Si hay una
+     * recarga en vuelo, o las reglas nunca llegaron, se relee ANTES de prellenar: más vale un
+     * instante de espera que pisar en silencio lo que el dueño acaba de corregir.
+     */
+    fun editar(rule: RecurringRule) {
+        if (reglasOk && !loading) {
+            sheetRuleId = rule.id
+            sheetOpen = true
+            return
+        }
+        coroutine.launch {
+            runCatching { Repositories.wallets.getRecurringRules() }
+                .onSuccess { frescas ->
+                    rules = frescas
+                    reglasOk = true
+                    if (frescas.any { it.id == rule.id }) {
+                        sheetRuleId = rule.id
+                        sheetOpen = true
+                    } else {
+                        error = "Ese recurrente ya no existe."
+                    }
+                }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -192,10 +246,15 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // «Recurrentes» del Inicio, así que las dos cifras no pueden discrepar.
     val resumen = remember(rules, subs) { resumenRecurrentes(rules, subs) }
     val ordered = resumen.items
-    // Las FILAS se pintan con lo que haya (cada una se describe sola y es cierta por separado);
-    // las CIFRAS —el flujo libre y los conteos— solo cuando llegó todo. Un total a medias es
-    // indistinguible de un total real.
-    val cifras = if (datosCompletos) resumen else null
+    // Las CIFRAS —el flujo libre y el conteo de la lista— solo se pintan cuando llegaron las dos
+    // fuentes que las componen: un total a medias es indistinguible de un total real.
+    //
+    // Las FILAS sí se pintan con lo que haya, pero NO porque «cada una sea cierta por separado»:
+    // una fila vieja se ve idéntica a una nueva y no hay forma de que el dueño lo note. Se
+    // pintan porque una lista de hace un segundo sigue siendo lo mejor que se puede mostrar
+    // mientras llega la siguiente, y porque el único uso donde esa diferencia hace daño —abrir
+    // la hoja de editar y reescribir con datos viejos— está cubierto aparte, en `editar()`.
+    val cifras = if (reglasOk && cobrosOk) resumen else null
 
     // «Próximos» muestra lo que vence PRONTO, no todas las reglas: el server manda una entrada
     // por regla, así que pintarlas todas repetía la lista entera de abajo (el mismo «Arriendo»
@@ -221,26 +280,21 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Recurrentes",
                 leading = leadingFor(Screen.Recurrentes, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
-                action = {
-                    // Ola 8: el alta es UNA sola («Nuevo recurrente», ver CreateRecurringRuleSheet)
-                    // y el re-escaneo se mudó del encabezado de Suscripciones a este, que es el
-                    // único que queda.
-                    if (ordered.isNotEmpty()) {
-                        NewItemButton(label = "Nuevo recurrente", onClick = { sheetRule = null; sheetOpen = true })
-                    }
-                    Text(
-                        text = if (scanning) "Buscando…" else "Buscar cobros",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (scanning) MinTextMute else MinText,
-                        modifier = Modifier.clickable(enabled = !scanning) { rescan() },
-                    )
-                },
+                // Ola 8: el alta es UNA sola («Nuevo recurrente», ver CreateRecurringRuleSheet).
+                // El re-escaneo NO comparte este espacio: dos acciones acá no dejaban ancho para
+                // el título y en un teléfono angosto se leía «Re…». Vive en el encabezado de «Por
+                // día del mes», que es donde aparece lo que encuentra.
+                //
+                // Mientras carga el botón se muestra igual: la lista todavía está vacía, y sin él
+                // la pantalla quedaba más de un segundo sin ninguna salida.
+                action = if (ordered.isNotEmpty() || loading) {
+                    { NewItemButton(label = "Nuevo recurrente", onClick = { sheetRuleId = null; sheetOpen = true }) }
+                } else null,
             )
             if (ordered.isEmpty() && !loading) {
                 NewItemButton(
                     label = "Nuevo recurrente",
-                    onClick = { sheetRule = null; sheetOpen = true },
+                    onClick = { sheetRuleId = null; sheetOpen = true },
                     modifier = Modifier.padding(horizontal = 20.dp).padding(vertical = 14.dp),
                     full = true,
                 )
@@ -436,9 +490,14 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         MinSectionHeader(
                             title = "Próximos",
-                            count = if (cifras != null && proximos.isNotEmpty()) proximos.size else null,
+                            count = if (vencimientosOk && proximos.isNotEmpty()) proximos.size else null,
                         )
-                        if (proximos.isEmpty() && !loading) {
+                        // Cargando y sin nada todavía: no se pinta NADA. La rama de abajo con la
+                        // lista vacía dibujaba un MinCard sin filas — una astilla de 4dp bajo el
+                        // rótulo, que junto con la otra sección hacía ver la pantalla rota.
+                        if (proximos.isEmpty() && loading) {
+                            Unit
+                        } else if (proximos.isEmpty()) {
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 variant = MinCardVariant.Elevated,
@@ -463,8 +522,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             ) {
                                                 onNavigate(Screen.Credits)
                                             } else {
-                                                sheetRule = payment.rule
-                                                sheetOpen = true
+                                                editar(payment.rule)
                                             }
                                         },
                                     )
@@ -482,8 +540,15 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         MinSectionHeader(
                             title = "Por día del mes",
                             count = if (cifras != null && ordered.isNotEmpty()) ordered.size else null,
+                            // El re-escaneo vive acá y no en el encabezado de la pantalla: es
+                            // donde aparece lo que encuentra, y deja el título respirar en
+                            // pantallas angostas.
+                            action = if (scanning) "Buscando…" else "Buscar cobros",
+                            onAction = { rescan() },
                         )
-                        if (ordered.isEmpty() && !loading) {
+                        if (ordered.isEmpty() && loading) {
+                            Unit
+                        } else if (ordered.isEmpty()) {
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 variant = MinCardVariant.Elevated,
@@ -520,7 +585,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 ordered.forEachIndexed { i, item ->
                                     RecurrenteRow(
                                         item = item,
-                                        onEditRule = { sheetRule = it; sheetOpen = true },
+                                        onEditRule = { editar(it) },
                                         onRemoveSub = { quitar(it) },
                                     )
                                     if (i < ordered.size - 1) Hairline()
@@ -540,7 +605,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     sheetOpen = false
                     loadKey++
                 },
-                existing = sheetRule,
+                // Se resuelve contra `rules` en el momento de pintar, no contra un objeto
+                // guardado al tocar: `editar()` ya garantizó que la lista esté al día.
+                existing = sheetRuleId?.let { id -> rules.firstOrNull { it.id == id } },
             )
         }
     }

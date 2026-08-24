@@ -121,6 +121,13 @@ fun CreateRecurringRuleSheet(
                         // solo mira gastos) y la hoja ni siquiera ofrece la casilla, así que
                         // guardar `true` dejaba en la fila una intención que nadie expresó — y
                         // que se leía como «pedí que me avisaran» desde cualquier consulta.
+                        //
+                        // Cambiar de tipo DENTRO de la hoja no pierde nada: `remindMe` es estado
+                        // de la hoja y nadie lo toca al mover el chip, así que ir a Ingreso y
+                        // volver a Gasto deja la casilla como estaba. Lo único que se pierde es
+                        // al GUARDAR como ingreso: ahí queda `false` en la fila, y si más
+                        // adelante se reabre y se pasa a Gasto, la casilla arranca desmarcada.
+                        // Es un camino angosto y el precio de que la base no mienta.
                         remindMe = selectedType == TransactionType.EXPENSE && remindMe,
                     )
                     if (isEditMode) {
@@ -390,18 +397,23 @@ fun CreateRecurringRuleSheet(
                         }
                     }
 
-                    // Inline error display
-                    if (error != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = error!!,
-                            fontSize = 12.sp,
-                            color = MinExpense,
-                        )
-                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
+
+                // El error del guardado va FIJO, junto al botón, y no dentro del área que
+                // scrollea. En el caso Gasto —el que desborda— el contenido queda rodado hacia
+                // arriba y el dueño nunca baja, porque el botón ya es fijo: si el POST fallaba,
+                // el texto rojo se agregaba al fondo, fuera de vista, y el botón volvía a decir
+                // «Crear recurrente». Tocaba, no pasaba nada, y volvía a tocar.
+                if (error != null) {
+                    Text(
+                        text = error!!,
+                        fontSize = 12.sp,
+                        color = MinExpense,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
 
                 // --- CTA --- (fijo al pie, fuera del área que scrollea)
                 Box(
