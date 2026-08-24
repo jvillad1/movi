@@ -21,8 +21,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -189,6 +192,31 @@ fun QuickAddScreen(
                 // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
                 SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
+                // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER.
+                //
+                // Esta hoja está anclada abajo (el `Box(weight(1f))` de arriba la empuja contra
+                // el borde inferior), así que **cualquier cambio de alto le mueve TODO el
+                // contenido bajo el dedo**. Y los sub-pickers son mucho más bajos que el
+                // editor: abrir «Nota» encogía la hoja a una franja y cerrarla la volvía a
+                // estirar de golpe. Verificado en la web local: la X del diálogo de Nota queda
+                // exactamente sobre la tecla «9» de la hoja restaurada — se ve la tecla
+                // iluminarse bajo el cursor apenas se cierra el diálogo. Un segundo clic ahí
+                // (un doble clic, un toque impaciente) escribe un 9 en el monto **sin ningún
+                // aviso**: así es como se guarda plata mal en silencio.
+                //
+                // El arreglo es de raíz y no un margen: se recuerda el alto del editor y se le
+                // pone como alto MÍNIMO al sub-picker, así la hoja mide siempre lo mismo y
+                // nada se teletransporta. Que el editor no esté compuesto durante un picker
+                // (el `when` lo reemplaza) ya garantiza que no haya teclado fantasma debajo:
+                // no hay eventos que atravesar porque no hay nada atrás.
+                var editorHeightPx by remember { mutableStateOf(0) }
+                val density = LocalDensity.current
+                val pinnedHeight = with(density) { editorHeightPx.toDp() }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (picker == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
+                ) {
                 when (picker) {
                     // F35: campo libre con sugerencias en vez de una lista fija — tocar una
                     // sugerencia cierra el sub-picker igual que antes (onSuggestionPicked);
@@ -222,7 +250,14 @@ fun QuickAddScreen(
                         onSave = { note = it; picker = Picker.None },
                         onClose = { picker = Picker.None },
                     )
-                    Picker.None -> Column(modifier = Modifier.fillMaxWidth()) {
+                    Picker.None -> Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // El alto que los sub-pickers van a respetar (ver el comentario de
+                            // arriba). Se mide acá y no se calcula a mano: así sigue siendo
+                            // correcto si mañana el editor gana o pierde una fila.
+                            .onSizeChanged { editorHeightPx = it.height },
+                    ) {
                         // El selector de tipo vive acá y no adentro de EditorBody porque ahora
                         // elige entre DOS formularios distintos: un movimiento (gasto/ingreso)
                         // y un traspaso, que no tiene ni categoría ni tipo pero sí dos cuentas.
@@ -262,6 +297,7 @@ fun QuickAddScreen(
                         }
                     }
                 }
+                } // Box del alto fijado
 
                 Spacer(Modifier.height(14.dp))
             }
@@ -503,15 +539,29 @@ private fun EditorBody(
                 )
             }
         }
-        if (!canSave && !saving && missingFieldMessage != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = missingFieldMessage,
-                fontSize = 12.sp,
-                color = MinTextMute,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        // Ola 8 · V2 — ESTE RENGLÓN SIEMPRE OCUPA SU LUGAR, DIGA ALGO O NO.
+        //
+        // Antes aparecía y desaparecía, y está **debajo** del teclado en una hoja anclada
+        // abajo: al escribir el primer dígito «Falta el monto» se iba, la hoja se encogía y
+        // el teclado entero bajaba de golpe. Medido en la web local: **22 px en pantalla, ~35
+        // dp — el 70 % del alto de una tecla.** O sea que el segundo toque en el mismo punto
+        // caía en la tecla de arriba: escribías «0» y salía «8», sin ningún aviso. Reservarle
+        // el alto fijo cuesta 16 dp de aire y deja el teclado quieto mientras se tipea, que es
+        // exactamente lo que hay que garantizar en la pantalla donde se anota la plata.
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().height(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (!canSave && !saving && missingFieldMessage != null) {
+                Text(
+                    text = missingFieldMessage,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -584,6 +634,12 @@ private fun WalletPicker(
 @Composable
 private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () -> Unit) {
     var text by remember { mutableStateOf(initial) }
+    // Ola 8 · V2: sin foco automático había que acertarle al campo con el dedo, y ver más
+    // abajo por qué eso era imposible. Es el MISMO arreglo que el sub-picker de Categoría ya
+    // tenía documentado (Ola 2 #3c) y que a Nota nunca se le hizo: la hoja se abre lista para
+    // escribir «Nómina agosto», sin un toque previo que pueda caer en cualquier otro lado.
+    val noteFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { noteFocusRequester.requestFocus() }
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp)) {
         PickerHeader("Nota", onClose)
         Box(
@@ -598,6 +654,16 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 onValueChange = { text = it },
                 cursorBrush = SolidColor(MinText),
                 textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                // Ola 8 · V2: **sin `fillMaxWidth` el campo no se podía tocar.** El área
+                // sensible de un BasicTextField es la que mide su contenido, y con el texto
+                // vacío eso son cero píxeles de ancho: la caja gris se ve grande, pero el
+                // campo de verdad es una raya invisible. Verificado en la web local sobre
+                // master — clic en el centro de la caja y clic pegado al borde izquierdo, y en
+                // los dos casos lo tecleado no entró en ninguna parte. O sea: la nota no se
+                // podía escribir. Las otras siete hojas de la app (CreateAccountSheet,
+                // VoidEventSheet, CreateSubscriptionSheet, CategoryField…) ya traían este
+                // `fillMaxWidth`; esta era la única que se lo había saltado.
+                modifier = Modifier.fillMaxWidth().focusRequester(noteFocusRequester),
                 decorationBox = { inner ->
                     if (text.isEmpty()) {
                         Text("Concepto del movimiento", fontSize = 14.sp, color = MinTextMute)
