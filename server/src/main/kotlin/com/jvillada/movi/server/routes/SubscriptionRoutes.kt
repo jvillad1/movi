@@ -6,6 +6,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -29,17 +30,13 @@ import org.jetbrains.exposed.sql.update
 import java.util.UUID
 import kotlin.math.roundToLong
 
-// F38: prefijo que separa las suscripciones de alta manual del dominio del detector.
-// `normalizeMerchant` (SubscriptionDetector.kt) deriva su `merchantKey` de la descripción del
-// EVENTO bancario — nunca antepone este prefijo — así que una fila "manual_*" queda
-// estructuralmente fuera de lo que `runSubscriptionDetection` puede generar o re-escribir
-// (ver `upsertDetected`/`applyExisting` en SubscriptionSync.kt): un re-scan nunca la toca ni la
-// duplica, sin necesidad de un caso especial ahí.
-private const val MANUAL_MERCHANT_PREFIX = "manual_"
-
+// F38: el prefijo que separa las suscripciones de alta manual del dominio del detector se mudó
+// a `:core` (MANUAL_SUB_PREFIX) — el cliente lo necesita para marcar en la lista única de
+// Recurrentes cuáles encontró Movi sola. La garantía es la misma: `upsertDetected`/`applyExisting`
+// (SubscriptionSync.kt) nunca generan esa clave, así que un re-scan no toca ni duplica un alta manual.
 private fun manualMerchantKey(displayName: String): String {
     val normalized = displayName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-    return (MANUAL_MERCHANT_PREFIX + normalized.ifBlank { "sub" }).take(80)
+    return (MANUAL_SUB_PREFIX + normalized.ifBlank { "sub" }).take(80)
 }
 
 fun Route.subscriptionRoutes() {
@@ -74,10 +71,22 @@ fun Route.subscriptionRoutes() {
 
             val newId = "sub_${UUID.randomUUID()}"
             val created = dbQuery {
-                val exists = Subscriptions.selectAll()
-                    .where { (Subscriptions.userId eq uid) and (Subscriptions.merchantKey eq key) and (Subscriptions.currency eq body.currency) }
-                    .count() > 0
-                if (exists) return@dbQuery false
+                // El choque se mide contra lo que el dueño PUEDE VER. Una fila DISMISSED está
+                // fuera de la lista y no se puede recuperar desde ninguna pantalla: si contara
+                // como duplicado, «Ya tienes una suscripción llamada X» hablaría de algo
+                // invisible e irrecuperable, y la única salida sería inventarle otro nombre.
+                // Al re-crearla se reemplaza la fila muerta (ver el delete de abajo).
+                val choque = Subscriptions.selectAll()
+                    .where {
+                        (Subscriptions.userId eq uid) and
+                            (Subscriptions.merchantKey eq key) and
+                            (Subscriptions.currency eq body.currency)
+                    }
+                    .map { it[Subscriptions.id] to SubStatus.valueOf(it[Subscriptions.status]) }
+                if (choque.any { it.second != SubStatus.DISMISSED }) return@dbQuery false
+                choque.forEach { (deadId, _) ->
+                    Subscriptions.deleteWhere { (Subscriptions.id eq deadId) and (Subscriptions.userId eq uid) }
+                }
                 Subscriptions.insert {
                     it[id]          = newId
                     it[userId]      = uid
@@ -155,7 +164,9 @@ private suspend fun resultFor(uid: String): SubscriptionsResult {
             else  -> 0L
         }
     }
-    return SubscriptionsResult(subscriptions = subs, monthlyTotalCop = total)
+    // La tasa viaja junto al total: el cliente la necesita para restar del total una fila en
+    // dólares (ver KDoc de SubscriptionsResult.usdToCop).
+    return SubscriptionsResult(subscriptions = subs, monthlyTotalCop = total, usdToCop = rate)
 }
 
 private fun ResultRow.toSubscription() = Subscription(

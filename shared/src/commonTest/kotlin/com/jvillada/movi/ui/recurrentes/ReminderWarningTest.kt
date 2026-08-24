@@ -9,28 +9,28 @@ class ReminderWarningTest {
 
     @Test
     fun `push already enabled means nothing to warn about`() {
-        assertFalse(shouldShowReminderWarning(pushStatus = "enabled", hasUpcomingPayments = true))
+        assertFalse(shouldShowReminderWarning(pushStatus = "enabled", hayRecordatoriosPedidos = true))
     }
 
     @Test
     fun `no upcoming payments means the warning would not be actionable`() {
-        assertFalse(shouldShowReminderWarning(pushStatus = "disabled", hasUpcomingPayments = false))
-        assertFalse(shouldShowReminderWarning(pushStatus = "denied", hasUpcomingPayments = false))
+        assertFalse(shouldShowReminderWarning(pushStatus = "disabled", hayRecordatoriosPedidos = false))
+        assertFalse(shouldShowReminderWarning(pushStatus = "denied", hayRecordatoriosPedidos = false))
     }
 
     @Test
     fun `unsupported platform has no fix to offer so we stay quiet`() {
-        assertFalse(shouldShowReminderWarning(pushStatus = "unsupported", hasUpcomingPayments = true))
+        assertFalse(shouldShowReminderWarning(pushStatus = "unsupported", hayRecordatoriosPedidos = true))
     }
 
     @Test
     fun `disabled push with payments due is exactly the actionable case`() {
-        assertTrue(shouldShowReminderWarning(pushStatus = "disabled", hasUpcomingPayments = true))
+        assertTrue(shouldShowReminderWarning(pushStatus = "disabled", hayRecordatoriosPedidos = true))
     }
 
     @Test
     fun `denied push with payments due still warns, just with a different fix`() {
-        assertTrue(shouldShowReminderWarning(pushStatus = "denied", hasUpcomingPayments = true))
+        assertTrue(shouldShowReminderWarning(pushStatus = "denied", hayRecordatoriosPedidos = true))
     }
 
     // ── La casilla «Recordarme unos días antes» en las hojas de crear/editar ──

@@ -53,8 +53,9 @@ private val items = listOf(
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
     MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
+    // Ola 8: sin «Suscripciones» — una suscripción es un recurrente, y esta entrada las abre a
+    // todas (lista única con su grupo de detectadas por confirmar).
     MasItem("Recurrentes",  Icons.Rounded.Repeat,           Color(0xFFFFD479), Color(0x1AFFD479), Screen.Recurrentes),
-    MasItem("Suscripciones", Icons.Rounded.Autorenew,       Color(0xFF81D4FA), Color(0x2481D4FA), Screen.Subscriptions),
     // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio.
     MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
 )

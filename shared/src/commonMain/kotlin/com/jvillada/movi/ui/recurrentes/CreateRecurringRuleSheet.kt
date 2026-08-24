@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
@@ -30,6 +33,26 @@ import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 
+/**
+ * La ÚNICA hoja para anotar algo que se repite todos los meses (Ola 8).
+ *
+ * Antes había dos —«Nuevo recurrente» y «Nueva suscripción»— y para elegir entre ellas el dueño
+ * tenía que saber una distinción que solo existe adentro de Movi. Ahora hay una sola, y la
+ * pregunta que decide dónde se guarda es una del mundo real, no del modelo de datos: **en qué
+ * moneda te lo cobran**.
+ *
+ * - **En pesos** → una regla recurrente: ingreso o gasto, con categoría y con recordatorio.
+ * - **En dólares** → una suscripción: las reglas recurrentes son COP puro (`RecurringRule` no
+ *   tiene campo de moneda) y agregarle uno tocaría el modelo, la tabla, el barrido de avisos y
+ *   los totales. El modelo de suscripciones YA es multi-moneda y ya convierte con la TRM del
+ *   día (ver `resultFor` en `SubscriptionRoutes.kt`), así que un cobro en dólares va ahí.
+ *
+ * Lo que el dueño pierde al elegir dólares (categoría y recordatorio) se dice en la hoja, en
+ * lugar de que los campos desaparezcan sin explicación.
+ *
+ * Editar es siempre editar una [RecurringRule] (las suscripciones no tienen hoja de edición,
+ * se quitan desde la lista), así que en modo edición la moneda ni se muestra.
+ */
 @Composable
 fun CreateRecurringRuleSheet(
     onDismiss: () -> Unit,
@@ -46,10 +69,16 @@ fun CreateRecurringRuleSheet(
     var category by remember { mutableStateOf(existing?.category ?: "Otros") }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
+    var currency by remember { mutableStateOf("COP") }
+    // ¿Elegir dólares le cambió al dueño un «Ingreso» que ya había marcado? (V11: la regla se
+    // explica igual, pero si además le pisamos una elección suya, eso se avisa aparte.)
+    var tipoCambiadoPorLaMoneda by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val isEditMode = existing != null
+    // Editar es editar una regla; solo al crear se puede elegir dólares (ver KDoc).
+    val enDolares = !isEditMode && currency == "USD"
     val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && dayOfMonth.toIntOrNull() in 1..31 && !saving
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
@@ -67,19 +96,46 @@ fun CreateRecurringRuleSheet(
         saving = true
         error = null
         coroutine.launch {
-            val rule = RecurringRule(
-                id = existing?.id ?: "",
-                name = name.trim(),
-                category = category.trim().ifBlank { "Otros" },
-                amount = amt,
-                dayOfMonth = day,
-                type = selectedType,
-                remindMe = remindMe,
-            )
-            val result = if (isEditMode) {
-                runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
-            } else {
-                runCatching { Repositories.wallets.createRecurringRule(rule) }
+            val result = when {
+                // Dólares → suscripción (el único modelo multi-moneda que hay). Nace CONFIRMED
+                // del lado del server: la escribió el dueño, no hay nada que confirmar.
+                enDolares -> runCatching {
+                    Repositories.wallets.createSubscription(
+                        CreateSubscriptionRequest(
+                            displayName = name.trim(),
+                            amount = amt,
+                            currency = currency,
+                            dayOfMonth = day,
+                        )
+                    )
+                }
+                else -> {
+                    val rule = RecurringRule(
+                        id = existing?.id ?: "",
+                        name = name.trim(),
+                        category = category.trim().ifBlank { "Otros" },
+                        amount = amt,
+                        dayOfMonth = day,
+                        type = selectedType,
+                        // Un INGRESO nunca entra al barrido de avisos (`selectDueForReminder`
+                        // solo mira gastos) y la hoja ni siquiera ofrece la casilla, así que
+                        // guardar `true` dejaba en la fila una intención que nadie expresó — y
+                        // que se leía como «pedí que me avisaran» desde cualquier consulta.
+                        //
+                        // Cambiar de tipo DENTRO de la hoja no pierde nada: `remindMe` es estado
+                        // de la hoja y nadie lo toca al mover el chip, así que ir a Ingreso y
+                        // volver a Gasto deja la casilla como estaba. Lo único que se pierde es
+                        // al GUARDAR como ingreso: ahí queda `false` en la fila, y si más
+                        // adelante se reabre y se pasa a Gasto, la casilla arranca desmarcada.
+                        // Es un camino angosto y el precio de que la base no mienta.
+                        remindMe = selectedType == TransactionType.EXPENSE && remindMe,
+                    )
+                    if (isEditMode) {
+                        runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
+                    } else {
+                        runCatching { Repositories.wallets.createRecurringRule(rule) }
+                    }
+                }
             }
             saving = false
             result.onSuccess { onSaved() }
@@ -99,194 +155,299 @@ fun CreateRecurringRuleSheet(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !saving, onClick = onDismiss),
-    ) {
-        Box(modifier = Modifier.weight(1f))
-
+    // La hoja crecía sin techo y el contenido que no entraba quedaba recortado, sin scroll: en
+    // una laptop (1280×860) el caso más común —un GASTO, que suma las secciones de categoría y
+    // recordatorio— dejaba «Crear recurrente» debajo del borde y el recurrente era, lisa y
+    // llanamente, imposible de crear. Ahora la hoja se topa en el 92% de la altura disponible,
+    // los campos scrollean, y la manija y el botón quedan FIJOS: el botón es siempre alcanzable
+    // sin depender de que el usuario descubra que hay que rodar.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val altoMaximoDeLaHoja = maxHeight * 0.92f
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
-                .padding(horizontal = 20.dp)
-                .clickable(enabled = false) {},
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .clickable(enabled = !saving, onClick = onDismiss),
         ) {
-            // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
-            SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
+            Box(modifier = Modifier.weight(1f))
 
-            // Title row: sheet title + optional delete action in edit mode
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (isEditMode) "Editar recurrente" else "Nuevo recurrente",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    modifier = Modifier.weight(1f),
-                )
-                if (isEditMode) {
-                    Text(
-                        text = if (saving) "…" else "Eliminar",
-                        fontSize = 13.sp,
-                        color = MinExpense,
-                        modifier = Modifier.clickable(enabled = !saving) { delete() },
-                    )
-                }
-            }
-
-            // --- NOMBRE ---
-            SheetSectionLabel("NOMBRE")
-            Spacer(Modifier.height(8.dp))
-            SheetInputBox {
-                BasicTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (name.isEmpty()) {
-                            Text("Ej: Arriendo, Netflix, Gym", fontSize = 14.sp, color = MinTextMute)
-                        }
-                        inner()
-                    },
-                )
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- MONTO ---
-            SheetSectionLabel("MONTO")
-            Spacer(Modifier.height(8.dp))
-            MoneyField(value = amount, onValueChange = { amount = it })
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- DÍA DEL MES ---
-            SheetSectionLabel("DÍA DEL MES (1–31)")
-            Spacer(Modifier.height(8.dp))
-            SheetInputBox {
-                BasicTextField(
-                    value = dayOfMonth,
-                    onValueChange = { input ->
-                        val digits = input.filter { it.isDigit() }.take(2)
-                        dayOfMonth = digits
-                    },
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (dayOfMonth.isEmpty()) {
-                            Text("Ej: 5", fontSize = 14.sp, color = MinTextMute)
-                        }
-                        inner()
-                    },
-                )
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- TIPO ---
-            SheetSectionLabel("TIPO")
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SheetChip(
-                    label = "Gasto",
-                    selected = selectedType == TransactionType.EXPENSE,
-                    onClick = { selectedType = TransactionType.EXPENSE },
-                )
-                SheetChip(
-                    label = "Ingreso",
-                    selected = selectedType == TransactionType.INCOME,
-                    onClick = { selectedType = TransactionType.INCOME },
-                )
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- CATEGORÍA ---
-            // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
-            // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
-            // una regla de gasto.
-            CategoryField(
-                value = category,
-                onValueChange = { category = it },
-                type = selectedType,
-                usedCategories = UsedCategoriesCache.categories,
-                label = "CATEGORÍA",
-                placeholder = "Ej: Vivienda, Suscripción, Salud",
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- RECORDATORIO ---
-            // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
-            // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
-            // nunca sale. Se muestra solo en Gasto.
-            if (selectedType == TransactionType.EXPENSE) {
-                ReminderOptInField(
-                    checked = remindMe,
-                    onCheckedChange = { remindMe = it },
-                    enabled = !saving,
-                )
-            }
-
-            // Inline error display
-            if (error != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = error!!,
-                    fontSize = 12.sp,
-                    color = MinExpense,
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // --- CTA ---
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
-                    .clickable(enabled = canSave) { save() },
-                contentAlignment = Alignment.Center,
+                    .heightIn(max = altoMaximoDeLaHoja)
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(MinSurfaceContainerHigh)
+                    .padding(horizontal = 20.dp)
+                    .clickable(enabled = false) {},
             ) {
-                Text(
-                    text = when {
-                        saving       -> if (isEditMode) "Guardando…" else "Creando…"
-                        isEditMode   -> "Guardar cambios"
-                        else         -> "Crear recurrente"
-                    },
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
-                )
-            }
-            if (!canSave && !saving && missingFieldMessage != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = missingFieldMessage,
-                    fontSize = 12.sp,
-                    color = MinTextMute,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-            }
+                // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+                SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
-            Spacer(Modifier.height(14.dp))
+                // Solo los CAMPOS scrollean; `fill = false` para que una hoja corta siga
+                // midiendo lo que ocupa en vez de estirarse hasta el tope.
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    // Title row: sheet title + optional delete action in edit mode
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (isEditMode) "Editar recurrente" else "Nuevo recurrente",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (isEditMode) {
+                            Text(
+                                text = if (saving) "…" else "Eliminar",
+                                fontSize = 13.sp,
+                                color = MinExpense,
+                                modifier = Modifier.clickable(enabled = !saving) { delete() },
+                            )
+                        }
+                    }
+
+                    // --- NOMBRE ---
+                    SheetSectionLabel("NOMBRE")
+                    Spacer(Modifier.height(8.dp))
+                    SheetInputBox {
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            cursorBrush = SolidColor(MinText),
+                            textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { inner ->
+                                if (name.isEmpty()) {
+                                    Text("Ej: Arriendo, Netflix, Gym", fontSize = 14.sp, color = MinTextMute)
+                                }
+                                inner()
+                            },
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // --- MONEDA ---
+                    // La única pregunta que decide dónde se guarda esto, y es una pregunta del mundo
+                    // real: cualquiera sabe si le cobran en pesos o en dólares. Al editar no aparece —
+                    // editar es siempre editar una regla (ver KDoc).
+                    if (!isEditMode) {
+                        SheetSectionLabel("MONEDA")
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SheetChip(
+                                label = "Pesos",
+                                selected = currency == "COP",
+                                onClick = { currency = "COP"; tipoCambiadoPorLaMoneda = false },
+                            )
+                            SheetChip(
+                                label = "Dólares",
+                                selected = currency == "USD",
+                                onClick = {
+                                    currency = "USD"
+                                    // En dólares esto se guarda como suscripción, y una suscripción es
+                                    // SIEMPRE un cobro. Forzar el tipo al tocar el chip (y no callarlo
+                                    // al guardar) es lo que evita el peor caso: elegir Ingreso, después
+                                    // Dólares, y que se guarde un gasto — el flujo libre se movía al
+                                    // revés por el doble del monto, sin que nada lo dijera.
+                                    // Si eso le pisó una elección al dueño, se le dice (ver la nota).
+                                    tipoCambiadoPorLaMoneda = selectedType == TransactionType.INCOME
+                                    selectedType = TransactionType.EXPENSE
+                                },
+                            )
+                        }
+                        Spacer(Modifier.height(18.dp))
+                    }
+
+                    // --- MONTO ---
+                    SheetSectionLabel("MONTO")
+                    Spacer(Modifier.height(8.dp))
+                    // V12: en Colombia "$20" se lee veinte pesos. Si el cobro es en dólares, el campo
+                    // lo dice mientras se escribe — igual que después lo dice la fila de la lista.
+                    MoneyField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        prefix = if (enDolares) "US$" else "$",
+                        placeholder = if (enDolares) "US$ 0" else "$ 0",
+                    )
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // --- DÍA DEL MES ---
+                    SheetSectionLabel("DÍA DEL MES (1–31)")
+                    Spacer(Modifier.height(8.dp))
+                    SheetInputBox {
+                        BasicTextField(
+                            value = dayOfMonth,
+                            onValueChange = { input ->
+                                val digits = input.filter { it.isDigit() }.take(2)
+                                dayOfMonth = digits
+                            },
+                            cursorBrush = SolidColor(MinText),
+                            textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { inner ->
+                                if (dayOfMonth.isEmpty()) {
+                                    Text("Ej: 5", fontSize = 14.sp, color = MinTextMute)
+                                }
+                                inner()
+                            },
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // --- TIPO ---
+                    // Siempre visible, también en dólares. Ahí «Ingreso» queda deshabilitado en vez de
+                    // desaparecer: el dueño VE que la opción existe y que no aplica, en lugar de elegirla
+                    // y que Movi la cambie por atrás. (Un ingreso recurrente en dólares no se puede
+                    // registrar hoy — el modelo de suscripciones es de cobros. Ver la nota de abajo.)
+                    SheetSectionLabel("TIPO")
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SheetChip(
+                            label = "Gasto",
+                            selected = selectedType == TransactionType.EXPENSE,
+                            onClick = { selectedType = TransactionType.EXPENSE },
+                        )
+                        SheetChip(
+                            label = "Ingreso",
+                            selected = selectedType == TransactionType.INCOME,
+                            enabled = !enDolares,
+                            onClick = { selectedType = TransactionType.INCOME },
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    if (enDolares) {
+                        // No se ocultan los campos en silencio: en dólares esto se guarda como
+                        // suscripción, y una suscripción es siempre un cobro, sin categoría y sin
+                        // recordatorio. Decirlo es más honesto que hacer desaparecer tres secciones.
+                        if (tipoCambiadoPorLaMoneda) {
+                            Text(
+                                text = "Cambiamos el tipo a Gasto: en dólares solo podemos anotar cobros.",
+                                fontSize = 12.sp,
+                                color = MinWarn,
+                                lineHeight = 17.sp,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        Text(
+                            text = "En dólares solo podemos anotar cobros, y guardamos únicamente el " +
+                                "nombre, el monto y el día: sin categoría y sin recordatorio. Para el " +
+                                "total del mes lo convertimos a pesos con la tasa de cambio más " +
+                                "reciente que pudimos consultar.",
+                            fontSize = 12.sp,
+                            color = MinTextMute,
+                            lineHeight = 17.sp,
+                        )
+                    } else {
+                        // --- CATEGORÍA ---
+                        // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
+                        // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
+                        // una regla de gasto.
+                        CategoryField(
+                            value = category,
+                            onValueChange = { category = it },
+                            type = selectedType,
+                            usedCategories = UsedCategoriesCache.categories,
+                            label = "CATEGORÍA",
+                            placeholder = "Ej: Vivienda, Suscripción, Salud",
+                        )
+
+                        Spacer(Modifier.height(18.dp))
+
+                        // --- RECORDATORIO ---
+                        // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
+                        // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
+                        // nunca sale. Se muestra solo en Gasto.
+                        if (selectedType == TransactionType.EXPENSE) {
+                            ReminderOptInField(
+                                checked = remindMe,
+                                onCheckedChange = { remindMe = it },
+                                enabled = !saving,
+                            )
+                        } else {
+                            // V10: antes la casilla simplemente se esfumaba al tocar «Ingreso». Que un
+                            // control desaparezca sin decir nada deja al dueño preguntándose si lo
+                            // imaginó; se explica, igual que se explica lo que se pierde en dólares.
+                            Text(
+                                text = "Los recordatorios son para lo que tienes que pagar, así que un " +
+                                    "ingreso no lleva aviso.",
+                                fontSize = 12.sp,
+                                color = MinTextMute,
+                                lineHeight = 17.sp,
+                            )
+                        }
+                    }
+
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // El error del guardado va FIJO, junto al botón, y no dentro del área que
+                // scrollea. En el caso Gasto —el que desborda— el contenido queda rodado hacia
+                // arriba y el dueño nunca baja, porque el botón ya es fijo: si el POST fallaba,
+                // el texto rojo se agregaba al fondo, fuera de vista, y el botón volvía a decir
+                // «Crear recurrente». Tocaba, no pasaba nada, y volvía a tocar.
+                if (error != null) {
+                    Text(
+                        text = error!!,
+                        fontSize = 12.sp,
+                        color = MinExpense,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+
+                // --- CTA --- (fijo al pie, fuera del área que scrollea)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .clickable(enabled = canSave) { save() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = when {
+                            saving       -> if (isEditMode) "Guardando…" else "Creando…"
+                            isEditMode   -> "Guardar cambios"
+                            else         -> "Crear recurrente"
+                        },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                    )
+                }
+                if (!canSave && !saving && missingFieldMessage != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = missingFieldMessage,
+                        fontSize = 12.sp,
+                        color = MinTextMute,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+            }
         }
     }
 }
@@ -316,7 +477,12 @@ private fun SheetInputBox(content: @Composable BoxScope.() -> Unit) {
 }
 
 @Composable
-private fun RowScope.SheetChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.SheetChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
     Box(
         modifier = Modifier
             .weight(1f)
@@ -325,7 +491,7 @@ private fun RowScope.SheetChip(label: String, selected: Boolean, onClick: () -> 
             .then(
                 if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
             )
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -333,7 +499,11 @@ private fun RowScope.SheetChip(label: String, selected: Boolean, onClick: () -> 
             text = label,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) MinOnPrimaryContainer else MinTextDim,
+            color = when {
+                !enabled -> MinTextFaint
+                selected -> MinOnPrimaryContainer
+                else     -> MinTextDim
+            },
         )
     }
 }
