@@ -103,9 +103,9 @@ fun transferMissingMessage(from: Account?, to: Account?, amount: Long, date: Str
  * (timeout, cambio de red, la app al fondo), el dueño ve «revisa tu conexión» y vuelve a tocar
  * Guardar. Si el segundo intento lleva ids nuevos, el server no tiene cómo saber que es el mismo
  * traspaso y crea uno segundo entero: origen −2×monto, destino +2×monto, y el dueño con dos
- * renglones idénticos que no pidió. Con los mismos ids, el INSERT choca contra la PK de las patas
- * y el server responde 409 «ya está registrado» — que es la verdad, y por eso
- * [isAlreadyRegistered] lo trata como éxito.
+ * renglones idénticos que no pidió. Con los mismos ids, el INSERT choca contra la PK de las patas,
+ * el server relee y —si las dos están— devuelve el traspaso real con 200, o sea que el reintento
+ * termina por el camino normal, sin error que mostrar.
  *
  * Se renuevan **solo después de un éxito**: recién ahí el traspaso siguiente es otro traspaso.
  */
@@ -145,9 +145,11 @@ fun transferRequestFor(
 /**
  * ¿Este fallo de `createTransfer` es en realidad «el traspaso ya está guardado»?
  *
- * El 409 del server significa que las dos patas existen — es la respuesta a un reintento con los
- * mismos ids (ver [TransferDraftIds]). Mostrarlo como error sería mentirle al dueño y empujarlo a
- * tocar Guardar una tercera vez.
+ * Red de seguridad, no el camino habitual: este server relee las patas ante el choque de PK y
+ * devuelve el traspaso real con 200, así que un reintento sale por el camino de éxito. El 409
+ * queda contemplado para un server anterior a ese cambio (una versión vieja todavía desplegada):
+ * también significa que las dos patas existen, y mostrarlo como error sería mentirle al dueño y
+ * empujarlo a tocar Guardar una tercera vez.
  */
 fun isAlreadyRegistered(error: Throwable): Boolean =
     error is ApiException && error.status == 409

@@ -299,9 +299,10 @@ class LocalRepository(
             remote.createTransfer(request)
         } catch (e: ApiException) {
             if (e.status != 409) throw e
-            // 409 = «ese traspaso ya está registrado»: es la respuesta a un reintento con los
-            // mismos ids (el server commiteó y la respuesta se perdió). Sin este rescate, la
-            // excepción salía ANTES del espejo y el traspaso quedaba invisible en el teléfono
+            // 409 = «ese traspaso ya está registrado». Este server ya no lo usa (relee y devuelve
+            // 200 con las patas reales), pero un server anterior todavía desplegado sí, y significa
+            // lo mismo: las dos patas existen. Sin este rescate, la excepción salía ANTES del
+            // espejo y el traspaso quedaba invisible en el teléfono
             // **para siempre** — el SyncEngine solo empuja, nunca trae, y Movimientos/Cuentas/el
             // detalle leen de acá. La app decía «guardado», refrescaba, y no había nada; solo
             // Inicio (que lee remoto) lo contaba. El teléfono contradiciéndose a sí mismo, y el
