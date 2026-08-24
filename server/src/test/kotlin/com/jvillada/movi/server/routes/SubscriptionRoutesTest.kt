@@ -43,6 +43,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
 import java.util.Date
@@ -191,7 +192,7 @@ class SubscriptionRoutesTest {
 
     // F39: nada nace activo — ni siquiera la confianza HIGH de netflix (3 ocurrencias) lo
     // salta directo a AUTO como pasaba antes. Las dos entran CANDIDATE y el total mensual
-    // arranca en 0 hasta que el dueño confirma alguna desde SuscripcionesScreen.
+    // arranca en 0 hasta que el dueño confirma alguna desde la pantalla Recurrentes.
     @Test
     fun `detect creates only CANDIDATE subscriptions, regardless of confidence`() = testApplication {
         wireApp()
@@ -456,5 +457,48 @@ class SubscriptionRoutesTest {
             setBody(body)
         }
         assertEquals(HttpStatusCode.Conflict, second.status)
+    }
+
+    /**
+     * Ola 8: el choque se mide contra lo que el dueño PUEDE VER. Antes, «Quitar» dejaba la fila
+     * en DISMISSED —invisible en la lista y sin forma de recuperarla— pero seguía contando como
+     * duplicado: volver a contratar el servicio y anotarlo de nuevo daba 409 sobre algo que no
+     * estaba en ninguna parte, y la única salida era cambiarle el nombre.
+     */
+    @Test
+    fun `re-creating a subscription that was removed is allowed, not 409`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val body = """{"displayName":"Claude","amount":20,"currency":"USD","dayOfMonth":7}"""
+
+        val first = client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.Created, first.status)
+        val id = Json.parseToJsonElement(first.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+
+        // El dueño la quita. (Una detectada se marca DISMISSED; se simula ese estado a mano
+        // porque es el que dejaba la fila bloqueando el alta.)
+        transaction {
+            Subscriptions.update({ Subscriptions.id eq id }) { it[status] = "DISMISSED" }
+        }
+
+        // Vuelve a contratarlo y lo anota otra vez: tiene que poder.
+        val again = client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.Created, again.status)
+
+        // Y queda UNA sola fila viva, no la nueva encima del cadáver de la vieja.
+        val res = client.get("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        val subs = Json.parseToJsonElement(res.bodyAsText()).jsonObject["subscriptions"]!!.jsonArray
+        assertEquals(1, subs.size)
+        assertEquals("CONFIRMED", subs[0].jsonObject["status"]!!.jsonPrimitive.content)
     }
 }

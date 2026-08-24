@@ -214,7 +214,19 @@ fun CreateRecurringRuleSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     SheetChip(label = "Pesos", selected = currency == "COP", onClick = { currency = "COP" })
-                    SheetChip(label = "Dólares", selected = currency == "USD", onClick = { currency = "USD" })
+                    SheetChip(
+                        label = "Dólares",
+                        selected = currency == "USD",
+                        onClick = {
+                            currency = "USD"
+                            // En dólares esto se guarda como suscripción, y una suscripción es
+                            // SIEMPRE un cobro. Forzar el tipo al tocar el chip (y no callarlo
+                            // al guardar) es lo que evita el peor caso: elegir Ingreso, después
+                            // Dólares, y que se guarde un gasto — el flujo libre se movía al
+                            // revés por el doble del monto, sin que nada lo dijera.
+                            selectedType = TransactionType.EXPENSE
+                        },
+                    )
                 }
                 Spacer(Modifier.height(18.dp))
             }
@@ -252,40 +264,46 @@ fun CreateRecurringRuleSheet(
 
             Spacer(Modifier.height(18.dp))
 
+            // --- TIPO ---
+            // Siempre visible, también en dólares. Ahí «Ingreso» queda deshabilitado en vez de
+            // desaparecer: el dueño VE que la opción existe y que no aplica, en lugar de elegirla
+            // y que Movi la cambie por atrás. (Un ingreso recurrente en dólares no se puede
+            // registrar hoy — el modelo de suscripciones es de cobros. Ver la nota de abajo.)
+            SheetSectionLabel("TIPO")
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SheetChip(
+                    label = "Gasto",
+                    selected = selectedType == TransactionType.EXPENSE,
+                    onClick = { selectedType = TransactionType.EXPENSE },
+                )
+                SheetChip(
+                    label = "Ingreso",
+                    selected = selectedType == TransactionType.INCOME,
+                    enabled = !enDolares,
+                    onClick = { selectedType = TransactionType.INCOME },
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
             if (enDolares) {
                 // No se ocultan los campos en silencio: en dólares esto se guarda como
-                // suscripción, y las suscripciones no tienen tipo, ni categoría, ni
+                // suscripción, y una suscripción es siempre un cobro, sin categoría y sin
                 // recordatorio. Decirlo es más honesto que hacer desaparecer tres secciones.
                 Text(
-                    text = "En dólares solo guardamos el nombre, el monto y el día de cobro: " +
-                        "sin categoría y sin recordatorio. Para el total del mes lo convertimos " +
-                        "a pesos con la tasa del día.",
+                    text = "En dólares solo podemos anotar cobros, y guardamos únicamente el " +
+                        "nombre, el monto y el día: sin categoría y sin recordatorio. Para el " +
+                        "total del mes lo convertimos a pesos con la tasa de cambio más " +
+                        "reciente que pudimos consultar.",
                     fontSize = 12.sp,
                     color = MinTextMute,
                     lineHeight = 17.sp,
                 )
             } else {
-                // --- TIPO ---
-                SheetSectionLabel("TIPO")
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SheetChip(
-                        label = "Gasto",
-                        selected = selectedType == TransactionType.EXPENSE,
-                        onClick = { selectedType = TransactionType.EXPENSE },
-                    )
-                    SheetChip(
-                        label = "Ingreso",
-                        selected = selectedType == TransactionType.INCOME,
-                        onClick = { selectedType = TransactionType.INCOME },
-                    )
-                }
-
-                Spacer(Modifier.height(18.dp))
-
                 // --- CATEGORÍA ---
                 // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
                 // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
@@ -387,7 +405,12 @@ private fun SheetInputBox(content: @Composable BoxScope.() -> Unit) {
 }
 
 @Composable
-private fun RowScope.SheetChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.SheetChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
     Box(
         modifier = Modifier
             .weight(1f)
@@ -396,7 +419,7 @@ private fun RowScope.SheetChip(label: String, selected: Boolean, onClick: () -> 
             .then(
                 if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
             )
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -404,7 +427,11 @@ private fun RowScope.SheetChip(label: String, selected: Boolean, onClick: () -> 
             text = label,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) MinOnPrimaryContainer else MinTextDim,
+            color = when {
+                !enabled -> MinTextFaint
+                selected -> MinOnPrimaryContainer
+                else     -> MinTextDim
+            },
         )
     }
 }

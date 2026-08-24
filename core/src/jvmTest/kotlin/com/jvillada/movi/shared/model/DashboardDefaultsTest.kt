@@ -29,7 +29,9 @@ class DashboardDefaultsTest {
         )
         val links = def.sections.first { it.type == "QUICK_LINKS_WITH_TOTALS" }.cards.map { it.action!!.target }
         // F61: sin "investments" — Inversiones ya no es pantalla.
-        assertEquals(listOf("accounts", "credits", "budgets", "goals", "subscriptions"), links)
+        // Ola 8: "subscriptions" → "recurrentes" — el acceso lleva el nombre y la cifra de la
+        // pantalla a la que de verdad va.
+        assertEquals(listOf("accounts", "credits", "budgets", "goals", "recurrentes"), links)
     }
 
     /**
@@ -42,14 +44,26 @@ class DashboardDefaultsTest {
      */
     @Test
     fun subscriptions_target_survives_the_screen_merge() {
+        // El acceso por defecto ya NO usa este target (generación 4 lo cambió por "recurrentes"),
+        // pero el target sigue siendo válido: cualquier Inicio guardado de otra instalación —o de
+        // una que no haya recibido todavía el seed nuevo— lo tiene en su fila. Si saliera de la
+        // taxonomía, `isValidAction` le arrancaría la acción (tarjeta muerta) y `ScreenValidation`
+        // rechazaría con 422 el guardado. Mismo trato que "investments" en F61: se queda, y el
+        // cliente lo redirige (ver `SduiRenderer.screenForTarget`).
         assertTrue("subscriptions" in ScreenTaxonomy.NAVIGATE_TARGETS)
         assertTrue("investments" in ScreenTaxonomy.NAVIGATE_TARGETS)
-        val stored = ScreenDefinition("dashboard", DASHBOARD_LAYOUT_VERSION, listOf(
+        val stored = ScreenDefinition("dashboard", 3, listOf(
             ScreenSection(type = "QUICK_LINKS_WITH_TOTALS", cards = listOf(
                 ScreenCard("Suscripciones", action = ScreenAction("NAVIGATE", "subscriptions")),
             )),
         ))
         assertEquals(stored.sections, renderableSections(stored), "el acceso guardado conserva su acción")
+    }
+
+    /** La generación tiene que subir cada vez que cambia la lista, o el seed no reemplaza la fila. */
+    @Test
+    fun ola8_bumped_the_layout_generation() {
+        assertTrue(DASHBOARD_LAYOUT_VERSION >= 4, "la Ola 8 cambió los accesos: la generación sube")
     }
 
     @Test

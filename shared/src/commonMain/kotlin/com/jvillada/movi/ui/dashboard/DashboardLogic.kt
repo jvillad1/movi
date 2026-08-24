@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
@@ -173,10 +174,33 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
         else LinkFigure(formatCOP(investmentAccounts.sumOf { it.balance }), plural(investmentAccounts.size, "cuenta", "cuentas"))
     }
+    "recurrentes" -> {
+        // Ola 8: el acceso muestra exactamente el número grande de la pantalla de destino —
+        // «Flujo libre»— calculado con la MISMA función pura que usa Recurrentes, para que
+        // tocar la tarjeta no lleve a una cifra distinta de la que se tocó. (La Ola 4 ya había
+        // encontrado ese desacuerdo entre Créditos y el Inicio.)
+        //
+        // `upcoming` trae UNA entrada por regla (ver `upcomingPayments`: mapea 1:1), así que
+        // sirve de lista de reglas sin pedir nada nuevo — el Inicio sigue liviano. Las cuotas
+        // sintéticas de créditos y tarjetas se descartan: no son reglas que el dueño escribió y
+        // tampoco salen en la lista de Recurrentes.
+        val reglas = data.upcoming.map { it.rule }.filterNot {
+            it.id.startsWith(CREDIT_RULE_PREFIX) || it.id.startsWith(CARD_RULE_PREFIX)
+        }
+        val resumen = resumenRecurrentes(reglas, data.subscriptions ?: SubscriptionsResult(emptyList(), 0))
+        if (resumen.items.isEmpty()) LinkFigure(sub = "Sin recurrentes")
+        else LinkFigure(
+            formatCOP(resumen.flujoLibre),
+            "libre al mes · " + plural(resumen.items.size, "recurrente", "recurrentes"),
+            isAlert = resumen.flujoLibre < 0,
+        )
+    }
+    // Se queda para los Inicios ya guardados que todavía traen el acceso viejo: el target sigue
+    // siendo válido y abre Recurrentes (ver SduiRenderer.screenForTarget).
     "subscriptions" -> {
         val subs = data.subscriptions
         // Solo las activas (AUTO/CONFIRMED) — es lo que suma monthlyTotalCop y lo que la pantalla
-        // de Suscripciones llama «activas». Las candidatas y las descartadas no son suscripciones
+        // Recurrentes lista como activas. Las candidatas y las descartadas no son suscripciones
         // todavía (o ya no): contarlas acá daba «$0 · 4 suscripciones al mes» con cero activas.
         val active = subs?.subscriptions?.count { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED } ?: 0
         val candidates = subs?.subscriptions?.count { it.status == SubStatus.CANDIDATE } ?: 0

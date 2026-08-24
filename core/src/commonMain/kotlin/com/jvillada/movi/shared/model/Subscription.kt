@@ -17,6 +17,11 @@ enum class SubStatus { AUTO, CANDIDATE, CONFIRMED, DISMISSED }
  * también lo necesita: en la lista única de Recurrentes, una suscripción SIN este prefijo lleva
  * la marca «la encontró Movi», y una con él no — es la única señal de origen que hay, porque
  * [SubStatus.CONFIRMED] cubre por igual «la detectó y la confirmé» y «la escribí yo».
+ *
+ * Es una heurística, no una garantía formal: `normalizeMerchant` podría producir `manual_algo`
+ * a partir de un comercio que de verdad se llame «Manual …», y esa fila se mostraría sin la
+ * marca. El costo de equivocarse es una etiqueta de menos en una fila —nunca un número mal
+ * calculado ni un borrado indebido— así que no justifica una columna nueva en la tabla.
  */
 const val MANUAL_SUB_PREFIX = "manual_"
 
@@ -43,6 +48,20 @@ data class Subscription(
 data class SubscriptionsResult(
     val subscriptions: List<Subscription>,
     val monthlyTotalCop: Long,  // suma AUTO+CONFIRMED en COP (USD × TRM)
+    /**
+     * La tasa USD→COP que el server usó para armar [monthlyTotalCop], o `0.0` si no hizo falta
+     * (ninguna activa en dólares).
+     *
+     * Se manda al cliente porque [monthlyTotalCop] es un total cerrado y la Ola 8 necesita
+     * sumar SUBCONJUNTOS: en la lista única de Recurrentes, una suscripción que el dueño ya
+     * tiene anotada como regla recurrente se excluye del total para no contarla dos veces (ver
+     * `resumenRecurrentes`). Sin la tasa, el cliente no puede restar una fila en dólares.
+     *
+     * Default `0.0` para que un server viejo (o un test) siga deserializando: con tasa 0 solo
+     * se puede convertir lo que ya está en pesos, que es exactamente lo que un server que no
+     * manda el campo tampoco convirtió.
+     */
+    val usdToCop: Double = 0.0,
 )
 
 /**

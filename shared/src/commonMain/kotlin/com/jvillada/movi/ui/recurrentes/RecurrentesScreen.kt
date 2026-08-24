@@ -67,7 +67,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     var upcoming by remember { mutableStateOf<List<UpcomingPayment>>(emptyList()) }
     var subs by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
     var scanning by remember { mutableStateOf(false) }
-    var subsError by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
     // loadKey increments after every create/update/delete to trigger a reload.
     var loadKey by remember { mutableStateOf(0) }
     var loading by remember { mutableStateOf(true) }
@@ -82,16 +82,27 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(loadKey) {
         loading = true
+        // Las tres cargas alimentan UNA sola cifra («Flujo libre»), así que ninguna puede fallar
+        // en silencio: si se cae la de reglas y no la de suscripciones, el total quedaría grande
+        // y negativo —perfectamente plausible— sin nada que avise que está incompleto. Antes de
+        // la Ola 8 esto daba $0 contra $0, visiblemente vacío; ahora miente. La primera que
+        // falle deja su mensaje y el resto no lo pisa.
+        var fallo: String? = null
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
         // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
-        runCatching { Repositories.wallets.getRecurringRules() }.onSuccess {
-            rules = it
-            UsedCategoriesCache.record(it.map { r -> r.category })
-        }
-        runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { upcoming = it }
+        runCatching { Repositories.wallets.getRecurringRules() }
+            .onSuccess {
+                rules = it
+                UsedCategoriesCache.record(it.map { r -> r.category })
+            }
+            .onFailure { fallo = it.toUserMessage() }
+        runCatching { Repositories.wallets.getUpcomingPayments() }
+            .onSuccess { upcoming = it }
+            .onFailure { if (fallo == null) fallo = it.toUserMessage() }
         runCatching { Repositories.wallets.getSubscriptions() }
-            .onSuccess { subs = it; subsError = null }
-            .onFailure { subsError = it.toUserMessage() }
+            .onSuccess { subs = it }
+            .onFailure { if (fallo == null) fallo = it.toUserMessage() }
+        error = fallo
         loading = false
     }
 
@@ -101,11 +112,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     fun rescan() {
         if (scanning) return
         scanning = true
-        subsError = null
+        error = null
         coroutine.launch {
             runCatching { Repositories.wallets.detectSubscriptions() }
                 .onSuccess { subs = it }
-                .onFailure { subsError = it.toUserMessage() }
+                .onFailure { error = it.toUserMessage() }
             scanning = false
         }
     }
@@ -114,7 +125,33 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
         coroutine.launch {
             runCatching { Repositories.wallets.updateSubscription(sub.id, sub.copy(status = status)) }
                 .onSuccess { loadKey++ }
-                .onFailure { subsError = it.toUserMessage() }
+                .onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    /**
+     * «Quitar» una suscripción de la lista. Qué significa quitar depende de quién la puso:
+     *
+     * - **La escribió el dueño** (`manual_`): se BORRA. Marcarla DISMISSED la dejaba en un
+     *   limbo — invisible en la lista, imposible de recuperar desde ninguna pantalla, y
+     *   todavía chocando con el alta si volvía a contratar el servicio («Ya tienes una
+     *   suscripción llamada "Claude"» sobre algo que no ve). El detector nunca produce esa
+     *   clave, así que no hay ningún barrido al que haga falta decirle «esta no».
+     * - **La encontró el detector**: sigue siendo DISMISSED, que ahí sí significa algo — es el
+     *   «no me la propongas más» que respeta SubscriptionSync en cada re-scan. Borrarla haría
+     *   que el próximo barrido la volviera a proponer.
+     */
+    fun quitar(sub: Subscription) {
+        coroutine.launch {
+            val laEscribioElDueno = sub.merchantKey.startsWith(MANUAL_SUB_PREFIX)
+            val resultado = if (laEscribioElDueno) {
+                runCatching { Repositories.wallets.deleteSubscription(sub.id) }
+            } else {
+                runCatching {
+                    Repositories.wallets.updateSubscription(sub.id, sub.copy(status = SubStatus.DISMISSED))
+                }
+            }
+            resultado.onSuccess { loadKey++ }.onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -132,28 +169,15 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     }
 
     val candidatas = subs.subscriptions.filter { it.status == SubStatus.CANDIDATE }
-    val suscripciones = subs.subscriptions.filter {
-        it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED
-    }
-    // ¿Hay algo cobrado en otra moneda? De eso depende la nota al pie del total (ver abajo).
-    val hayMonedaExtranjera = suscripciones.any { it.currency != "COP" }
+    // Nombres que el dueño ya tiene anotados a mano — para avisar en una candidata que va a
+    // duplicar algo que ya existe ANTES de que la confirme.
+    val clavesDeReglas = remember(rules) { rules.map { claveDeNombre(it.name) }.toSet() }
 
-    val ingresosRecurrentes = rules.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-    // El total NO suma peras con manzanas: `RecurringRule.amount` es COP puro (el modelo no
-    // tiene moneda) y `subs.monthlyTotalCop` ya viene convertido a COP por el server con la TRM
-    // del día (ver `resultFor` en SubscriptionRoutes.kt) — nunca se suman los `amount` crudos de
-    // las suscripciones, que están en su moneda nativa. Cada fila de la lista sí muestra su
-    // moneda tal cual (formatMoney), así que el dueño ve el dólar donde el dólar está.
-    val gastosRecurrentes   = rules.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount } +
-        subs.monthlyTotalCop
-    val flujoLibre          = ingresosRecurrentes - gastosRecurrentes
-
-    // La lista única, ordenada por día del mes: reglas y suscripciones activas, mezcladas por
-    // fecha porque para el dueño son lo mismo — algo que le cobran (o le entra) tal día.
-    val ordered: List<Recurrente> = remember(rules, suscripciones) {
-        (rules.map { Recurrente.Regla(it) } + suscripciones.map { Recurrente.Suscripcion(it) })
-            .sortedBy { it.dayOfMonth }
-    }
+    // Todo el cálculo (lista mezclada, ingresos, gastos sin doble conteo) vive en
+    // `resumenRecurrentes`, que es puro y testeado — y es el mismo que usa el acceso
+    // «Recurrentes» del Inicio, así que las dos cifras no pueden discrepar.
+    val resumen = remember(rules, subs) { resumenRecurrentes(rules, subs) }
+    val ordered = resumen.items
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
@@ -203,7 +227,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         Text("Flujo libre", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            text = formatCOP(flujoLibre),
+                            text = formatCOP(resumen.flujoLibre),
                             fontSize = 36.sp,
                             fontFamily = FontFamily.Monospace,
                             color = MinText,
@@ -224,7 +248,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 Text("Ingresos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = formatCOP(ingresosRecurrentes),
+                                    text = formatCOP(resumen.ingresos),
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,
@@ -236,7 +260,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 Text("Gastos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = formatCOP(gastosRecurrentes),
+                                    text = formatCOP(resumen.gastos),
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,
@@ -247,11 +271,14 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         }
                         // Solo cuando de verdad hay algo en otra moneda: si todo está en pesos,
                         // la nota sobraría y ensuciaría la tarjeta.
-                        if (hayMonedaExtranjera) {
+                        if (resumen.hayMonedaExtranjera) {
                             Spacer(Modifier.height(14.dp))
                             Text(
-                                text = "Lo que te cobran en dólares entra al total convertido a " +
-                                    "pesos con la tasa del día.",
+                                // No promete «la tasa del día»: FxRateService cae a la última tasa
+                            // que consiguió, a USD_COP_RATE o a una constante si la TRM no
+                            // responde, y el server no dice cuál de las tres usó.
+                            text = "Lo que te cobran en dólares entra al total convertido a " +
+                                    "pesos con la tasa de cambio más reciente que pudimos consultar.",
                                 fontSize = 11.sp,
                                 color = MinTextMute,
                                 lineHeight = 15.sp,
@@ -276,8 +303,8 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
 
-                // ── Error del lado de las suscripciones ─────────────────────────
-                subsError?.let { msg ->
+                // ── Cualquier carga que haya fallado (ver LaunchedEffect) ───────
+                error?.let { msg ->
                     item {
                         Spacer(Modifier.height(12.dp))
                         Text(msg, fontSize = 12.sp, color = MinExpense, modifier = Modifier.padding(horizontal = 20.dp))
@@ -322,9 +349,26 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             color = MinTextMute,
                                             modifier = Modifier.padding(top = 4.dp),
                                         )
+                                        // Avisar ANTES de confirmar, no después: si el dueño ya
+                                        // lo tiene anotado como recurrente, lo más probable es
+                                        // que esta candidata sea el mismo cobro visto por el
+                                        // detector. Se avisa y se deja decidir — confirmarla no
+                                        // rompe el total (queda excluida, ver resumenRecurrentes).
+                                        val yaEsRegla = claveDeNombre(s.displayName) in clavesDeReglas
+                                        if (yaEsRegla) {
+                                            Text(
+                                                text = "Ya lo tienes como recurrente",
+                                                fontSize = 12.sp,
+                                                color = MinAmber,
+                                                modifier = Modifier.padding(top = 4.dp),
+                                            )
+                                        }
                                         Spacer(Modifier.height(12.dp))
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            ActionChip("Confirmar", primary = true) { setStatus(s, SubStatus.CONFIRMED) }
+                                            ActionChip(
+                                                label = if (yaEsRegla) "Confirmar igual" else "Confirmar",
+                                                primary = true,
+                                            ) { setStatus(s, SubStatus.CONFIRMED) }
                                             ActionChip("No es", primary = false) { setStatus(s, SubStatus.DISMISSED) }
                                         }
                                     }
@@ -402,7 +446,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                     RecurrenteRow(
                                         item = item,
                                         onEditRule = { sheetRule = it; sheetOpen = true },
-                                        onRemoveSub = { setStatus(it, SubStatus.DISMISSED) },
+                                        onRemoveSub = { quitar(it) },
                                     )
                                     if (i < ordered.size - 1) Hairline()
                                 }
@@ -429,30 +473,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 
 // ── La lista única ────────────────────────────────────────────────────────────
 
-/**
- * Una fila de «Por día del mes». Las dos formas que puede tener algo que se repite: una regla
- * que escribió el dueño y una suscripción (detectada o dada de alta en dólares). Se unifican
- * en la UI y NO en el modelo a propósito — son dos tablas, dos endpoints y dos ciclos de vida
- * distintos del lado del server; lo único que comparten es que caen tal día del mes, y eso es
- * justo lo que esta lista ordena.
- */
-private sealed class Recurrente {
-    abstract val dayOfMonth: Int
-
-    data class Regla(val rule: RecurringRule) : Recurrente() {
-        override val dayOfMonth get() = rule.dayOfMonth
-    }
-
-    data class Suscripcion(val sub: Subscription) : Recurrente() {
-        override val dayOfMonth get() = sub.dayOfMonth
-        /**
-         * ¿La encontró Movi sola? [SubStatus.CONFIRMED] no alcanza para saberlo: cubre por
-         * igual «la detectó y la confirmé» y «la escribí yo». La señal de origen es la clave
-         * del comercio — ver [MANUAL_SUB_PREFIX].
-         */
-        val laEncontroMovi get() = !sub.merchantKey.startsWith(MANUAL_SUB_PREFIX)
-    }
-}
+// El tipo [Recurrente] y todo el cálculo viven en RecurrentesLogic.kt — puros y testeados.
 
 @Composable
 private fun RecurrenteRow(
@@ -477,8 +498,15 @@ private fun RecurrenteRow(
         }
         is Recurrente.Suscripcion -> {
             nombre = item.sub.displayName
-            // La marca discreta que pidió el dueño: que se note cuáles no anotó él.
-            contexto = if (item.laEncontroMovi) "Suscripción · la encontró Movi" else "Suscripción"
+            contexto = when {
+                // Lo primero que hay que decir: esta fila NO está sumando al total, porque el
+                // mismo cobro ya entra por la regla que el dueño escribió. Sin esta línea, el
+                // «Flujo libre» de arriba parecería no cuadrar con la lista de abajo.
+                item.yaEsRegla -> "Ya lo tienes como recurrente · no se suma dos veces"
+                // La marca discreta que pidió el dueño: que se note cuáles no anotó él.
+                item.laEncontroMovi -> "Suscripción · la encontró Movi"
+                else -> "Suscripción"
+            }
             esIngreso = false
             // En SU moneda, sin convertir: una suscripción en dólares se lee "−US$12". Solo el
             // total de arriba pasa por la TRM, y lo dice.

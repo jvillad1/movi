@@ -50,7 +50,7 @@ private const val FAMIRIOS_STAMP_PREFIX = "Famirios · "
 // F39: antes, confianza HIGH entraba directo como AUTO (activa, sin que el dueño la viera ni
 // la confirmara) — justo lo que el feedback pidió cambiar ("nada nace activo"). Ahora TODO lo
 // detectado nace CANDIDATE sin importar la confianza; el dueño confirma o descarta desde
-// SuscripcionesScreen (sección "Detectadas · por confirmar"), igual que ya pasaba con
+// la pantalla Recurrentes (sección "Detectadas · por confirmar"), igual que ya pasaba con
 // confianza media/baja. SubStatus.AUTO deja de producirse acá, pero el enum se queda: las
 // filas AUTO que ya existían de antes de este cambio se tratan como confirmadas en todos
 // lados (ver `resultFor` en SubscriptionRoutes.kt, que ya sumaba AUTO+CONFIRMED) — no hay

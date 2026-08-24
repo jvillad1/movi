@@ -71,10 +71,22 @@ fun Route.subscriptionRoutes() {
 
             val newId = "sub_${UUID.randomUUID()}"
             val created = dbQuery {
-                val exists = Subscriptions.selectAll()
-                    .where { (Subscriptions.userId eq uid) and (Subscriptions.merchantKey eq key) and (Subscriptions.currency eq body.currency) }
-                    .count() > 0
-                if (exists) return@dbQuery false
+                // El choque se mide contra lo que el dueño PUEDE VER. Una fila DISMISSED está
+                // fuera de la lista y no se puede recuperar desde ninguna pantalla: si contara
+                // como duplicado, «Ya tienes una suscripción llamada X» hablaría de algo
+                // invisible e irrecuperable, y la única salida sería inventarle otro nombre.
+                // Al re-crearla se reemplaza la fila muerta (ver el delete de abajo).
+                val choque = Subscriptions.selectAll()
+                    .where {
+                        (Subscriptions.userId eq uid) and
+                            (Subscriptions.merchantKey eq key) and
+                            (Subscriptions.currency eq body.currency)
+                    }
+                    .map { it[Subscriptions.id] to SubStatus.valueOf(it[Subscriptions.status]) }
+                if (choque.any { it.second != SubStatus.DISMISSED }) return@dbQuery false
+                choque.forEach { (deadId, _) ->
+                    Subscriptions.deleteWhere { (Subscriptions.id eq deadId) and (Subscriptions.userId eq uid) }
+                }
                 Subscriptions.insert {
                     it[id]          = newId
                     it[userId]      = uid
@@ -152,7 +164,9 @@ private suspend fun resultFor(uid: String): SubscriptionsResult {
             else  -> 0L
         }
     }
-    return SubscriptionsResult(subscriptions = subs, monthlyTotalCop = total)
+    // La tasa viaja junto al total: el cliente la necesita para restar del total una fila en
+    // dólares (ver KDoc de SubscriptionsResult.usdToCop).
+    return SubscriptionsResult(subscriptions = subs, monthlyTotalCop = total, usdToCop = rate)
 }
 
 private fun ResultRow.toSubscription() = Subscription(
