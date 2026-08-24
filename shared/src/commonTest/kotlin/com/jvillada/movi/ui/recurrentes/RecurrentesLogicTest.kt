@@ -1,11 +1,13 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -252,5 +254,81 @@ class RecurrentesLogicTest {
         val manual = Recurrente.Suscripcion(sub("Gym", 1, clave = "manual_gym"), yaEsRegla = false)
         assertTrue(detectada.laEncontroMovi)
         assertFalse(manual.laEncontroMovi)
+    }
+
+    // ── V4 · por qué las cifras esperan a que llegue TODO ──────────────────────
+
+    /**
+     * El caso que se vio en el navegador: con un recurrente en pesos y una suscripción en
+     * dólares, mientras cargaba la pantalla mostraba «Flujo libre −$1.800.000 · 1» —formado,
+     * creíble y mal— y después saltaba a −$1.860.962 · 2. Este test fija los dos números para
+     * dejar constancia de que un resumen a medias NO es una aproximación del bueno: es otro.
+     * Por eso la pantalla no pinta cifra hasta tener las tres cargas.
+     */
+    @Test
+    fun `un resumen a medias no se parece al completo`() {
+        val reglas = listOf(regla("Arriendo", 1_800_000, dia = 1))
+        val netflix = sub("Netflix", 15, moneda = "USD", dia = 5)
+        val tasa = 4_064.13
+
+        val aMedias = resumenRecurrentes(reglas, SubscriptionsResult(emptyList(), 0))
+        val completo = resumenRecurrentes(
+            reglas,
+            SubscriptionsResult(listOf(netflix), monthlyTotalCop = 60_962, usdToCop = tasa),
+        )
+
+        assertEquals(-1_800_000, aMedias.flujoLibre)
+        assertEquals(1, aMedias.items.size)
+        assertEquals(-1_860_962, completo.flujoLibre)
+        assertEquals(2, completo.items.size)
+    }
+
+    // ── V8 · «Próximos» deja de ser una copia de la lista de abajo ─────────────
+
+    private fun vence(nombre: String, estado: PaymentStatus, remindMe: Boolean = true) =
+        UpcomingPayment(
+            rule = regla(nombre, 1_000).copy(remindMe = remindMe),
+            dueDate = "2026-08-25", daysUntil = 2, status = estado,
+        )
+
+    @Test
+    fun `Proximos solo trae lo que urge, no la lista entera`() {
+        val todo = listOf(
+            vence("Arriendo", PaymentStatus.UPCOMING),
+            vence("Colegio", PaymentStatus.DUE_SOON),
+            vence("Gimnasio", PaymentStatus.DUE_TODAY),
+            vence("Internet", PaymentStatus.OVERDUE),
+        )
+        val urgentes = proximosQueUrgen(todo).map { it.rule.name }
+        assertEquals(listOf("Colegio", "Gimnasio", "Internet"), urgentes)
+    }
+
+    @Test
+    fun `sin nada por vencer Proximos queda vacio en vez de repetir todo`() {
+        val todo = listOf(vence("Arriendo", PaymentStatus.UPCOMING))
+        assertTrue(proximosQueUrgen(todo).isEmpty())
+    }
+
+    // ── V9 · el aviso de recordatorios mira lo PEDIDO ──────────────────────────
+
+    @Test
+    fun `un ingreso recurrente no dispara el aviso de recordatorios`() {
+        val soloIngreso = listOf(
+            UpcomingPayment(
+                rule = regla("Sueldo", 5_000_000, tipo = TransactionType.INCOME),
+                dueDate = "2026-08-30", daysUntil = 7, status = PaymentStatus.UPCOMING,
+            ),
+        )
+        assertFalse(hayRecordatoriosPedidos(soloIngreso), "nadie pidió que le avisen de un ingreso")
+    }
+
+    @Test
+    fun `un gasto con el recordatorio apagado tampoco lo dispara`() {
+        assertFalse(hayRecordatoriosPedidos(listOf(vence("Arriendo", PaymentStatus.DUE_SOON, remindMe = false))))
+    }
+
+    @Test
+    fun `un gasto que si pidio recordatorio lo dispara`() {
+        assertTrue(hayRecordatoriosPedidos(listOf(vence("Arriendo", PaymentStatus.DUE_SOON, remindMe = true))))
     }
 }

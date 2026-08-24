@@ -45,8 +45,15 @@ import com.jvillada.movi.ui.components.MinCardVariant
  * Decide si la pantalla de Recurrentes debe mostrar el aviso de
  * "tus recordatorios no te van a llegar".
  *
- * Es cierto y accionable solo cuando hay al menos un pago próximo por el que
- * recordar Y las notificaciones push no están activas. `pushStatus` viene de
+ * Es cierto y accionable solo cuando hay al menos un recordatorio PEDIDO Y las
+ * notificaciones push no están activas.
+ *
+ * «Pedido», y no «hay algo en Próximos»: el aviso promete que no va a llegar algo que
+ * el dueño espera, así que si nadie pidió que le avisen no hay promesa rota que anunciar.
+ * Un recurrente de INGRESO lo dejaba en evidencia — el sueldo nunca genera recordatorio
+ * (el barrido solo mira gastos, ver `selectDueForReminder`) y la hoja ni siquiera ofrece
+ * la casilla, pero la tarjeta ámbar salía igual diciendo que no podíamos avisar de «estos
+ * pagos». Quien llama filtra por tipo Gasto Y `remindMe`. `pushStatus` viene de
  * [com.jvillada.movi.platform.PushOptIn.status]: "enabled" | "disabled" | "denied" | "unsupported".
  *
  * - "enabled"     -> ya funciona, no hay nada que avisar.
@@ -56,8 +63,8 @@ import com.jvillada.movi.ui.components.MinCardVariant
  *                    para mostrar una acción ("Activar") o una instrucción
  *                    ("reactiva en el navegador"), pero ambos cuentan como "avisar".
  */
-fun shouldShowReminderWarning(pushStatus: String, hasUpcomingPayments: Boolean): Boolean =
-    hasUpcomingPayments && pushStatus != "enabled" && pushStatus != "unsupported"
+fun shouldShowReminderWarning(pushStatus: String, hayRecordatoriosPedidos: Boolean): Boolean =
+    hayRecordatoriosPedidos && pushStatus != "enabled" && pushStatus != "unsupported"
 
 /**
  * La misma pregunta, hecha desde la hoja de crear/editar en vez de desde la pantalla.
@@ -71,7 +78,7 @@ fun shouldShowReminderWarning(pushStatus: String, hasUpcomingPayments: Boolean):
  * es una sola y vive en un solo lugar.
  */
 fun shouldShowReminderOptInWarning(pushStatus: String, remindMe: Boolean): Boolean =
-    shouldShowReminderWarning(pushStatus, hasUpcomingPayments = remindMe)
+    shouldShowReminderWarning(pushStatus, hayRecordatoriosPedidos = remindMe)
 
 /**
  * La línea chica debajo de la casilla: *cuántos* días antes avisa el barrido.

@@ -77,6 +77,12 @@ fun MoneyField(
     label: String? = null,
     placeholder: String = "$ 0",
     maxDigits: Int = 12,
+    /**
+     * Símbolo que se antepone mientras se escribe. Por defecto el peso, que es lo que llenan
+     * casi todos los formularios; se pasa "US$" donde el monto NO es en pesos — en Colombia
+     * "$20" se lee veinte pesos, así que un cobro de veinte dólares mostrado con "$" miente.
+     */
+    prefix: String = "$",
 ) {
     Column(modifier = modifier) {
         if (label != null) {
@@ -90,7 +96,7 @@ fun MoneyField(
             Spacer(Modifier.height(8.dp))
         }
         val digits = value?.toString() ?: ""
-        val display = if (digits.isEmpty()) "" else "$" + groupDigitsForDisplay(digits)
+        val display = if (digits.isEmpty()) "" else prefix + groupDigitsForDisplay(digits)
         val fieldValue = TextFieldValue(text = display, selection = TextRange(display.length))
 
         Box(

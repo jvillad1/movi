@@ -71,6 +71,8 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // loadKey increments after every create/update/delete to trigger a reload.
     var loadKey by remember { mutableStateOf(0) }
     var loading by remember { mutableStateOf(true) }
+    // ¿Llegaron LAS TRES cargas? De eso depende que se pinte cifra (ver el LaunchedEffect).
+    var datosCompletos by remember { mutableStateOf(false) }
 
     // Sheet state: null = closed; non-null = open with optional prefilled rule (edit) or null (create)
     var sheetRule by remember { mutableStateOf<RecurringRule?>(null) }
@@ -83,26 +85,38 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     LaunchedEffect(loadKey) {
         loading = true
         // Las tres cargas alimentan UNA sola cifra («Flujo libre»), así que ninguna puede fallar
-        // en silencio: si se cae la de reglas y no la de suscripciones, el total quedaría grande
-        // y negativo —perfectamente plausible— sin nada que avise que está incompleto. Antes de
-        // la Ola 8 esto daba $0 contra $0, visiblemente vacío; ahora miente. La primera que
-        // falle deja su mensaje y el resto no lo pisa.
-        var fallo: String? = null
+        // ni tardar en silencio: si se cae la de reglas y no la de suscripciones, el total
+        // quedaría grande y negativo —perfectamente plausible— sin nada que avise que está
+        // incompleto. Antes de la Ola 8 esto daba $0 contra $0, visiblemente vacío; ahora miente.
+        // La primera que falle deja su mensaje y el resto no lo pisa.
+        datosCompletos = false
+        // Se traen las tres ANTES de tocar el estado. Publicarlas de a una hacía que Compose
+        // repintara con datos a medias: entre que llegaban las reglas y llegaban las
+        // suscripciones, la pantalla mostraba «Flujo libre −$1.800.000 · 1» —una cifra formada
+        // y creíble— y un instante después saltaba a −$1.860.962 · 2. Las tres asignaciones de
+        // abajo caen en el mismo snapshot, así que hay una sola repintada y ningún estado
+        // intermedio visible.
+        val porReglas = runCatching { Repositories.wallets.getRecurringRules() }
+        val porVencer = runCatching { Repositories.wallets.getUpcomingPayments() }
+        val porCobros = runCatching { Repositories.wallets.getSubscriptions() }
+
+        val fallo = listOf(porReglas, porVencer, porCobros)
+            .firstNotNullOfOrNull { it.exceptionOrNull() }
+            ?.toUserMessage()
+
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
         // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
-        runCatching { Repositories.wallets.getRecurringRules() }
-            .onSuccess {
-                rules = it
-                UsedCategoriesCache.record(it.map { r -> r.category })
-            }
-            .onFailure { fallo = it.toUserMessage() }
-        runCatching { Repositories.wallets.getUpcomingPayments() }
-            .onSuccess { upcoming = it }
-            .onFailure { if (fallo == null) fallo = it.toUserMessage() }
-        runCatching { Repositories.wallets.getSubscriptions() }
-            .onSuccess { subs = it }
-            .onFailure { if (fallo == null) fallo = it.toUserMessage() }
+        porReglas.getOrNull()?.let {
+            rules = it
+            UsedCategoriesCache.record(it.map { r -> r.category })
+        }
+        porVencer.getOrNull()?.let { upcoming = it }
+        porCobros.getOrNull()?.let { subs = it }
         error = fallo
+        // Las tres alimentan UNA sola cifra: si alguna falta, no hay número que mostrar. Es la
+        // misma regla que ya aplica el acceso «Recurrentes» del Inicio — un total armado con lo
+        // que alcanzó a llegar sale plausible y equivocado, que es peor que no salir.
+        datosCompletos = fallo == null
         loading = false
     }
 
@@ -178,6 +192,25 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // «Recurrentes» del Inicio, así que las dos cifras no pueden discrepar.
     val resumen = remember(rules, subs) { resumenRecurrentes(rules, subs) }
     val ordered = resumen.items
+    // Las FILAS se pintan con lo que haya (cada una se describe sola y es cierta por separado);
+    // las CIFRAS —el flujo libre y los conteos— solo cuando llegó todo. Un total a medias es
+    // indistinguible de un total real.
+    val cifras = if (datosCompletos) resumen else null
+
+    // «Próximos» muestra lo que vence PRONTO, no todas las reglas: el server manda una entrada
+    // por regla, así que pintarlas todas repetía la lista entera de abajo (el mismo «Arriendo»
+    // dos veces en la misma pantalla, justo debajo del número «Flujo libre» — una invitación a
+    // creer que se contó dos veces). Con el filtro, esta sección vuelve a ser lo que su nombre
+    // promete y solo coincide con la de abajo en lo que de verdad urge, que sí conviene ver dos
+    // veces: una como alerta y otra en el inventario. El corte es el mismo del barrido de avisos
+    // (`leadDays`, ver DueDates.kt): UPCOMING es «todavía falta».
+    val proximos = proximosQueUrgen(upcoming)
+
+    // El aviso ámbar habla de una promesa rota («no vamos a poder avisarte»), así que mira lo
+    // que se PIDIÓ, no lo que existe: solo un GASTO con `remindMe` entra al barrido de avisos
+    // (`selectDueForReminder`). Con un recurrente de ingreso —que ni siquiera ofrece la casilla—
+    // el aviso salía igual, prometiendo el incumplimiento de algo que nadie pidió.
+    val hayRecordatoriosPedidos = hayRecordatoriosPedidos(upcoming)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
@@ -227,7 +260,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         Text("Flujo libre", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            text = formatCOP(resumen.flujoLibre),
+                            text = cifras?.let { formatCOP(it.flujoLibre) } ?: "—",
                             fontSize = 36.sp,
                             fontFamily = FontFamily.Monospace,
                             color = MinText,
@@ -248,7 +281,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 Text("Ingresos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = formatCOP(resumen.ingresos),
+                                    text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,
@@ -260,7 +293,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 Text("Gastos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = formatCOP(resumen.gastos),
+                                    text = cifras?.let { formatCOP(it.gastos) } ?: "—",
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,
@@ -276,21 +309,21 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         // incluye dos cobros». Pasa si el server todavía no manda la tasa (el
                         // APK se instala a mano y el server se despliega aparte, así que el
                         // desfase existe) o si algún día entra una moneda que no sabemos pasar.
-                        if (resumen.sinConvertir > 0) {
+                        if (cifras != null && cifras.sinConvertir > 0) {
                             Spacer(Modifier.height(14.dp))
                             Text(
-                                text = if (resumen.sinConvertir == 1) {
+                                text = if (cifras.sinConvertir == 1) {
                                     "Este total no incluye 1 cobro en otra moneda: no pudimos " +
                                         "convertirlo a pesos."
                                 } else {
-                                    "Este total no incluye ${resumen.sinConvertir} cobros en otra " +
+                                    "Este total no incluye ${cifras.sinConvertir} cobros en otra " +
                                         "moneda: no pudimos convertirlos a pesos."
                                 },
                                 fontSize = 11.sp,
                                 color = MinAmber,
                                 lineHeight = 15.sp,
                             )
-                        } else if (resumen.hayMonedaExtranjera) {
+                        } else if (cifras != null && cifras.hayMonedaExtranjera) {
                             Spacer(Modifier.height(14.dp))
                             Text(
                                 // No promete «la tasa del día»: FxRateService cae a la última tasa
@@ -307,7 +340,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 }
 
                 // ── Aviso: recordatorios sin canal de entrega ───────────────────
-                if (shouldShowReminderWarning(pushStatus, upcoming.isNotEmpty())) {
+                if (shouldShowReminderWarning(pushStatus, hayRecordatoriosPedidos)) {
                     item {
                         Spacer(Modifier.height(20.dp))
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -403,15 +436,15 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         MinSectionHeader(
                             title = "Próximos",
-                            count = if (upcoming.isNotEmpty()) upcoming.size else null,
+                            count = if (cifras != null && proximos.isNotEmpty()) proximos.size else null,
                         )
-                        if (upcoming.isEmpty() && !loading) {
+                        if (proximos.isEmpty() && !loading) {
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                             ) {
-                                Text("Sin pagos próximos", fontSize = 14.sp, color = MinTextMute)
+                                Text("Nada vence en los próximos días", fontSize = 14.sp, color = MinTextMute)
                             }
                         } else {
                             MinCard(
@@ -419,7 +452,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                             ) {
-                                upcoming.forEachIndexed { i, payment ->
+                                proximos.forEachIndexed { i, payment ->
                                     UpcomingPaymentRow(
                                         payment = payment,
                                         onClick = {
@@ -435,7 +468,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             }
                                         },
                                     )
-                                    if (i < upcoming.size - 1) Hairline()
+                                    if (i < proximos.size - 1) Hairline()
                                 }
                             }
                         }
@@ -446,7 +479,10 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 item {
                     Spacer(Modifier.height(20.dp))
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(title = "Por día del mes", count = if (ordered.isNotEmpty()) ordered.size else null)
+                        MinSectionHeader(
+                            title = "Por día del mes",
+                            count = if (cifras != null && ordered.isNotEmpty()) ordered.size else null,
+                        )
                         if (ordered.isEmpty() && !loading) {
                             MinCard(
                                 modifier = Modifier.fillMaxWidth(),

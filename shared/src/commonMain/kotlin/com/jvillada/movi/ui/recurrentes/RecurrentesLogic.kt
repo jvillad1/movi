@@ -4,7 +4,9 @@ import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
+import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.math.roundToLong
 
@@ -159,3 +161,31 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         hayMonedaExtranjera = dolaresEnElTotal,
     )
 }
+
+/**
+ * Lo que va en «Próximos»: lo que vence PRONTO, no todo lo que existe.
+ *
+ * `GET /api/payments/upcoming` devuelve una entrada por regla (mapea 1:1, ver `upcomingPayments`),
+ * así que pintarlas todas convertía la sección en una copia de «Por día del mes»: el mismo
+ * «Arriendo» dos veces en la misma pantalla, una debajo de la otra y justo debajo del número
+ * «Flujo libre». No se contaba dos veces, pero invitaba a creer que sí — y en una pantalla cuyo
+ * trabajo es explicar un total, esa sospecha es el defecto.
+ *
+ * El corte es el del barrido de avisos (`leadDays`, ver DueDates.kt): [PaymentStatus.UPCOMING]
+ * significa «todavía falta». Lo que queda —vencido, vence hoy, vence pronto— sí merece salir dos
+ * veces: una como alerta y otra en el inventario de abajo.
+ */
+fun proximosQueUrgen(upcoming: List<UpcomingPayment>): List<UpcomingPayment> =
+    upcoming.filter { it.status != PaymentStatus.UPCOMING }
+
+/**
+ * ¿Alguien pidió que le recuerden algo? Es la pregunta que decide el aviso ámbar de
+ * «tus recordatorios no te van a llegar».
+ *
+ * Mira lo PEDIDO y no lo que existe, porque el aviso anuncia una promesa rota: sin promesa no
+ * hay nada que anunciar. Solo un GASTO con `remindMe` entra al barrido (`selectDueForReminder`
+ * ignora los ingresos), así que con un recurrente de ingreso —que ni siquiera ofrece la casilla—
+ * el aviso salía prometiendo incumplir algo que nadie había pedido.
+ */
+fun hayRecordatoriosPedidos(upcoming: List<UpcomingPayment>): Boolean =
+    upcoming.any { it.rule.type == TransactionType.EXPENSE && it.rule.remindMe }
