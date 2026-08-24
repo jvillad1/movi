@@ -36,7 +36,17 @@ data class DashboardData(
     val credits: List<CreditSummary> = emptyList(),
     /** F20: las tarjetas también son deuda — el acceso «Créditos» las suma junto a los préstamos. */
     val cards: List<CardSummary> = emptyList(),
-    val upcoming: List<UpcomingPayment> = emptyList(),
+    /**
+     * `null` = todavía no llegó (o su carga falló); lista vacía = llegó y no hay nada.
+     *
+     * La distinción no era necesaria mientras cada cifra salía de UNA sola fuente: si algo no
+     * llegaba, su acceso no se pintaba y listo. Dejó de serlo cuando el acceso «Recurrentes»
+     * pasó a COMPONER dos fuentes (reglas + suscripciones): con `emptyList()` por defecto, que
+     * se cayera `/api/payments/upcoming` era indistinguible de «este usuario no tiene reglas», y
+     * el Inicio mostraba un flujo libre calculado solo con las suscripciones — un número
+     * plausible, equivocado y sin nada que avisara. Ver `quickLinkFigure("recurrentes")`.
+     */
+    val upcoming: List<UpcomingPayment>? = null,
     val budgets: List<Budget> = emptyList(),
     /** Gasto del mes en curso por categoría (ver [spentByCategoryForMonth]). */
     val spentByCategory: Map<String, Long> = emptyMap(),
@@ -56,7 +66,7 @@ data class DashboardData(
      * F20, los pagos de tarjeta (id con [CARD_RULE_PREFIX]); esas tildan el paso de Créditos,
      * no este.
      */
-    val hasRecurringRule: Boolean get() = upcoming.any {
+    val hasRecurringRule: Boolean get() = upcoming.orEmpty().any {
         !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX)
     }
 }
@@ -184,16 +194,25 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // sirve de lista de reglas sin pedir nada nuevo — el Inicio sigue liviano. Las cuotas
         // sintéticas de créditos y tarjetas se descartan: no son reglas que el dueño escribió y
         // tampoco salen en la lista de Recurrentes.
-        val reglas = data.upcoming.map { it.rule }.filterNot {
-            it.id.startsWith(CREDIT_RULE_PREFIX) || it.id.startsWith(CARD_RULE_PREFIX)
+        // Esta cifra COMPONE dos fuentes, así que exige las dos. Con una sola —la otra se cayó,
+        // o todavía no llegó— el número saldría plausible y equivocado: sin las reglas, un
+        // sueldo de +$5.000.000 desaparece y «libre al mes» queda en −$44.900, en rojo, contra
+        // los $2.955.100 que muestra la pantalla de destino. Sin las dos no se pinta cifra
+        // (título solo), que es la regla de toda esta función: nunca un número inventado.
+        val reglas = data.upcoming?.filterNot {
+            it.rule.id.startsWith(CREDIT_RULE_PREFIX) || it.rule.id.startsWith(CARD_RULE_PREFIX)
+        }?.map { it.rule }
+        val subs = data.subscriptions
+        if (reglas == null || subs == null) LinkFigure()
+        else {
+            val resumen = resumenRecurrentes(reglas, subs)
+            if (resumen.items.isEmpty()) LinkFigure(sub = "Sin recurrentes")
+            else LinkFigure(
+                formatCOP(resumen.flujoLibre),
+                "libre al mes · " + plural(resumen.items.size, "recurrente", "recurrentes"),
+                isAlert = resumen.flujoLibre < 0,
+            )
         }
-        val resumen = resumenRecurrentes(reglas, data.subscriptions ?: SubscriptionsResult(emptyList(), 0))
-        if (resumen.items.isEmpty()) LinkFigure(sub = "Sin recurrentes")
-        else LinkFigure(
-            formatCOP(resumen.flujoLibre),
-            "libre al mes · " + plural(resumen.items.size, "recurrente", "recurrentes"),
-            isAlert = resumen.flujoLibre < 0,
-        )
     }
     // Se queda para los Inicios ya guardados que todavía traen el acceso viejo: el target sigue
     // siendo válido y abre Recurrentes (ver SduiRenderer.screenForTarget).
@@ -229,7 +248,7 @@ data class NotificationRow(val text: String, val target: Screen)
  * campana no pueda resolver.
  */
 fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
-    upcomingPaymentsWithin(data.upcoming).forEach { p ->
+    upcomingPaymentsWithin(data.upcoming.orEmpty()).forEach { p ->
         // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos (UpcomingPayment
         // generado por el server, no una regla que viva en Recurrentes) — se resuelven en
         // Créditos, no en Recurrentes.
@@ -255,7 +274,7 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
 fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSection> =
     renderableSections(def).filter { section ->
         when (section.type) {
-            "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming).isNotEmpty()
+            "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
             "ALERTS" -> dashboardAlerts(
                 overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
             ).isNotEmpty()

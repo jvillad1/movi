@@ -57,9 +57,18 @@ data class SubscriptionsResult(
      * tiene anotada como regla recurrente se excluye del total para no contarla dos veces (ver
      * `resumenRecurrentes`). Sin la tasa, el cliente no puede restar una fila en dólares.
      *
-     * Default `0.0` para que un server viejo (o un test) siga deserializando: con tasa 0 solo
-     * se puede convertir lo que ya está en pesos, que es exactamente lo que un server que no
-     * manda el campo tampoco convirtió.
+     * Default `0.0` para que un server viejo (o un test) siga deserializando. Ojo con lo que
+     * ese 0 significa y con lo que NO: un server viejo sí convertía los dólares —van adentro de
+     * [monthlyTotalCop]—, lo único que no hacía era exponer la tasa. O sea que tasa 0 no
+     * equivale al comportamiento viejo; equivale a «no puedo DESGLOSAR este total». Por eso
+     * `resumenRecurrentes` usa [monthlyTotalCop] tal cual cuando no hay nada que excluir (ahí el
+     * total del server es exacto, con dólares y todo) y solo necesita la tasa cuando tiene que
+     * saltear una fila. Si en ese caso falta, las filas que no se pudieron convertir se cuentan
+     * y se avisan en pantalla — nunca se restan en silencio.
+     *
+     * Esto importa en este proyecto en particular: el APK se entrega a mano por Drive y el
+     * server se despliega aparte, así que un cliente nuevo contra un server viejo es un estado
+     * real, no teórico.
      */
     val usdToCop: Double = 0.0,
 )

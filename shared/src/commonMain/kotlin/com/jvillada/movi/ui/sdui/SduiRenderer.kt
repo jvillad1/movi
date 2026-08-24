@@ -194,7 +194,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData) {
 
 @Composable
 private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
-    val rows = upcomingPaymentsWithin(data.upcoming)
+    val rows = upcomingPaymentsWithin(data.upcoming.orEmpty())
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         MinSectionHeader(
             title = section.title ?: "Próximos pagos",

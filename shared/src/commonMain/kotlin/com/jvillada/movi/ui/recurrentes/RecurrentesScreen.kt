@@ -271,13 +271,32 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                         }
                         // Solo cuando de verdad hay algo en otra moneda: si todo está en pesos,
                         // la nota sobraría y ensuciaría la tarjeta.
-                        if (resumen.hayMonedaExtranjera) {
+                        // Un total al que le faltan filas se dice, no se disimula: es la
+                        // diferencia entre «me queda esto libre» y «me queda esto libre, que no
+                        // incluye dos cobros». Pasa si el server todavía no manda la tasa (el
+                        // APK se instala a mano y el server se despliega aparte, así que el
+                        // desfase existe) o si algún día entra una moneda que no sabemos pasar.
+                        if (resumen.sinConvertir > 0) {
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                text = if (resumen.sinConvertir == 1) {
+                                    "Este total no incluye 1 cobro en otra moneda: no pudimos " +
+                                        "convertirlo a pesos."
+                                } else {
+                                    "Este total no incluye ${resumen.sinConvertir} cobros en otra " +
+                                        "moneda: no pudimos convertirlos a pesos."
+                                },
+                                fontSize = 11.sp,
+                                color = MinAmber,
+                                lineHeight = 15.sp,
+                            )
+                        } else if (resumen.hayMonedaExtranjera) {
                             Spacer(Modifier.height(14.dp))
                             Text(
                                 // No promete «la tasa del día»: FxRateService cae a la última tasa
-                            // que consiguió, a USD_COP_RATE o a una constante si la TRM no
-                            // responde, y el server no dice cuál de las tres usó.
-                            text = "Lo que te cobran en dólares entra al total convertido a " +
+                                // que consiguió, a USD_COP_RATE o a una constante si la TRM no
+                                // responde, y el server no dice cuál de las tres usó.
+                                text = "Lo que te cobran en dólares entra al total convertido a " +
                                     "pesos con la tasa de cambio más reciente que pudimos consultar.",
                                 fontSize = 11.sp,
                                 color = MinTextMute,
@@ -392,7 +411,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                             ) {
-                                Text("Sin recurrentes aún", fontSize = 14.sp, color = MinTextMute)
+                                Text("Sin pagos próximos", fontSize = 14.sp, color = MinTextMute)
                             }
                         } else {
                             MinCard(
@@ -434,7 +453,27 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 variant = MinCardVariant.Elevated,
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                             ) {
-                                Text("Sin recurrentes aún", fontSize = 14.sp, color = MinTextMute)
+                                // Con la base vacía esta es de las primeras pantallas que se ven,
+                                // así que dice qué hacer en vez de solo constatar el vacío. Los
+                                // dos caminos, como los ofrece el encabezado: anotarlo a mano o
+                                // dejar que Movi lo encuentre. (La pantalla vieja de
+                                // Suscripciones daba esta pista y la fusión la había perdido.)
+                                Text(
+                                    text = "Sin recurrentes aún",
+                                    fontSize = 14.sp,
+                                    color = MinText,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "Anota lo que se repite todos los meses —el arriendo, " +
+                                        "el sueldo, Netflix— con «Nuevo recurrente». Si ya " +
+                                        "importaste dos o tres meses de extractos, toca «Buscar " +
+                                        "cobros» y Movi busca sola los que se repiten.",
+                                    fontSize = 13.sp,
+                                    color = MinTextMute,
+                                    lineHeight = 18.sp,
+                                )
                             }
                         } else {
                             MinCard(
@@ -503,6 +542,9 @@ private fun RecurrenteRow(
                 // mismo cobro ya entra por la regla que el dueño escribió. Sin esta línea, el
                 // «Flujo libre» de arriba parecería no cuadrar con la lista de abajo.
                 item.yaEsRegla -> "Ya lo tienes como recurrente · no se suma dos veces"
+                // Heredada de antes de F39: se activó sin que el dueño la confirmara nunca.
+                // La pantalla vieja lo marcaba con «· auto» y conviene que se siga notando.
+                item.seActivoSola -> "Suscripción · la encontró Movi y la activó sola"
                 // La marca discreta que pidió el dueño: que se note cuáles no anotó él.
                 item.laEncontroMovi -> "Suscripción · la encontró Movi"
                 else -> "Suscripción"
