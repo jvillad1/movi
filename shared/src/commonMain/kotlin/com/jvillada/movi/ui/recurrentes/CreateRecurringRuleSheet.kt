@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
@@ -30,6 +31,26 @@ import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 
+/**
+ * La ÚNICA hoja para anotar algo que se repite todos los meses (Ola 8).
+ *
+ * Antes había dos —«Nuevo recurrente» y «Nueva suscripción»— y para elegir entre ellas el dueño
+ * tenía que saber una distinción que solo existe adentro de Movi. Ahora hay una sola, y la
+ * pregunta que decide dónde se guarda es una del mundo real, no del modelo de datos: **en qué
+ * moneda te lo cobran**.
+ *
+ * - **En pesos** → una regla recurrente: ingreso o gasto, con categoría y con recordatorio.
+ * - **En dólares** → una suscripción: las reglas recurrentes son COP puro (`RecurringRule` no
+ *   tiene campo de moneda) y agregarle uno tocaría el modelo, la tabla, el barrido de avisos y
+ *   los totales. El modelo de suscripciones YA es multi-moneda y ya convierte con la TRM del
+ *   día (ver `resultFor` en `SubscriptionRoutes.kt`), así que un cobro en dólares va ahí.
+ *
+ * Lo que el dueño pierde al elegir dólares (categoría y recordatorio) se dice en la hoja, en
+ * lugar de que los campos desaparezcan sin explicación.
+ *
+ * Editar es siempre editar una [RecurringRule] (las suscripciones no tienen hoja de edición,
+ * se quitan desde la lista), así que en modo edición la moneda ni se muestra.
+ */
 @Composable
 fun CreateRecurringRuleSheet(
     onDismiss: () -> Unit,
@@ -46,10 +67,13 @@ fun CreateRecurringRuleSheet(
     var category by remember { mutableStateOf(existing?.category ?: "Otros") }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
+    var currency by remember { mutableStateOf("COP") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val isEditMode = existing != null
+    // Editar es editar una regla; solo al crear se puede elegir dólares (ver KDoc).
+    val enDolares = !isEditMode && currency == "USD"
     val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && dayOfMonth.toIntOrNull() in 1..31 && !saving
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
@@ -67,19 +91,35 @@ fun CreateRecurringRuleSheet(
         saving = true
         error = null
         coroutine.launch {
-            val rule = RecurringRule(
-                id = existing?.id ?: "",
-                name = name.trim(),
-                category = category.trim().ifBlank { "Otros" },
-                amount = amt,
-                dayOfMonth = day,
-                type = selectedType,
-                remindMe = remindMe,
-            )
-            val result = if (isEditMode) {
-                runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
-            } else {
-                runCatching { Repositories.wallets.createRecurringRule(rule) }
+            val result = when {
+                // Dólares → suscripción (el único modelo multi-moneda que hay). Nace CONFIRMED
+                // del lado del server: la escribió el dueño, no hay nada que confirmar.
+                enDolares -> runCatching {
+                    Repositories.wallets.createSubscription(
+                        CreateSubscriptionRequest(
+                            displayName = name.trim(),
+                            amount = amt,
+                            currency = currency,
+                            dayOfMonth = day,
+                        )
+                    )
+                }
+                else -> {
+                    val rule = RecurringRule(
+                        id = existing?.id ?: "",
+                        name = name.trim(),
+                        category = category.trim().ifBlank { "Otros" },
+                        amount = amt,
+                        dayOfMonth = day,
+                        type = selectedType,
+                        remindMe = remindMe,
+                    )
+                    if (isEditMode) {
+                        runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
+                    } else {
+                        runCatching { Repositories.wallets.createRecurringRule(rule) }
+                    }
+                }
             }
             saving = false
             result.onSuccess { onSaved() }
@@ -162,6 +202,23 @@ fun CreateRecurringRuleSheet(
 
             Spacer(Modifier.height(18.dp))
 
+            // --- MONEDA ---
+            // La única pregunta que decide dónde se guarda esto, y es una pregunta del mundo
+            // real: cualquiera sabe si le cobran en pesos o en dólares. Al editar no aparece —
+            // editar es siempre editar una regla (ver KDoc).
+            if (!isEditMode) {
+                SheetSectionLabel("MONEDA")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SheetChip(label = "Pesos", selected = currency == "COP", onClick = { currency = "COP" })
+                    SheetChip(label = "Dólares", selected = currency == "USD", onClick = { currency = "USD" })
+                }
+                Spacer(Modifier.height(18.dp))
+            }
+
             // --- MONTO ---
             SheetSectionLabel("MONTO")
             Spacer(Modifier.height(8.dp))
@@ -195,52 +252,66 @@ fun CreateRecurringRuleSheet(
 
             Spacer(Modifier.height(18.dp))
 
-            // --- TIPO ---
-            SheetSectionLabel("TIPO")
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SheetChip(
-                    label = "Gasto",
-                    selected = selectedType == TransactionType.EXPENSE,
-                    onClick = { selectedType = TransactionType.EXPENSE },
+            if (enDolares) {
+                // No se ocultan los campos en silencio: en dólares esto se guarda como
+                // suscripción, y las suscripciones no tienen tipo, ni categoría, ni
+                // recordatorio. Decirlo es más honesto que hacer desaparecer tres secciones.
+                Text(
+                    text = "En dólares solo guardamos el nombre, el monto y el día de cobro: " +
+                        "sin categoría y sin recordatorio. Para el total del mes lo convertimos " +
+                        "a pesos con la tasa del día.",
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    lineHeight = 17.sp,
                 )
-                SheetChip(
-                    label = "Ingreso",
-                    selected = selectedType == TransactionType.INCOME,
-                    onClick = { selectedType = TransactionType.INCOME },
+            } else {
+                // --- TIPO ---
+                SheetSectionLabel("TIPO")
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SheetChip(
+                        label = "Gasto",
+                        selected = selectedType == TransactionType.EXPENSE,
+                        onClick = { selectedType = TransactionType.EXPENSE },
+                    )
+                    SheetChip(
+                        label = "Ingreso",
+                        selected = selectedType == TransactionType.INCOME,
+                        onClick = { selectedType = TransactionType.INCOME },
+                    )
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                // --- CATEGORÍA ---
+                // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
+                // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
+                // una regla de gasto.
+                CategoryField(
+                    value = category,
+                    onValueChange = { category = it },
+                    type = selectedType,
+                    usedCategories = UsedCategoriesCache.categories,
+                    label = "CATEGORÍA",
+                    placeholder = "Ej: Vivienda, Suscripción, Salud",
                 )
-            }
 
-            Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(18.dp))
 
-            // --- CATEGORÍA ---
-            // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
-            // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
-            // una regla de gasto.
-            CategoryField(
-                value = category,
-                onValueChange = { category = it },
-                type = selectedType,
-                usedCategories = UsedCategoriesCache.categories,
-                label = "CATEGORÍA",
-                placeholder = "Ej: Vivienda, Suscripción, Salud",
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            // --- RECORDATORIO ---
-            // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
-            // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
-            // nunca sale. Se muestra solo en Gasto.
-            if (selectedType == TransactionType.EXPENSE) {
-                ReminderOptInField(
-                    checked = remindMe,
-                    onCheckedChange = { remindMe = it },
-                    enabled = !saving,
-                )
+                // --- RECORDATORIO ---
+                // Una regla de INGRESO no genera recordatorio (el barrido solo mira gastos, ver
+                // selectDueForReminder), así que ofrecer la casilla ahí sería prometer un aviso que
+                // nunca sale. Se muestra solo en Gasto.
+                if (selectedType == TransactionType.EXPENSE) {
+                    ReminderOptInField(
+                        checked = remindMe,
+                        onCheckedChange = { remindMe = it },
+                        enabled = !saving,
+                    )
+                }
             }
 
             // Inline error display

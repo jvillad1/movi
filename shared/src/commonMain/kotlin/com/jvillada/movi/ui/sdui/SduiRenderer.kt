@@ -121,7 +121,10 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     // trayendo este target — se manda a Cuentas, que es donde ahora viven las cuentas de
     // inversión. Nunca un crash por destino desconocido.
     "investments" -> Screen.Accounts
-    "subscriptions" -> Screen.Subscriptions
+    // Ola 8: Suscripciones dejó de ser pantalla, igual que Inversiones. Mismo trato: el target
+    // sobrevive (el acceso «Suscripciones» del Inicio ya está guardado en la DB de cada
+    // instalación) y se manda a Recurrentes, que es donde ahora viven las suscripciones.
+    "subscriptions" -> Screen.Recurrentes
     "recurrentes" -> Screen.Recurrentes
     "extractos" -> Screen.Extractos
     "aichat" -> Screen.AIChat

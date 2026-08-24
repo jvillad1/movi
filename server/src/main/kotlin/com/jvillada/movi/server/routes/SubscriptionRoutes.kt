@@ -6,6 +6,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -29,17 +30,13 @@ import org.jetbrains.exposed.sql.update
 import java.util.UUID
 import kotlin.math.roundToLong
 
-// F38: prefijo que separa las suscripciones de alta manual del dominio del detector.
-// `normalizeMerchant` (SubscriptionDetector.kt) deriva su `merchantKey` de la descripción del
-// EVENTO bancario — nunca antepone este prefijo — así que una fila "manual_*" queda
-// estructuralmente fuera de lo que `runSubscriptionDetection` puede generar o re-escribir
-// (ver `upsertDetected`/`applyExisting` en SubscriptionSync.kt): un re-scan nunca la toca ni la
-// duplica, sin necesidad de un caso especial ahí.
-private const val MANUAL_MERCHANT_PREFIX = "manual_"
-
+// F38: el prefijo que separa las suscripciones de alta manual del dominio del detector se mudó
+// a `:core` (MANUAL_SUB_PREFIX) — el cliente lo necesita para marcar en la lista única de
+// Recurrentes cuáles encontró Movi sola. La garantía es la misma: `upsertDetected`/`applyExisting`
+// (SubscriptionSync.kt) nunca generan esa clave, así que un re-scan no toca ni duplica un alta manual.
 private fun manualMerchantKey(displayName: String): String {
     val normalized = displayName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-    return (MANUAL_MERCHANT_PREFIX + normalized.ifBlank { "sub" }).take(80)
+    return (MANUAL_SUB_PREFIX + normalized.ifBlank { "sub" }).take(80)
 }
 
 fun Route.subscriptionRoutes() {

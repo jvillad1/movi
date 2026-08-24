@@ -32,6 +32,26 @@ class DashboardDefaultsTest {
         assertEquals(listOf("accounts", "credits", "budgets", "goals", "subscriptions"), links)
     }
 
+    /**
+     * Ola 8: Suscripciones se plegó dentro de Recurrentes, pero el target NO se borra de la
+     * taxonomía — el acceso «Suscripciones» ya está guardado en el Inicio de cada instalación.
+     * Si saliera de la lista, `isValidAction` le arrancaría la acción (una tarjeta muerta que no
+     * lleva a ningún lado) y `ScreenValidation` rechazaría con 422 cualquier guardado del Editor
+     * que todavía lo traiga. Mismo trato que "investments" en F61: se queda y el cliente lo
+     * redirige (ver `SduiRenderer.screenForTarget`).
+     */
+    @Test
+    fun subscriptions_target_survives_the_screen_merge() {
+        assertTrue("subscriptions" in ScreenTaxonomy.NAVIGATE_TARGETS)
+        assertTrue("investments" in ScreenTaxonomy.NAVIGATE_TARGETS)
+        val stored = ScreenDefinition("dashboard", DASHBOARD_LAYOUT_VERSION, listOf(
+            ScreenSection(type = "QUICK_LINKS_WITH_TOTALS", cards = listOf(
+                ScreenCard("Suscripciones", action = ScreenAction("NAVIGATE", "subscriptions")),
+            )),
+        ))
+        assertEquals(stored.sections, renderableSections(stored), "el acceso guardado conserva su acción")
+    }
+
     @Test
     fun accounts_summary_and_analisis_are_gone() {
         assertTrue("ACCOUNTS_SUMMARY" !in ScreenTaxonomy.SECTION_TYPES)

@@ -21,8 +21,9 @@ sealed class Screen {
     data object Credits : Screen()
     data object Goals : Screen()
     data object Budgets : Screen()
+    // Ola 8: Suscripciones dejó de ser pantalla — una suscripción es un recurrente y vive
+    // adentro de [Recurrentes], en su propio grupo (ver RecurrentesScreen).
     data object Recurrentes : Screen()
-    data object Subscriptions : Screen()
     data object OCRCapture : Screen()
     data object OCRConfirm : Screen()
     data object SMSInbox : Screen()
@@ -55,6 +56,8 @@ sealed class Screen {
  * Presupuestos, Créditos y Recurrentes tienen destino propio (en el teléfono se resaltan
  * como Más, que es por donde se llega a ellos ahí).
  * F61: Inversiones dejó de ser pantalla — las cuentas de inversión se ven en Cuentas.
+ * Ola 8: ídem Suscripciones — viven adentro de Recurrentes, así que todo lo que antes marcaba
+ * la pestaña Más por ser "una suscripción" ahora marca RECURRING, que es donde de verdad está.
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOME
@@ -68,7 +71,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // Recurrentes salió de Más y pasó a destino propio: en pantalla ancha es una entrada del
     // rail; en el teléfono la barra ya está llena y `asBottomBarTab()` lo funde en Más.
     Screen.Recurrentes -> NavTab.RECURRING
-    Screen.Mas, Screen.Profile, Screen.Goals, Screen.Subscriptions,
+    Screen.Mas, Screen.Profile, Screen.Goals,
     Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
     else -> null
 }

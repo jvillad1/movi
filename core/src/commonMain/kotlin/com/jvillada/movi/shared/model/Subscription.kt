@@ -5,6 +5,21 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class SubStatus { AUTO, CANDIDATE, CONFIRMED, DISMISSED }
 
+/**
+ * F38: prefijo de [Subscription.merchantKey] que marca un alta MANUAL — la escribió el dueño,
+ * no la encontró el detector.
+ *
+ * `normalizeMerchant` (SubscriptionDetector.kt) deriva su clave de la descripción del EVENTO
+ * bancario y nunca antepone este prefijo, así que una fila `manual_*` queda estructuralmente
+ * fuera de lo que el detector puede generar o re-escribir: un re-scan no la toca ni la duplica.
+ *
+ * Vive en `:core` (y no privado en el server, como nació) porque desde la Ola 8 el cliente
+ * también lo necesita: en la lista única de Recurrentes, una suscripción SIN este prefijo lleva
+ * la marca «la encontró Movi», y una con él no — es la única señal de origen que hay, porque
+ * [SubStatus.CONFIRMED] cubre por igual «la detectó y la confirmé» y «la escribí yo».
+ */
+const val MANUAL_SUB_PREFIX = "manual_"
+
 @Serializable
 enum class SubConfidence { HIGH, MEDIUM, LOW }
 

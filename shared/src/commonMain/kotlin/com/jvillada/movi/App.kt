@@ -44,7 +44,6 @@ import com.jvillada.movi.ui.onboarding.WelcomeScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.RecurrentesScreen
-import com.jvillada.movi.ui.subscriptions.SuscripcionesScreen
 import com.jvillada.movi.ui.sms.SMSInboxScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
@@ -186,7 +185,6 @@ fun App() {
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 Screen.Recurrentes       -> RecurrentesScreen(navigate)
-                Screen.Subscriptions     -> SuscripcionesScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                 Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                 Screen.SMSInbox          -> SMSInboxScreen(navigate)
