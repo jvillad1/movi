@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -39,9 +40,14 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
@@ -89,6 +95,61 @@ sealed class MovementRow {
 fun isTransferLeg(event: FinancialEvent): Boolean =
     event.transferId != null || event.category == TRANSFER_CATEGORY
 
+/**
+ * ¿Este renglón es la **apertura de una cuenta** y no plata que entró o salió?
+ *
+ * El saldo inicial se guarda como un movimiento (INCOME por lo que había, EXPENSE por lo que se
+ * debía) para que el saldo de la cuenta cuadre solo, pero no es un ingreso ni un gasto: es la
+ * foto de lo que ya existía el día que la cuenta entró a la app. `isCashFlow` ya lo sabe y lo
+ * deja fuera de todos los totales — esto es solo el lado de la presentación, para que la lista
+ * lo diga con las mismas palabras que las cuentas.
+ */
+fun isOpeningBalance(event: FinancialEvent): Boolean = event.category == OPENING_CATEGORY
+
+/**
+ * ¿El renglón lleva signo y color de ingreso/gasto?
+ *
+ * `false` para lo que no movió plata del bolsillo — hoy, la apertura de una cuenta. Es
+ * **exactamente el mismo criterio** que ya usa el renglón de un traspaso, con el mismo motivo
+ * escrito ahí abajo: ponerle «+» y pintarlo de verde a algo que después se excluye de todos los
+ * totales de ingresos es contradecirse dentro de una misma pantalla (Ola 8 · V6).
+ */
+fun rowShowsSign(event: FinancialEvent): Boolean = !isOpeningBalance(event)
+
+private val MESES = listOf(
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+
+/**
+ * El encabezado de un día: «HOY», «AYER», «23 DE AGOSTO» — nunca «2026-08-23».
+ *
+ * Ola 8 · V13: los encabezados mostraban la fecha ISO cruda que manda el server en
+ * `EventDay.date`. Es la clave con la que se agrupa, no algo que alguien quiera leer.
+ *
+ * [hoy] entra por parámetro (y no se lee acá adentro) para que esto sea una función pura y
+ * testeable sin relojes. Quien la llama pasa `todayIsoInAppZone()`, que ya resuelve la zona de
+ * Bogotá con el plan B de `AppTimeZone`: en wasm no existe la base de zonas IANA y
+ * `TimeZone.of("America/Bogota")` lanza, así que cae a UTC-5 fijo (exacto: Colombia no tiene
+ * horario de verano). Acá abajo solo se compara y se resta un día con `LocalDate`, que es
+ * aritmética de calendario pura — no toca la tabla de zonas y por eso no la puede romper.
+ *
+ * Un ISO que no se pueda parsear se devuelve tal cual: es preferible un encabezado feo a una
+ * lista que no se pinta.
+ */
+fun formatDayHeading(iso: String, hoy: String): String {
+    if (iso == hoy) return "Hoy"
+    val fecha = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return iso
+    val hoyFecha = runCatching { LocalDate.parse(hoy) }.getOrNull()
+    if (hoyFecha != null) {
+        if (fecha == hoyFecha.minus(DatePeriod(days = 1))) return "Ayer"
+        // El año solo se dice cuando NO es el corriente: repetir «de 2026» en cada
+        // encabezado de 2026 es ruido.
+        if (fecha.year != hoyFecha.year) return "${fecha.dayOfMonth} de ${MESES[fecha.monthNumber - 1]} de ${fecha.year}"
+    }
+    return "${fecha.dayOfMonth} de ${MESES[fecha.monthNumber - 1]}"
+}
+
 // Índices de los chips de arriba de Movimientos, con nombre para que el filtro de abajo (y sus
 // tests) no dependan de recordar qué significaba el 1 y qué el 2.
 const val CHIP_TODO = 0
@@ -110,8 +171,16 @@ const val CHIP_POR_CONFIRMAR = 3
 fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
         event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED &&
-        !isTransferLeg(event)
-    CHIP_INGRESOS -> event.type == TransactionType.INCOME && !isTransferLeg(event)
+        !isTransferLeg(event) && !isOpeningBalance(event)
+    // Ola 8 · V6: **la apertura de una cuenta tampoco es un ingreso**, por la misma razón que
+    // no lo es una pata de traspaso. El chip «Ingresos» listaba dos «Saldo inicial» en verde y
+    // con «+», y arriba el total decía «+$4.500.000» sin contarlos: filas pintadas como
+    // ingresos, bajo un filtro llamado Ingresos, excluidas a propósito de todos los totales de
+    // ingresos. La contradicción vivía entera en una sola pantalla. `isCashFlow` ya sabía la
+    // respuesta desde siempre (OPENING_CATEGORY nunca es flujo); lo único que faltaba era que
+    // el filtro dijera lo mismo. En «Todo» sí aparece, que es donde tiene sentido verlo.
+    CHIP_INGRESOS -> event.type == TransactionType.INCOME &&
+        !isTransferLeg(event) && !isOpeningBalance(event)
     CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
     else -> true
 }
@@ -219,6 +288,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // Los nombres de las cuentas, para que el renglón de un traspaso diga de dónde a dónde fue la
     // plata (ver [transferRowSubtitle]). Un evento suelto no los necesita: la cuenta no se muestra.
     val accountNames = remember(accounts) { accounts.associate { it.id to it.name } }
+    // V13: «hoy» en la zona de la app (Bogotá), para que los encabezados digan «HOY»/«AYER».
+    // Se calcula una vez por composición y no dentro del bucle de días.
+    val hoyIso = remember { todayIsoInAppZone() }
 
     // Candidatos a pago de tarjeta sin marcar (Task 2 del plan): entrada opcional, así que un
     // fallo al traerlos no debe tapar Movimientos con un snackbar.
@@ -463,18 +535,33 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = day.date.uppercase(),
+                                // V13: «23 DE AGOSTO» / «HOY», no la clave ISO del server.
+                                text = formatDayHeading(day.date, hoyIso).uppercase(),
                                 fontSize = 11.sp,
                                 color = MinTextMute,
                                 fontWeight = FontWeight.Medium,
                                 letterSpacing = 0.4.sp,
                             )
-                            Text(
-                                text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
-                                fontSize = 11.sp,
-                                color = MinTextMute,
-                                fontFamily = FontFamily.Monospace,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                // V6: el total del día suma el FLUJO (lo que entró y salió del
+                                // bolsillo), no todos los renglones de abajo — la apertura de
+                                // una cuenta queda afuera. Decirlo con todas las letras cuesta
+                                // dos palabras y evita que la cifra parezca una suma mal hecha.
+                                Text(
+                                    text = "Flujo del día",
+                                    fontSize = 11.sp,
+                                    color = MinTextFaint,
+                                )
+                                Text(
+                                    text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
+                                    fontSize = 11.sp,
+                                    color = MinTextMute,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                            }
                         }
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -497,6 +584,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                         )
                                         is MovementRow.Single -> MovementSingleRow(
                                             tx = row.event,
+                                            accountNames = accountNames,
                                             onClick = { selectedEvent = row.event },
                                         )
                                     }
@@ -586,9 +674,29 @@ private fun TransferRow(
     }
 }
 
+/**
+ * Un renglón suelto de la lista.
+ *
+ * Ola 8 · V7: el subtítulo dice ahora **de qué cuenta es el movimiento**. Con dos cuentas
+ * abiertas había dos «Saldo inicial» idénticos y nada los distinguía — el renglón de un
+ * traspaso sí decía «De Bancolombia Ahorros a Nequi» y los demás no decían nada. En su lugar
+ * sale `EventSource` («MANUAL», «SMS»…), que además de no aportar nada acá es el nombre crudo
+ * de un enum en una app que habla español; el punto naranja al lado de la descripción ya avisa
+ * lo único que importaba de ahí: que el movimiento entró solo y falta confirmarlo.
+ */
 @Composable
-private fun MovementSingleRow(tx: FinancialEvent, onClick: () -> Unit) {
+private fun MovementSingleRow(
+    tx: FinancialEvent,
+    accountNames: Map<String, String>,
+    onClick: () -> Unit,
+) {
     val isIncome = tx.type == TransactionType.INCOME
+    // V6: la apertura de una cuenta no lleva signo ni color — misma decisión, y mismo motivo,
+    // que el renglón de un traspaso (ver [TransferRow]): la plata no entró ni salió, ya estaba.
+    val conSigno = rowShowsSign(tx)
+    val subtitulo = accountNames[tx.accountId]
+        ?.let { "${tx.category} · $it" }
+        ?: tx.category
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -614,27 +722,25 @@ private fun MovementSingleRow(tx: FinancialEvent, onClick: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(tx.category, fontSize = 12.sp, color = MinTextMute)
-                StatusDot(MinTextFaint, 2.dp)
-                Text(
-                    text = tx.source.name,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MinTextMute,
-                    letterSpacing = 0.3.sp,
-                )
-            }
+            Text(
+                text = subtitulo,
+                fontSize = 12.sp,
+                color = MinTextMute,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Text(
-            text = "${if (isIncome) "+" else "−"}${formatCOP(tx.amount)}",
+            text = if (conSigno) "${if (isIncome) "+" else "−"}${formatCOP(tx.amount)}"
+                   else formatCOP(tx.amount),
             fontSize = 14.5.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
-            color = if (isIncome) MinIncome else MinText,
+            color = when {
+                !conSigno -> MinTextMute
+                isIncome -> MinIncome
+                else -> MinText
+            },
             letterSpacing = (-0.3).sp,
         )
     }
