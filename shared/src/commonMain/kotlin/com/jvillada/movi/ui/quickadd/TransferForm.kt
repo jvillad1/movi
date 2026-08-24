@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -233,128 +236,160 @@ internal fun TransferBody(
         }
     }
 
-    if (picking != null) {
-        TransferAccountPicker(
-            title = if (picking == TransferSide.FROM) "Desde" else "Hacia",
-            accounts = elegibles,
-            selectedId = if (picking == TransferSide.FROM) fromId else toId,
-            onPick = { id ->
-                if (picking == TransferSide.FROM) fromId = id else toId = id
-                picking = null
-            },
-            onClose = { picking = null },
-        )
-        return
-    }
-
-    if (accountsLoaded && elegibles.size < 2) {
-        Spacer(Modifier.height(18.dp))
-        Text(
-            text = "Un traspaso necesita dos cuentas tuyas. Las tarjetas y los préstamos no cuentan: " +
-                "esos se manejan en Créditos.",
-            fontSize = 13.sp,
-            color = MinTextMute,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(18.dp))
-        return
-    }
-
-    Spacer(Modifier.height(18.dp))
-
-    MinCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-    ) {
-        CardRow(
-            left = { Text("Desde", fontSize = 14.5.sp, color = MinTextMute) },
-            right = {
-                Text(
-                    text = from?.name ?: "Elegir cuenta",
-                    fontSize = 14.5.sp,
-                    color = if (from == null) MinTextFaint else MinText,
-                    fontWeight = FontWeight.Medium,
-                )
-            },
-            showChevron = true,
-            onClick = { picking = TransferSide.FROM },
-        )
-        CardRow(
-            left = { Text("Hacia", fontSize = 14.5.sp, color = MinTextMute) },
-            right = {
-                Text(
-                    text = to?.name ?: "Elegir cuenta",
-                    fontSize = 14.5.sp,
-                    color = if (to == null) MinTextFaint else MinText,
-                    fontWeight = FontWeight.Medium,
-                )
-            },
-            showChevron = true,
-            isLast = true,
-            onClick = { picking = TransferSide.TO },
-        )
-    }
-
-    Spacer(Modifier.height(16.dp))
-    MoneyField(value = amount, onValueChange = { amount = it }, label = "MONTO")
-
-    Spacer(Modifier.height(14.dp))
-    Text("FECHA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
-    Spacer(Modifier.height(8.dp))
-    FieldBox("AAAA-MM-DD", date, onValueChange = { date = filterDateInput(it) })
-
-    Spacer(Modifier.height(14.dp))
-    Text("NOTA (OPCIONAL)", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
-    Spacer(Modifier.height(8.dp))
-    FieldBox("Concepto del traspaso", note, onValueChange = { note = it })
-
-    if (error != null) {
-        Spacer(Modifier.height(10.dp))
-        Text(error!!, fontSize = 12.sp, color = MinExpense)
-    }
-
-    Spacer(Modifier.height(16.dp))
+    // Ola 8 · V2 (N4 de la revisión) — la pestaña Traspaso recibe LOS MISMOS DOS ARREGLOS.
+    //
+    // Se los había perdido por un detalle de estructura: este `TransferAccountPicker` y su
+    // `return` viven ADENTRO de la rama `Picker.None` de QuickAddScreen, así que el `Box` de
+    // alto fijado que arregla los sub-pickers de Gasto/Ingreso no llegaba hasta acá. El bug
+    // original seguía intacto una pestaña más allá: abrir «Desde» encogía la hoja de altura
+    // completa a una franja, y cerrarla la estiraba de golpe.
+    //
+    // Mismo remedio, aplicado localmente: se mide el alto del formulario y se le pone como
+    // mínimo al picker de cuentas, así la hoja no cambia de alto al elegir una cuenta.
+    var formHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
-            .clickable(enabled = canSave) { save() },
-        contentAlignment = Alignment.Center,
+            .then(
+                if (picking == null) Modifier
+                else Modifier.heightIn(min = with(density) { formHeightPx.toDp() }),
+            ),
     ) {
-        Text(
-            text = if (saving) "Guardando…" else "Guardar traspaso",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
-        )
-    }
+        if (picking != null) {
+            TransferAccountPicker(
+                title = if (picking == TransferSide.FROM) "Desde" else "Hacia",
+                accounts = elegibles,
+                selectedId = if (picking == TransferSide.FROM) fromId else toId,
+                onPick = { id ->
+                    if (picking == TransferSide.FROM) fromId = id else toId = id
+                    picking = null
+                },
+                onClose = { picking = null },
+            )
+        } else {
+        Column(modifier = Modifier.fillMaxWidth().onSizeChanged { formHeightPx = it.height }) {
 
-    if (!saving && missing != null) {
+        if (accountsLoaded && elegibles.size < 2) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "Un traspaso necesita dos cuentas tuyas. Las tarjetas y los préstamos no cuentan: " +
+                    "esos se manejan en Créditos.",
+                fontSize = 13.sp,
+                color = MinTextMute,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(18.dp))
+        return@Column
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        MinCard(
+            modifier = Modifier.fillMaxWidth(),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+        ) {
+            CardRow(
+                left = { Text("Desde", fontSize = 14.5.sp, color = MinTextMute) },
+                right = {
+                    Text(
+                        text = from?.name ?: "Elegir cuenta",
+                        fontSize = 14.5.sp,
+                        color = if (from == null) MinTextFaint else MinText,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                showChevron = true,
+                onClick = { picking = TransferSide.FROM },
+            )
+            CardRow(
+                left = { Text("Hacia", fontSize = 14.5.sp, color = MinTextMute) },
+                right = {
+                    Text(
+                        text = to?.name ?: "Elegir cuenta",
+                        fontSize = 14.5.sp,
+                        color = if (to == null) MinTextFaint else MinText,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                showChevron = true,
+                isLast = true,
+                onClick = { picking = TransferSide.TO },
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        MoneyField(value = amount, onValueChange = { amount = it }, label = "MONTO")
+
+        Spacer(Modifier.height(14.dp))
+        Text("FECHA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
+        FieldBox("AAAA-MM-DD", date, onValueChange = { date = filterDateInput(it) })
+
+        Spacer(Modifier.height(14.dp))
+        Text("NOTA (OPCIONAL)", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        FieldBox("Concepto del traspaso", note, onValueChange = { note = it })
+
+        // Ola 8 · V2 (N4): igual que el error del editor de un movimiento — alto reservado,
+        // dos renglones, para que un fallo de red no corra el botón de guardar bajo el dedo.
+        Spacer(Modifier.height(10.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(32.dp)) {
+            if (error != null) {
+                Text(error!!, fontSize = 12.sp, color = MinExpense)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                .clickable(enabled = canSave) { save() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (saving) "Guardando…" else "Guardar traspaso",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+            )
+        }
+
+        // Ola 8 · V2 (N4): este renglón vive DEBAJO del botón y aparecía/desaparecía al
+        // escribir el monto, bajando el formulario entero ~40 dp en una hoja anclada abajo.
+        // Mismo criterio que «Falta el monto» en el editor de un movimiento: reserva su alto.
+        Spacer(Modifier.height(8.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(16.dp)) {
+            if (!saving && missing != null) {
+                Text(
+                    text = missing,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        // Un traspaso exige conexión (ver LocalRepository.createTransfer): las dos patas nacen juntas
+        // en la transacción del server o no nacen. Decirlo acá, antes de intentarlo, es más honesto
+        // que dejar que falle y mostrar "revisa tu conexión" como si fuera un imprevisto.
+        Spacer(Modifier.height(10.dp))
         Text(
-            text = missing,
-            fontSize = 12.sp,
-            color = MinTextMute,
+            text = "El traspaso se guarda en línea: las dos puntas se registran juntas o no se registra ninguna.",
+            fontSize = 11.sp,
+            color = MinTextFaint,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
-    }
-
-    // Un traspaso exige conexión (ver LocalRepository.createTransfer): las dos patas nacen juntas
-    // en la transacción del server o no nacen. Decirlo acá, antes de intentarlo, es más honesto
-    // que dejar que falle y mostrar "revisa tu conexión" como si fuera un imprevisto.
-    Spacer(Modifier.height(10.dp))
-    Text(
-        text = "El traspaso se guarda en línea: las dos puntas se registran juntas o no se registra ninguna.",
-        fontSize = 11.sp,
-        color = MinTextFaint,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth(),
-    )
+        } // Column del formulario
+        } // else de `picking != null`
+    } // Box del alto fijado
 }
 
 internal enum class TransferSide { FROM, TO }

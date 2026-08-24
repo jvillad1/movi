@@ -1,8 +1,10 @@
 package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -70,5 +72,78 @@ class TransactionsScreenTest {
     fun `una consulta sin coincidencia en ningun campo no matchea`() {
         val ev = event(description = "Almuerzo", merchant = "Frisby", category = "Comida")
         assertFalse(matchesQuery(ev, "xyzxyz"))
+    }
+
+    // ── Ola 8 · V6 — el saldo inicial no es un ingreso ────────────────────────────
+
+    private fun apertura() = FinancialEvent(
+        id = "ap1",
+        accountId = "a1",
+        type = TransactionType.INCOME,
+        amount = 3_500_000,
+        category = OPENING_CATEGORY,
+        description = "Saldo inicial",
+        timestamp = 0L,
+    )
+
+    @Test
+    fun `el saldo inicial no entra en el chip Ingresos`() {
+        // Aparecía en verde y con «+» bajo un filtro llamado Ingresos, mientras el total de
+        // arriba lo excluía a propósito: la contradicción que V6 vino a sacar.
+        assertFalse(matchesChip(apertura(), CHIP_INGRESOS))
+    }
+
+    @Test
+    fun `el saldo inicial si aparece en Todo`() {
+        assertTrue(matchesChip(apertura(), CHIP_TODO))
+    }
+
+    @Test
+    fun `un ingreso de verdad si entra en el chip Ingresos`() {
+        val nomina = FinancialEvent(
+            id = "n1",
+            accountId = "a1",
+            type = TransactionType.INCOME,
+            amount = 4_500_000,
+            category = "Salario",
+            description = "Nomina agosto",
+            timestamp = 0L,
+        )
+        assertTrue(matchesChip(nomina, CHIP_INGRESOS))
+    }
+
+    @Test
+    fun `el renglon del saldo inicial no lleva signo`() {
+        assertFalse(rowShowsSign(apertura()))
+        assertTrue(rowShowsSign(event()))
+    }
+
+    // ── Ola 8 · V13 — encabezados de día legibles ─────────────────────────────────
+
+    @Test
+    fun `el encabezado del dia dice Hoy y Ayer`() {
+        assertEquals("Hoy", formatDayHeading("2026-08-23", hoy = "2026-08-23"))
+        assertEquals("Ayer", formatDayHeading("2026-08-22", hoy = "2026-08-23"))
+    }
+
+    @Test
+    fun `el encabezado del dia dice la fecha en palabras`() {
+        assertEquals("15 de agosto", formatDayHeading("2026-08-15", hoy = "2026-08-23"))
+        assertEquals("1 de enero", formatDayHeading("2026-01-01", hoy = "2026-08-23"))
+    }
+
+    @Test
+    fun `el ano solo se dice cuando no es el corriente`() {
+        assertEquals("20 de diciembre de 2025", formatDayHeading("2025-12-20", hoy = "2026-08-23"))
+    }
+
+    @Test
+    fun `cruzando el fin de mes Ayer sigue siendo Ayer`() {
+        assertEquals("Ayer", formatDayHeading("2026-07-31", hoy = "2026-08-01"))
+    }
+
+    @Test
+    fun `una fecha ilegible se devuelve tal cual en vez de tumbar la lista`() {
+        assertEquals("no-es-fecha", formatDayHeading("no-es-fecha", hoy = "2026-08-23"))
     }
 }

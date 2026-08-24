@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
@@ -107,6 +109,9 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
+            // Ola 8 · V13: sin `fillMaxWidth` cada ficha medía lo que midiera su rótulo, así
+            // que la fila quedaba con tarjetas de anchos distintos.
+            .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MinSurfaceContainer)
             .clickable { onNavigate(item.screen) }
@@ -131,6 +136,17 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = MinTextDim,
+            // V13: «Mensajes del banco» ocupa dos renglones y su ficha quedaba más alta que
+            // las demás, desalineando la fila entera. Reservando SIEMPRE dos renglones, todas
+            // las fichas miden lo mismo — y el rótulo que se parte se centra en vez de
+            // quedar volcado a la izquierda.
+            minLines = 2,
+            maxLines = 2,
+            // Un rótulo que necesitara TRES renglones se cortaría; con `Ellipsis` al menos lo
+            // dice («Mensajes del ban…») en vez de recortar en silencio, que es lo que hace el
+            // `Clip` por defecto. Hoy el más largo —«Mensajes del banco»— entra en dos.
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }

@@ -197,12 +197,34 @@ private const val MINUS_SIGN = "−"
  */
 fun formatCOP(amount: Long): String = (if (amount < 0) MINUS_SIGN else "") + "$" + groupThousands(amount)
 
-/** Igual que [formatCOP] pero en millones («$1,25M»); mismo arreglo de signo, mismo motivo (F36). */
-fun formatMillions(amount: Long): String {
+/**
+ * Plata en poco espacio, **sin dejar de leerse como plata**.
+ *
+ * Reemplaza a `formatMillions`, que forzaba la escala de millones a cualquier cifra y por eso
+ * decía «$0,00M» tres veces seguidas en el Inicio de una base vacía (Ola 8 · V5) y convertía
+ * $250.000 en «$0,25M», obligando a hacer la cuenta mental para leer un cuarto de millón.
+ *
+ * La regla es la que usa cualquiera al hablar: **por debajo del millón se dicen los pesos**
+ * («$0», «$250.000»), y **de un millón para arriba se dicen millones** con un decimal y sin
+ * ceros de relleno («$1,2M», «$4,5M», «$12M»). Como mucho 8 caracteres («$999.999», «−$1.500M»),
+ * que es lo que entra en cada una de las tres columnas de la tarjeta en un teléfono angosto.
+ *
+ * **Esto no unifica la tarjeta en un solo formato, y no pretende hacerlo.** Arriba, «Balance
+ * neto» sigue en formato largo («$8.550.000») porque es la cifra principal y tiene toda la
+ * fila para ella; abajo conviven «$4,5M» y «$250.000» en la misma fila, porque cada columna
+ * dice su cifra en la escala en que esa cifra se lee sin traducir. Lo que se arregló es que
+ * ninguna mienta ni obligue a dividir mentalmente, no que todas se vean iguales.
+ *
+ * El signo lo trae el formato, como en [formatCOP] — no lo dupliques afuera (F36).
+ */
+fun formatMoneyCompact(amount: Long): String {
     val abs = kotlin.math.abs(amount)
-    // Round to nearest 0.01M without floating-point error.
-    val hundredths = (abs + 5_000) / 10_000
-    val intPart = hundredths / 100
-    val frac = (hundredths % 100).toString().padStart(2, '0')
-    return (if (amount < 0) MINUS_SIGN else "") + "$$intPart,${frac}M"
+    if (abs < 1_000_000L) return formatCOP(amount)
+    val sign = if (amount < 0) MINUS_SIGN else ""
+    // Décimas de millón, redondeadas sin pasar por coma flotante.
+    val tenths = (abs + 50_000L) / 100_000L
+    val intPart = tenths / 10
+    val frac = tenths % 10
+    // «$12M», no «$12,0M»: el decimal solo aparece cuando dice algo.
+    return if (frac == 0L) "$sign$${groupThousands(intPart)}M" else "$sign$${groupThousands(intPart)},${frac}M"
 }

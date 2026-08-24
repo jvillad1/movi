@@ -192,6 +192,12 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     enabled = !loading,
                     cursorBrush = SolidColor(MinText),
                     textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                    // Ola 8 · V2: mismo agujero que tenía la nota de Agregar. El `Box(weight)`
+                    // reserva el ancho, pero el área que responde al toque es la del campo, y
+                    // con el texto vacío mide cero: se tocaba «Pregúntale a Movi…» y no pasaba
+                    // nada. Sin `fillMaxWidth` solo se podía escribir después de acertarle a
+                    // una raya invisible.
+                    modifier = Modifier.fillMaxWidth(),
                     decorationBox = { inner ->
                         if (input.isEmpty()) {
                             Text(
