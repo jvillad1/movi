@@ -573,7 +573,7 @@ class EventRoutesTest {
      * El caso central de F12: un cliente que omite `reconciliationStatus` (como QuickAdd antes
      * del fix) hereda el default UNCONFIRMED del modelo — pero al venir con `source` MANUAL (el
      * otro default), el server lo corrige a RECONCILED. Sin esto, todo lo anotado a mano caía en
-     * el filtro "Por confirmar" y desaparecía de "Egresos", que excluye lo pendiente.
+     * el filtro "Por confirmar" y desaparecía de "Gastos", que excluye lo pendiente.
      */
     @Test
     fun `evento manual sin reconciliationStatus explicito nace RECONCILED`() = testApplication {

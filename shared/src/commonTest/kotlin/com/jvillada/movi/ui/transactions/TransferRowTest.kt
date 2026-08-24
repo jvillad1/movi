@@ -91,7 +91,7 @@ class TransferRowTest {
     }
 
     /**
-     * Si un filtro (chips «Egresos», búsqueda) dejó una sola pata a la vista, se muestra tal cual
+     * Si un filtro (chips «Gastos», búsqueda) dejó una sola pata a la vista, se muestra tal cual
      * en vez de esconderla: la lista tiene que seguir mostrando lo que el filtro pidió, y media
      * pareja con su descripción ("Traspaso a CDT") sigue siendo legible.
      */
