@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.balance
 
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -61,5 +62,15 @@ class CardPaymentsTest {
     @Test
     fun `una descripcion sin ninguno de los patrones no matchea`() {
         assertFalse(looksLikeCardPayment("Compra en Éxito", "Mercado"))
+    }
+
+    /**
+     * La nota del traspaso viaja pegada a la descripción, así que la coincidencia es alcanzable
+     * sin mala fe — y confirmar el candidato es imposible: `PUT /api/events/{id}/category`
+     * rechaza tocar una pata de traspaso.
+     */
+    @Test
+    fun `una pata de traspaso no se propone nunca, aunque su nota diga 'pago tarjeta'`() {
+        assertFalse(looksLikeCardPayment("Traspaso a Nequi · pago tarjeta", TRANSFER_CATEGORY))
     }
 }

@@ -267,6 +267,34 @@ class TransferRoutesTest {
         assertFalse(after["spentByCategory"]?.jsonObject.orEmpty().containsKey(TRANSFER_CATEGORY))
     }
 
+    /**
+     * T1: `FinanceSummary.eventCount` es "cuántos movimientos anotó el dueño", y un traspaso es
+     * UNO. Contaba dos —una fila por pata— mientras Movimientos, una pantalla más allá, mostraba
+     * el mismo traspaso como un solo renglón. Ver [com.jvillada.movi.shared.model.movementCount].
+     */
+    @Test
+    fun `un traspaso suma un movimiento al conteo, no dos`() = testApplication {
+        wireApp()
+        // La apertura de Ahorros ya está sembrada y no cuenta (F54): se arranca en cero.
+        assertEquals(0, financeSummaryEventCount(), "la apertura de cuenta no es un movimiento")
+
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        assertEquals(2L, eventCount() - 1L, "en la base siguen siendo dos filas")
+        assertEquals(1, financeSummaryEventCount(), "pero para el dueño pasó una sola cosa")
+    }
+
+    private suspend fun ApplicationTestBuilder.financeSummaryEventCount(): Int =
+        client.get("/api/finance-summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+            .let { Json.parseToJsonElement(it).jsonObject }["eventCount"]
+            ?.jsonPrimitive?.long?.toInt() ?: 0
+
     // ── Validaciones ──────────────────────────────────────────────────────────
 
     private fun assertRejected(expectedMessage: String, body: String) = testApplication {
