@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.TRANSFER_ID_ALREADY_USED
 import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.transferLegsFor
@@ -76,6 +77,26 @@ fun Route.transferRoutes() {
             // viejo o un POST a mano no pasan por ahí.
             validateTransfer(from, to, body.amount)?.let { motivo ->
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, motivo)
+            }
+
+            // ¿Ese `transferId` ya tiene dueño? El esquema impide que un traspaso termine con
+            // tres o cuatro patas (índice único (user_id, transfer_id, type), ver
+            // `Migrations.createUniqueTransferLegIndex`), pero un índice solo sabe decir "no" con
+            // una excepción de SQL, y acá abajo esa excepción se interpreta como reintento y se
+            // responde 200 con las patas que ya estaban — o sea, "guardado" sobre un traspaso que
+            // no es el que pidieron. Así que se pregunta antes, y se dice lo que pasa.
+            //
+            // El reintento de verdad —el dedo que volvió a tocar Guardar— manda EXACTAMENTE los
+            // mismos tres ids: ese caso cae por el `else` y sigue su camino de siempre.
+            val patasExistentes = dbQuery {
+                Events.select(Events.id)
+                    .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
+                    .map { it[Events.id] }
+                    .toSet()
+            }
+            if (patasExistentes.isNotEmpty() && patasExistentes != setOf(body.fromEventId, body.toEventId)) {
+                println("[transfers] transferId=${body.transferId} ya lo usan otras patas: $patasExistentes")
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_ID_ALREADY_USED)
             }
 
             val (fromLeg, toLeg) = transferLegsFor(body, from, to)

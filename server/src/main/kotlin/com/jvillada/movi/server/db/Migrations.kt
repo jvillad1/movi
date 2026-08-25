@@ -15,15 +15,97 @@ private const val DAY_MS = 86_400_000L
 /** Nombre viejo del SMS recién llegado, reemplazado por `SMS_STATE_PENDING`. Solo lo usa la migración. */
 private const val LEGACY_SMS_STATE_NEW = "new"
 
+/** Índice único que expresa "una sola pata por traspaso y por lado" — ver su migración. */
+const val UNIQUE_TRANSFER_LEG_INDEX = "uq_events_transfer_leg"
+
 /**
- * Migraciones de datos que corren al arrancar, después del schema. Todas deben ser
- * idempotentes por construcción (correrlas dos veces no cambia nada la segunda).
+ * Migraciones que corren al arrancar, después del schema, dentro de esa misma transacción. Todas
+ * deben ser idempotentes por construcción (correrlas dos veces no cambia nada la segunda).
+ *
+ * Casi todas son de datos. La excepción es [createUniqueTransferLegIndex], que agrega un índice:
+ * vive acá y no en `Tables.kt` justamente porque necesita mirar los datos antes de tocar el
+ * esquema — un `CREATE UNIQUE INDEX` que falle acá aborta la transacción y deja el server sin
+ * arrancar, así que primero pregunta y solo después crea. Cualquier migración de esquema que se
+ * agregue después tiene que respetar lo mismo: **nada que pueda tumbar el arranque**.
  */
 object Migrations {
     fun Transaction.runAll() {
         restampStatementEventsToBogota()
         renameLegacyNewSmsStateToPending()
+        createUniqueTransferLegIndex()
     }
+
+    /**
+     * **Un traspaso tiene exactamente dos patas: una de salida y una de entrada.** Hasta acá esa
+     * regla vivía solo en el código —el cliente, y `POST /api/transfers`, que inserta las dos en
+     * una transacción— y el esquema no la conocía: `idx_events_transfer_id` es un índice común, no
+     * único, así que nada impedía que un `transfer_id` terminara con tres o cuatro patas.
+     *
+     * **Por qué un único COMPUESTO y no un único a secas sobre `transfer_id`:** las dos patas
+     * comparten el `transfer_id` a propósito. Un único simple sobre esa columna rechazaría la
+     * segunda pata de TODOS los traspasos — rompería la feature entera y, sobre una base con
+     * traspasos reales, ni siquiera se podría crear. La forma que sí expresa la regla es
+     * `(user_id, transfer_id, type)`: como máximo un EXPENSE y un INCOME por traspaso, o sea como
+     * máximo dos patas y nunca dos del mismo lado.
+     *
+     * Se incluye `user_id` porque toda lectura de este sistema ya está acotada por usuario: la
+     * unicidad correcta es por dueño, no global. Dos usuarios que por una casualidad astronómica
+     * generaran el mismo id no tienen por qué molestarse.
+     *
+     * **Los eventos normales no se ven afectados**: tienen `transfer_id` en NULL, y tanto
+     * Postgres como H2 tratan como distintas todas las filas cuya clave tiene algún NULL. Es la
+     * suposición riesgosa de este cambio, así que está fijada por test (`MigrationsTest`).
+     *
+     * **Lo que esto NO expresa** y por eso vive además en el POST: "al menos dos patas", "de
+     * cuentas distintas" y "del mismo monto". Un índice no puede exigir la *existencia* de una
+     * fila hermana; eso solo lo puede garantizar quien escribe las dos, que es el endpoint —
+     * las inserta en una sola transacción, y desde este cambio además rechaza reusar un
+     * `transferId` que ya tiene patas ajenas (`TRANSFER_ID_ALREADY_USED`).
+     *
+     * **Si los datos ya violan la regla, no se crea el índice y el server arranca igual.** Esta
+     * migración corre dentro de la transacción del esquema: un `CREATE UNIQUE INDEX` que falle la
+     * aborta entera y deja el server sin levantar. Un arranque caído es mucho peor que un índice
+     * que falta —el POST sigue defendiendo la regla y los traspasos sanos siguen funcionando—, así
+     * que primero se pregunta y solo después se crea. Si algún día pasa, el log dice qué
+     * `transfer_id` hay que limpiar a mano.
+     *
+     * Idempotente por `IF NOT EXISTS` (soportado por Postgres y por H2 en modo PostgreSQL).
+     *
+     * @return `true` si el índice quedó creado (o ya estaba)
+     */
+    fun Transaction.createUniqueTransferLegIndex(): Boolean {
+        val duplicados = duplicateTransferLegs()
+        if (duplicados.isNotEmpty()) {
+            println(
+                "[migrations] NO se creó $UNIQUE_TRANSFER_LEG_INDEX: hay ${duplicados.size} " +
+                    "grupo(s) (user_id, transfer_id, type) con más de una pata. " +
+                    "transfer_id afectados: ${duplicados.joinToString()}. " +
+                    "Hay que dejar dos patas por traspaso (una EXPENSE y una INCOME) y reiniciar.",
+            )
+            return false
+        }
+        exec(
+            "CREATE UNIQUE INDEX IF NOT EXISTS $UNIQUE_TRANSFER_LEG_INDEX " +
+                "ON financial_events (user_id, transfer_id, type)",
+        )
+        return true
+    }
+
+    /**
+     * Los `transfer_id` que hoy tienen más de una pata del mismo lado — o sea, los que impedirían
+     * crear el índice de [createUniqueTransferLegIndex]. Vacío es lo esperado siempre.
+     */
+    fun Transaction.duplicateTransferLegs(): List<String> =
+        exec(
+            """
+            SELECT transfer_id FROM financial_events
+            WHERE transfer_id IS NOT NULL
+            GROUP BY user_id, transfer_id, type
+            HAVING COUNT(*) > 1
+            """.trimIndent(),
+        ) { rs ->
+            buildList { while (rs.next()) add(rs.getString(1)) }
+        }.orEmpty()
 
     /**
      * Antes de AppClock, los eventos de extracto (source = STATEMENT) se sellaban a las 00:00Z

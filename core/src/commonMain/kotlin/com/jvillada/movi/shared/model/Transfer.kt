@@ -57,6 +57,17 @@ const val TRANSFER_LEG_NOT_STANDALONE =
     "Un traspaso se registra completo, con sus dos puntas: abre Agregar y elige Traspaso."
 
 /**
+ * Lo que se le dice a un cliente que reusa un `transferId` que ya tiene patas de OTRO traspaso.
+ *
+ * No es el reintento del dedo —ese manda los mismos tres ids y se responde con las patas que ya
+ * están, ver `POST /api/transfers`—: es un traspaso distinto pidiendo una identidad ocupada. Si se
+ * dejara pasar, ese id terminaría con cuatro patas y nada podría volver a decir cuál compensa a
+ * cuál: ni la anulación en cascada, ni el renglón único de Movimientos, ni el conteo del Inicio.
+ */
+const val TRANSFER_ID_ALREADY_USED =
+    "Ese traspaso ya existe con otros movimientos. Vuelve a intentarlo desde Agregar."
+
+/**
  * Categoría a la que va a parar la pata que **sobrevive al borrado de la cuenta de la otra
  * punta** (ver `DELETE /api/accounts/{id}`).
  *

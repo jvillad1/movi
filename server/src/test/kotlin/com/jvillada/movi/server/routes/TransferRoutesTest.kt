@@ -21,6 +21,7 @@ import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.TRANSFER_ID_ALREADY_USED
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -647,6 +648,42 @@ class TransferRoutesTest {
         }.bodyAsText()
         assertEquals(750_000L, balanceOf(accounts, ahorrosId), "el saldo se movió una sola vez")
         assertEquals(250_000L, balanceOf(accounts, cdtId))
+    }
+
+    /**
+     * T3, del lado del endpoint: el mismo `transferId` con OTROS ids de evento no es un reintento,
+     * es un traspaso distinto pidiendo una identidad ocupada. Antes se dejaba pasar y ese id
+     * terminaba con cuatro patas: nada podía volver a decir cuál compensaba a cuál.
+     *
+     * (La red del esquema es el índice único `(user_id, transfer_id, type)` que crea
+     * `Migrations.createUniqueTransferLegIndex`; acá se prueba la puerta, no la red — este H2 se
+     * levanta con `SchemaUtils.create` y no corre migraciones.)
+     */
+    @Test
+    fun `reusar un transferId con otros ids de evento se rechaza`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        val otro = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromEventId = "ev-otro-from", toEventId = "ev-otro-to", amount = 90_000L))
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, otro.status)
+        assertEquals(TRANSFER_ID_ALREADY_USED, otro.bodyAsText())
+
+        val patas = transaction { Events.selectAll().where { Events.transferId eq "tr-1" }.count() }
+        assertEquals(2L, patas, "el traspaso que ya estaba sigue teniendo dos patas, ni una más")
+
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(750_000L, balanceOf(accounts, ahorrosId), "y ningún saldo se movió de más")
     }
 
     // ── m8: un id inválido se rechaza como tal, no como «ya registrado» ───────
