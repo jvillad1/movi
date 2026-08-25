@@ -56,6 +56,47 @@ const val TRANSFER_CATEGORY_RESERVED =
 const val TRANSFER_LEG_NOT_STANDALONE =
     "Un traspaso se registra completo, con sus dos puntas: abre Agregar y elige Traspaso."
 
+/**
+ * Categoría a la que va a parar la pata que **sobrevive al borrado de la cuenta de la otra
+ * punta** (ver `DELETE /api/accounts/{id}`).
+ *
+ * Es la misma «Otros» a la que ya cae una fila de extracto que llegó etiquetada «Traspaso» sin
+ * hermana (ver `StatementRoutes.createEventFromParsed`): en este sistema, una pata sin la otra
+ * **no puede quedarse en la categoría reservada**. Ahí adentro sería un fantasma permanente —
+ * fuera del mes por la regla de [isCashFlow], fuera de los chips Gastos e Ingresos por
+ * [TRANSFER_CATEGORY], y encima imposible de arreglar, porque `PUT /api/events/{id}/category`
+ * rechaza recategorizar cualquier cosa que tenga esta categoría ([TRANSFER_RECATEGORIZE_BLOCKED]).
+ *
+ * Y no es solo higiene: una vez que la otra cuenta se fue de Movi, esa plata efectivamente salió
+ * (o entró) del perímetro que la app lleva. El saldo de la cuenta que queda ya lo dice —nunca se
+ * toca—; lo que faltaba era que las cifras del mes dijeran lo mismo.
+ */
+const val ORPHANED_LEG_CATEGORY = "Otros"
+
+/**
+ * Lo que se le agrega a la descripción de esa pata para que se explique sola.
+ *
+ * La descripción ya nombra la otra punta ("Traspaso a Nequi", ver [transferLegsFor]); lo único
+ * que falta decir es que esa cuenta ya no está. Sin esto, el dueño se encontraba con un renglón
+ * que apunta a una cuenta que no puede abrir.
+ */
+const val ORPHANED_LEG_SUFFIX = " · cuenta eliminada"
+
+/** Largo de `financial_events.description` (ver `Tables.kt`) y de su espejo local. */
+private const val MAX_DESCRIPTION_LENGTH = 255
+
+/**
+ * La descripción de [original] con [ORPHANED_LEG_SUFFIX] pegado, sin pasarse del largo de la
+ * columna: si no cabe, se recorta la descripción —no el sufijo— porque el sufijo es justamente
+ * la parte que el dueño necesita leer. Idempotente: una descripción que ya lo trae no lo repite
+ * (borrar dos cuentas de dos traspasos distintos no puede encadenar sufijos).
+ */
+fun orphanedLegDescription(original: String): String {
+    if (original.endsWith(ORPHANED_LEG_SUFFIX)) return original
+    val room = MAX_DESCRIPTION_LENGTH - ORPHANED_LEG_SUFFIX.length
+    return original.take(room) + ORPHANED_LEG_SUFFIX
+}
+
 /** Las dos patas que quedaron creadas, tal como el server las guardó. */
 @Serializable
 data class TransferResult(

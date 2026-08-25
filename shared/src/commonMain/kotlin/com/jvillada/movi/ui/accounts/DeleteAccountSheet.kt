@@ -32,6 +32,12 @@ fun DeleteAccountSheet(
     accountId: String,
     accountName: String,
     eventCount: Int,
+    /**
+     * Cuántos de esos movimientos son **patas de traspaso con otras cuentas** (ver
+     * [transferWarningLabel]). Con default en 0 para que un call site que no lo sepa —o una
+     * cuenta sin traspasos— siga viendo la hoja de siempre.
+     */
+    transferCount: Int = 0,
     onDismiss: () -> Unit,
     onDeleted: () -> Unit,
 ) {
@@ -93,6 +99,18 @@ fun DeleteAccountSheet(
                 lineHeight = 19.sp,
             )
 
+            // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
+            // cuenta sino en otra: la mitad del traspaso que sobrevive. Solo aparece si la hay.
+            if (transferCount > 0) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = transferWarningLabel(transferCount),
+                    fontSize = 13.sp,
+                    color = MinTextMute,
+                    lineHeight = 18.sp,
+                )
+            }
+
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(text = error!!, fontSize = 12.sp, color = MinExpense)
@@ -140,3 +158,25 @@ fun DeleteAccountSheet(
 
 private fun eventCountLabel(count: Int): String =
     if (count == 1) "su 1 movimiento" else "sus $count movimientos"
+
+/**
+ * El aviso de los traspasos, **antes** de borrar y no después.
+ *
+ * Un traspaso tiene una pata en cada cuenta. Al borrar esta, la pata de la OTRA cuenta sobrevive
+ * —tiene que sobrevivir: la plata salió de verdad y el saldo de esa cuenta lo refleja— pero se
+ * queda sin la mitad que la explicaba, así que el server la suelta del par y la devuelve a una
+ * categoría normal (ver `desenlazarPatasHermanas` en `AccountRoutes.kt`). Eso cambia las cifras
+ * de un mes que el dueño ya daba por cerrado, y esa es justo la clase de cosa de la que no puede
+ * enterarse después: se dice acá, con el número real, antes de tocar el botón rojo.
+ */
+private fun transferWarningLabel(count: Int): String =
+    if (count == 1) {
+        "1 de esos movimientos es un traspaso con otra cuenta. Esa cuenta conserva su mitad y su " +
+            "saldo no cambia, pero ese movimiento deja de ser un traspaso y vuelve a contar en " +
+            "los gastos o ingresos del mes en que ocurrió. Puedes cambiarle la categoría después."
+    } else {
+        "$count de esos movimientos son traspasos con otras cuentas. Esas cuentas conservan su " +
+            "mitad y sus saldos no cambian, pero esos movimientos dejan de ser traspasos y " +
+            "vuelven a contar en los gastos o ingresos del mes en que ocurrieron. Puedes " +
+            "cambiarles la categoría después."
+    }

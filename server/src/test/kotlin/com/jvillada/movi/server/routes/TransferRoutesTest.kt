@@ -17,9 +17,12 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -51,6 +54,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -294,6 +298,73 @@ class TransferRoutesTest {
         }.bodyAsText()
             .let { Json.parseToJsonElement(it).jsonObject }["eventCount"]
             ?.jsonPrimitive?.long?.toInt() ?: 0
+
+    // ── Borrar una de las dos cuentas ─────────────────────────────────────────
+
+    /**
+     * T2: el dueño traspasa de Ahorros al CDT y después cierra el CDT y lo borra. La pata del CDT
+     * se va con la cuenta; la de Ahorros **sobrevive** —la plata salió de verdad y el saldo lo
+     * dice— pero no puede quedarse como media pareja: sin `transferId`, sin la categoría
+     * reservada y diciendo lo que pasó. Ver `desenlazarPatasHermanas` en `AccountRoutes.kt`.
+     */
+    @Test
+    fun `borrar una cuenta suelta la pata hermana en vez de dejarla colgando`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        val borrado = client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NoContent, borrado.status)
+
+        val pata = transaction {
+            Events.selectAll().where { Events.id eq "ev-from-1" }.single()
+        }
+        assertNull(pata[Events.transferId], "ya no es media pareja: nadie tiene que buscarle hermana")
+        assertEquals(ORPHANED_LEG_CATEGORY, pata[Events.category])
+        assertEquals("Traspaso a CDT$ORPHANED_LEG_SUFFIX", pata[Events.description])
+
+        // El saldo de Ahorros NO se toca: los $250.000 salieron y no vuelven por borrar el CDT.
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(750_000L, balanceOf(accounts, ahorrosId))
+
+        // Y ahora sí es un gasto del mes: con el CDT fuera de Movi, esa plata salió del perímetro
+        // que la app lleva.
+        val summary = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+        assertEquals(250_000L, summary["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+    }
+
+    @Test
+    fun `la pata suelta cuenta como un movimiento y se puede recategorizar`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+        client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        assertEquals(1, financeSummaryEventCount(), "quedó un movimiento, no medio ni dos")
+
+        // Lo que antes era imposible: la ruta rechazaba tocar cualquier pata de traspaso, así que
+        // el dueño no tenía forma de sacar esa fila de «Traspaso».
+        val recategorizada = client.put("/api/events/ev-from-1/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"Ahorro"}""")
+        }
+        assertEquals(HttpStatusCode.OK, recategorizada.status)
+    }
 
     // ── Validaciones ──────────────────────────────────────────────────────────
 

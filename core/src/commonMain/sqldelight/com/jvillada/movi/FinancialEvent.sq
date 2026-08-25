@@ -68,6 +68,17 @@ UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id AND category = :c
 updateCategory:
 UPDATE financial_event SET category = :category WHERE id = :id AND userId = :userId;
 
+-- Espejo local del desenlace que hace `DELETE /api/accounts/{id}` en el server (ver
+-- `desenlazarPatasHermanas` en AccountRoutes.kt): la pata que vive en OTRA cuenta sobrevive al
+-- borrado, pero deja de ser media pareja — transferId a NULL, categoría honesta y descripción que
+-- se explica sola. Hace falta acá porque el SyncEngine solo EMPUJA: nada baja del server, así que
+-- sin este UPDATE el teléfono se quedaría mostrando «Traspaso a Nequi» enlazado a una hermana que
+-- ya no existe, para siempre.
+detachOrphanedLeg:
+UPDATE financial_event
+SET transferId = NULL, category = :category, description = :description
+WHERE id = :id AND userId = :userId;
+
 -- F55: espejo local de DELETE /api/accounts/{id} — borra los movimientos locales de la cuenta
 -- borrada, mismo criterio que `selectByAccount` (accountId + userId, la cuenta es de un solo
 -- usuario en este dispositivo).
