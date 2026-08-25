@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Fija el modelo del **traspaso**: dos patas enlazadas por [FinancialEvent.transferId], las dos
@@ -172,5 +173,32 @@ class TransferTest {
             ).transferId,
         )
         assertNotNull(transferLegsFor(request(), ahorros, cdt).first.transferId)
+    }
+
+    // ── La pata que sobrevive al borrado de la otra cuenta ────────────────────
+
+    @Test
+    fun `la pata suelta dice que la otra cuenta ya no existe`() {
+        assertEquals("Traspaso a CDT · cuenta eliminada", orphanedLegDescription("Traspaso a CDT"))
+    }
+
+    /** Borrar dos cuentas, dos traspasos distintos: el sufijo no se encadena. */
+    @Test
+    fun `agregar el sufijo dos veces no lo repite`() {
+        val una = orphanedLegDescription("Traspaso a CDT")
+        assertEquals(una, orphanedLegDescription(una))
+    }
+
+    /**
+     * La columna es `varchar(255)`: si no cabe, lo que se recorta es la descripción y NO el
+     * sufijo — el sufijo es justo la parte que explica el renglón.
+     */
+    @Test
+    fun `una descripcion al limite se recorta pero conserva el sufijo`() {
+        val larga = "T".repeat(255)
+        val resultado = orphanedLegDescription(larga)
+
+        assertEquals(255, resultado.length)
+        assertTrue(resultado.endsWith(ORPHANED_LEG_SUFFIX))
     }
 }

@@ -2,6 +2,7 @@ package com.jvillada.movi.server.balance
 
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
@@ -40,9 +41,17 @@ private val CARD_PAYMENT_PATTERNS = listOf(
  * ([com.jvillada.movi.ui.transactions.ChangeCategorySheet]).
  *
  * Si [category] ya es [CARD_PAYMENT_CATEGORY] no hay nada que proponer: el evento ya está bien.
+ *
+ * Y una **pata de traspaso** ([TRANSFER_CATEGORY]) tampoco se propone nunca, aunque su
+ * descripción matchee: la nota que el dueño le escribió al traspaso viaja pegada a la descripción
+ * ("Traspaso a Nequi · pago tarjeta"), así que era alcanzable sin mala fe. Proponerla era ofrecer
+ * un botón que no lleva a ningún lado: confirmarla llama a `PUT /api/events/{id}/category`, y esa
+ * ruta rechaza tocar una pata de traspaso con un 422 (TRANSFER_RECATEGORIZE_BLOCKED). El dueño
+ * veía un candidato que la app no se deja arreglar.
  */
 fun looksLikeCardPayment(description: String, category: String): Boolean {
     if (category == CARD_PAYMENT_CATEGORY) return false
+    if (category == TRANSFER_CATEGORY) return false
     val normalized = description.lowercase()
     return CARD_PAYMENT_PATTERNS.any { it in normalized }
 }

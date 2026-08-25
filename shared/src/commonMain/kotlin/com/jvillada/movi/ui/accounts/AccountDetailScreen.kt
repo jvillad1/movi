@@ -108,6 +108,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     }
 
     val totalEvents = days.sumOf { it.items.size }
+    // Cuántos de esos movimientos tienen su otra mitad en OTRA cuenta. Sale de lo que ya está en
+    // pantalla —no hay endpoint nuevo, y funciona igual sin red— porque `transferId` viaja en cada
+    // evento. Una pata ya huérfana (de un borrado anterior) lo tiene en null y no cuenta: su otra
+    // punta ya no existe, así que borrar esta cuenta no le hace nada a nadie más.
+    val transferLegs = days.sumOf { day -> day.items.count { it.transferId != null } }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -386,6 +391,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     accountId = acc.id,
                     accountName = acc.name,
                     eventCount = totalEvents,
+                    transferCount = transferLegs,
                     onDismiss = { showDeleteAccount = false },
                     onDeleted = {
                         // F22: mismo destino de reserva que la flecha de volver de acá arriba —

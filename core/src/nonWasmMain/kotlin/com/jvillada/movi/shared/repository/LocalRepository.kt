@@ -15,6 +15,8 @@ import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.orphanedLegDescription
 import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.TransferResult
@@ -153,6 +155,28 @@ class LocalRepository(
         remote.deleteAccount(id)
         val uid = userId()
         db.transaction {
+            // Lo mismo que acaba de hacer el server, con las mismas palabras (ver
+            // `desenlazarPatasHermanas` en AccountRoutes.kt): la pata hermana de cada traspaso
+            // vive en OTRA cuenta, sobrevive al borrado y deja de ser media pareja. Se espeja acá
+            // porque el SyncEngine solo empuja —nada baja del server— y todas las pantallas del
+            // teléfono leen de esta base: sin esto, el celular se quedaría para siempre con un
+            // «Traspaso a Nequi» enlazado a una hermana que ya no existe, mientras el server
+            // muestra otra cosa.
+            db.financialEventQueries.selectByAccount(id, uid).executeAsList()
+                .mapNotNull { it.transferId }
+                .toSet()
+                .forEach { transferId ->
+                    db.financialEventQueries.selectByTransferId(transferId, uid).executeAsList()
+                        .filter { it.accountId != id }
+                        .forEach { hermana ->
+                            db.financialEventQueries.detachOrphanedLeg(
+                                category    = ORPHANED_LEG_CATEGORY,
+                                description = orphanedLegDescription(hermana.description),
+                                id          = hermana.id,
+                                userId      = uid,
+                            )
+                        }
+                }
             // Los voids ANTES que los eventos: la subconsulta de deleteByAccount los encuentra
             // por el accountId de sus eventos, que después de la línea siguiente ya no existen.
             db.voidEventQueries.deleteByAccount(id, uid)

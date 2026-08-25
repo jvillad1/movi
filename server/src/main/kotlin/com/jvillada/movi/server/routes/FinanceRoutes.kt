@@ -14,11 +14,11 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Holding
-import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.movementCount
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -196,11 +196,14 @@ fun Route.financeRoutes() {
                 egresos = egresos,
                 // Del usuario completo, no del mes ni del `scope` — ver KDoc del campo en
                 // FinanceSummary. `scope` hoy no filtra nada en este endpoint (ver arriba:
-                // ni accountRows ni nonVoidedEvents lo usan), así que no hay nada que
-                // "desfiltrar" acá más que la apertura de cuenta (F54): un "Saldo inicial" no es
-                // un movimiento que el usuario haya anotado, así que no cuenta para la guía de
-                // primeros pasos.
-                eventCount = nonVoidedEvents.count { it.category != OPENING_CATEGORY },
+                // ni accountRows ni nonVoidedEvents lo usan).
+                //
+                // El criterio de qué es "un movimiento" vive en :core (ver [movementCount]) y no
+                // acá: además de la apertura de cuenta (F54), un traspaso son DOS eventos y una
+                // sola cosa que el dueño hizo. Mover $1.000.000 de una cuenta a otra le sumaba 2
+                // a este contador, mientras Movimientos lo mostraba —correctamente— como un solo
+                // renglón.
+                eventCount = movementCount(nonVoidedEvents),
             )
         }
         call.respond(summary)

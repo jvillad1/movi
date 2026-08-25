@@ -7,6 +7,8 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
@@ -487,6 +489,70 @@ class LocalRepositoryTest {
 
         assertEquals(1_000_000L, repo.getAccount("acc-ahorros").balance)
         assertEquals(0L, repo.getAccount("acc-cdt").balance)
+    }
+
+    // ── deleteAccount: el espejo del desenlace de la pata hermana ─────────────
+
+    /**
+     * M1: la contraparte local de `desenlazarPatasHermanas` (ver `AccountRoutes.kt`).
+     *
+     * Toda la justificación de este espejo es "el teléfono y el server no pueden divergir", y
+     * divergir es justo lo que un test atrapa: el `SyncEngine` **solo empuja**, nada baja del
+     * server, así que si este UPDATE no corriera, el celular se quedaría para siempre con un
+     * «Traspaso a CDT» enlazado a una hermana que ya no existe — y con la categoría reservada,
+     * que además lo dejaría fuera de los chips Gastos e Ingresos y sin forma de recategorizarlo.
+     *
+     * Las aserciones son las MISMAS que las de `TransferRoutesTest`: si un lado cambia y el otro
+     * no, uno de los dos tests se cae.
+     */
+    @Test
+    fun deleteAccount_suelta_la_pata_hermana_del_traspaso() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        repo.deleteAccount("acc-cdt")
+
+        val pata = repo.getEvents("acc-ahorros").single()
+        assertNull(pata.transferId, "ya no es media pareja")
+        assertEquals(ORPHANED_LEG_CATEGORY, pata.category)
+        assertEquals("Traspaso a acc-cdt$ORPHANED_LEG_SUFFIX", pata.description)
+        // Y vuelve a ser flujo de caja: es la consecuencia que la hoja de borrado avisa.
+        assertTrue(pata.countsAsCashFlow)
+        // El saldo de Ahorros NO se toca: la plata salió de verdad.
+        assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
+    }
+
+    /** El espejo de M2: si se borra el origen, la que sobrevive es la pata de INGRESO. */
+    @Test
+    fun deleteAccount_de_la_cuenta_de_origen_deja_la_pata_de_ingreso_con_su_categoria() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.createTransfer(transferRequest())
+
+        repo.deleteAccount("acc-ahorros")
+
+        val pata = repo.getEvents("acc-cdt").single()
+        assertEquals(TransactionType.INCOME, pata.type)
+        assertNull(pata.transferId)
+        assertEquals(ORPHANED_LEG_CATEGORY, pata.category)
+        assertEquals("Traspaso desde acc-ahorros$ORPHANED_LEG_SUFFIX", pata.description)
+        assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
+    }
+
+    /** Una cuenta sin traspasos no le toca un pelo a los movimientos de las demás. */
+    @Test
+    fun deleteAccount_sin_traspasos_no_toca_ningun_otro_movimiento() = runBlocking {
+        crearCuentasDelTraspaso()
+        repo.postEvent(event("evt-mercado", "acc-ahorros", TransactionType.EXPENSE, 30_000L))
+        repo.createAccount(Account("acc-suelta", "Efectivo", AccountType.CASH, 0L))
+        repo.postEvent(event("evt-taxi", "acc-suelta", TransactionType.EXPENSE, 8_000L))
+
+        repo.deleteAccount("acc-suelta")
+
+        val mercado = repo.getEvents("acc-ahorros").single()
+        assertEquals("evt-mercado", mercado.id)
+        assertEquals("test", mercado.category)
+        assertNull(mercado.transferId)
+        assertTrue(repo.getEvents("acc-suelta").isEmpty())
     }
 
     /**

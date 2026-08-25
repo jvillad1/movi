@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import kotlinx.coroutines.CancellationException
@@ -32,6 +33,12 @@ fun DeleteAccountSheet(
     accountId: String,
     accountName: String,
     eventCount: Int,
+    /**
+     * Cuántos de esos movimientos son **patas de traspaso con otras cuentas** (ver
+     * [transferWarningLabel]). Con default en 0 para que un call site que no lo sepa —o una
+     * cuenta sin traspasos— siga viendo la hoja de siempre.
+     */
+    transferCount: Int = 0,
     onDismiss: () -> Unit,
     onDeleted: () -> Unit,
 ) {
@@ -93,6 +100,28 @@ fun DeleteAccountSheet(
                 lineHeight = 19.sp,
             )
 
+            // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
+            // cuenta sino en otra: la mitad del traspaso que sobrevive. Solo aparece si la hay.
+            //
+            // Se despega del párrafo rutinario a propósito —bloque con fondo propio, mismo cuerpo
+            // de letra, color de texto pleno— porque es lo que justifica la pausa. Con el gris
+            // apagado y un punto más chico, los dos párrafos se leían como uno solo y el aviso se
+            // perdía justo en la hoja donde hay que leerlo.
+            if (transferCount > 0) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = transferWarningLabel(transferCount),
+                    fontSize = 14.sp,
+                    color = MinText,
+                    lineHeight = 19.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MinSurfaceContainerLow)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                )
+            }
+
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(text = error!!, fontSize = 12.sp, color = MinExpense)
@@ -140,3 +169,39 @@ fun DeleteAccountSheet(
 
 private fun eventCountLabel(count: Int): String =
     if (count == 1) "su 1 movimiento" else "sus $count movimientos"
+
+/**
+ * El aviso de los traspasos, **antes** de borrar y no después.
+ *
+ * Un traspaso tiene una pata en cada cuenta. Al borrar esta, la pata de la OTRA cuenta sobrevive
+ * —tiene que sobrevivir: la plata salió de verdad y el saldo de esa cuenta lo refleja— pero se
+ * queda sin la mitad que la explicaba, así que el server la suelta del par y le pone una
+ * categoría propia (ver `desenlazarPatasHermanas` en `AccountRoutes.kt` y
+ * `ORPHANED_LEG_CATEGORY` en `:core`). Eso cambia las cifras de un mes que el dueño ya daba por cerrado, y esa es justo
+ * la clase de cosa de la que no puede enterarse después: se dice acá, con el número real, antes
+ * de tocar el botón rojo.
+ *
+ * **Se nombra la categoría de destino** porque sin ella el aviso no es accionable: quien tenga un
+ * presupuesto necesita saber en qué renglón va a aparecer ese monto. Y se dice **«un mes que ya
+ * diste por cerrado»** en vez de «el mes en que ocurrió»: las dos son ciertas, pero solo la
+ * primera dice lo que importa — que lo que va a cambiar son totales viejos, no los de este mes.
+ *
+ * Nota de alcance (L2): [transferCount] se cuenta sobre los movimientos que esta pantalla ya
+ * tiene cargados. En Android eso sale del espejo local, y el `SyncEngine` **solo empuja** — nada
+ * baja del server. Si un traspaso se creó en otro dispositivo y nunca pasó por este teléfono, no
+ * entra en el número. Es arquitectura preexistente (no hay pull de eventos en ninguna pantalla),
+ * no algo que este aviso introduzca; el borrado del server igual desenlaza todas las patas, así
+ * que el dato que puede quedar corto es el aviso, nunca la base.
+ */
+private fun transferWarningLabel(count: Int): String =
+    if (count == 1) {
+        "1 de esos movimientos es un traspaso con otra cuenta. Esa cuenta conserva su mitad y su " +
+            "saldo no cambia, pero ese movimiento deja de ser un traspaso: pasa a la categoría " +
+            "«$ORPHANED_LEG_CATEGORY» y vuelve a contar en los gastos o ingresos de un mes que ya " +
+            "diste por cerrado. Puedes cambiarle la categoría después."
+    } else {
+        "$count de esos movimientos son traspasos con otras cuentas. Esas cuentas conservan su " +
+            "mitad y sus saldos no cambian, pero esos movimientos dejan de ser traspasos: pasan " +
+            "a la categoría «$ORPHANED_LEG_CATEGORY» y vuelven a contar en los gastos o ingresos " +
+            "de meses que ya diste por cerrados. Puedes cambiarles la categoría después."
+    }

@@ -15,6 +15,8 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.orphanedLegDescription
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -25,10 +27,16 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
+import org.slf4j.LoggerFactory
+
+private val accountsLog = LoggerFactory.getLogger("AccountRoutes")
 
 fun Route.accountRoutes() {
     route("/api/accounts") {
@@ -93,6 +101,9 @@ fun Route.accountRoutes() {
         // credit_terms/void_events/card_payment_dismissals no tienen FK con ON DELETE CASCADE —
         // si se borrara la cuenta primero y algo de abajo fallara, quedarían filas huérfanas
         // apuntando a una cuenta que ya no existe.
+        //
+        // Y antes que todo eso, lo único que NO se borra: la pata hermana de un traspaso, que no
+        // es de esta cuenta (ver [desenlazarPatasHermanas]).
         delete("/{id}") {
             val id = call.parameters["id"]
                 ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing id")
@@ -106,6 +117,18 @@ fun Route.accountRoutes() {
                 val eventIds = Events.selectAll()
                     .where { (Events.accountId eq id) and (Events.userId eq uid) }
                     .map { it[Events.id] }
+
+                // ANTES de borrar los eventos: si esta cuenta era una punta de algún traspaso,
+                // la pata hermana vive en OTRA cuenta y se queda sin su mitad. Hay que dejarla
+                // explicándose sola — ver [desenlazarPatasHermanas], que es donde está escrito
+                // por qué se la suelta en vez de borrarla o de impedir el borrado.
+                val sueltas = desenlazarPatasHermanas(uid, id)
+                if (sueltas > 0) {
+                    accountsLog.info(
+                        "DELETE /api/accounts/$id: $sueltas pata(s) de traspaso quedaron sueltas " +
+                            "en otras cuentas (transfer_id a null, categoría propia)",
+                    )
+                }
 
                 if (eventIds.isNotEmpty()) {
                     CardPaymentDismissals.deleteWhere {
@@ -134,3 +157,69 @@ fun Route.accountRoutes() {
     }
 }
 
+/**
+ * **La otra mitad de cada traspaso que tocaba la cuenta [accountId] no puede quedar colgando.**
+ *
+ * El escenario: el dueño traspasa $1.000.000 de Bancolombia a Nequi, después cierra Nequi y la
+ * borra. La pata de Nequi se va con la cuenta; la de Bancolombia sobrevive, con la categoría
+ * reservada «Traspaso», la descripción «Traspaso a Nequi» y un `transfer_id` cuya otra mitad ya
+ * no existe. Esa fila era imposible de entender (apunta a una cuenta que no se puede abrir) e
+ * imposible de arreglar: `PUT /api/events/{id}/category` rechaza recategorizar cualquier pata de
+ * traspaso, así que el dueño no tenía forma de sacarla de ahí.
+ *
+ * **Qué se hace y por qué esto y no otra cosa:**
+ *
+ * - **No se borra la pata que queda, y no se le toca el monto.** La plata SÍ salió de
+ *   Bancolombia; borrarla devolvería $1.000.000 a un saldo que en el banco no los tiene. Ese es
+ *   el único invariante que no se negocia acá.
+ * - **No se bloquea el borrado.** La política de esta ruta ya estaba escrita antes de que
+ *   existieran los traspasos: borrar una cuenta borra en cascada todo lo suyo, sin preguntar y
+ *   sin excepciones. Inventarle una excepción a los traspasos sería una segunda política para el
+ *   mismo botón. El aviso —«N de estos movimientos son traspasos»— va donde tiene que ir: en la
+ *   hoja de confirmación, antes (ver `DeleteAccountSheet`).
+ * - **Se la suelta del par** (`transfer_id = NULL`): ya no es media pareja, es un movimiento
+ *   suelto, y nada tiene que salir a buscarle una hermana que no existe (la anulación en cascada
+ *   de `POST /api/events/{id}/void`, [movementCount], `collapseTransfers`).
+ * - **Se la saca de la categoría reservada** hacia una propia que dice qué pasó
+ *   ([ORPHANED_LEG_CATEGORY]; ahí está escrito por qué no es «Otros» ni una por dirección), y la
+ *   descripción nombra la cuenta que ya no está ([orphanedLegDescription]). Sí, eso hace que ese movimiento
+ *   vuelva a contar como gasto (o ingreso) del mes en que ocurrió — y es lo correcto: con la otra
+ *   cuenta fuera de Movi, esa plata efectivamente salió del perímetro que la app lleva. Es además
+ *   el mismo criterio que ya aplicaba `StatementRoutes` con una fila de extracto etiquetada
+ *   «Traspaso» sin hermana.
+ *
+ * Corre dentro de la misma transacción que el resto del borrado.
+ *
+ * @return cuántas patas hermanas quedaron sueltas
+ */
+private fun Transaction.desenlazarPatasHermanas(uid: String, accountId: String): Int {
+    val transferIds = Events
+        .select(Events.transferId)
+        .where {
+            (Events.userId eq uid) and (Events.accountId eq accountId) and Events.transferId.isNotNull()
+        }
+        .mapNotNull { it[Events.transferId] }
+        .toSet()
+    if (transferIds.isEmpty()) return 0
+
+    // Solo las patas de OTRAS cuentas: las de esta se van con la cuenta un par de líneas más
+    // abajo, y reescribirlas sería trabajo tirado a la basura.
+    val hermanas = Events.selectAll()
+        .where {
+            (Events.userId eq uid) and
+                (Events.transferId inList transferIds.toList()) and
+                (Events.accountId neq accountId)
+        }
+        .map { it[Events.id] to it[Events.description] }
+
+    hermanas.forEach { (eventId, description) ->
+        Events.update({ (Events.id eq eventId) and (Events.userId eq uid) }) {
+            it[Events.transferId] = null
+            // La categoría es la misma para las dos direcciones y no tiene tipo: ver
+            // [ORPHANED_LEG_CATEGORY], que explica por qué no es «Otros» ni una por dirección.
+            it[Events.category]    = ORPHANED_LEG_CATEGORY
+            it[Events.description] = orphanedLegDescription(description)
+        }
+    }
+    return hermanas.size
+}

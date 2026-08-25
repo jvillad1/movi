@@ -58,7 +58,10 @@ data class DashboardData(
     val hasAccount: Boolean get() = accounts.isNotEmpty()
     /** F20: una tarjeta registrada también tilda el paso de Créditos — es una deuda como cualquier préstamo. */
     val hasCredit: Boolean get() = credits.isNotEmpty() || cards.isNotEmpty()
-    /** F54: el evento de apertura no cuenta — ver KDoc de `FinanceSummary.eventCount`. */
+    /**
+     * La apertura de cuenta no cuenta (F54) y un traspaso cuenta una sola vez aunque sean dos
+     * eventos — ver `FinanceSummary.eventCount` y `movementCount` en `:core`.
+     */
     val hasMovement: Boolean get() = (summary?.eventCount ?: 0) > 0
     /**
      * F6: "Anota tus gastos recurrentes" se tilda con una regla recurrente REAL. `getUpcomingPayments`

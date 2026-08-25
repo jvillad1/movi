@@ -17,9 +17,13 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.TRANSFER_ID_ALREADY_USED
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -51,6 +55,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -265,6 +270,156 @@ class TransferRoutesTest {
         // que la clave ni aparezca es la forma más fuerte de decir "no se gastó nada".
         assertEquals(0L, after["monthSpent"]?.jsonPrimitive?.long ?: 0L)
         assertFalse(after["spentByCategory"]?.jsonObject.orEmpty().containsKey(TRANSFER_CATEGORY))
+    }
+
+    /**
+     * T1: `FinanceSummary.eventCount` es "cuántos movimientos anotó el dueño", y un traspaso es
+     * UNO. Contaba dos —una fila por pata— mientras Movimientos, una pantalla más allá, mostraba
+     * el mismo traspaso como un solo renglón. Ver [com.jvillada.movi.shared.model.movementCount].
+     */
+    @Test
+    fun `un traspaso suma un movimiento al conteo, no dos`() = testApplication {
+        wireApp()
+        // La apertura de Ahorros ya está sembrada y no cuenta (F54): se arranca en cero.
+        assertEquals(0, financeSummaryEventCount(), "la apertura de cuenta no es un movimiento")
+
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        assertEquals(2L, eventCount() - 1L, "en la base siguen siendo dos filas")
+        assertEquals(1, financeSummaryEventCount(), "pero para el dueño pasó una sola cosa")
+    }
+
+    private suspend fun ApplicationTestBuilder.financeSummaryEventCount(): Int =
+        client.get("/api/finance-summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+            .let { Json.parseToJsonElement(it).jsonObject }["eventCount"]
+            ?.jsonPrimitive?.long?.toInt() ?: 0
+
+    // ── Borrar una de las dos cuentas ─────────────────────────────────────────
+
+    /**
+     * T2: el dueño traspasa de Ahorros al CDT y después cierra el CDT y lo borra. La pata del CDT
+     * se va con la cuenta; la de Ahorros **sobrevive** —la plata salió de verdad y el saldo lo
+     * dice— pero no puede quedarse como media pareja: sin `transferId`, sin la categoría
+     * reservada y diciendo lo que pasó. Ver `desenlazarPatasHermanas` en `AccountRoutes.kt`.
+     */
+    @Test
+    fun `borrar una cuenta suelta la pata hermana en vez de dejarla colgando`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        val borrado = client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NoContent, borrado.status)
+
+        val pata = transaction {
+            Events.selectAll().where { Events.id eq "ev-from-1" }.single()
+        }
+        assertNull(pata[Events.transferId], "ya no es media pareja: nadie tiene que buscarle hermana")
+        assertEquals(ORPHANED_LEG_CATEGORY, pata[Events.category])
+        assertEquals("Traspaso a CDT$ORPHANED_LEG_SUFFIX", pata[Events.description])
+
+        // El saldo de Ahorros NO se toca: los $250.000 salieron y no vuelven por borrar el CDT.
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(750_000L, balanceOf(accounts, ahorrosId))
+
+        // Y ahora sí es un gasto del mes: con el CDT fuera de Movi, esa plata salió del perímetro
+        // que la app lleva.
+        val summary = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+        assertEquals(250_000L, summary["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+    }
+
+    /**
+     * El caso espejo, y el que destapó M2: si la borrada es la cuenta de ORIGEN, la pata que
+     * sobrevive es un INCOME. Bajo «Otros» —tipada como gasto en `PREDEFINED_CATEGORIES`— quedaba
+     * una fila bajo el chip **Ingresos** rotulada con una categoría de egreso.
+     * [ORPHANED_LEG_CATEGORY] no tiene tipo y sirve para las dos direcciones; la dirección la
+     * siguen diciendo el signo del monto y la descripción, que es lo que se afirma acá.
+     */
+    @Test
+    fun `si se borra la cuenta de origen, la pata que queda es un ingreso y lo dice`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        client.delete("/api/accounts/$ahorrosId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        val pata = transaction { Events.selectAll().where { Events.id eq "ev-to-1" }.single() }
+        assertEquals("INCOME", pata[Events.type])
+        assertEquals(ORPHANED_LEG_CATEGORY, pata[Events.category])
+        assertEquals("Traspaso desde Ahorros$ORPHANED_LEG_SUFFIX", pata[Events.description])
+        assertNull(pata[Events.transferId])
+    }
+
+    /**
+     * M3: la categoría de la pata suelta no puede ser «Otros». Este código ya cometió ese error
+     * con el ajuste de saldo —`ADJUSTMENT_CATEGORY` existe justamente porque bajo «Otros»
+     * *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al instante»*—
+     * y acá el choque sería peor: esta pata SÍ vuelve al flujo de caja, así que caería derecho en
+     * `spentByCategory` y podría poner en OVER un presupuesto de un mes viejo.
+     */
+    @Test
+    fun `la pata suelta no contamina un presupuesto llamado Otros`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+        client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        val porCategoria = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+            .let { Json.parseToJsonElement(it).jsonObject["spentByCategory"]?.jsonObject.orEmpty() }
+
+        assertFalse(porCategoria.containsKey("Otros"), "un presupuesto «Otros» no se entera de esto")
+        assertEquals(250_000L, porCategoria[ORPHANED_LEG_CATEGORY]?.jsonPrimitive?.long)
+    }
+
+    @Test
+    fun `la pata suelta cuenta como un movimiento y se puede recategorizar`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+        client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        assertEquals(1, financeSummaryEventCount(), "quedó un movimiento, no medio ni dos")
+
+        // Lo que antes era imposible: la ruta rechazaba tocar cualquier pata de traspaso, así que
+        // el dueño no tenía forma de sacar esa fila de «Traspaso».
+        val recategorizada = client.put("/api/events/ev-from-1/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"Ahorro"}""")
+        }
+        assertEquals(HttpStatusCode.OK, recategorizada.status)
     }
 
     // ── Validaciones ──────────────────────────────────────────────────────────
@@ -548,6 +703,42 @@ class TransferRoutesTest {
         }.bodyAsText()
         assertEquals(750_000L, balanceOf(accounts, ahorrosId), "el saldo se movió una sola vez")
         assertEquals(250_000L, balanceOf(accounts, cdtId))
+    }
+
+    /**
+     * T3, del lado del endpoint: el mismo `transferId` con OTROS ids de evento no es un reintento,
+     * es un traspaso distinto pidiendo una identidad ocupada. Antes se dejaba pasar y ese id
+     * terminaba con cuatro patas: nada podía volver a decir cuál compensaba a cuál.
+     *
+     * (La red del esquema es el índice único `(user_id, transfer_id, type)` que crea
+     * `Migrations.createUniqueTransferLegIndex`; acá se prueba la puerta, no la red — este H2 se
+     * levanta con `SchemaUtils.create` y no corre migraciones.)
+     */
+    @Test
+    fun `reusar un transferId con otros ids de evento se rechaza`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        val otro = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromEventId = "ev-otro-from", toEventId = "ev-otro-to", amount = 90_000L))
+        }
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, otro.status)
+        assertEquals(TRANSFER_ID_ALREADY_USED, otro.bodyAsText())
+
+        val patas = transaction { Events.selectAll().where { Events.transferId eq "tr-1" }.count() }
+        assertEquals(2L, patas, "el traspaso que ya estaba sigue teniendo dos patas, ni una más")
+
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(750_000L, balanceOf(accounts, ahorrosId), "y ningún saldo se movió de más")
     }
 
     // ── m8: un id inválido se rechaza como tal, no como «ya registrado» ───────

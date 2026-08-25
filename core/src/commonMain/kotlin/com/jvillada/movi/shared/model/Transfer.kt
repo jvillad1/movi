@@ -56,6 +56,79 @@ const val TRANSFER_CATEGORY_RESERVED =
 const val TRANSFER_LEG_NOT_STANDALONE =
     "Un traspaso se registra completo, con sus dos puntas: abre Agregar y elige Traspaso."
 
+/**
+ * Lo que se le dice a un cliente que reusa un `transferId` que ya tiene patas de OTRO traspaso.
+ *
+ * No es el reintento del dedo —ese manda los mismos tres ids y se responde con las patas que ya
+ * están, ver `POST /api/transfers`—: es un traspaso distinto pidiendo una identidad ocupada. Si se
+ * dejara pasar, ese id terminaría con cuatro patas y nada podría volver a decir cuál compensa a
+ * cuál: ni la anulación en cascada, ni el renglón único de Movimientos, ni el conteo del Inicio.
+ */
+const val TRANSFER_ID_ALREADY_USED =
+    "Ese traspaso ya existe con otros movimientos. Vuelve a intentarlo desde Agregar."
+
+/**
+ * Categoría de la pata que **sobrevive al borrado de la cuenta de la otra punta** (ver
+ * `DELETE /api/accounts/{id}`).
+ *
+ * **Por qué no se queda en [TRANSFER_CATEGORY]:** en este sistema, una pata sin la otra no puede
+ * quedarse en la categoría reservada. Ahí adentro es un fantasma permanente — fuera del mes por
+ * [isCashFlow], fuera de los chips Gastos e Ingresos, y encima imposible de arreglar, porque
+ * `PUT /api/events/{id}/category` rechaza recategorizar cualquier pata de traspaso
+ * ([TRANSFER_RECATEGORIZE_BLOCKED]). Mismo criterio que ya aplica `StatementRoutes` con una fila
+ * de extracto etiquetada «Traspaso» sin hermana.
+ *
+ * **Por qué NO es «Otros», que era la primera respuesta:** este código ya cometió ese error y lo
+ * dejó escrito. Ver `ADJUSTMENT_CATEGORY` en `BalanceAdjustment.kt`: el ajuste de saldo vivía en
+ * «Otros» y ahí *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al
+ * instante»*. Acá el choque sería peor, no mejor: el ajuste al menos queda fuera del flujo de
+ * caja, y esta pata **vuelve a entrar** (esa es toda la idea), así que cae derecho en
+ * `spentByCategory` y podría poner en OVER el presupuesto «Otros» de un mes viejo, meses después,
+ * por un traspaso que el dueño no tiene cómo relacionar con eso. Con nombre propio no hay
+ * presupuesto que ensuciar y el desglose se explica solo.
+ *
+ * **Y por qué UNA sola categoría y no una por dirección**, que fue el primer intento («Traspaso a
+ * cuenta eliminada» / «Traspaso desde cuenta eliminada»). Ese intento existía para no repetir el
+ * otro problema de «Otros»: que está tipada como EXPENSE en `PREDEFINED_CATEGORIES`, así que
+ * rotulaba como gasto una pata huérfana de tipo INCOME. Este nombre lo resuelve sin partirse en
+ * dos: no es una categoría predefinida, **no tiene tipo**, y se lee igual de bien en las dos
+ * direcciones — la dirección sigue estando donde el dueño la mira, en el signo del monto y en la
+ * descripción («Traspaso a Nequi …» / «Traspaso desde Nequi …», ver [orphanedLegDescription]).
+ *
+ * Distinguir por dirección no habría comprado nada donde importa —`spentByCategory` solo suma
+ * egresos, así que la variante de ingreso jamás aparecería en un presupuesto— y costaba caro:
+ * verificado en el navegador, con 27 caracteres el renglón de Movimientos no tenía ancho para el
+ * subtítulo «categoría · origen» y partía «MANUAL» en una letra por línea.
+ *
+ * **No es reservada.** A diferencia de [TRANSFER_CATEGORY], nada bloquea entrar ni salir de acá:
+ * el dueño puede recategorizar la fila desde Movimientos, que es justo lo que antes no podía.
+ */
+const val ORPHANED_LEG_CATEGORY = "Cuenta eliminada"
+
+/**
+ * Lo que se le agrega a la descripción de esa pata para que se explique sola.
+ *
+ * La descripción ya nombra la otra punta ("Traspaso a Nequi", ver [transferLegsFor]); lo único
+ * que falta decir es que esa cuenta ya no está. Sin esto, el dueño se encontraba con un renglón
+ * que apunta a una cuenta que no puede abrir.
+ */
+const val ORPHANED_LEG_SUFFIX = " · cuenta eliminada"
+
+/** Largo de `financial_events.description` (ver `Tables.kt`) y de su espejo local. */
+private const val MAX_DESCRIPTION_LENGTH = 255
+
+/**
+ * La descripción de [original] con [ORPHANED_LEG_SUFFIX] pegado, sin pasarse del largo de la
+ * columna: si no cabe, se recorta la descripción —no el sufijo— porque el sufijo es justamente
+ * la parte que el dueño necesita leer. Idempotente: una descripción que ya lo trae no lo repite
+ * (borrar dos cuentas de dos traspasos distintos no puede encadenar sufijos).
+ */
+fun orphanedLegDescription(original: String): String {
+    if (original.endsWith(ORPHANED_LEG_SUFFIX)) return original
+    val room = MAX_DESCRIPTION_LENGTH - ORPHANED_LEG_SUFFIX.length
+    return original.take(room) + ORPHANED_LEG_SUFFIX
+}
+
 /** Las dos patas que quedaron creadas, tal como el server las guardó. */
 @Serializable
 data class TransferResult(
