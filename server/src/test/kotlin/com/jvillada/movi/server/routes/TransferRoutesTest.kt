@@ -343,6 +343,61 @@ class TransferRoutesTest {
         assertEquals(250_000L, summary["monthSpent"]?.jsonPrimitive?.long ?: 0L)
     }
 
+    /**
+     * El caso espejo, y el que destapó M2: si la borrada es la cuenta de ORIGEN, la pata que
+     * sobrevive es un INCOME. Bajo «Otros» —tipada como gasto en `PREDEFINED_CATEGORIES`— quedaba
+     * una fila bajo el chip **Ingresos** rotulada con una categoría de egreso.
+     * [ORPHANED_LEG_CATEGORY] no tiene tipo y sirve para las dos direcciones; la dirección la
+     * siguen diciendo el signo del monto y la descripción, que es lo que se afirma acá.
+     */
+    @Test
+    fun `si se borra la cuenta de origen, la pata que queda es un ingreso y lo dice`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+
+        client.delete("/api/accounts/$ahorrosId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        val pata = transaction { Events.selectAll().where { Events.id eq "ev-to-1" }.single() }
+        assertEquals("INCOME", pata[Events.type])
+        assertEquals(ORPHANED_LEG_CATEGORY, pata[Events.category])
+        assertEquals("Traspaso desde Ahorros$ORPHANED_LEG_SUFFIX", pata[Events.description])
+        assertNull(pata[Events.transferId])
+    }
+
+    /**
+     * M3: la categoría de la pata suelta no puede ser «Otros». Este código ya cometió ese error
+     * con el ajuste de saldo —`ADJUSTMENT_CATEGORY` existe justamente porque bajo «Otros»
+     * *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al instante»*—
+     * y acá el choque sería peor: esta pata SÍ vuelve al flujo de caja, así que caería derecho en
+     * `spentByCategory` y podría poner en OVER un presupuesto de un mes viejo.
+     */
+    @Test
+    fun `la pata suelta no contamina un presupuesto llamado Otros`() = testApplication {
+        wireApp()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody())
+        }
+        client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        val porCategoria = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+            .let { Json.parseToJsonElement(it).jsonObject["spentByCategory"]?.jsonObject.orEmpty() }
+
+        assertFalse(porCategoria.containsKey("Otros"), "un presupuesto «Otros» no se entera de esto")
+        assertEquals(250_000L, porCategoria[ORPHANED_LEG_CATEGORY]?.jsonPrimitive?.long)
+    }
+
     @Test
     fun `la pata suelta cuenta como un movimiento y se puede recategorizar`() = testApplication {
         wireApp()

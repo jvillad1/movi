@@ -12,6 +12,15 @@ package com.jvillada.movi.shared.model
  *   solo renglón (`collapseTransfers`). Contarlas de a dos era la misma contradicción que esta
  *   feature vino a matar en las cifras del mes, una pantalla más allá.
  *
+ *   El criterio no es *idéntico* al de `collapseTransfers`, y conviene saber en qué difiere:
+ *   aquella junta solo cuando encuentra **un EXPENSE y un INCOME**, y si no emite cada pata por
+ *   separado; esta agrupa por `transferId` a secas. Coinciden en toda forma que el sistema pueda
+ *   producir hoy —`validateTransfer` prohíbe las cuentas de deuda de los dos lados, así que las
+ *   dos patas nunca son del mismo tipo—, y discreparían solo ante un par heredado del mismo lado:
+ *   ahí Movimientos mostraría dos renglones y esto contaría uno. Son justo las filas que impiden
+ *   crear el índice único de `Migrations.createUniqueTransferLegIndex`, o sea que las dos
+ *   divergencias aparecerían en la misma cuenta y con la misma alarma en el log.
+ *
  * - **La apertura de una cuenta no es un movimiento** (F54, categoría [OPENING_CATEGORY]): es la
  *   foto de lo que ya existía el día que la cuenta entró a la app. Sin esta regla la guía de
  *   primeros pasos se apagaba sola apenas creabas la primera cuenta con saldo, antes de que

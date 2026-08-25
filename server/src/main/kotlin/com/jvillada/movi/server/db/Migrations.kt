@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.rem
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.update
+import org.slf4j.LoggerFactory
 
 /** Milisegundos de UTC-5 (Bogotá, sin horario de verano). */
 private const val BOGOTA_OFFSET_MS = 5L * 3_600_000L
@@ -14,6 +15,8 @@ private const val DAY_MS = 86_400_000L
 
 /** Nombre viejo del SMS recién llegado, reemplazado por `SMS_STATE_PENDING`. Solo lo usa la migración. */
 private const val LEGACY_SMS_STATE_NEW = "new"
+
+private val migrationsLog = LoggerFactory.getLogger("Migrations")
 
 /** Índice único que expresa "una sola pata por traspaso y por lado" — ver su migración. */
 const val UNIQUE_TRANSFER_LEG_INDEX = "uq_events_transfer_leg"
@@ -76,11 +79,16 @@ object Migrations {
     fun Transaction.createUniqueTransferLegIndex(): Boolean {
         val duplicados = duplicateTransferLegs()
         if (duplicados.isNotEmpty()) {
-            println(
-                "[migrations] NO se creó $UNIQUE_TRANSFER_LEG_INDEX: hay ${duplicados.size} " +
-                    "grupo(s) (user_id, transfer_id, type) con más de una pata. " +
-                    "transfer_id afectados: ${duplicados.joinToString()}. " +
-                    "Hay que dejar dos patas por traspaso (una EXPENSE y una INCOME) y reiniciar.",
+            // WARN de verdad y no un println: este mensaje dice "tus datos no quedaron
+            // protegidos por el esquema", y tiene que salir con nivel y marca de tiempo entre el
+            // resto del log del arranque, no como una línea suelta en stdout.
+            migrationsLog.warn(
+                "NO se creó {}: hay {} grupo(s) (user_id, transfer_id, type) con más de una pata. " +
+                    "transfer_id afectados: {}. Hay que dejar dos patas por traspaso " +
+                    "(una EXPENSE y una INCOME) y reiniciar.",
+                UNIQUE_TRANSFER_LEG_INDEX,
+                duplicados.size,
+                duplicados.joinToString(),
             )
             return false
         }

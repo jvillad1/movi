@@ -127,9 +127,28 @@ fun Route.transferRoutes() {
                 // ocurrió y esto es idempotencia de verdad: se devuelven las patas reales (200),
                 // no un conflicto seco — el cliente las necesita para espejarlas en su DB local,
                 // que es de donde leen Movimientos, Cuentas y el detalle en el teléfono.
+                //
+                // Y las patas que están tienen que ser LAS DEL BODY, no dos cualesquiera con ese
+                // `transferId`. La puerta de más arriba ya rechaza reusar un id ajeno, pero eso es
+                // un check-then-act en dos transacciones: si dos POST distintos con el mismo id
+                // corren a la vez —o si el índice único nunca llegó a crearse por datos previos en
+                // conflicto (ver `Migrations.createUniqueTransferLegIndex`)— el perdedor podría
+                // leer acá las patas del ganador y responderlas como propias. Sería exactamente el
+                // «200 con el traspaso de otro» que la puerta vino a matar, así que se comprueba
+                // otra vez, ahora sobre lo que de verdad quedó guardado. Defensa sobre defensa:
+                // desde la app real no hay forma de llegar acá.
                 val existentes = dbQuery { transferLegsIn(uid, body.transferId) }
-                if (existentes != null) {
+                if (existentes != null &&
+                    setOf(existentes.from.id, existentes.to.id) == setOf(body.fromEventId, body.toEventId)
+                ) {
                     return@post call.respond(HttpStatusCode.OK, existentes)
+                }
+                if (existentes != null) {
+                    println(
+                        "[transfers] transferId=${body.transferId} quedó con patas ajenas " +
+                            "(${existentes.from.id}, ${existentes.to.id}); no se responde como idempotente",
+                    )
+                    return@post call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_ID_ALREADY_USED)
                 }
                 // No están las dos: el traspaso no quedó. Es un error genuino, y se dice como tal.
                 println("[transfers] el traspaso ${body.transferId} no quedó registrado tras el fallo del INSERT")

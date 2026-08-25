@@ -34,6 +34,9 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
+import org.slf4j.LoggerFactory
+
+private val accountsLog = LoggerFactory.getLogger("AccountRoutes")
 
 fun Route.accountRoutes() {
     route("/api/accounts") {
@@ -119,7 +122,13 @@ fun Route.accountRoutes() {
                 // la pata hermana vive en OTRA cuenta y se queda sin su mitad. Hay que dejarla
                 // explicándose sola — ver [desenlazarPatasHermanas], que es donde está escrito
                 // por qué se la suelta en vez de borrarla o de impedir el borrado.
-                desenlazarPatasHermanas(uid, id)
+                val sueltas = desenlazarPatasHermanas(uid, id)
+                if (sueltas > 0) {
+                    accountsLog.info(
+                        "DELETE /api/accounts/$id: $sueltas pata(s) de traspaso quedaron sueltas " +
+                            "en otras cuentas (transfer_id a null, categoría propia)",
+                    )
+                }
 
                 if (eventIds.isNotEmpty()) {
                     CardPaymentDismissals.deleteWhere {
@@ -171,11 +180,12 @@ fun Route.accountRoutes() {
  * - **Se la suelta del par** (`transfer_id = NULL`): ya no es media pareja, es un movimiento
  *   suelto, y nada tiene que salir a buscarle una hermana que no existe (la anulación en cascada
  *   de `POST /api/events/{id}/void`, [movementCount], `collapseTransfers`).
- * - **Se la saca de la categoría reservada** ([ORPHANED_LEG_CATEGORY]) y se le dice a la
- *   descripción lo que pasó ([orphanedLegDescription]). Sí, eso hace que ese movimiento vuelva a
- *   contar como gasto (o ingreso) del mes en que ocurrió — y es lo correcto: con la otra cuenta
- *   fuera de Movi, esa plata efectivamente salió del perímetro que la app lleva. Es además el
- *   mismo criterio que ya aplicaba `StatementRoutes` con una fila de extracto etiquetada
+ * - **Se la saca de la categoría reservada** hacia una propia que dice qué pasó
+ *   ([ORPHANED_LEG_CATEGORY]; ahí está escrito por qué no es «Otros» ni una por dirección), y la
+ *   descripción nombra la cuenta que ya no está ([orphanedLegDescription]). Sí, eso hace que ese movimiento
+ *   vuelva a contar como gasto (o ingreso) del mes en que ocurrió — y es lo correcto: con la otra
+ *   cuenta fuera de Movi, esa plata efectivamente salió del perímetro que la app lleva. Es además
+ *   el mismo criterio que ya aplicaba `StatementRoutes` con una fila de extracto etiquetada
  *   «Traspaso» sin hermana.
  *
  * Corre dentro de la misma transacción que el resto del borrado.
@@ -205,6 +215,8 @@ private fun Transaction.desenlazarPatasHermanas(uid: String, accountId: String):
     hermanas.forEach { (eventId, description) ->
         Events.update({ (Events.id eq eventId) and (Events.userId eq uid) }) {
             it[Events.transferId] = null
+            // La categoría es la misma para las dos direcciones y no tiene tipo: ver
+            // [ORPHANED_LEG_CATEGORY], que explica por qué no es «Otros» ni una por dirección.
             it[Events.category]    = ORPHANED_LEG_CATEGORY
             it[Events.description] = orphanedLegDescription(description)
         }

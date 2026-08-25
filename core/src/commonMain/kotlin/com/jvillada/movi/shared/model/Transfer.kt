@@ -68,21 +68,42 @@ const val TRANSFER_ID_ALREADY_USED =
     "Ese traspaso ya existe con otros movimientos. Vuelve a intentarlo desde Agregar."
 
 /**
- * Categoría a la que va a parar la pata que **sobrevive al borrado de la cuenta de la otra
- * punta** (ver `DELETE /api/accounts/{id}`).
+ * Categoría de la pata que **sobrevive al borrado de la cuenta de la otra punta** (ver
+ * `DELETE /api/accounts/{id}`).
  *
- * Es la misma «Otros» a la que ya cae una fila de extracto que llegó etiquetada «Traspaso» sin
- * hermana (ver `StatementRoutes.createEventFromParsed`): en este sistema, una pata sin la otra
- * **no puede quedarse en la categoría reservada**. Ahí adentro sería un fantasma permanente —
- * fuera del mes por la regla de [isCashFlow], fuera de los chips Gastos e Ingresos por
- * [TRANSFER_CATEGORY], y encima imposible de arreglar, porque `PUT /api/events/{id}/category`
- * rechaza recategorizar cualquier cosa que tenga esta categoría ([TRANSFER_RECATEGORIZE_BLOCKED]).
+ * **Por qué no se queda en [TRANSFER_CATEGORY]:** en este sistema, una pata sin la otra no puede
+ * quedarse en la categoría reservada. Ahí adentro es un fantasma permanente — fuera del mes por
+ * [isCashFlow], fuera de los chips Gastos e Ingresos, y encima imposible de arreglar, porque
+ * `PUT /api/events/{id}/category` rechaza recategorizar cualquier pata de traspaso
+ * ([TRANSFER_RECATEGORIZE_BLOCKED]). Mismo criterio que ya aplica `StatementRoutes` con una fila
+ * de extracto etiquetada «Traspaso» sin hermana.
  *
- * Y no es solo higiene: una vez que la otra cuenta se fue de Movi, esa plata efectivamente salió
- * (o entró) del perímetro que la app lleva. El saldo de la cuenta que queda ya lo dice —nunca se
- * toca—; lo que faltaba era que las cifras del mes dijeran lo mismo.
+ * **Por qué NO es «Otros», que era la primera respuesta:** este código ya cometió ese error y lo
+ * dejó escrito. Ver `ADJUSTMENT_CATEGORY` en `BalanceAdjustment.kt`: el ajuste de saldo vivía en
+ * «Otros» y ahí *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al
+ * instante»*. Acá el choque sería peor, no mejor: el ajuste al menos queda fuera del flujo de
+ * caja, y esta pata **vuelve a entrar** (esa es toda la idea), así que cae derecho en
+ * `spentByCategory` y podría poner en OVER el presupuesto «Otros» de un mes viejo, meses después,
+ * por un traspaso que el dueño no tiene cómo relacionar con eso. Con nombre propio no hay
+ * presupuesto que ensuciar y el desglose se explica solo.
+ *
+ * **Y por qué UNA sola categoría y no una por dirección**, que fue el primer intento («Traspaso a
+ * cuenta eliminada» / «Traspaso desde cuenta eliminada»). Ese intento existía para no repetir el
+ * otro problema de «Otros»: que está tipada como EXPENSE en `PREDEFINED_CATEGORIES`, así que
+ * rotulaba como gasto una pata huérfana de tipo INCOME. Este nombre lo resuelve sin partirse en
+ * dos: no es una categoría predefinida, **no tiene tipo**, y se lee igual de bien en las dos
+ * direcciones — la dirección sigue estando donde el dueño la mira, en el signo del monto y en la
+ * descripción («Traspaso a Nequi …» / «Traspaso desde Nequi …», ver [orphanedLegDescription]).
+ *
+ * Distinguir por dirección no habría comprado nada donde importa —`spentByCategory` solo suma
+ * egresos, así que la variante de ingreso jamás aparecería en un presupuesto— y costaba caro:
+ * verificado en el navegador, con 27 caracteres el renglón de Movimientos no tenía ancho para el
+ * subtítulo «categoría · origen» y partía «MANUAL» en una letra por línea.
+ *
+ * **No es reservada.** A diferencia de [TRANSFER_CATEGORY], nada bloquea entrar ni salir de acá:
+ * el dueño puede recategorizar la fila desde Movimientos, que es justo lo que antes no podía.
  */
-const val ORPHANED_LEG_CATEGORY = "Otros"
+const val ORPHANED_LEG_CATEGORY = "Cuenta eliminada"
 
 /**
  * Lo que se le agrega a la descripción de esa pata para que se explique sola.

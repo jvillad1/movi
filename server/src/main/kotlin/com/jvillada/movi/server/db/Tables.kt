@@ -95,6 +95,7 @@ object Events : Table("financial_events") {
         // que ya tuviera datos en conflicto eso deja el server sin levantar. Se crea en
         // `Migrations.createUniqueTransferLegIndex`, que primero pregunta y solo después crea —
         // ver ahí el porqué de la forma compuesta.
+
         // Todo lo que lee el Inicio y el resumen del mes filtra por usuario y rango de fechas
         // (GET /api/dashboard/summary, finance-summary). Se crea solo al arrancar vía
         // createMissingTablesAndColumns (DatabaseFactory) — sin migración manual.
