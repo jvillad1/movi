@@ -34,4 +34,29 @@ data class DashboardSummary(
     val cardPaymentCandidates: Int = 0,
     /** Mensajes del banco en estado `pending` — lo que el inbox de SMS llama «por confirmar». */
     val pendingSms: Int = 0,
+    /**
+     * Ola 9 · A2: **las categorías que el dueño ya usó alguna vez**, con el tipo (o los tipos)
+     * con los que las usó. Viaja acá y no en un endpoint propio a propósito: el Inicio ya pide
+     * esta respuesta y es la pantalla en la que la app arranca, así que las categorías propias
+     * están disponibles en «Agregar» sin una sola llamada nueva — y el Inicio ya dispara
+     * demasiadas. Del lado del server es un `DISTINCT (category, type)` sobre los movimientos
+     * del usuario: unas decenas de filas como mucho, no la historia entera.
+     *
+     * Lo consume `com.jvillada.movi.data.UsedCategoriesCache`.
+     */
+    val usedCategories: List<UsedCategory> = emptyList(),
+)
+
+/**
+ * Una categoría escrita por el dueño (o del catálogo) y **con qué tipos se la vio usada**.
+ *
+ * El tipo importa porque una categoría propia no tiene uno declarado, a diferencia de las de
+ * `PREDEFINED_CATEGORIES`: sin esto, «Carro» se ofrecía igual al anotar un ingreso que un gasto.
+ * [types] puede traer los dos (una categoría usada de los dos lados) o venir vacío (se la conoce
+ * pero no se sabe de qué lado) — y ese vacío significa «mostrala igual», nunca «escondela».
+ */
+@Serializable
+data class UsedCategory(
+    val name: String,
+    val types: List<TransactionType> = emptyList(),
 )

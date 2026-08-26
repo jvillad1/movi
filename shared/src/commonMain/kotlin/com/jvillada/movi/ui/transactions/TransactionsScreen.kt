@@ -314,8 +314,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             .onSuccess {
                 allDays = it
                 // F35: de paso, alimenta el caché de "categorías ya usadas" que lee
-                // CategoryField — esta pantalla ya carga los movimientos.
-                UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
+                // CategoryField — esta pantalla ya carga los movimientos. Ola 9 · A3: con el
+                // tipo de cada uno, para poder ofrecerlas del lado correcto.
+                UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
             }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false

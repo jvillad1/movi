@@ -13,6 +13,7 @@ import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
@@ -77,6 +78,7 @@ fun Route.dashboardRoutes() {
                 pendingSms = SmsMessages.select(SmsMessages.id.count())
                     .where { (SmsMessages.userId eq uid) and (SmsMessages.state eq SMS_STATE_PENDING) }
                     .single()[SmsMessages.id.count()].toInt(),
+                usedCategories = usedCategories(uid),
             )
         }
         call.respond(summary)
@@ -114,6 +116,35 @@ private fun Transaction.monthCashFlow(
         .mapValues { (_, r) -> r.sumOf { it[Events.amount] } }
     return income to spentByCategory
 }
+
+/**
+ * Ola 9 · A2: las categorías que este usuario ya usó, con los tipos con los que las usó.
+ *
+ * Va DENTRO de esta respuesta y no en una ruta propia porque el Inicio ya la pide y es donde la
+ * app arranca: así «Agregar» ofrece las categorías propias del dueño sin agregar un viaje —
+ * justamente en la pantalla de la que se quejó por disparar diez llamadas. El costo es un
+ * `DISTINCT` que devuelve unas decenas de filas (categorías, no movimientos), y no se paginan
+ * meses de historia para eso.
+ *
+ * Sin filtrar por mes a propósito: una categoría propia sigue siendo suya aunque no la haya
+ * usado este mes. Tampoco se excluyen las anuladas ni las categorías reservadas — el cliente ya
+ * las filtra en un solo lugar (`UsedCategoriesCache.recordAll`, por donde pasan todos sus caminos
+ * de entrada), y duplicar esa regla acá sería una segunda copia que puede desincronizarse.
+ */
+private fun Transaction.usedCategories(uid: String): List<UsedCategory> =
+    Events.select(Events.category, Events.type)
+        .where { Events.userId eq uid }
+        .withDistinct()
+        .map { it[Events.category].trim() to it[Events.type] }
+        .filter { (category, _) -> category.isNotEmpty() }
+        .groupBy({ it.first }, { it.second })
+        .map { (category, types) ->
+            UsedCategory(
+                name = category,
+                types = types.mapNotNull { t -> runCatching { TransactionType.valueOf(t) }.getOrNull() }.distinct(),
+            )
+        }
+        .sortedBy { it.name.lowercase() }
 
 /**
  * Cuántos devolvería `GET /api/events/card-payment-candidates` — mismo filtro (egreso, cuenta

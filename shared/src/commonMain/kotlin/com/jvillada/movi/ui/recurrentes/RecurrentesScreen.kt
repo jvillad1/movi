@@ -29,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -94,12 +96,22 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // renderizar, y `editar()` se asegura de que `rules` esté al día antes de abrir.
     var sheetRuleId by remember { mutableStateOf<String?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
+    // Ola 9 · D: id → nombre de cuenta, para poder decir de dónde sale cada pago. Vacío mientras
+    // ninguna regla tenga cuenta: la fila simplemente no dice nada, que es lo correcto.
+    var accountNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     // Estado del opt-in de push, para el aviso de "tus recordatorios no te van a llegar".
     var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
     var pushRefreshTick by remember { mutableStateOf(0) }
 
-    LaunchedEffect(loadKey) {
+    // Ola 9 · B: además de su propio `loadKey`, la señal de que se guardó algo desde una hoja
+    // que vive por encima de esta pantalla. Ahora se puede crear un recurrente sin salir de acá
+    // —anotar un movimiento y aceptar el ofrecimiento— y sin esto la lista seguiría mostrando lo
+    // de antes, o sea diciéndole al dueño que no se guardó nada. Mismo patrón que Presupuestos
+    // y Movimientos (ver [LocalRefreshTick]).
+    val refreshTick = LocalRefreshTick.current
+
+    LaunchedEffect(loadKey, refreshTick) {
         loading = true
         // En PARALELO, como ya las hace el Inicio. En serie eran tres viajes encadenados contra
         // el server —y el de suscripciones trae la TRM adentro (`FxRateService`), así que puede
@@ -115,22 +127,47 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
             val porCobros = async { runCatching { Repositories.wallets.getSubscriptions() } }
 
             var fallo: String? = null
+            // Ola 9 · E: si ESTA carga trajo cada lista o no. Distinto de `reglasOk`/`cobrosOk`,
+            // que son "alguna vez llegó" y nunca vuelven a false: alimentar al gate con esas
+            // banderas le pasaba la lista VIEJA cuando la recarga fallaba —incluida la regla que
+            // el dueño acababa de borrar—, y el precio es un ofrecimiento que no sale.
+            var reglasFrescas = false
+            var cobrosFrescos = false
             // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
             // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
             porReglas.await()
                 .onSuccess {
                     rules = it
-                    UsedCategoriesCache.record(it.map { r -> r.category })
+                    // Ola 9 · A3: una regla recurrente sabe si es gasto o ingreso.
+                    UsedCategoriesCache.recordAll(it.map { r -> r.category to r.type })
                     reglasOk = true
+                    reglasFrescas = true
+                    // Ola 9 · D: los nombres de las cuentas, y SOLO si alguna regla tiene
+                    // cuenta. Una cuarta llamada fija en esta pantalla sería un viaje por
+                    // gusto para quien todavía no usa el campo (o sea, todo el mundo hasta
+                    // hoy); así la paga únicamente quien la va a ver.
+                    if (it.any { r -> r.accountId != null }) {
+                        runCatching { Repositories.wallets.getAccounts() }
+                            .onSuccess { list -> accountNames = list.associate { a -> a.id to a.name } }
+                    }
                 }
                 .onFailure { fallo = it.toUserMessage() }
             porVencer.await()
                 .onSuccess { upcoming = it; vencimientosOk = true }
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             porCobros.await()
-                .onSuccess { subs = it; cobrosOk = true }
+                .onSuccess { subs = it; cobrosOk = true; cobrosFrescos = true }
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             error = fallo
+            // Ola 9 · B: el ofrecimiento «¿esto se repite?» necesita saber qué recurrentes ya
+            // existen. Esta pantalla acaba de cargarlos, así que se los deja al gate: le ahorra
+            // sus llamadas y —lo que de verdad importa— lo mantiene al día. Sin esto, crear
+            // «Gimnasio» acá y anotar el pago después terminaba ofreciendo crear el recurrente
+            // que el dueño acababa de crear.
+            RecurringOfferGate.recordarLoQueYaHay(
+                reglas = if (reglasFrescas) rules else null,
+                suscripciones = if (cobrosFrescos) subs.subscriptions else null,
+            )
         }
         loading = false
     }
@@ -148,7 +185,14 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 // cobros, así que sirve igual que la carga normal. Sin esto, quien entraba con
                 // `/api/subscriptions` caído y tocaba «Buscar cobros» veía aparecer los cobros
                 // pero se quedaba con «Flujo libre —» y sin conteos hasta salir y volver.
-                .onSuccess { subs = it; cobrosOk = true; error = null }
+                .onSuccess {
+                    subs = it
+                    cobrosOk = true
+                    error = null
+                    // Un barrido puede DESCUBRIR cobros. Sin esto, el gate seguiría con la lista
+                    // de antes y podría ofrecer una regla que duplica un cobro recién detectado.
+                    RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
+                }
                 .onFailure { error = it.toUserMessage() }
             scanning = false
         }
@@ -192,7 +236,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     fun setStatus(sub: Subscription, status: SubStatus) {
         coroutine.launch {
             runCatching { Repositories.wallets.updateSubscription(sub.id, sub.copy(status = status)) }
-                .onSuccess { loadKey++ }
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); loadKey++ }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -219,7 +263,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     Repositories.wallets.updateSubscription(sub.id, sub.copy(status = SubStatus.DISMISSED))
                 }
             }
-            resultado.onSuccess { loadKey++ }.onFailure { error = it.toUserMessage() }
+            resultado
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); loadKey++ }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -585,6 +631,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 ordered.forEachIndexed { i, item ->
                                     RecurrenteRow(
                                         item = item,
+                                        accountNames = accountNames,
                                         onEditRule = { editar(it) },
                                         onRemoveSub = { quitar(it) },
                                     )
@@ -603,6 +650,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 onDismiss = { sheetOpen = false },
                 onSaved = {
                     sheetOpen = false
+                    // Crear, editar o BORRAR desde acá deja viejo lo que el gate tenía cacheado.
+                    // Se invalida ya, sin esperar la recarga: si la recarga falla, quedarse con
+                    // la lista vieja le esconde al dueño el ofrecimiento del recurrente que
+                    // acaba de borrar.
+                    RecurringOfferGate.olvidarLoCacheado()
                     loadKey++
                 },
                 // Se resuelve contra `rules` en el momento de pintar, no contra un objeto
@@ -620,6 +672,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 private fun RecurrenteRow(
     item: Recurrente,
+    accountNames: Map<String, String>,
     onEditRule: (RecurringRule) -> Unit,
     onRemoveSub: (Subscription) -> Unit,
 ) {
@@ -633,7 +686,11 @@ private fun RecurrenteRow(
     when (item) {
         is Recurrente.Regla -> {
             nombre = item.rule.name
-            contexto = item.rule.category
+            // Ola 9 · D: la cuenta, si la regla tiene una y sabemos su nombre. Si no la tiene
+            // —lo normal en todo lo anotado antes de hoy— la fila se ve igual que siempre: no
+            // hay «sin cuenta» ni un hueco que llenar, porque no falta nada.
+            val cuenta = item.rule.accountId?.let { accountNames[it] }
+            contexto = if (cuenta != null) "${item.rule.category} · $cuenta" else item.rule.category
             esIngreso = item.rule.type == TransactionType.INCOME
             monto = "${if (esIngreso) "+" else "−"}${formatCOP(item.rule.amount)}"
             onClick = { onEditRule(item.rule) }

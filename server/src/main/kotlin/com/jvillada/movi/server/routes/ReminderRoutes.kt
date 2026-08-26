@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
@@ -34,7 +35,22 @@ private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     dayOfMonth = this[RecurringRules.dayOfMonth],
     type = TransactionType.valueOf(this[RecurringRules.type]),
     remindMe = this[RecurringRules.remindMe],
+    accountId = this[RecurringRules.accountId],
 )
+
+/**
+ * Ola 9 · D: ¿esta cuenta es de este usuario? La cuenta de una regla recurrente es **opcional**,
+ * así que un id desconocido no rechaza el alta: se guarda `null`. Rechazar dejaría al dueño sin
+ * poder anotar su arriendo por un id que mandó mal un cliente viejo, y el plan mensual (nombre,
+ * monto, día) es válido igual — perder el plan es peor que perder la cuenta.
+ */
+private fun org.jetbrains.exposed.sql.Transaction.accountIdIfOwned(uid: String, accountId: String?): String? {
+    val id = accountId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val exists = Accounts.selectAll()
+        .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+        .firstOrNull() != null
+    return if (exists) id else null
+}
 
 fun Route.reminderRoutes() {
     get("/api/recurring-rules") {
@@ -49,7 +65,8 @@ fun Route.reminderRoutes() {
         val uid = call.userId()
         val body = call.receive<RecurringRule>()
         val newId = "rr_${UUID.randomUUID()}"
-        dbQuery {
+        val storedAccountId = dbQuery {
+            val safeAccountId = accountIdIfOwned(uid, body.accountId)
             RecurringRules.insert {
                 it[id] = newId
                 it[userId] = uid
@@ -61,16 +78,46 @@ fun Route.reminderRoutes() {
                 // El body de un cliente viejo no trae el campo; el default del modelo lo pone
                 // en true, que es el comportamiento que ese cliente espera.
                 it[remindMe] = body.remindMe
+                // Ola 9 · D: la cuenta es opcional y, si viene, tiene que ser de este usuario
+                // (ver [accountIdIfOwned]).
+                it[accountId] = safeAccountId
             }
+            safeAccountId
         }
-        call.respond(HttpStatusCode.Created, body.copy(id = newId))
+        // La respuesta dice lo que QUEDÓ guardado, no lo que se pidió: si la cuenta no era suya
+        // se guardó null, y devolver el id igual haría que el cliente pinte una cuenta que la
+        // regla no tiene.
+        call.respond(HttpStatusCode.Created, body.copy(id = newId, accountId = storedAccountId))
     }
 
     put("/api/recurring-rules/{id}") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
         val body = call.receive<RecurringRule>()
+        var storedAccountId: String? = null
         val updated = dbQuery {
+            // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
+            //
+            // El APK 1.6 que el dueño ya tiene instalado no conoce este campo, así que su PUT
+            // llega sin él y kotlinx lo deserializa como `null`. Si `null` significara «quitá la
+            // cuenta», corregir el monto desde el teléfono le borraría en silencio la cuenta que
+            // había puesto desde la web. Es el mismo agujero que `remindMe` evita con su default
+            // `true`, y acá no alcanzaba un default porque «sin cuenta» es un estado legítimo.
+            //
+            // Por eso el campo es de tres estados en el wire (ver `RecurringRule.accountId`):
+            //   · `null`            → no lo toques (cliente viejo, o un PUT que no habla de cuentas)
+            //   · cadena vacía      → quitá la cuenta (el dueño eligió «Sin cuenta»)
+            //   · un id             → esa cuenta, si es suya
+            val cuentaActual = RecurringRules.selectAll()
+                .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+                .firstOrNull()?.get(RecurringRules.accountId)
+            val pedida = body.accountId
+            val safeAccountId = when {
+                pedida == null -> cuentaActual
+                pedida.isBlank() -> null
+                else -> accountIdIfOwned(uid, pedida)
+            }
+            storedAccountId = safeAccountId
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name
                 it[category] = body.category
@@ -78,9 +125,11 @@ fun Route.reminderRoutes() {
                 it[dayOfMonth] = body.dayOfMonth.coerceIn(1, 31)
                 it[type] = body.type.name
                 it[remindMe] = body.remindMe
+                it[accountId] = safeAccountId
             }
         }
-        if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(body.copy(id = id))
+        if (updated == 0) call.respond(HttpStatusCode.NotFound)
+        else call.respond(body.copy(id = id, accountId = storedAccountId))
     }
 
     delete("/api/recurring-rules/{id}") {

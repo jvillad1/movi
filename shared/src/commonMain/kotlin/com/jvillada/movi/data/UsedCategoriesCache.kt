@@ -3,7 +3,11 @@ package com.jvillada.movi.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsedCategory
 
 /**
  * F35: categorías ya usadas por el dueño, para sugerirlas en [com.jvillada.movi.ui.components.CategoryField]
@@ -13,28 +17,97 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
  * [record] al terminar su propia carga; QuickAddScreen (que no carga nada de eso) lo lee tal
  * cual, sin fetch propio.
  *
+ * **Ola 9 · A2 — las categorías propias ya están al abrir «Agregar».** Ese diseño tenía un
+ * agujero que se notó el primer día de uso real: quien abre la app y va DIRECTO a Agregar no
+ * pasó por ninguna de esas tres pantallas, así que el caché estaba vacío y sus propias
+ * categorías («Carro») no se le ofrecían aunque las hubiera escrito diez veces. Ahora el Inicio
+ * —la pantalla en la que la app arranca— también lo llena, con la lista que le viene DENTRO de
+ * `GET /api/dashboard/summary` (ver [UsedCategory] y `DashboardSummary.usedCategories`): es un
+ * campo más en una respuesta que esa pantalla ya pedía, o sea **cero llamadas nuevas** en la
+ * pantalla que el dueño ya se quejó de que dispara diez.
+ *
+ * **Ola 9 · A3 — cada categoría recuerda con qué tipo se usó.** Una categoría propia no tiene
+ * tipo declarado (las de `PREDEFINED_CATEGORIES` sí), así que «Carro» se ofrecía igual anotando
+ * un ingreso que un gasto. Acá se guarda el conjunto de tipos con los que se la vio usada y
+ * `suggestCategoryMatches` filtra con esa evidencia. La regla ante la duda es MOSTRAR: un vacío
+ * (la vimos, no sabemos de qué lado — un presupuesto, una regla vieja) se ofrece siempre; una
+ * categoría usada en los dos lados también. Solo se esconde lo que tiene evidencia de un solo
+ * tipo, y del otro tipo.
+ *
  * Solo vive en memoria del proceso — no persiste ni sincroniza. Arranca vacío en cada apertura
- * de la app y se repuebla en cuanto cualquiera de esas pantallas carga una vez: es una ayuda
- * para escribir más rápido, no una fuente de verdad, así que no vale la pena persistirlo.
+ * de la app y se repuebla en cuanto el Inicio (o cualquiera de esas pantallas) carga una vez: es
+ * una ayuda para escribir más rápido, no una fuente de verdad, así que no vale la pena persistirlo.
  */
 object UsedCategoriesCache {
-    var categories: Set<String> by mutableStateOf(emptySet())
+    /**
+     * Nombre limpio → tipos con los que se la vio usada. Un conjunto **vacío** significa
+     * "la conocemos pero no sabemos de qué tipo", que no es lo mismo que no conocerla.
+     */
+    var used: Map<String, Set<TransactionType>> by mutableStateOf(emptyMap())
         private set
 
-    /**
-     * La categoría reservada del traspaso NUNCA entra acá, aunque venga en los movimientos que
-     * alimentan este caché (las patas de un traspaso la llevan, y tanto Movimientos como
-     * Presupuestos vuelcan todo lo que cargan).
-     *
-     * Sin este filtro, «Traspaso» aparecía como sugerencia en el campo de categoría de Agregar,
-     * en Cambiar categoría y en Presupuestos: la app le ofrecía al dueño escribir exactamente la
-     * categoría que después iba a rechazar — y si llegaba a guardarse, su gasto real desaparecía
-     * del mes (regla de `isCashFlow`) sin ninguna pata del otro lado que lo explicara.
-     */
+    /** Los nombres, sin el tipo — para quien solo necesita saber cuáles existen. */
+    val categories: Set<String> get() = used.keys
+
+    /** Varios nombres sueltos, sin saber de qué tipo. Todo pasa por [recordAll]. */
     fun record(names: Collection<String>) {
-        val cleaned = names.map { it.trim() }
-            .filter { it.isNotEmpty() && it != TRANSFER_CATEGORY }
-        if (cleaned.isEmpty()) return
-        categories = categories + cleaned
+        recordAll(names.map { it to null })
     }
+
+    /**
+     * Las tres categorías que Movi **escribe solo** y que el dueño no debería poder elegir a
+     * mano. Nunca entran acá, aunque vengan en los movimientos que alimentan el caché — el filtro
+     * está en [recordAll], que es por donde pasan todos los caminos de entrada.
+     *
+     * - «Traspaso», que llevan las dos patas de un traspaso y que tanto Movimientos como
+     *   Presupuestos vuelcan al cargar. Ofrecerla en el campo de categoría era invitar al dueño a
+     *   escribir exactamente lo que la app después iba a rechazar — y si llegaba a guardarse, su
+     *   gasto real desaparecía del mes (regla de `isCashFlow`) sin ninguna pata que lo explicara.
+     * - «Cuenta eliminada», que el server le pone a la pata de traspaso que quedó sin hermana.
+     * - «Saldo inicial», que marca la apertura de una cuenta y queda FUERA del flujo de caja.
+     *
+     * Las dos últimas llegaron con la lista completa que ahora manda el Inicio (Ola 9 · A2).
+     */
+    private val RESERVADAS = setOf(TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY, OPENING_CATEGORY)
+
+    /** Una sola categoría, con el tipo con el que se la acaba de usar (o `null` si no se sabe). */
+    fun record(name: String, type: TransactionType?) {
+        recordAll(listOf(name to type))
+    }
+
+    /**
+     * Varias de golpe. `null` en el tipo = "no se sabe": NO borra lo que ya se sabía de esa
+     * categoría (si «Carro» ya constaba como gasto, verla sin tipo no la vuelve ambigua).
+     */
+    fun recordAll(entries: Collection<Pair<String, TransactionType?>>) {
+        val cleaned = entries
+            .map { (name, type) -> name.trim() to type }
+            .filter { (name, _) -> name.isNotEmpty() && name !in RESERVADAS }
+        if (cleaned.isEmpty()) return
+        val next = used.toMutableMap()
+        var changed = false
+        for ((name, type) in cleaned) {
+            val before = next[name]
+            val after = if (type == null) (before ?: emptySet()) else (before.orEmpty() + type)
+            if (before == null || after != before) {
+                next[name] = after
+                changed = true
+            }
+        }
+        if (changed) used = next
+    }
+
+    /** Al cerrar sesión: estas son las categorías del usuario que se va (ver `SessionManager.clear`). */
+    fun clear() {
+        used = emptyMap()
+    }
+
+    /** Lo que llega del Inicio dentro del resumen (ver el KDoc de arriba). */
+    fun recordFromServer(entries: Collection<UsedCategory>) {
+        recordAll(entries.flatMap { entry ->
+            if (entry.types.isEmpty()) listOf(entry.name to null)
+            else entry.types.map { entry.name to it }
+        })
+    }
+
 }

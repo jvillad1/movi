@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -181,7 +184,15 @@ private fun CheckBox(checked: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         if (checked) {
-            Text("✓", fontSize = 12.sp, color = MinOnPrimaryContainer, fontWeight = FontWeight.Medium)
+            // Ícono, no el carácter "✓": la fuente del canvas no lo trae y en el navegador la
+            // casilla marcada se veía como un cuadradito vacío — o sea, justo lo contrario de
+            // lo que quiere decir. (Se vio en la PWA, en «Nuevo recurrente».)
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = MinOnPrimaryContainer,
+                modifier = Modifier.size(14.dp),
+            )
         }
     }
 }

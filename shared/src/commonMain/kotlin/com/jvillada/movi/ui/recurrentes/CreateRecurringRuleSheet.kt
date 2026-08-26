@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -58,15 +59,33 @@ fun CreateRecurringRuleSheet(
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
     existing: RecurringRule? = null,
+    /**
+     * Ola 9 · B: el formulario llega lleno con lo que el dueño acaba de anotar (nombre, monto,
+     * categoría, tipo, cuenta y el día del mes tomado de la fecha del movimiento). **Todo se
+     * puede corregir antes de guardar**: es un formulario prellenado, no una confirmación.
+     */
+    prefill: RecurringPrefill? = null,
 ) {
     val coroutine = rememberCoroutineScope()
 
     // Prefill state from existing rule when in edit mode
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var amount by remember { mutableStateOf(existing?.amount) }
-    var dayOfMonth by remember { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
-    var selectedType by remember { mutableStateOf(existing?.type ?: TransactionType.EXPENSE) }
-    var category by remember { mutableStateOf(existing?.category ?: "Otros") }
+    var name by remember { mutableStateOf(existing?.name ?: prefill?.name ?: "") }
+    var amount by remember { mutableStateOf(existing?.amount ?: prefill?.amount) }
+    var dayOfMonth by remember {
+        mutableStateOf(existing?.dayOfMonth?.toString() ?: prefill?.dayOfMonth?.toString() ?: "")
+    }
+    var selectedType by remember {
+        mutableStateOf(existing?.type ?: prefill?.type ?: TransactionType.EXPENSE)
+    }
+    var category by remember { mutableStateOf(existing?.category ?: prefill?.category ?: "Otros") }
+    // Ola 9 · D: ¿la categoría la eligió una persona? Con una regla que ya existe o con un
+    // movimiento que la trae, sí — y entonces la sugerencia por nombre no la toca. Ver
+    // [categoriaSugeridaPorNombre].
+    var categoriaElegidaAMano by remember { mutableStateOf(existing != null || prefill != null) }
+    // Ola 9 · D: a qué cuenta entra o de cuál sale. Opcional siempre (ver RecurringRule.accountId).
+    var accountId by remember { mutableStateOf(existing?.accountId ?: prefill?.accountId) }
+    var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
+    var accountPickerOpen by remember { mutableStateOf(false) }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
     var currency by remember { mutableStateOf("COP") }
@@ -75,6 +94,34 @@ fun CreateRecurringRuleSheet(
     var tipoCambiadoPorLaMoneda by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Una sola llamada, y solo cuando el dueño abrió esta hoja: no hay lista de cuentas
+    // cacheada en `:shared` y el selector necesita los nombres. Si falla, el selector queda
+    // vacío y la regla se guarda igual sin cuenta — que es un estado legítimo del modelo.
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getAccounts() }
+            .onSuccess { list ->
+                accounts = list
+                if (accountId != null && list.none { it.id == accountId }) accountId = null
+            }
+    }
+
+    // Ola 9 · D: si el nombre coincide con una categoría del catálogo, se propone esa en vez de
+    // dejar el genérico «Otros». Solo mientras nadie haya tocado la categoría a mano.
+    //
+    // La propuesta también se DESHACE. Escribir «Comida» y después cambiar el nombre a
+    // «Netflix» dejaba la categoría en «Comida» —una que el dueño nunca eligió— porque la
+    // sugerencia solo sabía asignar. Se recuerda cuál fue la última propuesta y, si el nombre
+    // nuevo no propone nada y la categoría sigue siendo exactamente esa, se vuelve al genérico.
+    var categoriaPropuesta by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(name, selectedType) {
+        if (categoriaElegidaAMano) return@LaunchedEffect
+        val sugerida = categoriaSugeridaPorNombre(name, selectedType)
+        when {
+            sugerida != null -> { category = sugerida; categoriaPropuesta = sugerida }
+            category == categoriaPropuesta -> { category = "Otros"; categoriaPropuesta = null }
+        }
+    }
 
     val isEditMode = existing != null
     // Editar es editar una regla; solo al crear se puede elegir dólares (ver KDoc).
@@ -129,6 +176,10 @@ fun CreateRecurringRuleSheet(
                         // adelante se reabre y se pasa a Gasto, la casilla arranca desmarcada.
                         // Es un camino angosto y el precio de que la base no mienta.
                         remindMe = selectedType == TransactionType.EXPENSE && remindMe,
+                        // Ola 9 · D: cadena vacía = «Sin cuenta», elegido a propósito. `null`
+                        // en el wire significa «no lo toques» y es lo que manda un cliente
+                        // viejo — ver el PUT en `ReminderRoutes.kt`.
+                        accountId = accountId ?: "",
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
@@ -364,11 +415,23 @@ fun CreateRecurringRuleSheet(
                         // una regla de gasto.
                         CategoryField(
                             value = category,
-                            onValueChange = { category = it },
+                            onValueChange = { category = it; categoriaElegidaAMano = true },
                             type = selectedType,
-                            usedCategories = UsedCategoriesCache.categories,
+                            usedCategories = UsedCategoriesCache.used,
                             label = "CATEGORÍA",
                             placeholder = "Ej: Vivienda, Suscripción, Salud",
+                        )
+
+                        Spacer(Modifier.height(18.dp))
+
+                        // --- CUENTA (opcional) ---
+                        AccountPickerField(
+                            accounts = accounts,
+                            selectedId = accountId,
+                            open = accountPickerOpen,
+                            enabled = !saving,
+                            onToggle = { accountPickerOpen = !accountPickerOpen },
+                            onPick = { accountId = it; accountPickerOpen = false },
                         )
 
                         Spacer(Modifier.height(18.dp))
@@ -450,6 +513,91 @@ fun CreateRecurringRuleSheet(
             }
         }
     }
+}
+
+/**
+ * Ola 9 · D — **de qué cuenta sale (o a cuál entra) esto todos los meses.**
+ *
+ * Un movimiento siempre tuvo cuenta y un recurrente no, así que Movi sabía que el salario entra
+ * el 25 pero no dónde. El selector es **opcional a propósito**: «Sin cuenta» es una opción de
+ * primera clase y no un error — las reglas que el dueño ya tiene nacieron sin cuenta y nadie
+ * puede exigirle ahora un dato que nunca se le pidió.
+ *
+ * Se abre y se cierra en su lugar, sin hoja encima de la hoja: esta ya vive dentro de un
+ * `verticalScroll` y una modal sobre otra modal, en el navegador angosto, es una trampa.
+ */
+@Composable
+private fun AccountPickerField(
+    accounts: List<Account>,
+    selectedId: String?,
+    open: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    onPick: (String?) -> Unit,
+) {
+    val selected = accounts.firstOrNull { it.id == selectedId }
+    SheetSectionLabel("CUENTA (OPCIONAL)")
+    Spacer(Modifier.height(8.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MinSurfaceContainerLow)
+            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled && accounts.isNotEmpty(), onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = when {
+                    selected != null -> selected.name
+                    accounts.isEmpty() -> "Sin cuentas todavía"
+                    else -> "Sin cuenta"
+                },
+                fontSize = 14.sp,
+                color = if (selected != null) MinText else MinTextMute,
+                modifier = Modifier.weight(1f),
+            )
+            if (accounts.isNotEmpty()) {
+                Text(if (open) "Cerrar" else "Elegir", fontSize = 12.sp, color = MinTextMute)
+            }
+        }
+    }
+    if (open && accounts.isNotEmpty()) {
+        Spacer(Modifier.height(6.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MinSurfaceContainerHigh)
+                .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),
+        ) {
+            AccountPickerRow(label = "Sin cuenta", selected = selectedId == null) { onPick(null) }
+            accounts.forEach { account ->
+                AccountPickerRow(label = account.name, selected = account.id == selectedId) {
+                    onPick(account.id)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountPickerRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        fontSize = 14.sp,
+        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        color = if (selected) MinOnPrimaryContainer else MinText,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (selected) Modifier.background(MinPrimaryContainer) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    )
 }
 
 @Composable

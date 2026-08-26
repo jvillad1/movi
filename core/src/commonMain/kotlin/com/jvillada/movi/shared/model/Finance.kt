@@ -132,6 +132,32 @@ data class RecurringRule(
     val dayOfMonth: Int,
     val type: TransactionType,
     /**
+     * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
+     * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el
+     * 25 pero no dónde — y al ofrecer «esto se repite» desde un movimiento (Ola 9 · B) el dato
+     * se perdía justo en el paso que lo tenía a mano.
+     *
+     * **Opcional a propósito, y opcional para siempre.** Las reglas que el dueño ya tiene en
+     * producción nacieron sin cuenta: exigirla ahora sería inventarle un dato que nadie le
+     * pidió, y bloquear la edición de lo que ya escribió. `null` significa exactamente «no se
+     * sabe», y la pantalla lo muestra así, sin drama.
+     *
+     * Si la cuenta se borra, la regla **no** se borra: el server la deja en `null` (misma
+     * política que ya usaba `AccountRoutes` con la pata hermana de un traspaso — se suelta la
+     * referencia, no se destruye el hecho). El plan «arriendo, día 5, $1.800.000» sigue siendo
+     * cierto aunque la cuenta de la que salía ya no esté en Movi.
+     *
+     * **En un PUT este campo tiene tres estados, y la diferencia importa:**
+     *  - `null` → «no lo toques». Es lo que manda un cliente que no conoce el campo (el APK 1.6
+     *    que el dueño ya tiene instalado). Sin esta regla, corregir el monto desde el teléfono
+     *    le borraba en silencio la cuenta que había puesto desde la web.
+     *  - `""` → «quitá la cuenta»: el dueño eligió «Sin cuenta» a propósito.
+     *  - un id → esa cuenta, si es suya; si no lo es, se guarda `null` y la respuesta lo dice.
+     *
+     * En un POST no hay nada que preservar: `null` y `""` significan lo mismo (sin cuenta).
+     */
+    val accountId: String? = null,
+    /**
      * ¿Este pago entra al barrido de recordatorios? Lo decide el dueño con la casilla
      * «Recordarme unos días antes» al crear o editar la regla.
      *

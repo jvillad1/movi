@@ -70,6 +70,15 @@ fun QuickAddScreen(
     onSaved: () -> Unit = onDismiss,
     onNavigate: (Screen) -> Unit = {},
     presetAccountId: String? = null,
+    /**
+     * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
+     * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
+     * salió bien, junto con [onSaved] — nunca antes: primero se guarda, después se ofrece.
+     *
+     * No se dispara en un traspaso: `RecurringRule` no modela traspasos (ver
+     * `shouldOfferRecurring`), así que ni siquiera se propone la pregunta.
+     */
+    onSavedEvent: (FinancialEvent) -> Unit = {},
 ) {
     val coroutine = rememberCoroutineScope()
     var typeIndex by remember { mutableStateOf(0) }
@@ -168,9 +177,16 @@ fun QuickAddScreen(
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
-            // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
-            // "usada" en el resto de la sesión sin esperar a que otra pantalla la cargue.
-            result.onSuccess { UsedCategoriesCache.record(listOf(trimmedCategory)); onSaved() }
+            result.onSuccess {
+                // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
+                // "usada" en el resto de la sesión. Ola 9 · A3: con el tipo con que la usó.
+                UsedCategoriesCache.record(trimmedCategory, event.type)
+                // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
+                // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
+                // paso, así que un ofrecimiento suyo se iría con ella).
+                onSavedEvent(event)
+                onSaved()
+            }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -259,7 +275,7 @@ fun QuickAddScreen(
                             value = category,
                             onValueChange = { category = it },
                             type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                            usedCategories = UsedCategoriesCache.categories,
+                            usedCategories = UsedCategoriesCache.used,
                             label = null,
                             onSuggestionPicked = { picker = Picker.None },
                             focusRequester = categoryFocusRequester,

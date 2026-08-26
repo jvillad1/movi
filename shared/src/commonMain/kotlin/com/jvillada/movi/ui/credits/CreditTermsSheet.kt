@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -325,7 +326,19 @@ internal fun FieldBox(
             .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
-        if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = MinTextFaint)
+        // Una sola línea SIEMPRE, igual que en [MoneyField] y por lo mismo: estos campos se usan
+        // a media fila (los dos días de la tarjeta) y un placeholder que se parte en dos renglones
+        // infla la caja y desalinea al campo de al lado. Visto a ojo a 360dp.
+        if (value.isEmpty()) {
+            Text(
+                placeholder,
+                fontSize = 14.sp,
+                color = MinTextFaint,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         BasicTextField(
             value = value,
             onValueChange = onValueChange,

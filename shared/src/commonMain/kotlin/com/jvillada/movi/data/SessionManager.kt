@@ -107,6 +107,11 @@ object SessionManager {
         // las alertas del anterior, y si alguna carga fallara en silencio, se quedarían.
         ScreenDefCache.dashboard = null
         DashboardDataCache.clear()
+        // Ola 9: las categorías usadas y lo que ya se ofreció como recurrente también son del
+        // usuario que se va — sugerirle al siguiente las categorías del anterior sería filtrar
+        // algo suyo por una lista de autocompletado.
+        UsedCategoriesCache.clear()
+        RecurringOfferGate.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

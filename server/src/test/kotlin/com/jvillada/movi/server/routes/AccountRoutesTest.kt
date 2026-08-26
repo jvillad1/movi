@@ -43,6 +43,7 @@ import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 /**
  * Hallazgo Critical de la revisión de la Ola 1b: hasta acá, `POST /api/accounts` fabricaba un
@@ -367,6 +368,42 @@ class AccountRoutesTest {
         assertEquals(HttpStatusCode.NoContent, res.status)
 
         assertEquals(Quintuple(0, 0, 0, 0, 0, 0, 0), rowCounts(accId), "no debe quedar NADA de la cuenta borrada")
+    }
+
+    /**
+     * Ola 9 · D: borrar la cuenta **no borra** el recurrente que la referenciaba — lo suelta.
+     * Mismo criterio que la pata hermana de un traspaso: se suelta la referencia, no se destruye
+     * el hecho. «Arriendo, día 5, $1.800.000» sigue siendo verdad sin la cuenta.
+     */
+    @Test
+    fun `DELETE suelta las reglas recurrentes de la cuenta en vez de borrarlas`() = testApplication {
+        wireApp()
+        val accId = "acc-con-recurrente"
+        seedAccountWithEverything(accId, userId)
+        val uid = userId  // adentro del insert, `userId` resuelve a la COLUMNA, no a este campo
+        transaction {
+            RecurringRules.insert {
+                it[RecurringRules.id]         = "rr-de-la-cuenta"
+                it[RecurringRules.userId]     = uid
+                it[RecurringRules.name]       = "Arriendo"
+                it[RecurringRules.category]   = "Vivienda"
+                it[RecurringRules.amount]     = 1_800_000
+                it[RecurringRules.dayOfMonth] = 5
+                it[RecurringRules.type]       = "EXPENSE"
+                it[RecurringRules.accountId]  = accId
+            }
+        }
+
+        val res = client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.NoContent, res.status)
+
+        val regla = transaction {
+            RecurringRules.selectAll().where { RecurringRules.id eq "rr-de-la-cuenta" }.singleOrNull()
+        }
+        assertNotNull(regla, "la regla recurrente NO se borra con la cuenta")
+        assertEquals("Arriendo", regla[RecurringRules.name])
+        assertEquals(1_800_000L, regla[RecurringRules.amount], "el plan queda intacto")
+        assertEquals(null, regla[RecurringRules.accountId], "y sin cuenta, que es la verdad")
     }
 
     @Test
