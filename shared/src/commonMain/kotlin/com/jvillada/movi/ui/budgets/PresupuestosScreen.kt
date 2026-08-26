@@ -98,7 +98,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
         runCatching { Repositories.wallets.getBudgets() }.onSuccess {
             budgets = it
-            UsedCategoriesCache.record(it.map { b -> b.category })
+            // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
+            // categorías se anotan con ese tipo y no como "no se sabe".
+            UsedCategoriesCache.recordAll(it.map { b -> b.category to TransactionType.EXPENSE })
         }
     }
 
@@ -111,7 +113,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         reload()
         runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
             days = it
-            UsedCategoriesCache.record(it.flatMap { d -> d.items }.map { ev -> ev.category })
+            // Ola 9 · A3: con el tipo de cada movimiento, así una categoría propia se ofrece
+            // del lado en que de verdad se usó.
+            UsedCategoriesCache.recordAll(it.flatMap { d -> d.items }.map { ev -> ev.category to ev.type })
         }
         // Misma cifra que el Inicio: el server suma con TODO lo que sabe (todos los dispositivos,
         // SMS, importaciones; anulados fuera). En el teléfono `getEventsByDay` es local y solo
@@ -453,7 +457,7 @@ private fun BudgetSheet(
                     value = category,
                     onValueChange = { category = it },
                     type = TransactionType.EXPENSE,
-                    usedCategories = UsedCategoriesCache.categories,
+                    usedCategories = UsedCategoriesCache.used,
                     label = "Categoría",
                     placeholder = "Mercado, Salud, Restaurantes…",
                 )

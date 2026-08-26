@@ -192,7 +192,7 @@ fun ChangeCategorySheet(
                 value = freeText,
                 onValueChange = { freeText = it },
                 type = event.type,
-                usedCategories = UsedCategoriesCache.categories,
+                usedCategories = UsedCategoriesCache.used,
                 label = null,
                 placeholder = "Ej: Colegio",
             )

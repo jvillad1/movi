@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.components
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * F35: [suggestCategoryMatches] es el filtro puro detrás de `CategoryField` — texto libre con
@@ -48,7 +50,7 @@ class CategoryFieldTest {
         val result = suggestCategoryMatches(
             query = "",
             type = TransactionType.EXPENSE,
-            usedCategories = listOf("Mascotas"),
+            usedCategories = mapOf("Mascotas" to setOf(TransactionType.EXPENSE)),
         )
         assertEquals("Mascotas", result.last())
         assert(result.indexOf("Comida") < result.indexOf("Mascotas"))
@@ -59,7 +61,7 @@ class CategoryFieldTest {
         val result = suggestCategoryMatches(
             query = "",
             type = TransactionType.EXPENSE,
-            usedCategories = listOf("comida", "Salud"), // minúscula a propósito
+            usedCategories = mapOf("comida" to emptySet(), "Salud" to emptySet()), // minúscula a propósito
         )
         assertEquals(1, result.count { it.equals("Comida", ignoreCase = true) })
     }
@@ -69,7 +71,7 @@ class CategoryFieldTest {
         val result = suggestCategoryMatches(
             query = "masc",
             type = null,
-            usedCategories = listOf("Mascotas", "  ", "Mascotas", ""),
+            usedCategories = mapOf("Mascotas" to emptySet(), "  " to emptySet(), "" to emptySet()),
         )
         assertEquals(listOf("Mascotas"), result)
     }
@@ -85,5 +87,66 @@ class CategoryFieldTest {
     fun `una consulta sin coincidencias no sugiere nada`() {
         val result = suggestCategoryMatches(query = "xyzxyz", type = TransactionType.EXPENSE)
         assertEquals(emptyList(), result)
+    }
+
+    // ── Ola 9 · A3: las categorías propias se ofrecen según cómo se usaron ─────────────
+
+    @Test
+    fun `una categoria propia usada solo en gastos no se ofrece al anotar un ingreso`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        assert("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used))
+        assert("Carro" !in suggestCategoryMatches("", TransactionType.INCOME, used))
+    }
+
+    @Test
+    fun `una categoria propia usada de los dos lados se ofrece en los dos`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE, TransactionType.INCOME))
+        assert("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used))
+        assert("Carro" in suggestCategoryMatches("", TransactionType.INCOME, used))
+    }
+
+    @Test
+    fun `ante la duda se muestra - sin tipos conocidos se ofrece en los dos lados`() {
+        // Arranque en frío: la conocemos (vino de un presupuesto, de una regla vieja) pero no
+        // sabemos de qué lado. Esconderla por falta de datos sería peor que sugerirla de más.
+        val used = mapOf("Colegio" to emptySet<TransactionType>())
+        assert("Colegio" in suggestCategoryMatches("", TransactionType.EXPENSE, used))
+        assert("Colegio" in suggestCategoryMatches("", TransactionType.INCOME, used))
+    }
+
+    @Test
+    fun `sin tipo se ofrecen todas las propias, del lado que sean`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        assert("Carro" in suggestCategoryMatches("", type = null, usedCategories = used))
+    }
+
+    // ── Ola 9 · A1: la opción de crear ────────────────────────────────────────────────
+
+    @Test
+    fun `ofrece crear cuando lo escrito no coincide con ninguna sugerencia`() {
+        val matches = suggestCategoryMatches("Carro", TransactionType.EXPENSE)
+        assertEquals(emptyList(), matches)
+        assertTrue(shouldOfferCreateCategory("Carro", matches))
+    }
+
+    @Test
+    fun `coincidencia parcial - se ve la sugerencia Y la opcion de crear`() {
+        // "Sal" con "Salario" en el catálogo: las dos cosas, sin que una tape a la otra.
+        val matches = suggestCategoryMatches("Sal", TransactionType.INCOME)
+        assertEquals(listOf("Salario"), matches)
+        assertTrue(shouldOfferCreateCategory("Sal", matches))
+    }
+
+    @Test
+    fun `no ofrece crear lo que ya existe, ni con otras mayusculas o tildes`() {
+        val matches = suggestCategoryMatches("educacion", TransactionType.EXPENSE)
+        assertEquals(listOf("Educación"), matches)
+        assertFalse(shouldOfferCreateCategory("educacion", matches))
+    }
+
+    @Test
+    fun `no ofrece crear con el campo vacio o en blanco`() {
+        assertFalse(shouldOfferCreateCategory("", emptyList()))
+        assertFalse(shouldOfferCreateCategory("   ", emptyList()))
     }
 }

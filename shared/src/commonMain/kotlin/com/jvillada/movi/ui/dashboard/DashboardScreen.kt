@@ -22,8 +22,10 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.renderableSections
@@ -137,6 +139,18 @@ fun DashboardScreen(
                             spentByCategory = s.spentByCategory,
                             cardCandidates = s.cardPaymentCandidates,
                             pendingSms = s.pendingSms,
+                        )
+                        // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
+                        // «Agregar» aunque entre directo desde acá, sin haber pasado por
+                        // Movimientos ni Presupuestos. **No es una llamada nueva**: viene en
+                        // esta misma respuesta, que esta pantalla ya pedía.
+                        UsedCategoriesCache.recordFromServer(s.usedCategories)
+                        // Y por si el server todavía es viejo y no manda ese campo: lo que se
+                        // gastó este mes también dice qué categorías existen, y son gastos por
+                        // definición. Cuesta cero y evita que un despliegue a medias deje el
+                        // campo sin sugerencias.
+                        UsedCategoriesCache.recordAll(
+                            s.spentByCategory.keys.map { c -> c to TransactionType.EXPENSE },
                         )
                     }
             }

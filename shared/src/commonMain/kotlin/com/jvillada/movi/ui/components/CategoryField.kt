@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MinBorder
+import com.jvillada.movi.theme.MinPrimary
 import com.jvillada.movi.theme.MinSurfaceContainerHigh
 import com.jvillada.movi.theme.MinSurfaceContainerLow
 import com.jvillada.movi.theme.MinText
@@ -54,24 +55,54 @@ import kotlinx.coroutines.delay
  * no dupliquen a una predefinida (comparación también sin tildes/mayúsculas) — así una
  * categoría nueva escrita a mano no compite por el primer lugar con el catálogo fijo.
  * Sin recortar por defecto: el que llama decide si hace falta un scroll (ver [CategoryField]).
+ *
+ * **Ola 9 · A3 — las propias también se filtran por tipo.** [usedCategories] no es una lista de
+ * nombres sino nombre → tipos con los que se la vio usada (ver
+ * `com.jvillada.movi.data.UsedCategoriesCache`). Una categoría propia solo se esconde cuando hay
+ * evidencia de que es del OTRO lado: sin tipos conocidos (conjunto vacío) o usada en los dos, se
+ * ofrece igual. Esconder por falta de datos sería peor que sugerir de más — en un arranque en
+ * frío no sabemos nada de ninguna.
  */
 fun suggestCategoryMatches(
     query: String,
     type: TransactionType? = null,
-    usedCategories: Collection<String> = emptyList(),
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
 ): List<String> {
     val predefined = PREDEFINED_CATEGORIES
         .filter { type == null || it.type == type.name || it.type == "BOTH" }
         .map { it.name }
     val q = normalizeForMatch(query)
     val predefinedMatches = predefined.filter { normalizeForMatch(it).contains(q) }
-    val usedMatches = usedCategories
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
+    val usedMatches = usedCategories.entries
+        .mapNotNull { (name, types) ->
+            val clean = name.trim()
+            if (clean.isEmpty()) null else clean to types
+        }
+        .filter { (_, types) -> type == null || types.isEmpty() || type in types }
+        .map { (name, _) -> name }
         .distinct()
         .filterNot { used -> predefined.any { it.equals(used, ignoreCase = true) } }
         .filter { normalizeForMatch(it).contains(q) }
     return predefinedMatches + usedMatches
+}
+
+/**
+ * Ola 9 · A1: ¿hay que ofrecer «Crear "lo que escribió"» arriba de las sugerencias?
+ *
+ * El campo de categoría **siempre** aceptó texto libre —ni el cliente ni el server validan
+ * contra el catálogo— pero nada lo decía: el dueño escribió «Carro», la lista de sugerencias
+ * quedó vacía y se leyó como un callejón sin salida (preguntó, textualmente, si se podían crear
+ * categorías). La opción de crear es esa misma capacidad, dicha en voz alta.
+ *
+ * Se ofrece cuando lo escrito no coincide EXACTAMENTE (normalizado) con ninguna sugerencia
+ * visible. Que sea "exactamente" y no "no hay sugerencias" es lo que cubre la coincidencia
+ * parcial: con «Sal» escrito y «Salario» en el catálogo se ven las dos cosas —la sugerencia y
+ * crear «Sal»— sin que una tape a la otra.
+ */
+fun shouldOfferCreateCategory(query: String, matches: List<String>): Boolean {
+    val q = normalizeForMatch(query.trim())
+    if (q.isEmpty()) return false
+    return matches.none { normalizeForMatch(it) == q }
 }
 
 /** Minúsculas y sin tildes/eñe — no hay normalización Unicode común a los 3 targets acá. */
@@ -102,7 +133,8 @@ fun CategoryField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     type: TransactionType? = null,
-    usedCategories: Set<String> = emptySet(),
+    /** Nombre → tipos con los que se la vio usada (ver `UsedCategoriesCache.used`). */
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     label: String? = "CATEGORÍA",
     placeholder: String = "Ej: Vivienda, Suscripción, Salud",
     /** Además de [onValueChange]: se dispara solo al tocar una sugerencia, nunca al tipear —
@@ -149,6 +181,10 @@ fun CategoryField(
     val matches = if (isExactMatch) allMatches else remember(value, type, usedCategories) {
         suggestCategoryMatches(value, type, usedCategories)
     }
+    // Ola 9 · A1: lo escrito no coincide con nada → arriba de todo, la opción de crearlo. Ver
+    // [shouldOfferCreateCategory] para el porqué y para el caso de la coincidencia parcial.
+    val nuevaCategoria = value.trim()
+    val ofrecerCrear = shouldOfferCreateCategory(value, matches)
 
     fun pick(name: String) {
         onValueChange(name)
@@ -205,7 +241,7 @@ fun CategoryField(
         }
         // Visible mientras el campo tiene foco (más la demora de gracia de F62): tocar una
         // sugerencia la elige y lo quita del medio.
-        if (suggestionsVisible && matches.isNotEmpty()) {
+        if (suggestionsVisible && (matches.isNotEmpty() || ofrecerCrear)) {
             Spacer(Modifier.height(6.dp))
             Column(
                 modifier = Modifier
@@ -216,6 +252,27 @@ fun CategoryField(
                     .background(MinSurfaceContainerHigh)
                     .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),
             ) {
+                if (ofrecerCrear) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { pick(nuevaCategoria) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            "Crear \"$nuevaCategoria\"",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinPrimary,
+                        )
+                        Text(
+                            "Se guarda tal cual, como categoría tuya",
+                            fontSize = 11.sp,
+                            color = MinTextMute,
+                        )
+                    }
+                    if (matches.isNotEmpty()) Hairline()
+                }
                 matches.forEachIndexed { i, name ->
                     Text(
                         name,

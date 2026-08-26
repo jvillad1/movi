@@ -18,7 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalGoBack
@@ -43,7 +45,10 @@ import com.jvillada.movi.ui.onboarding.OnboardingProfileScreen
 import com.jvillada.movi.ui.onboarding.WelcomeScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
+import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.RecurrentesScreen
+import com.jvillada.movi.ui.recurrentes.RecurringOfferBar
+import com.jvillada.movi.ui.recurrentes.RecurringPrefill
 import com.jvillada.movi.ui.sms.SMSInboxScreen
 import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
@@ -58,6 +63,7 @@ import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 
 @Composable
@@ -81,6 +87,34 @@ fun App() {
             // usan como key de su LaunchedEffect — sin esto, la de atrás (que ahora nunca sale de
             // la composición) seguiría mostrando la lista de antes de guardar. Ver [LocalRefreshTick].
             var refreshTick by remember { mutableStateOf(0) }
+            // Ola 9 · B — «¿esto se repite todos los meses?», ofrecido DESPUÉS de guardar.
+            //
+            // Vive acá, y no en la hoja de Agregar, por una razón concreta: guardar cierra esa
+            // hoja, así que cualquier cosa que ella misma mostrara se iría con ella. Acá el
+            // movimiento ya está guardado y el ofrecimiento es independiente de todo lo demás:
+            // ignorarlo, cerrarlo o irse a otra pantalla no pierde nada.
+            var movimientoRecienGuardado by remember { mutableStateOf<FinancialEvent?>(null) }
+            var ofrecimientoRecurrente by remember { mutableStateOf<RecurringPrefill?>(null) }
+            var hojaRecurrentePrellenada by remember { mutableStateOf<RecurringPrefill?>(null) }
+
+            // Keyed por el ID del movimiento: dos guardados distintos vuelven a evaluar, y una
+            // recomposición con el mismo movimiento no. Y el resultado solo se ASIGNA si hay algo
+            // que ofrecer: si esto pudiera escribir `null`, una segunda pasada sobre el mismo
+            // movimiento (que el gate ya descarta por "ya se ofreció") apagaría la barra que la
+            // primera acababa de encender. Se vio pasar.
+            LaunchedEffect(movimientoRecienGuardado?.id) {
+                val evento = movimientoRecienGuardado ?: return@LaunchedEffect
+                // Las guardas (traspaso, ya existe, ya se ofreció esta cosa) viven en el gate.
+                RecurringOfferGate.ofrecerPara(evento)?.let { ofrecimientoRecurrente = it }
+            }
+            // Se va sola. Es la mitad del diseño: si la barra se quedara hasta que alguien la
+            // cierre, "ignorarla" costaría un toque y anotar el almuerzo de todos los días
+            // sería una molestia diaria. Así, no contestar ES la respuesta.
+            LaunchedEffect(ofrecimientoRecurrente) {
+                if (ofrecimientoRecurrente == null) return@LaunchedEffect
+                delay(12_000)
+                ofrecimientoRecurrente = null
+            }
 
             val navigate: (Screen) -> Unit = { screen ->
                 if (opensAsOverlay(screen)) {
@@ -226,10 +260,43 @@ fun App() {
                             onSaved = { refreshTick++; quickAdd = null },
                             onNavigate = navigate,
                             presetAccountId = request.presetAccountId,
+                            // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
+                            // vale la pena ofrecer el recurrente.
+                            onSavedEvent = { movimientoRecienGuardado = it },
                         )
                     }
                 }
+                // La barra del ofrecimiento: encima del contenido, debajo de la hoja de
+                // Agregar (que para este momento ya se cerró), y siempre por dentro del ancho
+                // de la columna — en angosto ocupa el ancho completo y en laptop queda alineada
+                // con el contenido, no pegada al borde de la ventana.
+                ofrecimientoRecurrente?.let { propuesta ->
+                    RecurringOfferBar(
+                        prefill = propuesta,
+                        onAccept = {
+                            hojaRecurrentePrellenada = propuesta
+                            ofrecimientoRecurrente = null
+                        },
+                        onDismiss = { ofrecimientoRecurrente = null },
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                }
+                hojaRecurrentePrellenada?.let { propuesta ->
+                    CreateRecurringRuleSheet(
+                        onDismiss = { hojaRecurrentePrellenada = null },
+                        onSaved = {
+                            hojaRecurrentePrellenada = null
+                            // La lista de reglas que el gate tenía cacheada quedó vieja: sin
+                            // esto, anotar el arriendo del mes que viene volvería a ofrecer
+                            // crear el recurrente que se acaba de crear.
+                            RecurringOfferGate.olvidarReglas()
+                            refreshTick++
+                        },
+                        prefill = propuesta,
+                    )
+                }
                 } // screen slot
+
                 if (showBottomNav) {
                     MinBottomNav(active = activeTab, onTabSelected = onTabSelected)
                 }
