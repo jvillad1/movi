@@ -28,6 +28,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -393,6 +394,76 @@ class ReminderRoutesTest {
         }
         assertEquals(HttpStatusCode.Created, resp.status)
         assertEquals(null, resp.body<RecurringRule>().accountId)
+    }
+
+    /**
+     * Ola 9 · D — **el APK que el dueño ya tiene instalado no puede borrarle la cuenta.**
+     *
+     * Ese cliente no conoce el campo, así que su PUT llega sin él (`null`). Si eso significara
+     * «quitá la cuenta», corregir el monto desde el teléfono le borraría en silencio la cuenta
+     * que puso desde la web. `null` = no lo toques.
+     */
+    @Test
+    fun `un PUT sin accountId conserva la cuenta que ya tenia la regla`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Arriendo", "Vivienda", 1_800_000, 5,
+                    TransactionType.EXPENSE, accountId = accountOwnedByA,
+                ),
+            )
+        }.body<RecurringRule>()
+
+        // Cuerpo tal cual lo manda un cliente viejo: sin el campo `accountId` en el JSON.
+        val cuerpoViejo = """
+            {"id":"${creada.id}","name":"Arriendo","category":"Vivienda","amount":1900000,
+             "dayOfMonth":5,"type":"EXPENSE","remindMe":true}
+        """.trimIndent().replace("\n", "")
+        val respuesta = client.put("/api/recurring-rules/${creada.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            setBody(TextContent(cuerpoViejo, ContentType.Application.Json))
+        }
+        assertEquals(HttpStatusCode.OK, respuesta.status, respuesta.bodyAsText())
+        assertEquals(accountOwnedByA, respuesta.body<RecurringRule>().accountId)
+
+        val guardada = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>().first { it.id == creada.id }
+        assertEquals(accountOwnedByA, guardada.accountId, "la cuenta sobrevive al cliente viejo")
+        assertEquals(1_900_000L, guardada.amount, "y el cambio que sí pidió se guardó")
+    }
+
+    /** Y «Sin cuenta» (cadena vacía) sí la quita: es una elección explícita del dueño. */
+    @Test
+    fun `un PUT con accountId vacio quita la cuenta`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Arriendo", "Vivienda", 1_800_000, 5,
+                    TransactionType.EXPENSE, accountId = accountOwnedByA,
+                ),
+            )
+        }.body<RecurringRule>()
+
+        val respuesta = client.put("/api/recurring-rules/${creada.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(creada.copy(accountId = ""))
+        }
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+        assertEquals(null, respuesta.body<RecurringRule>().accountId)
     }
 
     /** Una regla vieja (sin cuenta) sigue leyéndose y editándose sin cuenta. */

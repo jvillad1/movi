@@ -144,6 +144,21 @@ class CategoryFieldTest {
         assertFalse(shouldOfferCreateCategory("educacion", matches))
     }
 
+    /**
+     * Ola 9 · B4: «Carro» existe (como gasto) aunque el filtro por tipo la esconda al anotar un
+     * ingreso. Ofrecer «Crear "Carro"» ahí prometía algo nuevo que no crea nada.
+     */
+    @Test
+    fun `no ofrece crear algo que ya existe aunque el tipo lo esconda`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val matches = suggestCategoryMatches("Carro", TransactionType.INCOME, used)
+
+        assertEquals(emptyList(), matches, "el filtro por tipo la esconde")
+        assertFalse(shouldOfferCreateCategory("Carro", matches, conocidas = used.keys))
+        // Pero una que de verdad no existe sí se ofrece.
+        assertTrue(shouldOfferCreateCategory("Moto", matches, conocidas = used.keys))
+    }
+
     @Test
     fun `no ofrece crear con el campo vacio o en blanco`() {
         assertFalse(shouldOfferCreateCategory("", emptyList()))

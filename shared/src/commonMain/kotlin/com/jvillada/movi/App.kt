@@ -107,11 +107,17 @@ fun App() {
                 // Las guardas (traspaso, ya existe, ya se ofreció esta cosa) viven en el gate.
                 RecurringOfferGate.ofrecerPara(evento)?.let { ofrecimientoRecurrente = it }
             }
+            // La barra se esconde mientras haya una hoja abierta encima (ver más abajo).
+            val ofrecimientoALaVista = ofrecimientoRecurrente != null &&
+                quickAdd == null && hojaRecurrentePrellenada == null
             // Se va sola. Es la mitad del diseño: si la barra se quedara hasta que alguien la
             // cierre, "ignorarla" costaría un toque y anotar el almuerzo de todos los días
             // sería una molestia diaria. Así, no contestar ES la respuesta.
-            LaunchedEffect(ofrecimientoRecurrente) {
-                if (ofrecimientoRecurrente == null) return@LaunchedEffect
+            //
+            // La cuenta corre solo mientras la barra se VE: si el dueño abrió otra hoja encima,
+            // el ofrecimiento lo espera en vez de vencerse a espaldas suyas.
+            LaunchedEffect(ofrecimientoRecurrente, ofrecimientoALaVista) {
+                if (!ofrecimientoALaVista) return@LaunchedEffect
                 delay(12_000)
                 ofrecimientoRecurrente = null
             }
@@ -128,9 +134,13 @@ fun App() {
                 }
             }
             val goBack: () -> Unit = {
-                // La hoja primero: el botón «atrás» del teléfono tiene que cerrar la modal antes
-                // de tocar la pila, igual que haría con cualquier diálogo.
-                if (quickAdd != null) quickAdd = null
+                // Las hojas primero: el botón «atrás» del teléfono tiene que cerrar la modal
+                // antes de tocar la pila, igual que haría con cualquier diálogo. La de crear el
+                // recurrente va ANTES que la de Agregar porque, cuando las dos existen, es la
+                // que está encima — y sin ella acá el «atrás» desde Inicio se salía de la app
+                // con el formulario a medio llenar (Ola 9 · B).
+                if (hojaRecurrentePrellenada != null) hojaRecurrentePrellenada = null
+                else if (quickAdd != null) quickAdd = null
                 else if (backStack.size > 1) backStack.removeLast()
             }
             // F22: «volver» real para las flechas ‹ de cada pantalla. Si hay
@@ -153,7 +163,10 @@ fun App() {
                 }
             }
 
-            BackHandlerEffect(enabled = quickAdd != null || backStack.size > 1, onBack = goBack)
+            BackHandlerEffect(
+                enabled = quickAdd != null || hojaRecurrentePrellenada != null || backStack.size > 1,
+                onBack = goBack,
+            )
 
             LaunchedEffect(SessionManager.loggedIn) {
                 if (!SessionManager.loggedIn) {
@@ -266,11 +279,16 @@ fun App() {
                         )
                     }
                 }
-                // La barra del ofrecimiento: encima del contenido, debajo de la hoja de
-                // Agregar (que para este momento ya se cerró), y siempre por dentro del ancho
-                // de la columna — en angosto ocupa el ancho completo y en laptop queda alineada
-                // con el contenido, no pegada al borde de la ventana.
-                ofrecimientoRecurrente?.let { propuesta ->
+                // La barra del ofrecimiento: encima del contenido y siempre por dentro del
+                // ancho de la columna — en angosto ocupa el ancho completo y en laptop queda
+                // alineada con el contenido, no pegada al borde de la ventana.
+                //
+                // **Se esconde mientras haya una hoja abierta.** Normalmente para cuando
+                // aparece ya se cerró la de Agregar, pero el dueño puede volver a abrirla dentro
+                // de los 12 segundos: en un `Box` los hijos posteriores se pintan ENCIMA, así
+                // que sin esta condición la barra le quedaba flotando sobre el teclado numérico.
+                // No se pierde nada: el ofrecimiento sigue vivo y vuelve a verse al cerrar.
+                ofrecimientoRecurrente?.takeIf { ofrecimientoALaVista }?.let { propuesta ->
                     RecurringOfferBar(
                         prefill = propuesta,
                         onAccept = {

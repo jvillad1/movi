@@ -108,9 +108,19 @@ fun CreateRecurringRuleSheet(
 
     // Ola 9 · D: si el nombre coincide con una categoría del catálogo, se propone esa en vez de
     // dejar el genérico «Otros». Solo mientras nadie haya tocado la categoría a mano.
+    //
+    // La propuesta también se DESHACE. Escribir «Comida» y después cambiar el nombre a
+    // «Netflix» dejaba la categoría en «Comida» —una que el dueño nunca eligió— porque la
+    // sugerencia solo sabía asignar. Se recuerda cuál fue la última propuesta y, si el nombre
+    // nuevo no propone nada y la categoría sigue siendo exactamente esa, se vuelve al genérico.
+    var categoriaPropuesta by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(name, selectedType) {
         if (categoriaElegidaAMano) return@LaunchedEffect
-        categoriaSugeridaPorNombre(name, selectedType)?.let { category = it }
+        val sugerida = categoriaSugeridaPorNombre(name, selectedType)
+        when {
+            sugerida != null -> { category = sugerida; categoriaPropuesta = sugerida }
+            category == categoriaPropuesta -> { category = "Otros"; categoriaPropuesta = null }
+        }
     }
 
     val isEditMode = existing != null
@@ -166,8 +176,10 @@ fun CreateRecurringRuleSheet(
                         // adelante se reabre y se pasa a Gasto, la casilla arranca desmarcada.
                         // Es un camino angosto y el precio de que la base no mienta.
                         remindMe = selectedType == TransactionType.EXPENSE && remindMe,
-                        // Ola 9 · D. Puede ser null: la cuenta nunca es obligatoria.
-                        accountId = accountId,
+                        // Ola 9 · D: cadena vacía = «Sin cuenta», elegido a propósito. `null`
+                        // en el wire significa «no lo toques» y es lo que manda un cliente
+                        // viejo — ver el PUT en `ReminderRoutes.kt`.
+                        accountId = accountId ?: "",
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }

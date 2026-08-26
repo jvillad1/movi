@@ -99,9 +99,20 @@ fun suggestCategoryMatches(
  * parcial: con «Sal» escrito y «Salario» en el catálogo se ven las dos cosas —la sugerencia y
  * crear «Sal»— sin que una tape a la otra.
  */
-fun shouldOfferCreateCategory(query: String, matches: List<String>): Boolean {
+fun shouldOfferCreateCategory(
+    query: String,
+    matches: List<String>,
+    /**
+     * Todo lo que Movi ya conoce, incluido lo que el filtro por tipo esconde. Sin esto, escribir
+     * «Carro» al anotar un INGRESO ofrecía «Crear "Carro"» para una categoría que ya existe
+     * (solo que como gasto, ver [suggestCategoryMatches]): una oferta que promete algo nuevo y
+     * no crea nada.
+     */
+    conocidas: Collection<String> = emptyList(),
+): Boolean {
     val q = normalizeForMatch(query.trim())
     if (q.isEmpty()) return false
+    if (conocidas.any { normalizeForMatch(it.trim()) == q }) return false
     return matches.none { normalizeForMatch(it) == q }
 }
 
@@ -184,7 +195,12 @@ fun CategoryField(
     // Ola 9 · A1: lo escrito no coincide con nada → arriba de todo, la opción de crearlo. Ver
     // [shouldOfferCreateCategory] para el porqué y para el caso de la coincidencia parcial.
     val nuevaCategoria = value.trim()
-    val ofrecerCrear = shouldOfferCreateCategory(value, matches)
+    val ofrecerCrear = shouldOfferCreateCategory(
+        query = value,
+        matches = matches,
+        // Las propias de cualquier tipo Y el catálogo entero: lo que ya existe no se "crea".
+        conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name },
+    )
 
     fun pick(name: String) {
         onValueChange(name)

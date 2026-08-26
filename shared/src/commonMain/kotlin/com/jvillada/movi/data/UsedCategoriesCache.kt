@@ -3,6 +3,8 @@ package com.jvillada.movi.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
@@ -61,6 +63,18 @@ object UsedCategoriesCache {
         recordAll(names.map { it to null })
     }
 
+    /**
+     * Las categorías que Movi **escribe solo** y que el dueño no debería poder elegir a mano.
+     *
+     * «Traspaso» ya estaba (ver arriba). Se suman dos más, que llegaron con la lista completa
+     * que ahora manda el Inicio (Ola 9 · A2): «Cuenta eliminada», que el server le pone a la
+     * pata de traspaso que quedó sin hermana, y «Saldo inicial», que marca la apertura de una
+     * cuenta y queda FUERA del flujo de caja. Ofrecerlas como sugerencia era invitar al dueño a
+     * escribir una categoría reservada en un gasto suyo: en el mejor caso una fila confusa, en
+     * el peor un gasto real que desaparece del mes.
+     */
+    private val RESERVADAS = setOf(TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY, OPENING_CATEGORY)
+
     /** Una sola categoría, con el tipo con el que se la acaba de usar (o `null` si no se sabe). */
     fun record(name: String, type: TransactionType?) {
         recordAll(listOf(name to type))
@@ -73,7 +87,7 @@ object UsedCategoriesCache {
     fun recordAll(entries: Collection<Pair<String, TransactionType?>>) {
         val cleaned = entries
             .map { (name, type) -> name.trim() to type }
-            .filter { (name, _) -> name.isNotEmpty() && name != TRANSFER_CATEGORY }
+            .filter { (name, _) -> name.isNotEmpty() && name !in RESERVADAS }
         if (cleaned.isEmpty()) return
         val next = used.toMutableMap()
         var changed = false

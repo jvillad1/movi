@@ -96,7 +96,27 @@ fun Route.reminderRoutes() {
         val body = call.receive<RecurringRule>()
         var storedAccountId: String? = null
         val updated = dbQuery {
-            val safeAccountId = accountIdIfOwned(uid, body.accountId)
+            // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
+            //
+            // El APK 1.6 que el dueño ya tiene instalado no conoce este campo, así que su PUT
+            // llega sin él y kotlinx lo deserializa como `null`. Si `null` significara «quitá la
+            // cuenta», corregir el monto desde el teléfono le borraría en silencio la cuenta que
+            // había puesto desde la web. Es el mismo agujero que `remindMe` evita con su default
+            // `true`, y acá no alcanzaba un default porque «sin cuenta» es un estado legítimo.
+            //
+            // Por eso el campo es de tres estados en el wire (ver `RecurringRule.accountId`):
+            //   · `null`            → no lo toques (cliente viejo, o un PUT que no habla de cuentas)
+            //   · cadena vacía      → quitá la cuenta (el dueño eligió «Sin cuenta»)
+            //   · un id             → esa cuenta, si es suya
+            val cuentaActual = RecurringRules.selectAll()
+                .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+                .firstOrNull()?.get(RecurringRules.accountId)
+            val pedida = body.accountId
+            val safeAccountId = when {
+                pedida == null -> cuentaActual
+                pedida.isBlank() -> null
+                else -> accountIdIfOwned(uid, pedida)
+            }
             storedAccountId = safeAccountId
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name

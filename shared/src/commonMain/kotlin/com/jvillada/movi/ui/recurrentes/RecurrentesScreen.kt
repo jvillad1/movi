@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.platform.PushOptIn
@@ -151,6 +152,15 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 .onSuccess { subs = it; cobrosOk = true }
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             error = fallo
+            // Ola 9 · B: el ofrecimiento «¿esto se repite?» necesita saber qué recurrentes ya
+            // existen. Esta pantalla acaba de cargarlos, así que se los deja al gate: le ahorra
+            // sus llamadas y —lo que de verdad importa— lo mantiene al día. Sin esto, crear
+            // «Gimnasio» acá y anotar el pago después terminaba ofreciendo crear el recurrente
+            // que el dueño acababa de crear.
+            RecurringOfferGate.recordarLoQueYaHay(
+                reglas = if (reglasOk) rules else null,
+                suscripciones = if (cobrosOk) subs.subscriptions else null,
+            )
         }
         loading = false
     }

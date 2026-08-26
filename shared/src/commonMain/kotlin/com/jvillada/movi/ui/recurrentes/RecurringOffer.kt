@@ -42,8 +42,13 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
  *    anotar el arriendo de este mes no se lo vuelve a ofrecer.
  * 3. **Como mucho una vez por "cosa" y por sesión.** La primera comida de la semana lo ofrece;
  *    las otras cuatro, no. Esta es la guarda que hace que la función se pueda usar todos los
- *    días: la que decide no es la categoría ni el monto —dos cosas sobre las que Movi no sabe
- *    nada todavía— sino que ya se lo ofrecimos y no lo tomó.
+ *    días: la que decide no es el monto —algo sobre lo que Movi no sabe nada todavía— sino que
+ *    ya se lo ofrecimos y no lo tomó.
+ *
+ *    La "cosa" acá es la **categoría** (con su tipo), no el nombre: el nombre sale de la nota, y
+ *    con notas distintas —«Almuerzo lunes», «Almuerzo con Ana»— cada gasto de comida volvía a
+ *    disparar la barra, que es exactamente el modo de falla que esta guarda existe para evitar.
+ *    Un gasto sin nota y otro con nota son, para esto, la misma cosa.
  *
  * Y, por construcción, **nunca dos veces por el mismo movimiento**: el ofrecimiento sale una
  * sola vez, del guardado, y no se persiste ninguna cola.
@@ -68,6 +73,13 @@ fun shouldOfferRecurring(
     event: FinancialEvent,
     existingRules: List<RecurringRule>,
     alreadyOffered: Set<String> = emptySet(),
+    /**
+     * Los cobros que Movi ya conoce como suscripción. Recurrentes muestra reglas y suscripciones
+     * en UNA sola lista y las suma juntas en «Gastos recurrentes», así que ofrecer una regla
+     * «Netflix» a quien ya tiene la suscripción «Netflix» no solo repite la fila: le **cuenta el
+     * cobro dos veces** en el flujo libre. La comparación es la misma que usa esa pantalla.
+     */
+    existingSubscriptionNames: List<String> = emptyList(),
 ): Boolean {
     // Un traspaso, por cualquiera de sus dos señas: el enlace entre patas o la categoría
     // reservada. Se miran las dos porque una pata suelta (cuenta borrada) pierde el enlace
@@ -77,9 +89,20 @@ fun shouldOfferRecurring(
     if (event.amount <= 0L) return false
     val key = claveDeNombre(prefillNameFor(event))
     if (key.isEmpty()) return false
-    if (key in alreadyOffered) return false
-    return existingRules.none { claveDeNombre(it.name) == key }
+    // La molestia se mide por categoría (ver la guarda 3), el duplicado por nombre.
+    if (throttleKeyFor(event) in alreadyOffered) return false
+    if (existingRules.any { claveDeNombre(it.name) == key }) return false
+    return existingSubscriptionNames.none { claveDeNombre(it) == key }
 }
+
+/**
+ * La clave de "ya se lo ofrecimos en esta sesión": categoría + tipo, no el nombre. Ver la
+ * guarda 3 en el KDoc de arriba — con el nombre (que sale de la nota) la guarda no protegía nada
+ * en el caso para el que se escribió.
+ */
+fun throttleKeyFor(event: FinancialEvent): String =
+    "${event.type.name}:${claveDeNombre(event.category)}"
+
 
 /**
  * El nombre con el que nacería el recurrente: la nota que escribió el dueño («Arriendo agosto»)

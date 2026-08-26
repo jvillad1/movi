@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +15,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -105,25 +106,37 @@ fun MoneyField(
             Spacer(Modifier.height(8.dp))
         }
         val digits = value?.toString() ?: ""
-        val display = groupDigitsForDisplay(digits)
 
-        // Ola 9 · C — EL ESTADO DEL TEXTO VIVE ACÁ, no se reconstruye en cada recomposición.
+        // ── Ola 9 · C — CÓMO SE EDITA UN MONTO (y por qué antes se guardaba otra cifra) ──
         //
-        // Antes este campo armaba un `TextFieldValue(display, selection = TextRange(display.length))`
-        // nuevo en cada paso de la composición. Eso reancla el cursor al final SIEMPRE, también
-        // cuando el usuario acababa de seleccionar el texto — y en el navegador (wasm) el buffer
-        // del sistema y el de Compose quedaban en desacuerdo: **seleccionar todo y volver a
-        // escribir el monto no hacía nada**, las teclas se perdían. Con teclado físico esa es la
-        // forma natural de corregir una cifra, así que el campo se sentía roto. (Verificado a
-        // ojo en el navegador, en «Nuevo recurrente» y en «Nueva cuenta»: se comportaban igual
-        // de mal, que es lo que el reporte del dueño insinuaba sin poder nombrar.)
+        // Este campo armaba un `TextFieldValue(display, selection = TextRange(display.length))`
+        // NUEVO en cada composición: le tiraba a la basura la selección que mandaba el sistema y
+        // reanclaba el cursor al final, siempre. En el navegador eso no "perdía teclas": las
+        // **concatenaba**. Escribir 50000, seleccionar todo con ⌘A y escribir 7000 dejaba
+        // $500.007.000 — quinientos millones donde el dueño quiso siete mil, guardables sin que
+        // nada avisara. El `<input>` oculto y lo que Compose pintaba eran textos distintos, así
+        // que toda edición posterior operaba sobre algo que el dueño no veía.
         //
-        // Ahora el estado es propio y solo se resincroniza cuando los dígitos que manda el
-        // padre difieren de los que tenemos (prellenado, reset del formulario, otra pantalla) —
-        // nunca por el simple hecho de recomponer, así que la selección del usuario sobrevive.
-        var field by remember { mutableStateOf(TextFieldValue(display, TextRange(display.length))) }
-        if (field.text.filter { it.isDigit() } != digits) {
-            field = TextFieldValue(display, TextRange(display.length))
+        // El arreglo NO es una limitación de la plataforma —fue un diagnóstico equivocado en la
+        // primera versión de esta ola—: [CategoryField], en la misma hoja y a diez líneas de
+        // acá, ya lo hacía bien. Se copia su patrón, que son dos reglas:
+        //
+        //  1. El estado del texto vive ACÁ y solo se resincroniza cuando el cambio viene de
+        //     AFUERA (prellenado, reset, otra pantalla) — nunca por recomponer.
+        //  2. Lo que manda el sistema se respeta TAL CUAL, selección incluida. Solo se reescribe
+        //     cuando de verdad hay que reformatear, y ahí se dice explícitamente dónde queda el
+        //     cursor.
+        //
+        // Reformatear (agrupar de a miles mientras se escribe, F14) se hace solo cuando el
+        // cursor está al final y no hay nada seleccionado — que es el caso de tipear normal. Con
+        // una selección viva o el cursor en el medio se deja pasar el texto sin tocarlo: agrupar
+        // ahí movería el cursor de lugar y es exactamente lo que rompía el campo.
+        var field by remember { mutableStateOf(TextFieldValue(groupDigitsForDisplay(digits), TextRange(digits.length))) }
+        LaunchedEffect(digits) {
+            if (field.text.filter { it.isDigit() } != digits) {
+                val fromOutside = groupDigitsForDisplay(digits)
+                field = TextFieldValue(fromOutside, TextRange(fromOutside.length))
+            }
         }
 
         Box(
@@ -135,47 +148,57 @@ fun MoneyField(
                 .padding(horizontal = 14.dp, vertical = 14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Ola 9 · C: el símbolo es una ETIQUETA, no parte del texto editable. Antes
-                // viajaba adentro del campo ("$12.345"), así que el cursor podía pararse antes
-                // del "$" y el borrado tenía que pelearse con un carácter que el usuario nunca
-                // escribió. Afuera, lo que se edita son solo dígitos — y el campo se anuncia
-                // como monto de una: es lo primero que se ve, esté vacío o lleno.
+                // El símbolo es una ETIQUETA, no parte del texto editable: adentro del campo
+                // ("$12.345") el cursor podía pararse antes del "$" y el borrado tenía que
+                // pelearse con un carácter que el usuario nunca escribió. Afuera, lo que se
+                // edita son solo dígitos, y el campo se anuncia como monto esté vacío o lleno.
                 Text(
                     text = prefix,
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
                     fontFamily = FontFamily.Monospace,
                     color = if (digits.isEmpty()) MinTextFaint else MinTextMute,
                 )
                 Spacer(Modifier.width(6.dp))
                 Box(modifier = Modifier.weight(1f)) {
                     if (digits.isEmpty()) {
+                        // Una sola línea SIEMPRE: este campo también se usa a media fila (la
+                        // cuota de un crédito), y un placeholder largo partido en tres renglones
+                        // estiraba la caja al triple y empujaba al campo de al lado (visto a ojo
+                        // a 360dp en «Términos del crédito»).
                         Text(
                             text = placeholder.removePrefix(prefix).trim().ifEmpty { "0" },
-                            fontSize = 16.sp,
-                            fontFamily = FontFamily.Monospace,
+                            fontSize = 14.sp,
                             color = MinTextFaint,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     BasicTextField(
                         value = field,
-                        onValueChange = { new ->
-                            // Nos quedamos solo con los dígitos: un paste con puntos o comas de
-                            // mil entra limpio, y una letra sencillamente no entra. El texto que
-                            // se muestra es el agrupado, no lo que llegó.
-                            val newDigits = new.text.filter { it.isDigit() }.take(maxDigits)
-                            val grouped = groupDigitsForDisplay(newDigits)
-                            // Reanclar el cursor al final es la misma simplificación de siempre
-                            // (los teclados propios de Agregar y Presupuestos solo agregan o
-                            // borran el último dígito), pero ahora se hace UNA vez por edición
-                            // real y no en cada recomposición.
-                            field = TextFieldValue(grouped, TextRange(grouped.length))
-                            onValueChange(parseMoneyDigits(newDigits))
+                        onValueChange = { entrante ->
+                            val soloDigitosYPuntos = entrante.text.all { it.isDigit() || it == '.' }
+                            val nuevosDigitos = entrante.text.filter { it.isDigit() }.take(maxDigits)
+                            val agrupado = groupDigitsForDisplay(nuevosDigitos)
+                            val cursorAlFinal = entrante.selection.collapsed &&
+                                entrante.selection.start == entrante.text.length
+                            field = when {
+                                // Entró algo que no es un dígito (una letra, un símbolo, un
+                                // pegado con comas) o se pasó del largo: se limpia y se dice
+                                // dónde queda el cursor, porque el texto cambió de forma.
+                                !soloDigitosYPuntos || nuevosDigitos.length != entrante.text.count { it.isDigit() } ->
+                                    TextFieldValue(agrupado, TextRange(agrupado.length))
+                                // Tipeo normal (cursor al final): se agrupa de a miles.
+                                cursorAlFinal ->
+                                    if (agrupado == entrante.text) entrante
+                                    else TextFieldValue(agrupado, TextRange(agrupado.length))
+                                // Selección viva o cursor en el medio: NO se toca nada.
+                                else -> entrante
+                            }
+                            onValueChange(parseMoneyDigits(nuevosDigitos))
                         },
-                        // Monoespaciada y un poco más grande: la misma cara que tiene el monto en
-                        // «Agregar», para que las tres pantallas que el dueño nombró (agregar,
-                        // cuenta, recurrente) se lean como el mismo campo de plata.
                         textStyle = TextStyle(
-                            fontSize = 16.sp,
+                            fontSize = 14.sp,
                             color = MinText,
                             fontFamily = FontFamily.Monospace,
                         ),
@@ -185,27 +208,13 @@ fun MoneyField(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                // Ola 9 · C — CÓMO SE CORRIGE UN MONTO YA ESCRITO.
-                //
-                // Con teclado físico, lo natural es seleccionar todo y volver a escribir. En el
-                // navegador eso NO funciona: Compose/wasm se come las teclas que llegan con el
-                // texto seleccionado (verificado a ojo, y sigue pasando con el estado del campo
-                // acá adentro — no es algo que este componente pueda arreglar). Sin esta salida
-                // quedaba solo el borrado tecla por tecla, y de ahí el «el monto está mal».
-                //
-                // Esto no depende del teclado ni de la selección: cambia el estado de la app, que
-                // es el camino que sí funciona siempre. Es el mismo gesto que el ⌫ del teclado de
-                // «Agregar», llevado a un campo de texto.
-                if (digits.isNotEmpty()) {
-                    Text(
-                        text = "Borrar",
-                        fontSize = 12.sp,
-                        color = MinTextMute,
-                        modifier = Modifier
-                            .clickable { onValueChange(null) }
-                            .padding(start = 10.dp, top = 4.dp, bottom = 4.dp),
-                    )
-                }
+                // NO hay un botón de «borrar todo», y es a propósito: se probó y **no funciona
+                // en el navegador**. Vaciar el campo desde el estado de la app deja el buffer
+                // del `<input>` oculto con lo de antes, así que el siguiente dígito se pega a lo
+                // que había: borrar sobre «7» y escribir 1800000 daba $71.800.000. Un botón que
+                // a veces suma un dígito fantasma a una cifra de plata es peor que no tenerlo,
+                // y con la selección arreglada ya no hace falta: seleccionar y reescribir —el
+                // gesto de cualquier campo de texto— reemplaza el monto entero.
             }
         }
     }

@@ -146,6 +146,15 @@ data class RecurringRule(
      * política que ya usaba `AccountRoutes` con la pata hermana de un traspaso — se suelta la
      * referencia, no se destruye el hecho). El plan «arriendo, día 5, $1.800.000» sigue siendo
      * cierto aunque la cuenta de la que salía ya no esté en Movi.
+     *
+     * **En un PUT este campo tiene tres estados, y la diferencia importa:**
+     *  - `null` → «no lo toques». Es lo que manda un cliente que no conoce el campo (el APK 1.6
+     *    que el dueño ya tiene instalado). Sin esta regla, corregir el monto desde el teléfono
+     *    le borraba en silencio la cuenta que había puesto desde la web.
+     *  - `""` → «quitá la cuenta»: el dueño eligió «Sin cuenta» a propósito.
+     *  - un id → esa cuenta, si es suya; si no lo es, se guarda `null` y la respuesta lo dice.
+     *
+     * En un POST no hay nada que preservar: `null` y `""` significan lo mismo (sin cuenta).
      */
     val accountId: String? = null,
     /**

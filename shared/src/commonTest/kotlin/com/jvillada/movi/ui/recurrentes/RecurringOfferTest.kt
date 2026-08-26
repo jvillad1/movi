@@ -69,10 +69,50 @@ class RecurringOfferTest {
 
     @Test
     fun `no se ofrece dos veces por la misma cosa en la misma sesion`() {
-        val yaOfrecidas = setOf(claveDeNombre("Arriendo"))
+        val yaOfrecidas = setOf(throttleKeyFor(evento()))
         assertFalse(shouldOfferRecurring(evento(), emptyList(), yaOfrecidas))
-        // Y no arrastra a lo demás: otro gasto distinto se sigue ofreciendo.
-        assertTrue(shouldOfferRecurring(evento(description = "Gimnasio"), emptyList(), yaOfrecidas))
+        // Y no arrastra a lo demás: un gasto de otra categoría se sigue ofreciendo.
+        assertTrue(shouldOfferRecurring(evento(category = "Gimnasio"), emptyList(), yaOfrecidas))
+    }
+
+    /**
+     * La guarda anti-molestia se indexa por CATEGORÍA, no por el nombre: el nombre sale de la
+     * nota, así que con «Almuerzo lunes» y «Almuerzo con Ana» cada gasto de comida volvía a
+     * disparar la barra — justo el caso para el que la guarda existe.
+     */
+    @Test
+    fun `la misma categoria con notas distintas no vuelve a ofrecerse`() {
+        val primero = evento(category = "Comida", description = "Almuerzo lunes", amount = 22_000)
+        val yaOfrecidas = setOf(throttleKeyFor(primero))
+
+        val segundo = evento(category = "Comida", description = "Almuerzo con Ana", amount = 31_000)
+        assertFalse(shouldOfferRecurring(segundo, emptyList(), yaOfrecidas))
+    }
+
+    /** Un ingreso de una categoría ya ofrecida como gasto sí se ofrece: son cosas distintas. */
+    @Test
+    fun `la guarda por categoria distingue gasto de ingreso`() {
+        val gasto = evento(category = "Carro", type = TransactionType.EXPENSE)
+        val ingreso = evento(category = "Carro", type = TransactionType.INCOME)
+
+        assertTrue(shouldOfferRecurring(ingreso, emptyList(), setOf(throttleKeyFor(gasto))))
+    }
+
+    /**
+     * Recurrentes muestra reglas y suscripciones en una sola lista y las SUMA juntas: ofrecer
+     * una regla «Netflix» a quien ya tiene el cobro detectado se lo contaría dos veces en el
+     * flujo libre.
+     */
+    @Test
+    fun `no se ofrece si el cobro ya existe como suscripcion`() {
+        val netflix = evento(description = "Netflix", category = "Entretenimiento", amount = 44_900)
+
+        assertFalse(
+            shouldOfferRecurring(netflix, emptyList(), emptySet(), listOf("NETFLIX")),
+        )
+        assertTrue(
+            shouldOfferRecurring(netflix, emptyList(), emptySet(), listOf("Spotify")),
+        )
     }
 
     @Test

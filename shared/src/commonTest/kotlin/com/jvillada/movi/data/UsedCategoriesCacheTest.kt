@@ -1,5 +1,7 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
@@ -47,6 +49,20 @@ class UsedCategoriesCacheTest {
         UsedCategoriesCache.record(listOf("  $TRANSFER_CATEGORY  "))
 
         assertFalse(TRANSFER_CATEGORY in UsedCategoriesCache.categories)
+    }
+
+    /**
+     * Ola 9 · M4: la lista completa que ahora manda el Inicio trae también las categorías que
+     * Movi escribe sola. Ofrecerlas como sugerencia era invitar al dueño a escribir en un gasto
+     * suyo una categoría reservada — «Saldo inicial» ni siquiera cuenta como flujo de caja.
+     */
+    @Test
+    fun `las categorias que Movi escribe sola tampoco se sugieren`() {
+        UsedCategoriesCache.record(listOf(ORPHANED_LEG_CATEGORY, OPENING_CATEGORY, "Mercado"))
+
+        assertFalse(ORPHANED_LEG_CATEGORY in UsedCategoriesCache.categories)
+        assertFalse(OPENING_CATEGORY in UsedCategoriesCache.categories)
+        assertTrue("Mercado" in UsedCategoriesCache.categories)
     }
 
     // ── Ola 9 · A3: el tipo con el que se usó cada categoría ──────────────────────────
