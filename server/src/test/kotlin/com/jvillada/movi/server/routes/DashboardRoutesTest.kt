@@ -53,6 +53,7 @@ import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 /**
  * `GET /api/dashboard/summary`: el Inicio deja de bajarse colecciones enteras (todos los SMS,
@@ -238,6 +239,41 @@ class DashboardRoutesTest {
         assertEquals(3_000_000L, body.long("monthIncome"), "solo el sueldo: ni la apertura ni el ajuste del crédito")
         assertEquals(200_000L, body.long("monthSpent"), "comida + compra con tarjeta; el pago del extracto no se duplica")
         assertEquals(mapOf("Comida" to 150_000L, "Transporte" to 50_000L), body.spentByCategory())
+    }
+
+    // ── Ola 9 · A2: las categorías ya usadas viajan con el resumen ───────────────────
+
+    /**
+     * Van acá y no en un endpoint propio: el Inicio ya pide esta respuesta, así que «Agregar»
+     * tiene las categorías propias del dueño sin una llamada nueva. **Sin filtrar por mes**: una
+     * categoría propia sigue siendo suya aunque no la haya usado este mes.
+     */
+    @Test
+    fun `el resumen trae las categorias usadas, con su tipo y de toda la historia`() = testApplication {
+        wireApp()
+        event("u-1", savings, "EXPENSE", 40_000L, category = "Carro")
+        event("u-2", savings, "EXPENSE", 60_000L, category = "Carro")
+        event("u-3", savings, "INCOME", 3_000_000L, category = "Nómina")
+        // De los dos lados: la categoría queda con los dos tipos.
+        event("u-4", savings, "EXPENSE", 10_000L, category = "Ajustes")
+        event("u-5", savings, "INCOME", 10_000L, category = "Ajustes")
+        // De un mes viejo: igual cuenta como categoría conocida.
+        event("u-6", savings, "EXPENSE", 20_000L, category = "Colegio", timestamp = lastMonthMillis())
+        // De otro usuario: no se filtra a este.
+        event("u-7", savings, "EXPENSE", 20_000L, category = "Ajeno", uid = otherUserId)
+
+        val usadas = summary()["usedCategories"]!!.jsonArray
+            .associate { entry ->
+                val obj = entry.jsonObject
+                obj["name"]!!.jsonPrimitive.content to
+                    (obj["types"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet() ?: emptySet())
+            }
+
+        assertEquals(setOf("EXPENSE"), usadas["Carro"], "una sola entrada por categoría, sin repetir")
+        assertEquals(setOf("INCOME"), usadas["Nómina"])
+        assertEquals(setOf("EXPENSE", "INCOME"), usadas["Ajustes"])
+        assertEquals(setOf("EXPENSE"), usadas["Colegio"], "el mes viejo también cuenta")
+        assertFalse("Ajeno" in usadas.keys, "las categorías de otro usuario no se filtran acá")
     }
 
     @Test

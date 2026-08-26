@@ -132,6 +132,23 @@ data class RecurringRule(
     val dayOfMonth: Int,
     val type: TransactionType,
     /**
+     * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
+     * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el
+     * 25 pero no dónde — y al ofrecer «esto se repite» desde un movimiento (Ola 9 · B) el dato
+     * se perdía justo en el paso que lo tenía a mano.
+     *
+     * **Opcional a propósito, y opcional para siempre.** Las reglas que el dueño ya tiene en
+     * producción nacieron sin cuenta: exigirla ahora sería inventarle un dato que nadie le
+     * pidió, y bloquear la edición de lo que ya escribió. `null` significa exactamente «no se
+     * sabe», y la pantalla lo muestra así, sin drama.
+     *
+     * Si la cuenta se borra, la regla **no** se borra: el server la deja en `null` (misma
+     * política que ya usaba `AccountRoutes` con la pata hermana de un traspaso — se suelta la
+     * referencia, no se destruye el hecho). El plan «arriendo, día 5, $1.800.000» sigue siendo
+     * cierto aunque la cuenta de la que salía ya no esté en Movi.
+     */
+    val accountId: String? = null,
+    /**
      * ¿Este pago entra al barrido de recordatorios? Lo decide el dueño con la casilla
      * «Recordarme unos días antes» al crear o editar la regla.
      *

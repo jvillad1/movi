@@ -37,6 +37,11 @@ object DatabaseFactory {
             // antes». La columna se declara `.default(true)`, así que el ALTER que emite esta
             // llamada deja en TRUE las filas que ya existían: quien ya recibía recordatorios
             // los sigue recibiendo, sin migración manual.
+            // RecurringRules: `account_id` (Ola 9 · D) — a qué cuenta entra o de cuál sale el
+            // pago. Es NULLABLE, así que el ALTER que emite esta llamada no puede fallar sobre
+            // una tabla con datos y las reglas que ya existen quedan en NULL, que es la verdad:
+            // nacieron sin cuenta porque el campo no existía. Idempotente por construcción —
+            // la segunda vez la columna ya está y no se emite nada.
             SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }

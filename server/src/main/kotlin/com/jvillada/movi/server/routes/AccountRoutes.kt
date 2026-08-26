@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
@@ -148,6 +149,21 @@ fun Route.accountRoutes() {
                 // DELETE): una meta cuyo «ahorrado» sale del saldo de una cuenta borrada no
                 // significa nada — se va con ella.
                 Goals.deleteWhere { (Goals.accountId eq id) and (Goals.userId eq uid) }
+                // Ola 9 · D — las reglas recurrentes que apuntaban acá NO se borran: se sueltan.
+                // Mismo criterio que la pata hermana de un traspaso ([desenlazarPatasHermanas]):
+                // se suelta la referencia, no se destruye el hecho. «Arriendo, día 5, $1.800.000»
+                // sigue siendo verdad aunque la cuenta de la que salía ya no esté en Movi, y
+                // borrar el plan (con su recordatorio) porque cambió de banco sería una pérdida
+                // silenciosa que el dueño no pidió. La cuenta es opcional en el modelo justamente
+                // para que `null` se pueda mostrar sin drama.
+                val reglasSueltas = RecurringRules.update({
+                    (RecurringRules.userId eq uid) and (RecurringRules.accountId eq id)
+                }) { it[RecurringRules.accountId] = null }
+                if (reglasSueltas > 0) {
+                    accountsLog.info(
+                        "DELETE /api/accounts/$id: $reglasSueltas regla(s) recurrente(s) quedaron sin cuenta",
+                    )
+                }
                 Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
                 true
             }

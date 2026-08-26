@@ -63,6 +63,8 @@ class ReminderRoutesTest {
     private val userAEmail = "a@reminder.test"
     private val userBEmail = "b@reminder.test"
     private val ruleOwnedByA = "rule-a-reminder"
+    private val accountOwnedByA = "acc-a-reminder"
+    private val accountOwnedByB = "acc-b-reminder"
 
     @BeforeTest
     fun setUp() {
@@ -75,8 +77,8 @@ class ReminderRoutesTest {
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, Cards,
             )
-            SchemaUtils.drop(Cards, Credits, RecurringRules, Users)
-            SchemaUtils.create(Users, RecurringRules, Credits, Cards)
+            SchemaUtils.drop(Cards, Credits, RecurringRules, Users, Accounts)
+            SchemaUtils.create(Users, Accounts, RecurringRules, Credits, Cards)
 
             Users.insert {
                 it[id]           = userAId
@@ -89,6 +91,20 @@ class ReminderRoutesTest {
                 it[email]        = userBEmail
                 it[name]         = "User B"
                 it[passwordHash] = "hash-b"
+            }
+            // Ola 9 · D: una cuenta de A y otra de B, para probar que la cuenta de una regla
+            // solo se guarda si es de quien la crea.
+            Accounts.insert {
+                it[id]     = accountOwnedByA
+                it[userId] = userAId
+                it[name]   = "Bancolombia A"
+                it[type]   = "SAVINGS"
+            }
+            Accounts.insert {
+                it[id]     = accountOwnedByB
+                it[userId] = userBId
+                it[name]   = "Nequi B"
+                it[type]   = "SAVINGS"
             }
             RecurringRules.insert {
                 it[id]         = ruleOwnedByA
@@ -326,5 +342,78 @@ class ReminderRoutesTest {
             header(HttpHeaders.Authorization, "Bearer $tokenA")
         }.body<List<RecurringRule>>().single { it.id == created.id }
         assertTrue(reread.remindMe)
+    }
+
+    // ── Ola 9 · D: la cuenta del recurrente ──────────────────────────────────────────
+
+    /** La cuenta viaja, se guarda y vuelve en el GET. */
+    @Test
+    fun `una regla guarda la cuenta cuando es del mismo usuario`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Arriendo", "Vivienda", 1_800_000, 5,
+                    TransactionType.EXPENSE, accountId = accountOwnedByA,
+                ),
+            )
+        }.body<RecurringRule>()
+        assertEquals(accountOwnedByA, creada.accountId)
+
+        val listadas = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>()
+        assertEquals(accountOwnedByA, listadas.first { it.id == creada.id }.accountId)
+    }
+
+    /**
+     * Una cuenta que no es suya no se guarda — y la respuesta lo dice, en vez de devolver el id
+     * que se pidió y hacerle creer al cliente que la regla tiene una cuenta que no tiene.
+     */
+    @Test
+    fun `una cuenta ajena no se guarda, y la regla se crea igual sin cuenta`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val resp = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Arriendo", "Vivienda", 1_800_000, 5,
+                    TransactionType.EXPENSE, accountId = accountOwnedByB,
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.Created, resp.status)
+        assertEquals(null, resp.body<RecurringRule>().accountId)
+    }
+
+    /** Una regla vieja (sin cuenta) sigue leyéndose y editándose sin cuenta. */
+    @Test
+    fun `la cuenta es opcional - una regla sin cuenta se lee y se edita igual`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        val listadas = client.get("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<RecurringRule>>()
+        val vieja = listadas.first { it.id == ruleOwnedByA }
+        assertEquals(null, vieja.accountId)
+
+        val editada = client.put("/api/recurring-rules/$ruleOwnedByA") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(vieja.copy(amount = 1_900_000L))
+        }
+        assertEquals(HttpStatusCode.OK, editada.status)
+        assertEquals(null, editada.body<RecurringRule>().accountId)
     }
 }

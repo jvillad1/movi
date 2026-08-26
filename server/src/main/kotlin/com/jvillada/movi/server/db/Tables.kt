@@ -153,6 +153,17 @@ object RecurringRules : Table("recurring_rules") {
      * NOT NULL` y las filas que ya existían queden avisando, igual que antes del cambio.
      */
     val remindMe           = bool("remind_me").default(true)
+    /**
+     * Ola 9 · D: a qué cuenta entra o de cuál sale este pago. **Nullable, y así se queda**: las
+     * reglas que ya existen nacieron sin cuenta y no se les puede exigir un dato que nadie pidió,
+     * así que `createMissingTablesAndColumns` emite `ADD COLUMN account_id VARCHAR(50) NULL` y
+     * las filas viejas quedan en NULL — que es la verdad: no se sabe.
+     *
+     * Sin FK a `accounts` por la misma razón que el resto de esta base no las usa; la integridad
+     * la mantiene el DELETE de la cuenta, que pone esta columna en NULL en vez de borrar la
+     * regla (ver `AccountRoutes`).
+     */
+    val accountId          = varchar("account_id", 50).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }
