@@ -76,26 +76,79 @@ class RecurringOfferTest {
     }
 
     /**
-     * La guarda anti-molestia se indexa por CATEGORÍA, no por el nombre: el nombre sale de la
-     * nota, así que con «Almuerzo lunes» y «Almuerzo con Ana» cada gasto de comida volvía a
-     * disparar la barra — justo el caso para el que la guarda existe.
+     * La "cosa" NO es el nombre: el nombre sale de la nota, así que con «Almuerzo lunes» y
+     * «Almuerzo con Ana» —el mismo menú del mediodía al mismo precio— cada gasto de comida volvía
+     * a disparar la barra, que es el caso para el que la guarda existe.
      */
     @Test
-    fun `la misma categoria con notas distintas no vuelve a ofrecerse`() {
+    fun `la misma cosa con notas distintas no vuelve a ofrecerse`() {
         val primero = evento(category = "Comida", description = "Almuerzo lunes", amount = 22_000)
-        val yaOfrecidas = setOf(throttleKeyFor(primero))
+        val segundo = evento(category = "Comida", description = "Almuerzo con Ana", amount = 22_000)
 
-        val segundo = evento(category = "Comida", description = "Almuerzo con Ana", amount = 31_000)
-        assertFalse(shouldOfferRecurring(segundo, emptyList(), yaOfrecidas))
+        assertFalse(shouldOfferRecurring(segundo, emptyList(), setOf(throttleKeyFor(primero))))
+    }
+
+    /**
+     * Y tampoco es la categoría sola: dos suscripciones de «Entretenimiento» la misma noche son
+     * dos cosas distintas, y con la clave vieja la segunda no se ofrecía en toda la sesión — el
+     * día de configurar la app, que es el día para el que la función existe.
+     */
+    @Test
+    fun `dos cobros distintos de la misma categoria se ofrecen los dos`() {
+        val netflix = evento(description = "Netflix", category = "Entretenimiento", amount = 44_900)
+        val spotify = evento(description = "Spotify", category = "Entretenimiento", amount = 16_900)
+
+        assertTrue(shouldOfferRecurring(spotify, emptyList(), setOf(throttleKeyFor(netflix))))
     }
 
     /** Un ingreso de una categoría ya ofrecida como gasto sí se ofrece: son cosas distintas. */
     @Test
-    fun `la guarda por categoria distingue gasto de ingreso`() {
+    fun `la guarda por cosa distingue gasto de ingreso`() {
         val gasto = evento(category = "Carro", type = TransactionType.EXPENSE)
         val ingreso = evento(category = "Carro", type = TransactionType.INCOME)
 
         assertTrue(shouldOfferRecurring(ingreso, emptyList(), setOf(throttleKeyFor(gasto))))
+    }
+
+    /**
+     * El techo de insistencia: lo que evita que un almuerzo de precio distinto cada día —tres
+     * "cosas" distintas para la clave, y ninguna con forma de recurrente— vuelva a nagear.
+     */
+    @Test
+    fun `a las tres barras no tomadas se apaga la categoria entera`() {
+        val almuerzo = evento(category = "Comida", amount = 28_000)
+        val clave = categoryThrottleKeyFor(almuerzo)
+
+        assertTrue(shouldOfferRecurring(almuerzo, emptyList(), sinTomarPorCategoria = mapOf(clave to 2)))
+        assertFalse(shouldOfferRecurring(almuerzo, emptyList(), sinTomarPorCategoria = mapOf(clave to MAX_SIN_TOMAR)))
+        // Y solo esa categoría: otra sigue viva.
+        assertTrue(
+            shouldOfferRecurring(
+                evento(category = "Vivienda"),
+                emptyList(),
+                sinTomarPorCategoria = mapOf(clave to MAX_SIN_TOMAR),
+            ),
+        )
+    }
+
+    @Test
+    fun `el techo distingue gasto de ingreso`() {
+        val gasto = evento(category = "Carro", type = TransactionType.EXPENSE)
+        val ingreso = evento(category = "Carro", type = TransactionType.INCOME)
+
+        assertTrue(
+            shouldOfferRecurring(
+                ingreso,
+                emptyList(),
+                sinTomarPorCategoria = mapOf(categoryThrottleKeyFor(gasto) to MAX_SIN_TOMAR),
+            ),
+        )
+    }
+
+    @Test
+    fun `la clave de categoria del prellenado es la misma que la del evento`() {
+        val e = evento(category = "Entretenimiento", type = TransactionType.EXPENSE)
+        assertEquals(categoryThrottleKeyFor(e), categoryThrottleKeyFor(prefillFrom(e)))
     }
 
     /**

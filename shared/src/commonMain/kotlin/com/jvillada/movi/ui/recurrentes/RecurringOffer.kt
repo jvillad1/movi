@@ -40,15 +40,32 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
  * 2. **Nunca si ya existe un recurrente equivalente** (mismo nombre normalizado, la misma
  *    comparación que usa el resto de Recurrentes — ver [claveDeNombre]). Si ya tiene «Arriendo»,
  *    anotar el arriendo de este mes no se lo vuelve a ofrecer.
- * 3. **Como mucho una vez por "cosa" y por sesión.** La primera comida de la semana lo ofrece;
- *    las otras cuatro, no. Esta es la guarda que hace que la función se pueda usar todos los
- *    días: la que decide no es el monto —algo sobre lo que Movi no sabe nada todavía— sino que
- *    ya se lo ofrecimos y no lo tomó.
+ * 3. **Como mucho una vez por "cosa" y por sesión, y como mucho [MAX_SIN_TOMAR] veces por
+ *    categoría.** La primera comida de la semana lo ofrece; las otras cuatro, no.
  *
- *    La "cosa" acá es la **categoría** (con su tipo), no el nombre: el nombre sale de la nota, y
- *    con notas distintas —«Almuerzo lunes», «Almuerzo con Ana»— cada gasto de comida volvía a
- *    disparar la barra, que es exactamente el modo de falla que esta guarda existe para evitar.
- *    Un gasto sin nota y otro con nota son, para esto, la misma cosa.
+ *    Qué es una "cosa" costó dos intentos, los dos por el mismo error de tomar UN identificador
+ *    y esperar que sirva para todo:
+ *
+ *    - **El nombre** (o sea, la nota) no sirve: con notas distintas —«Almuerzo lunes», «Almuerzo
+ *      con Ana»— cada gasto de comida volvía a disparar la barra, que es el modo de falla que
+ *      esta guarda existe para evitar.
+ *    - **La categoría sola** tampoco: la segunda cosa genuinamente recurrente de una categoría
+ *      no se ofrecía en toda la sesión. Netflix y Spotify bajo «Entretenimiento» la misma noche
+ *      y solo Netflix recibía la barra — justo el día de configurar la app, que es el día para
+ *      el que la función existe.
+ *
+ *    La "cosa" es entonces **tipo + categoría + monto exacto** ([throttleKeyFor]), y no depende
+ *    de la nota. El monto no es un parche: un recurrente ES un cobro del mismo monto todos los
+ *    meses, así que dos montos distintos son dos candidatos distintos — Netflix ($44.900) no es
+ *    Spotify ($16.900). Y lo que se repite con monto variable (el almuerzo) no tiene forma de
+ *    recurrente, así que ofrecerlo importa menos.
+ *
+ *    Encima va el techo por categoría, que es lo que evita que un almuerzo de precio distinto
+ *    cada día vuelva a nagear: a las [MAX_SIN_TOMAR] barras **no tomadas** de una misma categoría
+ *    (tipo incluido, ver [categoryThrottleKeyFor]) se apaga la categoría entera por lo que queda
+ *    de sesión. Se cuentan las NO tomadas: aceptar una la descuenta, así que quien está
+ *    configurando la app —acepta Netflix, acepta Spotify, acepta HBO— nunca choca contra el
+ *    techo. Es la misma medida de siempre, dicha bien: ya se lo ofrecimos y no lo tomó.
  *
  * Y, por construcción, **nunca dos veces por el mismo movimiento**: el ofrecimiento sale una
  * sola vez, del guardado, y no se persiste ninguna cola.
@@ -67,7 +84,7 @@ data class RecurringPrefill(
  * ¿Se le ofrece convertir [event] en recurrente? Las guardas están explicadas arriba.
  *
  * @param existingRules lo que el dueño ya tiene anotado como recurrente.
- * @param alreadyOffered claves de nombre que ya se ofrecieron en esta sesión (ver la guarda 3).
+ * @param alreadyOffered claves de "cosa" ([throttleKeyFor]) ya ofrecidas en esta sesión (guarda 3).
  */
 fun shouldOfferRecurring(
     event: FinancialEvent,
@@ -80,6 +97,12 @@ fun shouldOfferRecurring(
      * cobro dos veces** en el flujo libre. La comparación es la misma que usa esa pantalla.
      */
     existingSubscriptionNames: List<String> = emptyList(),
+    /**
+     * Clave de categoría ([categoryThrottleKeyFor]) -> cuántas barras de esa categoría se
+     * ofrecieron en esta sesión y NO se tomaron. A las [MAX_SIN_TOMAR] la categoría se apaga por
+     * lo que queda de sesión (guarda 3).
+     */
+    sinTomarPorCategoria: Map<String, Int> = emptyMap(),
 ): Boolean {
     // Un traspaso, por cualquiera de sus dos señas: el enlace entre patas o la categoría
     // reservada. Se miran las dos porque una pata suelta (cuenta borrada) pierde el enlace
@@ -89,20 +112,38 @@ fun shouldOfferRecurring(
     if (event.amount <= 0L) return false
     val key = claveDeNombre(prefillNameFor(event))
     if (key.isEmpty()) return false
-    // La molestia se mide por categoría (ver la guarda 3), el duplicado por nombre.
+    // La molestia se mide por cosa y por categoría (ver la guarda 3), el duplicado por nombre.
     if (throttleKeyFor(event) in alreadyOffered) return false
+    if ((sinTomarPorCategoria[categoryThrottleKeyFor(event)] ?: 0) >= MAX_SIN_TOMAR) return false
     if (existingRules.any { claveDeNombre(it.name) == key }) return false
     return existingSubscriptionNames.none { claveDeNombre(it) == key }
 }
 
 /**
- * La clave de "ya se lo ofrecimos en esta sesión": categoría + tipo, no el nombre. Ver la
- * guarda 3 en el KDoc de arriba — con el nombre (que sale de la nota) la guarda no protegía nada
- * en el caso para el que se escribió.
+ * Cuántas barras **no tomadas** de una misma categoría se aguantan por sesión antes de apagarla
+ * entera. Ver la guarda 3. Tres y no una: el día de configurar la app, varios recurrentes de la
+ * misma categoría de una sentada es el caso normal, no el raro.
+ */
+const val MAX_SIN_TOMAR: Int = 3
+
+/**
+ * La clave de "esta cosa exacta ya se ofreció en esta sesión": tipo + categoría + monto. No
+ * depende de la nota. Ver la guarda 3 en el KDoc de arriba para por qué no es el nombre y por qué
+ * no es la categoría sola.
  */
 fun throttleKeyFor(event: FinancialEvent): String =
+    "${event.type.name}:${claveDeNombre(event.category)}:${event.amount}"
+
+/**
+ * La clave de "cuántas veces le insistí con esta categoría": tipo + categoría, sin el monto. Es
+ * la unidad en la que se mide la molestia (ver [MAX_SIN_TOMAR]), no la identidad de la cosa.
+ */
+fun categoryThrottleKeyFor(event: FinancialEvent): String =
     "${event.type.name}:${claveDeNombre(event.category)}"
 
+/** La misma clave de categoría, pero desde el formulario ya prellenado (para descontar al aceptar). */
+fun categoryThrottleKeyFor(prefill: RecurringPrefill): String =
+    "${prefill.type.name}:${claveDeNombre(prefill.category)}"
 
 /**
  * El nombre con el que nacería el recurrente: la nota que escribió el dueño («Arriendo agosto»)

@@ -49,29 +49,24 @@ object UsedCategoriesCache {
     /** Los nombres, sin el tipo — para quien solo necesita saber cuáles existen. */
     val categories: Set<String> get() = used.keys
 
-    /**
-     * La categoría reservada del traspaso NUNCA entra acá, aunque venga en los movimientos que
-     * alimentan este caché (las patas de un traspaso la llevan, y tanto Movimientos como
-     * Presupuestos vuelcan todo lo que cargan).
-     *
-     * Sin este filtro, «Traspaso» aparecía como sugerencia en el campo de categoría de Agregar,
-     * en Cambiar categoría y en Presupuestos: la app le ofrecía al dueño escribir exactamente la
-     * categoría que después iba a rechazar — y si llegaba a guardarse, su gasto real desaparecía
-     * del mes (regla de `isCashFlow`) sin ninguna pata del otro lado que lo explicara.
-     */
+    /** Varios nombres sueltos, sin saber de qué tipo. Todo pasa por [recordAll]. */
     fun record(names: Collection<String>) {
         recordAll(names.map { it to null })
     }
 
     /**
-     * Las categorías que Movi **escribe solo** y que el dueño no debería poder elegir a mano.
+     * Las tres categorías que Movi **escribe solo** y que el dueño no debería poder elegir a
+     * mano. Nunca entran acá, aunque vengan en los movimientos que alimentan el caché — el filtro
+     * está en [recordAll], que es por donde pasan todos los caminos de entrada.
      *
-     * «Traspaso» ya estaba (ver arriba). Se suman dos más, que llegaron con la lista completa
-     * que ahora manda el Inicio (Ola 9 · A2): «Cuenta eliminada», que el server le pone a la
-     * pata de traspaso que quedó sin hermana, y «Saldo inicial», que marca la apertura de una
-     * cuenta y queda FUERA del flujo de caja. Ofrecerlas como sugerencia era invitar al dueño a
-     * escribir una categoría reservada en un gasto suyo: en el mejor caso una fila confusa, en
-     * el peor un gasto real que desaparece del mes.
+     * - «Traspaso», que llevan las dos patas de un traspaso y que tanto Movimientos como
+     *   Presupuestos vuelcan al cargar. Ofrecerla en el campo de categoría era invitar al dueño a
+     *   escribir exactamente lo que la app después iba a rechazar — y si llegaba a guardarse, su
+     *   gasto real desaparecía del mes (regla de `isCashFlow`) sin ninguna pata que lo explicara.
+     * - «Cuenta eliminada», que el server le pone a la pata de traspaso que quedó sin hermana.
+     * - «Saldo inicial», que marca la apertura de una cuenta y queda FUERA del flujo de caja.
+     *
+     * Las dos últimas llegaron con la lista completa que ahora manda el Inicio (Ola 9 · A2).
      */
     private val RESERVADAS = setOf(TRANSFER_CATEGORY, ORPHANED_LEG_CATEGORY, OPENING_CATEGORY)
 

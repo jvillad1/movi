@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
+import com.jvillada.movi.ui.recurrentes.categoryThrottleKeyFor
 import com.jvillada.movi.ui.recurrentes.prefillFrom
 import com.jvillada.movi.ui.recurrentes.shouldOfferRecurring
 import com.jvillada.movi.ui.recurrentes.throttleKeyFor
@@ -31,7 +32,13 @@ import com.jvillada.movi.ui.recurrentes.throttleKeyFor
 object RecurringOfferGate {
     private var reglas: List<RecurringRule>? = null
     private var suscripciones: List<Subscription>? = null
+    /** Las "cosas" (tipo + categoría + monto) que ya recibieron su barra en esta sesión. */
     private val yaOfrecidas = mutableSetOf<String>()
+    /**
+     * Categoría (con tipo) -> barras de esa categoría que se ofrecieron y NO se tomaron. Es el
+     * techo de insistencia de la guarda 3; [seTomo] lo descuenta.
+     */
+    private val sinTomarPorCategoria = mutableMapOf<String, Int>()
 
     /**
      * Lo que Recurrentes acaba de cargar. Sirve para dos cosas: ahorrarse las llamadas de acá, y
@@ -44,9 +51,19 @@ object RecurringOfferGate {
         suscripciones?.let { this.suscripciones = it }
     }
 
-    /** Después de crear o borrar una regla desde acá: lo cacheado quedó viejo. */
-    fun olvidarReglas() {
+    /**
+     * Después de crear, editar o borrar un recurrente (regla o cobro) desde cualquier pantalla:
+     * lo cacheado quedó viejo y hay que volver a preguntar.
+     *
+     * Se tiran las DOS listas y no solo la de reglas porque la hoja de recurrentes también crea
+     * suscripciones manuales. Y se invalida en el momento de la mutación —no se espera a que la
+     * recarga traiga lo nuevo—: si esa recarga falla, quedarse con lo viejo le esconde al dueño
+     * un ofrecimiento legítimo por el recurrente que acaba de borrar. Sin cache, el gate vuelve
+     * a pedirlo la próxima vez que haga falta, que es como mucho un par de llamadas.
+     */
+    fun olvidarLoCacheado() {
         reglas = null
+        suscripciones = null
     }
 
     /** Al cerrar sesión: lo de acá es del usuario que se va (ver `SessionManager.clear`). */
@@ -54,12 +71,30 @@ object RecurringOfferGate {
         reglas = null
         suscripciones = null
         yaOfrecidas.clear()
+        sinTomarPorCategoria.clear()
+    }
+
+    /**
+     * El dueño TOMÓ el ofrecimiento (tocó «Sí, anótalo»). Descuenta el techo de insistencia de
+     * esa categoría: lo que se cuenta es cuántas veces se le insistió **al pedo**, no cuántas
+     * barras salieron. Sin esto, quien configura la app cargando cuatro suscripciones de
+     * «Entretenimiento» de una sentada chocaba contra el techo justo cuando la función está
+     * haciendo exactamente lo que se le pidió.
+     *
+     * Se llama al ACEPTAR y no al guardar: aceptar ya es la señal de que la barra le sirvió, y
+     * si además guarda, la regla nueva la tapa sola por nombre (guarda 2).
+     */
+    fun seTomo(prefill: RecurringPrefill) {
+        val clave = categoryThrottleKeyFor(prefill)
+        val quedan = (sinTomarPorCategoria[clave] ?: 0) - 1
+        if (quedan <= 0) sinTomarPorCategoria.remove(clave) else sinTomarPorCategoria[clave] = quedan
     }
 
     /**
      * El formulario prellenado que hay que ofrecer para [event], o `null` si no hay que ofrecer
-     * nada. Marca la "cosa" como ya ofrecida: en esta sesión no vuelve a salir para esa
-     * categoría, la haya tomado el dueño o no (ver la guarda 3 en `RecurringOffer.kt`).
+     * nada. Marca la "cosa" (tipo + categoría + monto) como ya ofrecida y le suma uno al contador
+     * de insistencia de su categoría, que [seTomo] descuenta si el dueño la toma (guarda 3 en
+     * `RecurringOffer.kt`).
      */
     suspend fun ofrecerPara(event: FinancialEvent): RecurringPrefill? {
         val reglasAlDia = reglas ?: runCatching { Repositories.wallets.getRecurringRules() }
@@ -78,8 +113,10 @@ object RecurringOfferGate {
         val activas = cobrosAlDia
             .filter { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED }
             .map { it.displayName }
-        if (!shouldOfferRecurring(event, reglasAlDia, yaOfrecidas, activas)) return null
+        if (!shouldOfferRecurring(event, reglasAlDia, yaOfrecidas, activas, sinTomarPorCategoria)) return null
         yaOfrecidas += throttleKeyFor(event)
+        val categoria = categoryThrottleKeyFor(event)
+        sinTomarPorCategoria[categoria] = (sinTomarPorCategoria[categoria] ?: 0) + 1
         return prefillFrom(event)
     }
 }

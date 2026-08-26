@@ -127,6 +127,12 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
             val porCobros = async { runCatching { Repositories.wallets.getSubscriptions() } }
 
             var fallo: String? = null
+            // Ola 9 · E: si ESTA carga trajo cada lista o no. Distinto de `reglasOk`/`cobrosOk`,
+            // que son "alguna vez llegó" y nunca vuelven a false: alimentar al gate con esas
+            // banderas le pasaba la lista VIEJA cuando la recarga fallaba —incluida la regla que
+            // el dueño acababa de borrar—, y el precio es un ofrecimiento que no sale.
+            var reglasFrescas = false
+            var cobrosFrescos = false
             // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
             // esta pantalla ya carga las reglas, no hace falta un fetch nuevo.
             porReglas.await()
@@ -135,6 +141,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     // Ola 9 · A3: una regla recurrente sabe si es gasto o ingreso.
                     UsedCategoriesCache.recordAll(it.map { r -> r.category to r.type })
                     reglasOk = true
+                    reglasFrescas = true
                     // Ola 9 · D: los nombres de las cuentas, y SOLO si alguna regla tiene
                     // cuenta. Una cuarta llamada fija en esta pantalla sería un viaje por
                     // gusto para quien todavía no usa el campo (o sea, todo el mundo hasta
@@ -149,7 +156,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 .onSuccess { upcoming = it; vencimientosOk = true }
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             porCobros.await()
-                .onSuccess { subs = it; cobrosOk = true }
+                .onSuccess { subs = it; cobrosOk = true; cobrosFrescos = true }
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             error = fallo
             // Ola 9 · B: el ofrecimiento «¿esto se repite?» necesita saber qué recurrentes ya
@@ -158,8 +165,8 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
             // «Gimnasio» acá y anotar el pago después terminaba ofreciendo crear el recurrente
             // que el dueño acababa de crear.
             RecurringOfferGate.recordarLoQueYaHay(
-                reglas = if (reglasOk) rules else null,
-                suscripciones = if (cobrosOk) subs.subscriptions else null,
+                reglas = if (reglasFrescas) rules else null,
+                suscripciones = if (cobrosFrescos) subs.subscriptions else null,
             )
         }
         loading = false
@@ -178,7 +185,14 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 // cobros, así que sirve igual que la carga normal. Sin esto, quien entraba con
                 // `/api/subscriptions` caído y tocaba «Buscar cobros» veía aparecer los cobros
                 // pero se quedaba con «Flujo libre —» y sin conteos hasta salir y volver.
-                .onSuccess { subs = it; cobrosOk = true; error = null }
+                .onSuccess {
+                    subs = it
+                    cobrosOk = true
+                    error = null
+                    // Un barrido puede DESCUBRIR cobros. Sin esto, el gate seguiría con la lista
+                    // de antes y podría ofrecer una regla que duplica un cobro recién detectado.
+                    RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
+                }
                 .onFailure { error = it.toUserMessage() }
             scanning = false
         }
@@ -222,7 +236,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     fun setStatus(sub: Subscription, status: SubStatus) {
         coroutine.launch {
             runCatching { Repositories.wallets.updateSubscription(sub.id, sub.copy(status = status)) }
-                .onSuccess { loadKey++ }
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); loadKey++ }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -249,7 +263,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     Repositories.wallets.updateSubscription(sub.id, sub.copy(status = SubStatus.DISMISSED))
                 }
             }
-            resultado.onSuccess { loadKey++ }.onFailure { error = it.toUserMessage() }
+            resultado
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); loadKey++ }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -634,6 +650,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 onDismiss = { sheetOpen = false },
                 onSaved = {
                     sheetOpen = false
+                    // Crear, editar o BORRAR desde acá deja viejo lo que el gate tenía cacheado.
+                    // Se invalida ya, sin esperar la recarga: si la recarga falla, quedarse con
+                    // la lista vieja le esconde al dueño el ofrecimiento del recurrente que
+                    // acaba de borrar.
+                    RecurringOfferGate.olvidarLoCacheado()
                     loadKey++
                 },
                 // Se resuelve contra `rules` en el momento de pintar, no contra un objeto

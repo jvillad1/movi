@@ -1,9 +1,11 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -163,5 +165,64 @@ class CategoryFieldTest {
     fun `no ofrece crear con el campo vacio o en blanco`() {
         assertFalse(shouldOfferCreateCategory("", emptyList()))
         assertFalse(shouldOfferCreateCategory("   ", emptyList()))
+    }
+
+    /**
+     * Ola 9 · A4: el hueco entre las dos guardas anteriores. El filtro por tipo escondía la
+     * categoría que existe y la guarda anti-duplicado escondía el «Crear»: el panel quedaba
+     * completamente vacío, de pantalla completa y sin explicación.
+     */
+    @Test
+    fun `lo que existe del otro lado se ofrece como usar, no como crear`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val matches = suggestCategoryMatches("Carro", TransactionType.INCOME, used)
+        val conocidas = used.keys + PREDEFINED_CATEGORIES.map { it.name }
+
+        assertEquals(emptyList(), matches)
+        assertFalse(shouldOfferCreateCategory("Carro", matches, conocidas))
+        assertTrue(shouldOfferKnownFromOtherSide("Carro", matches, conocidas))
+        assertEquals(
+            "Ya la tienes en Gastos",
+            ladoConocidoDeCategoria("Carro", TransactionType.INCOME, used),
+        )
+    }
+
+    @Test
+    fun `crear y usar nunca salen las dos a la vez`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val conocidas = used.keys + PREDEFINED_CATEGORIES.map { it.name }
+        for (q in listOf("Carro", "Moto", "Comida", "Sal", "")) {
+            val matches = suggestCategoryMatches(q, TransactionType.EXPENSE, used)
+            assertFalse(
+                shouldOfferCreateCategory(q, matches, conocidas) &&
+                    shouldOfferKnownFromOtherSide(q, matches, conocidas),
+                "«$q» ofrecía crear Y usar",
+            )
+        }
+    }
+
+    @Test
+    fun `una categoria que ya se ve entre las sugerencias no se ofrece como usar`() {
+        val matches = suggestCategoryMatches("Comida", TransactionType.EXPENSE)
+        assertTrue(matches.contains("Comida"))
+        assertFalse(shouldOfferKnownFromOtherSide("Comida", matches, matches))
+    }
+
+    @Test
+    fun `una del catalogo escondida por tipo se explica con el lado que le toca`() {
+        // «Salario» es del catálogo y es INCOME: anotando un gasto no aparece entre las sugerencias.
+        val matches = suggestCategoryMatches("Salario", TransactionType.EXPENSE)
+        assertEquals(emptyList(), matches)
+        assertTrue(shouldOfferKnownFromOtherSide("Salario", matches, PREDEFINED_CATEGORIES.map { it.name }))
+        assertEquals("Ya la tienes en Ingresos", ladoConocidoDeCategoria("Salario", TransactionType.EXPENSE))
+    }
+
+    @Test
+    fun `usar elige como esta escrita la que ya existe, no lo tecleado`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        assertEquals("Carro", nombreCanonicoConocido("carro", used))
+        assertEquals("Educación", nombreCanonicoConocido("educacion"))
+        assertNull(nombreCanonicoConocido("Moto", used))
+        assertNull(nombreCanonicoConocido("   "))
     }
 }

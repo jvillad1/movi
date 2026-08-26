@@ -116,6 +116,73 @@ fun shouldOfferCreateCategory(
     return matches.none { normalizeForMatch(it) == q }
 }
 
+/**
+ * Ola 9 · A4: **la salida del panel vacío.** El filtro por tipo y la guarda anti-duplicado de
+ * [shouldOfferCreateCategory] se tapaban entre sí: en Agregar -> Ingreso, escribir «Carro» —una
+ * categoría que el dueño solo usó como gasto— escondía la que existe (por tipo) Y escondía el
+ * «Crear» (porque ya existe). El resultado era una pantalla completa sin nada que tocar y sin
+ * ninguna explicación; el texto no se perdía, pero se leía como roto.
+ *
+ * Devuelve `true` exactamente en ese hueco: lo escrito no está entre las sugerencias visibles
+ * pero Movi sí lo conoce. Es el complemento de [shouldOfferCreateCategory] — nunca son las dos
+ * cosas a la vez.
+ */
+fun shouldOfferKnownFromOtherSide(
+    query: String,
+    matches: List<String>,
+    conocidas: Collection<String> = emptyList(),
+): Boolean {
+    val q = normalizeForMatch(query.trim())
+    if (q.isEmpty()) return false
+    if (matches.any { normalizeForMatch(it) == q }) return false
+    return conocidas.any { normalizeForMatch(it.trim()) == q }
+}
+
+/**
+ * De qué lado la conoce Movi, para poder decirlo en una línea («Ya la tienes en Gastos») en vez
+ * de dejar el panel mudo. Mira las propias ([usedCategories], que guardan con qué tipos se las
+ * vio) y el catálogo fijo. `null` si no hay nada del OTRO lado que contar — ahí la sugerencia ya
+ * se está viendo y no hay nada que explicar.
+ */
+fun ladoConocidoDeCategoria(
+    query: String,
+    type: TransactionType?,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+): String? {
+    val q = normalizeForMatch(query.trim())
+    if (q.isEmpty()) return null
+    val tipos = mutableSetOf<TransactionType>()
+    for ((name, types) in usedCategories) {
+        if (normalizeForMatch(name.trim()) == q) tipos += types
+    }
+    PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { pre ->
+        if (pre.type == "BOTH") tipos += setOf(TransactionType.EXPENSE, TransactionType.INCOME)
+        else runCatching { TransactionType.valueOf(pre.type) }.getOrNull()?.let { tipos += it }
+    }
+    val delOtroLado = tipos - setOfNotNull(type)
+    return when {
+        delOtroLado.isEmpty() -> null
+        delOtroLado.size > 1 -> "Ya la tienes en Gastos y en Ingresos"
+        delOtroLado.first() == TransactionType.EXPENSE -> "Ya la tienes en Gastos"
+        else -> "Ya la tienes en Ingresos"
+    }
+}
+
+/**
+ * Cómo está escrita la categoría que Movi ya conoce («Carro» cuando el dueño acaba de escribir
+ * «carro»). Se elige esa y no lo tecleado para no partir una categoría en dos por una mayúscula
+ * —presupuestos y gastos se cruzan por nombre—. `null` si no la conoce.
+ */
+fun nombreCanonicoConocido(
+    query: String,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+): String? {
+    val q = normalizeForMatch(query.trim())
+    if (q.isEmpty()) return null
+    PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { return it.name }
+    return usedCategories.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }
+}
+
 /** Minúsculas y sin tildes/eñe — no hay normalización Unicode común a los 3 targets acá. */
 private fun normalizeForMatch(s: String): String = buildString(s.length) {
     for (c in s.lowercase()) {
@@ -195,12 +262,14 @@ fun CategoryField(
     // Ola 9 · A1: lo escrito no coincide con nada → arriba de todo, la opción de crearlo. Ver
     // [shouldOfferCreateCategory] para el porqué y para el caso de la coincidencia parcial.
     val nuevaCategoria = value.trim()
-    val ofrecerCrear = shouldOfferCreateCategory(
-        query = value,
-        matches = matches,
-        // Las propias de cualquier tipo Y el catálogo entero: lo que ya existe no se "crea".
-        conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name },
-    )
+    // Las propias de cualquier tipo Y el catálogo entero: lo que ya existe no se "crea".
+    val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name }
+    val ofrecerCrear = shouldOfferCreateCategory(query = value, matches = matches, conocidas = conocidas)
+    // Ola 9 · A4: y si no se crea porque YA existe (del otro lado), se dice — sin esto el panel
+    // quedaba completamente vacío. Ver [shouldOfferKnownFromOtherSide].
+    val ofrecerConocida = shouldOfferKnownFromOtherSide(value, matches, conocidas)
+    val ladoConocido = if (ofrecerConocida) ladoConocidoDeCategoria(value, type, usedCategories) else null
+    val nombreConocido = if (ofrecerConocida) nombreCanonicoConocido(value, usedCategories) ?: nuevaCategoria else nuevaCategoria
 
     fun pick(name: String) {
         onValueChange(name)
@@ -257,7 +326,7 @@ fun CategoryField(
         }
         // Visible mientras el campo tiene foco (más la demora de gracia de F62): tocar una
         // sugerencia la elige y lo quita del medio.
-        if (suggestionsVisible && (matches.isNotEmpty() || ofrecerCrear)) {
+        if (suggestionsVisible && (matches.isNotEmpty() || ofrecerCrear || ofrecerConocida)) {
             Spacer(Modifier.height(6.dp))
             Column(
                 modifier = Modifier
@@ -283,6 +352,30 @@ fun CategoryField(
                         )
                         Text(
                             "Se guarda tal cual, como categoría tuya",
+                            fontSize = 11.sp,
+                            color = MinTextMute,
+                        )
+                    }
+                    if (matches.isNotEmpty()) Hairline()
+                }
+                if (ofrecerConocida) {
+                    // Se puede TOCAR, no es un cartel: elegirla es lo que el dueño vino a hacer
+                    // (la categoría es texto libre y usarla de los dos lados es válido), y así el
+                    // panel deja de ser una pantalla sin salida.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { pick(nombreConocido) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            "Usar \"$nombreConocido\"",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinPrimary,
+                        )
+                        Text(
+                            ladoConocido ?: "Ya la tienes anotada",
                             fontSize = 11.sp,
                             color = MinTextMute,
                         )

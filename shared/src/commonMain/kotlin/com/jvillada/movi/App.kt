@@ -294,6 +294,10 @@ fun App() {
                         onAccept = {
                             hojaRecurrentePrellenada = propuesta
                             ofrecimientoRecurrente = null
+                            // Le sirvió: esta barra no cuenta como insistencia perdida, así que
+                            // el techo por categoría no se le gasta a quien está justamente
+                            // usando la función (ver la guarda 3 en `RecurringOffer.kt`).
+                            RecurringOfferGate.seTomo(propuesta)
                         },
                         onDismiss = { ofrecimientoRecurrente = null },
                         modifier = Modifier.align(Alignment.BottomCenter),
@@ -304,10 +308,10 @@ fun App() {
                         onDismiss = { hojaRecurrentePrellenada = null },
                         onSaved = {
                             hojaRecurrentePrellenada = null
-                            // La lista de reglas que el gate tenía cacheada quedó vieja: sin
-                            // esto, anotar el arriendo del mes que viene volvería a ofrecer
-                            // crear el recurrente que se acaba de crear.
-                            RecurringOfferGate.olvidarReglas()
+                            // Lo que el gate tenía cacheado quedó viejo: sin esto, anotar el
+                            // arriendo del mes que viene volvería a ofrecer crear el recurrente
+                            // que se acaba de crear.
+                            RecurringOfferGate.olvidarLoCacheado()
                             refreshTick++
                         },
                         prefill = propuesta,

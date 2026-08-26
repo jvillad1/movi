@@ -128,8 +128,8 @@ private fun Transaction.monthCashFlow(
  *
  * Sin filtrar por mes a propósito: una categoría propia sigue siendo suya aunque no la haya
  * usado este mes. Tampoco se excluyen las anuladas ni las categorías reservadas — el cliente ya
- * filtra «Traspaso» en un solo lugar (`UsedCategoriesCache.record`), y duplicar esa regla acá
- * sería una segunda copia que puede desincronizarse.
+ * las filtra en un solo lugar (`UsedCategoriesCache.recordAll`, por donde pasan todos sus caminos
+ * de entrada), y duplicar esa regla acá sería una segunda copia que puede desincronizarse.
  */
 private fun Transaction.usedCategories(uid: String): List<UsedCategory> =
     Events.select(Events.category, Events.type)
