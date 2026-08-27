@@ -41,6 +41,32 @@ fun Route.eventRoutes() {
             if (body.transferId != null || body.category == TRANSFER_CATEGORY) {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_LEG_NOT_STANDALONE)
             }
+
+            // Ola 10: **una categoría reservada no se anota A MANO.** `isCashFlow` las excluye por
+            // nombre, así que un gasto real escrito como «Pago de tarjeta» se guardaba y
+            // desaparecía de «Gastos del mes» sin que nada lo dijera. El campo de categoría avisa,
+            // pero un cartel no es una guarda: se podía cerrar el selector con la categoría puesta
+            // y guardar igual.
+            //
+            // La guarda es **precisa y no un rechazo general**, porque por esta misma ruta llegan
+            // dos usos legítimos de categorías reservadas y bloquearlos rompería dos flujos que
+            // hoy funcionan:
+            //
+            // - **`OPENING_CATEGORY` con `source = MANUAL`**: es el evento de apertura que crea el
+            //   propio cliente al abrir una cuenta con saldo (ver `openingEventFor`). Nace MANUAL
+            //   y reservado, y es correcto. Se deja pasar por eso, no por olvido — el camino de
+            //   tipeo a mano ya lo corta el cliente (ver `QuickAddScreen`).
+            // - **`CARD_PAYMENT_CATEGORY` con `source = SMS`**: es el pago de tarjeta detectado en
+            //   un mensaje del banco y confirmado por el dueño (ver `SmsRoutes.categoryFor` y
+            //   `SMSReconcileScreen`). Ahí la categoría reservada es exactamente la correcta.
+            //
+            // O sea: lo que se rechaza es escribir a mano una reservada que no sea la apertura.
+            if (body.source == EventSource.MANUAL &&
+                isReservedCategory(body.category) &&
+                body.category.trim() != OPENING_CATEGORY
+            ) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, CATEGORY_RESERVED_NOT_MANUAL)
+            }
             val event = body.copy(
                 id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
                 timestamp = if (body.timestamp == 0L) now else body.timestamp,

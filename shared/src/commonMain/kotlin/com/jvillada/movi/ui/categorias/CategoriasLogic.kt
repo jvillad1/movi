@@ -146,8 +146,12 @@ fun avisoDeUnificacion(origen: CategoryUsage, destino: CategoryUsage): String {
     // irreversible y le cambia un número que puso a propósito, así que se dice ANTES y con la
     // cifra final, no después.
     if (origen.budgets > 0 && destino.budgets > 0) {
-        return "$base Ojo: las dos tienen presupuesto y los dos límites se suman en uno solo " +
-            "para «${destino.name}». Eso no se puede deshacer."
+        // Con la CIFRA, no con un «se suman» a secas: el dueño está por cambiar un límite que
+        // puso a propósito, no puede deshacerlo, y «se suman» lo obliga a hacer la cuenta de
+        // cabeza justo cuando lo que necesita es decidir. El monto viaja en `budgetLimit`.
+        val suma = origen.budgetLimit + destino.budgetLimit
+        return "$base Ojo: las dos tienen presupuesto y los dos límites se suman en uno solo — " +
+            "el de «${destino.name}» queda en ${formatCOP(suma)}. Eso no se puede deshacer."
     }
     return base
 }

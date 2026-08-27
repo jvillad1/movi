@@ -101,9 +101,17 @@ fun suggestCategoryMatches(
     val predefined = todasLasDelCatalogo
         // «Pago de tarjeta» está en el catálogo Y es reservada: la app se la ofrecía al anotar un
         // gasto y, si el dueño la elegía, `isCashFlow` sacaba ese gasto real de «Gastos del mes»
-        // sin decir nada. Ninguna reservada se sugiere en este campo. (La hoja de CAMBIAR la
-        // categoría de un movimiento existente sí la sigue listando, a propósito: ahí confirmar
-        // «esto fue el pago de mi tarjeta» es justo lo que hay que poder hacer.)
+        // sin decir nada. Ninguna reservada se sugiere en este campo.
+        //
+        // **Esto cierra la SUGERENCIA, no la escritura** — decirlo así porque la primera versión
+        // de este comentario daba el problema por resuelto y no lo estaba: el campo siempre
+        // aceptó texto libre, así que «Pago de tarjeta» tecleado a mano seguía guardándose. Lo
+        // que cierra la escritura es la guarda de `QuickAddScreen` (el botón no habilita) más la
+        // del server (`POST /api/events` la rechaza con 422).
+        //
+        // (La hoja de CAMBIAR la categoría de un movimiento existente sí la sigue listando, a
+        // propósito: ahí confirmar «esto fue el pago de mi tarjeta» es justo lo que hay que poder
+        // hacer.)
         .filterNot { isReservedCategory(it) }
         .filter { seOfrece(it, emptySet()) }
     val q = normalizeForMatch(query)
@@ -296,11 +304,21 @@ fun ladoConocidoDeCategoria(
 fun nombreCanonicoConocido(
     query: String,
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    /**
+     * Ola 10: las preferencias también saben cómo se escribe una categoría, y **sobreviven a un
+     * arranque en frío** — se persisten, mientras que [usedCategories] arranca vacío en cada
+     * apertura. Sin mirarlas acá, tras una recarga sin red pasaba justo lo que esta función
+     * existe para impedir: el panel reconocía «carro» (porque las conocidas incluyen las claves de
+     * `prefs`), pero esto devolvía `null` y se guardaba **«carro»** en vez de «Carro» — la
+     * categoría partida en dos por una mayúscula, que es como se cruzan presupuestos y gastos.
+     */
+    prefs: Map<String, CategoryPref> = emptyMap(),
 ): String? {
     val q = normalizeForMatch(query.trim())
     if (q.isEmpty()) return null
     PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { return it.name }
-    return usedCategories.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }
+    usedCategories.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }?.let { return it }
+    return prefs.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }
 }
 
 /** Minúsculas y sin tildes/eñe — no hay normalización Unicode común a los 3 targets acá. */
@@ -405,7 +423,7 @@ fun CategoryField(
         estaEscondida -> "La escondiste en Categorías; puedes usarla igual"
         else -> ladoConocidoDeCategoria(value, type, usedCategories, prefs)
     }
-    val nombreConocido = if (ofrecerConocida) nombreCanonicoConocido(value, usedCategories) ?: nuevaCategoria else nuevaCategoria
+    val nombreConocido = if (ofrecerConocida) nombreCanonicoConocido(value, usedCategories, prefs) ?: nuevaCategoria else nuevaCategoria
 
     fun pick(name: String) {
         onValueChange(name)

@@ -633,8 +633,12 @@ class LocalRepository(
      * de esta pantalla — pero queda escrito acá, con el escenario, en vez de resumido como una
      * divergencia menor.
      *
-     * Lo que sí está descartado es el peor caso: el teléfono **no repisa** el rename hacia el
-     * server. `selectUnsynced` filtra por `syncedAt IS NULL`, y esas filas ya están selladas.
+     * Lo que sí está descartado es el peor caso **para las filas ya sincronizadas**: el teléfono
+     * no las repisa hacia el server, porque `selectUnsynced` filtra por `syncedAt IS NULL` y esas
+     * filas ya están selladas. La afirmación **no cubre** una fila creada sin señal y todavía
+     * pendiente: esa sí se empuja tal como está, con el nombre viejo, y el server la acepta. Es un
+     * caso acotado (un movimiento anotado offline entre el rename y el próximo sync) pero no es
+     * cero, y decirlo redondo sería el tipo de tranquilidad falsa que este KDoc vino a corregir.
      */
     override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
         val result = remote.renameCategory(from, to)

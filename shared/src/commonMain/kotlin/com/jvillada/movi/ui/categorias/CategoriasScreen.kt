@@ -297,7 +297,9 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                             if (esUnificacion) Repositories.wallets.mergeCategory(h.categoria.name, nuevoNombre)
                             else Repositories.wallets.renameCategory(h.categoria.name, nuevoNombre)
                         }.onSuccess { r ->
-                            UsedCategoriesCache.applyRename(h.categoria.name, r.name)
+                            // `escondeElOrigen` = lo mismo que hizo el server: unificar esconde la
+                            // de origen si venía del catálogo, renombrar no (ver `rewriteCategory`).
+                            UsedCategoriesCache.applyRename(h.categoria.name, r.name, escondeElOrigen = esUnificacion)
                             confirmacion = textoDeResultado(r.movements, r.budgets, r.recurringRules, r.budgetsMerged, r.name)
                             error = null
                             hoja = null
@@ -315,7 +317,9 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     scope.launch {
                         runCatching { Repositories.wallets.mergeCategory(h.categoria.name, destino) }
                             .onSuccess { r ->
-                                UsedCategoriesCache.applyRename(h.categoria.name, r.name)
+                                // Unificar SIEMPRE esconde el origen del catálogo, del lado del
+                                // server y de este espejo. Ver `applyRename`.
+                                UsedCategoriesCache.applyRename(h.categoria.name, r.name, escondeElOrigen = true)
                                 confirmacion = textoDeResultado(r.movements, r.budgets, r.recurringRules, r.budgetsMerged, r.name)
                                 error = null
                                 hoja = null

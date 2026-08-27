@@ -31,7 +31,7 @@ import kotlinx.serialization.Serializable
 /**
  * Las **cuatro categorías reservadas** de Movi: las escribe la app sola y de su nombre EXACTO
  * dependen las cifras del mes (ver [isCashFlow], que compara por string). Renombrar cualquiera
- * de ellas rompería el cálculo de ingresos y egresos de toda la historia; unificarla o esconderla
+ * de ellas rompería el cálculo de ingresos y gastos de toda la historia; unificarla o esconderla
  * la sacaría de la vista sin sacarla de los datos.
  *
  * Por eso quedan **fuera de todas las acciones** de esta pantalla — se muestran, para que el
@@ -109,6 +109,17 @@ data class CategoryUsage(
     val otherCurrencyMovements: Int = 0,
     /** ¿Hay un presupuesto con este nombre? (el cruce presupuesto↔gasto es por nombre). */
     val budgets: Int = 0,
+    /**
+     * El límite mensual de ese presupuesto (COP), 0 si no tiene.
+     *
+     * Viaja **solo** para que el aviso previo de unificar pueda decir la CIFRA en la que va a
+     * quedar el límite, no apenas que «se suman». Cuatro comentarios de esta ola prometían ese
+     * número —incluido el que justifica por qué acá se suma y en `PUT /api/budgets/{c}/rename`
+     * se rechaza— y el modelo no lo transportaba: la promesa era falsa. Es un `Long` por
+     * categoría en una respuesta que ya trae seis números por categoría; el costo es ninguno al
+     * lado de cambiarle un límite a ciegas.
+     */
+    val budgetLimit: Long = 0,
     /** ¿Cuántas reglas recurrentes llevan este nombre? */
     val recurringRules: Int = 0,
 ) {
@@ -214,6 +225,28 @@ const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
         "usas, escóndela."
 
 const val CATEGORY_NAME_REQUIRED: String = "Falta el nombre de la categoría."
+
+/**
+ * Lo que se le dice a quien intenta **anotar un movimiento a mano** en una categoría reservada.
+ *
+ * Hasta acá el campo de categoría solo mostraba un cartel: no la sugería, explicaba por qué, y
+ * después dejaba **guardar igual**. Escribir «Pago de tarjeta» a mano en un gasto de $1.000 lo
+ * dejaba anotado y fuera del mes — `isCashFlow` lo excluye por nombre—, o sea plata que salió de
+ * verdad y desapareció de «Gastos del mes» sin que nada lo dijera. Un cartel no es una guarda.
+ */
+/**
+ * La versión corta, para el renglón de «lo que falta» de «Agregar».
+ *
+ * Ese renglón tiene **alto fijo de 16 dp a propósito** (ver `QuickAddScreen`: si crece o se
+ * encoge, el teclado salta 35 dp y el siguiente toque cae en la tecla de al lado). El texto largo
+ * se cortaría en silencio, así que ahí va este, y la explicación completa vive en el panel de
+ * categoría y en el 422 del server, que sí tienen lugar para envolver.
+ */
+const val CATEGORY_RESERVED_SHORT: String = "Esa categoría la usa Movi sola: elige otra"
+
+const val CATEGORY_RESERVED_NOT_MANUAL: String =
+    "Esa categoría la usa Movi sola (traspasos, saldos iniciales y pagos de tarjeta) y los " +
+        "movimientos que la llevan quedan fuera de tus gastos del mes. Elige otra."
 
 /**
  * El mismo tope que ya impone `PUT /api/events/{id}/category` — la columna aguanta 100, pero un

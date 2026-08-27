@@ -78,7 +78,14 @@ private fun SheetLabel(text: String) {
 }
 
 @Composable
-private fun CategoryRow(name: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun CategoryRow(
+    name: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    /** Segunda línea opcional: hoy solo la usa «Pago de tarjeta», para decir qué implica elegirla. */
+    subtitle: String? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -91,7 +98,12 @@ private fun CategoryRow(name: String, selected: Boolean, enabled: Boolean, onCli
         // web sale como ▯. No hay un mapa a íconos Material por categoría, así que se usa uno
         // genérico y uniforme en vez de intentar mapear 15+ emojis uno a uno.
         Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(18.dp))
-        Text(name, fontSize = 14.5.sp, color = MinText, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(name, fontSize = 14.5.sp, color = MinText)
+            if (subtitle != null) {
+                Text(subtitle, fontSize = 11.5.sp, color = MinTextMute, lineHeight = 15.sp)
+            }
+        }
         if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
     }
 }
@@ -190,6 +202,14 @@ fun ChangeCategorySheet(
                     selected = cat.name == event.category,
                     enabled = !saving,
                     onClick = { choose(cat.name) },
+                    // Ola 10: «Pago de tarjeta» sigue estando acá a propósito —es el camino real
+                    // para arreglar un «No es» tocado por error— pero elegirla saca el movimiento
+                    // de las cifras del mes, y eso no se puede dejar mudo: en el campo de
+                    // categoría la misma palabra está prohibida, así que sin este renglón la
+                    // asimetría se lee como un descuido en vez de una decisión.
+                    subtitle = if (cat.name == CARD_PAYMENT_CATEGORY) {
+                        "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta"
+                    } else null,
                 )
                 if (i < options.size - 1) Hairline()
             }

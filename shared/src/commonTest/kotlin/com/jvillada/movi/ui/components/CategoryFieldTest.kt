@@ -364,6 +364,17 @@ class CategoryFieldTest {
     }
 
     @Test
+    fun `en frio, el nombre canonico sale de las preferencias`() {
+        // `prefs` se persiste y `used` no: tras una recarga sin red, escribir «carro» reconocía la
+        // categoría (el panel mira las claves de prefs) pero se guardaba «carro» en minúscula —
+        // la categoría partida en dos por una mayúscula, que es como se cruzan presupuesto y gasto.
+        val prefs = mapOf("Carro" to CategoryPref(pinnedType = "EXPENSE"))
+        assertEquals("Carro", nombreCanonicoConocido("carro", emptyMap(), prefs))
+        // Sin las preferencias (el estado viejo) devolvía null y se guardaba lo tecleado.
+        assertNull(nombreCanonicoConocido("carro", emptyMap()))
+    }
+
+    @Test
     fun `con Ambos fijado desaparece el cartel de que la tienes del otro lado`() {
         // Sin fijar nada, anotando un ingreso «Otros» no se sugiere (el catálogo la tiene en
         // EXPENSE) y el panel explica por qué. Con «Ambos» fijado ya se sugiere, así que no queda

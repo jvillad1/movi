@@ -57,7 +57,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
  *
  * Las [com.jvillada.movi.shared.model.RESERVED_CATEGORIES] («Traspaso», «Saldo inicial», «Pago de
  * tarjeta», «Cuenta eliminada»). `isCashFlow` las reconoce **por su nombre exacto**: renombrar una
- * sola rompería el cálculo de ingresos y egresos de todos los meses de golpe. Se listan (para que
+ * sola rompería el cálculo de ingresos y gastos de todos los meses de golpe. Se listan (para que
  * el dueño entienda de dónde salen esos movimientos) y se rechazan en toda acción, tanto como
  * origen como destino.
  */
@@ -379,6 +379,7 @@ private class UsageAcc {
     var recibidoMes = 0L
     var otraMoneda = 0
     var presupuestos = 0
+    var limitePresupuesto = 0L
     var recurrentes = 0
 }
 
@@ -430,7 +431,12 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
 
     Budgets.selectAll().where { Budgets.userId eq uid }.forEach { row ->
         val nombre = row[Budgets.category].trim()
-        if (nombre.isNotEmpty()) acc.getOrPut(nombre) { UsageAcc() }.presupuestos++
+        if (nombre.isEmpty()) return@forEach
+        val a = acc.getOrPut(nombre) { UsageAcc() }
+        a.presupuestos++
+        // El límite viaja para que la hoja pueda decir en cuánto va a QUEDAR al unificar, no
+        // apenas que los dos se suman. Ver [CategoryUsage.budgetLimit].
+        a.limitePresupuesto += row[Budgets.monthlyLimit]
     }
     RecurringRules.selectAll().where { RecurringRules.userId eq uid }.forEach { row ->
         val nombre = row[RecurringRules.category].trim()
@@ -464,6 +470,7 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
             monthIncomeTotal = a.recibidoMes,
             otherCurrencyMovements = a.otraMoneda,
             budgets = a.presupuestos,
+            budgetLimit = a.limitePresupuesto,
             recurringRules = a.recurrentes,
         )
     }.sortedWith(

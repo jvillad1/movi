@@ -9,6 +9,7 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -160,6 +161,14 @@ object UsedCategoriesCache {
      * repuebla en el primer paso por el Inicio. Es una ayuda para escribir, no una fuente de
      * verdad — no puede ser el motivo de que nada arranque.
      */
+    /**
+     * **Vecino conocido, ajeno a esta ola:** `SessionManager` lee `settings.getStringOrNull(
+     * "auth_token")` **en el inicializador de su object y sin protección**. Con el almacenamiento
+     * del sitio bloqueado, esa clase muere antes de que este caché llegue a cargarse, y el
+     * `runCatching` de acá abajo no lo tapa: son dos objects distintos. Es de `master`, no de esta
+     * rama, y arreglarlo toca la sesión —que no es lo que esta ola vino a mover—, así que queda
+     * escrito y no tocado.
+     */
     private fun leerPrefsGuardadas(): Map<String, CategoryPref> = runCatching {
         val raw = prefsSettings.getStringOrNull(KEY_CATEGORY_PREFS) ?: return@runCatching emptyMap()
         prefsJson.decodeFromString(prefsSerializer, raw)
@@ -219,24 +228,39 @@ object UsedCategoriesCache {
      * viejo: el caché es una ayuda para escribir, y seguir ofreciendo «Trasnporte» después de
      * arreglarlo sería justo el error que el dueño vino a corregir.
      */
-    fun applyRename(from: String, to: String) {
+    fun applyRename(from: String, to: String, escondeElOrigen: Boolean = false) {
         val viejo = from.trim()
         val nuevo = to.trim()
         if (viejo.isEmpty() || nuevo.isEmpty()) return
         val tipos = used[viejo].orEmpty() + used[nuevo].orEmpty()
         used = (used - viejo) + (nuevo to tipos)
-        // El destino acaba de recibir movimientos, así que **no puede quedar escondido** — es la
-        // misma regla que aplica el server en `rewriteCategory`, espejada acá para que no haya una
-        // ventana en la que el server ya la destapó y el teléfono la sigue escondiendo hasta el
-        // próximo paso por el Inicio. El tipo fijado del destino, en cambio, se respeta.
+
+        // Espejo EXACTO de lo que hace el server en `rewriteCategory`, y las tres partes importan:
+        //
+        // 1. El destino acaba de recibir movimientos, así que **no puede quedar escondido**.
+        // 2. Si el destino no tenía tipo fijado, **hereda el del origen** (el server hace eso).
+        // 3. Si el origen era del catálogo, el server lo **esconde** para que deje de sugerirse —
+        //    y esto es lo que faltaba. Borrar su preferencia en vez de marcarla escondida
+        //    deshacía la operación insignia de la rama: unificar «Otros ingresos» en «Otros»
+        //    dejaba la lista diciendo «Escondida» y, al mismo tiempo, «Agregar → Ingreso» seguía
+        //    sugiriendo «Otros ingresos» — a un toque de volver a partir en dos justo lo que el
+        //    dueño acababa de juntar. Sanaba recién al pasar por Inicio.
+        //
+        // Que sea un espejo y no una regla propia es el punto: dos reglas paralelas para el mismo
+        // efecto se desincronizan, y esta ya se desincronizó una vez.
+        val prefOrigen = prefs[viejo]
         val prefDestino = prefs[nuevo]
-        prefs = (prefs - viejo).let { sinViejo ->
-            when {
-                prefDestino == null -> sinViejo
-                prefDestino.pinnedType == null -> sinViejo - nuevo
-                else -> sinViejo + (nuevo to prefDestino.copy(hidden = false))
-            }
+        val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType
+        var siguiente = prefs - viejo - nuevo
+        if (tipoFijadoDestino != null) {
+            siguiente = siguiente + (nuevo to CategoryPref(hidden = false, pinnedType = tipoFijadoDestino))
         }
+        if (escondeElOrigen && PREDEFINED_CATEGORIES.any { it.name == viejo }) {
+            siguiente = siguiente + (viejo to CategoryPref(hidden = true))
+            // El nombre viejo vuelve a la lista de conocidas, pero escondido: lo que NO puede
+            // pasar es que se siga ofreciendo. `used` ya no lo tiene (arriba se movió al nuevo).
+        }
+        prefs = siguiente
     }
 
 }
