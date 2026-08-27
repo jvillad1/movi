@@ -197,6 +197,36 @@ object RecurringRules : Table("recurring_rules") {
     init { index("idx_recurring_rules_user_id", false, userId) }
 }
 
+/**
+ * «Este recurrente ya ocurrió en este periodo» — ver
+ * [com.jvillada.movi.shared.model.RecurringOccurrence] para el porqué y para la unidad de periodo.
+ *
+ * **Clave primaria compuesta `(user_id, rule_id, period)`**: una sola ocurrencia por regla y por
+ * periodo. Es la misma unidad con la que `reminderKeyFor` deduplica los avisos, así que las dos
+ * mitades del sistema hablan del mismo mes; y como es la PK, la impone el `CREATE TABLE` — no
+ * hace falta ningún `CREATE INDEX` posterior, que es justo el DDL que en esta base puede dejar el
+ * server sin levantar.
+ *
+ * Tabla NUEVA: entra por `SchemaUtils.create` (CREATE TABLE IF NOT EXISTS) y no por
+ * `createMissingTablesAndColumns`. Sobre la base del dueño, que no la tiene, se crea vacía; sobre
+ * una que ya la tenga no se emite nada. No hay datos viejos que migrar: antes de esto no existía
+ * ningún vínculo entre un movimiento y la regla que lo originó, así que no hay nada que rellenar
+ * — todos los recurrentes arrancan sin ninguna ocurrencia sellada, o sea exactamente como se
+ * comportaban ayer.
+ *
+ * `event_id` es NULLABLE y sin FK (como el resto de esta base): NULL significa «el dueño cerró el
+ * periodo sin emparejar ningún movimiento». Que no haya FK no deja la fila mintiendo: la lectura
+ * solo honra una ocurrencia cuyo movimiento siga vivo y sin anular (ver `loadOccurredPeriods`).
+ */
+object RecurringOccurrences : Table("recurring_occurrences") {
+    val userId      = varchar("user_id", 50)
+    val ruleId      = varchar("rule_id", 50)
+    val period      = varchar("period", 7)              // "YYYY-MM" del VENCIMIENTO
+    val eventId     = varchar("event_id", 50).nullable()
+    val confirmedAt = long("confirmed_at")
+    override val primaryKey = PrimaryKey(userId, ruleId, period)
+}
+
 object SmsMessages : Table("sms_messages") {
     val id     = varchar("id", 50)
     val userId = varchar("user_id", 50)

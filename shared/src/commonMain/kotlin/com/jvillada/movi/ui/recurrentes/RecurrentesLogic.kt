@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -31,16 +32,14 @@ import kotlin.math.roundToLong
  * distinguirlas por el nombre, que es lo único que comparten los dos modelos; la fila queda
  * marcada en la lista («ya lo tienes como recurrente»), así que el caso es visible aunque no
  * sea evitable. Ver también el reparto uno-a-uno en [resumenRecurrentes].
+ *
+ * **La implementación se mudó a `:core`** ([claveComparableDeNombre]) sin cambiar ni una regla:
+ * ahora el server también la necesita, para proponer qué movimiento fue la ocurrencia de un
+ * recurrente. Dos copias que normalizaran distinto harían que el server propusiera
+ * emparejamientos que esta pantalla no sabría explicar. Este alias se queda para no reescribir
+ * los llamados que ya existen.
  */
-fun claveDeNombre(nombre: String): String {
-    val sinAcentos = nombre.map { c ->
-        when (c.lowercaseChar()) {
-            'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
-            else -> c.lowercaseChar()
-        }
-    }
-    return sinAcentos.filter { it.isLetterOrDigit() }.joinToString("")
-}
+fun claveDeNombre(nombre: String): String = claveComparableDeNombre(nombre)
 
 /**
  * Cuánto pesa una suscripción en pesos, o `null` si no se puede saber.

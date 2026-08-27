@@ -25,6 +25,8 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
@@ -137,6 +139,21 @@ interface WalletRepository {
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
     suspend fun deleteRecurringRule(id: String)
     suspend fun getUpcomingPayments(): List<UpcomingPayment>
+
+    /**
+     * «¿Esto ya ocurrió?» — el estado del periodo en juego de cada recurrente, con lo que la app
+     * **propone** como su ocurrencia. Ver [com.jvillada.movi.shared.model.OccurrenceState].
+     */
+    suspend fun getOccurrenceStates(): List<OccurrenceState>
+
+    /**
+     * Sella un periodo como ocurrido. [eventId] `null` = «ya lo pagué / ya me llegó», sin
+     * movimiento que emparejar. Volver a llamarlo con otro movimiento reemplaza el sello.
+     */
+    suspend fun markOccurrence(ruleId: String, period: String, eventId: String? = null): RecurringOccurrence
+
+    /** Deshacer el sello: el recurrente vuelve a estar pendiente en ese periodo. */
+    suspend fun unmarkOccurrence(ruleId: String, period: String)
     suspend fun chatAi(request: AiChatRequest): AiChatResponse
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account

@@ -1,15 +1,33 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.reminders.dueDateFor
 import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
+import com.jvillada.movi.server.reminders.loadOccurredBy
+import com.jvillada.movi.server.reminders.loadOccurrenceRows
+import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
+import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
+import com.jvillada.movi.server.reminders.periodOf
+import com.jvillada.movi.server.reminders.statusFor
 import com.jvillada.movi.server.reminders.upcomingPayments
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
+import com.jvillada.movi.shared.model.MarkOccurrenceRequest
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.PaymentStatus
+import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -144,12 +162,212 @@ fun Route.reminderRoutes() {
     get("/api/payments/upcoming") {
         val uid = call.userId()
         val leadDays = System.getenv("REMINDER_LEAD_DAYS")?.toIntOrNull() ?: DEFAULT_REMINDER_LEAD_DAYS
-        val rules = dbQuery {
-            RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
+        val (rules, occurredBy) = dbQuery {
+            val r = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
+            r to loadOccurredBy(uid)
         }
         val creditRules = loadCreditRulePairs(uid).map { it.first }
         // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
         val cardRules = loadCardRulePairs(uid).map { it.first }
-        call.respond(upcomingPayments(rules + creditRules + cardRules, AppClock.today(), leadDays))
+        // Lo que el dueño ya dio por ocurrido no vuelve a leerse como vencido: su vencimiento
+        // vigente rodó al mes que viene (ver `dueDateFor`). Un cliente que no conoce esta función
+        // —el APK 1.6 instalado en el teléfono— no ve ningún campo nuevo: ve la fecha correcta.
+        call.respond(
+            upcomingPayments(rules + creditRules + cardRules, AppClock.today(), leadDays, occurredBy),
+        )
     }
+
+    // ── «Esto ya ocurrió» ─────────────────────────────────────────────────────
+    // El porqué de todo esto está en RecurringOccurrence (:core) y en OccurrenceMatching.
+
+    /**
+     * El estado del periodo **que está en juego** de cada recurrente: si ya se dio por ocurrido, y
+     * si no, qué movimientos podrían serlo.
+     *
+     * Endpoint aparte de `/api/payments/upcoming` a propósito: ese ya lo consume el APK que el
+     * dueño tiene instalado, y crecerle campos (o agregarle un valor al enum `PaymentStatus`) le
+     * rompería la deserialización. Uno nuevo lo ignora quien no lo conoce.
+     */
+    get("/api/payments/occurrences") {
+        val uid = call.userId()
+        val leadDays = System.getenv("REMINDER_LEAD_DAYS")?.toIntOrNull() ?: DEFAULT_REMINDER_LEAD_DAYS
+        val today = AppClock.today()
+        val estados = dbQuery {
+            // Solo reglas REALES. La cuota de un crédito y el pago de una tarjeta son reglas
+            // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
+            // propia forma de saldarse (ahí el pago mueve la deuda, que es un hecho más fuerte
+            // que un sello). Meterlas acá sería un segundo mecanismo compitiendo con ese.
+            val rules = RecurringRules.selectAll()
+                .where { RecurringRules.userId eq uid }
+                .map { it.toRule() }
+            if (rules.isEmpty()) return@dbQuery emptyList<OccurrenceState>()
+
+            val ocurrencias = loadOccurrenceRows(uid).associateBy { it.ruleId to it.period }
+            val ocurridos = loadOccurredBy(uid)
+            val usados = loadUsedOccurrenceEventIds(uid)
+            val eventos = loadNonVoidedEventsIn(uid)
+
+            rules.mapNotNull { rule ->
+                // El periodo NATURAL: el vencimiento calculado SIN tener en cuenta lo ya
+                // ocurrido. Es de lo que habla esta entrada. (`/api/payments/upcoming`, en
+                // cambio, ya rodó al siguiente cuando este está cerrado — son dos preguntas
+                // distintas y cada una merece su respuesta.)
+                val due = dueDateFor(rule, today)
+                val period = periodOf(due)
+                val cerrado = period in ocurridos[rule.id].orEmpty()
+                when {
+                    cerrado -> {
+                        val fila = ocurrencias[rule.id to period]
+                        OccurrenceState(
+                            ruleId = rule.id,
+                            period = period,
+                            dueDate = due.toString(),
+                            occurred = true,
+                            eventId = fila?.eventId,
+                            confirmedAt = fila?.confirmedAt ?: 0L,
+                        )
+                    }
+                    // Todavía falta para el vencimiento: no se pregunta nada. Preguntar «¿ya
+                    // ocurrió?» por algo que vence dentro de tres semanas es ruido, y peor:
+                    // invita a cerrar un periodo antes de que pase.
+                    statusFor(due, today, leadDays) == PaymentStatus.UPCOMING -> null
+                    else -> OccurrenceState(
+                        ruleId = rule.id,
+                        period = period,
+                        dueDate = due.toString(),
+                        occurred = false,
+                        candidates = occurrenceCandidatesFor(rule, due, eventos, usados),
+                    )
+                }
+            }
+        }
+        call.respond(estados)
+    }
+
+    /**
+     * Sellar un periodo como ocurrido: con el movimiento que el dueño confirmó, o sin ninguno
+     * (el «ya lo pagué» / «ya me llegó»).
+     *
+     * Idempotente: volver a mandarlo reemplaza el sello. Eso es lo que hace que «no fue este, fue
+     * aquel» funcione sin un paso de deshacer en el medio.
+     */
+    post("/api/recurring-rules/{id}/occurrence") {
+        val uid = call.userId()
+        val ruleId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val body = call.receive<MarkOccurrenceRequest>()
+        val today = AppClock.today()
+        if (!PERIOD_REGEX.matches(body.period)) {
+            return@post call.respond(HttpStatusCode.BadRequest, "Periodo inválido: usa \"YYYY-MM\".")
+        }
+        if (ruleId.startsWith(CREDIT_RULE_PREFIX) || ruleId.startsWith(CARD_RULE_PREFIX)) {
+            return@post call.respond(
+                HttpStatusCode.BadRequest,
+                "La cuota de un crédito y el pago de una tarjeta se gestionan en Créditos.",
+            )
+        }
+        val resultado: MarcaResult = dbQuery {
+            val rule = RecurringRules.selectAll()
+                .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
+                .firstOrNull()?.toRule()
+                ?: return@dbQuery MarcaResult.Error(HttpStatusCode.NotFound)
+            // No se puede cerrar un periodo que todavía no llegó: sellar septiembre en agosto
+            // apagaría el aviso de septiembre antes de que nadie sepa si va a pasar. El techo es
+            // el periodo en juego, el mismo que calcula el GET de arriba.
+            if (body.period > periodOf(dueDateFor(rule, today))) {
+                return@dbQuery MarcaResult.Error(
+                    HttpStatusCode.BadRequest,
+                    "Ese periodo todavía no llegó: no se puede dar por ocurrido.",
+                )
+            }
+            val eventId = body.eventId?.trim()?.takeIf { it.isNotEmpty() }
+            if (eventId != null) {
+                val evento = Events.selectAll()
+                    .where { (Events.id eq eventId) and (Events.userId eq uid) }
+                    .firstOrNull()
+                    ?: return@dbQuery MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento no existe.")
+                val anulado = VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq eventId) and (VoidEvents.userId eq uid) }
+                    .firstOrNull() != null
+                if (anulado) {
+                    return@dbQuery MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento está anulado.")
+                }
+                // Las mismas dos puertas que cierra `occurrenceCandidatesFor`, cerradas también
+                // acá: la UI solo ofrece candidatos, pero el endpoint no puede confiar en eso.
+                if (evento[Events.transferId] != null || isReservedCategory(evento[Events.category])) {
+                    return@dbQuery MarcaResult.Error(
+                        HttpStatusCode.BadRequest,
+                        "Un traspaso o un asiento interno no puede ser la ocurrencia de un recurrente.",
+                    )
+                }
+                // Un mismo movimiento no puede cerrar dos periodos: sería una sola entrada de
+                // plata dando por saldados dos meses.
+                val yaUsado = RecurringOccurrences.selectAll()
+                    .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId eq eventId) }
+                    .any { it[RecurringOccurrences.ruleId] != ruleId || it[RecurringOccurrences.period] != body.period }
+                if (yaUsado) {
+                    return@dbQuery MarcaResult.Error(
+                        HttpStatusCode.Conflict,
+                        "Ese movimiento ya está marcado como la ocurrencia de otro periodo.",
+                    )
+                }
+            }
+            val now = System.currentTimeMillis()
+            RecurringOccurrences.deleteWhere {
+                (RecurringOccurrences.userId eq uid) and
+                    (RecurringOccurrences.ruleId eq ruleId) and
+                    (RecurringOccurrences.period eq body.period)
+            }
+            RecurringOccurrences.insert {
+                it[RecurringOccurrences.userId] = uid
+                it[RecurringOccurrences.ruleId] = ruleId
+                it[RecurringOccurrences.period] = body.period
+                it[RecurringOccurrences.eventId] = eventId
+                it[confirmedAt] = now
+            }
+            MarcaResult.Ok(
+                RecurringOccurrence(
+                    ruleId = ruleId,
+                    period = body.period,
+                    eventId = eventId,
+                    confirmedAt = now,
+                ),
+            )
+        }
+        when (resultado) {
+            is MarcaResult.Ok -> call.respond(HttpStatusCode.Created, resultado.occurrence)
+            is MarcaResult.Error ->
+                if (resultado.message == null) call.respond(resultado.code)
+                else call.respond(resultado.code, resultado.message)
+        }
+    }
+
+    /** Deshacer: marcar por error tiene que poder revertirse, y sin ceremonia. */
+    delete("/api/recurring-rules/{id}/occurrence/{period}") {
+        val uid = call.userId()
+        val ruleId = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+        val period = call.parameters["period"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+        val borrados = dbQuery {
+            RecurringOccurrences.deleteWhere {
+                (RecurringOccurrences.userId eq uid) and
+                    (RecurringOccurrences.ruleId eq ruleId) and
+                    (RecurringOccurrences.period eq period)
+            }
+        }
+        if (borrados == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
+    }
+}
+
+/** `"YYYY-MM"`, con mes real: `2026-13` no es un periodo. */
+private val PERIOD_REGEX = Regex("""^\d{4}-(0[1-9]|1[0-2])$""")
+
+/**
+ * Lo que decidió el sellado, decidido DENTRO de la transacción y respondido afuera.
+ *
+ * Un tipo propio y no un `Any`: las validaciones son varias y cada una tiene su código y su
+ * mensaje, y un cast sin chequear en el medio es exactamente donde se cuela el error que nadie
+ * ve hasta que un usuario recibe un 500 en vez de un «ese movimiento está anulado».
+ */
+private sealed interface MarcaResult {
+    data class Ok(val occurrence: RecurringOccurrence) : MarcaResult
+    data class Error(val code: HttpStatusCode, val message: String? = null) : MarcaResult
 }

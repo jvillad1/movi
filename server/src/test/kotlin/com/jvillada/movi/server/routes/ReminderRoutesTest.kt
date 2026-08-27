@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
@@ -14,8 +15,13 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.shared.model.MarkOccurrenceRequest
+import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
@@ -67,6 +73,11 @@ class ReminderRoutesTest {
     private val accountOwnedByA = "acc-a-reminder"
     private val accountOwnedByB = "acc-b-reminder"
 
+    /** La fecha civil de la app, la misma que usan los endpoints (Bogotá, no la del sistema). */
+    private val hoy = AppClock.today()
+    private val periodoDeHoy =
+        hoy.year.toString().padStart(4, '0') + "-" + hoy.monthValue.toString().padStart(2, '0')
+
     @BeforeTest
     fun setUp() {
         Database.connect(
@@ -76,10 +87,10 @@ class ReminderRoutesTest {
         transaction {
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, Cards,
+                Budgets, RecurringRules, RecurringOccurrences, SmsMessages, Credits, Cards,
             )
-            SchemaUtils.drop(Cards, Credits, RecurringRules, Users, Accounts)
-            SchemaUtils.create(Users, Accounts, RecurringRules, Credits, Cards)
+            SchemaUtils.drop(Cards, Credits, RecurringOccurrences, RecurringRules, Users, Accounts)
+            SchemaUtils.create(Users, Accounts, RecurringRules, RecurringOccurrences, Credits, Cards)
 
             Users.insert {
                 it[id]           = userAId
@@ -486,5 +497,218 @@ class ReminderRoutesTest {
         }
         assertEquals(HttpStatusCode.OK, editada.status)
         assertEquals(null, editada.body<RecurringRule>().accountId)
+    }
+
+    // ── «Esto ya ocurrió» ────────────────────────────────────────────────────────────
+    //
+    // El caso del dueño, de punta a punta: su recurrente de ingreso aparecía vencido mientras el
+    // movimiento ya estaba anotado, por un monto PARECIDO pero no igual (una retención).
+
+    /**
+     * Una regla cuyo día del mes es HOY, para que el periodo en juego sea siempre el mes en curso
+     * corra el test el día que corra. Sin esto, un test con día fijo pasaría o fallaría según la
+     * fecha — que es la clase de test que se termina borrando en vez de arreglando.
+     */
+    private suspend fun reglaDeHoy(
+        client: io.ktor.client.HttpClient,
+        token: String,
+        nombre: String,
+    ): RecurringRule =
+        client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", nombre, "Salario", 5_000_000, hoy.dayOfMonth,
+                    TransactionType.INCOME, accountId = accountOwnedByA,
+                ),
+            )
+        }.body()
+
+    private fun sembrarMovimiento(
+        id: String,
+        amount: Long = 4_780_000,
+        category: String = "Salario",
+        description: String = "Salario",
+        accountId: String = accountOwnedByA,
+        owner: String = userAId,
+        transferId: String? = null,
+    ) = transaction {
+        Events.insert {
+            it[Events.id] = id
+            it[Events.userId] = owner
+            it[Events.accountId] = accountId
+            it[Events.type] = "INCOME"
+            it[Events.amount] = amount
+            it[Events.category] = category
+            it[Events.description] = description
+            it[Events.timestamp] = appDateToEpochMillis(hoy)
+            it[Events.transferId] = transferId
+        }
+    }
+
+    @Test
+    fun `propone el movimiento parecido, confirmarlo cierra el periodo y deshacerlo lo reabre`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario ocurrencia")
+        sembrarMovimiento("ev-ocurrencia-1")
+
+        // 1. La app PROPONE — no marca nada sola. Y propone un monto que NO es el anotado.
+        val propuesto = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        assertFalse(propuesto.occurred)
+        assertEquals(periodoDeHoy, propuesto.period)
+        assertTrue(
+            propuesto.candidates.any { it.id == "ev-ocurrencia-1" },
+            "el movimiento del mismo día por un monto parecido tiene que proponerse",
+        )
+
+        // 2. El dueño confirma.
+        val marcado = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy, eventId = "ev-ocurrencia-1"))
+        }
+        assertEquals(HttpStatusCode.Created, marcado.status)
+
+        // 3. Ya no se lee como vencido: el vencimiento vigente rodó al mes que viene.
+        val vencimiento = client.get("/api/payments/upcoming") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<UpcomingPayment>>().single { it.rule.id == regla.id }
+        assertTrue(vencimiento.daysUntil > 0, "un periodo cerrado no puede seguir vencido")
+        assertFalse(vencimiento.dueDate.startsWith(periodoDeHoy))
+
+        // 4. Y queda visible como ocurrido, con el movimiento que lo respalda.
+        val cerrado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        assertTrue(cerrado.occurred)
+        assertEquals("ev-ocurrencia-1", cerrado.eventId)
+        assertTrue(cerrado.candidates.isEmpty(), "cerrado no se vuelve a ofrecer")
+
+        // 5. Deshacer lo devuelve a pendiente.
+        val deshecho = client.delete("/api/recurring-rules/${regla.id}/occurrence/$periodoDeHoy") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        assertEquals(HttpStatusCode.NoContent, deshecho.status)
+        val reabierto = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        assertFalse(reabierto.occurred)
+    }
+
+    /** El «ya me llegó» sin movimiento que emparejar: cierra igual, y se nota que no tiene respaldo. */
+    @Test
+    fun `se puede cerrar el periodo sin ningun movimiento`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario sin movimiento")
+
+        val resp = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy, eventId = null))
+        }
+        assertEquals(HttpStatusCode.Created, resp.status)
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        assertTrue(estado.occurred)
+        assertEquals(null, estado.eventId)
+    }
+
+    /** Si el movimiento emparejado se anula, la ocurrencia deja de valer y vuelve a estar pendiente. */
+    @Test
+    fun `anular el movimiento reabre el periodo`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario anulable")
+        sembrarMovimiento("ev-ocurrencia-anulada")
+
+        client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy, eventId = "ev-ocurrencia-anulada"))
+        }
+        transaction {
+            VoidEvents.insert {
+                it[id] = "void-ocurrencia-anulada"
+                it[userId] = userAId
+                it[originalEventId] = "ev-ocurrencia-anulada"
+                it[timestamp] = System.currentTimeMillis()
+            }
+        }
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        assertFalse(estado.occurred, "un movimiento anulado no puede seguir cerrando el mes")
+    }
+
+    @Test
+    fun `un usuario no puede sellar el recurrente de otro`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenB = mintToken(userBId, userBEmail)
+        val resp = client.post("/api/recurring-rules/$ruleOwnedByA/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenB")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy))
+        }
+        assertEquals(HttpStatusCode.NotFound, resp.status)
+    }
+
+    @Test
+    fun `no se puede cerrar un periodo que todavia no llego`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario futuro")
+        val futuro = hoy.plusMonths(6)
+        val resp = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                MarkOccurrenceRequest(
+                    period = futuro.year.toString().padStart(4, '0') + "-" +
+                        futuro.monthValue.toString().padStart(2, '0'),
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+    }
+
+    @Test
+    fun `un movimiento de otro usuario no puede ser la ocurrencia`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario ajeno")
+        sembrarMovimiento("ev-de-b", accountId = accountOwnedByB, owner = userBId)
+        val resp = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy, eventId = "ev-de-b"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+    }
+
+    @Test
+    fun `una pata de traspaso no puede ser la ocurrencia`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario traspaso")
+        sembrarMovimiento("ev-pata-traspaso", transferId = "tr-1", category = "Traspaso")
+        val resp = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy, eventId = "ev-pata-traspaso"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
     }
 }

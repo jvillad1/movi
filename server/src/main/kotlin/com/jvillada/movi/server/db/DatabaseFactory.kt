@@ -32,7 +32,10 @@ object DatabaseFactory {
             // CategoryPrefs (Ola 10) es tabla NUEVA: entra por acá y no por
             // createMissingTablesAndColumns — un CREATE TABLE IF NOT EXISTS sobre una base que no
             // la tiene no puede fallar, y sobre una que ya la tiene no emite nada.
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs)
+            // RecurringOccurrences («ya ocurrió», Ola 11) es tabla NUEVA por el mismo motivo:
+            // su clave primaria compuesta viaja dentro del CREATE TABLE, así que no queda ningún
+            // CREATE INDEX suelto que pueda fallar sobre una base con datos.
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs)
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.
             // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
