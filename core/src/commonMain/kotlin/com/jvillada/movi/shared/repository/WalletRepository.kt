@@ -5,6 +5,8 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CategoryRewriteResult
+import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreateTransferRequest
@@ -95,6 +97,41 @@ interface WalletRepository {
      * de guardar.
      */
     suspend fun renameBudget(category: String, newCategory: String): Budget
+
+    // ── Categorías (Ola 10 · «Más → Categorías») ──────────────────────────────
+
+    /**
+     * La lista completa de categorías **con su uso real** — del catálogo y propias, en una sola
+     * lista. Ver [CategoryUsage] y `GET /api/categories`.
+     */
+    suspend fun getCategories(): List<CategoryUsage>
+
+    /**
+     * Renombrar una categoría **propia**: el arreglo del error de tipeo. Reescribe los
+     * movimientos, el presupuesto y las reglas recurrentes que la llevan, **en una sola
+     * transacción del server**.
+     *
+     * Rechaza (422) las reservadas y las del catálogo — ver `CategoryRoutes`. Si el nombre
+     * destino ya existe devuelve 409: eso ya no es renombrar sino unificar, y lo decide el dueño
+     * ([mergeCategory]).
+     */
+    suspend fun renameCategory(from: String, to: String): CategoryRewriteResult
+
+    /**
+     * Unificar una categoría dentro de otra: el arreglo de los duplicados. Misma reescritura
+     * atómica que [renameCategory], y además esconde la de origen si venía del catálogo (es el
+     * camino para juntar «Otros ingresos» dentro de «Otros»).
+     */
+    suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult
+
+    /**
+     * Esconder / mostrar una categoría y fijarle el tipo («EXPENSE», «INCOME», «BOTH» o `null`
+     * para volver a lo que diga el catálogo o el uso).
+     *
+     * **Esconder no borra nada**: los movimientos viejos la siguen diciendo y siguen contando
+     * donde contaban; lo único que cambia es que deja de ofrecerse al escribir.
+     */
+    suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage
     suspend fun getRecurringRules(): List<RecurringRule>
     suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule

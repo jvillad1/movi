@@ -7,6 +7,8 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CategoryRewriteResult
+import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
@@ -597,6 +599,63 @@ class LocalRepository(
     // leen siempre del server, así que renombrar es delegar y ya, igual que create/update/delete.
     override suspend fun renameBudget(category: String, newCategory: String): Budget =
         remote.renameBudget(category, newCategory)
+
+    // ── Categorías (Ola 10) ───────────────────────────────────────────────────
+
+    /** La lista con uso real la arma el server sobre TODA la historia — acá no hay nada que espejar. */
+    override suspend fun getCategories(): List<CategoryUsage> = remote.getCategories()
+
+    /**
+     * Renombrar contra el server y **espejar la reescritura en SQLDelight** — mismo patrón que
+     * [createAccount] y [updateEventCategory]: `remote` primero, lo local después y solo con lo
+     * que el server confirmó.
+     *
+     * El espejo hace falta porque el `SyncEngine` **solo empuja**: nada baja del server. Sin este
+     * UPDATE, la reescritura quedaría hecha en la base del server y la web mostraría «Transporte»
+     * mientras este teléfono —que lee sus movimientos de la tabla local, ver [getEvents]— seguiría
+     * diciendo «Trasnporte» para siempre. Y no sería un desfase pasajero: no hay ningún ciclo que
+     * lo corrija después.
+     *
+     * **Lo que este espejo NO cubre, dicho sin suavizar.** Una categoría renombrada desde OTRO
+     * dispositivo no llega a este, y para el dueño —que usa la web Y el APK— eso no es un desfase
+     * cosmético: **el teléfono vuelve a ofrecer el tipeo que él acaba de corregir, y puede volver
+     * a sembrarlo.** El camino completo:
+     *
+     * 1. Renombra «Trasnporte» → «Transporte» desde la web. El server reescribe las tres tablas;
+     *    la tabla local del teléfono se queda con el nombre viejo.
+     * 2. Abre Movimientos en el teléfono. Esa pantalla lee de SQLDelight, así que ve «Trasnporte»
+     *    — y de paso lo vuelve a meter en `UsedCategoriesCache` (ver `TransactionsScreen`).
+     * 3. Va a «Agregar» y la app le **sugiere «Trasnporte»**. Si la toca, crea un movimiento nuevo
+     *    con el nombre viejo, y ahora sí queda historia partida en dos **en el server**.
+     *
+     * Nada lo corrige después salvo reinstalar. Cerrarlo de verdad pide que el `SyncEngine`
+     * aprenda a bajar cambios (hoy solo empuja), que es un cambio de arquitectura y no un detalle
+     * de esta pantalla — pero queda escrito acá, con el escenario, en vez de resumido como una
+     * divergencia menor.
+     *
+     * Lo que sí está descartado es el peor caso **para las filas ya sincronizadas**: el teléfono
+     * no las repisa hacia el server, porque `selectUnsynced` filtra por `syncedAt IS NULL` y esas
+     * filas ya están selladas. La afirmación **no cubre** una fila creada sin señal y todavía
+     * pendiente: esa sí se empuja tal como está, con el nombre viejo, y el server la acepta. Es un
+     * caso acotado (un movimiento anotado offline entre el rename y el próximo sync) pero no es
+     * cero, y decirlo redondo sería el tipo de tranquilidad falsa que este KDoc vino a corregir.
+     */
+    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
+        val result = remote.renameCategory(from, to)
+        db.financialEventQueries.renameCategory(newCategory = result.name, oldCategory = from, userId = userId())
+        return result
+    }
+
+    /** Igual que [renameCategory]: el server reescribe, y acá se espeja lo que confirmó. */
+    override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult {
+        val result = remote.mergeCategory(from, into)
+        db.financialEventQueries.renameCategory(newCategory = result.name, oldCategory = from, userId = userId())
+        return result
+    }
+
+    /** Preferencias puras: no tocan ni un movimiento, así que no hay nada que espejar. */
+    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage =
+        remote.setCategoryPrefs(name, hidden, pinnedType)
     override suspend fun getRecurringRules(): List<RecurringRule> = remote.getRecurringRules()
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = remote.createRecurringRule(rule)
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)

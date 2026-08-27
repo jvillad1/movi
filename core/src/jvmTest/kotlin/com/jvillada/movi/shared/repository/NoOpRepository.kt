@@ -105,6 +105,13 @@ open class NoOpRepository(
     override suspend fun updateBudget(category: String, budget: Budget) = budget
     override suspend fun deleteBudget(category: String) {}
     override suspend fun renameBudget(category: String, newCategory: String) = Budget(newCategory, 0)
+    override suspend fun getCategories() = emptyList<com.jvillada.movi.shared.model.CategoryUsage>()
+    override suspend fun renameCategory(from: String, to: String) =
+        com.jvillada.movi.shared.model.CategoryRewriteResult(name = to)
+    override suspend fun mergeCategory(from: String, into: String) =
+        com.jvillada.movi.shared.model.CategoryRewriteResult(name = into)
+    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?) =
+        com.jvillada.movi.shared.model.CategoryUsage(name = name, hidden = hidden, pinnedType = pinnedType)
     override suspend fun getRecurringRules() = emptyList<RecurringRule>()
     override suspend fun createRecurringRule(rule: RecurringRule) = rule
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule

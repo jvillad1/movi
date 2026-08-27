@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -224,5 +227,167 @@ class CategoryFieldTest {
         assertEquals("Educación", nombreCanonicoConocido("educacion"))
         assertNull(nombreCanonicoConocido("Moto", used))
         assertNull(nombreCanonicoConocido("   "))
+    }
+
+    // ── Ola 10: lo que el dueño decidió en «Más → Categorías» ─────────────────
+    // Esconder y fijar el tipo solo sirven de algo si se notan ACÁ, en el campo donde escribe la
+    // categoría. Estos tests son la única prueba de que la pantalla nueva hace algo.
+
+    @Test
+    fun `una categoria del catalogo escondida deja de sugerirse`() {
+        val prefs = mapOf("Ropa" to CategoryPref(hidden = true))
+        val result = suggestCategoryMatches("", TransactionType.EXPENSE, prefs = prefs)
+        assertFalse("Ropa" in result)
+        assertTrue("Comida" in result, "las demás siguen igual")
+    }
+
+    @Test
+    fun `una categoria propia escondida deja de sugerirse`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val prefs = mapOf("Carro" to CategoryPref(hidden = true))
+        assertFalse("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used, prefs))
+        assertTrue("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used))
+    }
+
+    @Test
+    fun `esconder no depende de como este escrito el nombre`() {
+        // El caché guarda lo que tecleó el dueño; la preferencia viene del server. Una diferencia
+        // de mayúscula o de tilde no puede hacer reaparecer lo que escondió.
+        val used = mapOf("educacion" to setOf(TransactionType.EXPENSE))
+        val prefs = mapOf("Educación" to CategoryPref(hidden = true))
+        val result = suggestCategoryMatches("", TransactionType.EXPENSE, used, prefs)
+        assertFalse(result.any { it.equals("educacion", ignoreCase = true) })
+    }
+
+    @Test
+    fun `Otros fijada en Ambos se ofrece anotando un ingreso`() {
+        // El caso del que salió toda la ola: «Otros» está clavada en EXPENSE en el catálogo, y
+        // por eso existía «Otros ingresos» duplicándola. Fijarla en «Ambos» la libera.
+        val prefs = mapOf("Otros" to CategoryPref(pinnedType = "BOTH"))
+        assertTrue("Otros" in suggestCategoryMatches("", TransactionType.INCOME, prefs = prefs))
+        assertTrue("Otros" in suggestCategoryMatches("", TransactionType.EXPENSE, prefs = prefs))
+        assertFalse("Otros" in suggestCategoryMatches("", TransactionType.INCOME))
+    }
+
+    @Test
+    fun `fijar el tipo de una propia le gana a lo aprendido del uso`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val prefs = mapOf("Carro" to CategoryPref(pinnedType = "INCOME"))
+        assertTrue("Carro" in suggestCategoryMatches("", TransactionType.INCOME, used, prefs))
+        assertFalse("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used, prefs))
+    }
+
+    // ── Los tres defectos que la revisión encontró en «Agregar» ──────────────
+    // Los tres eran de la misma familia: la pantalla donde el dueño anota todos los días seguía
+    // leyendo el `type` clavado del catálogo y no sabía nada de `prefs`.
+
+    @Test
+    fun `una escondida no puede ser el valor inicial del campo`() {
+        // B1: el campo arrancaba diciendo «Comida» aunque él acabara de esconderla — a un toque
+        // de «Guardar movimiento» de anotar un gasto en la categoría que retiró.
+        val prefs = mapOf("Comida" to CategoryPref(hidden = true))
+        val inicial = categoriaPorDefectoPara(TransactionType.EXPENSE, prefs = prefs)
+        assertFalse(inicial == "Comida")
+        assertEquals("Comida", categoriaPorDefectoPara(TransactionType.EXPENSE))
+    }
+
+    @Test
+    fun `si escondio todas las del catalogo igual queda un valor inicial`() {
+        val prefs = PREDEFINED_CATEGORIES.associate { it.name to CategoryPref(hidden = true) }
+        assertTrue(categoriaPorDefectoPara(TransactionType.EXPENSE, prefs = prefs).isNotEmpty())
+    }
+
+    @Test
+    fun `con una escondida escrita, el panel sigue mostrando todas las demas`() {
+        // B2: `matches` quedaba vacío y el panel se reducía a «Usar "Comida"» — para elegir otra
+        // había que borrar el campo primero. Esconder una hacía desaparecer todas.
+        val prefs = mapOf("Comida" to CategoryPref(hidden = true))
+        val conocidas = PREDEFINED_CATEGORIES.map { it.name }
+        val matches = categoriasParaElPanel("Comida", TransactionType.EXPENSE, prefs = prefs)
+        // La escondida no está…
+        assertFalse("Comida" in matches)
+        // …pero el resto del catálogo sí, y se la puede seguir usando a mano si insiste.
+        assertTrue("Transporte" in matches)
+        assertTrue(shouldOfferKnownFromOtherSide("Comida", matches, conocidas))
+    }
+
+    @Test
+    fun `el panel sigue filtrando cuando lo escrito NO es una categoria conocida`() {
+        // La otra mitad de la regla: escribir «Trans» tiene que acotar, no listar todo.
+        val matches = categoriasParaElPanel("Trans", TransactionType.EXPENSE)
+        assertEquals(listOf("Transporte"), matches)
+    }
+
+    @Test
+    fun `con el campo vacio el panel lista todas las del tipo`() {
+        assertEquals(
+            suggestCategoryMatches("", TransactionType.INCOME),
+            categoriasParaElPanel("", TransactionType.INCOME),
+        )
+    }
+
+    @Test
+    fun `una categoria fijada en Ambos sirve para los dos tipos`() {
+        // B3: al pasar de Gasto a Ingreso, «Otros» fijada en «Ambos» se reemplazaba en silencio
+        // por «Salario» — leía el EXPENSE del catálogo e ignoraba lo que él acababa de decidir.
+        val prefs = mapOf("Otros" to CategoryPref(pinnedType = "BOTH"))
+        assertTrue(categoriaSirveParaTipo("Otros", TransactionType.INCOME, prefs = prefs))
+        assertTrue(categoriaSirveParaTipo("Otros", TransactionType.EXPENSE, prefs = prefs))
+        // Sin fijar, sigue siendo solo de gastos.
+        assertFalse(categoriaSirveParaTipo("Otros", TransactionType.INCOME))
+    }
+
+    @Test
+    fun `una escondida no sirve para ningun tipo`() {
+        val prefs = mapOf("Ropa" to CategoryPref(hidden = true))
+        assertFalse(categoriaSirveParaTipo("Ropa", TransactionType.EXPENSE, prefs = prefs))
+    }
+
+    @Test
+    fun `una categoria propia sin nada declarado sirve para cualquier tipo`() {
+        // Ante la duda no se le saca del campo lo que escribió a mano.
+        assertTrue(categoriaSirveParaTipo("Colegio", TransactionType.INCOME))
+        assertTrue(categoriaSirveParaTipo("Colegio", TransactionType.EXPENSE))
+    }
+
+    @Test
+    fun `las reservadas nunca se sugieren en el campo`() {
+        // «Pago de tarjeta» está en el catálogo Y es reservada: se ofrecía al anotar un gasto y,
+        // si el dueño la elegía, isCashFlow sacaba ese gasto real de «Gastos del mes» en silencio.
+        val todas = suggestCategoryMatches("", TransactionType.EXPENSE)
+        assertFalse(CARD_PAYMENT_CATEGORY in todas)
+        assertFalse(categoriaSirveParaTipo(CARD_PAYMENT_CATEGORY, TransactionType.EXPENSE))
+        assertFalse(categoriaPorDefectoPara(TransactionType.EXPENSE) == CARD_PAYMENT_CATEGORY)
+        // Y tampoco entra por la puerta de las propias, si quedó en algún movimiento viejo.
+        val used = mapOf(TRANSFER_CATEGORY to setOf(TransactionType.EXPENSE))
+        assertFalse(TRANSFER_CATEGORY in suggestCategoryMatches("", TransactionType.EXPENSE, used))
+    }
+
+    @Test
+    fun `en frio, el nombre canonico sale de las preferencias`() {
+        // `prefs` se persiste y `used` no: tras una recarga sin red, escribir «carro» reconocía la
+        // categoría (el panel mira las claves de prefs) pero se guardaba «carro» en minúscula —
+        // la categoría partida en dos por una mayúscula, que es como se cruzan presupuesto y gasto.
+        val prefs = mapOf("Carro" to CategoryPref(pinnedType = "EXPENSE"))
+        assertEquals("Carro", nombreCanonicoConocido("carro", emptyMap(), prefs))
+        // Sin las preferencias (el estado viejo) devolvía null y se guardaba lo tecleado.
+        assertNull(nombreCanonicoConocido("carro", emptyMap()))
+    }
+
+    @Test
+    fun `con Ambos fijado desaparece el cartel de que la tienes del otro lado`() {
+        // Sin fijar nada, anotando un ingreso «Otros» no se sugiere (el catálogo la tiene en
+        // EXPENSE) y el panel explica por qué. Con «Ambos» fijado ya se sugiere, así que no queda
+        // nada que explicar: el cartel es la consecuencia de esconderla, no un adorno.
+        val conocidas = PREDEFINED_CATEGORIES.map { it.name }
+        val sinFijar = suggestCategoryMatches("Otros", TransactionType.INCOME)
+        assertFalse("Otros" in sinFijar)
+        assertTrue(shouldOfferKnownFromOtherSide("Otros", sinFijar, conocidas))
+        assertEquals("Ya la tienes en Gastos", ladoConocidoDeCategoria("Otros", TransactionType.INCOME))
+
+        val prefs = mapOf("Otros" to CategoryPref(pinnedType = "BOTH"))
+        val fijada = suggestCategoryMatches("Otros", TransactionType.INCOME, prefs = prefs)
+        assertTrue("Otros" in fijada)
+        assertFalse(shouldOfferKnownFromOtherSide("Otros", fijada, conocidas))
     }
 }

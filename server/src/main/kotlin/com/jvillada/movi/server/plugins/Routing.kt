@@ -21,6 +21,7 @@ fun Application.configureRouting() {
             eventRoutes()
             transferRoutes()
             financeRoutes()
+            categoryRoutes()
             dashboardRoutes()
             creditRoutes()
             cardRoutes()

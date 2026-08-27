@@ -84,3 +84,11 @@ WHERE id = :id AND userId = :userId;
 -- usuario en este dispositivo).
 deleteByAccount:
 DELETE FROM financial_event WHERE accountId = :accountId AND userId = :userId;
+
+-- Ola 10 · Categorías: espejo local de la reescritura que hace el server al renombrar o unificar
+-- una categoría (ver POST /api/categories/rename y /merge). Hace falta acá porque el SyncEngine
+-- SOLO EMPUJA — nada baja del server —, así que sin este UPDATE el teléfono seguiría mostrando
+-- «Trasnporte» en sus movimientos para siempre mientras la web ya dice «Transporte».
+-- Solo cubre lo que se renombra DESDE este dispositivo; ver el KDoc de LocalRepository.renameCategory.
+renameCategory:
+UPDATE financial_event SET category = :newCategory WHERE category = :oldCategory AND userId = :userId;

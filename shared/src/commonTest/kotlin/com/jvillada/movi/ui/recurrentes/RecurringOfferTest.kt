@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.RESERVED_CATEGORIES
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -54,6 +55,19 @@ class RecurringOfferTest {
     fun `nunca en un traspaso - ni por el enlace ni por la categoria reservada`() {
         assertFalse(shouldOfferRecurring(evento(transferId = "tr_1"), emptyList()))
         assertFalse(shouldOfferRecurring(evento(category = TRANSFER_CATEGORY, description = TRANSFER_CATEGORY), emptyList()))
+    }
+
+    @Test
+    fun `ninguna categoria reservada se propone como recurrente`() {
+        // Ola 10: acá solo se filtraba «Traspaso». Un gasto anotado como «Pago de tarjeta» —que ya
+        // queda fuera del mes por isCashFlow— disparaba además «¿"Pago de tarjeta" se repite todos
+        // los meses?»: un movimiento invisible para las cifras y encima propuesto para repetirse.
+        for (reservada in RESERVED_CATEGORIES) {
+            assertFalse(
+                shouldOfferRecurring(evento(category = reservada, description = reservada), emptyList()),
+                "«$reservada» no se puede proponer como recurrente",
+            )
+        }
     }
 
     @Test

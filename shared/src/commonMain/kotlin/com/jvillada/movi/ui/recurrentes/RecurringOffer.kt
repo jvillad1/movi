@@ -1,9 +1,11 @@
 package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.ui.components.categoriaSirveParaTipo
 import com.jvillada.movi.shared.model.RecurringRule
-import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 
@@ -108,7 +110,13 @@ fun shouldOfferRecurring(
     // reservada. Se miran las dos porque una pata suelta (cuenta borrada) pierde el enlace
     // pero no deja de ser lo que fue.
     if (event.transferId != null) return false
-    if (event.category.trim() == TRANSFER_CATEGORY) return false
+    // Ola 10: **ninguna** categoría reservada, no solo la de traspaso. Acá solo se filtraba
+    // «Traspaso», así que un gasto anotado como «Pago de tarjeta» —que ya queda fuera del mes por
+    // `isCashFlow`— disparaba además «¿"Pago de tarjeta" se repite todos los meses?». Un
+    // movimiento invisible para las cifras y encima propuesto para repetirse todos los meses es
+    // el peor de los dos mundos. Lo mismo vale para «Saldo inicial» (una apertura no se repite)
+    // y «Cuenta eliminada».
+    if (isReservedCategory(event.category)) return false
     if (event.amount <= 0L) return false
     val key = claveDeNombre(prefillNameFor(event))
     if (key.isEmpty()) return false
@@ -179,12 +187,23 @@ fun prefillFrom(event: FinancialEvent): RecurringPrefill = RecurringPrefill(
  * le cambia la categoría a alguien que no la pidió. Quien llama tiene además la última palabra
  * —no se aplica si el dueño ya tocó la categoría a mano— así que el peor caso acá es no
  * proponer nada.
+ *
+ * **Ola 10 (revisión): el filtro por tipo pasa por [categoriaSirveParaTipo], no por el `type`
+ * clavado del catálogo.** Esta era la tercera puerta que seguía leyendo el camino viejo, y las
+ * dos formas de romperse eran reales: proponer una categoría que el dueño **escondió**, y dejar
+ * de proponer una que fijó en «Ambos». Que la propuesta contradiga lo que él acaba de decidir es
+ * peor que no proponer.
  */
-fun categoriaSugeridaPorNombre(name: String, type: TransactionType): String? {
+fun categoriaSugeridaPorNombre(
+    name: String,
+    type: TransactionType,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+): String? {
     val key = claveDeNombre(name)
     if (key.isEmpty()) return null
     return PREDEFINED_CATEGORIES
-        .filter { it.type == type.name || it.type == "BOTH" }
         .firstOrNull { claveDeNombre(it.name) == key }
         ?.name
+        ?.takeIf { categoriaSirveParaTipo(it, type, usedCategories, prefs) }
 }

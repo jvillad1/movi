@@ -39,9 +39,10 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.CATEGORY_RESERVED_SHORT
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -86,7 +87,19 @@ fun QuickAddScreen(
     var note by remember { mutableStateOf("") }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
     // "Mercado" — ahora es texto libre con sugerencias (CategoryField), no una lista fija.
-    var category by remember { mutableStateOf(PREDEFINED_CATEGORIES.first { it.type == "EXPENSE" }.name) }
+    //
+    // Ola 10 (revisión): el valor inicial sale de [categoriaPorDefectoPara] y no de
+    // `PREDEFINED_CATEGORIES.first { … }`. Con la línea vieja, esconder «Comida» en
+    // «Más → Categorías» y abrir Agregar dejaba el campo diciendo **«Comida»**: un toque en
+    // «Guardar movimiento», sin abrir siquiera el selector, y el gasto quedaba anotado en la
+    // categoría que el dueño acababa de retirar. La pantalla donde más se equivoca es esta.
+    var category by remember {
+        mutableStateOf(
+            categoriaPorDefectoPara(
+                TransactionType.EXPENSE, UsedCategoriesCache.used, UsedCategoriesCache.prefs,
+            ),
+        )
+    }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
     // si no existiera (borrada entre medio) el efecto de abajo cae al primer accountId disponible.
@@ -112,20 +125,41 @@ fun QuickAddScreen(
             }
     }
 
-    LaunchedEffect(typeIndex) {
+    // Ola 10: las preferencias llegan del server (dentro del resumen del Inicio) y pueden
+    // aparecer DESPUÉS de que esta hoja se compuso. Se leen como estado para que la
+    // reconciliación de abajo vuelva a correr cuando lleguen — si no, la hoja abierta antes de
+    // que cargaran se quedaría con lo que el dueño ya cambió.
+    val categoryPrefs = UsedCategoriesCache.prefs
+    val usedCategories = UsedCategoriesCache.used
+
+    LaunchedEffect(typeIndex, categoryPrefs) {
         // Con categoría libre (F35) ya no hay una lista fija de la que "salirse" al cambiar de
-        // tipo — pero si la categoría actual SÍ es una predefinida del otro tipo (p. ej.
-        // "Salario" al pasar a Gasto), seguir mostrándola confundiría. Una categoría escrita a
-        // mano, o "BOTH", se deja tal cual: no hay forma de saber si tiene sentido para el
-        // nuevo tipo.
+        // tipo — pero si la actual no sirve para el tipo elegido (p. ej. "Salario" al pasar a
+        // Gasto), seguir mostrándola confundiría. Una categoría propia sin nada declarado se deja
+        // tal cual: no hay forma de saber si tiene sentido para el nuevo tipo.
+        //
+        // Ola 10 (revisión): la decisión la toma [categoriaSirveParaTipo], NO el `type` clavado
+        // del catálogo. Con la versión vieja, fijar «Otros» en «Ambos» y pasar de Gasto a Ingreso
+        // se la reemplazaba en silencio por «Salario» — leía el EXPENSE del catálogo e ignoraba lo
+        // que el dueño acababa de decidir, que es literalmente lo que esta ola vino a habilitar.
+        // Y ahora también saca del campo una categoría ESCONDIDA (o reservada), en vez de dejarla
+        // ahí lista para guardarse.
+        //
+        // **Ventana conocida, anotada y no cerrada (A6).** Al agregar `categoryPrefs` como key,
+        // este efecto ya no corre solo al cambiar de pestaña: también cuando las preferencias
+        // llegan del server. Si en ese instante exacto el campo tiene escrito el nombre COMPLETO
+        // de una categoría del otro tipo, se lo reemplaza mientras escribe. No se pudo reproducir
+        // (las prefs llegan con el resumen del Inicio, muy antes de que se abra esta hoja), pero
+        // la ventana antes no existía. Cerrarla pide distinguir «lo escribió él» de «lo puso la
+        // app», que es estado nuevo en la pantalla más delicada de la app — y el precio de
+        // equivocarse ahí es peor que el de esta ventana.
         //
         // La pestaña Traspaso (índice 2) queda fuera: un traspaso no tiene categoría elegible —
         // la suya es reservada— así que no hay nada que reconciliar al entrar ni al salir.
         if (typeIndex > 1) return@LaunchedEffect
         val newType = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
-        val matched = PREDEFINED_CATEGORIES.find { it.name == category }
-        if (matched != null && matched.type != newType.name && matched.type != "BOTH") {
-            category = PREDEFINED_CATEGORIES.first { it.type == newType.name }.name
+        if (!categoriaSirveParaTipo(category, newType, usedCategories, categoryPrefs)) {
+            category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs)
         }
     }
 
@@ -137,12 +171,21 @@ fun QuickAddScreen(
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
+    // Ola 10: **una categoría reservada no se puede guardar**, no solo «no se sugiere».
+    // El campo de categoría ya avisaba, pero el aviso era un cartel: se cerraba el selector con
+    // «Pago de tarjeta» escrito, el botón seguía habilitado, y el gasto quedaba anotado y FUERA
+    // de «Gastos del mes» (isCashFlow lo excluye por nombre) sin que nada lo dijera. Plata que
+    // salió de verdad, invisible. El server rechaza lo mismo (ver `POST /api/events`); acá se
+    // corta antes para poder explicarlo en vez de devolver un error.
+    val categoriaReservada = isReservedCategory(category)
     // Ola 2 #2: canSave no miraba la categoría — se podía guardar con la caja vacía.
-    val canSave = parsedAmount > 0 && category.isNotBlank() && selectedAccountId != null && !saving
+    val canSave = parsedAmount > 0 && category.isNotBlank() && !categoriaReservada &&
+        selectedAccountId != null && !saving
     // F24: mismo patrón que Presupuestos/Recurrentes — la primera cosa que falta.
     val missingFieldMessage = when {
         parsedAmount <= 0 -> "Falta el monto"
         category.isBlank() -> "Falta la categoría"
+        categoriaReservada -> CATEGORY_RESERVED_SHORT
         selectedAccountId == null -> "Falta la cuenta"
         else -> null
     }
@@ -275,7 +318,8 @@ fun QuickAddScreen(
                             value = category,
                             onValueChange = { category = it },
                             type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                            usedCategories = UsedCategoriesCache.used,
+                            usedCategories = usedCategories,
+                            prefs = categoryPrefs,
                             label = null,
                             onSuggestionPicked = { picker = Picker.None },
                             focusRequester = categoryFocusRequester,

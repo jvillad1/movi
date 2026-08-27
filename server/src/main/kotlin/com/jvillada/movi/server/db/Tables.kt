@@ -138,6 +138,35 @@ object Budgets : Table("budgets") {
     override val primaryKey = PrimaryKey(userId, category)
 }
 
+/**
+ * Ola 10 — lo que el dueño decidió sobre una categoría en «Más → Categorías».
+ *
+ * **Solo preferencias, nunca la categoría en sí.** La categoría no tiene tabla propia y este
+ * cambio no se la inventa: sigue siendo texto copiado en cada fila de `financial_events`,
+ * `budgets` y `recurring_rules`. Renombrar y unificar son reescrituras de esas tres tablas (ver
+ * `CategoryRoutes.rewriteCategory`), no un UPDATE acá. Lo único que vive en esta tabla es lo que
+ * NO está en ningún movimiento: si la categoría se sigue ofreciendo al escribir ([hidden]) y de
+ * qué tipo la considera el dueño ([pinnedType]), que es lo que le permite decir que «Otros» sirve
+ * para gastos y para ingresos aunque el catálogo la tenga clavada en EXPENSE.
+ *
+ * Por usuario, y con el **nombre** como clave — no un id: es la misma clave con la que se cruzan
+ * hoy presupuestos y gastos. La consecuencia es que renombrar tiene que mover también la fila de
+ * acá, y por eso la reescritura la incluye en su transacción.
+ *
+ * Una fila con `hidden = false` y `pinned_type = NULL` no dice nada que el default no diga: el
+ * PUT la borra en vez de guardarla, así que esta tabla solo tiene lo que el dueño de verdad
+ * cambió. Tabla nueva → `SchemaUtils.create` la crea sola al arrancar (CREATE TABLE IF NOT
+ * EXISTS), sin migración ni DDL que pueda tumbar el arranque.
+ */
+object CategoryPrefs : Table("category_prefs") {
+    val userId     = varchar("user_id", 50)
+    val name       = varchar("name", 100)
+    val hidden     = bool("hidden").default(false)
+    /** "EXPENSE" | "INCOME" | "BOTH", o NULL = sin fijar (manda el catálogo, o el uso). */
+    val pinnedType = varchar("pinned_type", 10).nullable()
+    override val primaryKey = PrimaryKey(userId, name)
+}
+
 object RecurringRules : Table("recurring_rules") {
     val id                 = varchar("id", 50)
     val userId             = varchar("user_id", 50)

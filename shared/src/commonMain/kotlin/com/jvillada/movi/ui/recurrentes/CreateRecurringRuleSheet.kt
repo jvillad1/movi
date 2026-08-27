@@ -29,6 +29,8 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.CategoryField
+import com.jvillada.movi.ui.components.categoriaPorDefectoPara
+import com.jvillada.movi.ui.components.categoriaSirveParaTipo
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.toUserMessage
@@ -77,7 +79,22 @@ fun CreateRecurringRuleSheet(
     var selectedType by remember {
         mutableStateOf(existing?.type ?: prefill?.type ?: TransactionType.EXPENSE)
     }
-    var category by remember { mutableStateOf(existing?.category ?: prefill?.category ?: "Otros") }
+    // Ola 10 (revisión): una regla NUEVA arranca en «Otros» como siempre, salvo que el dueño la
+    // haya escondido o fijado del otro lado — ahí se cae a la primera que sí se le va a ofrecer.
+    // Mismo defecto que se corrigió en Agregar: un campo prellenado con una categoría escondida
+    // se puede guardar de un toque, sin abrir el selector. Una regla que YA existe (o el prefill
+    // de un movimiento) conserva la suya: esa la eligió una persona.
+    var category by remember {
+        val propia = existing?.category ?: prefill?.category
+        val tipoInicial = existing?.type ?: prefill?.type ?: TransactionType.EXPENSE
+        val prefsAhora = UsedCategoriesCache.prefs
+        val usadasAhora = UsedCategoriesCache.used
+        mutableStateOf(
+            propia
+                ?: "Otros".takeIf { categoriaSirveParaTipo(it, tipoInicial, usadasAhora, prefsAhora) }
+                ?: categoriaPorDefectoPara(tipoInicial, usadasAhora, prefsAhora),
+        )
+    }
     // Ola 9 · D: ¿la categoría la eligió una persona? Con una regla que ya existe o con un
     // movimiento que la trae, sí — y entonces la sugerencia por nombre no la toca. Ver
     // [categoriaSugeridaPorNombre].
@@ -114,12 +131,20 @@ fun CreateRecurringRuleSheet(
     // sugerencia solo sabía asignar. Se recuerda cuál fue la última propuesta y, si el nombre
     // nuevo no propone nada y la categoría sigue siendo exactamente esa, se vuelve al genérico.
     var categoriaPropuesta by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(name, selectedType) {
+    // Ola 10: lo que el dueño decidió en «Más → Categorías» entra en la propuesta. Se leen como
+    // estado para que la hoja abierta antes de que las preferencias llegaran también las respete.
+    val categoryPrefs = UsedCategoriesCache.prefs
+    val usedCategories = UsedCategoriesCache.used
+    LaunchedEffect(name, selectedType, categoryPrefs) {
         if (categoriaElegidaAMano) return@LaunchedEffect
-        val sugerida = categoriaSugeridaPorNombre(name, selectedType)
+        val sugerida = categoriaSugeridaPorNombre(name, selectedType, usedCategories, categoryPrefs)
+        // El genérico sigue siendo «Otros», salvo que el dueño la haya escondido o fijado del otro
+        // lado — ahí caer igual en ella sería volver a poner justo lo que sacó de la vista.
+        val generica = if (categoriaSirveParaTipo("Otros", selectedType, usedCategories, categoryPrefs)) "Otros"
+        else categoriaPorDefectoPara(selectedType, usedCategories, categoryPrefs)
         when {
             sugerida != null -> { category = sugerida; categoriaPropuesta = sugerida }
-            category == categoriaPropuesta -> { category = "Otros"; categoriaPropuesta = null }
+            category == categoriaPropuesta -> { category = generica; categoriaPropuesta = null }
         }
     }
 
@@ -417,7 +442,8 @@ fun CreateRecurringRuleSheet(
                             value = category,
                             onValueChange = { category = it; categoriaElegidaAMano = true },
                             type = selectedType,
-                            usedCategories = UsedCategoriesCache.used,
+                            usedCategories = usedCategories,
+                            prefs = categoryPrefs,
                             label = "CATEGORÍA",
                             placeholder = "Ej: Vivienda, Suscripción, Salud",
                         )

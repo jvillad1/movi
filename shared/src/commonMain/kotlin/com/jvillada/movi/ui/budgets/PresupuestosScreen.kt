@@ -458,6 +458,7 @@ private fun BudgetSheet(
                     onValueChange = { category = it },
                     type = TransactionType.EXPENSE,
                     usedCategories = UsedCategoriesCache.used,
+                    prefs = UsedCategoriesCache.prefs,
                     label = "Categoría",
                     placeholder = "Mercado, Salud, Restaurantes…",
                 )

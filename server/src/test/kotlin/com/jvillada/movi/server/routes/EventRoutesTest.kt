@@ -232,6 +232,50 @@ class EventRoutesTest {
 
     // ── Tests ──────────────────────────────────────────────────────────────────
 
+    /**
+     * Ola 10: **una categoría reservada no se anota a mano.** `isCashFlow` las excluye por nombre,
+     * así que un gasto real escrito como «Pago de tarjeta» se guardaba y desaparecía de los gastos
+     * del mes sin decir nada. El campo de categoría avisaba, pero un cartel no es una guarda: se
+     * cerraba el selector con la categoría puesta y el botón seguía habilitado.
+     */
+    @Test
+    fun `un gasto MANUAL en una categoria reservada se rechaza`() = testApplication {
+        wireApp()
+        val res = postEvent(
+            userAId,
+            """{"id":"evt-res","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                "category":"Pago de tarjeta","description":"a mano","source":"MANUAL","timestamp":0}""",
+        )
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, res.bodyAsText())
+    }
+
+    @Test
+    fun `el pago de tarjeta que viene de un SMS si se acepta`() = testApplication {
+        wireApp()
+        // Por esta misma ruta llega el pago de tarjeta detectado en un mensaje del banco y
+        // confirmado por el dueño (SmsRoutes.categoryFor + SMSReconcileScreen). Ahí la categoría
+        // reservada es la CORRECTA, y un rechazo general habría roto ese flujo.
+        val res = postEvent(
+            userAId,
+            """{"id":"evt-sms","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                "category":"Pago de tarjeta","description":"Pago autom TC","source":"SMS","timestamp":0}""",
+        )
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+    }
+
+    @Test
+    fun `el evento de apertura de una cuenta sigue pasando, aunque sea MANUAL y reservado`() = testApplication {
+        wireApp()
+        // `openingEventFor` lo crea el propio cliente al abrir una cuenta con saldo: nace MANUAL y
+        // con categoría reservada, y es correcto. Bloquearlo habría roto crear cuentas.
+        val res = postEvent(
+            userAId,
+            """{"id":"evt-open","accountId":"$savingsAccountId","type":"INCOME","amount":50000,
+                "category":"Saldo inicial","description":"Saldo inicial","source":"MANUAL","timestamp":0}""",
+        )
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+    }
+
     @Test
     fun `propone un EXPENSE de cuenta de activo cuya descripcion matchea un patron`() = testApplication {
         wireApp()

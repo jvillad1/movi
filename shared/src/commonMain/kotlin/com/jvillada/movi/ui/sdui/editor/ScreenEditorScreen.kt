@@ -75,6 +75,7 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     // Ola 8: sin pantalla propia — el cliente lo manda a Recurrentes (ver SduiRenderer.screenForTarget).
     "subscriptions" to "Recurrentes (suscripciones)",
     "recurrentes" to "Recurrentes",
+    "categorias" to "Categorías",
     "extractos" to "Extractos",
     "aichat" to "Movi AI",
     "profile" to "Perfil",

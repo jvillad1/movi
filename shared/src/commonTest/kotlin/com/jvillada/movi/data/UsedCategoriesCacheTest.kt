@@ -1,5 +1,6 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -118,5 +119,46 @@ class UsedCategoriesCacheTest {
         assertEquals(emptySet<TransactionType>(), UsedCategoriesCache.used["Sin tipo"])
         // La categoría reservada tampoco entra por esta puerta.
         assertFalse(TRANSFER_CATEGORY in UsedCategoriesCache.categories)
+    }
+
+    // ── Ola 10: el espejo de lo que hace el server al renombrar/unificar ──────
+
+    @Test
+    fun `unificar una del catalogo la deja ESCONDIDA, no borrada`() {
+        // Era el modo de falla que este mismo caché dice existir para evitar: tras unificar
+        // «Otros ingresos» en «Otros», el server la escondía y la lista lo mostraba, pero acá se
+        // borraba la preferencia — así que «Agregar → Ingreso» seguía sugiriendo «Otros
+        // ingresos», a un toque de volver a partir en dos lo que se acababa de juntar.
+        UsedCategoriesCache.record("Otros ingresos", TransactionType.INCOME)
+        UsedCategoriesCache.applyRename("Otros ingresos", "Otros", escondeElOrigen = true)
+
+        assertEquals(CategoryPref(hidden = true), UsedCategoriesCache.prefs["Otros ingresos"])
+        assertFalse("Otros ingresos" in UsedCategoriesCache.categories)
+        assertTrue("Otros" in UsedCategoriesCache.categories)
+    }
+
+    @Test
+    fun `renombrar una propia no le deja ninguna preferencia fantasma`() {
+        // Una categoría propia sin datos deja de existir sola: marcarla escondida la dejaría en
+        // la lista para siempre. Solo las del catálogo necesitan el «escondida».
+        UsedCategoriesCache.record("Trasnporte", TransactionType.EXPENSE)
+        UsedCategoriesCache.applyRename("Trasnporte", "Transporte", escondeElOrigen = true)
+
+        assertFalse("Trasnporte" in UsedCategoriesCache.prefs)
+        assertFalse("Trasnporte" in UsedCategoriesCache.categories)
+    }
+
+    @Test
+    fun `el destino hereda el tipo fijado del origen y nunca queda escondido`() {
+        UsedCategoriesCache.recordFromServer(
+            listOf(
+                UsedCategory("Carro", listOf(TransactionType.EXPENSE), pinnedType = "BOTH"),
+                UsedCategory("Auto", hidden = true),
+            ),
+        )
+        UsedCategoriesCache.applyRename("Carro", "Auto")
+
+        assertEquals(CategoryPref(hidden = false, pinnedType = "BOTH"), UsedCategoriesCache.prefs["Auto"])
+        assertFalse("Carro" in UsedCategoriesCache.prefs)
     }
 }

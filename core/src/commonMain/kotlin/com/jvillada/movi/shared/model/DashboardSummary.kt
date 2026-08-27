@@ -54,9 +54,21 @@ data class DashboardSummary(
  * `PREDEFINED_CATEGORIES`: sin esto, «Carro» se ofrecía igual al anotar un ingreso que un gasto.
  * [types] puede traer los dos (una categoría usada de los dos lados) o venir vacío (se la conoce
  * pero no se sabe de qué lado) — y ese vacío significa «mostrala igual», nunca «escondela».
+ *
+ * **Ola 10 — lo que el dueño decidió en «Más → Categorías» viaja acá.** [hidden] y [pinnedType]
+ * son sus preferencias (tabla `category_prefs`), y llegan por este mismo campo en vez de por una
+ * llamada nueva: sin ellas, esconder una categoría o fijarle el tipo no tendría ningún efecto
+ * donde importa —el campo de categoría de «Agregar»—, que es precisamente para lo que sirven. Por
+ * eso el server además emite una fila acá para toda categoría CON preferencia aunque no tenga
+ * ningún movimiento (esconder «Freelance» sin haberla usado nunca es un caso normal); esa fila
+ * viene con [types] vacío.
  */
 @Serializable
 data class UsedCategory(
     val name: String,
     val types: List<TransactionType> = emptyList(),
+    /** El dueño la escondió: deja de ofrecerse al escribir. No toca ningún movimiento. */
+    val hidden: Boolean = false,
+    /** Tipo fijado a mano: `"EXPENSE"`, `"INCOME"` o `"BOTH"`. Manda sobre catálogo y uso. */
+    val pinnedType: String? = null,
 )

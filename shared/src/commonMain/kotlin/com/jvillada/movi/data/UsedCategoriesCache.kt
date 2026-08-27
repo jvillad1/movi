@@ -3,6 +3,13 @@ package com.jvillada.movi.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.russhwolf.settings.Settings
+import com.russhwolf.settings.set
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
+import com.jvillada.movi.shared.model.CategoryPref
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -38,6 +45,18 @@ import com.jvillada.movi.shared.model.UsedCategory
  * de la app y se repuebla en cuanto el Inicio (o cualquiera de esas pantallas) carga una vez: es
  * una ayuda para escribir más rápido, no una fuente de verdad, así que no vale la pena persistirlo.
  */
+private const val KEY_CATEGORY_PREFS = "category_prefs"
+
+/**
+ * Top-level y no dentro del `object`: el estado inicial de `prefs` se lee en el inicializador del
+ * object, y una propiedad declarada más abajo todavía valdría `null` en ese momento.
+ */
+private val prefsSettings: Settings by lazy { Settings() }
+private val prefsJson = Json { ignoreUnknownKeys = true }
+
+/** Explícito y no reificado: la sobrecarga reificada de `encodeToString` es ambigua acá. */
+private val prefsSerializer = MapSerializer(String.serializer(), CategoryPref.serializer())
+
 object UsedCategoriesCache {
     /**
      * Nombre limpio → tipos con los que se la vio usada. Un conjunto **vacío** significa
@@ -48,6 +67,30 @@ object UsedCategoriesCache {
 
     /** Los nombres, sin el tipo — para quien solo necesita saber cuáles existen. */
     val categories: Set<String> get() = used.keys
+
+    /**
+     * **Ola 10 — lo que el dueño decidió en «Más → Categorías».** Nombre → escondida y/o tipo
+     * fijado (ver [CategoryPref]).
+     *
+     * Va separado de [used] a propósito: [used] es *evidencia* (lo que se observó de sus
+     * movimientos) y esto es *decisión* (lo que él dijo que quería). Mezclarlas obligaría a
+     * adivinar cuál gana en cada lectura; separadas, la regla es una sola y vive en un solo lugar
+     * ([com.jvillada.movi.shared.model.effectiveCategoryTypes]): lo decidido manda.
+     *
+     * Solo lo llena [recordFromServer] — es lo único que sabe de preferencias, porque son del
+     * server. Las otras pantallas que alimentan [used] de paso (Movimientos, Presupuestos,
+     * Recurrentes) no lo tocan: no tienen el dato, y **borrarlo por no tenerlo sería peor que no
+     * actualizarlo** — una categoría escondida volvería a aparecer sola apenas el dueño entra a
+     * Movimientos.
+     */
+    private var prefsState: Map<String, CategoryPref> by mutableStateOf(leerPrefsGuardadas())
+
+    var prefs: Map<String, CategoryPref>
+        get() = prefsState
+        private set(value) {
+            prefsState = value
+            guardarPrefs(value)
+        }
 
     /** Varios nombres sueltos, sin saber de qué tipo. Todo pasa por [recordAll]. */
     fun record(names: Collection<String>) {
@@ -97,17 +140,127 @@ object UsedCategoriesCache {
         if (changed) used = next
     }
 
+    /**
+     * Las preferencias **sí se persisten** (a diferencia de [used], que es una ayuda para escribir
+     * y se repuebla sola en cuanto cualquier pantalla carga).
+     *
+     * El motivo es que degradaban en silencio justo donde peor se nota: [prefs] lo llena solo
+     * `recordFromServer`, y a ese solo lo llama el Inicio con el resumen. En el teléfono sin
+     * señal, o si esa llamada falla, el caché quedaba vacío y **todas las categorías escondidas
+     * reaparecían** en «Agregar» — la app deshaciendo sola una decisión del dueño, sin decir nada.
+     * Guardadas, lo que escondió sigue escondido hasta que el server diga lo contrario.
+     *
+     * Mismo `Settings` que usa `SessionManager`, y se borran en [clear] junto con la sesión: son
+     * del usuario que se va.
+     */
+    /**
+     * Lectura **a prueba de todo**: esto corre en el inicializador del object, así que cualquier
+     * cosa que tire acá se lleva puesta la clase entera y con ella la app (o, como se vio, la
+     * suite de tests: en un test de JVM puro no hay `Settings` que valga). Un almacenamiento que
+     * no está, o un JSON viejo o corrupto, valen exactamente lo mismo: se arranca sin nada y se
+     * repuebla en el primer paso por el Inicio. Es una ayuda para escribir, no una fuente de
+     * verdad — no puede ser el motivo de que nada arranque.
+     */
+    /**
+     * **Vecino conocido, ajeno a esta ola:** `SessionManager` lee `settings.getStringOrNull(
+     * "auth_token")` **en el inicializador de su object y sin protección**. Con el almacenamiento
+     * del sitio bloqueado, esa clase muere antes de que este caché llegue a cargarse, y el
+     * `runCatching` de acá abajo no lo tapa: son dos objects distintos. Es de `master`, no de esta
+     * rama, y arreglarlo toca la sesión —que no es lo que esta ola vino a mover—, así que queda
+     * escrito y no tocado.
+     */
+    private fun leerPrefsGuardadas(): Map<String, CategoryPref> = runCatching {
+        val raw = prefsSettings.getStringOrNull(KEY_CATEGORY_PREFS) ?: return@runCatching emptyMap()
+        prefsJson.decodeFromString(prefsSerializer, raw)
+    }.getOrDefault(emptyMap())
+
+    private fun guardarPrefs(value: Map<String, CategoryPref>) {
+        runCatching {
+            if (value.isEmpty()) prefsSettings.remove(KEY_CATEGORY_PREFS)
+            else prefsSettings[KEY_CATEGORY_PREFS] = prefsJson.encodeToString(prefsSerializer, value)
+        }
+    }
+
     /** Al cerrar sesión: estas son las categorías del usuario que se va (ver `SessionManager.clear`). */
     fun clear() {
         used = emptyMap()
+        prefs = emptyMap()
     }
 
-    /** Lo que llega del Inicio dentro del resumen (ver el KDoc de arriba). */
+    /**
+     * Lo que llega del Inicio dentro del resumen (ver el KDoc de arriba) — y, desde la Ola 10,
+     * también las preferencias.
+     *
+     * Las preferencias se **reemplazan enteras**, no se acumulan: esta lista es la verdad completa
+     * del server sobre lo que el dueño decidió, así que fusionarla con lo viejo dejaría vivo un
+     * «escondida» que él acaba de deshacer.
+     */
     fun recordFromServer(entries: Collection<UsedCategory>) {
         recordAll(entries.flatMap { entry ->
             if (entry.types.isEmpty()) listOf(entry.name to null)
             else entry.types.map { entry.name to it }
         })
+        prefs = entries
+            .mapNotNull { entry ->
+                val nombre = entry.name.trim()
+                if (nombre.isEmpty()) return@mapNotNull null
+                if (!entry.hidden && entry.pinnedType == null) return@mapNotNull null
+                nombre to CategoryPref(hidden = entry.hidden, pinnedType = entry.pinnedType)
+            }
+            .toMap()
+    }
+
+    /**
+     * Lo que la pantalla «Categorías» acaba de cambiar, aplicado al instante — sin esperar al
+     * próximo paso por el Inicio. Sin esto, esconder una categoría y volver a «Agregar» la
+     * seguiría ofreciendo hasta la próxima carga del resumen, y se leería como que el botón no
+     * hizo nada.
+     */
+    fun applyPref(name: String, pref: CategoryPref) {
+        val nombre = name.trim()
+        if (nombre.isEmpty()) return
+        prefs = if (!pref.hidden && pref.pinnedType == null) prefs - nombre else prefs + (nombre to pref)
+    }
+
+    /**
+     * Lo que la pantalla «Categorías» acaba de renombrar o unificar, aplicado al instante por el
+     * mismo motivo que [applyPref]. Mueve los tipos observados al nombre nuevo y descarta el
+     * viejo: el caché es una ayuda para escribir, y seguir ofreciendo «Trasnporte» después de
+     * arreglarlo sería justo el error que el dueño vino a corregir.
+     */
+    fun applyRename(from: String, to: String, escondeElOrigen: Boolean = false) {
+        val viejo = from.trim()
+        val nuevo = to.trim()
+        if (viejo.isEmpty() || nuevo.isEmpty()) return
+        val tipos = used[viejo].orEmpty() + used[nuevo].orEmpty()
+        used = (used - viejo) + (nuevo to tipos)
+
+        // Espejo EXACTO de lo que hace el server en `rewriteCategory`, y las tres partes importan:
+        //
+        // 1. El destino acaba de recibir movimientos, así que **no puede quedar escondido**.
+        // 2. Si el destino no tenía tipo fijado, **hereda el del origen** (el server hace eso).
+        // 3. Si el origen era del catálogo, el server lo **esconde** para que deje de sugerirse —
+        //    y esto es lo que faltaba. Borrar su preferencia en vez de marcarla escondida
+        //    deshacía la operación insignia de la rama: unificar «Otros ingresos» en «Otros»
+        //    dejaba la lista diciendo «Escondida» y, al mismo tiempo, «Agregar → Ingreso» seguía
+        //    sugiriendo «Otros ingresos» — a un toque de volver a partir en dos justo lo que el
+        //    dueño acababa de juntar. Sanaba recién al pasar por Inicio.
+        //
+        // Que sea un espejo y no una regla propia es el punto: dos reglas paralelas para el mismo
+        // efecto se desincronizan, y esta ya se desincronizó una vez.
+        val prefOrigen = prefs[viejo]
+        val prefDestino = prefs[nuevo]
+        val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType
+        var siguiente = prefs - viejo - nuevo
+        if (tipoFijadoDestino != null) {
+            siguiente = siguiente + (nuevo to CategoryPref(hidden = false, pinnedType = tipoFijadoDestino))
+        }
+        if (escondeElOrigen && PREDEFINED_CATEGORIES.any { it.name == viejo }) {
+            siguiente = siguiente + (viejo to CategoryPref(hidden = true))
+            // El nombre viejo vuelve a la lista de conocidas, pero escondido: lo que NO puede
+            // pasar es que se siga ofreciendo. `used` ya no lo tiene (arriba se movió al nuevo).
+        }
+        prefs = siguiente
     }
 
 }

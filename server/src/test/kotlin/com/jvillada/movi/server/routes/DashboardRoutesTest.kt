@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.PushSubscriptions
@@ -91,10 +92,14 @@ class DashboardRoutesTest {
             SchemaUtils.drop(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
+                // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
+                CategoryPrefs,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
+                // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
+                CategoryPrefs,
             )
             listOf(userId to "a@dashboard.test", otherUserId to "b@dashboard.test").forEach { (id, mail) ->
                 Users.insert {

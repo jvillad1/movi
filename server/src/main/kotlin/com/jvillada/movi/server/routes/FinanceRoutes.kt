@@ -92,6 +92,12 @@ fun Route.financeRoutes() {
         else call.respond(HttpStatusCode.NoContent)
     }
 
+    // Ola 10: este rename **rechaza con 409** si el nombre nuevo ya tiene presupuesto, mientras
+    // que `POST /api/categories/merge` en esa misma colisión SUMA los dos límites. La diferencia
+    // es deliberada y la regla detrás es una sola —no fundir dos presupuestos sin que el dueño lo
+    // haya pedido—: acá está editando UN presupuesto y fundirlo haría desaparecer una fila que él
+    // ve en Presupuestos; allá pidió juntar dos categorías y la hoja le muestra la suma antes de
+    // aplicarla. Ver el KDoc de `CategoryRoutes.rewriteCategory`.
     // F17: la categoría es la PK de budgets (userId+category), así que "renombrar" no es un
     // UPDATE — es borrar la fila vieja e insertar una con el nombre nuevo, conservando el
     // límite. Todo en una transacción para que un fallo a mitad de camino no deje ni el

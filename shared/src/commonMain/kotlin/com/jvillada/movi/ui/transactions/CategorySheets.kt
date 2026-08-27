@@ -27,6 +27,7 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -77,7 +78,14 @@ private fun SheetLabel(text: String) {
 }
 
 @Composable
-private fun CategoryRow(name: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun CategoryRow(
+    name: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    /** Segunda línea opcional: hoy solo la usa «Pago de tarjeta», para decir qué implica elegirla. */
+    subtitle: String? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -90,7 +98,12 @@ private fun CategoryRow(name: String, selected: Boolean, enabled: Boolean, onCli
         // web sale como ▯. No hay un mapa a íconos Material por categoría, así que se usa uno
         // genérico y uniforme en vez de intentar mapear 15+ emojis uno a uno.
         Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(18.dp))
-        Text(name, fontSize = 14.5.sp, color = MinText, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(name, fontSize = 14.5.sp, color = MinText)
+            if (subtitle != null) {
+                Text(subtitle, fontSize = 11.5.sp, color = MinTextMute, lineHeight = 15.sp)
+            }
+        }
         if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
     }
 }
@@ -125,8 +138,18 @@ fun ChangeCategorySheet(
     // toque porque ahí elegir ES la acción completa).
     var freeText by remember { mutableStateOf("") }
 
-    val options = remember(event.type) {
-        PREDEFINED_CATEGORIES.filter { it.type == event.type.name || it.type == "BOTH" }
+    // Ola 10: el atajo del catálogo respeta lo que el dueño decidió en «Más → Categorías» —
+    // misma regla única que las sugerencias ([effectiveCategoryTypes]). Sin esto, una categoría
+    // escondida seguiría apareciendo acá y «esconder» habría sido media promesa.
+    val categoryPrefs = UsedCategoriesCache.prefs
+    val options = remember(event.type, categoryPrefs) {
+        PREDEFINED_CATEGORIES.filter { cat ->
+            val pref = categoryPrefs.entries
+                .firstOrNull { it.key.trim().equals(cat.name, ignoreCase = true) }?.value
+            if (pref?.hidden == true) return@filter false
+            val efectivos = effectiveCategoryTypes(cat.name, pref?.pinnedType)
+            efectivos.isEmpty() || event.type in efectivos
+        }
     }
     // Los extractos importados traen categorías libres del parser (ver ClaudeStatementParser)
     // que pueden no estar en el catálogo. Si la actual no aparece en `options`, se agrega igual
@@ -179,6 +202,14 @@ fun ChangeCategorySheet(
                     selected = cat.name == event.category,
                     enabled = !saving,
                     onClick = { choose(cat.name) },
+                    // Ola 10: «Pago de tarjeta» sigue estando acá a propósito —es el camino real
+                    // para arreglar un «No es» tocado por error— pero elegirla saca el movimiento
+                    // de las cifras del mes, y eso no se puede dejar mudo: en el campo de
+                    // categoría la misma palabra está prohibida, así que sin este renglón la
+                    // asimetría se lee como un descuido en vez de una decisión.
+                    subtitle = if (cat.name == CARD_PAYMENT_CATEGORY) {
+                        "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta"
+                    } else null,
                 )
                 if (i < options.size - 1) Hairline()
             }
@@ -193,6 +224,7 @@ fun ChangeCategorySheet(
                 onValueChange = { freeText = it },
                 type = event.type,
                 usedCategories = UsedCategoriesCache.used,
+                prefs = UsedCategoriesCache.prefs,
                 label = null,
                 placeholder = "Ej: Colegio",
             )
