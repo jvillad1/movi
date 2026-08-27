@@ -35,7 +35,9 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
@@ -90,6 +92,21 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     var cobrosOk by remember { mutableStateOf(false) }
     var vencimientosOk by remember { mutableStateOf(false) }
 
+    // «¿Esto ya ocurrió?» — el estado del periodo en juego de cada recurrente y lo que la app
+    // propone como su ocurrencia (ver OccurrenceLogic.kt y `GET /api/payments/occurrences`).
+    var ocurrencias by remember { mutableStateOf<List<OccurrenceState>>(emptyList()) }
+    var ocurrenciasOk by remember { mutableStateOf(false) }
+    // Lo que el dueño rechazó con «no fue este», por lo que queda de esta pantalla. Las claves son
+    // (regla, movimiento) — ver `claveDescartada`: indexado por evento solo, rechazar en una regla
+    // le quitaba la propuesta correcta a otra. No se
+    // persiste: rechazar una propuesta no es un hecho sobre su plata — ver `propuestaActual`.
+    var descartadas by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Reglas con una marca en vuelo, para no dejar tocar dos veces el MISMO botón. Es un conjunto
+    // y no un solo id: con uno solo, marcar el salario congelaba también el «Ya lo pagué» del
+    // arriendo hasta que volviera el server — dos hechos independientes compartiendo un candado
+    // que solo tenía sentido por fila.
+    var marcando by remember { mutableStateOf<Set<String>>(emptySet()) }
+
     // Hoja de crear/editar. Guarda el ID y NO la fila: el objeto de una fila puede ser de un
     // snapshot viejo, y prellenar el formulario con eso hace que «Guardar cambios» reescriba
     // datos que el dueño ya había corregido. El prellenado se resuelve contra `rules` al
@@ -125,6 +142,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
             val porReglas = async { runCatching { Repositories.wallets.getRecurringRules() } }
             val porVencer = async { runCatching { Repositories.wallets.getUpcomingPayments() } }
             val porCobros = async { runCatching { Repositories.wallets.getSubscriptions() } }
+            // En paralelo con las demás: es la cuarta fuente de esta pantalla y encadenarla
+            // alargaría la ventana de «pantalla a medias» que las otras tres ya evitan.
+            val porOcurrir = async { runCatching { Repositories.wallets.getOccurrenceStates() } }
 
             var fallo: String? = null
             // Ola 9 · E: si ESTA carga trajo cada lista o no. Distinto de `reglasOk`/`cobrosOk`,
@@ -157,6 +177,13 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             porCobros.await()
                 .onSuccess { subs = it; cobrosOk = true; cobrosFrescos = true }
+                .onFailure { if (fallo == null) fallo = it.toUserMessage() }
+            // Si esta falla no se pinta ninguna propuesta ni ninguna marca: la pantalla se ve
+            // exactamente como antes de esta función. Una propuesta a medias —o peor, un «ya
+            // ocurrió» que en realidad no se pudo leer— sería una afirmación sin respaldo, que
+            // es justo lo que esta pantalla no puede permitirse.
+            porOcurrir.await()
+                .onSuccess { ocurrencias = it; ocurrenciasOk = true }
                 .onFailure { if (fallo == null) fallo = it.toUserMessage() }
             error = fallo
             // Ola 9 · B: el ofrecimiento «¿esto se repite?» necesita saber qué recurrentes ya
@@ -269,6 +296,38 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
+    /**
+     * Sellar «esto ya ocurrió» — con el movimiento que el dueño confirmó, o sin ninguno.
+     *
+     * Después de esto el recurrente deja de leerse como vencido y deja de avisar **ese mes**: su
+     * vencimiento vigente pasa a ser el del mes que viene (lo decide el server, ver `dueDateFor`).
+     * Al mes siguiente vuelve a estar pendiente solo.
+     */
+    fun marcarOcurrio(ruleId: String, period: String, eventId: String?) {
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
+        error = null
+        coroutine.launch {
+            runCatching { Repositories.wallets.markOccurrence(ruleId, period, eventId) }
+                .onSuccess { loadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - ruleId
+        }
+    }
+
+    /** Deshacer: marcar por error tiene que poder revertirse sin ceremonia. */
+    fun deshacerOcurrio(ruleId: String, period: String) {
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
+        error = null
+        coroutine.launch {
+            runCatching { Repositories.wallets.unmarkOccurrence(ruleId, period) }
+                .onSuccess { loadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - ruleId
+        }
+    }
+
     if (PushOptIn.supported) {
         LaunchedEffect(pushRefreshTick) {
             // El flujo de permisos del navegador es async (moviPush.js): refrescar unas
@@ -310,6 +369,8 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // veces: una como alerta y otra en el inventario. El corte es el mismo del barrido de avisos
     // (`leadDays`, ver DueDates.kt): UPCOMING es «todavía falta».
     val proximos = proximosQueUrgen(upcoming)
+    // Qué reglas ya muestran su pregunta arriba, para no repetirla en el inventario de abajo.
+    val idsEnProximos = remember(proximos) { proximos.map { it.rule.id }.toSet() }
 
     // El aviso ámbar habla de una promesa rota («no vamos a poder avisarte»), así que mira lo
     // que se PIDIÓ, no lo que existe: solo un GASTO con `remindMe` entra al barrido de avisos
@@ -572,6 +633,28 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             }
                                         },
                                     )
+                                    // «¿Ya ocurrió?», debajo del renglón que lo dio por vencido.
+                                    // Solo con la fuente completa (`ocurrenciasOk`): con las
+                                    // fuentes a medias no se afirma nada — la regla de esta
+                                    // pantalla desde que el «Flujo libre» mintió dos veces.
+                                    val estado = if (ocurrenciasOk) ocurrenciaDe(ocurrencias, payment.rule.id) else null
+                                    if (hayQuePreguntar(estado)) {
+                                        PropuestaOcurrencia(
+                                            estado = estado!!,
+                                            rule = payment.rule,
+                                            propuesta = propuestaActual(estado, descartadas),
+                                            enVuelo = payment.rule.id in marcando,
+                                            onConfirmar = { ev ->
+                                                marcarOcurrio(payment.rule.id, estado.period, ev.id)
+                                            },
+                                            onDescartar = { ev ->
+                                                descartadas = descartadas + claveDescartada(payment.rule.id, ev.id)
+                                            },
+                                            onCerrarSinMovimiento = {
+                                                marcarOcurrio(payment.rule.id, estado.period, null)
+                                            },
+                                        )
+                                    }
                                     if (i < proximos.size - 1) Hairline()
                                 }
                             }
@@ -629,12 +712,53 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                 padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                             ) {
                                 ordered.forEachIndexed { i, item ->
+                                    // Un recurrente ya dado por ocurrido desaparece de «Próximos»
+                                    // (su vencimiento vigente ya es el del mes que viene), así
+                                    // que el «Deshacer» tiene que vivir acá — en el inventario,
+                                    // que es donde el recurrente sigue estando.
+                                    val ocurrida = if (ocurrenciasOk && item is Recurrente.Regla) {
+                                        ocurrenciaDe(ocurrencias, item.rule.id)?.takeIf { it.occurred }
+                                    } else null
                                     RecurrenteRow(
                                         item = item,
                                         accountNames = accountNames,
+                                        ocurrencia = ocurrida,
                                         onEditRule = { editar(it) },
                                         onRemoveSub = { quitar(it) },
+                                        onDeshacer = { ruleId -> deshacerOcurrio(ruleId, ocurrida!!.period) },
                                     )
+                                    // La pregunta también vive acá para lo que NO está en
+                                    // «Próximos». Pasada la ventana de gracia, un vencimiento deja
+                                    // de figurar arriba (su fecha vigente ya es la del mes que
+                                    // viene) pero el mes en curso sigue abierto: el arriendo del 1
+                                    // se puede seguir cerrando el 27. Sin esto, el server ofrecía
+                                    // la pregunta y la pantalla no tenía dónde hacerla.
+                                    //
+                                    // Sin duplicar: lo que ya salió arriba no se repite acá — la
+                                    // misma tarjeta dos veces en una pantalla es la clase de cosa
+                                    // que hace dudar de si se contó dos veces.
+                                    val abierta = if (ocurrenciasOk && item is Recurrente.Regla &&
+                                        item.rule.id !in idsEnProximos
+                                    ) {
+                                        ocurrenciaDe(ocurrencias, item.rule.id)?.takeIf { !it.occurred }
+                                    } else null
+                                    if (abierta != null && item is Recurrente.Regla) {
+                                        PropuestaOcurrencia(
+                                            estado = abierta,
+                                            rule = item.rule,
+                                            propuesta = propuestaActual(abierta, descartadas),
+                                            enVuelo = item.rule.id in marcando,
+                                            onConfirmar = { ev ->
+                                                marcarOcurrio(item.rule.id, abierta.period, ev.id)
+                                            },
+                                            onDescartar = { ev ->
+                                                descartadas = descartadas + claveDescartada(item.rule.id, ev.id)
+                                            },
+                                            onCerrarSinMovimiento = {
+                                                marcarOcurrio(item.rule.id, abierta.period, null)
+                                            },
+                                        )
+                                    }
                                     if (i < ordered.size - 1) Hairline()
                                 }
                             }
@@ -673,8 +797,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
 private fun RecurrenteRow(
     item: Recurrente,
     accountNames: Map<String, String>,
+    /** No null solo cuando esta fila es una regla YA dada por ocurrida en el periodo en juego. */
+    ocurrencia: OccurrenceState? = null,
     onEditRule: (RecurringRule) -> Unit,
     onRemoveSub: (Subscription) -> Unit,
+    onDeshacer: (String) -> Unit = {},
 ) {
     // Misma anatomía para las dos formas: día en un círculo, nombre + una línea de contexto, y
     // el monto a la derecha. Lo que cambia es el contexto y qué pasa al tocar.
@@ -690,7 +817,10 @@ private fun RecurrenteRow(
             // —lo normal en todo lo anotado antes de hoy— la fila se ve igual que siempre: no
             // hay «sin cuenta» ni un hueco que llenar, porque no falta nada.
             val cuenta = item.rule.accountId?.let { accountNames[it] }
-            contexto = if (cuenta != null) "${item.rule.category} · $cuenta" else item.rule.category
+            val base = if (cuenta != null) "${item.rule.category} · $cuenta" else item.rule.category
+            // Que se note en el inventario, no solo por la ausencia en «Próximos»: si el dueño
+            // marcó algo por error, el único lugar donde puede darse cuenta es acá.
+            contexto = if (ocurrencia != null) "$base · ${textoYaOcurrio(ocurrencia)}" else base
             esIngreso = item.rule.type == TransactionType.INCOME
             monto = "${if (esIngreso) "+" else "−"}${formatCOP(item.rule.amount)}"
             onClick = { onEditRule(item.rule) }
@@ -770,7 +900,120 @@ private fun RecurrenteRow(
                     color = MinExpense,
                     modifier = Modifier.clickable { onRemoveSub(item.sub) },
                 )
+            } else if (item is Recurrente.Regla && ocurrencia != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "Deshacer",
+                    fontSize = 12.sp,
+                    color = MinPrimary,
+                    modifier = Modifier.clickable { onDeshacer(item.rule.id) },
+                )
             }
+        }
+    }
+}
+
+/**
+ * **«Parece que esto ya ocurrió»** — la propuesta, debajo del renglón que lo dio por vencido.
+ *
+ * Es un OFRECIMIENTO, no una pregunta que haya que resolver: se puede ignorar y la pantalla sigue
+ * funcionando igual. Nada se marca solo. La app **propone** y el dueño **confirma**, porque la
+ * asimetría del riesgo manda: dar por ocurrido algo que no ocurrió apaga el aviso de una deuda
+ * real, y eso cuesta plata; el ruido de hoy cuesta un toque.
+ *
+ * Tres salidas, en orden de certeza:
+ *
+ *  1. **«Sí, fue este»** — el emparejamiento exacto. El periodo queda cerrado *y anclado* a un
+ *     movimiento que se puede mirar.
+ *  2. **«No fue este»** — pasa a la propuesta siguiente. Sin esto, una propuesta equivocada
+ *     tapaba a la buena y el único camino era ignorarlas todas.
+ *  3. **«Ya lo pagué» / «Ya me llegó»** — cierra el periodo sin movimiento que emparejar (pagó en
+ *     efectivo, todavía no lo anotó, lo anotó en otra cuenta). Está siempre, también cuando no
+ *     hay ninguna propuesta: es la salida que hace que la función sirva aunque el emparejamiento
+ *     no encuentre nada.
+ *
+ * **El monto se muestra aunque no coincida, y se dice que no coincide.** El monto de un recurrente
+ * es un estimado —«otros meses puede ser menos o más dependiendo de retenciones»—, así que no
+ * filtra candidatos; pero por eso mismo confirmar a ciegas podría sellar el mes con otra cosa. La
+ * diferencia se pinta: es lo que convierte el «sí» en una decisión.
+ */
+@Composable
+private fun PropuestaOcurrencia(
+    estado: OccurrenceState,
+    rule: RecurringRule,
+    propuesta: FinancialEvent?,
+    enVuelo: Boolean,
+    onConfirmar: (FinancialEvent) -> Unit,
+    onDescartar: (FinancialEvent) -> Unit,
+    onCerrarSinMovimiento: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, bottom = 14.dp)) {
+        Text(
+            text = tituloPropuesta(rule.type, estado.period),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = MinText,
+        )
+        if (propuesta != null) {
+            Spacer(Modifier.height(4.dp))
+            // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
+            // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación
+            // el monto quedaba pegado al texto — dos datos distintos leyéndose como uno.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(
+                    text = descripcionPropuesta(propuesta),
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = formatMoney(propuesta.amount, propuesta.currency),
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = MinText,
+                    lineHeight = 16.sp,
+                )
+            }
+            if (difiereDelEsperado(rule.amount, propuesta.amount)) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +
+                        "Puede ser: revísalo antes de confirmar.",
+                    fontSize = 11.sp,
+                    color = MinTextMute,
+                    lineHeight = 15.sp,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (propuesta != null) {
+                ActionChip(label = if (enVuelo) "Guardando…" else "Sí, fue este", primary = true) {
+                    if (!enVuelo) onConfirmar(propuesta)
+                }
+                ActionChip(label = "No fue este", primary = false) {
+                    if (!enVuelo) onDescartar(propuesta)
+                }
+            } else {
+                ActionChip(
+                    label = if (enVuelo) "Guardando…" else etiquetaCierreManual(rule.type),
+                    primary = true,
+                ) { if (!enVuelo) onCerrarSinMovimiento() }
+            }
+        }
+        if (propuesta != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = etiquetaCierreManual(rule.type) + ", sin emparejar ningún movimiento",
+                fontSize = 11.sp,
+                color = MinPrimary,
+                modifier = Modifier.clickable { if (!enVuelo) onCerrarSinMovimiento() },
+            )
         }
     }
 }
@@ -805,14 +1048,28 @@ private fun statusColor(status: PaymentStatus): Color = when (status) {
     PaymentStatus.UPCOMING  -> MinTextMute
 }
 
+/**
+ * El estado de un vencimiento, **con el mes cuando nombra un día**.
+ *
+ * Decía «Vence el 1 · en 5 días» a secas, y ese renglón puede hablar del mes que viene: la ventana
+ * de gracia rueda el vencimiento de una regla de día bajo a fin de mes. Justo debajo puede quedar
+ * la tarjeta «¿Ya pagaste el de agosto?», que sí nombra su mes — y entonces el único mes escrito
+ * en pantalla era el de la tarjeta mientras la fila de arriba hablaba de otro. Nombrar los dos es
+ * la mitad que le faltaba al arreglo de textos.
+ *
+ * «Vencido hace N días» y «Vence hoy» no llevan mes: no nombran ningún día, así que no hay nada
+ * que confundir.
+ */
 private fun statusText(payment: UpcomingPayment): String {
     val n = payment.daysUntil
     val day = dueDateDay(payment.dueDate)
+    val mes = nombreDelMes(payment.dueDate)
+    val cuando = if (mes.isEmpty()) "Vence el $day" else "Vence el $day de $mes"
     return when (payment.status) {
         PaymentStatus.OVERDUE   -> "Vencido hace ${-n} ${if (-n == 1) "día" else "días"}"
         PaymentStatus.DUE_TODAY -> "Vence hoy"
-        PaymentStatus.DUE_SOON  -> "Vence el $day · en $n ${if (n == 1) "día" else "días"}"
-        PaymentStatus.UPCOMING  -> "Vence el $day · en $n ${if (n == 1) "día" else "días"}"
+        PaymentStatus.DUE_SOON  -> "$cuando · en $n ${if (n == 1) "día" else "días"}"
+        PaymentStatus.UPCOMING  -> "$cuando · en $n ${if (n == 1) "día" else "días"}"
     }
 }
 

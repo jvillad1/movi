@@ -41,6 +41,8 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.SmsMessage
@@ -661,6 +663,16 @@ class LocalRepository(
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)
     override suspend fun deleteRecurringRule(id: String) = remote.deleteRecurringRule(id)
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> = remote.getUpcomingPayments()
+
+    // «Ya ocurrió» va derecho al server, igual que los vencimientos: el espejo local no tiene
+    // tabla de ocurrencias ni sabe calcular candidatos (el emparejamiento necesita TODOS los
+    // movimientos vivos y las ocurrencias ya usadas). Consecuencia honesta: sin conexión, la
+    // pregunta «¿esto ya ocurrió?» no se puede contestar ni marcar. Es lo mismo que ya pasa con
+    // «Próximos», y el `SyncEngine` de este proyecto solo empuja — no sabría traer esto de vuelta.
+    override suspend fun getOccurrenceStates(): List<OccurrenceState> = remote.getOccurrenceStates()
+    override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence =
+        remote.markOccurrence(ruleId, period, eventId)
+    override suspend fun unmarkOccurrence(ruleId: String, period: String) = remote.unmarkOccurrence(ruleId, period)
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = remote.chatAi(request)
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)

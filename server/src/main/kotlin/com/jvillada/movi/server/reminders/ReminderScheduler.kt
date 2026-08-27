@@ -100,8 +100,15 @@ private suspend fun processUser(
             .map { row -> row.toRulePair() }
     }
     val allPairs = rulePairs + loadCreditRulePairs(userId) + loadCardRulePairs(userId)
+    // Lo que el dueño ya dio por ocurrido no vuelve a avisar ESTE mes (y sí el que viene): el
+    // filtro no necesita un `if` nuevo — el vencimiento vigente de una regla cerrada ya rodó al
+    // mes siguiente, así que cae en UPCOMING y sale por el criterio que ya estaba. Ver
+    // `dueDateFor`. El sello de `lastRemindedPeriod` de más abajo usa el MISMO conjunto, porque
+    // si sellara el periodo viejo y el filtro mirara el nuevo volverían a divergir — que es el
+    // bug que este archivo ya arregló una vez.
+    val occurredBy = dbQuery { loadOccurredBy(userId) }
 
-    val selected = selectDueForReminder(allPairs, today, leadDays)
+    val selected = selectDueForReminder(allPairs, today, leadDays, occurredBy)
 
     if (selected.isEmpty()) return
 
@@ -127,7 +134,7 @@ private suspend fun processUser(
         // Update rules one-by-one: Exposed's update DSL doesn't support an IN clause
         // in the where block, so individual updates are the cleanest approach.
         for (rule in selected) {
-            val duePeriod = reminderKeyFor(rule, today)
+            val duePeriod = reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
             dbQuery {
                 if (rule.id.startsWith(CREDIT_RULE_PREFIX)) {
                     Credits.update({
@@ -146,7 +153,7 @@ private suspend fun processUser(
                 }
             }
         }
-        val periods = selected.map { reminderKeyFor(it, today) }.distinct().sorted()
+        val periods = selected.map { reminderKeyFor(it, today, DEFAULT_GRACE_DAYS, occurredBy[it.id].orEmpty()) }.distinct().sorted()
         logger.info(
             "ReminderScheduler: reminded user $userId about ${selected.size} payment(s) " +
                 "for period(s) ${periods.joinToString(", ")}",

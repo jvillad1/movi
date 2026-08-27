@@ -33,6 +33,9 @@ import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.shared.model.MarkOccurrenceRequest
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ParsedSms
@@ -317,6 +320,33 @@ class WalletRepositoryImpl(
 
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
         client.get("$baseUrl/api/payments/upcoming").body()
+
+    override suspend fun getOccurrenceStates(): List<OccurrenceState> =
+        client.get("$baseUrl/api/payments/occurrences").body()
+
+    // Mismo idioma que createCard: los rechazos de acá son legibles y el dueño los necesita leer
+    // («ese movimiento está anulado», «ya está marcado como la ocurrencia de otro periodo»).
+    // `.body()` a ciegas sobre un 4xx de texto plano pierde el mensaje deserializando.
+    override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence {
+        val response = client.post("$baseUrl/api/recurring-rules/$ruleId/occurrence") {
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = period, eventId = eventId))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // Se mira el status, igual que `markOccurrence`: sin esto un 404 o un 500 se leían como
+    // éxito, la pantalla recargaba y el «Deshacer» seguía ahí — el dueño tocando un botón que no
+    // hace nada y sin un solo mensaje que se lo diga.
+    override suspend fun unmarkOccurrence(ruleId: String, period: String) {
+        val response = client.delete("$baseUrl/api/recurring-rules/$ruleId/occurrence/$period")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
 
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse =
         client.post("$baseUrl/api/ai/chat") {
