@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -300,6 +302,34 @@ fun QuickAddScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                     .background(MinSurfaceContainerHigh)
+                    // ── Ola 12 · iOS — SI LA HOJA NO ENTRA, SE PUEDE LLEGAR IGUAL AL BOTÓN ──
+                    //
+                    // Esta hoja está anclada abajo y NO se podía desplazar: lo que no entraba
+                    // en el hueco de la pantalla quedaba cortado contra la barra inferior, sin
+                    // ninguna forma de alcanzarlo. En un iPhone 16 (852 pt) el cuerpo de
+                    // «Gasto»/«Ingreso» mide ~745 pt y el hueco ~692, así que **«Guardar
+                    // movimiento» caía entero por debajo del recorte**: se podía escribir el
+                    // monto, elegir categoría y cuenta, y no había manera de guardar. Verificado
+                    // a ojo en el simulador; en «Traspaso», que es más bajo, el botón sí se veía
+                    // y lo único cortado era el renglón de ayuda de abajo.
+                    //
+                    // **Por qué no se había visto en Android ni en la web.** No es código de
+                    // iOS: es alto de pantalla. El emulador Pixel tiene ~998 dp y en el
+                    // navegador se probó a 375×812 —donde no hay ni barra de estado de 59 pt ni
+                    // indicador de inicio de 34 pt—, así que ahí sobraban ~50 pt y entraba justo.
+                    // iOS fue la primera pantalla corta de verdad en la que se corrió la app.
+                    //
+                    // `verticalScroll` es un no-op mientras el contenido entra —que es el caso
+                    // de Android y de la web hoy—, así que no mueve nada de lo que ya funciona:
+                    // solo aparece cuando, si no, habría contenido inalcanzable. Va DESPUÉS de
+                    // `background` a propósito, para que el fondo pinte el alto visible de la
+                    // hoja y no se desplace con el contenido.
+                    //
+                    // Los dos sub-pickers que traen su propio scroll (la lista de cuentas de
+                    // [WalletPicker], `heightIn(max = 360.dp)`, y las sugerencias de
+                    // `CategoryField`, `heightIn(max = 220.dp)`) ya tienen alto acotado ANTES de
+                    // su scroll, así que no reciben la altura infinita de este contenedor.
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .clickable(enabled = false) {},
             ) {
