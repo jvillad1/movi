@@ -113,8 +113,8 @@ class CuentaPorDefectoTest {
 
     @Test
     fun `el aviso solo aparece cuando la cuenta la puso la app`() {
-        assertEquals("La última que usaste", avisoDeCuenta(OrigenCuenta.ULTIMA, 3))
-        assertEquals("Elegida por la app", avisoDeCuenta(OrigenCuenta.PRIMERA, 3))
+        assertEquals("Última usada", avisoDeCuenta(OrigenCuenta.ULTIMA, 3))
+        assertEquals("Por defecto", avisoDeCuenta(OrigenCuenta.PRIMERA, 3))
         assertNull(avisoDeCuenta(OrigenCuenta.ELEGIDA, 3))
         assertNull(avisoDeCuenta(OrigenCuenta.CONTEXTO, 3))
         assertNull(avisoDeCuenta(OrigenCuenta.NINGUNA, 3))

@@ -363,7 +363,7 @@ fun QuickAddScreen(
                         onPick = {
                             selectedAccountId = it
                             // Elegida a mano: la reconciliación de arriba ya no la pisa, y el
-                            // aviso «La última que usaste» desaparece — ya no lo decidió la app.
+                            // aviso «Última usada» desaparece — ya no lo decidió la app.
                             origenCuenta = OrigenCuenta.ELEGIDA
                             picker = Picker.None
                         },
@@ -729,7 +729,7 @@ private fun EditorBody(
 }
 
 /**
- * El renglón chiquito de «La última que usaste» / «Elegida por la app», debajo de la etiqueta de
+ * El renglón chiquito de «Última usada» / «Por defecto», debajo de la etiqueta de
  * una fila de cuenta. Lo usan la fila «Cuenta» del editor y las filas «Desde»/«Hacia» del
  * traspaso, con el mismo alto y el mismo criterio (ver [avisoDeCuenta]).
  *

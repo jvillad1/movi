@@ -84,8 +84,13 @@ fun resolverCuenta(
 fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int): String? {
     if (cuentasDisponibles <= 1) return null
     return when (origen) {
-        OrigenCuenta.ULTIMA -> "La última que usaste"
-        OrigenCuenta.PRIMERA -> "Elegida por la app"
+        // **Cortos a propósito, y medido en la web, no a ojo.** Este renglón comparte la fila con
+        // el nombre de la cuenta, que se lleva el ancho que necesite: a 375 dp, con «Bancolombia
+        // Ahorros» al lado, la primera versión («La última que usaste») entraba justo hasta «La
+        // última que …» y se comía la única palabra que decía algo. Con doce caracteres entra
+        // entera y le sobra lugar a un nombre más largo todavía.
+        OrigenCuenta.ULTIMA -> "Última usada"
+        OrigenCuenta.PRIMERA -> "Por defecto"
         OrigenCuenta.CONTEXTO, OrigenCuenta.ELEGIDA, OrigenCuenta.NINGUNA -> null
     }
 }
