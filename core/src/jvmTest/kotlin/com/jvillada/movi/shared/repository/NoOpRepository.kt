@@ -172,6 +172,26 @@ open class NoOpRepository(
             reconciliationStatus = ReconciliationStatus.RECONCILED,
         )
     }
+    /**
+     * Mismo criterio que [updateEventCategory]: 404 para un evento que no está en [knownEventIds]
+     * —así el test del camino "todavía sin sincronizar" falla si [LocalRepository] llama al
+     * server cuando no debe— y echo del [timestamp] recibido para el que sí conoce.
+     */
+    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+        if (id !in knownEventIds) throw ApiException(404)
+        return FinancialEvent(
+            id = id,
+            accountId = "acc-stub",
+            type = TransactionType.EXPENSE,
+            amount = 50_000L,
+            category = "Comida",
+            description = "stub",
+            timestamp = timestamp,
+            source = EventSource.MANUAL,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        )
+    }
+
     override suspend fun getCardPaymentCandidates() = emptyList<FinancialEvent>()
     override suspend fun dismissCardPaymentCandidate(id: String) {
         dismissedCandidateIds += id

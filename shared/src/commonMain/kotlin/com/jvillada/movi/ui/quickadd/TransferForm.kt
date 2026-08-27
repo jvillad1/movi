@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.quickadd
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +43,7 @@ import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.theme.MinExpense
 import com.jvillada.movi.theme.MinOnPrimaryContainer
 import com.jvillada.movi.theme.MinPrimaryContainer
+import com.jvillada.movi.theme.MinBorder
 import com.jvillada.movi.theme.MinSurfaceContainerLow
 import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
@@ -51,7 +54,10 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
-import com.jvillada.movi.ui.credits.filterDateInput
+import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.fecha.timestampParaFecha
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -269,11 +275,24 @@ internal fun TransferBody(
     }
 
     var amount by remember { mutableStateOf<Long?>(null) }
-    var date by remember { mutableStateOf(todayIsoInAppZone()) }
+    // Ola 13 — LA FECHA DEL TRASPASO SE ELIGE, NO SE ESCRIBE.
+    //
+    // Acá había un campo de texto donde se tecleaba «AAAA-MM-DD» a mano, con su
+    // `filterDateInput` y su «La fecha tiene que ser AAAA-MM-DD» cuando no se acertaba. Era la
+    // única forma de poner una fecha en toda la app, y dejarla convivir en la MISMA hoja con el
+    // selector nuevo de Gasto/Ingreso habría sido peor que no tocar nada: dos maneras distintas
+    // de decir lo mismo, a dos toques de distancia.
+    //
+    // `date` sigue existiendo como el ISO derivado, y no como la fuente: así
+    // [transferMissingMessage] y [transferTimestampFor] —y sus tests— no cambian.
+    val hoy = remember { hoyEnAppZone() }
+    var fecha by remember { mutableStateOf(hoy) }
+    val date = fecha.toString()
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<TransferSide?>(null) }
+    var pickingDate by remember { mutableStateOf(false) }
     // Los ids viven en el borrador, NO adentro de `save()`: un reintento tras un fallo tiene que
     // llevar los mismos, o el server crea un traspaso duplicado (ver [TransferDraftIds]).
     var ids by remember { mutableStateOf(TransferDraftIds.new()) }
@@ -286,7 +305,9 @@ internal fun TransferBody(
     fun save() {
         val origen = from ?: return
         val destino = to ?: return
-        val timestamp = transferTimestampFor(date) ?: return
+        // Con «Hoy» (el default) queda la hora real, como siempre; cualquier otro día va al
+        // mediodía de Bogotá — ver [timestampParaFecha] y [epochAlMediodia].
+        val timestamp = timestampParaFecha(fecha, hoy)
         saving = true
         error = null
         coroutine.launch {
@@ -340,11 +361,24 @@ internal fun TransferBody(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (picking == null) Modifier
+                if (picking == null && !pickingDate) Modifier
                 else Modifier.heightIn(min = with(density) { formHeightPx.toDp() }),
             ),
     ) {
-        if (picking != null) {
+        if (pickingDate) {
+            // Mismo sub-picker que la pestaña Gasto/Ingreso, adentro del mismo Box de alto
+            // fijado: abrirlo no cambia el alto de la hoja.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                PickerHeader("Fecha", onClose = { pickingDate = false })
+                SelectorDeFecha(
+                    seleccionada = fecha,
+                    hoy = hoy,
+                    onPick = { fecha = it; pickingDate = false },
+                    enabled = !saving,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+        } else if (picking != null) {
             TransferAccountPicker(
                 title = if (picking == TransferSide.FROM) "Desde" else "Hacia",
                 accounts = elegibles,
@@ -461,7 +495,26 @@ internal fun TransferBody(
         Spacer(Modifier.height(14.dp))
         Text("FECHA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
-        FieldBox("AAAA-MM-DD", date, onValueChange = { date = filterDateInput(it) })
+        // Misma caja que tenía el campo de texto (mismo alto, mismo borde, mismo lugar) pero se
+        // toca en vez de escribirse: así el formulario no cambia de alto respecto de master y el
+        // dedo la encuentra donde ya estaba.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MinSurfaceContainerLow)
+                .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                .clickable(enabled = !saving) { pickingDate = true }
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+        ) {
+            Text(
+                text = etiquetaDeFecha(fecha, hoy),
+                fontSize = 14.sp,
+                color = MinText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
 
         Spacer(Modifier.height(14.dp))
         Text("NOTA (OPCIONAL)", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)

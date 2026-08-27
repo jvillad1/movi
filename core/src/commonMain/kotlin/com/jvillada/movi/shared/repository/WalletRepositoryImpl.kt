@@ -46,6 +46,7 @@ import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpdateEventCategoryRequest
+import com.jvillada.movi.shared.model.UpdateEventTimestampRequest
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
@@ -427,6 +428,20 @@ class WalletRepositoryImpl(
         val response = client.put("$baseUrl/api/events/$id/category") {
             contentType(ContentType.Application.Json)
             setBody(UpdateEventCategoryRequest(category))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // Mismo idioma que updateEventCategory: el server puede rechazar con 404 (evento
+    // inexistente, de otro usuario o anulado) o 422 (fecha futura) y ese texto es lo único que
+    // le explica al dueño por qué no se guardó — se pierde si se deserializa a ciegas.
+    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/timestamp") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateEventTimestampRequest(timestamp))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

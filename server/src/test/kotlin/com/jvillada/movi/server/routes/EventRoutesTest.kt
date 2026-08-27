@@ -7,12 +7,15 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -33,6 +36,7 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
@@ -76,12 +80,13 @@ class EventRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                Credits, SmsMessages, RecurringOccurrences, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals,
+                Budgets, RecurringRules, RecurringOccurrences, SmsMessages, Credits,
+                CardPaymentDismissals,
             )
 
             Users.insert {
@@ -695,5 +700,143 @@ class EventRoutesTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val days = Json.parseToJsonElement(res.bodyAsText()).jsonArray
         assertEquals(listOf("2026-08-31"), days.map { it.jsonObject["date"]!!.jsonPrimitive.content })
+    }
+
+    // ── PUT /api/events/{id}/timestamp — corregir la fecha ────────────────────
+
+    private suspend fun ApplicationTestBuilder.setTimestamp(id: String, userId: String, ts: Long) =
+        client.put("/api/events/$id/timestamp") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"timestamp":$ts}""")
+        }
+
+    /** El mediodía de Bogotá de hace [dias] días — lo mismo que arma `epochAlMediodia` en el cliente. */
+    private fun mediodiaHace(dias: Long): Long =
+        AppClock.today().minusDays(dias).atTime(12, 0).atZone(AppClock.zone).toInstant().toEpochMilli()
+
+    private fun timestampDe(id: String): Long =
+        transaction { Events.selectAll().where { Events.id eq id }.first()[Events.timestamp] }
+
+    @Test
+    fun `mover un gasto a ayer cambia su fecha y lo saca del dia de hoy`() = testApplication {
+        wireApp()
+        seedEvent("ev-hoy", userAId, savingsAccountId, "EXPENSE", "Tostao", "Comida")
+
+        val ayer = mediodiaHace(1)
+        val res = setTimestamp("ev-hoy", userAId, ayer)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(ayer, Json.parseToJsonElement(res.bodyAsText()).jsonObject["timestamp"]!!.jsonPrimitive.long)
+        assertEquals(ayer, timestampDe("ev-hoy"))
+
+        // Y se ve donde el dueño lo va a buscar: /by-day lo agrupa bajo el día de AYER.
+        val dias = client.get("/api/events/by-day") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        val fechas = Json.parseToJsonElement(dias.bodyAsText()).jsonArray
+            .map { it.jsonObject["date"]!!.jsonPrimitive.content }
+        assertEquals(listOf(AppClock.today().minusDays(1).toString()), fechas)
+    }
+
+    /**
+     * La guarda del futuro. Un movimiento es plata que YA se movió: fecharlo mañana infla el
+     * saldo y las cifras del mes con algo que no pasó — y es la misma regla que este server ya
+     * aplica del otro lado al negarse a dar por ocurrido un vencimiento que no llegó.
+     */
+    @Test
+    fun `una fecha futura se rechaza con 422 y no toca la fila`() = testApplication {
+        wireApp()
+        val original = mediodiaHace(3)
+        seedEvent("ev-futuro", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado", timestamp = original)
+
+        val res = setTimestamp("ev-futuro", userAId, mediodiaHace(-1))
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(EVENT_DATE_IN_FUTURE, res.bodyAsText())
+        assertEquals(original, timestampDe("ev-futuro"))
+    }
+
+    /** HOY sí entra: el corte es por día civil de Bogotá, no por instante (un reloj adelantado no traba nada). */
+    @Test
+    fun `hoy no cuenta como futuro`() = testApplication {
+        wireApp()
+        seedEvent("ev-hoy-ok", userAId, savingsAccountId, "EXPENSE", "Almuerzo", "Comida", timestamp = mediodiaHace(5))
+        assertEquals(HttpStatusCode.OK, setTimestamp("ev-hoy-ok", userAId, mediodiaHace(0)).status)
+    }
+
+    @Test
+    fun `un movimiento de otro usuario o anulado responde 404`() = testApplication {
+        wireApp()
+        seedEvent("ev-ajeno", userBId, savingsAccountId, "EXPENSE", "Ajeno", "Comida")
+        seedEvent("ev-anulado", userAId, savingsAccountId, "EXPENSE", "Anulado", "Comida")
+        voidEvent("ev-anulado", userAId)
+
+        assertEquals(HttpStatusCode.NotFound, setTimestamp("ev-ajeno", userAId, mediodiaHace(1)).status)
+        assertEquals(HttpStatusCode.NotFound, setTimestamp("ev-anulado", userAId, mediodiaHace(1)).status)
+    }
+
+    /**
+     * **Las dos patas de un traspaso se mueven juntas.** Mover solo una dejaría la plata saliendo
+     * un día y entrando otro, y en Movimientos el traspaso se partiría en dos renglones sueltos
+     * (`collapseTransfers` agrupa dentro de un mismo día).
+     */
+    @Test
+    fun `mover una pata de traspaso mueve tambien a su hermana`() = testApplication {
+        wireApp()
+        val original = System.currentTimeMillis()
+        transaction {
+            listOf("ev-tr-out" to "EXPENSE", "ev-tr-in" to "INCOME").forEach { (evId, tipo) ->
+                Events.insert {
+                    it[id]                   = evId
+                    it[userId]               = userAId
+                    it[accountId]            = savingsAccountId
+                    it[type]                 = tipo
+                    it[amount]               = 500_000L
+                    it[currency]             = "COP"
+                    it[category]             = "Traspaso"
+                    it[description]          = "Traspaso"
+                    it[timestamp]            = original
+                    it[eventSource]          = "MANUAL"
+                    it[reconciliationStatus] = "RECONCILED"
+                    it[transferId]           = "tr-1"
+                }
+            }
+        }
+
+        val ayer = mediodiaHace(1)
+        assertEquals(HttpStatusCode.OK, setTimestamp("ev-tr-out", userAId, ayer).status)
+        assertEquals(ayer, timestampDe("ev-tr-out"))
+        assertEquals(ayer, timestampDe("ev-tr-in"))
+    }
+
+    /**
+     * **La ocurrencia de recurrente sobrevive al cambio de fecha, y es a propósito.**
+     *
+     * `recurring_occurrences` sella un PERIODO («agosto ya ocurrió») y guarda el movimiento solo
+     * como evidencia. Pagar el 30 de julio el arriendo de agosto es lo normal, así que corregir
+     * la fecha hacia otro mes no puede volver a abrir el periodo: sería preguntar de nuevo «¿ya
+     * lo pagaste?» por algo que el dueño ya respondió. Si el sello quedó mal, se deshace donde se
+     * puso — el «Deshacer» de Recurrentes.
+     */
+    @Test
+    fun `mover la fecha NO deshace la ocurrencia de recurrente que lo señala`() = testApplication {
+        wireApp()
+        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda")
+        transaction {
+            RecurringOccurrences.insert {
+                it[userId]      = userAId
+                it[ruleId]      = "rule-arriendo"
+                it[period]      = "2026-08"
+                it[eventId]     = "ev-arriendo"
+                it[confirmedAt] = System.currentTimeMillis()
+            }
+        }
+
+        assertEquals(HttpStatusCode.OK, setTimestamp("ev-arriendo", userAId, mediodiaHace(40)).status)
+        val sigueSellado = transaction {
+            RecurringOccurrences.selectAll()
+                .where { RecurringOccurrences.eventId eq "ev-arriendo" }
+                .count()
+        }
+        assertEquals(1L, sigueSellado)
     }
 }

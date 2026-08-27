@@ -24,6 +24,8 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 
 fun Route.eventRoutes() {
@@ -224,6 +226,87 @@ fun Route.eventRoutes() {
                     }
                 }
                 event?.takeIf { !isVoided }?.copy(category = category)?.withCashFlowFlag(accountTypesFor(uid))
+            }
+            if (updated == null) call.respond(HttpStatusCode.NotFound)
+            else call.respond(updated)
+        }
+
+        // ── Corregir la FECHA de un movimiento ya anotado ────────────────────────────────
+        //
+        // Hasta acá lo único editable de un movimiento era su categoría: para arreglarle la fecha
+        // había que anularlo y volver a crearlo, o sea perder su id (y con él la ocurrencia de
+        // recurrente que lo señalara) para cambiar un dato que el dueño nunca eligió — porque
+        // hasta esta rama la hoja de Agregar sellaba siempre `Clock.System.now()`.
+        //
+        // Tres guardas, y cada una tiene su motivo:
+        //
+        // 1. **No al futuro.** Un movimiento es plata que YA se movió; uno fechado mañana infla
+        //    el saldo y las cifras del mes con algo que no pasó. Es la misma regla que este
+        //    server ya aplica del otro lado en `POST /api/recurring-rules/{id}/occurrence`
+        //    («Ese vencimiento todavía no llegó»). El corte es por **día civil de Bogotá**
+        //    (AppClock), no por instante: así un cliente con el reloj unos minutos adelantado
+        //    —o en otra zona— no se queda sin poder fechar el gasto de hoy.
+        //
+        //    La guarda vive acá y NO en `POST /api/events` a propósito: por el POST entran
+        //    también los movimientos que llegan solos (SMS, extracto, OCR), que traen su propia
+        //    fecha y no se pisan. Esta ruta, en cambio, es siempre una corrección a mano.
+        //
+        // 2. **Un piso de año.** Mismo rango razonable que la fecha de desembolso de un crédito
+        //    (2000..2100 en `transferTimestampFor`): un epoch-ms cerca de 0 es un cliente con un
+        //    bug, no una intención, y dejarlo entrar esconde el movimiento en 1970 para siempre.
+        //
+        // 3. **Las dos patas de un traspaso se mueven juntas.** La fecha de un traspaso es UN
+        //    hecho, no dos: mover solo la pata de origen dejaría la plata saliendo un día y
+        //    entrando otro, y en Movimientos el traspaso se partiría en dos renglones sueltos
+        //    (`collapseTransfers` agrupa dentro de un mismo día). Se cascadea por `transferId`,
+        //    en la misma transacción y por el mismo camino explícito que ya usa la anulación —
+        //    no por «el otro evento con el mismo monto».
+        put("/{id}/timestamp") {
+            val id = call.parameters["id"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val nuevo = call.receive<UpdateEventTimestampRequest>().timestamp
+            val fecha = epochMillisToAppDate(nuevo)
+            if (fecha.year !in 2000..2100) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
+            }
+            if (fecha.isAfter(AppClock.today())) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, EVENT_DATE_IN_FUTURE)
+            }
+
+            val updated: FinancialEvent? = dbQuery {
+                val event = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                // Un evento anulado se trata como inexistente, igual que en PUT /{id}/category:
+                // ningún GET lo vuelve a mostrar, así que la fecha que devolviéramos acá no se
+                // vería en ninguna pantalla.
+                val isVoided = event != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (event == null || isVoided) {
+                    null
+                } else {
+                    val transferId = event.transferId
+                    if (transferId != null) {
+                        Events.update({ (Events.userId eq uid) and (Events.transferId eq transferId) }) {
+                            it[timestamp] = nuevo
+                        }
+                    } else {
+                        Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
+                            it[timestamp] = nuevo
+                        }
+                    }
+                    // **La ocurrencia de recurrente que señale a este movimiento NO se toca, y
+                    // eso es una decisión, no un olvido.** `recurring_occurrences` sella un
+                    // PERIODO («agosto ya ocurrió») y guarda el movimiento solo como evidencia;
+                    // `loadOccurredBy` solo verifica que ese movimiento siga vivo, nunca que su
+                    // fecha caiga adentro del periodo. Es lo correcto: pagar el 30 de julio el
+                    // arriendo de agosto es lo normal, y borrar el sello porque la fecha se
+                    // corrigió volvería a preguntar «¿ya lo pagaste?» por algo que el dueño ya
+                    // respondió. Si el sello quedó mal, se deshace donde se puso, en Recurrentes.
+                    event.copy(timestamp = nuevo).withCashFlowFlag(accountTypesFor(uid))
+                }
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
             else call.respond(updated)

@@ -63,6 +63,31 @@ data class FinancialEvent(
 @Serializable
 data class UpdateEventCategoryRequest(val category: String)
 
+/**
+ * Body de `PUT /api/events/{id}/timestamp` — **corregir la fecha de un movimiento ya anotado**.
+ *
+ * Es un epoch-ms y no un `"AAAA-MM-DD"` a propósito: el almacenamiento de Movi es epoch-ms y cada
+ * pantalla lo vuelve a fechar en la zona de la app (ver `AppTimeZone`), así que mandar una fecha
+ * civil obligaría al server a elegir una hora del día — y la hora que elija decide en qué día cae
+ * el movimiento visto desde otra zona. El cliente ya sabe hacer esa conversión (al **mediodía** de
+ * Bogotá, ver `epochAlMediodia`), y es el único que la hace, en un solo lugar.
+ *
+ * DTO propio y no [FinancialEvent] entero por el mismo motivo que [UpdateEventCategoryRequest]:
+ * acá el cliente solo tiene voz sobre la fecha.
+ */
+@Serializable
+data class UpdateEventTimestampRequest(val timestamp: Long)
+
+/**
+ * El rechazo de `PUT /api/events/{id}/timestamp` cuando la fecha pedida todavía no llegó.
+ *
+ * Vive en `:core` para que el server y el cliente digan **exactamente lo mismo** — mismo criterio
+ * que [TRANSFER_RECATEGORIZE_BLOCKED]: la hoja corta antes para poder explicarlo, y el server
+ * repite la guarda porque no puede confiar en que el que llama sea esa hoja.
+ */
+const val EVENT_DATE_IN_FUTURE: String =
+    "Esa fecha todavía no llegó: un movimiento se anota cuando la plata ya se movió."
+
 @Serializable
 data class VoidEvent(
     val id: String,

@@ -195,6 +195,21 @@ interface WalletRepository {
     suspend fun updateEventCategory(id: String, category: String): FinancialEvent
 
     /**
+     * **Corrige la fecha de un movimiento ya registrado** (`PUT /api/events/{id}/timestamp`).
+     *
+     * [timestamp] es epoch-ms, y quien llama tiene que armarlo con
+     * `com.jvillada.movi.ui.fecha.epochAlMediodia` — el mediodía de Bogotá — y no con una
+     * medianoche cualquiera: la hora del día decide en qué día cae el movimiento visto desde otra
+     * zona (ver el KDoc de esa función).
+     *
+     * Lanza [ApiException] con 422 si la fecha todavía no llegó
+     * ([com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE]) y con 404 si el movimiento no
+     * existe, es de otro usuario o está anulado. Si el movimiento es una pata de un traspaso, el
+     * server mueve **las dos**: la fecha de un traspaso es un solo hecho.
+     */
+    suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent
+
+    /**
      * Movimientos que **parecen** el pago del extracto de una tarjeta pero todavía no están
      * categorizados como [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] — candidatos
      * a confirmar con [updateEventCategory], nunca aplicados solos. El server solo propone

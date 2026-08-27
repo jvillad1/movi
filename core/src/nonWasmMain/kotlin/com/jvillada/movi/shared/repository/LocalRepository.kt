@@ -634,6 +634,59 @@ class LocalRepository(
         return updated
     }
 
+
+    /**
+     * Corrige la fecha de un movimiento. **Mismo esquema de dos caminos que
+     * [updateEventCategory]**, y por los mismos motivos, así que acá solo se anota lo que cambia.
+     *
+     * - Si el evento **ya está sincronizado**: manda el `PUT` y espeja lo que devolvió el server
+     *   (que es quien valida la fecha; ver la guarda de futuro en `PUT /api/events/{id}/timestamp`).
+     * - Si el evento **todavía no llegó al server** (`syncedAt == null`, la ventana normal de los
+     *   30 s del `SyncEngine`): el UPDATE es **solo local**. Llamar a `remote` ahí devolvería 404
+     *   —el server ni sabe que el evento existe— y dejaría al dueño sin poder corregir la fecha
+     *   de lo que acaba de anotar, que es justo cuando más se corrige. El `SyncEngine` sube el
+     *   evento después con `row.timestamp`, o sea con la fecha ya corregida.
+     *
+     * La carrera con el `SyncEngine` se cierra igual que en [updateEventCategory] y con las
+     * mismas dos mitades: acá se relee `syncedAt` fresco adentro de la transacción, y del otro
+     * lado `markSyncedIfUnchanged` ahora compara **también el timestamp** — sin eso, corregir la
+     * fecha mientras el POST estaba en vuelo dejaba la fila sellada con la fecha vieja en el
+     * server y la nueva solo en local, para siempre.
+     *
+     * **Las dos patas de un traspaso se mueven juntas**, igual que se anulan juntas: es UN hecho
+     * con una sola fecha. El server cascadea por `transferId` y acá se espeja lo mismo. (Por
+     * diseño una pata nunca está pendiente de sincronizar —`createTransfer` es remote-first—, así
+     * que el camino local de la cascada es la red de seguridad, no el habitual.)
+     */
+    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+        val uid = userId()
+        val types = accountTypes(uid)
+        val resolvedLocally = db.transactionWithResult {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            if (local != null && local.syncedAt == null) {
+                val transferId = local.transferId
+                if (transferId != null) {
+                    db.financialEventQueries.updateTimestampByTransferId(timestamp, transferId, uid)
+                } else {
+                    db.financialEventQueries.updateTimestamp(timestamp, id, uid)
+                }
+                local.toModel(types).copy(timestamp = timestamp)
+            } else {
+                null
+            }
+        }
+        if (resolvedLocally != null) return resolvedLocally
+
+        val updated = remote.updateEventTimestamp(id, timestamp)
+        val transferId = updated.transferId
+        if (transferId != null) {
+            db.financialEventQueries.updateTimestampByTransferId(updated.timestamp, transferId, uid)
+        } else {
+            db.financialEventQueries.updateTimestamp(updated.timestamp, updated.id, uid)
+        }
+        return updated
+    }
+
     // ── Delegate everything else to remote ────────────────────────────────────
 
     override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()

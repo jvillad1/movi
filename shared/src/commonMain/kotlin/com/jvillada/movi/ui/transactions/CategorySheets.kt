@@ -29,6 +29,12 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import com.jvillada.movi.ui.fecha.avisoDeCambioDeMes
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
@@ -128,7 +134,12 @@ private fun CategoryRow(
 fun ChangeCategorySheet(
     event: FinancialEvent,
     onDismiss: () -> Unit,
-    onCategoryChanged: (FinancialEvent) -> Unit,
+    /**
+     * El movimiento quedó modificado — hoy por un cambio de categoría o **de fecha** (Ola 13).
+     * Se llamaba `onCategoryChanged` y se renombró cuando dejó de ser solo eso: quien la
+     * recibe cierra la hoja y recarga, que es lo mismo en los dos casos.
+     */
+    onEventChanged: (FinancialEvent) -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -163,7 +174,7 @@ fun ChangeCategorySheet(
         coroutine.launch {
             val result = runCatching { Repositories.wallets.updateEventCategory(event.id, category) }
             saving = false
-            result.onSuccess { onCategoryChanged(it) }.onFailure { error = it.toUserMessage() }
+            result.onSuccess { onEventChanged(it) }.onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -179,6 +190,14 @@ fun ChangeCategorySheet(
                 Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
                 Spacer(Modifier.height(16.dp))
                 Text(TRANSFER_RECATEGORIZE_BLOCKED, fontSize = 13.5.sp, color = MinTextMute)
+                Spacer(Modifier.height(20.dp))
+                Hairline()
+                Spacer(Modifier.height(16.dp))
+                // La FECHA de un traspaso sí se puede corregir, aunque su categoría no: no hay
+                // ninguna contabilidad que romper —las dos patas se mueven juntas, el server
+                // cascadea por `transferId`— y sin esto un traspaso mal fechado seguiría sin
+                // arreglo posible que no fuera anularlo entero y rehacerlo.
+                SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
                 Spacer(Modifier.height(24.dp))
             }
         }
@@ -187,10 +206,16 @@ fun ChangeCategorySheet(
 
     BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            SheetLabel("CAMBIAR CATEGORÍA")
-            Spacer(Modifier.height(8.dp))
             Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+            Spacer(Modifier.height(18.dp))
+            // La fecha va ARRIBA de la lista de categorías, no al final: la lista mide veinte
+            // renglones y todo lo que quede debajo de ella es, en la práctica, invisible.
+            SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
+            Spacer(Modifier.height(20.dp))
+            Hairline()
             Spacer(Modifier.height(16.dp))
+            SheetLabel("CAMBIAR CATEGORÍA")
+            Spacer(Modifier.height(12.dp))
 
             if (!currentIsKnown) {
                 CategoryRow(name = event.category, selected = true, enabled = false, onClick = {})
@@ -397,6 +422,122 @@ fun CardPaymentCandidatesSheet(
                 Text(it, fontSize = 12.sp, color = MinExpense)
             }
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+/**
+ * **La fecha de un movimiento ya guardado, editable acá mismo.**
+ *
+ * ## Por qué en esta hoja y no en una pantalla nueva
+ *
+ * Porque esta hoja YA es «el movimiento que tocaste» — es lo que se abre al tocar un renglón en
+ * Movimientos, y hasta ahora lo único que dejaba cambiar era la categoría. Hasta esta rama, la
+ * única forma de arreglarle la fecha a un gasto era **anularlo y volver a crearlo**: perder su id
+ * —y con él la ocurrencia de recurrente que lo señalara, y su renglón de historia— para corregir
+ * un dato que el dueño nunca había podido elegir.
+ *
+ * ## Por qué hay un paso de confirmación acá y no en la hoja de Agregar
+ *
+ * Al anotar, elegir la fecha ES la acción y no hay nada que romper: el movimiento todavía no está
+ * en ningún mes. Al **corregir**, en cambio, la fecha ya está contada en algún lado, y cambiarla
+ * de mes mueve plata entre meses — puede sacarla de un mes que el dueño ya dio por cerrado. Por
+ * eso acá elegir un día NO guarda: muestra el aviso ([avisoDeCambioDeMes]) y recién después se
+ * confirma. Mismo criterio que la unificación de categorías, que también avisa antes con las
+ * palabras exactas.
+ */
+@Composable
+private fun SeccionDeFecha(
+    event: FinancialEvent,
+    onFechaCambiada: (FinancialEvent) -> Unit,
+) {
+    val coroutine = rememberCoroutineScope()
+    val hoy = remember { hoyEnAppZone() }
+    val actual = remember(event.timestamp) { fechaDeEpoch(event.timestamp) }
+    var abierto by remember { mutableStateOf(false) }
+    var elegida by remember(event.timestamp) { mutableStateOf(actual) }
+    var guardando by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun guardar() {
+        if (guardando || elegida == actual) return
+        guardando = true
+        error = null
+        coroutine.launch {
+            val result = runCatching {
+                Repositories.wallets.updateEventTimestamp(
+                    event.id,
+                    timestampParaFecha(elegida, hoy),
+                )
+            }
+            guardando = false
+            result.onSuccess { onFechaCambiada(it) }.onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    SheetLabel("FECHA")
+    Spacer(Modifier.height(8.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !guardando) { abierto = !abierto },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = etiquetaDeFecha(actual, hoy),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = MinText,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = if (abierto) "Cerrar" else "Cambiar",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MinPrimary,
+        )
+    }
+
+    if (abierto) {
+        Spacer(Modifier.height(12.dp))
+        SelectorDeFecha(
+            seleccionada = elegida,
+            hoy = hoy,
+            // Elegir NO guarda: deja la fecha pendiente para que el aviso de abajo pueda decir
+            // qué implica antes de que se confirme.
+            onPick = { elegida = it },
+            enabled = !guardando,
+        )
+        val aviso = avisoDeCambioDeMes(actual, elegida)
+        if (aviso != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(aviso, fontSize = 12.5.sp, color = MinWarn, lineHeight = 17.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        val puedeGuardar = elegida != actual && !guardando
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (puedeGuardar) MinPrimaryContainer else MinSurfaceContainerLow)
+                .clickable(enabled = puedeGuardar) { guardar() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = when {
+                    guardando -> "Guardando…"
+                    elegida == actual -> "Elige otro día"
+                    else -> "Mover a ${etiquetaDeFecha(elegida, hoy).lowercase()}"
+                },
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (puedeGuardar) MinOnPrimaryContainer else MinTextFaint,
+            )
+        }
+        error?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, fontSize = 12.sp, color = MinExpense)
         }
     }
 }

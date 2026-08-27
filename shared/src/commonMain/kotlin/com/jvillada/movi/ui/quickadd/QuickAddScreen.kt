@@ -52,7 +52,10 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.fecha.timestampParaFecha
 
 /**
  * Cuánto de una fila de la hoja puede ocupar el valor de la derecha (ver `rightMaxFraction` en
@@ -67,6 +70,7 @@ private sealed class Picker {
     data object Category : Picker()
     data object Wallet : Picker()
     data object Note : Picker()
+    data object Date : Picker()
 }
 
 /**
@@ -128,6 +132,18 @@ fun QuickAddScreen(
         mutableStateOf(if (presetAccountId != null) OrigenCuenta.CONTEXTO else OrigenCuenta.NINGUNA)
     }
     var picker by remember { mutableStateOf<Picker>(Picker.None) }
+    // Ola 13 — LA FECHA DEL MOVIMIENTO, con hoy por defecto.
+    //
+    // Antes esto no existía y el guardado sellaba `Clock.System.now()` a secas, así que TODO caía
+    // bajo «HOY» en Movimientos: el dueño anotaba de una sentada el gimnasio, el mercado, un café,
+    // un almuerzo y el fútbol, y varios no habían sido hoy. El default no cambia —quien anota en
+    // el momento no toca nada— pero ahora se puede corregir antes de guardar.
+    //
+    // `hoy` se calcula UNA vez por apertura de la hoja y se comparte: si el selector, la etiqueta
+    // y el guardado preguntaran cada uno por su cuenta, una hoja abierta a las 23:59:59 podría
+    // decir «Hoy» y guardar la fecha de mañana.
+    val hoy = remember { hoyEnAppZone() }
+    var fecha by remember { mutableStateOf(hoy) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreateSheet by remember { mutableStateOf(false) }
@@ -260,7 +276,10 @@ fun QuickAddScreen(
                 // acaba de escribir con sus propios dedos. Sin esto caía en el default
                 // UNCONFIRMED y desaparecía de "Gastos", que excluye lo pendiente.
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
-                timestamp = Clock.System.now().toEpochMilliseconds(),
+                // Ola 13: la fecha elegida, no «ahora» a secas. Con «Hoy» (el default) sigue
+                // siendo `Clock.System.now()` exactamente como antes — ver [timestampParaFecha],
+                // que explica por qué otro día va al mediodía de Bogotá y hoy no.
+                timestamp = timestampParaFecha(fecha, hoy),
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
@@ -420,6 +439,20 @@ fun QuickAddScreen(
                         },
                         onClose = { picker = Picker.None },
                     )
+                    // Ola 13: el selector de fecha entra como sub-picker, igual que Categoría,
+                    // Cuenta y Nota — reemplaza el cuerpo adentro del Box de alto fijado, así que
+                    // abrirlo no cambia el alto de la hoja ni corre el teclado. Elegir un día ES
+                    // la acción completa (no hay nada más que decidir), así que cierra al toque,
+                    // como una sugerencia de categoría.
+                    Picker.Date -> Column(modifier = Modifier.fillMaxWidth()) {
+                        PickerHeader("Fecha", onClose = { picker = Picker.None })
+                        SelectorDeFecha(
+                            seleccionada = fecha,
+                            hoy = hoy,
+                            onPick = { fecha = it; picker = Picker.None },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
                     Picker.Note -> NoteEditor(
                         initial = note,
                         onSave = { note = it; picker = Picker.None },
@@ -463,6 +496,8 @@ fun QuickAddScreen(
                             else avisoDeCuenta(origenCuenta, accounts.size),
                         walletHintReserved = accounts.size > 1,
                         note = note,
+                        dateLabel = etiquetaDeFecha(fecha, hoy),
+                        onPickDate = { picker = Picker.Date },
                         onPickCategory = { picker = Picker.Category },
                         onPickWallet = { picker = Picker.Wallet },
                         onEditNote = { picker = Picker.Note },
@@ -548,6 +583,9 @@ private fun EditorBody(
     /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
     walletHintReserved: Boolean = false,
     note: String,
+    /** «Hoy», «Ayer» o «23 de agosto» — ver `etiquetaDeFecha`. */
+    dateLabel: String,
+    onPickDate: () -> Unit,
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
     onEditNote: () -> Unit,
@@ -647,6 +685,39 @@ private fun EditorBody(
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
+        )
+        // Ola 13 — LA FECHA, entre la cuenta y la nota.
+        //
+        // Una fila más en una hoja anclada abajo es exactamente lo que esta pantalla no puede
+        // regalar, así que vale la pena decir por qué esta sí:
+        //
+        // - **Es estática.** El teclado se mueve cuando algo aparece o desaparece mientras se
+        //   tipea (por eso el aviso de la cuenta y el error de red reservan su alto). Esta fila
+        //   está siempre, diga «Hoy» o «23 de agosto»: no puede mover nada.
+        // - **No crece.** El valor de la derecha tiene el mismo techo que las otras filas
+        //   (`rightMaxFraction`) y una sola línea; el texto más largo posible acá es «23 de
+        //   septiembre de 2025», que entra con aire en 167 dp.
+        // - **El sub-picker no cambia el alto de la hoja**: vive adentro del `Box` de alto
+        //   fijado, igual que Categoría, Cuenta y Nota.
+        //
+        // Va DESPUÉS de «Cuenta» y no arriba de todo porque el orden de la tarjeta sigue el de la
+        // decisión: cuánto (el teclado), en qué (categoría), de dónde (cuenta), cuándo (fecha), y
+        // el detalle opcional al final.
+        CardRow(
+            left = { Text("Fecha", fontSize = 14.5.sp, color = MinTextMute) },
+            right = {
+                Text(
+                    text = dateLabel,
+                    fontSize = 14.5.sp,
+                    color = MinText,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            rightMaxFraction = FRACCION_VALOR_FILA,
+            showChevron = true,
+            onClick = onPickDate,
         )
         CardRow(
             left = { Text("Nota", fontSize = 14.5.sp, color = MinTextMute) },

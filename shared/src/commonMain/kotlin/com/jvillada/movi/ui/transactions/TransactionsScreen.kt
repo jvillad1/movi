@@ -610,7 +610,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         ChangeCategorySheet(
             event = event,
             onDismiss = { selectedEvent = null },
-            onCategoryChanged = { selectedEvent = null; refreshKey++ },
+            onEventChanged = { selectedEvent = null; refreshKey++ },
         )
     }
 

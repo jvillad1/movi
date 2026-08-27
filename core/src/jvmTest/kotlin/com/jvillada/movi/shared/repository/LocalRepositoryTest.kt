@@ -198,6 +198,63 @@ class LocalRepositoryTest {
         assertEquals(balanceBefore, repoSincronizado.getAccount("acc-sync").balance)
     }
 
+
+    /**
+     * **La fecha de un movimiento todavía sin sincronizar se corrige SOLO LOCAL.**
+     *
+     * Mismo camino B que [updateEventCategory_evento_pendiente_se_resuelve_local_sin_llamar_al_server]
+     * y por el mismo motivo: `postEvent` escribe solo local y `syncedAt` sigue `null` hasta que el
+     * `SyncEngine` empuje en su ciclo de 30 s. Es exactamente la ventana en la que el dueño
+     * corrige la fecha del gasto que **acaba de anotar**, que es cuando más se corrige. El stub no
+     * conoce `"evt-fecha"`, así que si esto llamara a `remote` tiraría el 404 real y el test
+     * fallaría antes de los asserts.
+     */
+    @Test
+    fun updateEventTimestamp_evento_pendiente_se_resuelve_local_sin_llamar_al_server() = runBlocking {
+        repo.createAccount(Account("acc-fecha", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-fecha", "acc-fecha", TransactionType.EXPENSE, 20_000L))
+        val balanceBefore = repo.getAccount("acc-fecha").balance
+
+        val ayer = 1_756_000_000_000L
+        val result = repo.updateEventTimestamp("evt-fecha", ayer)
+        assertEquals(ayer, result.timestamp)
+        // Si hubiera ido al server, el stub habría devuelto accountId="acc-stub".
+        assertEquals("acc-fecha", result.accountId)
+
+        val mirrored = repo.getEvents("acc-fecha").single { it.id == "evt-fecha" }
+        assertEquals(ayer, mirrored.timestamp)
+        // Cambiar la fecha no mueve plata: el saldo de la cuenta no se toca.
+        assertEquals(balanceBefore, repo.getAccount("acc-fecha").balance)
+    }
+
+    /**
+     * Camino A: el evento ya está en el server, así que la corrección tiene que **pasar por él**
+     * (es quien valida que la fecha no sea futura) y recién después espejarse. Sin este test, un
+     * fix que resolviera todo localmente pasaría igual y dejaría el server con la fecha vieja.
+     */
+    @Test
+    fun updateEventTimestamp_evento_sincronizado_pasa_por_el_server_y_se_espeja() = runBlocking {
+        val repoSincronizado = LocalRepository(
+            db = db,
+            remote = NoOpRepository(knownEventIds = setOf("evt-fecha-sync")),
+            userId = { testUserId },
+        )
+        repoSincronizado.createAccount(Account("acc-fecha-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repoSincronizado.postEvent(event("evt-fecha-sync", "acc-fecha-sync", TransactionType.EXPENSE, 20_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "evt-fecha-sync")
+
+        val ayer = 1_756_000_000_000L
+        val result = repoSincronizado.updateEventTimestamp("evt-fecha-sync", ayer)
+        assertEquals(ayer, result.timestamp)
+        // El stub siempre echoa accountId="acc-stub": la prueba de que sí pasó por remote.
+        assertEquals("acc-stub", result.accountId)
+
+        assertEquals(
+            ayer,
+            repoSincronizado.getEvents("acc-fecha-sync").single { it.id == "evt-fecha-sync" }.timestamp,
+        )
+    }
+
     /**
      * Camino B (Hallazgo 1 de la revisión de `396a695`): el evento **todavía no llegó al
      * server** — `postEvent` es local-only y `syncedAt` sigue `null` hasta que el `SyncEngine`

@@ -95,6 +95,13 @@ class SyncEngine(
      * cubre la mitad: la revalidación ve si SyncEngine YA selló antes de que ese código corriera,
      * no si SyncEngine va a sellar DESPUÉS con un snapshot desactualizado — que es este caso.
      *
+     * **Lo mismo vale para la FECHA** desde que existe
+     * [com.jvillada.movi.shared.repository.LocalRepository.updateEventTimestamp]: corregir la
+     * fecha de un movimiento pendiente escribe solo en local, exactamente en la misma ventana.
+     * Por eso `markSyncedIfUnchanged` compara las dos cosas (`AND category = … AND timestamp = …`)
+     * y no solo la categoría — con una sola de las dos condiciones, el agujero seguía abierto
+     * para la otra.
+     *
      * Con la condición `AND category = :category`, si la categoría cambió el UPDATE no toca
      * ninguna fila: `syncedAt` se queda en null y el próximo ciclo (30s) la vuelve a levantar de
      * `selectUnsynced`, esta vez con la categoría ya corregida. Nota: eso reintenta un
@@ -132,7 +139,7 @@ class SyncEngine(
                     )
                 )
                 db.financialEventQueries.markSyncedIfUnchanged(
-                    Clock.System.now().toEpochMilliseconds(), row.id, row.category,
+                    Clock.System.now().toEpochMilliseconds(), row.id, row.category, row.timestamp,
                 )
             } catch (e: Exception) {
                 logSyncFailure("syncEvents", e, id = row.id)
