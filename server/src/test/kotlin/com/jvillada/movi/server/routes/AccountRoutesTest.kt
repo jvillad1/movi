@@ -31,14 +31,17 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -450,4 +453,50 @@ class AccountRoutesTest {
         assertEquals(HttpStatusCode.NoContent,
             client.delete("/api/accounts/$accId") { header(HttpHeaders.Authorization, "Bearer $token") }.status)
     }
+
+    /**
+     * Ola 11 — **`GET /api/accounts` devuelve un orden, no el que le quede cómodo al motor.**
+     *
+     * Sin `ORDER BY`, SQL no promete nada: el orden físico de las filas cambia después de un
+     * UPDATE o un VACUUM. Y toda la app trataba esta lista como si tuviera orden (la hoja de
+     * Agregar preseleccionaba `first()`), así que un detalle del motor decidía en qué cuenta se
+     * anotaba la plata. Este test escribe las cuentas al revés del alfabeto —y encima le hace un
+     * UPDATE a la primera, que es lo que en Postgres reescribe la fila al final de la tabla—
+     * para que un `selectAll` sin orden tenga todas las chances de devolverlas mal.
+     *
+     * **Los nombres van con la caja mezclada a propósito.** El cliente ordena la misma lista en
+     * SQLite, que compara con `BINARY` (todas las mayúsculas antes que cualquier minúscula), y
+     * este server con la locale de Postgres, que ignora la caja: con `ORDER BY name` a secas,
+     * «efectivo» en minúscula iba primero en la web y último en el teléfono, o sea que la app
+     * preseleccionaba una cuenta distinta en cada lado. Por eso el orden es por `lower(name)` y
+     * por eso este test lo ejercita con «efectivo» y no con «Efectivo».
+     */
+    @Test
+    fun `GET ordena por nombre sin importar la caja, no por como las escribio la base`() = testApplication {
+        wireApp()
+        createNamedAccount("acc-3", "Nequi")
+        createNamedAccount("acc-1", "efectivo")
+        createNamedAccount("acc-2", "Bancolombia")
+        // Un UPDATE sobre la que se insertó primero: en Postgres eso la reescribe y la manda al
+        // final del orden físico. Con H2 el efecto no es idéntico, pero el ORDER BY tiene que
+        // dar lo mismo en los dos.
+        transaction {
+            Accounts.update({ Accounts.id eq "acc-3" }) { it[balance] = 42L }
+        }
+
+        val nombres = Json.parseToJsonElement(
+            client.get("/api/accounts") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
+        ).jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+
+        // Con `ORDER BY name` a secas y una base que compara por byte, «efectivo» quedaría al
+        // final; con `lower(name)`, va donde el dueño espera verla.
+        assertEquals(listOf("Bancolombia", "efectivo", "Nequi"), nombres)
+    }
+
+    private suspend fun ApplicationTestBuilder.createNamedAccount(id: String, name: String) =
+        client.post("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"id":"$id","name":"$name","type":"SAVINGS","balance":0}""")
+        }
 }

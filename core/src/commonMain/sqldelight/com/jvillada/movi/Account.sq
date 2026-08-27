@@ -13,8 +13,28 @@ CREATE TABLE account (
     syncedAt   INTEGER
 );
 
+-- Mismo criterio que `GET /api/accounts` (ver AccountRoutes.kt, donde está escrito por qué se
+-- ordena por nombre y no por id ni por fecha de creación) — y `lower()` en los dos lados, que es
+-- lo que empareja el caso frecuente.
+--
+-- **Lo que esto garantiza y lo que NO.** SQLite compara texto con `BINARY` (byte a byte, todas
+-- las mayúsculas antes que cualquier minúscula) y este Postgres con la locale `en_US.UTF-8`
+-- (case-insensitive de hecho). Sin `lower()`, el dueño que escribió «efectivo» en minúscula y
+-- «Nequi» con mayúscula veía una primera cuenta distinta en el navegador que en el teléfono. Con
+-- `lower()` ese caso —el único frecuente— queda igual en los dos. Lo que sigue difiriendo son
+-- los acentos y la Ñ: el `lower()` de SQLite es ASCII-only (no baja la «Ñ») y ordena por byte,
+-- así que «Ñu» cae después de «Zeta» en el teléfono y entre «Nu» y «Zeta» en la web. Emparejar
+-- eso pide compilar SQLite con ICU, que es una dependencia nueva en los tres clientes para
+-- arreglar el orden entre dos cuentas que empiezan con Ñ. Queda escrito, no tapado.
+--
+-- Y sí hace falta un orden explícito acá: sin `ORDER BY`, SQLite devuelve las filas en orden de
+-- rowid, y `INSERT OR REPLACE` (que es como está escrito el `insert` de abajo) borra la fila y
+-- la reinserta con un rowid NUEVO al final. Eso NO lo dispara el sync —`SyncEngine.syncAccounts`
+-- sella con `markSynced`, que es un UPDATE y no toca el rowid— pero sí `mirrorAccountLocally`
+-- (al crear un crédito o una tarjeta) y `adjustCreditBalance` (al corregir el saldo de una): con
+-- una tarjeta en la app, ajustarle el saldo la manda al final de la lista.
 selectAll:
-SELECT * FROM account WHERE userId = :userId;
+SELECT * FROM account WHERE userId = :userId ORDER BY lower(name) ASC, id ASC;
 
 selectById:
 SELECT * FROM account WHERE id = :id;

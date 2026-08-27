@@ -32,7 +32,9 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
 import org.slf4j.LoggerFactory
@@ -45,7 +47,48 @@ fun Route.accountRoutes() {
             val uid = call.userId()
             val rate = FxRateService.usdToCop()
             val rows = dbQuery {
-                Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }
+                // **Orden explícito, y no el que quiera darle Postgres.** Esta consulta no tenía
+                // `ORDER BY`, y sin él un motor SQL no promete NADA: normalmente devuelve el
+                // orden físico de las filas, que cambia después de un UPDATE (la fila se
+                // reescribe al final) o de un VACUUM. Toda la app trata esta lista como si
+                // tuviera un orden —la hoja de Agregar preseleccionaba `first()`, el traspaso
+                // usaba la primera y la segunda—, así que ese detalle del motor decidía en qué
+                // cuenta se anotaba la plata, y podía cambiar de una sesión a la otra sin que
+                // nada cambiara a la vista.
+                //
+                // **Por nombre**, y no por fecha de creación ni por id:
+                //
+                // - `accounts` no tiene columna de creación, así que «orden en que las creó» no
+                //   es un dato que exista. Ordenar por `id` para simularlo sería una mentira:
+                //   los ids nuevos son UUID aleatorios (`newId`), o sea orden al azar pero
+                //   estable — lo peor de los dos mundos, porque parece intencional y no lo es.
+                // - El nombre es lo único de esta tabla que el dueño ve y controla. Alfabético
+                //   es un orden que puede predecir y, si le molesta, cambiar renombrando.
+                //
+                // **Por `lower(name)` y no por `name` a secas**, y esto no es cosmética: el
+                // cliente ordena la MISMA lista en SQLite (ver `Account.sq`), que compara con
+                // `BINARY` —todas las mayúsculas antes que cualquier minúscula— mientras que
+                // este Postgres usa la locale `en_US.UTF-8`, que ignora la caja. Con «Nequi» y
+                // «efectivo» (así, como las escribió el dueño), la web decía que la primera era
+                // *efectivo* y el teléfono que era *Nequi*: la misma app, dos cuentas por
+                // defecto distintas. `lower()` en los dos lados empareja ese caso. Lo que NO
+                // empareja son los acentos y la Ñ —el `lower()` de SQLite es ASCII-only—; está
+                // escrito con detalle en `Account.sq`, junto con por qué no se fuerza más.
+                //
+                // Desempate por `id` para que dos cuentas con el mismo nombre («Ahorros» en dos
+                // bancos) tampoco queden libradas al motor.
+                //
+                // **Dos efectos colaterales, a la vista y a propósito.** (1) La pantalla Cuentas
+                // también sale alfabética, porque lee esta misma respuesta — antes salía en el
+                // orden en que el motor las tuviera. (2) La cuenta que la hoja de Agregar
+                // preselecciona la primerísima vez (`OrigenCuenta.PRIMERA`, cuando todavía no
+                // hay ninguna usada) puede ser una tarjeta de crédito si se llama «Amex»: el
+                // orden no sabe de tipos. Se muestra con su aviso «Por defecto» y se cambia de
+                // un toque, y en cuanto anote el primer movimiento manda la última usada.
+                Accounts.selectAll()
+                    .where { Accounts.userId eq uid }
+                    .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
+                    .map { it.toAccount() }
             }
             val byAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
             val enriched = rows.map { enrichWith(it, byAccount[it.id] ?: emptyList(), rate) }
