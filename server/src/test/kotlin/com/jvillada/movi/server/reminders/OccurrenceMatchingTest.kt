@@ -201,6 +201,16 @@ class OccurrenceMatchingTest {
         )
     }
 
+    /**
+     * Un recurrente no tiene moneda: sus montos son pesos. Un cobro en dólares que se llamara
+     * igual entraba igual, y el orden terminaba comparando 12 con 5.000.000 mientras la tarjeta
+     * anunciaba «no es el monto que anotaste ($5.000.000)» contra un US$12.
+     */
+    @Test fun `un cobro en otra moneda no se propone`() {
+        val enDolares = evento(id = "ev_usd", amount = 1_200).copy(currency = "USD")
+        assertTrue(occurrenceCandidatesFor(regla(), due, listOf(enDolares)).isEmpty())
+    }
+
     @Test fun `se muestran como mucho tres propuestas`() {
         val muchos = (1..6).map { evento(id = "ev_$it", amount = 5_000_000L + it) }
         assertEquals(3, occurrenceCandidatesFor(regla(), due, muchos).size)

@@ -723,6 +723,45 @@ class ReminderRoutesTest {
         estados.forEach { assertEquals(periodoDeHoy, it.period) }
     }
 
+    /**
+     * Hallazgo MEDIA-1: el techo del POST era por MES y el del GET por DÍA. El 27 de agosto,
+     * `"2026-08"` sobre una regla de día 31 pasaba —el mes ya empezó— y apagaba un vencimiento que
+     * todavía no había llegado. No es alcanzable desde la pantalla, pero este endpoint no puede
+     * confiar en eso: es el mismo argumento con el que se cierran las cuatro puertas.
+     */
+    @Test
+    fun `un vencimiento de este mes que todavia no llego no se puede cerrar`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        // Un día del mes que con seguridad está DESPUÉS de hoy. Si hoy es el último día del mes no
+        // existe ningún día futuro dentro del mes, y ahí el caso no aplica.
+        val diaFuturo = hoy.dayOfMonth + 1
+        if (diaFuturo > hoy.lengthOfMonth()) return@testApplication
+        val regla = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Predial", "Impuestos", 900_000, diaFuturo,
+                    TransactionType.EXPENSE, accountId = accountOwnedByA,
+                ),
+            )
+        }.body<RecurringRule>()
+
+        val resp = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy))
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        // Y el GET tampoco lo ofrece — las dos guardas dicen lo mismo.
+        val estados = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>()
+        assertTrue(estados.none { it.ruleId == regla.id }, "el GET no puede ofrecer lo que el POST rechaza")
+    }
+
     /** Borrar la regla se lleva sus ocurrencias: si no, el movimiento queda quemado para siempre. */
     @Test
     fun `borrar la regla no deja ocurrencias huerfanas`() = testApplication {

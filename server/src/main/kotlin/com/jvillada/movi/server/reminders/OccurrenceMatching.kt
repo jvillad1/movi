@@ -57,11 +57,17 @@ import kotlin.math.abs
  * como el arriendo — un toque y el arriendo real dejaba de avisar. Es literalmente el modo de
  * falla que este párrafo decía evitar.
  *
- * Lo que sí queda pasando, y conviene tener presente: dos cosas de la MISMA categoría —«Energía»
- * y «Agua», las dos en «Servicios»— se proponen la una por la otra. No hay forma de separarlas
- * por lo único que comparten los dos modelos, y a diferencia del caso de arriba la propuesta al
- * menos comparte algo que el dueño eligió a mano. Se muestra con su nota y su monto, y el más
- * cercano al esperado va primero.
+ * Lo que sí queda pasando, y conviene tener presente: varias cosas de la MISMA categoría —«Agua»,
+ * «Gas», «Internet», todas en «Servicios»— se proponen la una por la otra, y el mismo pago puede
+ * salir ofrecido en las tres tarjetas a la vez. Con el **nombre** puesto (la nota, o el comercio
+ * que trae el banco) esto se resuelve solo: el nombre pesa 3 contra 1 de la categoría, así que el
+ * candidato correcto queda arriba en su regla. Sin nombre ni comercio, la tarjeta solo puede
+ * mostrar el día y el monto, y ahí decide el dueño con lo que sabe.
+ *
+ * Lo que hace tolerable ese residual es el «no fue este», y por eso su descarte se guarda por
+ * **(regla, movimiento)** y no por movimiento (ver `claveDescartada` en `OccurrenceLogic.kt`):
+ * rechazar el pago del gas en la regla del agua no puede quitárselo a la del gas, que es donde sí
+ * era el correcto.
  *
  * ## La cuenta ya NO filtra
  *
@@ -92,6 +98,12 @@ const val OCCURRENCE_WINDOW_DAYS: Long = 10
 const val MAX_OCCURRENCE_CANDIDATES: Int = 3
 
 /**
+ * La moneda en la que están los montos de un [RecurringRule]. El modelo no tiene campo de moneda —
+ * las reglas son pesos, igual que asume el «Flujo libre» de la pantalla de Recurrentes.
+ */
+const val MONEDA_DE_LAS_REGLAS: String = "COP"
+
+/**
  * Los movimientos que **podrían** ser la ocurrencia de [rule] en el vencimiento [dueDate], del más
  * probable al menos. Ver el KDoc de arriba para el porqué de cada regla.
  *
@@ -118,6 +130,13 @@ fun occurrenceCandidatesFor(
         .filter { it.type == rule.type }
         .filter { it.transferId == null }
         .filter { !isReservedCategory(it.category) }
+        // **Solo pesos.** `RecurringRule` no tiene moneda: sus montos son COP por modelo (lo mismo
+        // que asume `resumenRecurrentes` al sumar el flujo libre). Un cobro en dólares que se
+        // llame igual entraba igual, y entonces el orden comparaba 12 con 1.800.000 y la tarjeta
+        // anunciaba «no es el monto que anotaste ($1.800.000)» contra un US$12 — dos cifras que
+        // no son comparables, presentadas como si lo fueran. Hasta que un recurrente pueda decir
+        // en qué moneda es, lo honesto es no proponerlo.
+        .filter { it.currency == MONEDA_DE_LAS_REGLAS }
         .mapNotNull { event ->
             val fecha = epochMillisToAppDate(event.timestamp, zone)
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)

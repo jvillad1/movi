@@ -52,8 +52,33 @@ class OccurrenceLogicTest {
     @Test fun `no fue este pasa a la siguiente propuesta`() {
         val e = estado(candidates = listOf(evento("ev_1"), evento("ev_2")))
         assertEquals("ev_1", propuestaActual(e)?.id)
-        assertEquals("ev_2", propuestaActual(e, descartadas = setOf("ev_1"))?.id)
-        assertNull(propuestaActual(e, descartadas = setOf("ev_1", "ev_2")))
+        assertEquals("ev_2", propuestaActual(e, descartadas = setOf(claveDescartada("rr_1", "ev_1")))?.id)
+        assertNull(
+            propuestaActual(
+                e,
+                descartadas = setOf(claveDescartada("rr_1", "ev_1"), claveDescartada("rr_1", "ev_2")),
+            ),
+        )
+    }
+
+    /**
+     * Regresión del hallazgo MEDIA-2: el descarte estaba indexado por id de EVENTO, así que
+     * rechazar una propuesta en una regla se la quitaba a todas. Con «Agua», «Gas» e «Internet»
+     * todas en «Servicios», el mismo pago del gas era la primera propuesta de las tres: decir «no
+     * fue este» en Agua le borraba a Gas su candidato correcto.
+     */
+    @Test fun `no fue este solo afecta a la regla donde se dijo`() {
+        val elPagoDelGas = evento("ev_gas")
+        val agua = estado(candidates = listOf(elPagoDelGas)).copy(ruleId = "rr_agua")
+        val gas = estado(candidates = listOf(elPagoDelGas)).copy(ruleId = "rr_gas")
+        val rechazadoEnAgua = setOf(claveDescartada("rr_agua", "ev_gas"))
+
+        assertNull(propuestaActual(agua, rechazadoEnAgua), "en Agua ya se dijo que no")
+        assertEquals(
+            "ev_gas",
+            propuestaActual(gas, rechazadoEnAgua)?.id,
+            "en Gas sigue siendo el candidato correcto",
+        )
     }
 
     @Test fun `el idioma sigue al tipo del recurrente, y dice de que mes habla`() {
@@ -90,8 +115,21 @@ class OccurrenceLogicTest {
         assertFalse(difiereDelEsperado(5_000_000, 5_000_000))
     }
 
-    @Test fun `la descripcion de la propuesta cae a la categoria cuando no hay nota`() {
-        assertTrue(descripcionPropuesta(evento("ev_1", description = "")).endsWith("Salario"))
+    /**
+     * Regresión del hallazgo MEDIA-3: caía a la CATEGORÍA, que es justo la palabra que comparten
+     * todos los candidatos. Con cuatro servicios y las notas vacías, las tres tarjetas decían
+     * literalmente lo mismo — un solo movimiento ofrecido como respuesta a tres deudas distintas.
+     */
+    @Test fun `la descripcion usa el comercio cuando no hay nota, nunca la categoria`() {
+        val sinNota = evento("ev_1", description = "").copy(merchant = "EPM")
+        val texto = descripcionPropuesta(sinNota)
+        assertTrue(texto.endsWith("EPM"), texto)
+        assertFalse(texto.contains("Salario"), "la categoría no identifica: no se muestra")
+    }
+
+    @Test fun `sin nota y sin comercio la propuesta no se inventa un que`() {
+        val pelado = evento("ev_1", description = "").copy(merchant = null)
+        assertEquals("Movimiento del 25 de agosto", descripcionPropuesta(pelado.copy(timestamp = 1_787_677_200_000)))
     }
 
     /**

@@ -96,7 +96,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // propone como su ocurrencia (ver OccurrenceLogic.kt y `GET /api/payments/occurrences`).
     var ocurrencias by remember { mutableStateOf<List<OccurrenceState>>(emptyList()) }
     var ocurrenciasOk by remember { mutableStateOf(false) }
-    // Lo que el dueño rechazó con «no fue este», por lo que queda de esta pantalla. No se
+    // Lo que el dueño rechazó con «no fue este», por lo que queda de esta pantalla. Las claves son
+    // (regla, movimiento) — ver `claveDescartada`: indexado por evento solo, rechazar en una regla
+    // le quitaba la propuesta correcta a otra. No se
     // persiste: rechazar una propuesta no es un hecho sobre su plata — ver `propuestaActual`.
     var descartadas by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Reglas con una marca en vuelo, para no dejar tocar dos veces el MISMO botón. Es un conjunto
@@ -645,7 +647,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             onConfirmar = { ev ->
                                                 marcarOcurrio(payment.rule.id, estado.period, ev.id)
                                             },
-                                            onDescartar = { ev -> descartadas = descartadas + ev.id },
+                                            onDescartar = { ev ->
+                                                descartadas = descartadas + claveDescartada(payment.rule.id, ev.id)
+                                            },
                                             onCerrarSinMovimiento = {
                                                 marcarOcurrio(payment.rule.id, estado.period, null)
                                             },
@@ -747,7 +751,9 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             onConfirmar = { ev ->
                                                 marcarOcurrio(item.rule.id, abierta.period, ev.id)
                                             },
-                                            onDescartar = { ev -> descartadas = descartadas + ev.id },
+                                            onDescartar = { ev ->
+                                                descartadas = descartadas + claveDescartada(item.rule.id, ev.id)
+                                            },
                                             onCerrarSinMovimiento = {
                                                 marcarOcurrio(item.rule.id, abierta.period, null)
                                             },
@@ -950,15 +956,19 @@ private fun PropuestaOcurrencia(
         )
         if (propuesta != null) {
             Spacer(Modifier.height(4.dp))
+            // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
+            // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación
+            // el monto quedaba pegado al texto — dos datos distintos leyéndose como uno.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
             ) {
                 Text(
                     text = descripcionPropuesta(propuesta),
                     fontSize = 12.sp,
                     color = MinTextMute,
+                    lineHeight = 16.sp,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
@@ -966,6 +976,7 @@ private fun PropuestaOcurrencia(
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
                     color = MinText,
+                    lineHeight = 16.sp,
                 )
             }
             if (difiereDelEsperado(rule.amount, propuesta.amount)) {
@@ -1037,14 +1048,28 @@ private fun statusColor(status: PaymentStatus): Color = when (status) {
     PaymentStatus.UPCOMING  -> MinTextMute
 }
 
+/**
+ * El estado de un vencimiento, **con el mes cuando nombra un día**.
+ *
+ * Decía «Vence el 1 · en 5 días» a secas, y ese renglón puede hablar del mes que viene: la ventana
+ * de gracia rueda el vencimiento de una regla de día bajo a fin de mes. Justo debajo puede quedar
+ * la tarjeta «¿Ya pagaste el de agosto?», que sí nombra su mes — y entonces el único mes escrito
+ * en pantalla era el de la tarjeta mientras la fila de arriba hablaba de otro. Nombrar los dos es
+ * la mitad que le faltaba al arreglo de textos.
+ *
+ * «Vencido hace N días» y «Vence hoy» no llevan mes: no nombran ningún día, así que no hay nada
+ * que confundir.
+ */
 private fun statusText(payment: UpcomingPayment): String {
     val n = payment.daysUntil
     val day = dueDateDay(payment.dueDate)
+    val mes = nombreDelMes(payment.dueDate)
+    val cuando = if (mes.isEmpty()) "Vence el $day" else "Vence el $day de $mes"
     return when (payment.status) {
         PaymentStatus.OVERDUE   -> "Vencido hace ${-n} ${if (-n == 1) "día" else "días"}"
         PaymentStatus.DUE_TODAY -> "Vence hoy"
-        PaymentStatus.DUE_SOON  -> "Vence el $day · en $n ${if (n == 1) "día" else "días"}"
-        PaymentStatus.UPCOMING  -> "Vence el $day · en $n ${if (n == 1) "día" else "días"}"
+        PaymentStatus.DUE_SOON  -> "$cuando · en $n ${if (n == 1) "día" else "días"}"
+        PaymentStatus.UPCOMING  -> "$cuando · en $n ${if (n == 1) "día" else "días"}"
     }
 }
 

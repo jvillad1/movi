@@ -20,15 +20,28 @@ fun ocurrenciaDe(estados: List<OccurrenceState>, ruleId: String): OccurrenceStat
     estados.firstOrNull { it.ruleId == ruleId }
 
 /**
+ * La clave de un «no fue este»: **la regla Y el movimiento**, nunca el movimiento solo.
+ *
+ * El conjunto estaba indexado por id de evento, y eso hacía que rechazar una propuesta en una
+ * regla se la quitara a todas. Con «Agua», «Gas» e «Internet» —las tres en «Servicios»— el mismo
+ * pago del gas era la primera propuesta de las tres; decir «no fue este» en Agua (correcto, no era
+ * el agua) le borraba a **Gas** su candidato bueno, y Gas pasaba a proponer el pago de la energía.
+ * O sea: la única salida para rechazar una propuesta equivocada rompía la propuesta correcta de
+ * otra regla — justo el mecanismo del que depende que las categorías compartidas sean tolerables.
+ */
+fun claveDescartada(ruleId: String, eventId: String): String = "$ruleId|$eventId"
+
+/**
  * La propuesta que toca mostrar, o `null` si no queda ninguna.
  *
- * [descartadas] son las que el dueño ya rechazó con «no fue este» **en esta sesión de pantalla**.
- * No se persisten a propósito: rechazar una propuesta no es un hecho sobre su plata (a diferencia
- * de confirmarla, que sí lo es y por eso sí va a la base). Guardar cada «no» obligaría a una tabla
- * más para evitar un ruido que se va solo apenas confirma o apenas cambia el mes.
+ * [descartadas] son las claves ([claveDescartada]) que el dueño ya rechazó con «no fue este» **en
+ * esta sesión de pantalla**. No se persisten a propósito: rechazar una propuesta no es un hecho
+ * sobre su plata (a diferencia de confirmarla, que sí lo es y por eso sí va a la base). Guardar
+ * cada «no» obligaría a una tabla más para evitar un ruido que se va solo apenas confirma o apenas
+ * cambia el mes.
  */
 fun propuestaActual(estado: OccurrenceState, descartadas: Set<String> = emptySet()): FinancialEvent? =
-    estado.candidates.firstOrNull { it.id !in descartadas }
+    estado.candidates.firstOrNull { claveDescartada(estado.ruleId, it.id) !in descartadas }
 
 /**
  * ¿Hay algo que preguntar para este recurrente?
@@ -52,7 +65,10 @@ private val MESES = listOf(
  * entendemos — nunca un número crudo ni un `"?"`.
  */
 fun nombreDelMes(period: String): String {
-    val mes = period.substringAfter('-', "").toIntOrNull() ?: return ""
+    // Sirve igual para un periodo `"2026-09"` y para una fecha ISO `"2026-09-01"`: los dos textos
+    // que la pantalla tiene a mano (el periodo de la ocurrencia y el `dueDate` de un vencimiento)
+    // llevan el mes en el mismo lugar, y no vale la pena dos funciones para eso.
+    val mes = period.take(7).substringAfter('-', "").toIntOrNull() ?: return ""
     return MESES.getOrElse(mes - 1) { "" }
 }
 
@@ -97,9 +113,28 @@ fun textoYaOcurrio(estado: OccurrenceState): String {
 }
 
 /**
- * Una línea que describa la propuesta sin obligar a abrirla: el día **con su mes**, la nota (o la
- * categoría, que es lo que la app guarda como descripción cuando la nota va vacía) y nada más. El
- * monto se pinta aparte, con su formato de plata.
+ * Una línea que describa la propuesta sin obligar a abrirla: el día **con su mes** y **qué fue** —
+ * la nota que escribió el dueño o, si no escribió ninguna, el comercio que dijo el banco. El monto
+ * se pinta aparte, con su formato de plata.
+ *
+ * ## Por qué NO cae a la categoría
+ *
+ * Caía, y era peor que no decir nada. Con «Agua», «Gas» e «Internet» todas en «Servicios» y las
+ * notas vacías —lo normal en algo importado de un extracto— las tres tarjetas quedaban idénticas:
+ *
+ * ```
+ * Agua       ¿Ya pagaste el de agosto?   Movimiento del 24 de agosto · Servicios   $58.000
+ * Gas        ¿Ya pagaste el de agosto?   Movimiento del 24 de agosto · Servicios   $58.000
+ * Internet   ¿Ya pagaste el de agosto?   Movimiento del 24 de agosto · Servicios   $58.000
+ * ```
+ *
+ * Un solo movimiento ofrecido como respuesta a tres deudas impagas distintas, sin nada en pantalla
+ * que las separe. La categoría es exactamente lo que todos los candidatos comparten —por eso son
+ * candidatos—, así que como texto identificador vale cero y encima *aparenta* identificar.
+ *
+ * El comercio sí distingue, y el dato estaba ahí sin usarse: `occurrenceCandidatesFor` ya empareja
+ * contra `merchant`. Cuando no hay ni nota ni comercio, la línea se queda en el día y el monto —
+ * poco, pero honesto: no finge saber qué fue.
  *
  * El mes va siempre, aunque sea el mismo del vencimiento: «Movimiento del 25» a secas era
  * indistinguible entre el 25 de este mes y el del anterior, que es precisamente lo que había que
@@ -109,7 +144,10 @@ fun descripcionPropuesta(event: FinancialEvent): String {
     val fecha = epochMillisToAppDate(event.timestamp)
     val mes = MESES.getOrElse(fecha.monthNumber - 1) { "" }
     val cuando = if (mes.isEmpty()) "Movimiento del ${fecha.dayOfMonth}" else "Movimiento del ${fecha.dayOfMonth} de $mes"
-    val que = event.description.trim().ifEmpty { event.category.trim() }
+    // La nota del dueño primero; si no escribió ninguna, el comercio que dijo el banco. **Nunca la
+    // categoría**: es justo la palabra que todos los candidatos comparten —por eso son candidatos—
+    // así que ponerla ahí no distingue nada y encima *parece* que identifica.
+    val que = event.description.trim().ifEmpty { event.merchant.orEmpty().trim() }
     return if (que.isEmpty()) cuando else "$cuando · $que"
 }
 

@@ -307,16 +307,19 @@ fun Route.reminderRoutes() {
                 .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
                 .firstOrNull()?.toRule()
                 ?: return@dbQuery MarcaResult.Error(HttpStatusCode.NotFound)
-            // **Techo: el mes de hoy.** No se puede cerrar un mes que todavía no pasó.
+            // **Techo: el vencimiento de ese periodo tiene que haber LLEGADO — por día, no por
+            // mes.** Es la misma guarda que el GET, escrita igual.
             //
-            // El techo era `periodOf(dueDateFor(rule, today))` — la fecha YA RODADA por la
-            // ventana de gracia—, así que el 27 de agosto aceptaba `"2026-09"` para una regla de
-            // día 1: sellaba septiembre antes de que llegara y le apagaba el aviso. El mes de hoy
-            // no depende de la regla ni de la gracia, y dice exactamente lo que hay que decir.
-            if (body.period > periodOf(today)) {
+            // Fue un techo por mes, y ahí quedaba un hueco: el 27 de agosto, `"2026-08"` sobre
+            // una regla de día 31 pasaba —el mes ya empezó— y le apagaba el vencimiento del 31,
+            // que todavía no había llegado. No es alcanzable desde la pantalla (solo manda el
+            // periodo que le dio el GET), pero este archivo ya argumenta, para las cuatro
+            // puertas, que la UI ofrece y el endpoint no puede confiar en eso. Vale igual acá.
+            val vencimientoDelPeriodo = occurrenceInMonth(YearMonth.parse(body.period), rule.dayOfMonth)
+            if (vencimientoDelPeriodo.isAfter(today)) {
                 return@dbQuery MarcaResult.Error(
                     HttpStatusCode.BadRequest,
-                    "Ese periodo todavía no llegó: no se puede dar por ocurrido.",
+                    "Ese vencimiento todavía no llegó: no se puede dar por ocurrido.",
                 )
             }
             // Y un piso, para que un cliente con un bug no ensucie la tabla con periodos

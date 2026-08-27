@@ -14,16 +14,31 @@ import kotlinx.serialization.Serializable
  * «Salario» del 25 aparecía «Vencido hace 1 día» mientras el ingreso ya estaba anotado ahí abajo,
  * en la misma pantalla.
  *
- * ## La unidad es el PERIODO DE VENCIMIENTO, no el mes de hoy
+ * ## La unidad es la ocurrencia del MES CALENDARIO — y esto ya se decidió dos veces
  *
- * [period] es `"YYYY-MM"` y es el periodo de la **fecha de vencimiento vigente** de la regla — el
- * mismo que ya calcula `reminderKeyFor` para deduplicar los avisos, y por la misma razón: cerca
- * de fin de mes el vencimiento vigente puede caer en el mes siguiente, y usar el mes de hoy haría
- * que las dos mitades del sistema (el aviso y la ocurrencia) discreparan sobre de qué mes se está
- * hablando. Se sigue el criterio que ya estaba en vez de inventar uno nuevo.
+ * [period] es `"YYYY-MM"` y es el mes al que pertenece la ocurrencia: el «arriendo de agosto», el
+ * «salario de agosto». Un recurrente cierra el mes que se está viviendo, y solo una vez que su día
+ * llegó (ver `GET /api/payments/occurrences`).
  *
- * Como consecuencia, «ya ocurrió» es por periodo: cerrar agosto no dice nada de septiembre, y al
- * mes siguiente el recurrente vuelve a estar pendiente solo.
+ * **El primer intento usó el «vencimiento vigente» —la fecha que devuelve `dueDateFor`— y eso fue
+ * un bug con plata adentro.** El razonamiento parecía sólido: es el mismo criterio con el que
+ * `reminderKeyFor` deduplica los avisos, así que las dos mitades del sistema hablarían del mismo
+ * mes. Lo que ese razonamiento pasaba por alto es que `dueDateFor` **rueda con la ventana de
+ * gracia**: para una regla de día 1 o 2, durante la última semana del mes el vencimiento vigente
+ * ya es el del mes SIGUIENTE. La app terminaba preguntando «¿ya pagaste el arriendo?» sobre
+ * septiembre el 27 de agosto y ofreciendo, como respuesta, el pago de agosto — con el monto
+ * exacto, así que ni siquiera saltaba el aviso de monto distinto. Confirmarlo apagaba el arriendo
+ * de septiembre: fuera de «Próximos», fuera del barrido, sin correo.
+ *
+ * Las dos nociones son distintas y cada una sirve para lo suyo. El **aviso** pregunta «¿qué es lo
+ * próximo que vence?», y ahí rodar es correcto. La **ocurrencia** pregunta «¿el de este mes ya
+ * pasó?», y ahí rodar es exactamente el error. Que coincidan casi siempre es lo que hizo que el
+ * primer intento se viera bien.
+ *
+ * Si alguna vez te dan ganas de «unificar» esto de vuelta contra `dueDateFor`: es este bug.
+ *
+ * Como consecuencia, «ya ocurrió» es por mes: cerrar agosto no dice nada de septiembre, y al mes
+ * siguiente el recurrente vuelve a estar pendiente solo.
  *
  * ## [eventId] puede ser null, y la diferencia importa
  *
@@ -63,10 +78,11 @@ data class MarkOccurrenceRequest(
  * APK que el dueño ya tiene instalado, y agregarle campos (o peor, un valor nuevo al enum
  * `PaymentStatus`) rompería su deserialización. Un endpoint nuevo lo ignora quien no lo conoce.
  *
- * @param period    el periodo del vencimiento **natural** — el que se calcula sin tener en cuenta
- *                  lo ya ocurrido. Es de lo que habla esta entrada; `/api/payments/upcoming`, en
- *                  cambio, ya rodó al periodo siguiente cuando este está cerrado.
- * @param dueDate   la fecha de ese vencimiento natural, ISO `"2026-08-25"`.
+ * @param period    el **mes en curso**, `"YYYY-MM"` — de lo que habla esta entrada. Nunca es el
+ *                  mes siguiente: ver arriba por qué usar el vencimiento vigente fue un bug.
+ *                  (`/api/payments/upcoming` sí rueda, y ahí corresponde.)
+ * @param dueDate   la fecha en que ese mes vence para esta regla, ISO `"2026-08-25"`, recortada al
+ *                  largo del mes.
  * @param occurred  `true` = el dueño ya lo dio por ocurrido; entonces [candidates] va vacío.
  * @param eventId   con qué movimiento quedó emparejado, si quedó con alguno.
  * @param candidates lo que la app **propone** cuando todavía no está cerrado, del más probable al
