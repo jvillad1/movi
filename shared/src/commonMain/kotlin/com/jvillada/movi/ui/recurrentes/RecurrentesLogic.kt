@@ -188,3 +188,39 @@ fun proximosQueUrgen(upcoming: List<UpcomingPayment>): List<UpcomingPayment> =
  */
 fun hayRecordatoriosPedidos(upcoming: List<UpcomingPayment>): Boolean =
     upcoming.any { it.rule.type == TransactionType.EXPENSE && it.rule.remindMe }
+
+/**
+ * Qué mandar en `RecurringRule.accountId` cuando se guarda la hoja de un recurrente.
+ *
+ * **Existe para que `""` no pueda significar dos cosas.** El campo es de tres estados en el wire
+ * (ver el KDoc de [RecurringRule.accountId] y el PUT de `ReminderRoutes.kt`):
+ *   · `null`  → «no lo toques» — nadie habló de cuentas en este guardado
+ *   · `""`    → «quítala» — el dueño eligió «Sin cuenta» a propósito
+ *   · un id   → esa cuenta
+ *
+ * La hoja mandaba `accountId ?: ""`, o sea que **«no pude corroborar esta cuenta» y «el dueño la
+ * quitó» viajaban con el mismo valor**. Y no corroborar era el caso NORMAL en Android: la lista
+ * de cuentas salía de la DB local, donde una cuenta nacida en el server nunca estaba (ver
+ * `LocalRepository.getAccounts`), así que la hoja borraba la elección del dueño y después el
+ * `""` le pedía al server que la quitara. Corregirle el monto a un recurrente desde el teléfono
+ * le borraba la cuenta que había puesto desde la web: la protección de tres estados que ese
+ * endpoint documenta, derrotada desde el otro lado.
+ *
+ * Ahora los tres estados de la hoja se mapean uno a uno con los tres del wire, y **el único
+ * camino que produce `""` es que el dueño abra el selector y toque «Sin cuenta»**. Ninguna falla
+ * de lectura puede producir ese valor: si la lista de cuentas no llegó, [cuentaEnLaHoja] conserva
+ * lo que la regla ya tenía y eso es lo que se manda. Por eso esta capa protege aunque la de
+ * abajo (traer las cuentas del server) falle o se rompa después.
+ *
+ * En un POST no hay nada que preservar —`null` y `""` significan lo mismo, sin cuenta— así que la
+ * misma función sirve para las dos puertas.
+ *
+ * @param cuentaEnLaHoja el id que muestra el campo, o `null` si el campo dice «Sin cuenta».
+ * @param elDuenoEligioSinCuenta ¿ese `null` salió de que el dueño tocó «Sin cuenta» en el
+ *   selector? Si no, el `null` significa «acá no se habló de cuentas».
+ */
+fun cuentaParaElWire(cuentaEnLaHoja: String?, elDuenoEligioSinCuenta: Boolean): String? = when {
+    cuentaEnLaHoja != null -> cuentaEnLaHoja
+    elDuenoEligioSinCuenta -> ""
+    else -> null
+}

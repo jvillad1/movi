@@ -103,6 +103,16 @@ fun CreateRecurringRuleSheet(
     var accountId by remember { mutableStateOf(existing?.accountId ?: prefill?.accountId) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var accountPickerOpen by remember { mutableStateOf(false) }
+    // ¿El `accountId = null` de acá arriba lo puso el dueño tocando «Sin cuenta», o es que la
+    // regla nunca tuvo cuenta? Es la diferencia entre «quítala» y «no la toques» en el wire —
+    // ver [cuentaParaElWire], que es lo único que puede producir el `""` destructivo.
+    var elDuenoEligioSinCuenta by remember { mutableStateOf(false) }
+    // «Sin cuentas todavía» solo se afirma cuando la lista llegó y vino vacía — mismo criterio
+    // que `accountsLoaded` en la hoja de Agregar. Antes una lectura que todavía estaba en vuelo,
+    // o que falló, se contaba como «no tienes ninguna»: la misma clase de mentira que esta rama
+    // vino a sacar, en chiquito.
+    var cuentasLeidas by remember { mutableStateOf(false) }
+    var fallaronLasCuentas by remember { mutableStateOf(false) }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
     var currency by remember { mutableStateOf("COP") }
@@ -113,14 +123,20 @@ fun CreateRecurringRuleSheet(
     var error by remember { mutableStateOf<String?>(null) }
 
     // Una sola llamada, y solo cuando el dueño abrió esta hoja: no hay lista de cuentas
-    // cacheada en `:shared` y el selector necesita los nombres. Si falla, el selector queda
-    // vacío y la regla se guarda igual sin cuenta — que es un estado legítimo del modelo.
+    // cacheada en `:shared` y el selector necesita los nombres. Si falla, el selector se queda
+    // sin nombres y la hoja lo dice así (ver [AccountPickerField]) — la cuenta que la regla ya
+    // tenía se conserva y se manda de vuelta tal cual.
+    //
+    // **Acá había un `if (list.none { it.id == accountId }) accountId = null`** y era la mitad
+    // cliente de la pérdida de datos: la lista que no corroboraba la cuenta borraba la elección
+    // del dueño, y el guardado convertía ese null en el `""` que le pide al server que la quite.
+    // No alcanza con que la lista ahora llegue completa (ver `LocalRepository.getAccounts`): una
+    // lectura que falle no puede tener permiso para borrar nada. Si la cuenta de verdad ya no
+    // existe, el server lo resuelve solo — `accountIdIfOwned` guarda null y la respuesta lo dice.
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }
-            .onSuccess { list ->
-                accounts = list
-                if (accountId != null && list.none { it.id == accountId }) accountId = null
-            }
+            .onSuccess { list -> accounts = list; cuentasLeidas = true }
+            .onFailure { fallaronLasCuentas = true }
     }
 
     // Ola 9 · D: si el nombre coincide con una categoría del catálogo, se propone esa en vez de
@@ -201,10 +217,11 @@ fun CreateRecurringRuleSheet(
                         // adelante se reabre y se pasa a Gasto, la casilla arranca desmarcada.
                         // Es un camino angosto y el precio de que la base no mienta.
                         remindMe = selectedType == TransactionType.EXPENSE && remindMe,
-                        // Ola 9 · D: cadena vacía = «Sin cuenta», elegido a propósito. `null`
-                        // en el wire significa «no lo toques» y es lo que manda un cliente
-                        // viejo — ver el PUT en `ReminderRoutes.kt`.
-                        accountId = accountId ?: "",
+                        // Los tres estados del wire, uno a uno con los tres de la hoja: un id,
+                        // `""` SOLO si el dueño tocó «Sin cuenta», y `null` («no lo toques») si
+                        // acá no se habló de cuentas. Ver [cuentaParaElWire] — antes esto era
+                        // `accountId ?: ""` y una lectura fallida bastaba para borrar la cuenta.
+                        accountId = cuentaParaElWire(accountId, elDuenoEligioSinCuenta),
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
@@ -453,11 +470,19 @@ fun CreateRecurringRuleSheet(
                         // --- CUENTA (opcional) ---
                         AccountPickerField(
                             accounts = accounts,
+                            cuentasLeidas = cuentasLeidas,
+                            fallaronLasCuentas = fallaronLasCuentas,
                             selectedId = accountId,
                             open = accountPickerOpen,
                             enabled = !saving,
                             onToggle = { accountPickerOpen = !accountPickerOpen },
-                            onPick = { accountId = it; accountPickerOpen = false },
+                            onPick = {
+                                accountId = it
+                                // Tocar «Sin cuenta» (it == null) es la ÚNICA forma de pedir que
+                                // se quite la cuenta. Volver a elegir una cuenta lo deshace.
+                                elDuenoEligioSinCuenta = it == null
+                                accountPickerOpen = false
+                            },
                         )
 
                         Spacer(Modifier.height(18.dp))
@@ -555,6 +580,10 @@ fun CreateRecurringRuleSheet(
 @Composable
 private fun AccountPickerField(
     accounts: List<Account>,
+    /** ¿La lista de cuentas llegó? Con `false`, `accounts` vacía significa «no se sabe». */
+    cuentasLeidas: Boolean,
+    /** ¿La lectura falló? Distingue «todavía no llegó» de «no va a llegar». */
+    fallaronLasCuentas: Boolean,
     selectedId: String?,
     open: Boolean,
     enabled: Boolean,
@@ -562,6 +591,13 @@ private fun AccountPickerField(
     onPick: (String?) -> Unit,
 ) {
     val selected = accounts.firstOrNull { it.id == selectedId }
+    // La regla tiene cuenta pero no pudimos resolverle el nombre (la lista no llegó). El campo
+    // lo dice así en vez de mentir con «Sin cuenta»: la cuenta sigue puesta y se guarda igual.
+    val cuentaSinNombre = selected == null && selectedId != null
+    // Con una cuenta puesta el selector se abre aunque la lista esté vacía: es el único lugar
+    // desde donde el dueño puede pedir «Sin cuenta», y esa elección no puede depender de que una
+    // lectura de red haya salido bien.
+    val sePuedeElegir = accounts.isNotEmpty() || selectedId != null
     SheetSectionLabel("CUENTA (OPCIONAL)")
     Spacer(Modifier.height(8.dp))
     Box(
@@ -570,7 +606,7 @@ private fun AccountPickerField(
             .clip(RoundedCornerShape(12.dp))
             .background(MinSurfaceContainerLow)
             .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled && accounts.isNotEmpty(), onClick = onToggle)
+            .clickable(enabled = enabled && sePuedeElegir, onClick = onToggle)
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         Row(
@@ -580,6 +616,9 @@ private fun AccountPickerField(
             Text(
                 text = when {
                     selected != null -> selected.name
+                    cuentaSinNombre -> "Se conserva la cuenta elegida"
+                    fallaronLasCuentas -> "No pudimos cargar tus cuentas"
+                    !cuentasLeidas -> "Cargando tus cuentas…"
                     accounts.isEmpty() -> "Sin cuentas todavía"
                     else -> "Sin cuenta"
                 },
@@ -587,12 +626,12 @@ private fun AccountPickerField(
                 color = if (selected != null) MinText else MinTextMute,
                 modifier = Modifier.weight(1f),
             )
-            if (accounts.isNotEmpty()) {
+            if (sePuedeElegir) {
                 Text(if (open) "Cerrar" else "Elegir", fontSize = 12.sp, color = MinTextMute)
             }
         }
     }
-    if (open && accounts.isNotEmpty()) {
+    if (open && sePuedeElegir) {
         Spacer(Modifier.height(6.dp))
         Column(
             modifier = Modifier

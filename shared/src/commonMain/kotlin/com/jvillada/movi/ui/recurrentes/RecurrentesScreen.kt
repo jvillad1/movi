@@ -164,8 +164,12 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                     reglasFrescas = true
                     // Ola 9 · D: los nombres de las cuentas, y SOLO si alguna regla tiene
                     // cuenta. Una cuarta llamada fija en esta pantalla sería un viaje por
-                    // gusto para quien todavía no usa el campo (o sea, todo el mundo hasta
-                    // hoy); así la paga únicamente quien la va a ver.
+                    // gusto para quien todavía no usa el campo; así la paga únicamente quien
+                    // la va a ver. Y desde que `LocalRepository.getAccounts` pregunta al
+                    // server, en Android esto **es** un viaje de red (antes leía SQLDelight),
+                    // encadenado después de las reglas: importa más que antes que sea
+                    // condicional. Si falla, la lista muestra los recurrentes sin el nombre de
+                    // la cuenta, que es lo mismo que hacía cuando el campo no existía.
                     if (it.any { r -> r.accountId != null }) {
                         runCatching { Repositories.wallets.getAccounts() }
                             .onSuccess { list -> accountNames = list.associate { a -> a.id to a.name } }

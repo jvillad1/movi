@@ -331,4 +331,48 @@ class RecurrentesLogicTest {
     fun `un gasto que si pidio recordatorio lo dispara`() {
         assertTrue(hayRecordatoriosPedidos(listOf(vence("Arriendo", PaymentStatus.DUE_SOON, remindMe = true))))
     }
+
+    // ── La cuenta de un recurrente en el wire ─────────────────────────────────
+    //
+    // `""` significa «quítala» del lado del server. La hoja mandaba `accountId ?: ""`, así que
+    // «no pude corroborar esta cuenta» y «el dueño la quitó» viajaban iguales: editar el monto
+    // desde el teléfono borraba la cuenta que se había puesto desde la web.
+
+    @Test
+    fun `la cuenta elegida viaja como su id`() {
+        assertEquals("acc-1", cuentaParaElWire("acc-1", elDuenoEligioSinCuenta = false))
+    }
+
+    @Test
+    fun `elegir Sin cuenta a proposito es lo unico que manda la cadena vacia`() {
+        assertEquals("", cuentaParaElWire(null, elDuenoEligioSinCuenta = true))
+    }
+
+    @Test
+    fun `sin hablar de cuentas se manda null, que el server lee como no lo toques`() {
+        assertEquals(null, cuentaParaElWire(null, elDuenoEligioSinCuenta = false))
+    }
+
+    /**
+     * La regresión concreta: la lista de cuentas no llegó (o no traía la cuenta de la regla), así
+     * que la hoja se queda con el id que la regla ya tenía y lo manda de vuelta. Ningún camino
+     * que no sea un toque del dueño puede producir el `""` que borra.
+     */
+    @Test
+    fun `una lista de cuentas que no corrobora nada no puede borrar la cuenta de la regla`() {
+        // La hoja ya no anula el id por no encontrarlo en la lista que llegó, así que lo que
+        // tiene para mandar sigue siendo la cuenta que la regla traía.
+        val enLaHoja = "acc-bancolombia"
+
+        val enElWire = cuentaParaElWire(enLaHoja, elDuenoEligioSinCuenta = false)
+
+        assertEquals("acc-bancolombia", enElWire)
+        assertFalse(enElWire == "", "la cadena vacia es «quítala», y nadie la pidió")
+    }
+
+    /** Elegir «Sin cuenta» y arrepentirse deja de pedir el borrado. */
+    @Test
+    fun `volver a elegir una cuenta despues de Sin cuenta deshace el borrado`() {
+        assertEquals("acc-2", cuentaParaElWire("acc-2", elDuenoEligioSinCuenta = false))
+    }
 }

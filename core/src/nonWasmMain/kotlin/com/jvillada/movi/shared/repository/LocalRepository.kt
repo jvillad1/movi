@@ -58,8 +58,32 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+
+/**
+ * Cuánto se le da al server para contestar la lista de cuentas **cuando ya hay algo local que
+ * mostrar**.
+ *
+ * El engine HTTP tiene `connectTimeoutMillis = 30_000` (ver `Platform.android.kt`), pensado para
+ * un POST que no se puede perder. Para esta lectura ese número es al revés de lo que la app
+ * promete: en una zona muerta o detrás de un portal cautivo, media pantalla quedaba media hora
+ * de reloj esperando —y en la hoja de Agregar, sin cuenta seleccionada, «Falta la cuenta»— donde
+ * master resolvía en microsegundos contra SQLite. Cinco segundos es la frontera entre «el server
+ * está lento» y «no hay server»: pasado eso, lo local es la mejor respuesta que existe y se
+ * contesta con eso. La lectura no se cancela por gusto en el otro caso: sin NADA local no hay
+ * respuesta mejor que esperar.
+ */
+private const val PRESUPUESTO_DE_RED_MS = 5_000L
+
+/** Fila de `account` (SQLDelight) → [Account] del modelo. */
+private fun com.jvillada.movi.Account.toAccountModel() = Account(
+    id = id, name = name,
+    type = AccountType.valueOf(type),
+    balance = balance, currency = currency,
+)
 
 class LocalRepository(
     private val db: MoviDatabase,
@@ -69,18 +93,147 @@ class LocalRepository(
 
     // ── Accounts ──────────────────────────────────────────────────────────────
 
-    override suspend fun getAccounts(): List<Account> =
-        db.accountQueries.selectAll(userId()).executeAsList().map { row ->
-            Account(id = row.id, name = row.name,
-                type = AccountType.valueOf(row.type),
-                balance = row.balance, currency = row.currency)
+    /**
+     * **Las cuentas del server también, no solo las que nacieron en este teléfono.**
+     *
+     * Antes esto leía SOLO SQLDelight, mientras el resto de la misma pantalla venía del server —
+     * y el [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae. Resultado: una cuenta
+     * nacida en el server (creada en la web, sembrada por API, o anterior a esta instalación)
+     * **nunca llegaba al teléfono**. De ahí salían tres pantallas mintiendo a la vez: Cuentas
+     * decía «Sin cuentas aún» —invitando a crear un duplicado de una cuenta que ya existe—, el
+     * Inicio decía «Sin cuentas aún» y «Balance neto $0», y la hoja de un recurrente decía «Sin
+     * cuentas todavía» y al guardar borraba la cuenta de la regla (eso se arregla aparte, y por
+     * separado, en [com.jvillada.movi.ui.recurrentes.cuentaParaElWire]).
+     *
+     * **Por qué acá y no en el SyncEngine.** Bajar cuentas en el ciclo de 30s deja la primera
+     * pintada de cada pantalla igual de mentirosa que antes (hasta el próximo tick), y obliga a
+     * inventar reglas de conflicto para nombre y saldo. Este camino es el patrón que el archivo
+     * ya usa en la escritura —remoto primero, espejo local; ver [createAccount], [createCredit],
+     * [createCard], [adjustCreditBalance] y [mirrorAccountLocally]— aplicado a la lectura: se
+     * pregunta al server, se espeja lo que contestó, y lo local queda como respaldo.
+     *
+     * **La lista dice exactamente lo que el server tiene, más lo que este teléfono todavía no
+     * pudo subir.** Espejar sin más dejaba un agujero peor que el original: una cuenta borrada
+     * desde la web sobrevivía como fila local **para siempre** —con red perfecta y con un GET
+     * exitoso que no la devolvía—, seguía sumando al «Balance neto», el selector del recurrente
+     * la ofrecía, y elegirla ahí volvía a perder la cuenta de la regla (el server nulea un id que
+     * no conoce). Un fantasma así ni siquiera se podía sacar: «Eliminar cuenta» es remote-first y
+     * el 404 del server dejaba la fila local en pie.
+     *
+     * La regla que lo cierra es de una línea: **se oculta la cuenta que ya estaba sellada ANTES
+     * de preguntar y que el server no devolvió.** Sellada (`syncedAt != null`) significa «el
+     * server la conoce»; si preguntamos y no vino, ya no existe allá. Nada creado o sellado
+     * DESPUÉS del GET se filtra —por eso el fotograma se toma antes de la llamada y no después—,
+     * así que ni la cuenta que el dueño acaba de crear ni la que el `SyncEngine` selló mientras
+     * el GET estaba en vuelo pueden parpadear fuera de la lista.
+     *
+     * **No se borra ningún dato**, solo se deja de mostrar: la fila sobrevive con sus eventos
+     * locales, y esa es toda la diferencia con [deleteAccount] —que sí cascadea patas hermanas,
+     * voids y eventos, y que no tendría por qué correr desde un camino de LECTURA, donde una
+     * respuesta corta se volvería pérdida de datos—. Lo que sí se agregó del lado del borrado es
+     * que un 404 se trate como éxito (ver [deleteAccount]): así, si alguna vez un fantasma queda
+     * a la vista, el dueño puede sacarlo.
+     *
+     * **Sin red, y con red mala.** Si `remote.getAccounts()` falla se devuelve lo local tal cual
+     * —incluye lo espejado en la última lectura con red, así que el teléfono sigue mostrando las
+     * cuentas del server en modo avión—. Y como el engine HTTP tiene 30 s de `connectTimeout`
+     * (ver `Platform.android.kt`), una zona muerta o un portal cautivo bloqueaban media pantalla
+     * medio minuto donde antes se resolvía en microsegundos: con algo local ya en la base, la
+     * espera se corta en [PRESUPUESTO_DE_RED_MS] y se contesta con lo que hay. Solo cuando no hay
+     * NADA local se espera lo que haga falta, porque ahí no existe una respuesta mejor.
+     *
+     * Lo único que no se hace es afirmar «no tienes cuentas» cuando no se pudo preguntar Y no hay
+     * nada local: ahí la excepción se propaga para que la pantalla muestre su reintento (ver
+     * `AccountsScreen`, que además ya no pinta el estado vacío mientras no haya una lista de
+     * verdad).
+     *
+     * **No duplica.** El espejo es el `INSERT OR REPLACE` de [mirrorAccountLocally] y la PK es el
+     * id, que es el mismo de los dos lados (los ids los genera el cliente con `newId`, y los que
+     * nacieron en el server vienen en la respuesta). Una cuenta que ya estaba local se pisa, no
+     * se agrega.
+     *
+     * **El saldo sigue teniendo una sola fuente.** Para las cuentas que el server conoce se
+     * devuelve el objeto que el server mandó —saldo derivado de los eventos, más
+     * `balancesByCurrency`/`estimatedTotalCop`, que la columna local no sabe guardar—, igual que
+     * ya hacen Inicio y Presupuestos. La columna local `accounts.balance` se refresca con ese
+     * valor y queda solo como respaldo sin red. Precio conocido: un movimiento anotado offline
+     * mueve el saldo local, y apenas hay red este GET muestra el del server —que todavía no lo
+     * tiene— hasta que el `SyncEngine` lo empuje y una lectura posterior lo refleje. Con red
+     * intermitente eso puede tardar varios ciclos de 30 s, no uno; lo que no puede es quedarse
+     * así para siempre, que es lo que hacía la columna local de master (nunca se reconciliaba
+     * con nada). La alternativa —mezclar el delta local con el saldo del server— sería la segunda
+     * fuente de verdad que no queremos.
+     *
+     * **El orden lo sigue poniendo SQLDelight** (`ORDER BY lower(name), id`, ver `Account.sq`),
+     * que es el mismo criterio que `GET /api/accounts` — el emparejamiento entre el teléfono y
+     * la web se mantiene y no se reordena nada en Kotlin.
+     */
+    override suspend fun getAccounts(): List<Account> {
+        val uid = userId()
+        // El fotograma va ANTES de preguntar: es lo que hace que la regla de abajo solo pueda
+        // ocultar cuentas por las que el server ya fue consultado. Ver el KDoc.
+        val filasAntesDePreguntar = db.accountQueries.selectAll(uid).executeAsList()
+        val selladasAntesDePreguntar = filasAntesDePreguntar
+            .filter { it.syncedAt != null }
+            .mapTo(mutableSetOf()) { it.id }
+        val habiaAlgoLocal = filasAntesDePreguntar.isNotEmpty()
+
+        val remotas = try {
+            if (habiaAlgoLocal) {
+                withTimeoutOrNull(PRESUPUESTO_DE_RED_MS) { remote.getAccounts() }
+                    ?: return leerCuentasLocales(uid)
+            } else {
+                remote.getAccounts()
+            }
+        } catch (e: CancellationException) {
+            // La pantalla se fue mientras el request estaba en vuelo. Tragarlo haría que el
+            // `runCatching` del llamador lo leyera como un éxito con lista vacía.
+            throw e
+        } catch (e: Exception) {
+            val locales = leerCuentasLocales(uid)
+            // Vacío + no se pudo preguntar = no se sabe, y «no tienes cuentas» sería una
+            // afirmación sin respaldo. Con algo local, eso es la mejor respuesta que hay.
+            if (locales.isEmpty()) throw e
+            return locales
         }
 
+        db.transaction { remotas.forEach { mirrorAccountLocally(it) } }
+        val porId = remotas.associateBy { it.id }
+        val fantasmas = selladasAntesDePreguntar - porId.keys
+        // El orden sale de la DB; el contenido de cada cuenta que el server conoce, del server;
+        // y las que el server ya no tiene se dejan de mostrar (sin borrarles nada).
+        return leerCuentasLocales(uid)
+            .filterNot { it.id in fantasmas }
+            .map { porId[it.id] ?: it }
+    }
+
+    /** Las cuentas de la DB local, en el orden de `Account.sq`. Respaldo sin red de [getAccounts]. */
+    private fun leerCuentasLocales(uid: String): List<Account> =
+        db.accountQueries.selectAll(uid).executeAsList().map { it.toAccountModel() }
+
+    /**
+     * Mismo criterio que [getAccounts]: el server primero, la fila local como respaldo.
+     *
+     * Antes esto era un `executeAsOne()` sobre SQLDelight, o sea que abrir el detalle de una
+     * cuenta que nació en el server **tiraba una excepción** — y era alcanzable de verdad:
+     * `CreditosScreen` navega al detalle de la cuenta de un crédito, y un crédito creado en la
+     * web no tenía fila local. Hoy [getAccounts] la espeja apenas se lista, pero el detalle
+     * también se alcanza sin pasar por la lista, así que la garantía tiene que estar acá y no
+     * depender del orden de las pantallas. Se espeja lo que contesta el server por lo mismo que
+     * en [getAccounts]: el saldo derivado de eventos es el bueno.
+     *
+     * El respaldo local es a propósito **más permisivo** que el de [getAccounts]: acá el dueño
+     * pidió una cuenta puntual y mostrarle lo último que se supo de ella es mejor que un error.
+     * Un 404 no la esconde —para eso está el filtro de la lista, que es donde el fantasma hacía
+     * daño (sumaba al patrimonio y se podía elegir en un recurrente)—.
+     */
     override suspend fun getAccount(id: String): Account =
-        db.accountQueries.selectById(id).executeAsOne().let { row ->
-            Account(id = row.id, name = row.name,
-                type = AccountType.valueOf(row.type),
-                balance = row.balance, currency = row.currency)
+        try {
+            remote.getAccount(id).also { mirrorAccountLocally(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            db.accountQueries.selectById(id).executeAsOneOrNull()?.toAccountModel() ?: throw e
         }
 
     /**
@@ -154,9 +307,21 @@ class LocalRepository(
      * excepción se propaga tal cual — no se atrapa acá — para que la UI la traduzca a un
      * mensaje claro ("No se pudo eliminar — revisa tu conexión", ver `AccountDetailScreen`) en
      * vez de fingir que el borrado ocurrió.
+     *
+     * **Con una excepción: el 404 se sella como éxito**, igual que el 409 en
+     * [com.jvillada.movi.shared.SyncEngine.syncVoids]. «Esa cuenta no existe en el server» es
+     * exactamente el estado al que este borrado quería llegar, y tratarlo como falla dejaba al
+     * dueño encerrado: una cuenta borrada desde la web y todavía espejada acá contestaba 404, la
+     * app decía «revisa tu conexión» con la conexión perfecta, y la fila local no había forma de
+     * sacarla salvo borrando los datos de la app. Hoy [getAccounts] ni siquiera la muestra, pero
+     * la salida tiene que existir igual: es la que hace que un fantasma no pueda ser permanente.
      */
     override suspend fun deleteAccount(id: String) {
-        remote.deleteAccount(id)
+        try {
+            remote.deleteAccount(id)
+        } catch (e: ApiException) {
+            if (e.status != 404) throw e
+        }
         val uid = userId()
         db.transaction {
             // Lo mismo que acaba de hacer el server, con las mismas palabras (ver
@@ -477,9 +642,12 @@ class LocalRepository(
      * Crea contra el server y **espeja la cuenta devuelta en la DB local** (F20, Ola 5).
      *
      * Antes delegaba y ya, y la cuenta LOAN que `POST /api/credits` creaba solo existía en el
-     * server: la pantalla de Cuentas en Android lee [getAccounts] → SQLDelight, y el
+     * server: la pantalla de Cuentas en Android leía [getAccounts] → SQLDelight y nada más, y el
      * [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae — así que un crédito creado
      * desde la app nunca aparecía en Cuentas del teléfono (sí en Créditos, que lee remoto).
+     * Desde que [getAccounts] pregunta al server, esa cuenta aparecería igual en la próxima
+     * lectura con red; el espejo se queda porque es lo que la deja visible **ya** (sin esperar
+     * otro viaje) y sin red.
      * Mismo espejo que ya hacía [adjustCreditBalance] para el caso "el crédito nació en el
      * server": la fila local se escribe con lo que el server devolvió, `syncedAt = ahora` para
      * que el SyncEngine no la vuelva a subir.
@@ -503,7 +671,12 @@ class LocalRepository(
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = remote.putCardTerms(terms)
     override suspend fun deleteCardTerms(accountId: String) = remote.deleteCardTerms(accountId)
 
-    /** Upsert local (INSERT OR REPLACE) de una cuenta que nació en el server, marcada como sincronizada. */
+    /**
+     * Upsert local (INSERT OR REPLACE) de una cuenta que nació en el server, marcada como
+     * sincronizada. Lo usan las escrituras ([createCredit], [createCard]) y también las lecturas
+     * ([getAccounts], [getAccount]) — la PK es el id, el mismo de los dos lados, así que espejar
+     * una cuenta que ya estaba la pisa en vez de duplicarla.
+     */
     private fun mirrorAccountLocally(account: Account) {
         db.accountQueries.insert(
             account.id, account.name, account.type.name,
@@ -516,8 +689,10 @@ class LocalRepository(
      *
      * El resto de las operaciones de crédito delegan y ya: se leen siempre desde el server. El
      * ajuste no puede, porque su efecto secundario —un movimiento en la cuenta— se lee desde acá:
-     * [getEvents]/[getEventsByDay] y [getAccounts] van a SQLDelight, y [com.jvillada.movi.shared.SyncEngine]
-     * solo empuja, nunca trae. Sin este espejo, en Android el ajuste no aparecía en Movimientos,
+     * [getEvents]/[getEventsByDay] van a SQLDelight (y [getAccounts] cae ahí cuando no hay red),
+     * mientras [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae. Los eventos siguen
+     * sin bajar del server por ningún camino, así que este espejo sigue siendo la única forma de
+     * que el ajuste se vea acá. Sin él, en Android el ajuste no aparecía en Movimientos,
      * ni en Análisis, ni en Presupuestos, ni en el detalle de la cuenta, y la pantalla de Cuentas
      * seguía mostrando la deuda vieja para siempre — mientras la hoja prometía por escrito que
      * "queda como un movimiento visible en la cuenta".
