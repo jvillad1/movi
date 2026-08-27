@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.isReservedCategory
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
@@ -27,8 +28,8 @@ import kotlin.math.abs
  * monto de un recurrente es un **estimado, no un contrato**. Exigir monto exacto —o un margen
  * fijo de ±10 % elegido a ojo— haría fallar justo el caso que motivó la función. Así que:
  *
- *  - **Identifica** lo estable: el tipo (ingreso/gasto), la ventana alrededor del vencimiento, la
- *    cuenta (si la regla tiene una) y la cercanía de nombre o categoría.
+ *  - **Identifica** lo estable: el tipo (ingreso/gasto), la ventana alrededor del vencimiento y la
+ *    coincidencia de nombre o categoría. La cuenta suma pero no identifica sola (ver abajo).
  *  - **Ordena** por lo variable: entre los candidatos, el más cercano al monto esperado va
  *    primero — pero uno con una retención de más **no** queda descartado, solo va después.
  *  - **Decide el dueño.** Con confirmación humana no hace falta clavar un margen y rezar.
@@ -48,21 +49,42 @@ import kotlin.math.abs
  *
  * ## Y una señal mínima, para no proponer cualquier cosa
  *
- * Además de las puertas, un candidato tiene que compartir **al menos una** seña de identidad con
- * la regla: el mismo nombre normalizado, la misma categoría, o la cuenta (cuando la regla dice en
- * qué cuenta cae, quien está en esa cuenta ya está señalado). Sin ese mínimo, un gasto del 25
- * cualquiera se propondría como «tu arriendo», y una propuesta que se equivoca envalentona a
- * decir que sí sin mirar. Cuando no hay ninguna señal, la app no propone nada y queda el camino
- * manual: «Ya lo pagué» / «Ya me llegó», que cierra el periodo sin emparejar.
+ * Además de las puertas, un candidato tiene que **llamarse igual o compartir la categoría**. La
+ * cuenta *suma* —ordena mejor a lo que cae donde el dueño dijo que cae— pero **no alcanza sola**,
+ * y esto costó una revisión: `rule.accountId != null` no mira el movimiento, así que con la
+ * cuenta como seña suficiente TODO gasto de esa cuenta en la ventana pasaba el mínimo. La regla
+ * «Arriendo · Vivienda · $1.800.000 · Bancolombia» proponía el mercado del Éxito de $1.750.000
+ * como el arriendo — un toque y el arriendo real dejaba de avisar. Es literalmente el modo de
+ * falla que este párrafo decía evitar.
+ *
+ * Lo que sí queda pasando, y conviene tener presente: dos cosas de la MISMA categoría —«Energía»
+ * y «Agua», las dos en «Servicios»— se proponen la una por la otra. No hay forma de separarlas
+ * por lo único que comparten los dos modelos, y a diferencia del caso de arriba la propuesta al
+ * menos comparte algo que el dueño eligió a mano. Se muestra con su nota y su monto, y el más
+ * cercano al esperado va primero.
+ *
+ * ## La cuenta ya NO filtra
+ *
+ * Antes, una regla con cuenta descartaba todo lo que estuviera en otra. El silencio era el lado
+ * seguro del error, pero dejaba sin propuesta un «Salario» anotado en Nequi que se llamaba
+ * exactamente igual que la regla — el nombre idéntico pesando menos que un campo que el dueño
+ * llenó de pasada. Ahora la cuenta suma como seña y el orden hace el resto.
  */
 
 /**
  * Cuántos días alrededor del vencimiento se buscan candidatos.
  *
  * Diez a cada lado: cubre el pago adelantado, el sueldo que cae el viernes porque el 25 fue
- * domingo, y el atraso de un par de días hábiles. Y deja diez días de aire contra la ventana del
- * periodo vecino (los vencimientos están a ~30 días), así que un mismo movimiento rara vez queda
- * propuesto para dos periodos — y si queda, la puerta 4 impide que cierre los dos.
+ * domingo, y el atraso de un par de días hábiles.
+ *
+ * **Pero nunca hacia atrás más allá del mes del vencimiento** (ver [occurrenceCandidatesFor]).
+ * Sin ese piso, una regla de día 1 o 2 —el día típico de un arriendo o una nómina— proponía el
+ * pago del mes ANTERIOR para cerrar el vencimiento de este: el arriendo de agosto pagado tarde el
+ * 25 de agosto ofrecido como el arriendo de septiembre, con el monto exacto (así que ni siquiera
+ * salía el aviso de «no es el monto que anotaste») y sin que ningún texto dijera de qué mes se
+ * hablaba. Confirmarlo hacía desaparecer el arriendo de septiembre: fuera de «Próximos», fuera
+ * del barrido, sin correo. Perder una propuesta legítima —el sueldo que cayó el último día del
+ * mes anterior— cuesta un «Ya me llegó»; cerrar el mes equivocado cuesta plata.
  */
 const val OCCURRENCE_WINDOW_DAYS: Long = 10
 
@@ -87,6 +109,8 @@ fun occurrenceCandidatesFor(
 ): List<FinancialEvent> {
     val claveRegla = claveComparableDeNombre(rule.name)
     val claveCategoria = claveComparableDeNombre(rule.category)
+    // El piso: nada anterior al mes del vencimiento. Ver el KDoc de OCCURRENCE_WINDOW_DAYS.
+    val primerDiaDelPeriodo = YearMonth.from(dueDate).atDay(1)
 
     return events
         .asSequence()
@@ -94,25 +118,25 @@ fun occurrenceCandidatesFor(
         .filter { it.type == rule.type }
         .filter { it.transferId == null }
         .filter { !isReservedCategory(it.category) }
-        // La cuenta de la regla, cuando la tiene, es la seña más fuerte que dio el dueño sobre
-        // dónde cae esto todos los meses: se respeta como filtro, no como preferencia. Si él
-        // anotó el movimiento en otra cuenta no habrá propuesta — y ese silencio es correcto:
-        // mejor que no proponga a que proponga el movimiento equivocado.
-        .filter { rule.accountId == null || it.accountId == rule.accountId }
         .mapNotNull { event ->
             val fecha = epochMillisToAppDate(event.timestamp, zone)
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)
             if (abs(dias) > windowDays) return@mapNotNull null
+            if (fecha.isBefore(primerDiaDelPeriodo)) return@mapNotNull null
             val nombrePega = claveRegla.isNotEmpty() &&
                 (claveComparableDeNombre(event.description) == claveRegla ||
                     claveComparableDeNombre(event.merchant.orEmpty()) == claveRegla)
             val categoriaPega = claveCategoria.isNotEmpty() &&
                 claveComparableDeNombre(event.category) == claveCategoria
-            val laCuentaLoSenala = rule.accountId != null
-            if (!nombrePega && !categoriaPega && !laCuentaLoSenala) return@mapNotNull null
+            // La seña mínima es el NOMBRE o la CATEGORÍA. La cuenta no basta sola: no dice nada
+            // del movimiento, solo de dónde está guardado (ver el KDoc de arriba).
+            if (!nombrePega && !categoriaPega) return@mapNotNull null
+            val laCuentaPega = rule.accountId != null && event.accountId == rule.accountId
             // El nombre pesa más que la categoría: «Salario» dicho igual identifica mejor que
-            // «Otros ingresos» compartido con media docena de cosas.
-            val senas = (if (nombrePega) 2 else 0) + (if (categoriaPega) 1 else 0)
+            // «Otros ingresos» compartido con media docena de cosas. La cuenta desempata.
+            val senas = (if (nombrePega) 3 else 0) +
+                (if (categoriaPega) 1 else 0) +
+                (if (laCuentaPega) 1 else 0)
             Candidato(
                 event = event,
                 senas = senas,

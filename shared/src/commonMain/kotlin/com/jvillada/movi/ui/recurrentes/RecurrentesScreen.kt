@@ -99,8 +99,11 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // Lo que el dueño rechazó con «no fue este», por lo que queda de esta pantalla. No se
     // persiste: rechazar una propuesta no es un hecho sobre su plata — ver `propuestaActual`.
     var descartadas by remember { mutableStateOf<Set<String>>(emptySet()) }
-    // Regla con una marca en vuelo, para no dejar tocar dos veces el mismo botón.
-    var marcando by remember { mutableStateOf<String?>(null) }
+    // Reglas con una marca en vuelo, para no dejar tocar dos veces el MISMO botón. Es un conjunto
+    // y no un solo id: con uno solo, marcar el salario congelaba también el «Ya lo pagué» del
+    // arriendo hasta que volviera el server — dos hechos independientes compartiendo un candado
+    // que solo tenía sentido por fila.
+    var marcando by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Hoja de crear/editar. Guarda el ID y NO la fila: el objeto de una fila puede ser de un
     // snapshot viejo, y prellenar el formulario con eso hace que «Guardar cambios» reescriba
@@ -299,27 +302,27 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
      * Al mes siguiente vuelve a estar pendiente solo.
      */
     fun marcarOcurrio(ruleId: String, period: String, eventId: String?) {
-        if (marcando != null) return
-        marcando = ruleId
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
         error = null
         coroutine.launch {
             runCatching { Repositories.wallets.markOccurrence(ruleId, period, eventId) }
                 .onSuccess { loadKey++ }
                 .onFailure { error = it.toUserMessage() }
-            marcando = null
+            marcando = marcando - ruleId
         }
     }
 
     /** Deshacer: marcar por error tiene que poder revertirse sin ceremonia. */
     fun deshacerOcurrio(ruleId: String, period: String) {
-        if (marcando != null) return
-        marcando = ruleId
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
         error = null
         coroutine.launch {
             runCatching { Repositories.wallets.unmarkOccurrence(ruleId, period) }
                 .onSuccess { loadKey++ }
                 .onFailure { error = it.toUserMessage() }
-            marcando = null
+            marcando = marcando - ruleId
         }
     }
 
@@ -364,6 +367,8 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // veces: una como alerta y otra en el inventario. El corte es el mismo del barrido de avisos
     // (`leadDays`, ver DueDates.kt): UPCOMING es «todavía falta».
     val proximos = proximosQueUrgen(upcoming)
+    // Qué reglas ya muestran su pregunta arriba, para no repetirla en el inventario de abajo.
+    val idsEnProximos = remember(proximos) { proximos.map { it.rule.id }.toSet() }
 
     // El aviso ámbar habla de una promesa rota («no vamos a poder avisarte»), así que mira lo
     // que se PIDIÓ, no lo que existe: solo un GASTO con `remindMe` entra al barrido de avisos
@@ -636,7 +641,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                             estado = estado!!,
                                             rule = payment.rule,
                                             propuesta = propuestaActual(estado, descartadas),
-                                            enVuelo = marcando == payment.rule.id,
+                                            enVuelo = payment.rule.id in marcando,
                                             onConfirmar = { ev ->
                                                 marcarOcurrio(payment.rule.id, estado.period, ev.id)
                                             },
@@ -718,6 +723,36 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                                         onRemoveSub = { quitar(it) },
                                         onDeshacer = { ruleId -> deshacerOcurrio(ruleId, ocurrida!!.period) },
                                     )
+                                    // La pregunta también vive acá para lo que NO está en
+                                    // «Próximos». Pasada la ventana de gracia, un vencimiento deja
+                                    // de figurar arriba (su fecha vigente ya es la del mes que
+                                    // viene) pero el mes en curso sigue abierto: el arriendo del 1
+                                    // se puede seguir cerrando el 27. Sin esto, el server ofrecía
+                                    // la pregunta y la pantalla no tenía dónde hacerla.
+                                    //
+                                    // Sin duplicar: lo que ya salió arriba no se repite acá — la
+                                    // misma tarjeta dos veces en una pantalla es la clase de cosa
+                                    // que hace dudar de si se contó dos veces.
+                                    val abierta = if (ocurrenciasOk && item is Recurrente.Regla &&
+                                        item.rule.id !in idsEnProximos
+                                    ) {
+                                        ocurrenciaDe(ocurrencias, item.rule.id)?.takeIf { !it.occurred }
+                                    } else null
+                                    if (abierta != null && item is Recurrente.Regla) {
+                                        PropuestaOcurrencia(
+                                            estado = abierta,
+                                            rule = item.rule,
+                                            propuesta = propuestaActual(abierta, descartadas),
+                                            enVuelo = item.rule.id in marcando,
+                                            onConfirmar = { ev ->
+                                                marcarOcurrio(item.rule.id, abierta.period, ev.id)
+                                            },
+                                            onDescartar = { ev -> descartadas = descartadas + ev.id },
+                                            onCerrarSinMovimiento = {
+                                                marcarOcurrio(item.rule.id, abierta.period, null)
+                                            },
+                                        )
+                                    }
                                     if (i < ordered.size - 1) Hairline()
                                 }
                             }
@@ -908,7 +943,7 @@ private fun PropuestaOcurrencia(
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, bottom = 14.dp)) {
         Text(
-            text = tituloPropuesta(rule.type),
+            text = tituloPropuesta(rule.type, estado.period),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = MinText,

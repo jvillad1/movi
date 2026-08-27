@@ -338,8 +338,14 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    // Se mira el status, igual que `markOccurrence`: sin esto un 404 o un 500 se leían como
+    // éxito, la pantalla recargaba y el «Deshacer» seguía ahí — el dueño tocando un botón que no
+    // hace nada y sin un solo mensaje que se lo diga.
     override suspend fun unmarkOccurrence(ruleId: String, period: String) {
-        client.delete("$baseUrl/api/recurring-rules/$ruleId/occurrence/$period")
+        val response = client.delete("$baseUrl/api/recurring-rules/$ruleId/occurrence/$period")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
     }
 
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse =

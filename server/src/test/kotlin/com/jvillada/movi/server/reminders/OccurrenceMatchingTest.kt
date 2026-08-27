@@ -128,15 +128,77 @@ class OccurrenceMatchingTest {
         assertTrue(occurrenceCandidatesFor(regla(), due, listOf(ajeno)).isEmpty())
     }
 
-    @Test fun `la cuenta de la regla senala, y tambien filtra`() {
+    /**
+     * **Regresión del hallazgo ALTA-2.** La cuenta no mira el movimiento: decir «esta regla tiene
+     * cuenta» no dice NADA sobre si un gasto de esa cuenta es el arriendo. Con la cuenta como seña
+     * suficiente, la lista de gastos que tiene una cuenta de verdad entraba entera.
+     *
+     * El test de antes probaba la cuenta con UN movimiento, que es exactamente el escenario donde
+     * el bug no se ve.
+     */
+    @Test fun `una cuenta poblada no convierte cualquier gasto en el arriendo`() {
+        val arriendo = RecurringRule(
+            "rr_arriendo", "Arriendo", "Vivienda", 1_800_000, 25,
+            TransactionType.EXPENSE, accountId = "acc_1",
+        )
+        val gastosDeLaCuenta = listOf(
+            evento(id = "ev_exito", amount = 1_750_000, category = "Mercado", description = "Compra Exito", type = TransactionType.EXPENSE),
+            evento(id = "ev_monitor", amount = 2_100_000, category = "Tecnologia", description = "Monitor", type = TransactionType.EXPENSE),
+            evento(id = "ev_energia", amount = 260_000, category = "Servicios", description = "Energia", type = TransactionType.EXPENSE),
+        )
+        assertTrue(
+            occurrenceCandidatesFor(arriendo, due, gastosDeLaCuenta).isEmpty(),
+            "el mercado del Éxito no puede proponerse como el arriendo solo por estar en la misma cuenta",
+        )
+        // Y el arriendo de verdad, que sí comparte la categoría, sí se propone.
+        val elArriendo = evento(id = "ev_arriendo", amount = 1_800_000, category = "Vivienda", description = "Pago arriendo", type = TransactionType.EXPENSE)
+        assertEquals(
+            listOf("ev_arriendo"),
+            occurrenceCandidatesFor(arriendo, due, gastosDeLaCuenta + elArriendo).map { it.id },
+        )
+    }
+
+    @Test fun `la cuenta suma como sena pero ya no filtra`() {
         val reglaConCuenta = regla(accountId = "acc_1")
-        // Sin nombre ni categoría en común, pero en LA cuenta: la cuenta alcanza como seña.
-        val enLaCuenta = evento(id = "ev_ok", description = "Nomina agosto", category = "Otros ingresos")
-        assertEquals(listOf("ev_ok"), occurrenceCandidatesFor(reglaConCuenta, due, listOf(enLaCuenta)).map { it.id })
-        // Y en otra cuenta no se propone, aunque se llame igual: la cuenta es lo que el dueño
-        // afirmó sobre dónde cae esto todos los meses.
-        val enOtra = evento(id = "ev_no", accountId = "acc_2")
-        assertTrue(occurrenceCandidatesFor(reglaConCuenta, due, listOf(enOtra)).isEmpty())
+        // Mismo nombre pero en OTRA cuenta: se propone igual. Antes desaparecía, y un nombre
+        // idéntico pesando menos que la cuenta es raro.
+        val enOtra = evento(id = "ev_nequi", accountId = "acc_2")
+        assertEquals(listOf("ev_nequi"), occurrenceCandidatesFor(reglaConCuenta, due, listOf(enOtra)).map { it.id })
+        // Y con dos iguales, el que está en la cuenta de la regla va primero.
+        val enLaCuenta = evento(id = "ev_banco", accountId = "acc_1")
+        assertEquals(
+            listOf("ev_banco", "ev_nequi"),
+            occurrenceCandidatesFor(reglaConCuenta, due, listOf(enOtra, enLaCuenta)).map { it.id },
+        )
+    }
+
+    /**
+     * **Regresión del hallazgo ALTA-1.** La ventana de ±10 días también iba hacia atrás, así que
+     * para una regla de día bajo proponía el pago del mes ANTERIOR para cerrar este. Con el monto
+     * exacto, además, así que ni siquiera salía el aviso de «no es el monto que anotaste».
+     */
+    @Test fun `nunca se propone un movimiento anterior al mes del vencimiento`() {
+        val arriendo = RecurringRule(
+            "rr_arriendo", "Arriendo", "Vivienda", 1_800_000, 1, TransactionType.EXPENSE,
+        )
+        val vencimientoDeSeptiembre = LocalDate.of(2026, 9, 1)
+        val pagoDeAgosto = evento(
+            id = "ev_agosto", day = 25, month = 8, amount = 1_800_000,
+            category = "Vivienda", description = "Arriendo", type = TransactionType.EXPENSE,
+        )
+        assertTrue(
+            occurrenceCandidatesFor(arriendo, vencimientoDeSeptiembre, listOf(pagoDeAgosto)).isEmpty(),
+            "el arriendo de agosto no puede cerrar el vencimiento de septiembre",
+        )
+        // El de septiembre sí, aunque llegue tarde.
+        val pagoDeSeptiembre = pagoDeAgosto.copy(
+            id = "ev_septiembre",
+            timestamp = appDateToEpochMillis(LocalDate.of(2026, 9, 3)),
+        )
+        assertEquals(
+            listOf("ev_septiembre"),
+            occurrenceCandidatesFor(arriendo, vencimientoDeSeptiembre, listOf(pagoDeSeptiembre)).map { it.id },
+        )
     }
 
     @Test fun `se muestran como mucho tres propuestas`() {

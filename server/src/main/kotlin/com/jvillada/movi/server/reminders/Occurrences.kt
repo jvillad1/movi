@@ -1,14 +1,20 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.db.toFinancialEvent
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 
 /** Las filas crudas de `recurring_occurrences` de un usuario, sin filtrar por nada. */
 fun Transaction.loadOccurrenceRows(uid: String): List<RecurringOccurrence> =
@@ -63,6 +69,34 @@ fun Transaction.loadOccurredBy(uid: String): Map<String, Set<String>> {
         .filter { it.eventId == null || it.eventId in vivos }
         .groupBy { it.ruleId }
         .mapValues { (_, v) -> v.map { it.period }.toSet() }
+}
+
+/**
+ * Los movimientos vivos (no anulados) de [uid] en `[desde, hastaExclusivo)`, en epoch-ms.
+ *
+ * Existe para no traerse TODOS los movimientos del usuario en cada carga de la pantalla de
+ * Recurrentes: los candidatos solo pueden estar en una franja de unas seis semanas alrededor del
+ * mes en curso, y el índice `idx_events_user_ts` (user_id, timestamp) es exactamente el que hace
+ * falta para acotarla. Con un par de años de movimientos anotados la diferencia deja de ser
+ * teórica.
+ *
+ * Aplica `withCashFlowFlag` igual que [com.jvillada.movi.server.balance.loadNonVoidedEventsIn]:
+ * el campo es derivado y no debería depender de por cuál consulta entró el evento.
+ */
+fun Transaction.loadEventsBetween(uid: String, desde: Long, hastaExclusivo: Long): List<FinancialEvent> {
+    val anulados = VoidEvents.selectAll()
+        .where { VoidEvents.userId eq uid }
+        .map { it[VoidEvents.originalEventId] }
+        .toSet()
+    val tipos = accountTypesFor(uid)
+    return Events.selectAll()
+        .where {
+            (Events.userId eq uid) and
+                (Events.timestamp greaterEq desde) and
+                (Events.timestamp less hastaExclusivo)
+        }
+        .filterNot { it[Events.id] in anulados }
+        .map { it.toFinancialEvent().withCashFlowFlag(tipos) }
 }
 
 /**

@@ -216,7 +216,7 @@ object RecurringRules : Table("recurring_rules") {
  *
  * `event_id` es NULLABLE y sin FK (como el resto de esta base): NULL significa «el dueño cerró el
  * periodo sin emparejar ningún movimiento». Que no haya FK no deja la fila mintiendo: la lectura
- * solo honra una ocurrencia cuyo movimiento siga vivo y sin anular (ver `loadOccurredPeriods`).
+ * solo honra una ocurrencia cuyo movimiento siga vivo y sin anular (ver `loadOccurredBy`).
  */
 object RecurringOccurrences : Table("recurring_occurrences") {
     val userId      = varchar("user_id", 50)

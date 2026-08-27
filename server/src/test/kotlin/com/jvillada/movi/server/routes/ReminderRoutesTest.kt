@@ -682,6 +682,76 @@ class ReminderRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, resp.status)
     }
 
+    /**
+     * Hallazgo ALTA-1, visto desde el endpoint: el mes que viene no se puede cerrar, nunca.
+     *
+     * El techo era el vencimiento **ya rodado por la ventana de gracia**, así que a fin de mes una
+     * regla de día 1 aceptaba el periodo siguiente y le apagaba el aviso antes de que llegara.
+     */
+    @Test
+    fun `el mes que viene nunca se puede dar por ocurrido`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        // Día 1: es la regla para la que la gracia rueda el vencimiento a fin de mes.
+        val regla = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                RecurringRule(
+                    "ignored", "Arriendo dia 1", "Vivienda", 1_800_000, 1,
+                    TransactionType.EXPENSE, accountId = accountOwnedByA,
+                ),
+            )
+        }.body<RecurringRule>()
+        val mesQueViene = hoy.plusMonths(1)
+        val resp = client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                MarkOccurrenceRequest(
+                    period = mesQueViene.year.toString().padStart(4, '0') + "-" +
+                        mesQueViene.monthValue.toString().padStart(2, '0'),
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        // Y lo que sí propone el GET para esa regla es el mes EN CURSO, nunca el siguiente.
+        val estados = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().filter { it.ruleId == regla.id }
+        estados.forEach { assertEquals(periodoDeHoy, it.period) }
+    }
+
+    /** Borrar la regla se lleva sus ocurrencias: si no, el movimiento queda quemado para siempre. */
+    @Test
+    fun `borrar la regla no deja ocurrencias huerfanas`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Salario huerfano")
+        sembrarMovimiento("ev-huerfano")
+        client.post("/api/recurring-rules/${regla.id}/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(MarkOccurrenceRequest(period = periodoDeHoy, eventId = "ev-huerfano"))
+        }
+        client.delete("/api/recurring-rules/${regla.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        // La regla vuelve a nacer (el dueño la rehace) y el movimiento tiene que volver a estar
+        // disponible: si la fila vieja siguiera ahí, ese ingreso no se propondría nunca más.
+        val renacida = reglaDeHoy(client, tokenA, "Salario huerfano")
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == renacida.id }
+        assertFalse(estado.occurred)
+        assertTrue(
+            estado.candidates.any { it.id == "ev-huerfano" },
+            "el movimiento de una regla borrada no puede quedar quemado para siempre",
+        )
+    }
+
     @Test
     fun `un movimiento de otro usuario no puede ser la ocurrencia`() = testApplication {
         application { testModule() }

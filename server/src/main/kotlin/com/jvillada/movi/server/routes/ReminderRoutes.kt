@@ -1,6 +1,6 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
+import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringOccurrences
@@ -8,22 +8,23 @@ import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
-import com.jvillada.movi.server.reminders.dueDateFor
 import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
+import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
+import com.jvillada.movi.server.reminders.occurrenceInMonth
 import com.jvillada.movi.server.reminders.periodOf
-import com.jvillada.movi.server.reminders.statusFor
+
 import com.jvillada.movi.server.reminders.upcomingPayments
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.MarkOccurrenceRequest
 import com.jvillada.movi.shared.model.OccurrenceState
-import com.jvillada.movi.shared.model.PaymentStatus
+
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -42,8 +43,10 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import java.time.YearMonth
 import java.util.UUID
 import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.appDateToEpochMillis
 
 private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     id = this[RecurringRules.id],
@@ -154,6 +157,15 @@ fun Route.reminderRoutes() {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
         val deleted = dbQuery {
+            // Las ocurrencias se van con la regla, en la misma transacción. Si quedaran, sus
+            // movimientos seguirían contando como «ya usados» para siempre: marcar el salario,
+            // borrar la regla y volver a crearla dejaba ese ingreso fuera de toda propuesta, sin
+            // ninguna pantalla desde donde limpiarlo — el caso que motivó esta rama, convertido
+            // en permanente. Va primero para que un fallo deje la regla en pie en vez de dejar
+            // filas sueltas.
+            RecurringOccurrences.deleteWhere {
+                (RecurringOccurrences.ruleId eq id) and (RecurringOccurrences.userId eq uid)
+            }
             RecurringRules.deleteWhere { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
         }
         if (deleted == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
@@ -190,8 +202,9 @@ fun Route.reminderRoutes() {
      */
     get("/api/payments/occurrences") {
         val uid = call.userId()
-        val leadDays = System.getenv("REMINDER_LEAD_DAYS")?.toIntOrNull() ?: DEFAULT_REMINDER_LEAD_DAYS
         val today = AppClock.today()
+        val mesEnCurso = YearMonth.from(today)
+        val periodoEnCurso = mesEnCurso.toString()
         val estados = dbQuery {
             // Solo reglas REALES. La cuota de un crédito y el pago de una tarjeta son reglas
             // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
@@ -205,35 +218,51 @@ fun Route.reminderRoutes() {
             val ocurrencias = loadOccurrenceRows(uid).associateBy { it.ruleId to it.period }
             val ocurridos = loadOccurredBy(uid)
             val usados = loadUsedOccurrenceEventIds(uid)
-            val eventos = loadNonVoidedEventsIn(uid)
+            // Solo la franja donde puede haber candidatos, no todos los movimientos de la vida
+            // del usuario: desde el primero del mes (el piso del emparejador) hasta la ventana
+            // por delante del vencimiento más tardío posible.
+            val eventos = loadEventsBetween(
+                uid = uid,
+                desde = appDateToEpochMillis(mesEnCurso.atDay(1)),
+                hastaExclusivo = appDateToEpochMillis(
+                    mesEnCurso.atEndOfMonth().plusDays(OCCURRENCE_WINDOW_DAYS + 1),
+                ),
+            )
 
             rules.mapNotNull { rule ->
-                // El periodo NATURAL: el vencimiento calculado SIN tener en cuenta lo ya
-                // ocurrido. Es de lo que habla esta entrada. (`/api/payments/upcoming`, en
-                // cambio, ya rodó al siguiente cuando este está cerrado — son dos preguntas
-                // distintas y cada una merece su respuesta.)
-                val due = dueDateFor(rule, today)
-                val period = periodOf(due)
-                val cerrado = period in ocurridos[rule.id].orEmpty()
+                // **La unidad es la ocurrencia del MES EN CURSO**, y punto.
+                //
+                // Antes se usaba `dueDateFor`, o sea la fecha ya rodada por la ventana de gracia,
+                // y ahí estaba el agujero: para una regla de día 1 o 2, durante los últimos días
+                // del mes el vencimiento vigente ya es el del mes SIGUIENTE. La app terminaba
+                // preguntando «¿ya lo pagaste?» sobre septiembre el 27 de agosto y ofreciendo
+                // como respuesta el pago de agosto — con el monto exacto, así que ni siquiera
+                // salía el aviso de monto distinto. El rodado de la gracia sigue viviendo en
+                // `/api/payments/upcoming`, que es donde tiene sentido; acá estorbaba.
+                //
+                // Además, mirar el mes en curso mantiene el «Ya ocurrió» y su «Deshacer» a la
+                // vista TODO el mes, en vez de hacerlos desaparecer a los pocos días.
+                val due = occurrenceInMonth(mesEnCurso, rule.dayOfMonth)
+                val cerrado = periodoEnCurso in ocurridos[rule.id].orEmpty()
                 when {
                     cerrado -> {
-                        val fila = ocurrencias[rule.id to period]
+                        val fila = ocurrencias[rule.id to periodoEnCurso]
                         OccurrenceState(
                             ruleId = rule.id,
-                            period = period,
+                            period = periodoEnCurso,
                             dueDate = due.toString(),
                             occurred = true,
                             eventId = fila?.eventId,
                             confirmedAt = fila?.confirmedAt ?: 0L,
                         )
                     }
-                    // Todavía falta para el vencimiento: no se pregunta nada. Preguntar «¿ya
-                    // ocurrió?» por algo que vence dentro de tres semanas es ruido, y peor:
-                    // invita a cerrar un periodo antes de que pase.
-                    statusFor(due, today, leadDays) == PaymentStatus.UPCOMING -> null
+                    // El día todavía no llegó: no se pregunta nada. Preguntar «¿ya ocurrió?» por
+                    // algo que vence dentro de tres semanas es ruido, y peor: invita a cerrar un
+                    // periodo antes de que pase.
+                    due.isAfter(today) -> null
                     else -> OccurrenceState(
                         ruleId = rule.id,
-                        period = period,
+                        period = periodoEnCurso,
                         dueDate = due.toString(),
                         occurred = false,
                         candidates = occurrenceCandidatesFor(rule, due, eventos, usados),
@@ -254,7 +283,15 @@ fun Route.reminderRoutes() {
     post("/api/recurring-rules/{id}/occurrence") {
         val uid = call.userId()
         val ruleId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        val body = call.receive<MarkOccurrenceRequest>()
+        // Este proyecto no tiene StatusPages, así que un body malformado sale como 500 sin
+        // atrapar. Un 500 le dice al cliente «el server se rompió» y lo invita a reintentar algo
+        // que nunca va a funcionar; un 400 dice la verdad. (Solo se arregla acá: cambiarlo para
+        // todos los endpoints es otra rama.)
+        val body = try {
+            call.receive<MarkOccurrenceRequest>()
+        } catch (e: Exception) {
+            return@post call.respond(HttpStatusCode.BadRequest, "No se pudo leer la marca: ${e.message}")
+        }
         val today = AppClock.today()
         if (!PERIOD_REGEX.matches(body.period)) {
             return@post call.respond(HttpStatusCode.BadRequest, "Periodo inválido: usa \"YYYY-MM\".")
@@ -270,13 +307,25 @@ fun Route.reminderRoutes() {
                 .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
                 .firstOrNull()?.toRule()
                 ?: return@dbQuery MarcaResult.Error(HttpStatusCode.NotFound)
-            // No se puede cerrar un periodo que todavía no llegó: sellar septiembre en agosto
-            // apagaría el aviso de septiembre antes de que nadie sepa si va a pasar. El techo es
-            // el periodo en juego, el mismo que calcula el GET de arriba.
-            if (body.period > periodOf(dueDateFor(rule, today))) {
+            // **Techo: el mes de hoy.** No se puede cerrar un mes que todavía no pasó.
+            //
+            // El techo era `periodOf(dueDateFor(rule, today))` — la fecha YA RODADA por la
+            // ventana de gracia—, así que el 27 de agosto aceptaba `"2026-09"` para una regla de
+            // día 1: sellaba septiembre antes de que llegara y le apagaba el aviso. El mes de hoy
+            // no depende de la regla ni de la gracia, y dice exactamente lo que hay que decir.
+            if (body.period > periodOf(today)) {
                 return@dbQuery MarcaResult.Error(
                     HttpStatusCode.BadRequest,
                     "Ese periodo todavía no llegó: no se puede dar por ocurrido.",
+                )
+            }
+            // Y un piso, para que un cliente con un bug no ensucie la tabla con periodos
+            // arqueológicos que además queman ids en `usedEventIds` (un movimiento sellado no
+            // vuelve a proponerse nunca).
+            if (body.period < periodOf(today.minusMonths(MAX_MESES_HACIA_ATRAS))) {
+                return@dbQuery MarcaResult.Error(
+                    HttpStatusCode.BadRequest,
+                    "Ese periodo es demasiado viejo para darlo por ocurrido.",
                 )
             }
             val eventId = body.eventId?.trim()?.takeIf { it.isNotEmpty() }
@@ -359,6 +408,12 @@ fun Route.reminderRoutes() {
 
 /** `"YYYY-MM"`, con mes real: `2026-13` no es un periodo. */
 private val PERIOD_REGEX = Regex("""^\d{4}-(0[1-9]|1[0-2])$""")
+
+/**
+ * Hasta cuántos meses atrás se puede sellar una ocurrencia. Es un piso defensivo, no una regla de
+ * negocio: la pantalla solo ofrece el mes en curso, así que nadie llega acá de a pie.
+ */
+private const val MAX_MESES_HACIA_ATRAS: Long = 12
 
 /**
  * Lo que decidió el sellado, decidido DENTRO de la transacción y respondido afuera.
