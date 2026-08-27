@@ -418,6 +418,7 @@ fun CreateRecurringRuleSheet(
                             onValueChange = { category = it; categoriaElegidaAMano = true },
                             type = selectedType,
                             usedCategories = UsedCategoriesCache.used,
+                            prefs = UsedCategoriesCache.prefs,
                             label = "CATEGORÍA",
                             placeholder = "Ej: Vivienda, Suscripción, Salud",
                         )

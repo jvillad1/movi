@@ -3,6 +3,7 @@ package com.jvillada.movi.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -48,6 +49,24 @@ object UsedCategoriesCache {
 
     /** Los nombres, sin el tipo — para quien solo necesita saber cuáles existen. */
     val categories: Set<String> get() = used.keys
+
+    /**
+     * **Ola 10 — lo que el dueño decidió en «Más → Categorías».** Nombre → escondida y/o tipo
+     * fijado (ver [CategoryPref]).
+     *
+     * Va separado de [used] a propósito: [used] es *evidencia* (lo que se observó de sus
+     * movimientos) y esto es *decisión* (lo que él dijo que quería). Mezclarlas obligaría a
+     * adivinar cuál gana en cada lectura; separadas, la regla es una sola y vive en un solo lugar
+     * ([com.jvillada.movi.shared.model.effectiveCategoryTypes]): lo decidido manda.
+     *
+     * Solo lo llena [recordFromServer] — es lo único que sabe de preferencias, porque son del
+     * server. Las otras pantallas que alimentan [used] de paso (Movimientos, Presupuestos,
+     * Recurrentes) no lo tocan: no tienen el dato, y **borrarlo por no tenerlo sería peor que no
+     * actualizarlo** — una categoría escondida volvería a aparecer sola apenas el dueño entra a
+     * Movimientos.
+     */
+    var prefs: Map<String, CategoryPref> by mutableStateOf(emptyMap())
+        private set
 
     /** Varios nombres sueltos, sin saber de qué tipo. Todo pasa por [recordAll]. */
     fun record(names: Collection<String>) {
@@ -100,14 +119,57 @@ object UsedCategoriesCache {
     /** Al cerrar sesión: estas son las categorías del usuario que se va (ver `SessionManager.clear`). */
     fun clear() {
         used = emptyMap()
+        prefs = emptyMap()
     }
 
-    /** Lo que llega del Inicio dentro del resumen (ver el KDoc de arriba). */
+    /**
+     * Lo que llega del Inicio dentro del resumen (ver el KDoc de arriba) — y, desde la Ola 10,
+     * también las preferencias.
+     *
+     * Las preferencias se **reemplazan enteras**, no se acumulan: esta lista es la verdad completa
+     * del server sobre lo que el dueño decidió, así que fusionarla con lo viejo dejaría vivo un
+     * «escondida» que él acaba de deshacer.
+     */
     fun recordFromServer(entries: Collection<UsedCategory>) {
         recordAll(entries.flatMap { entry ->
             if (entry.types.isEmpty()) listOf(entry.name to null)
             else entry.types.map { entry.name to it }
         })
+        prefs = entries
+            .mapNotNull { entry ->
+                val nombre = entry.name.trim()
+                if (nombre.isEmpty()) return@mapNotNull null
+                if (!entry.hidden && entry.pinnedType == null) return@mapNotNull null
+                nombre to CategoryPref(hidden = entry.hidden, pinnedType = entry.pinnedType)
+            }
+            .toMap()
+    }
+
+    /**
+     * Lo que la pantalla «Categorías» acaba de cambiar, aplicado al instante — sin esperar al
+     * próximo paso por el Inicio. Sin esto, esconder una categoría y volver a «Agregar» la
+     * seguiría ofreciendo hasta la próxima carga del resumen, y se leería como que el botón no
+     * hizo nada.
+     */
+    fun applyPref(name: String, pref: CategoryPref) {
+        val nombre = name.trim()
+        if (nombre.isEmpty()) return
+        prefs = if (!pref.hidden && pref.pinnedType == null) prefs - nombre else prefs + (nombre to pref)
+    }
+
+    /**
+     * Lo que la pantalla «Categorías» acaba de renombrar o unificar, aplicado al instante por el
+     * mismo motivo que [applyPref]. Mueve los tipos observados al nombre nuevo y descarta el
+     * viejo: el caché es una ayuda para escribir, y seguir ofreciendo «Trasnporte» después de
+     * arreglarlo sería justo el error que el dueño vino a corregir.
+     */
+    fun applyRename(from: String, to: String) {
+        val viejo = from.trim()
+        val nuevo = to.trim()
+        if (viejo.isEmpty() || nuevo.isEmpty()) return
+        val tipos = used[viejo].orEmpty() + used[nuevo].orEmpty()
+        used = (used - viejo) + (nuevo to tipos)
+        prefs = prefs - viejo
     }
 
 }

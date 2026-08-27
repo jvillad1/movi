@@ -24,6 +24,16 @@ sealed class Screen {
     // Ola 8: Suscripciones dejó de ser pantalla — una suscripción es un recurrente y vive
     // adentro de [Recurrentes], en su propio grupo (ver RecurrentesScreen).
     data object Recurrentes : Screen()
+    /**
+     * Ola 10 — «Más → Categorías»: ver, renombrar, unificar, esconder y fijar el tipo.
+     *
+     * Se llega SOLO desde Más (ver [MasScreen]), y esa es toda la puerta que tiene. Precedente a
+     * no repetir: al plegar Inversiones dentro de Cuentas, el historial de cada tarjeta quedó
+     * inalcanzable porque su único `onNavigate` vivía en la pantalla que se borró. Acá la entrada
+     * es una ficha de Más —una lista que nadie está borrando— y no un enlace escondido dentro de
+     * otra pantalla.
+     */
+    data object Categorias : Screen()
     data object OCRCapture : Screen()
     data object OCRConfirm : Screen()
     data object SMSInbox : Screen()
@@ -72,7 +82,10 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // rail; en el teléfono la barra ya está llena y `asBottomBarTab()` lo funde en Más.
     Screen.Recurrentes -> NavTab.RECURRING
     Screen.Mas, Screen.Profile, Screen.Goals,
-    Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile -> NavTab.MORE
+    Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile,
+    // Ola 10: Categorías vive en Más y no tiene destino propio — es una pantalla de
+    // mantenimiento, no un lugar al que se vuelva todos los días.
+    Screen.Categorias -> NavTab.MORE
     else -> null
 }
 

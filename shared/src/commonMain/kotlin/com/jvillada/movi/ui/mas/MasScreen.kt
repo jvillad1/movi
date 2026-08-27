@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -56,6 +57,10 @@ private val items = listOf(
     // Ola 8: sin «Suscripciones» — una suscripción es un recurrente, y esta entrada las abre a
     // todas (lista única con su grupo de detectadas por confirmar).
     MasItem("Recurrentes",  Icons.Rounded.Repeat,           Color(0xFFFFD479), Color(0x1AFFD479), Screen.Recurrentes),
+    // Ola 10: la única puerta a «Categorías». Va junto a Presupuestos y Recurrentes —las otras
+    // dos pantallas que se cruzan con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño
+    // va a acordarse de que quería arreglar un nombre.
+    MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
     // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio.
     MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
 )

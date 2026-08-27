@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -224,5 +225,70 @@ class CategoryFieldTest {
         assertEquals("Educación", nombreCanonicoConocido("educacion"))
         assertNull(nombreCanonicoConocido("Moto", used))
         assertNull(nombreCanonicoConocido("   "))
+    }
+
+    // ── Ola 10: lo que el dueño decidió en «Más → Categorías» ─────────────────
+    // Esconder y fijar el tipo solo sirven de algo si se notan ACÁ, en el campo donde escribe la
+    // categoría. Estos tests son la única prueba de que la pantalla nueva hace algo.
+
+    @Test
+    fun `una categoria del catalogo escondida deja de sugerirse`() {
+        val prefs = mapOf("Ropa" to CategoryPref(hidden = true))
+        val result = suggestCategoryMatches("", TransactionType.EXPENSE, prefs = prefs)
+        assertFalse("Ropa" in result)
+        assertTrue("Comida" in result, "las demás siguen igual")
+    }
+
+    @Test
+    fun `una categoria propia escondida deja de sugerirse`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val prefs = mapOf("Carro" to CategoryPref(hidden = true))
+        assertFalse("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used, prefs))
+        assertTrue("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used))
+    }
+
+    @Test
+    fun `esconder no depende de como este escrito el nombre`() {
+        // El caché guarda lo que tecleó el dueño; la preferencia viene del server. Una diferencia
+        // de mayúscula o de tilde no puede hacer reaparecer lo que escondió.
+        val used = mapOf("educacion" to setOf(TransactionType.EXPENSE))
+        val prefs = mapOf("Educación" to CategoryPref(hidden = true))
+        val result = suggestCategoryMatches("", TransactionType.EXPENSE, used, prefs)
+        assertFalse(result.any { it.equals("educacion", ignoreCase = true) })
+    }
+
+    @Test
+    fun `Otros fijada en Ambos se ofrece anotando un ingreso`() {
+        // El caso del que salió toda la ola: «Otros» está clavada en EXPENSE en el catálogo, y
+        // por eso existía «Otros ingresos» duplicándola. Fijarla en «Ambos» la libera.
+        val prefs = mapOf("Otros" to CategoryPref(pinnedType = "BOTH"))
+        assertTrue("Otros" in suggestCategoryMatches("", TransactionType.INCOME, prefs = prefs))
+        assertTrue("Otros" in suggestCategoryMatches("", TransactionType.EXPENSE, prefs = prefs))
+        assertFalse("Otros" in suggestCategoryMatches("", TransactionType.INCOME))
+    }
+
+    @Test
+    fun `fijar el tipo de una propia le gana a lo aprendido del uso`() {
+        val used = mapOf("Carro" to setOf(TransactionType.EXPENSE))
+        val prefs = mapOf("Carro" to CategoryPref(pinnedType = "INCOME"))
+        assertTrue("Carro" in suggestCategoryMatches("", TransactionType.INCOME, used, prefs))
+        assertFalse("Carro" in suggestCategoryMatches("", TransactionType.EXPENSE, used, prefs))
+    }
+
+    @Test
+    fun `con Ambos fijado desaparece el cartel de que la tienes del otro lado`() {
+        // Sin fijar nada, anotando un ingreso «Otros» no se sugiere (el catálogo la tiene en
+        // EXPENSE) y el panel explica por qué. Con «Ambos» fijado ya se sugiere, así que no queda
+        // nada que explicar: el cartel es la consecuencia de esconderla, no un adorno.
+        val conocidas = PREDEFINED_CATEGORIES.map { it.name }
+        val sinFijar = suggestCategoryMatches("Otros", TransactionType.INCOME)
+        assertFalse("Otros" in sinFijar)
+        assertTrue(shouldOfferKnownFromOtherSide("Otros", sinFijar, conocidas))
+        assertEquals("Ya la tienes en Gastos", ladoConocidoDeCategoria("Otros", TransactionType.INCOME))
+
+        val prefs = mapOf("Otros" to CategoryPref(pinnedType = "BOTH"))
+        val fijada = suggestCategoryMatches("Otros", TransactionType.INCOME, prefs = prefs)
+        assertTrue("Otros" in fijada)
+        assertFalse(shouldOfferKnownFromOtherSide("Otros", fijada, conocidas))
     }
 }

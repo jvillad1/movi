@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.RecurringRules
@@ -93,11 +94,13 @@ class TransferRoutesTest {
         transaction {
             SchemaUtils.drop(
                 Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
-                RecurringRules, VoidEvents, Events, StatementImports, Budgets, Accounts, Users,
+                RecurringRules, VoidEvents, Events, StatementImports, Budgets, Accounts, Users, CategoryPrefs,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
                 SmsMessages, Credits, Cards, CardPaymentDismissals, Subscriptions, Goals,
+                // Ola 10: el resumen del Inicio lee las preferencias de categoría.
+                CategoryPrefs,
             )
 
             Users.insert {

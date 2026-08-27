@@ -60,6 +60,10 @@ object ScreenTaxonomy {
         "dashboard", "transactions", "quickadd", "budgets", "mas", "accounts", "credits",
         "goals", "investments", "subscriptions", "recurrentes", "extractos",
         "aichat", "profile",
+        // Ola 10 — «Más → Categorías». Entra a la taxonomía para que el Editor de pantallas la
+        // pueda enlazar desde el Inicio; el seed no la usa (ver seedScreens), así que agregarla
+        // NO obliga a subir DASHBOARD_LAYOUT_VERSION ni pisa ninguna edición del dueño.
+        "categorias",
     )
 }
 

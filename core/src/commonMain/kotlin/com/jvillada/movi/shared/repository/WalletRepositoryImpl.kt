@@ -6,6 +6,11 @@ import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CategoryPrefsRequest
+import com.jvillada.movi.shared.model.CategoryRewriteResult
+import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.MergeCategoryRequest
+import com.jvillada.movi.shared.model.RenameCategoryRequest
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
@@ -240,6 +245,50 @@ class WalletRepositoryImpl(
         val response = client.put("$baseUrl/api/budgets/$category/rename") {
             contentType(ContentType.Application.Json)
             setBody(RenameBudgetRequest(newCategory))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // ── Categorías (Ola 10) ───────────────────────────────────────────────────
+    // Los nombres viajan SIEMPRE en el cuerpo, nunca en la ruta: una categoría es texto libre
+    // del dueño («Salud & bienestar», «Otros ingresos») y meter eso en un path segment obliga a
+    // codificar/decodificar bien en cuatro clientes distintos para nada.
+
+    override suspend fun getCategories(): List<CategoryUsage> =
+        client.get("$baseUrl/api/categories").body()
+
+    // Mismo idioma que renameBudget: 409 (el nombre ya existe) y 422 (reservada / del catálogo)
+    // traen su propio texto del server, y ese texto es LO QUE LA PANTALLA MUESTRA — deserializar
+    // a ciegas lo perdería y dejaría al dueño con un error mudo.
+    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
+        val response = client.post("$baseUrl/api/categories/rename") {
+            contentType(ContentType.Application.Json)
+            setBody(RenameCategoryRequest(from = from, to = to))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult {
+        val response = client.post("$baseUrl/api/categories/merge") {
+            contentType(ContentType.Application.Json)
+            setBody(MergeCategoryRequest(from = from, into = into))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage {
+        val response = client.put("$baseUrl/api/categories/prefs") {
+            contentType(ContentType.Application.Json)
+            setBody(CategoryPrefsRequest(name = name, hidden = hidden, pinnedType = pinnedType))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

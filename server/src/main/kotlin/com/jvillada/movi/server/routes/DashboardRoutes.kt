@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.looksLikeCardPayment
+import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.VoidEvents
@@ -130,21 +131,42 @@ private fun Transaction.monthCashFlow(
  * usado este mes. Tampoco se excluyen las anuladas ni las categorías reservadas — el cliente ya
  * las filtra en un solo lugar (`UsedCategoriesCache.recordAll`, por donde pasan todos sus caminos
  * de entrada), y duplicar esa regla acá sería una segunda copia que puede desincronizarse.
+ *
+ * **Ola 10 — acá también viajan las preferencias de «Más → Categorías»** (`category_prefs`:
+ * escondida y tipo fijado). Sin esto, esconder una categoría o fijarle el tipo no cambiaría nada
+ * en el único lugar donde se nota —el campo de categoría de «Agregar»—, que es para lo que
+ * sirven. Se emite además una fila por cada categoría CON preferencia aunque no tenga ningún
+ * movimiento: esconder una del catálogo que nunca usó es el caso normal, y esa fila viaja con
+ * `types` vacío.
  */
-private fun Transaction.usedCategories(uid: String): List<UsedCategory> =
-    Events.select(Events.category, Events.type)
+private fun Transaction.usedCategories(uid: String): List<UsedCategory> {
+    val prefs = CategoryPrefs.selectAll()
+        .where { CategoryPrefs.userId eq uid }
+        .associate { it[CategoryPrefs.name].trim() to (it[CategoryPrefs.hidden] to it[CategoryPrefs.pinnedType]) }
+
+    val porUso = Events.select(Events.category, Events.type)
         .where { Events.userId eq uid }
         .withDistinct()
         .map { it[Events.category].trim() to it[Events.type] }
         .filter { (category, _) -> category.isNotEmpty() }
         .groupBy({ it.first }, { it.second })
-        .map { (category, types) ->
+        .mapValues { (_, types) ->
+            types.mapNotNull { t -> runCatching { TransactionType.valueOf(t) }.getOrNull() }.distinct()
+        }
+
+    val nombres = porUso.keys + prefs.keys.filter { it.isNotEmpty() }
+    return nombres
+        .map { nombre ->
+            val pref = prefs[nombre]
             UsedCategory(
-                name = category,
-                types = types.mapNotNull { t -> runCatching { TransactionType.valueOf(t) }.getOrNull() }.distinct(),
+                name = nombre,
+                types = porUso[nombre].orEmpty(),
+                hidden = pref?.first ?: false,
+                pinnedType = pref?.second,
             )
         }
         .sortedBy { it.name.lowercase() }
+}
 
 /**
  * Cuántos devolvería `GET /api/events/card-payment-candidates` — mismo filtro (egreso, cuenta

@@ -126,6 +126,7 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     // instalación) y se manda a Recurrentes, que es donde ahora viven las suscripciones.
     "subscriptions" -> Screen.Recurrentes
     "recurrentes" -> Screen.Recurrentes
+    "categorias" -> Screen.Categorias
     "extractos" -> Screen.Extractos
     "aichat" -> Screen.AIChat
     "profile" -> Screen.Profile

@@ -27,6 +27,7 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
@@ -125,8 +126,18 @@ fun ChangeCategorySheet(
     // toque porque ahí elegir ES la acción completa).
     var freeText by remember { mutableStateOf("") }
 
-    val options = remember(event.type) {
-        PREDEFINED_CATEGORIES.filter { it.type == event.type.name || it.type == "BOTH" }
+    // Ola 10: el atajo del catálogo respeta lo que el dueño decidió en «Más → Categorías» —
+    // misma regla única que las sugerencias ([effectiveCategoryTypes]). Sin esto, una categoría
+    // escondida seguiría apareciendo acá y «esconder» habría sido media promesa.
+    val categoryPrefs = UsedCategoriesCache.prefs
+    val options = remember(event.type, categoryPrefs) {
+        PREDEFINED_CATEGORIES.filter { cat ->
+            val pref = categoryPrefs.entries
+                .firstOrNull { it.key.trim().equals(cat.name, ignoreCase = true) }?.value
+            if (pref?.hidden == true) return@filter false
+            val efectivos = effectiveCategoryTypes(cat.name, pref?.pinnedType)
+            efectivos.isEmpty() || event.type in efectivos
+        }
     }
     // Los extractos importados traen categorías libres del parser (ver ClaudeStatementParser)
     // que pueden no estar en el catálogo. Si la actual no aparece en `options`, se agrega igual
@@ -193,6 +204,7 @@ fun ChangeCategorySheet(
                 onValueChange = { freeText = it },
                 type = event.type,
                 usedCategories = UsedCategoriesCache.used,
+                prefs = UsedCategoriesCache.prefs,
                 label = null,
                 placeholder = "Ej: Colegio",
             )

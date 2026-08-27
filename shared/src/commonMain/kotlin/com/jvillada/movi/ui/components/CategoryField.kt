@@ -34,8 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.MinBorder
 import com.jvillada.movi.theme.MinPrimary
 import com.jvillada.movi.theme.MinSurfaceContainerHigh
@@ -62,15 +64,40 @@ import kotlinx.coroutines.delay
  * evidencia de que es del OTRO lado: sin tipos conocidos (conjunto vacío) o usada en los dos, se
  * ofrece igual. Esconder por falta de datos sería peor que sugerir de más — en un arranque en
  * frío no sabemos nada de ninguna.
+ *
+ * **Ola 10 · Categorías — el tipo dejó de ser la identidad de una categoría.** Hasta acá el
+ * catálogo mandaba: «Otros» era de gasto porque el código lo decía, y punto. Ahora manda
+ * [prefs] — lo que el dueño decidió en «Más → Categorías» —, con una sola regla ([effectiveCategoryTypes]):
+ * lo fijado gana sobre el catálogo, y el catálogo sobre lo aprendido del uso. Y una categoría
+ * **escondida** no se ofrece nunca, venga del catálogo o sea propia. Ese es el mecanismo con el
+ * que «Otros» pasa a servir para gastos y para ingresos y «Otros ingresos» deja de estorbar, sin
+ * tocar una línea de [PREDEFINED_CATEGORIES] ni un movimiento de nadie.
  */
 fun suggestCategoryMatches(
     query: String,
     type: TransactionType? = null,
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
 ): List<String> {
-    val predefined = PREDEFINED_CATEGORIES
-        .filter { type == null || it.type == type.name || it.type == "BOTH" }
-        .map { it.name }
+    // El caché guarda los nombres tal cual los escribió el dueño; las preferencias vienen del
+    // server con el mismo nombre. Se cruzan sin distinguir mayúsculas ni tildes para que una
+    // diferencia de tipeo no haga que una categoría escondida reaparezca.
+    val prefsNormalizadas = prefs.entries.associate { (name, pref) -> normalizeForMatch(name.trim()) to pref }
+    fun prefDe(name: String): CategoryPref? = prefsNormalizadas[normalizeForMatch(name.trim())]
+
+    fun seOfrece(name: String, tiposUsados: Set<TransactionType>): Boolean {
+        val pref = prefDe(name)
+        if (pref?.hidden == true) return false
+        if (type == null) return true
+        val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados)
+        // Vacío = "no se sabe de qué lado" → se muestra igual. Ver el KDoc de arriba.
+        return efectivos.isEmpty() || type in efectivos
+    }
+
+    // Para deduplicar hace falta el catálogo ENTERO, no solo el visible: una categoría del
+    // catálogo escondida no puede volver a colarse por la puerta de las propias.
+    val todasLasDelCatalogo = PREDEFINED_CATEGORIES.map { it.name }
+    val predefined = todasLasDelCatalogo.filter { seOfrece(it, emptySet()) }
     val q = normalizeForMatch(query)
     val predefinedMatches = predefined.filter { normalizeForMatch(it).contains(q) }
     val usedMatches = usedCategories.entries
@@ -78,10 +105,10 @@ fun suggestCategoryMatches(
             val clean = name.trim()
             if (clean.isEmpty()) null else clean to types
         }
-        .filter { (_, types) -> type == null || types.isEmpty() || type in types }
+        .filter { (name, types) -> seOfrece(name, types) }
         .map { (name, _) -> name }
         .distinct()
-        .filterNot { used -> predefined.any { it.equals(used, ignoreCase = true) } }
+        .filterNot { used -> todasLasDelCatalogo.any { it.equals(used, ignoreCase = true) } }
         .filter { normalizeForMatch(it).contains(q) }
     return predefinedMatches + usedMatches
 }
@@ -148,17 +175,24 @@ fun ladoConocidoDeCategoria(
     query: String,
     type: TransactionType?,
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
 ): String? {
     val q = normalizeForMatch(query.trim())
     if (q.isEmpty()) return null
-    val tipos = mutableSetOf<TransactionType>()
+    val tiposUsados = mutableSetOf<TransactionType>()
+    var nombre = query.trim()
     for ((name, types) in usedCategories) {
-        if (normalizeForMatch(name.trim()) == q) tipos += types
+        if (normalizeForMatch(name.trim()) == q) {
+            tiposUsados += types
+            nombre = name.trim()
+        }
     }
-    PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { pre ->
-        if (pre.type == "BOTH") tipos += setOf(TransactionType.EXPENSE, TransactionType.INCOME)
-        else runCatching { TransactionType.valueOf(pre.type) }.getOrNull()?.let { tipos += it }
-    }
+    PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { nombre = it.name }
+    // Ola 10: la misma regla única que las sugerencias — lo fijado por el dueño gana sobre el
+    // catálogo. Sin esto, «Otros» fijada en «Ambos» seguiría diciendo «Ya la tienes en Gastos»
+    // al anotar un ingreso, contradiciendo lo que él mismo acababa de decidir.
+    val pinned = prefs.entries.firstOrNull { normalizeForMatch(it.key.trim()) == q }?.value?.pinnedType
+    val tipos = effectiveCategoryTypes(nombre, pinned, tiposUsados)
     val delOtroLado = tipos - setOfNotNull(type)
     return when {
         delOtroLado.isEmpty() -> null
@@ -213,6 +247,8 @@ fun CategoryField(
     type: TransactionType? = null,
     /** Nombre → tipos con los que se la vio usada (ver `UsedCategoriesCache.used`). */
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    /** Ola 10: lo que el dueño decidió en «Más → Categorías» (ver `UsedCategoriesCache.prefs`). */
+    prefs: Map<String, CategoryPref> = emptyMap(),
     label: String? = "CATEGORÍA",
     placeholder: String = "Ej: Vivienda, Suscripción, Salud",
     /** Además de [onValueChange]: se dispara solo al tocar una sugerencia, nunca al tipear —
@@ -254,21 +290,23 @@ fun CategoryField(
     // Ola 2 #3a: con el campo prellenado (QuickAdd arranca en "Comida", Recurrentes en "Otros"),
     // la única sugerencia visible era la misma categoría ya escrita. Si lo que hay en el campo
     // coincide EXACTAMENTE con una sugerencia, o está vacío, se listan TODAS las disponibles.
-    val allMatches = remember(type, usedCategories) { suggestCategoryMatches("", type, usedCategories) }
+    val allMatches = remember(type, usedCategories, prefs) { suggestCategoryMatches("", type, usedCategories, prefs) }
     val isExactMatch = value.isBlank() || allMatches.any { normalizeForMatch(it) == normalizeForMatch(value) }
-    val matches = if (isExactMatch) allMatches else remember(value, type, usedCategories) {
-        suggestCategoryMatches(value, type, usedCategories)
+    val matches = if (isExactMatch) allMatches else remember(value, type, usedCategories, prefs) {
+        suggestCategoryMatches(value, type, usedCategories, prefs)
     }
     // Ola 9 · A1: lo escrito no coincide con nada → arriba de todo, la opción de crearlo. Ver
     // [shouldOfferCreateCategory] para el porqué y para el caso de la coincidencia parcial.
     val nuevaCategoria = value.trim()
     // Las propias de cualquier tipo Y el catálogo entero: lo que ya existe no se "crea".
-    val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name }
+    // Ola 10: escondida sigue siendo conocida — ofrecerle «Crear "Ropa"» a alguien que acaba de
+    // esconder «Ropa» sería prometerle algo nuevo y devolverle exactamente lo que sacó de la vista.
+    val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name } + prefs.keys
     val ofrecerCrear = shouldOfferCreateCategory(query = value, matches = matches, conocidas = conocidas)
     // Ola 9 · A4: y si no se crea porque YA existe (del otro lado), se dice — sin esto el panel
     // quedaba completamente vacío. Ver [shouldOfferKnownFromOtherSide].
     val ofrecerConocida = shouldOfferKnownFromOtherSide(value, matches, conocidas)
-    val ladoConocido = if (ofrecerConocida) ladoConocidoDeCategoria(value, type, usedCategories) else null
+    val ladoConocido = if (ofrecerConocida) ladoConocidoDeCategoria(value, type, usedCategories, prefs) else null
     val nombreConocido = if (ofrecerConocida) nombreCanonicoConocido(value, usedCategories) ?: nuevaCategoria else nuevaCategoria
 
     fun pick(name: String) {

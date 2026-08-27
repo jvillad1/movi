@@ -276,6 +276,7 @@ fun QuickAddScreen(
                             onValueChange = { category = it },
                             type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                             usedCategories = UsedCategoriesCache.used,
+                            prefs = UsedCategoriesCache.prefs,
                             label = null,
                             onSuggestionPicked = { picker = Picker.None },
                             focusRequester = categoryFocusRequester,
