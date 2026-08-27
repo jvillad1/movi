@@ -104,6 +104,27 @@ class CuentaPorDefectoTest {
         assertEquals(OrigenCuenta.ULTIMA, destino.origen)
     }
 
+    /**
+     * B1 de la revisión: el par habitual es Bancolombia→Nequi y el dueño arma el de vuelta
+     * poniendo Desde = Nequi. El destino que tiene sentido es Bancolombia (el origen viejo), no
+     * la primera del alfabeto — y con `ultima = lastTransferToId` el recuerdo quedaba excluido de
+     * su propia sugerencia, porque esa cuenta es justo la que pasó a ser origen.
+     *
+     * Acá se prueba la regla; quien la aplica es `destinoSugerido` en `TransferForm.kt`.
+     */
+    @Test
+    fun `si el origen nuevo era el destino habitual, el destino propuesto es el origen viejo`() {
+        val ultimoOrigen = "acc_b"   // Bancolombia
+        val ultimoDestino = "acc_n"  // Nequi
+        val origenElegido = ultimoDestino
+
+        val recuerdo = if (origenElegido == ultimoDestino) ultimoOrigen else ultimoDestino
+        val destino = resolverCuenta(tres, ultima = recuerdo, excluir = origenElegido)
+
+        assertEquals("acc_b", destino.id)
+        assertEquals(OrigenCuenta.ULTIMA, destino.origen)
+    }
+
     @Test
     fun `con una sola cuenta el aviso no dice nada`() {
         assertNull(avisoDeCuenta(OrigenCuenta.ULTIMA, cuentasDisponibles = 1))

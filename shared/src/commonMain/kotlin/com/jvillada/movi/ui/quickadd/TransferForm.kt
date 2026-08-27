@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -155,6 +156,12 @@ fun transferRequestFor(
  * queda contemplado para un server anterior a ese cambio (una versión vieja todavía desplegada):
  * también significa que las dos patas existen, y mostrarlo como error sería mentirle al dueño y
  * empujarlo a tocar Guardar una tercera vez.
+ *
+ * **Para que quede sin ambigüedad (revisión de la Ola 11): el `TransferRoutes` de hoy NUNCA
+ * responde 409.** El reintento idempotente da 200 y un `transferId` reusado para otro traspaso da
+ * 422 (`TRANSFER_ID_ALREADY_USED`), que sí es un error de verdad y se muestra como tal. O sea que
+ * esta rama —y el `recordTransfer` que cuelga de ella— está muerta contra el server actual y
+ * existe solo para el cliente que le pegue a uno viejo.
  */
 fun isAlreadyRegistered(error: Throwable): Boolean =
     error is ApiException && error.status == 409
@@ -168,6 +175,33 @@ fun isAlreadyRegistered(error: Throwable): Boolean =
  */
 fun transferableAccounts(accounts: List<Account>): List<Account> =
     accounts.filter { it.type.group != AccountGroup.DEUDA }
+
+/**
+ * Igual que `FRACCION_VALOR_FILA` en la hoja de un movimiento, y por el mismo motivo. Un poco más
+ * generoso porque acá las etiquetas son más cortas («Desde», «Hacia») y no llevan más que su
+ * aviso debajo.
+ */
+private const val FRACCION_VALOR_FILA_TRASPASO = 0.6f
+
+/**
+ * **Qué cuenta proponer del otro lado del traspaso.**
+ *
+ * El recuerdo natural del destino es [LastAccountStore.lastTransferToId] — salvo cuando el origen
+ * que quedó elegido ES esa cuenta. Ahí lo que el dueño está armando es el traspaso de vuelta
+ * (siempre fue Bancolombia→Nequi y ahora puso Desde=Nequi), así que el destino que tiene sentido
+ * proponerle es el origen viejo, no la primera cuenta del alfabeto.
+ *
+ * Sin esto, el par recordado quedaba excluido de su propia sugerencia: el destino se resolvía con
+ * `ultima = lastTransferToId` y `excluir = origen`, que son la misma cuenta, y caía en `PRIMERA`.
+ * Se veía —con su «Por defecto»—, pero era una trampa para el dedo rápido: dos toques y el
+ * traspaso salía hacia una cuenta que nadie eligió.
+ */
+private fun destinoSugerido(origenElegido: String?): String? =
+    if (origenElegido != null && origenElegido == LastAccountStore.lastTransferToId) {
+        LastAccountStore.lastTransferFromId
+    } else {
+        LastAccountStore.lastTransferToId
+    }
 
 /**
  * El cuerpo de la pestaña **Traspaso** de la hoja de Agregar.
@@ -226,7 +260,7 @@ internal fun TransferBody(
         if (!destinoFirme) {
             val elegida = resolverCuenta(
                 cuentas = elegibles,
-                ultima = LastAccountStore.lastTransferToId,
+                ultima = destinoSugerido(fromId),
                 excluir = fromId,
             )
             toId = elegida.id
@@ -327,7 +361,9 @@ internal fun TransferBody(
                         if (toId == id) {
                             val reemplazo = resolverCuenta(
                                 cuentas = elegibles,
-                                ultima = LastAccountStore.lastTransferToId,
+                                // [destinoSugerido]: si la cuenta que acaba de pasar a origen era
+                                // el destino habitual, lo que se propone es el traspaso de vuelta.
+                                ultima = destinoSugerido(id),
                                 excluir = id,
                             )
                             toId = reemplazo.id
@@ -380,8 +416,14 @@ internal fun TransferBody(
                         fontSize = 14.5.sp,
                         color = if (from == null) MinTextFaint else MinText,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
+                // Mismo techo que las filas del editor de un movimiento: sin él, un nombre de
+                // cuenta largo se lleva la fila entera y parte «Desde» letra por letra (ver
+                // `rightMaxFraction` en CardRow).
+                rightMaxFraction = FRACCION_VALOR_FILA_TRASPASO,
                 showChevron = true,
                 onClick = { picking = TransferSide.FROM },
             )
@@ -402,8 +444,11 @@ internal fun TransferBody(
                         fontSize = 14.5.sp,
                         color = if (to == null) MinTextFaint else MinText,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
+                rightMaxFraction = FRACCION_VALOR_FILA_TRASPASO,
                 showChevron = true,
                 isLast = true,
                 onClick = { picking = TransferSide.TO },

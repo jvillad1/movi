@@ -104,6 +104,31 @@ fun CardRow(
     showChevron: Boolean = false,
     isLast: Boolean = false,
     onClick: (() -> Unit)? = null,
+    /**
+     * **Techo de ancho para el lado derecho, como fracción del ancho de la fila.** `null` (el
+     * valor de siempre) = sin techo.
+     *
+     * Existe porque el lado derecho es un hijo SIN peso: se mide con todo el ancho disponible y
+     * se lleva el que quiera, y recién con lo que sobra se mide la columna izquierda, que sí
+     * tiene `weight(1f)`. Con un valor largo —el nombre de una cuenta, «Bancolombia Ahorros
+     * Nómina Principal»— a la izquierda no le queda nada y su etiqueta se parte **en una letra
+     * por renglón**: la fila pasa de 48 a ~200 dp y, en una hoja anclada abajo como la de
+     * Agregar, empuja el teclado y «Guardar movimiento» fuera de la pantalla.
+     *
+     * Es de `master`, no de la Ola 11 —la estructura es la misma desde siempre—, pero la fila
+     * «Cuenta» es de uso diario y la rama le suma 15 dp, así que se arregla acá.
+     *
+     * **Opcional a propósito.** Este componente lo usan 21 filas en siete pantallas, y algunas
+     * ponen a la derecha cosas que no son texto (montos, chips, un `Switch`) donde un techo
+     * podría apretar algo que hoy entra bien. Quien sabe que su valor puede ser largo lo pide;
+     * el resto no cambia ni un píxel.
+     *
+     * Con techo, el lado derecho ocupa exactamente esa fracción y alinea su contenido al final,
+     * que es donde ya estaba: un valor corto se ve idéntico, uno largo se corta ahí (poner
+     * `maxLines = 1` en el `Text` que va adentro para que además se corte con «…» en vez de
+     * ocupar dos renglones).
+     */
+    rightMaxFraction: Float? = null,
 ) {
     Column {
         Row(
@@ -125,7 +150,16 @@ fun CardRow(
                     )
                 }
             }
-            if (right != null) right()
+            if (right != null) {
+                if (rightMaxFraction != null) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(rightMaxFraction),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) { right() }
+                } else {
+                    right()
+                }
+            }
             if (showChevron) {
                 ChevronRight()
             }

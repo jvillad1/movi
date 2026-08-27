@@ -52,6 +52,14 @@ import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
+/**
+ * Cuánto de una fila de la hoja puede ocupar el valor de la derecha (ver `rightMaxFraction` en
+ * `CardRow`, donde está el porqué). 55 % deja ~167 dp para el valor y ~136 dp para la etiqueta y
+ * su aviso a 375 dp — medido: «Bancolombia Ahorros» entra entero, «Última usada» también, y un
+ * nombre más largo se corta con «…» en vez de partir la etiqueta letra por letra.
+ */
+private const val FRACCION_VALOR_FILA = 0.55f
+
 private sealed class Picker {
     data object None : Picker()
     data object Category : Picker()
@@ -138,6 +146,13 @@ fun QuickAddScreen(
                 // `list.firstOrNull()` a secas, y «la primera» no estaba definida en ninguna
                 // parte (ni el server ni SQLDelight ordenaban): la cuenta preseleccionada podía
                 // cambiar sola entre sesiones, sin que nada cambiara a la vista.
+                // **Anotado, no arreglado (B2 de la revisión):** este efecto también corre
+                // después de crear una cuenta desde esta misma hoja (`accountsRefreshKey++`), y
+                // ahí puede MOVER la preselección — master conservaba la que estuviera. Pasa
+                // solo si el dueño no había elegido a mano, y el cambio se ve (la fila dice el
+                // nombre nuevo con su «Por defecto»), así que probablemente sea mejor así: quien
+                // acaba de crear una cuenta suele querer estrenarla. Queda escrito porque es un
+                // cambio de comportamiento que ningún otro comentario nombra.
                 val eleccionFirme = origenCuenta == OrigenCuenta.ELEGIDA &&
                     list.any { it.id == selectedAccountId }
                 if (!eleccionFirme) {
@@ -251,9 +266,15 @@ fun QuickAddScreen(
                 // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
                 // "usada" en el resto de la sesión. Ola 9 · A3: con el tipo con que la usó.
                 UsedCategoriesCache.record(trimmedCategory, event.type)
-                // Ola 11: la próxima vez, «Agregar» arranca en esta cuenta. Va DESPUÉS del POST
-                // exitoso y no antes: un guardado que falló no movió plata de ninguna cuenta, y
-                // no tiene por qué mover el valor por defecto de la próxima apertura.
+                // Ola 11: la próxima vez, «Agregar» arranca en esta cuenta. Va DESPUÉS del
+                // guardado exitoso y no antes: un guardado que falló no movió plata de ninguna
+                // cuenta, y no tiene por qué mover el valor por defecto de la próxima apertura.
+                //
+                // Precisión que importa en el teléfono: en Android `Repositories.wallets` es
+                // `LocalRepository` (offline-first), así que «exitoso» acá significa **guardado
+                // en la base local**, no confirmado por el server — el `SyncEngine` lo empuja
+                // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
+                // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
                 LastAccountStore.recordAccount(event.accountId)
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
@@ -397,6 +418,14 @@ fun QuickAddScreen(
                         amount = amount,
                         onKey = ::onKey,
                         category = category,
+                        // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
+                        // falla y la hoja se abrió con `presetAccountId`, `selectedAccount` es
+                        // null —la lista está vacía— así que esto dice «Seleccionar cuenta»,
+                        // pero `canSave` mira `selectedAccountId`, que SÍ tiene el preset: el
+                        // botón queda habilitado y el movimiento se guarda en la cuenta
+                        // correcta, sin que el dueño haya llegado a ver cuál era. Arreglarlo
+                        // bien pide resolver el nombre sin la lista (o bloquear el guardado, que
+                        // sería peor: hoy se guarda, y se guarda bien).
                         walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
                         // Ola 11: solo dice algo cuando el valor lo puso la app y hay más de una
                         // cuenta donde anotar (ver [avisoDeCuenta]).
@@ -531,7 +560,19 @@ private fun EditorBody(
     ) {
         CardRow(
             left = { Text("Categoría", fontSize = 14.5.sp, color = MinTextMute) },
-            right = { Text(category, fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) },
+            right = {
+                Text(
+                    text = category,
+                    fontSize = 14.5.sp,
+                    color = MinText,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            // Ver el KDoc de [rightMaxFraction] en CardRow: una categoría propia larga
+            // («Mantenimiento del carro») se llevaba la fila entera y partía la etiqueta.
+            rightMaxFraction = FRACCION_VALOR_FILA,
             showChevron = true,
             onClick = onPickCategory,
         )
@@ -560,7 +601,17 @@ private fun EditorBody(
                 // ofrecer, y no había ningún problema que arreglarle a quien tiene una cuenta.
                 AvisoDeCuentaRow(walletHint, walletHintReserved)
             },
-            right = { Text(walletLabel, fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) },
+            right = {
+                Text(
+                    text = walletLabel,
+                    fontSize = 14.5.sp,
+                    color = MinText,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            rightMaxFraction = FRACCION_VALOR_FILA,
             showChevron = true,
             // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
@@ -575,8 +626,13 @@ private fun EditorBody(
                     fontSize = 14.5.sp,
                     color = if (note.isBlank()) MinTextFaint else MinText,
                     fontWeight = if (note.isBlank()) FontWeight.Normal else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             },
+            // La nota es texto libre: sin techo, «Almuerzo con el equipo de la oficina» hacía
+            // exactamente lo mismo que un nombre de cuenta largo.
+            rightMaxFraction = FRACCION_VALOR_FILA,
             isLast = true,
             onClick = onEditNote,
         )
@@ -746,11 +802,16 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
                 color = MinTextFaint,
-                // Una sola línea, y con puntos suspensivos si no entra: este renglón comparte la
-                // fila con el nombre de la cuenta, que puede ser largo («Bancolombia Ahorros»)
-                // y se lleva el ancho que necesite. Medido en la web a 375 dp entra completo,
-                // pero un nombre más largo lo apretaría, y un corte a la mitad de una palabra
-                // se lee como un bug; el «…» al menos dice que hay más.
+                // Una sola línea, y con puntos suspensivos si no entra.
+                //
+                // **Esto solo no alcanzaba, y el comentario que estaba acá antes mentía.** El
+                // renglón comparte la fila con el nombre de la cuenta, que hasta la Ola 11 se
+                // llevaba TODO el ancho que quisiera (ver `rightMaxFraction` en `CardRow`): con
+                // un nombre muy largo el aviso no se cortaba con «…», directamente no se veía, y
+                // lo que se rompía era la etiqueta «Cuenta» de al lado, partida en una letra por
+                // renglón. El arreglo de verdad es el techo del lado derecho; este `maxLines` es
+                // la segunda mitad, para que con la fila ya acotada el aviso se corte con «…» en
+                // vez de ocupar dos renglones y volver a mover el teclado.
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
