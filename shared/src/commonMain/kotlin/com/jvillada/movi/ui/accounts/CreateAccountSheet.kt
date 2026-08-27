@@ -43,6 +43,37 @@ private val TYPE_OPTIONS = listOf(
     TypeOption(AccountType.INVESTMENT, "Inversión", "Plata guardada: CDT, fondos", Icons.AutoMirrored.Filled.TrendingUp),
 )
 
+/**
+ * **Anotado, no arreglado — esta hoja está anclada abajo y NO se desplaza (Ola 12).**
+ *
+ * `QuickAddScreen` acaba de ganar `verticalScroll` porque en una pantalla corta «Guardar
+ * movimiento» quedaba entero por debajo del recorte y no había forma de guardar. Esta hoja tiene
+ * la misma estructura y el mismo riesgo, y encima **se abre desde ahí** («+ Crear cuenta» cuando
+ * todavía no hay cuentas): es de lo primero que toca un dueño nuevo.
+ *
+ * Medido a ojo en el navegador (densidad 2, dp = píxel CSS), con el campo de nombre vacío, que
+ * es como se abre siempre:
+ *
+ *   contenido de esta hoja               631 dp
+ *   sitio que hay en el AVD Movi_Sensor  603 dp   (medido con la hoja de «Agregar» instrumentada)
+ *
+ * O sea que **en un teléfono como el AVD se cortan unos 28 dp**: el renglón «Falta el nombre» y
+ * el borde de abajo de «Crear cuenta», que queda pegado contra la barra inferior. En una ventana
+ * de 620 se corta la mitad del botón — visto. En un iPhone SE hay menos sitio todavía. El botón
+ * se sigue pudiendo tocar por poco, así que esto es margen cero, no bloqueo: por eso queda
+ * ESCRITO y no arreglado en la misma tanda que la otra hoja.
+ *
+ * Las otras hojas ancladas abajo y sin desplazamiento, por si alguien hace la ronda completa:
+ * [com.jvillada.movi.ui.goals.GoalSheet], [VoidEventSheet] y [DeleteAccountSheet] — ninguna se
+ * midió acá. (`CreditBalanceSheet` figuraba en esa lista pero **ya se desplaza**: tiene el
+ * `verticalScroll` + `weight(1f, fill = false)` del idioma; verificado en el código.)
+ *
+ * El arreglo, cuando toque, es el de las seis hojas que sí se desplazan: la manija afuera y el
+ * cuerpo en una `Column` con `verticalScroll(...)` + `weight(1f, fill = false)`. Ojo con
+ * copiar el modificador a la `Column` de la hoja: su hermano es el `Box(weight(1f))` que la
+ * ancla abajo, y dos hijos con peso se reparten el alto (medido en «Agregar»: la hoja quedaba
+ * capada a la mitad de la pantalla).
+ */
 @Composable
 fun CreateAccountSheet(
     onDismiss: () -> Unit,
