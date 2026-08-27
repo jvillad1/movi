@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
@@ -102,8 +103,19 @@ fun QuickAddScreen(
     }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
-    // si no existiera (borrada entre medio) el efecto de abajo cae al primer accountId disponible.
+    // si no existiera (borrada entre medio), el efecto de abajo cae en la última usada y, si esa
+    // tampoco está, en la primera de la lista (ver [resolverCuenta]).
     var selectedAccountId by remember { mutableStateOf(presetAccountId) }
+    /**
+     * **Ola 11 — por qué está elegida ESTA cuenta.** Con una sola cuenta esto no cambia nada;
+     * con varias, es la diferencia entre un valor por defecto que se puede leer y uno que se
+     * descubre después en Movimientos. Lo usan dos cosas: el aviso de la fila «Cuenta»
+     * ([avisoDeCuenta]) y la reconciliación de abajo, que **no puede pisar una elección a mano**
+     * cuando la lista de cuentas se vuelve a cargar (p. ej. tras crear una cuenta desde acá).
+     */
+    var origenCuenta by remember {
+        mutableStateOf(if (presetAccountId != null) OrigenCuenta.CONTEXTO else OrigenCuenta.NINGUNA)
+    }
     var picker by remember { mutableStateOf<Picker>(Picker.None) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -119,8 +131,22 @@ fun QuickAddScreen(
             .onSuccess { list ->
                 accountsLoaded = true
                 accounts = list
-                if (selectedAccountId == null || list.none { it.id == selectedAccountId }) {
-                    selectedAccountId = list.firstOrNull()?.id
+                // Ola 11: la que el dueño acaba de elegir con el dedo no se toca —salvo que ya
+                // no exista—, y para todo lo demás decide [resolverCuenta]: contexto, después la
+                // última usada, y recién después la primera de la lista. Antes acá había un
+                // `list.firstOrNull()` a secas, y «la primera» no estaba definida en ninguna
+                // parte (ni el server ni SQLDelight ordenaban): la cuenta preseleccionada podía
+                // cambiar sola entre sesiones, sin que nada cambiara a la vista.
+                val eleccionFirme = origenCuenta == OrigenCuenta.ELEGIDA &&
+                    list.any { it.id == selectedAccountId }
+                if (!eleccionFirme) {
+                    val elegida = resolverCuenta(
+                        cuentas = list,
+                        contexto = presetAccountId,
+                        ultima = LastAccountStore.lastAccountId,
+                    )
+                    selectedAccountId = elegida.id
+                    origenCuenta = elegida.origen
                 }
             }
     }
@@ -224,6 +250,10 @@ fun QuickAddScreen(
                 // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
                 // "usada" en el resto de la sesión. Ola 9 · A3: con el tipo con que la usó.
                 UsedCategoriesCache.record(trimmedCategory, event.type)
+                // Ola 11: la próxima vez, «Agregar» arranca en esta cuenta. Va DESPUÉS del POST
+                // exitoso y no antes: un guardado que falló no movió plata de ninguna cuenta, y
+                // no tiene por qué mover el valor por defecto de la próxima apertura.
+                LastAccountStore.recordAccount(event.accountId)
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
@@ -329,7 +359,13 @@ fun QuickAddScreen(
                     Picker.Wallet -> WalletPicker(
                         accounts = accounts,
                         selectedId = selectedAccountId,
-                        onPick = { selectedAccountId = it; picker = Picker.None },
+                        onPick = {
+                            selectedAccountId = it
+                            // Elegida a mano: la reconciliación de arriba ya no la pisa, y el
+                            // aviso «La última que usaste» desaparece — ya no lo decidió la app.
+                            origenCuenta = OrigenCuenta.ELEGIDA
+                            picker = Picker.None
+                        },
                         onClose = { picker = Picker.None },
                     )
                     Picker.Note -> NoteEditor(
@@ -349,6 +385,10 @@ fun QuickAddScreen(
                             TransferBody(
                                 accounts = accounts,
                                 accountsLoaded = accountsLoaded,
+                                // Ola 11: si la hoja se abrió desde el detalle de una cuenta, ese
+                                // contexto vale también para el ORIGEN del traspaso — es la
+                                // cuenta que el dueño estaba mirando cuando tocó «Agregar».
+                                presetAccountId = presetAccountId,
                                 onSaved = onSaved,
                             )
                         } else {
@@ -357,6 +397,11 @@ fun QuickAddScreen(
                         onKey = ::onKey,
                         category = category,
                         walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
+                        // Ola 11: solo dice algo cuando el valor lo puso la app y hay más de una
+                        // cuenta donde anotar (ver [avisoDeCuenta]).
+                        walletHint = if (selectedAccount == null) null
+                            else avisoDeCuenta(origenCuenta, accounts.size),
+                        walletHintReserved = accounts.size > 1,
                         note = note,
                         onPickCategory = { picker = Picker.Category },
                         onPickWallet = { picker = Picker.Wallet },
@@ -439,6 +484,9 @@ private fun EditorBody(
     onKey: (String) -> Unit,
     category: String,
     walletLabel: String,
+    walletHint: String? = null,
+    /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
+    walletHintReserved: Boolean = false,
     note: String,
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
@@ -487,7 +535,30 @@ private fun EditorBody(
             onClick = onPickCategory,
         )
         CardRow(
-            left = { Text("Cuenta", fontSize = 14.5.sp, color = MinTextMute) },
+            left = {
+                Text("Cuenta", fontSize = 14.5.sp, color = MinTextMute)
+                // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
+                // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
+                //
+                // Lo primero: con varias cuentas, el valor por defecto es una decisión de la app
+                // («la última que usaste», o «la primera de la lista» la primera vez), y esa
+                // decisión tiene que poder leerse ANTES de tocar Guardar. La fila ya mostraba el
+                // nombre, pero un nombre no dice si lo eligió el dueño o lo puso la app.
+                //
+                // Lo segundo es la disciplina de esta hoja: está anclada abajo, así que
+                // **cualquier cambio de alto le mueve el teclado bajo el dedo** (ver el bloque de
+                // la Ola 8 · V2 más arriba: 22 px de salto ya hicieron que se tipeara «8» en vez
+                // de «0»). Este renglón aparece y desaparece por su cuenta —al cargar la lista,
+                // al elegir una cuenta a mano— así que reserva su alto mientras haya más de una
+                // cuenta, que es exactamente cuando puede llegar a decir algo. Cuesta 15 dp
+                // fijos ahí, y garantiza que ni elegir una cuenta ni cambiar de pestaña corran
+                // el teclado.
+                //
+                // Con UNA sola cuenta no reserva nada y la fila queda idéntica a como estaba
+                // antes de esta rama: no hay decisión que confesar, no hay alternativa que
+                // ofrecer, y no había ningún problema que arreglarle a quien tiene una cuenta.
+                AvisoDeCuentaRow(walletHint, walletHintReserved)
+            },
             right = { Text(walletLabel, fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) },
             showChevron = true,
             // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
@@ -652,6 +723,24 @@ private fun EditorBody(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+/**
+ * El renglón chiquito de «La última que usaste» / «Elegida por la app», debajo de la etiqueta de
+ * una fila de cuenta. Lo usan la fila «Cuenta» del editor y las filas «Desde»/«Hacia» del
+ * traspaso, con el mismo alto y el mismo criterio (ver [avisoDeCuenta]).
+ *
+ * `lineHeight` explícito y `Box` de alto fijo: el alto tiene que ser el mismo diga lo que diga,
+ * y no depender de la métrica de la fuente que le toque a cada plataforma.
+ */
+@Composable
+internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
+    if (aviso == null && !reservado) return
+    Box(modifier = Modifier.height(15.dp)) {
+        if (aviso != null) {
+            Text(aviso, fontSize = 11.sp, lineHeight = 14.sp, color = MinTextFaint)
         }
     }
 }

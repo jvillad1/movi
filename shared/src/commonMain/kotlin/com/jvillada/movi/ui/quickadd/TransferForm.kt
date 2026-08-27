@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +27,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
@@ -179,13 +181,59 @@ fun transferableAccounts(accounts: List<Account>): List<Account> =
 internal fun TransferBody(
     accounts: List<Account>,
     accountsLoaded: Boolean,
+    presetAccountId: String? = null,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     val elegibles = remember(accounts) { transferableAccounts(accounts) }
 
-    var fromId by remember(elegibles) { mutableStateOf(elegibles.firstOrNull()?.id) }
-    var toId by remember(elegibles) { mutableStateOf(elegibles.getOrNull(1)?.id) }
+    var fromId by remember { mutableStateOf<String?>(null) }
+    var toId by remember { mutableStateOf<String?>(null) }
+    var origenFrom by remember { mutableStateOf(OrigenCuenta.NINGUNA) }
+    var origenTo by remember { mutableStateOf(OrigenCuenta.NINGUNA) }
+
+    /**
+     * **Ola 11 — el traspaso también recuerda su par, y también deja de depender del orden.**
+     *
+     * Antes esto era `elegibles.firstOrNull()` y `elegibles.getOrNull(1)`, o sea las dos
+     * primeras cuentas de una lista que nadie ordenaba: el mismo problema que la fila «Cuenta»
+     * del editor, duplicado, y con la vuelta de tuerca de que acá **dos cuentas equivocadas**
+     * salen mal de una y entran mal en otra.
+     *
+     * El par origen→destino se repite (siempre el mismo banco al mismo bolsillo), así que se
+     * recuerda entero y aparte del de un movimiento — ver `LastAccountStore`, donde está escrito
+     * por qué un traspaso no puede definir «la última cuenta usada» de un gasto.
+     *
+     * El destino se resuelve **excluyendo** el origen: no hay traspaso de una cuenta a sí misma,
+     * y ofrecerlo para después bloquear el botón sería peor que no ofrecerlo.
+     *
+     * Corre cuando cambia la lista de cuentas (que llega después de que esta pestaña se compuso)
+     * y respeta lo que el dueño haya elegido a mano, salvo que esa cuenta ya no exista.
+     */
+    LaunchedEffect(elegibles) {
+        val origenFirme = origenFrom == OrigenCuenta.ELEGIDA && elegibles.any { it.id == fromId }
+        if (!origenFirme) {
+            val elegida = resolverCuenta(
+                cuentas = elegibles,
+                contexto = presetAccountId,
+                ultima = LastAccountStore.lastTransferFromId,
+            )
+            fromId = elegida.id
+            origenFrom = elegida.origen
+        }
+        val destinoFirme = origenTo == OrigenCuenta.ELEGIDA &&
+            elegibles.any { it.id == toId } && toId != fromId
+        if (!destinoFirme) {
+            val elegida = resolverCuenta(
+                cuentas = elegibles,
+                ultima = LastAccountStore.lastTransferToId,
+                excluir = fromId,
+            )
+            toId = elegida.id
+            origenTo = elegida.origen
+        }
+    }
+
     var amount by remember { mutableStateOf<Long?>(null) }
     var date by remember { mutableStateOf(todayIsoInAppZone()) }
     var note by remember { mutableStateOf("") }
@@ -219,6 +267,9 @@ internal fun TransferBody(
                     // Ids nuevos recién ACÁ: el traspaso siguiente es otro traspaso. Mientras el
                     // anterior no haya llegado, cada reintento tiene que ser el mismo pedido.
                     ids = TransferDraftIds.new()
+                    // Ola 11: el próximo traspaso arranca con este mismo par. Igual que en el
+                    // editor de un movimiento, solo después de que el server lo confirmó.
+                    LastAccountStore.recordTransfer(origen.id, destino.id)
                     onSaved()
                 }
                 .onFailure { fallo ->
@@ -228,6 +279,9 @@ internal fun TransferBody(
                     // a alguien cuyo traspaso sí se guardó es lo que lo empuja a guardarlo otra vez.
                     if (isAlreadyRegistered(fallo)) {
                         ids = TransferDraftIds.new()
+                        // El traspaso SÍ quedó registrado, así que este par cuenta como usado
+                        // igual que en el camino feliz.
+                        LastAccountStore.recordTransfer(origen.id, destino.id)
                         onSaved()
                     } else {
                         error = fallo.toUserMessage()
@@ -262,7 +316,27 @@ internal fun TransferBody(
                 accounts = elegibles,
                 selectedId = if (picking == TransferSide.FROM) fromId else toId,
                 onPick = { id ->
-                    if (picking == TransferSide.FROM) fromId = id else toId = id
+                    if (picking == TransferSide.FROM) {
+                        fromId = id
+                        origenFrom = OrigenCuenta.ELEGIDA
+                        // Ola 11: si el destino era justo esa cuenta, se corre a otra en vez de
+                        // dejar el formulario trabado en «Elige dos cuentas distintas» con el
+                        // dueño teniendo que adivinar cuál de las dos filas arreglar. El cambio
+                        // se ve —la fila «Hacia» pasa a decir otro nombre, con su aviso de que
+                        // lo eligió la app— así que no es una decisión escondida.
+                        if (toId == id) {
+                            val reemplazo = resolverCuenta(
+                                cuentas = elegibles,
+                                ultima = LastAccountStore.lastTransferToId,
+                                excluir = id,
+                            )
+                            toId = reemplazo.id
+                            origenTo = reemplazo.origen
+                        }
+                    } else {
+                        toId = id
+                        origenTo = OrigenCuenta.ELEGIDA
+                    }
                     picking = null
                 },
                 onClose = { picking = null },
@@ -292,7 +366,14 @@ internal fun TransferBody(
             padding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
         ) {
             CardRow(
-                left = { Text("Desde", fontSize = 14.5.sp, color = MinTextMute) },
+                left = {
+                    Text("Desde", fontSize = 14.5.sp, color = MinTextMute)
+                    // Ola 11: mismo aviso que la fila «Cuenta» del editor y por el mismo motivo
+                    // —el valor por defecto es una decisión de la app y tiene que poder leerse
+                    // antes de guardar—, con el mismo alto reservado para que elegir una cuenta
+                    // no mueva el formulario bajo el dedo. Ver [avisoDeCuenta].
+                    AvisoDeCuentaRow(avisoDeCuenta(origenFrom, elegibles.size), elegibles.size > 1)
+                },
                 right = {
                     Text(
                         text = from?.name ?: "Elegir cuenta",
@@ -305,7 +386,16 @@ internal fun TransferBody(
                 onClick = { picking = TransferSide.FROM },
             )
             CardRow(
-                left = { Text("Hacia", fontSize = 14.5.sp, color = MinTextMute) },
+                left = {
+                    Text("Hacia", fontSize = 14.5.sp, color = MinTextMute)
+                    // Menos una: el destino no puede ser el origen, así que con dos cuentas el
+                    // destino no tiene alternativa y no hay ninguna decisión que confesar —
+                    // misma regla que «con una sola cuenta el aviso no dice nada».
+                    AvisoDeCuentaRow(
+                        avisoDeCuenta(origenTo, elegibles.size - 1),
+                        elegibles.size - 1 > 1,
+                    )
+                },
                 right = {
                     Text(
                         text = to?.name ?: "Elegir cuenta",
