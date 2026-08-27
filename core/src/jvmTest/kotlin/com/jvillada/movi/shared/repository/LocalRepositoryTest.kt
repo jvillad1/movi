@@ -813,6 +813,159 @@ class LocalRepositoryTest {
         assertEquals("Nequi", repoConServer.getAccount("acc-web").name)
     }
 
+    // ── La cuenta fantasma ────────────────────────────────────────────────────
+    //
+    // Espejar sin filtrar abría una puerta nueva al MISMO daño que la capa 1 cerró: una cuenta
+    // borrada desde la web sobrevivía como fila local para siempre, sumaba al patrimonio, y el
+    // selector del recurrente la ofrecía — elegirla ahí perdía la cuenta de la regla, porque el
+    // server nulea un id que no conoce.
+
+    @Test
+    fun getAccounts_deja_de_mostrar_una_cuenta_que_el_server_ya_no_tiene() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(
+            listOf(cuentaServer("acc-banco", "Bancolombia"), cuentaServer("acc-nequi", "Nequi", 2_499_000L)),
+        )
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        assertEquals(2, repoConServer.getAccounts().size)
+
+        // Borrada desde la web: el server deja de devolverla, con red perfecta.
+        server.cuentas = server.cuentas.filterNot { it.id == "acc-nequi" }
+
+        val visibles = repoConServer.getAccounts()
+        assertEquals(listOf("acc-banco"), visibles.map { it.id })
+        assertEquals(
+            0L,
+            visibles.filter { it.id == "acc-nequi" }.sumOf { it.balance },
+            "el fantasma no puede seguir sumando al patrimonio",
+        )
+    }
+
+    /** Ocultarla no es borrarla: la fila y sus eventos siguen ahí, intactos. */
+    @Test
+    fun getAccounts_oculta_el_fantasma_sin_borrarle_ni_un_dato() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-nequi", "Nequi")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+        repoConServer.postEvent(event("ev-fantasma", "acc-nequi", TransactionType.EXPENSE, 10_000L))
+
+        server.cuentas = emptyList()
+        assertTrue(repoConServer.getAccounts().isEmpty())
+
+        assertNotNull(db.accountQueries.selectById("acc-nequi").executeAsOneOrNull())
+        assertEquals(1, repoConServer.getEvents("acc-nequi").size)
+    }
+
+    /**
+     * La única condición para ocultar es «estaba sellada ANTES de preguntar y el server no la
+     * devolvió». Una cuenta creada offline (nunca sellada) no cumple ninguna de las dos, así que
+     * el filtro no puede tocarla por más que el server no la conozca.
+     */
+    @Test
+    fun getAccounts_nunca_oculta_una_cuenta_creada_offline() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoSinRed = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        repoSinRed.createAccount(Account("acc-offline", "Efectivo", AccountType.CASH, 0L))
+
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        assertEquals(setOf("acc-offline", "acc-web"), repoConServer.getAccounts().map { it.id }.toSet())
+    }
+
+    /**
+     * La carrera angosta: el `SyncEngine` sella una cuenta creada offline mientras el GET está en
+     * vuelo. El fotograma de «selladas» se toma ANTES de preguntar, así que esa cuenta no estaba
+     * sellada cuando se preguntó y no puede parpadear fuera de la lista.
+     */
+    @Test
+    fun getAccounts_no_esconde_la_cuenta_que_el_SyncEngine_sella_durante_el_GET() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoSinRed = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        repoSinRed.createAccount(Account("acc-en-vuelo", "Efectivo", AccountType.CASH, 0L))
+
+        val server = object : ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi"))) {
+            override suspend fun getAccounts(): List<Account> {
+                // Lo que haría SyncEngine.syncAccounts en paralelo: sella la fila local.
+                db.accountQueries.markSynced(1_700_000_000_000L, "acc-en-vuelo")
+                return super.getAccounts()
+            }
+        }
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        assertEquals(
+            setOf("acc-en-vuelo", "acc-web"),
+            repoConServer.getAccounts().map { it.id }.toSet(),
+        )
+    }
+
+    /** Sin red no se puede saber si desapareció: no se oculta nada. */
+    @Test
+    fun getAccounts_sin_red_no_oculta_nada() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+
+        server.falla = true
+        assertEquals(listOf("acc-web"), repoConServer.getAccounts().map { it.id })
+    }
+
+    /**
+     * La salida de emergencia: si un fantasma llega igual a la vista, «Eliminar cuenta» tiene que
+     * funcionar. El server contesta 404 («ya no existe»), que es exactamente el estado buscado.
+     */
+    @Test
+    fun deleteAccount_trata_el_404_como_exito_y_limpia_la_fila_local() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-nequi", "Nequi")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+        server.cuentas = emptyList()
+
+        repoConServer.deleteAccount("acc-nequi")
+
+        assertNull(db.accountQueries.selectById("acc-nequi").executeAsOneOrNull())
+    }
+
+    /** Un borrado que falla por red sigue propagando: eso no cambió. */
+    @Test
+    fun deleteAccount_sin_red_sigue_fallando_sin_tocar_la_fila_local() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-nequi", "Nequi")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+
+        server.falla = true
+        assertTrue(runCatching { repoConServer.deleteAccount("acc-nequi") }.isFailure)
+        assertTrue(
+            db.accountQueries.selectById("acc-nequi").executeAsOneOrNull() != null,
+            "un borrado que no llegó al server no puede sacar la fila local",
+        )
+    }
+
+    /**
+     * Red mala (no «sin red»): el engine espera hasta 30 s para conectar. Con algo local que
+     * mostrar, la lectura se corta en el presupuesto de red (5 s) y contesta con lo que hay — si no,
+     * la hoja de Agregar se queda medio minuto sin cuenta seleccionada y sin poder guardar.
+     */
+    @Test
+    fun getAccounts_con_red_lenta_contesta_con_lo_local_sin_esperar_al_server() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi", 120_000L)))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+
+        server.demoraMs = 30_000L
+        val empezo = System.currentTimeMillis()
+        val cuentas = repoConServer.getAccounts()
+        val tardo = System.currentTimeMillis() - empezo
+
+        assertEquals(listOf("acc-web"), cuentas.map { it.id })
+        assertTrue(tardo < 20_000L, "no puede quedarse esperando al server: tardó ${tardo}ms")
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

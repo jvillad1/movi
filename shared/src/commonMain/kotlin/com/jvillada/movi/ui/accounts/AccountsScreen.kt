@@ -44,6 +44,12 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
+    // «Sin cuentas aún» es una afirmación sobre la plata del dueño, así que solo se hace cuando
+    // una lectura DE VERDAD contestó y contestó vacío. Antes bastaba una lectura fallida: el
+    // snackbar de error se autodescartaba y abajo quedaba el estado vacío invitando a «crear tu
+    // primera cuenta» a alguien que ya tiene tres. Mismo criterio que `accountsLoaded` en la
+    // hoja de Agregar.
+    var cuentasLeidas by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -55,7 +61,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getAccounts() }
-            .onSuccess { accounts = it }
+            .onSuccess { accounts = it; cuentasLeidas = true }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
     }
@@ -97,7 +103,46 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     bottom = 80.dp,
                 ),
             ) {
-                if (accounts.isEmpty() && !loading) {
+                if (accounts.isEmpty() && !loading && !cuentasLeidas) {
+                    // No se pudo leer y no hay nada que mostrar: se dice eso, y nada más. El
+                    // botón acá sería «Reintentar», no «Crear primera cuenta» — proponer crear
+                    // una cuenta sin saber si ya existe es como se fabrican los duplicados.
+                    item {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(32.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                Text(
+                                    text = "No pudimos cargar tus cuentas",
+                                    fontSize = 15.sp,
+                                    color = MinTextDim,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(MinPrimaryContainer)
+                                        .clickable { refreshKey++ }
+                                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "Reintentar",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MinOnPrimaryContainer,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (accounts.isEmpty() && !loading) {
                     item {
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),

@@ -21,6 +21,20 @@ open class NoOpRepository(
     val dismissedCandidateIds = mutableListOf<String>()
 
     /**
+     * Las cuentas que este "server" tiene, y que por lo tanto devuelve en [getAccounts].
+     *
+     * Arranca vacío (como antes), pero **todo lo que crea una cuenta la agrega acá**:
+     * `createAccount`, `createCredit` y `createCard`. Un stub que aceptara crear un crédito y
+     * después jurara que no tiene ninguna cuenta no imita a ningún server posible — y esa
+     * inconsistencia importa desde que `LocalRepository.getAccounts` **deja de mostrar** la
+     * cuenta sellada que el server ya no devuelve (la regla anti-fantasma). Con el stub
+     * contradictorio, los tests del espejo de crédito/tarjeta fallaban por un fantasma que en la
+     * realidad no existe: el server que acaba de crear la cuenta sí la devuelve en el GET
+     * siguiente.
+     */
+    val cuentasDelServer = mutableListOf<Account>()
+
+    /**
      * Imita `POST /api/transfers`: construye las dos patas con la MISMA función que usa el
      * server ([transferLegsFor]), sobre cuentas de nombre igual a su id — el stub no tiene un
      * catálogo de cuentas y lo que se ejercita del otro lado es el espejo local, no el texto.
@@ -32,7 +46,8 @@ open class NoOpRepository(
     }
 
     override suspend fun getCredits() = emptyList<CreditSummary>()
-    override suspend fun createCredit(request: CreateCreditRequest) = putCreditTerms(request.terms)
+    override suspend fun createCredit(request: CreateCreditRequest) =
+        putCreditTerms(request.terms).also { cuentasDelServer += it.account }
     override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(
         account = Account(id = terms.accountId, name = "", type = AccountType.LOAN, balance = 0),
         terms = terms,
@@ -65,7 +80,7 @@ open class NoOpRepository(
         account = Account(id = "acc-card-stub", name = request.name, type = AccountType.CREDIT_CARD, balance = request.initialDebt, currency = request.currency),
         terms = request.terms.copy(accountId = "acc-card-stub"),
         available = request.terms.creditLimit?.let { it - request.initialDebt },
-    )
+    ).also { cuentasDelServer += it.account }
     override suspend fun putCardTerms(terms: CardTerms) = CardSummary(
         account = Account(id = terms.accountId, name = "", type = AccountType.CREDIT_CARD, balance = 0),
         terms = terms,
@@ -122,11 +137,11 @@ open class NoOpRepository(
         com.jvillada.movi.shared.model.RecurringOccurrence(ruleId, period, eventId)
     override suspend fun unmarkOccurrence(ruleId: String, period: String) {}
     override suspend fun chatAi(request: AiChatRequest) = error("stub")
-    override suspend fun getAccounts() = emptyList<Account>()
+    override suspend fun getAccounts(): List<Account> = cuentasDelServer.toList()
     // Tipo de retorno explícito (y no el `Nothing` que infiere `error(...)`): así una subclase
     // puede sobrescribirlo para devolver una cuenta de verdad — ver [ServerAccountsRepository].
     override suspend fun getAccount(id: String): Account = error("stub")
-    override suspend fun createAccount(account: Account) = account
+    override suspend fun createAccount(account: Account) = account.also { cuentasDelServer += it }
     override suspend fun deleteAccount(id: String) {}
     override suspend fun postEvent(event: FinancialEvent) = event
     override suspend fun getEvents(accountId: String?) = emptyList<FinancialEvent>()

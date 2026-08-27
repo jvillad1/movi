@@ -13,7 +13,7 @@ import com.jvillada.movi.shared.model.Account
  * Con [falla] en `true` imita "sin red": las dos lecturas explotan, igual que
  * [FailingCreateAccountRepository] hace con la escritura.
  */
-class ServerAccountsRepository(
+open class ServerAccountsRepository(
     var cuentas: List<Account> = emptyList(),
     var falla: Boolean = false,
 ) : NoOpRepository() {
@@ -23,12 +23,23 @@ class ServerAccountsRepository(
 
     override suspend fun getAccounts(): List<Account> {
         lecturas++
+        if (demoraMs > 0L) kotlinx.coroutines.delay(demoraMs)
         if (falla) error("sin red: no se pudo leer la lista de cuentas")
         return cuentas
     }
 
     override suspend fun getAccount(id: String): Account {
         if (falla) error("sin red: no se pudo leer la cuenta")
-        return cuentas.firstOrNull { it.id == id } ?: error("404: la cuenta no existe")
+        return cuentas.firstOrNull { it.id == id } ?: throw ApiException(404, "Account not found")
     }
+
+    /** Imita `DELETE /api/accounts/{id}`: 404 si el server ya no la tiene. */
+    override suspend fun deleteAccount(id: String) {
+        if (falla) error("sin red: no se pudo borrar la cuenta")
+        if (cuentas.none { it.id == id }) throw ApiException(404, "Account not found")
+        cuentas = cuentas.filterNot { it.id == id }
+    }
+
+    /** Imita una lectura que tarda: [demoraMs] antes de contestar. */
+    var demoraMs: Long = 0L
 }
