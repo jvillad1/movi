@@ -112,6 +112,9 @@ object SessionManager {
         // algo suyo por una lista de autocompletado.
         UsedCategoriesCache.clear()
         RecurringOfferGate.clear()
+        // Y los canales de aviso: `emailTo` es la dirección del usuario que se va, y decirle al
+        // siguiente «te avisamos por correo a juan@…» sería mostrarle un dato ajeno.
+        ReminderChannelsCache.clear()
         // Ola 11: y la última cuenta usada, por lo mismo — es una cuenta del usuario que se va.
         LastAccountStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo

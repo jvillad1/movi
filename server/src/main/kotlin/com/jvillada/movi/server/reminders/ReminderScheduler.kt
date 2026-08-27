@@ -9,7 +9,6 @@ import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildPushPayload
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
-import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.server.application.Application
@@ -21,7 +20,6 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
-import java.io.File
 import java.time.LocalDate
 import com.jvillada.movi.server.time.AppClock
 
@@ -35,8 +33,8 @@ import com.jvillada.movi.server.time.AppClock
  * (which has a SupervisorJob cancelled on app stop), so it cleans up automatically.
  */
 fun Application.startReminderScheduler() {
-    val apiKey = readEnv("RESEND_API_KEY")
-    val emailEnabled = !apiKey.isNullOrBlank()
+    val apiKey = ReminderConfig.resendApiKey()
+    val emailEnabled = ReminderConfig.emailEnabled()
     val pushEnabled = WebPushSender.isConfigured()
     if (!emailEnabled) log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")
     if (!pushEnabled) log.warn("ReminderScheduler: VAPID keys not set — push reminders disabled")
@@ -45,9 +43,12 @@ fun Application.startReminderScheduler() {
         return
     }
 
-    val from      = readEnv("REMINDER_FROM") ?: "movi <reminders@movi.app>"
-    val leadDays  = readEnv("REMINDER_LEAD_DAYS")?.toIntOrNull()  ?: DEFAULT_REMINDER_LEAD_DAYS
-    val sweepHours = readEnv("REMINDER_SWEEP_HOURS")?.toLongOrNull() ?: 12L
+    // Las MISMAS lecturas que contesta `GET /api/reminders/channels` (ver [ReminderConfig]): si
+    // el endpoint dijera «hay correo» leyendo otras variables que las que usa este barrido, el
+    // aviso del cliente volvería a poder mentir, solo que del otro lado.
+    val from      = ReminderConfig.from()
+    val leadDays  = ReminderConfig.leadDays()
+    val sweepHours = ReminderConfig.sweepHours()
 
     log.info("ReminderScheduler: starting (sweepHours=$sweepHours, leadDays=$leadDays, from=$from)")
 
@@ -249,20 +250,4 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded
-}
-
-/**
- * Reads a key from environment variables, then falls back to server/.env or .env files
- * (same resolution order as [DatabaseFactory] and [JwtConfig]).
- */
-private fun readEnv(key: String): String? {
-    System.getenv(key)?.let { return it }
-    val files = listOf(
-        File(System.getProperty("user.dir"), "server/.env"),
-        File(System.getProperty("user.dir"), ".env"),
-    )
-    return files.firstNotNullOfOrNull { f ->
-        if (!f.exists()) null
-        else f.readLines().firstOrNull { it.startsWith("$key=") }?.substringAfter("=")?.trim()
-    }
 }

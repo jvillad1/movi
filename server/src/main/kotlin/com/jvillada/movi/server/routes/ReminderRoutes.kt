@@ -2,12 +2,14 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.reminders.loadEventsBetween
@@ -16,17 +18,18 @@ import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
 import com.jvillada.movi.server.reminders.occurrenceInMonth
+import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
 
 import com.jvillada.movi.server.reminders.upcomingPayments
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
-import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.MarkOccurrenceRequest
 import com.jvillada.movi.shared.model.OccurrenceState
 
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
@@ -171,9 +174,44 @@ fun Route.reminderRoutes() {
         if (deleted == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.NoContent)
     }
 
+    /**
+     * **Por dónde le pueden llegar los recordatorios a este usuario.**
+     *
+     * El cliente no tiene forma de saberlo: las variables de entorno son del server, y la
+     * dirección de correo del barrido es la de la fila de `users`. Sin este endpoint, el aviso
+     * de la app miraba solo el permiso de notificaciones del navegador y de ahí concluía «no hay
+     * ningún canal» — falso en producción, donde `RESEND_API_KEY` está puesta y el correo sale.
+     *
+     * Autenticado a propósito (a diferencia de `/api/push/vapid-key`, que es público porque el
+     * navegador necesita la clave antes de tener sesión): acá se devuelve **a qué dirección**
+     * sale el correo, y eso es un dato del usuario.
+     *
+     * Lo que se afirma sale de [ReminderConfig], el mismo objeto que lee el barrido. No hay un
+     * segundo criterio que pueda quedar desfasado.
+     */
+    get("/api/reminders/channels") {
+        val uid = call.userId()
+        val hayCorreo = ReminderConfig.emailEnabled()
+        val email = if (hayCorreo) {
+            dbQuery { Users.selectAll().where { Users.id eq uid }.firstOrNull()?.get(Users.email) }
+        } else null
+        call.respond(
+            ReminderChannels(
+                email = hayCorreo,
+                emailTo = email,
+                emailSandbox = hayCorreo && ReminderConfig.senderIsSandbox(),
+                push = WebPushSender.isConfigured(),
+                leadDays = ReminderConfig.leadDays(),
+            ),
+        )
+    }
+
     get("/api/payments/upcoming") {
         val uid = call.userId()
-        val leadDays = System.getenv("REMINDER_LEAD_DAYS")?.toIntOrNull() ?: DEFAULT_REMINDER_LEAD_DAYS
+        // Misma lectura que el barrido y que `/api/reminders/channels` — ver [ReminderConfig].
+        // Antes era un `System.getenv` suelto, que ignoraba `server/.env` y podía dar un número
+        // distinto al que de verdad usa el scheduler.
+        val leadDays = ReminderConfig.leadDays()
         val (rules, occurredBy) = dbQuery {
             val r = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
             r to loadOccurredBy(uid)

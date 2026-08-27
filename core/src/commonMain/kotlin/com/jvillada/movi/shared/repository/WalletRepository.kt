@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
@@ -139,6 +140,16 @@ interface WalletRepository {
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
     suspend fun deleteRecurringRule(id: String)
     suspend fun getUpcomingPayments(): List<UpcomingPayment>
+
+    /**
+     * **Por dónde le pueden llegar los recordatorios a este usuario**, según el server.
+     *
+     * Lo pregunta el cliente antes de afirmar que un aviso NO va a llegar. Ver
+     * [com.jvillada.movi.shared.model.ReminderChannels]: sin esto, la app miraba solo el permiso
+     * de notificaciones del navegador y concluía «no hay ningún canal» — falso donde el correo
+     * está configurado, que es el caso de producción.
+     */
+    suspend fun getReminderChannels(): ReminderChannels
 
     /**
      * «¿Esto ya ocurrió?» — el estado del periodo en juego de cada recurrente, con lo que la app

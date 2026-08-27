@@ -29,6 +29,7 @@ import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -320,6 +321,9 @@ class WalletRepositoryImpl(
 
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
         client.get("$baseUrl/api/payments/upcoming").body()
+
+    override suspend fun getReminderChannels(): ReminderChannels =
+        client.get("$baseUrl/api/reminders/channels").body()
 
     override suspend fun getOccurrenceStates(): List<OccurrenceState> =
         client.get("$baseUrl/api/payments/occurrences").body()

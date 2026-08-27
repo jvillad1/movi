@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.RegisterRequest
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
@@ -838,6 +839,12 @@ class LocalRepository(
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)
     override suspend fun deleteRecurringRule(id: String) = remote.deleteRecurringRule(id)
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> = remote.getUpcomingPayments()
+
+    // Los canales de aviso también van derecho al server, por el mismo motivo que los
+    // vencimientos: la respuesta depende de la configuración del server (variables de entorno) y
+    // el espejo local no la conoce. Sin conexión no se contesta, y el cliente trata «no sé» como
+    // «no afirmo nada» — que es justo lo correcto para un aviso que promete o niega una entrega.
+    override suspend fun getReminderChannels(): ReminderChannels = remote.getReminderChannels()
 
     // «Ya ocurrió» va derecho al server, igual que los vencimientos: el espejo local no tiene
     // tabla de ocurrencias ni sabe calcular candidatos (el emparejamiento necesita TODOS los

@@ -132,6 +132,7 @@ open class NoOpRepository(
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule
     override suspend fun deleteRecurringRule(id: String) {}
     override suspend fun getUpcomingPayments() = emptyList<com.jvillada.movi.shared.model.UpcomingPayment>()
+    override suspend fun getReminderChannels() = com.jvillada.movi.shared.model.ReminderChannels()
     override suspend fun getOccurrenceStates() = emptyList<com.jvillada.movi.shared.model.OccurrenceState>()
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?) =
         com.jvillada.movi.shared.model.RecurringOccurrence(ruleId, period, eventId)
