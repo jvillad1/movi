@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -24,15 +25,19 @@ class CategoriasLogicTest {
         reserved: Boolean = false,
         movements: Int = 0,
         total: Long = 0,
+        incomeTotal: Long = 0,
         monthMovements: Int = 0,
         monthTotal: Long = 0,
+        monthIncomeTotal: Long = 0,
         budgets: Int = 0,
         recurringRules: Int = 0,
         otherCurrencyMovements: Int = 0,
     ) = CategoryUsage(
         name = name, scope = scope, reserved = reserved, usedTypes = usedTypes,
         pinnedType = pinnedType, hidden = hidden, movements = movements, total = total,
+        incomeTotal = incomeTotal,
         monthMovements = monthMovements, monthTotal = monthTotal,
+        monthIncomeTotal = monthIncomeTotal,
         otherCurrencyMovements = otherCurrencyMovements,
         budgets = budgets, recurringRules = recurringRules,
     )
@@ -107,6 +112,27 @@ class CategoriasLogicTest {
     }
 
     @Test
+    fun `los gastos y los ingresos NO se suman en un solo numero`() {
+        // Los importes se guardan en positivo y el signo lo lleva el tipo: un solo total daba
+        // «$130.000» para 100k de gasto y 30k de ingreso — un número sin significado, justo en
+        // una categoría de tipo «Ambos», que es el caso que esta ola habilita.
+        val resumen = resumenDeUso(
+            cat("Otros", movements = 4, total = 100_000, incomeTotal = 30_000, pinnedType = CATEGORY_TYPE_BOTH),
+        )
+        assertTrue(resumen.contains("100.000"), resumen)
+        assertTrue(resumen.contains("30.000"), resumen)
+        assertFalse(resumen.contains("130.000"), resumen)
+    }
+
+    @Test
+    fun `el resumen del mes tambien separa gasto de ingreso`() {
+        val resumen = resumenDelMes(cat("Otros", monthMovements = 2, monthTotal = 10_000, monthIncomeTotal = 5_000))!!
+        assertTrue(resumen.contains("10.000"), resumen)
+        assertTrue(resumen.contains("5.000"), resumen)
+        assertFalse(resumen.contains("15.000"), resumen)
+    }
+
+    @Test
     fun `una categoria sin nada detras lo dice`() {
         assertEquals("Sin movimientos", resumenDeUso(cat("Freelance", scope = CategoryScope.PREDEFINED)))
     }
@@ -129,7 +155,10 @@ class CategoriasLogicTest {
 
     @Test
     fun `el aviso de unificar dice cuantos movimientos cambian de nombre`() {
-        val aviso = avisoDeUnificacion(cat("Trasnporte", movements = 2, budgets = 1, recurringRules = 1), "Transporte")
+        val aviso = avisoDeUnificacion(
+            cat("Trasnporte", movements = 2, budgets = 1, recurringRules = 1),
+            cat("Transporte", scope = CategoryScope.PREDEFINED),
+        )
         assertTrue(aviso.contains("2 movimientos"), aviso)
         assertTrue(aviso.contains("su presupuesto"), aviso)
         assertTrue(aviso.contains("1 recurrente"), aviso)
@@ -138,8 +167,33 @@ class CategoriasLogicTest {
     }
 
     @Test
+    fun `si las dos tienen presupuesto, el aviso lo dice ANTES y avisa que no se deshace`() {
+        // La suma de los dos límites es lo único de la operación que no es «el mismo dato con
+        // otro nombre»: le cambia un número que el dueño puso a propósito, y es irreversible.
+        val aviso = avisoDeUnificacion(
+            cat("Trasnporte", movements = 2, budgets = 1),
+            cat("Transporte", scope = CategoryScope.PREDEFINED, budgets = 1),
+        )
+        assertTrue(aviso.contains("presupuesto"), aviso)
+        assertTrue(aviso.contains("se suman"), aviso)
+        assertTrue(aviso.contains("no se puede deshacer"), aviso)
+    }
+
+    @Test
+    fun `si solo una tiene presupuesto no se habla de sumar nada`() {
+        val aviso = avisoDeUnificacion(
+            cat("Trasnporte", movements = 2, budgets = 1),
+            cat("Transporte", scope = CategoryScope.PREDEFINED),
+        )
+        assertFalse(aviso.contains("se suman"), aviso)
+    }
+
+    @Test
     fun `unificar una categoria vacia lo dice en vez de prometer un cambio`() {
-        val aviso = avisoDeUnificacion(cat("Otros ingresos", scope = CategoryScope.PREDEFINED), "Otros")
+        val aviso = avisoDeUnificacion(
+            cat("Otros ingresos", scope = CategoryScope.PREDEFINED),
+            cat("Otros", scope = CategoryScope.PREDEFINED),
+        )
         assertTrue(aviso.contains("Nada cambia de nombre"), aviso)
     }
 

@@ -40,6 +40,21 @@ object ClaudeStatementParser {
             ?.takeIf { it.isNotBlank() && it != "x" }
     }
 
+    /**
+     * **Deuda conocida (Ola 10, anotada a propósito y no arreglada acá).** Este prompt arma la
+     * lista de categorías desde `PREDEFINED_CATEGORIES` **con el tipo clavado del catálogo**, y no
+     * consulta `category_prefs`. O sea que el importador de extractos es el único consumidor que
+     * quedó ignorando lo que el dueño decidió en «Más → Categorías»: si esconde «Ropa», importa un
+     * extracto y el modelo le devuelve movimientos en «Ropa», la categoría que retiró vuelve a
+     * entrar a su historia por esta puerta.
+     *
+     * No se arregla en esta tanda porque no es cambiarle el filtro a una lista: el prompt es
+     * por-usuario solo a medias (tiene el `uid` a mano para las `MerchantRule`, así que el dato
+     * está), pero además hay que decidir qué hacer con las categorías que el modelo ya devolvió
+     * antes del cambio y si una escondida debe reemplazarse o solo dejar de ofrecerse. Es una
+     * decisión de producto, no un `filter` — y meterla apurada acá es exactamente cómo esta app
+     * se ganó sus últimos cuatro defectos.
+     */
     private fun buildSystemPrompt(rules: List<MerchantRule>): String {
         val rulesJson = if (rules.isEmpty()) "[]"
         else json.encodeToString(ListSerializer(MerchantRule.serializer()), rules)

@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.MergeCategoryRequest
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.RenameCategoryRequest
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.categoriaDestinoInexistenteMensaje
 import com.jvillada.movi.shared.model.categoriaDestinoOcupadoMensaje
 import com.jvillada.movi.shared.model.categoriaReservadaMensaje
 import com.jvillada.movi.shared.model.isReservedCategory
@@ -155,7 +156,19 @@ fun Route.categoryRoutes() {
             return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_MERGE_SAME)
         }
 
-        call.respond(dbQuery { rewriteCategory(uid, from = from, to = into, hideSource = true) })
+        // El destino tiene que EXISTIR. No es ceremonia: sin esta guarda, unificar «Comida» en
+        // «Alimentación» (un nombre que no existe) es exactamente un renombrado de una categoría
+        // del catálogo — lo que `rename` rechaza con 422 dos rutas más arriba, y por una razón que
+        // no desaparece por entrar en esta puerta: el catálogo es una constante compartida y
+        // volvería a sugerir el nombre viejo. Unificar es juntar dos cosas que ya existen.
+        // La comprobación y la reescritura, en la MISMA transacción: preguntar afuera y escribir
+        // adentro deja una ventana en la que el destino puede desaparecer entre medio.
+        val result = dbQuery<CategoryRewriteResult?> {
+            if (!categoryExists(uid, into)) null
+            else rewriteCategory(uid, from = from, to = into, hideSource = true)
+        }
+        if (result == null) call.respond(HttpStatusCode.NotFound, categoriaDestinoInexistenteMensaje(into))
+        else call.respond(result)
     }
 
     /**
@@ -208,6 +221,7 @@ fun Route.categoryRoutes() {
 
 /** Cómo terminó un renombrado — el rechazo por nombre ocupado se decide adentro de la transacción. */
 private sealed interface RewriteOutcome {
+    /** Renombrar hacia un nombre que ya existe: eso es unificar, y lo decide el dueño. */
     data object DestinoOcupado : RewriteOutcome
     data class Ok(val result: CategoryRewriteResult) : RewriteOutcome
 }
@@ -244,8 +258,18 @@ internal fun Transaction.categoryExists(uid: String, name: String): Boolean {
  *   presupuesto no se puede simplemente actualizar el nombre — chocaría. En ese caso los dos
  *   límites **se suman** en el del destino y el de origen se borra: el caso real es el dueño
  *   juntando dos categorías que en su cabeza siempre fueron una, y ahí el límite de la categoría
- *   unificada es lo que tenía repartido. Se devuelve en [CategoryRewriteResult.budgetsMerged]
- *   para poder decírselo antes y después, en vez de cambiarle un límite en silencio.
+ *   unificada es lo que tenía repartido. **Es irreversible**: los dos límites originales dejan de
+ *   existir. Por eso la hoja lo dice ANTES (ver `avisoDeUnificacion`, que recibe el destino
+ *   completo justamente para poder nombrar la suma) y [CategoryRewriteResult.budgetsMerged] lo
+ *   repite DESPUÉS. Cambiarle en silencio un número que puso a propósito no es una opción.
+ *
+ *   **Por qué acá se suma y `PUT /api/budgets/{category}/rename` rechaza con 409** (dos
+ *   comportamientos distintos para la misma colisión, a propósito): son dos intenciones
+ *   distintas. Allá el dueño está editando UN presupuesto y le cambia el nombre; si ese nombre ya
+ *   tiene presupuesto, fundirlos sería hacer desaparecer una fila que él ve en Presupuestos sin
+ *   haberlo pedido — el 409 es correcto. Acá pidió explícitamente **juntar dos categorías**, con
+ *   el aviso de la suma delante, y rechazarlo lo dejaría sin ninguna forma de completar lo que
+ *   pidió. La regla es la misma en las dos: no fundir presupuestos sin que lo haya pedido.
  * - **`recurring_rules`** — lo que se repite cada mes también lleva el nombre copiado.
  * - **`category_prefs`** — la preferencia viaja con el nombre (si no, esconder + renombrar
  *   dejaría escondida una categoría que ya no existe y visible la nueva).
@@ -347,9 +371,12 @@ internal fun Transaction.rewriteCategory(
 private class UsageAcc {
     val tipos = mutableSetOf<TransactionType>()
     var movimientos = 0
-    var total = 0L
+    /** Gastos e ingresos **separados**: sumarlos en un solo número no significa nada. Ver [CategoryUsage.total]. */
+    var gastado = 0L
+    var recibido = 0L
     var movimientosMes = 0
-    var totalMes = 0L
+    var gastadoMes = 0L
+    var recibidoMes = 0L
     var otraMoneda = 0
     var presupuestos = 0
     var recurrentes = 0
@@ -391,12 +418,13 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
                 return@forEach
             }
             val monto = row[Events.amount]
+            val esIngreso = row[Events.type] == TransactionType.INCOME.name
             a.movimientos++
-            a.total += monto
+            if (esIngreso) a.recibido += monto else a.gastado += monto
             val ts = row[Events.timestamp]
             if (ts >= monthStart && ts < monthEnd) {
                 a.movimientosMes++
-                a.totalMes += monto
+                if (esIngreso) a.recibidoMes += monto else a.gastadoMes += monto
             }
         }
 
@@ -429,9 +457,11 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
             pinnedType = pref?.second,
             hidden = pref?.first ?: false,
             movements = a.movimientos,
-            total = a.total,
+            total = a.gastado,
+            incomeTotal = a.recibido,
             monthMovements = a.movimientosMes,
-            monthTotal = a.totalMes,
+            monthTotal = a.gastadoMes,
+            monthIncomeTotal = a.recibidoMes,
             otherCurrencyMovements = a.otraMoneda,
             budgets = a.presupuestos,
             recurringRules = a.recurrentes,

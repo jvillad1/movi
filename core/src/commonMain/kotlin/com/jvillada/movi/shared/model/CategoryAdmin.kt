@@ -87,11 +87,21 @@ data class CategoryUsage(
     val hidden: Boolean = false,
     /** Movimientos en COP no anulados con esta categoría, en toda la historia. */
     val movements: Int = 0,
-    /** Cuánto suman esos movimientos (COP). Ingresos y gastos suman en positivo cada uno por su lado. */
+    /**
+     * Cuánto se **gastó** con esta categoría (COP, toda la historia).
+     *
+     * Separado de [incomeTotal] a propósito. Los importes se guardan siempre en positivo y el
+     * signo lo lleva `type`, así que un solo total sumaría gastos con ingresos y daría un número
+     * sin significado — justo en una categoría de tipo «Ambos», que es el caso que esta pantalla
+     * habilita, y justo en la única pantalla que existe para **decidir mirando números**.
+     */
     val total: Long = 0,
-    /** Los mismos dos números, acotados al mes en curso (mes civil de Bogotá). */
+    /** Cuánto **entró** con esta categoría (COP, toda la historia). Ver [total]. */
+    val incomeTotal: Long = 0,
+    /** Los mismos números, acotados al mes en curso (mes civil de Bogotá). */
     val monthMovements: Int = 0,
     val monthTotal: Long = 0,
+    val monthIncomeTotal: Long = 0,
     /**
      * Movimientos con esta categoría en una moneda que no es COP. Van aparte porque sumarlos a
      * [total] sería sumar peras con dólares: el total dice pesos o no dice nada.
@@ -111,8 +121,12 @@ data class CategoryUsage(
  * necesita saber para dejar de ofrecer una escondida y para respetar un tipo fijado.
  *
  * Viaja dentro de [UsedCategory] (en el resumen del Inicio) y se guarda en
- * `com.jvillada.movi.data.UsedCategoriesCache.prefs`.
+ * `com.jvillada.movi.data.UsedCategoriesCache.prefs`. Es `@Serializable` porque ese caché lo
+ * **persiste** en el dispositivo: sin red, o si el resumen del Inicio falla, lo que el dueño
+ * escondió tiene que seguir escondido — que reaparezca todo por una llamada que no respondió es
+ * degradar en silencio justo la decisión que él tomó.
  */
+@Serializable
 data class CategoryPref(
     val hidden: Boolean = false,
     /** `"EXPENSE"`, `"INCOME"`, `"BOTH"` o `null` = sin fijar. */
@@ -217,3 +231,6 @@ fun categoriaDestinoOcupadoMensaje(name: String): String =
 
 const val CATEGORY_MERGE_SAME: String =
     "Es la misma categoría: elige otra para unificarla."
+
+fun categoriaDestinoInexistenteMensaje(name: String): String =
+    "No tienes ninguna categoría «$name». Unificar es juntar dos que ya existen; elige una de la lista."

@@ -137,10 +137,18 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
+    val escondidas = categorias.count { it.hidden }
+    // Destapar la ÚLTIMA escondida hacía desaparecer su pastilla y dejaba el filtro apuntando a
+    // un conjunto vacío: «17 categorías» arriba, «Nada por aquí todavía» abajo y ninguna pastilla
+    // marcada, sin nada que indicara cómo salir. El filtro cae solo a «Todas» cuando deja de tener
+    // sentido — y se corrige también la variable, no solo lo que se muestra, para que la pastilla
+    // marcada y la lista no puedan contradecirse.
+    LaunchedEffect(escondidas) {
+        if (escondidas == 0 && filtro == CategoryFilter.ESCONDIDAS) filtro = CategoryFilter.TODAS
+    }
     val visibles = remember(categorias, filtro, busqueda) {
         filtrarCategorias(categorias, filtro, busqueda)
     }
-    val escondidas = categorias.count { it.hidden }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -219,7 +227,12 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     }
                 }
                 items(visibles, key = { it.name }) { categoria ->
-                    FilaDeCategoria(categoria) { hoja = Hoja.Detalle(categoria) }
+                    FilaDeCategoria(categoria) {
+                        // Abrir otra categoría es empezar otra cosa: el «Listo: …» de la anterior
+                        // ya no describe lo que está pasando y se iba quedando indefinidamente.
+                        confirmacion = null
+                        hoja = Hoja.Detalle(categoria)
+                    }
                 }
             }
         }
@@ -713,7 +726,7 @@ private fun HojaRenombrar(
                 text = when {
                     colision?.reserved == true ->
                         "«${colision.name}» es una categoría reservada de Movi: no puedes usar ese nombre."
-                    colision != null -> avisoDeUnificacion(categoria, colision.name)
+                    colision != null -> avisoDeUnificacion(categoria, colision)
                     else -> "El cambio se aplica a tus movimientos, a tu presupuesto y a tus " +
                         "recurrentes al mismo tiempo. No se borra nada."
                 },
@@ -747,7 +760,9 @@ private fun HojaUnificar(
     onConfirmar: (String) -> Unit,
 ) {
     var busqueda by remember { mutableStateOf("") }
-    var elegida by remember { mutableStateOf<String?>(null) }
+    // La categoría destino ENTERA, no su nombre: el aviso previo necesita saber si ella también
+    // tiene presupuesto para poder avisar de la suma antes de aplicarla (ver [avisoDeUnificacion]).
+    var elegida by remember { mutableStateOf<CategoryUsage?>(null) }
     var guardando by remember { mutableStateOf(false) }
 
     val candidatas = remember(existentes, busqueda, categoria) {
@@ -776,7 +791,7 @@ private fun HojaUnificar(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !guardando) { elegida = c.name }
+                            .clickable(enabled = !guardando) { elegida = c }
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -785,7 +800,7 @@ private fun HojaUnificar(
                             Text(c.name, fontSize = 14.sp, color = MinText)
                             Text(resumenDeUso(c), fontSize = 11.sp, color = MinTextFaint, fontFamily = FontFamily.Monospace)
                         }
-                        if (elegida == c.name) {
+                        if (elegida?.name == c.name) {
                             Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -810,11 +825,11 @@ private fun HojaUnificar(
                 modifier = Modifier.padding(top = 10.dp),
             )
             BotonDeHoja(
-                texto = elegida?.let { "Unificar en «$it»" } ?: "Unificar",
+                texto = elegida?.let { "Unificar en «${it.name}»" } ?: "Unificar",
                 habilitado = elegida != null && !guardando,
                 onClick = {
                     guardando = true
-                    onConfirmar(elegida!!)
+                    onConfirmar(elegida!!.name)
                 },
             )
         }

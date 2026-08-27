@@ -488,6 +488,33 @@ class CategoryRoutesTest {
     }
 
     @Test
+    fun `unificar hacia un nombre que no existe se rechaza — eso seria renombrar`() = testApplication {
+        wireApp()
+        // Sin esta guarda, unificar «Comida» en un nombre nuevo era exactamente el renombrado de
+        // una categoría del catálogo que `rename` rechaza con 422: la misma operación, por otra
+        // puerta, esquivando el motivo (el catálogo volvería a sugerir el nombre viejo).
+        seedEvent("e1", "Comida")
+        val res = merge("Comida", "Alimentación")
+        assertEquals(HttpStatusCode.NotFound, res.status, res.bodyAsText())
+        assertEquals("Comida", categoriaEnEventos("e1"))
+    }
+
+    @Test
+    fun `el total separa lo gastado de lo recibido`() = testApplication {
+        wireApp()
+        // Los importes se guardan en positivo y el signo lo lleva `type`: un solo total sumaba
+        // gastos con ingresos y daba un número sin significado, justo en el caso «Ambos».
+        seedEvent("e1", "Otros", amount = 100_000, type = "EXPENSE")
+        seedEvent("e2", "Otros", amount = 30_000, type = "INCOME")
+        val otros = categorias().porNombre("Otros")
+        assertEquals(2, otros.num("movements"))
+        assertEquals(100_000L, otros.plata("total"))
+        assertEquals(30_000L, otros.plata("incomeTotal"))
+        assertEquals(100_000L, otros.plata("monthTotal"))
+        assertEquals(30_000L, otros.plata("monthIncomeTotal"))
+    }
+
+    @Test
     fun `el destino de una unificacion nunca queda escondido`() = testApplication {
         wireApp()
         // Si «Comida» estaba escondida y ahora recibe movimientos, dejarla escondida sería mandar

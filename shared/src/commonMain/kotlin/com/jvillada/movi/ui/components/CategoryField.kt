@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.theme.MinBorder
 import com.jvillada.movi.theme.MinPrimary
 import com.jvillada.movi.theme.MinSurfaceContainerHigh
@@ -97,7 +98,14 @@ fun suggestCategoryMatches(
     // Para deduplicar hace falta el catálogo ENTERO, no solo el visible: una categoría del
     // catálogo escondida no puede volver a colarse por la puerta de las propias.
     val todasLasDelCatalogo = PREDEFINED_CATEGORIES.map { it.name }
-    val predefined = todasLasDelCatalogo.filter { seOfrece(it, emptySet()) }
+    val predefined = todasLasDelCatalogo
+        // «Pago de tarjeta» está en el catálogo Y es reservada: la app se la ofrecía al anotar un
+        // gasto y, si el dueño la elegía, `isCashFlow` sacaba ese gasto real de «Gastos del mes»
+        // sin decir nada. Ninguna reservada se sugiere en este campo. (La hoja de CAMBIAR la
+        // categoría de un movimiento existente sí la sigue listando, a propósito: ahí confirmar
+        // «esto fue el pago de mi tarjeta» es justo lo que hay que poder hacer.)
+        .filterNot { isReservedCategory(it) }
+        .filter { seOfrece(it, emptySet()) }
     val q = normalizeForMatch(query)
     val predefinedMatches = predefined.filter { normalizeForMatch(it).contains(q) }
     val usedMatches = usedCategories.entries
@@ -105,6 +113,7 @@ fun suggestCategoryMatches(
             val clean = name.trim()
             if (clean.isEmpty()) null else clean to types
         }
+        .filterNot { (name, _) -> isReservedCategory(name) }
         .filter { (name, types) -> seOfrece(name, types) }
         .map { (name, _) -> name }
         .distinct()
@@ -112,6 +121,83 @@ fun suggestCategoryMatches(
         .filter { normalizeForMatch(it).contains(q) }
     return predefinedMatches + usedMatches
 }
+
+/**
+ * **Lo que el panel de sugerencias muestra de verdad**, ya decidido: la lista completa o la
+ * filtrada por lo escrito.
+ *
+ * Vivía suelto adentro del `@Composable`, y ahí se escondió un defecto que ningún test podía ver:
+ * con una categoría **escondida** escrita en el campo (p. ej. «Comida», que era el valor inicial),
+ * lo escrito no coincidía con ninguna sugerencia visible, así que se caía a la lista filtrada —
+ * vacía, porque la única que matchea está escondida— y el panel se reducía a un solo renglón,
+ * «Usar "Comida"». Para elegir otra había que borrar el campo primero: esconder UNA categoría
+ * hacía desaparecer TODAS las demás, que es lo contrario de lo que el botón promete.
+ *
+ * La regla correcta no es «coincide con una sugerencia» sino **«Movi ya conoce este nombre»**,
+ * visible o no: si lo conoce, no hay nada que filtrar y se muestran todas.
+ */
+fun categoriasParaElPanel(
+    query: String,
+    type: TransactionType? = null,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+): List<String> {
+    val todas = suggestCategoryMatches("", type, usedCategories, prefs)
+    val q = normalizeForMatch(query.trim())
+    val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name } + prefs.keys
+    val esNombreConocido = q.isNotEmpty() && conocidas.any { normalizeForMatch(it.trim()) == q }
+    val mostrarTodas = query.isBlank() || esNombreConocido || todas.any { normalizeForMatch(it) == q }
+    return if (mostrarTodas) todas else suggestCategoryMatches(query, type, usedCategories, prefs)
+}
+
+/**
+ * **¿Esta categoría sirve para anotar un movimiento de [type]?**
+ *
+ * La usa toda pantalla que arranca con una categoría ya puesta o que la reconcilia al cambiar de
+ * Gasto a Ingreso (hoy `QuickAddScreen`). Antes cada una miraba `Category.type` del catálogo por
+ * su cuenta, y eso dejaba dos agujeros que se vieron en el uso real:
+ *
+ * - Fijar «Otros» en «Ambos» no servía de nada: al pasar de Gasto a Ingreso, `QuickAdd` leía el
+ *   `EXPENSE` clavado del catálogo y **se la reemplazaba en silencio por «Salario»** — el caso
+ *   exacto que esta ola vino a resolver, roto en la pantalla donde el dueño anota todos los días.
+ * - Una categoría escondida seguía sirviendo de valor inicial, así que el campo arrancaba
+ *   diciendo justo lo que él acababa de retirar.
+ *
+ * Una categoría **propia** sin nada declarado (ni tipo fijado ni catálogo) siempre sirve: no hay
+ * evidencia de que no, y esconder por falta de datos es peor que ofrecer de más.
+ */
+fun categoriaSirveParaTipo(
+    name: String,
+    type: TransactionType,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+): Boolean {
+    val limpio = name.trim()
+    if (limpio.isEmpty()) return false
+    if (isReservedCategory(limpio)) return false
+    val pref = prefs.entries.firstOrNull { normalizeForMatch(it.key.trim()) == normalizeForMatch(limpio) }?.value
+    if (pref?.hidden == true) return false
+    val esDelCatalogo = PREDEFINED_CATEGORIES.any { it.name.equals(limpio, ignoreCase = true) }
+    if (!esDelCatalogo && pref?.pinnedType == null) return true
+    val tipos = effectiveCategoryTypes(limpio, pref?.pinnedType, usedCategories[limpio].orEmpty())
+    return tipos.isEmpty() || type in tipos
+}
+
+/**
+ * Con qué categoría **arranca** un campo para un tipo dado: la primera que de verdad se le va a
+ * ofrecer. Sale de [suggestCategoryMatches] y no de `PREDEFINED_CATEGORIES.first { … }` para que
+ * no pueda volver a pasar lo de antes — el campo prellenado con una categoría escondida, a un
+ * toque de «Guardar» de anotar un gasto en la que el dueño acababa de retirar.
+ *
+ * Si escondió TODAS las del catálogo de ese lado, cae a la primera del catálogo igual: quedarse
+ * sin ningún valor inicial sería peor que uno imperfecto.
+ */
+fun categoriaPorDefectoPara(
+    type: TransactionType,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+): String = suggestCategoryMatches("", type, usedCategories, prefs).firstOrNull()
+    ?: PREDEFINED_CATEGORIES.first { it.type == type.name }.name
 
 /**
  * Ola 9 · A1: ¿hay que ofrecer «Crear "lo que escribió"» arriba de las sugerencias?
@@ -287,14 +373,6 @@ fun CategoryField(
         }
     }
 
-    // Ola 2 #3a: con el campo prellenado (QuickAdd arranca en "Comida", Recurrentes en "Otros"),
-    // la única sugerencia visible era la misma categoría ya escrita. Si lo que hay en el campo
-    // coincide EXACTAMENTE con una sugerencia, o está vacío, se listan TODAS las disponibles.
-    val allMatches = remember(type, usedCategories, prefs) { suggestCategoryMatches("", type, usedCategories, prefs) }
-    val isExactMatch = value.isBlank() || allMatches.any { normalizeForMatch(it) == normalizeForMatch(value) }
-    val matches = if (isExactMatch) allMatches else remember(value, type, usedCategories, prefs) {
-        suggestCategoryMatches(value, type, usedCategories, prefs)
-    }
     // Ola 9 · A1: lo escrito no coincide con nada → arriba de todo, la opción de crearlo. Ver
     // [shouldOfferCreateCategory] para el porqué y para el caso de la coincidencia parcial.
     val nuevaCategoria = value.trim()
@@ -302,11 +380,31 @@ fun CategoryField(
     // Ola 10: escondida sigue siendo conocida — ofrecerle «Crear "Ropa"» a alguien que acaba de
     // esconder «Ropa» sería prometerle algo nuevo y devolverle exactamente lo que sacó de la vista.
     val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name } + prefs.keys
-    val ofrecerCrear = shouldOfferCreateCategory(query = value, matches = matches, conocidas = conocidas)
+
+    // Ola 2 #3a + Ola 10: qué se lista lo decide [categoriasParaElPanel] — con el campo
+    // prellenado o con un nombre que Movi ya conoce (aunque esté escondido) se muestran TODAS las
+    // disponibles; si no, las que coinciden con lo escrito. Ver ahí el porqué de cada rama.
+    val matches = remember(value, type, usedCategories, prefs) {
+        categoriasParaElPanel(value, type, usedCategories, prefs)
+    }
+
+    // Una reservada escrita a mano no se crea ni se "usa": se explica y se corta. Es la única
+    // rama del panel que no ofrece nada tocable, y a propósito — elegirla saca el gasto del mes.
+    val esReservada = isReservedCategory(value)
+    val ofrecerCrear = !esReservada &&
+        shouldOfferCreateCategory(query = value, matches = matches, conocidas = conocidas)
     // Ola 9 · A4: y si no se crea porque YA existe (del otro lado), se dice — sin esto el panel
     // quedaba completamente vacío. Ver [shouldOfferKnownFromOtherSide].
-    val ofrecerConocida = shouldOfferKnownFromOtherSide(value, matches, conocidas)
-    val ladoConocido = if (ofrecerConocida) ladoConocidoDeCategoria(value, type, usedCategories, prefs) else null
+    val ofrecerConocida = !esReservada && shouldOfferKnownFromOtherSide(value, matches, conocidas)
+    // ¿Está escondida? Entonces el renglón «Usar…» no puede decir «ya la tienes en Gastos» y
+    // callarse lo único que explica por qué no aparece en la lista de abajo.
+    val estaEscondida = prefs.entries
+        .firstOrNull { normalizeForMatch(it.key.trim()) == normalizeForMatch(value.trim()) }?.value?.hidden == true
+    val ladoConocido = when {
+        !ofrecerConocida -> null
+        estaEscondida -> "La escondiste en Categorías; puedes usarla igual"
+        else -> ladoConocidoDeCategoria(value, type, usedCategories, prefs)
+    }
     val nombreConocido = if (ofrecerConocida) nombreCanonicoConocido(value, usedCategories) ?: nuevaCategoria else nuevaCategoria
 
     fun pick(name: String) {
@@ -364,7 +462,7 @@ fun CategoryField(
         }
         // Visible mientras el campo tiene foco (más la demora de gracia de F62): tocar una
         // sugerencia la elige y lo quita del medio.
-        if (suggestionsVisible && (matches.isNotEmpty() || ofrecerCrear || ofrecerConocida)) {
+        if (suggestionsVisible && (matches.isNotEmpty() || ofrecerCrear || ofrecerConocida || esReservada)) {
             Spacer(Modifier.height(6.dp))
             Column(
                 modifier = Modifier
@@ -375,6 +473,22 @@ fun CategoryField(
                     .background(MinSurfaceContainerHigh)
                     .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),
             ) {
+                if (esReservada) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        Text(
+                            "«$nuevaCategoria» la usa Movi sola",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                        )
+                        Text(
+                            "Es una categoría reservada y de ella dependen las cifras de tu mes. Elige otra.",
+                            fontSize = 11.sp,
+                            color = MinTextMute,
+                        )
+                    }
+                    if (matches.isNotEmpty()) Hairline()
+                }
                 if (ofrecerCrear) {
                     Column(
                         modifier = Modifier

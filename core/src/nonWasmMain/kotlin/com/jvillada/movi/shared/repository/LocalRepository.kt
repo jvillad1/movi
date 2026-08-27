@@ -616,11 +616,25 @@ class LocalRepository(
      * diciendo «Trasnporte» para siempre. Y no sería un desfase pasajero: no hay ningún ciclo que
      * lo corrija después.
      *
-     * **Lo que este espejo NO cubre, dicho en voz alta:** una categoría renombrada desde OTRO
-     * dispositivo (la web, otro teléfono) no llega a este. Cerrar eso de verdad pide que el
-     * `SyncEngine` aprenda a bajar cambios, que es un cambio de arquitectura y no un detalle de
-     * esta pantalla. Mientras tanto la divergencia es acotada y visible: solo afecta a los
-     * movimientos que este aparato ya tenía guardados, y desaparece si se reinstala.
+     * **Lo que este espejo NO cubre, dicho sin suavizar.** Una categoría renombrada desde OTRO
+     * dispositivo no llega a este, y para el dueño —que usa la web Y el APK— eso no es un desfase
+     * cosmético: **el teléfono vuelve a ofrecer el tipeo que él acaba de corregir, y puede volver
+     * a sembrarlo.** El camino completo:
+     *
+     * 1. Renombra «Trasnporte» → «Transporte» desde la web. El server reescribe las tres tablas;
+     *    la tabla local del teléfono se queda con el nombre viejo.
+     * 2. Abre Movimientos en el teléfono. Esa pantalla lee de SQLDelight, así que ve «Trasnporte»
+     *    — y de paso lo vuelve a meter en `UsedCategoriesCache` (ver `TransactionsScreen`).
+     * 3. Va a «Agregar» y la app le **sugiere «Trasnporte»**. Si la toca, crea un movimiento nuevo
+     *    con el nombre viejo, y ahora sí queda historia partida en dos **en el server**.
+     *
+     * Nada lo corrige después salvo reinstalar. Cerrarlo de verdad pide que el `SyncEngine`
+     * aprenda a bajar cambios (hoy solo empuja), que es un cambio de arquitectura y no un detalle
+     * de esta pantalla — pero queda escrito acá, con el escenario, en vez de resumido como una
+     * divergencia menor.
+     *
+     * Lo que sí está descartado es el peor caso: el teléfono **no repisa** el rename hacia el
+     * server. `selectUnsynced` filtra por `syncedAt IS NULL`, y esas filas ya están selladas.
      */
     override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
         val result = remote.renameCategory(from, to)

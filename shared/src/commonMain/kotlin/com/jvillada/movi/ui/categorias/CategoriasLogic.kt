@@ -94,7 +94,12 @@ fun resumenDeUso(c: CategoryUsage): String {
     val partes = mutableListOf<String>()
     if (c.movements > 0) {
         partes += if (c.movements == 1) "1 movimiento" else "${c.movements} movimientos"
-        partes += formatCOP(c.total)
+        // Gastos e ingresos **por separado**. Un solo total los sumaba en positivo (el signo lo
+        // lleva `type`, no el importe), así que una categoría de tipo «Ambos» —el caso que esta
+        // ola habilita— mostraba un número que no significaba nada, en la única pantalla que
+        // existe para decidir mirando números. Si solo hay de un lado, se muestra una sola cifra.
+        if (c.total > 0) partes += formatCOP(c.total)
+        if (c.incomeTotal > 0) partes += "+${formatCOP(c.incomeTotal)} de ingresos"
     }
     if (c.otherCurrencyMovements > 0) {
         partes += if (c.otherCurrencyMovements == 1) "1 en otra moneda"
@@ -111,7 +116,11 @@ fun resumenDeUso(c: CategoryUsage): String {
 fun resumenDelMes(c: CategoryUsage): String? {
     if (c.monthMovements <= 0) return null
     val cuantos = if (c.monthMovements == 1) "1 movimiento" else "${c.monthMovements} movimientos"
-    return "Este mes: $cuantos · ${formatCOP(c.monthTotal)}"
+    val plata = buildList {
+        if (c.monthTotal > 0) add(formatCOP(c.monthTotal))
+        if (c.monthIncomeTotal > 0) add("+${formatCOP(c.monthIncomeTotal)} de ingresos")
+    }
+    return (listOf("Este mes: $cuantos") + plata).joinToString(" · ")
 }
 
 /**
@@ -119,7 +128,7 @@ fun resumenDelMes(c: CategoryUsage): String? {
  * poder fijarlo por test: es el aviso de una operación que reescribe la historia del dueño, y no
  * puede quedar dependiendo de que alguien no rompa una interpolación.
  */
-fun avisoDeUnificacion(origen: CategoryUsage, destino: String): String {
+fun avisoDeUnificacion(origen: CategoryUsage, destino: CategoryUsage): String {
     val partes = mutableListOf<String>()
     val movimientos = origen.movements + origen.otherCurrencyMovements
     if (movimientos > 0) {
@@ -130,8 +139,17 @@ fun avisoDeUnificacion(origen: CategoryUsage, destino: String): String {
         partes += if (origen.recurringRules == 1) "1 recurrente" else "${origen.recurringRules} recurrentes"
     }
     val que = if (partes.isEmpty()) "Nada cambia de nombre: «${origen.name}» no tiene movimientos."
-    else "${partes.joinToString(", ")} de «${origen.name}» pasan a decir «$destino»."
-    return "$que No se borra nada: los movimientos siguen ahí, con el nombre nuevo."
+    else "${partes.joinToString(", ")} de «${origen.name}» pasan a decir «${destino.name}»."
+    val base = "$que No se borra nada: los movimientos siguen ahí, con el nombre nuevo."
+    // Lo único de toda la operación que NO es «el mismo dato con otro nombre»: si las dos tienen
+    // presupuesto, los dos límites se suman en uno y los originales dejan de existir. Es
+    // irreversible y le cambia un número que puso a propósito, así que se dice ANTES y con la
+    // cifra final, no después.
+    if (origen.budgets > 0 && destino.budgets > 0) {
+        return "$base Ojo: las dos tienen presupuesto y los dos límites se suman en uno solo " +
+            "para «${destino.name}». Eso no se puede deshacer."
+    }
+    return base
 }
 
 /** El texto del selector de tipo, incluida la opción de no fijar nada. */

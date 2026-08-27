@@ -1,7 +1,9 @@
 package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.ui.components.categoriaSirveParaTipo
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
@@ -179,12 +181,23 @@ fun prefillFrom(event: FinancialEvent): RecurringPrefill = RecurringPrefill(
  * le cambia la categoría a alguien que no la pidió. Quien llama tiene además la última palabra
  * —no se aplica si el dueño ya tocó la categoría a mano— así que el peor caso acá es no
  * proponer nada.
+ *
+ * **Ola 10 (revisión): el filtro por tipo pasa por [categoriaSirveParaTipo], no por el `type`
+ * clavado del catálogo.** Esta era la tercera puerta que seguía leyendo el camino viejo, y las
+ * dos formas de romperse eran reales: proponer una categoría que el dueño **escondió**, y dejar
+ * de proponer una que fijó en «Ambos». Que la propuesta contradiga lo que él acaba de decidir es
+ * peor que no proponer.
  */
-fun categoriaSugeridaPorNombre(name: String, type: TransactionType): String? {
+fun categoriaSugeridaPorNombre(
+    name: String,
+    type: TransactionType,
+    usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+): String? {
     val key = claveDeNombre(name)
     if (key.isEmpty()) return null
     return PREDEFINED_CATEGORIES
-        .filter { it.type == type.name || it.type == "BOTH" }
         .firstOrNull { claveDeNombre(it.name) == key }
         ?.name
+        ?.takeIf { categoriaSirveParaTipo(it, type, usedCategories, prefs) }
 }
