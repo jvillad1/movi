@@ -32,6 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.LastAccountStore
@@ -740,7 +741,19 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
     if (aviso == null && !reservado) return
     Box(modifier = Modifier.height(15.dp)) {
         if (aviso != null) {
-            Text(aviso, fontSize = 11.sp, lineHeight = 14.sp, color = MinTextFaint)
+            Text(
+                text = aviso,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                color = MinTextFaint,
+                // Una sola línea, y con puntos suspensivos si no entra: este renglón comparte la
+                // fila con el nombre de la cuenta, que puede ser largo («Bancolombia Ahorros»)
+                // y se lleva el ancho que necesite. Medido en la web a 375 dp entra completo,
+                // pero un nombre más largo lo apretaría, y un corte a la mitad de una palabra
+                // se lee como un bug; el «…» al menos dice que hay más.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
