@@ -69,18 +69,103 @@ class LocalRepository(
 
     // ── Accounts ──────────────────────────────────────────────────────────────
 
-    override suspend fun getAccounts(): List<Account> =
-        db.accountQueries.selectAll(userId()).executeAsList().map { row ->
+    /**
+     * **Las cuentas del server también, no solo las que nacieron en este teléfono.**
+     *
+     * Antes esto leía SOLO SQLDelight, mientras el resto de la misma pantalla venía del server —
+     * y el [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae. Resultado: una cuenta
+     * nacida en el server (creada en la web, sembrada por API, o anterior a esta instalación)
+     * **nunca llegaba al teléfono**. De ahí salían tres pantallas mintiendo a la vez: Cuentas
+     * decía «Sin cuentas aún» —invitando a crear un duplicado de una cuenta que ya existe—, el
+     * Inicio decía «Sin cuentas aún» y «Balance neto $0», y la hoja de un recurrente decía «Sin
+     * cuentas todavía» y al guardar borraba la cuenta de la regla (eso se arregla aparte, y por
+     * separado, en [com.jvillada.movi.ui.recurrentes.cuentaParaElWire]).
+     *
+     * **Por qué acá y no en el SyncEngine.** Bajar cuentas en el ciclo de 30s deja la primera
+     * pintada de cada pantalla igual de mentirosa que antes (hasta el próximo tick), y obliga a
+     * inventar reglas de conflicto para nombre y saldo. Este camino es el patrón que el archivo
+     * ya usa en la escritura —remoto primero, espejo local; ver [createAccount], [createCredit],
+     * [createCard], [adjustCreditBalance] y [mirrorAccountLocally]— aplicado a la lectura: se
+     * pregunta al server, se espeja lo que contestó, y lo local queda como respaldo.
+     *
+     * **Sin red no se rompe nada.** Si `remote.getAccounts()` falla se devuelve lo local tal cual
+     * —incluye lo espejado en la última lectura con red, así que el teléfono sigue mostrando las
+     * cuentas del server aunque el avión esté en modo avión—. Lo único que NO se hace es afirmar
+     * «no tienes cuentas» cuando no se pudo preguntar Y no hay nada local: ahí la excepción se
+     * propaga, y las pantallas (que ya envuelven esto en `runCatching`) muestran su error con
+     * reintento en vez de un vacío que se lee como un hecho.
+     *
+     * **No duplica.** El espejo es el `INSERT OR REPLACE` de [mirrorAccountLocally] y la PK es el
+     * id, que es el mismo de los dos lados (los ids los genera el cliente con `newId`, y los que
+     * nacieron en el server vienen en la respuesta). Una cuenta que ya estaba local se pisa, no
+     * se agrega.
+     *
+     * **El saldo sigue teniendo una sola fuente.** Para las cuentas que el server conoce se
+     * devuelve el objeto que el server mandó —saldo derivado de los eventos, más
+     * `balancesByCurrency`/`estimatedTotalCop`, que la columna local no sabe guardar—, igual que
+     * ya hacen Inicio y Presupuestos. La columna local `accounts.balance` se refresca con ese
+     * valor y queda solo como respaldo sin red. Precio conocido y acotado: un movimiento anotado
+     * offline mueve el saldo local, pero apenas vuelve la red este GET muestra el del server
+     * —que todavía no lo tiene— hasta que el ciclo de 30s lo empuje. Es la misma ventana que ya
+     * tiene el Inicio, y se cierra sola; la alternativa (mezclar el delta local con el saldo del
+     * server) sería justamente la segunda fuente de verdad que no queremos.
+     *
+     * **El orden lo sigue poniendo SQLDelight** (`ORDER BY lower(name), id`, ver `Account.sq`),
+     * que es el mismo criterio que `GET /api/accounts` — el emparejamiento entre el teléfono y
+     * la web se mantiene y no se reordena nada en Kotlin.
+     *
+     * **Lo que esto NO hace, a propósito:** no borra la fila local de una cuenta que el server ya
+     * no devuelve. Un borrado hecho desde otro dispositivo sigue sin llegar solo al teléfono (el
+     * teléfono ya espeja el suyo, ver [deleteAccount]). Hacerlo acá pediría repetir toda la
+     * cascada de [deleteAccount] —patas hermanas, voids, eventos— sobre el camino de LECTURA, y
+     * cualquier respuesta corta (un token de otro usuario, una respuesta a medias) se volvería un
+     * borrado de datos del dueño. Queda escrito como pendiente, no tapado.
+     */
+    override suspend fun getAccounts(): List<Account> {
+        val uid = userId()
+        val remotas = try {
+            remote.getAccounts()
+        } catch (e: Exception) {
+            val locales = leerCuentasLocales(uid)
+            // Vacío + no se pudo preguntar = no se sabe, y «no tienes cuentas» sería una
+            // afirmación sin respaldo. Con algo local, eso es la mejor respuesta que hay.
+            if (locales.isEmpty()) throw e
+            return locales
+        }
+        db.transaction { remotas.forEach { mirrorAccountLocally(it) } }
+        val porId = remotas.associateBy { it.id }
+        // El orden y el conjunto salen de la DB (incluye las creadas offline, todavía sin
+        // sincronizar); el contenido de cada cuenta que el server conoce, del server.
+        return leerCuentasLocales(uid).map { porId[it.id] ?: it }
+    }
+
+    /** Las cuentas de la DB local, en el orden de `Account.sq`. Respaldo sin red de [getAccounts]. */
+    private fun leerCuentasLocales(uid: String): List<Account> =
+        db.accountQueries.selectAll(uid).executeAsList().map { row ->
             Account(id = row.id, name = row.name,
                 type = AccountType.valueOf(row.type),
                 balance = row.balance, currency = row.currency)
         }
 
+    /**
+     * Mismo criterio que [getAccounts]: el server primero, la fila local como respaldo.
+     *
+     * Antes esto era un `executeAsOne()` sobre SQLDelight, o sea que abrir el detalle de una
+     * cuenta que nació en el server **tiraba una excepción** (la fila no existía en el teléfono).
+     * Hoy [getAccounts] la espeja apenas se lista, pero el detalle también se alcanza sin pasar
+     * por la lista, así que la garantía tiene que estar acá y no depender del orden de las
+     * pantallas. Se espeja lo que contesta el server por lo mismo que en [getAccounts]: el saldo
+     * derivado de eventos es el bueno, y así el respaldo local queda al día.
+     */
     override suspend fun getAccount(id: String): Account =
-        db.accountQueries.selectById(id).executeAsOne().let { row ->
-            Account(id = row.id, name = row.name,
-                type = AccountType.valueOf(row.type),
-                balance = row.balance, currency = row.currency)
+        try {
+            remote.getAccount(id).also { mirrorAccountLocally(it) }
+        } catch (e: Exception) {
+            db.accountQueries.selectById(id).executeAsOneOrNull()?.let { row ->
+                Account(id = row.id, name = row.name,
+                    type = AccountType.valueOf(row.type),
+                    balance = row.balance, currency = row.currency)
+            } ?: throw e
         }
 
     /**
@@ -477,9 +562,12 @@ class LocalRepository(
      * Crea contra el server y **espeja la cuenta devuelta en la DB local** (F20, Ola 5).
      *
      * Antes delegaba y ya, y la cuenta LOAN que `POST /api/credits` creaba solo existía en el
-     * server: la pantalla de Cuentas en Android lee [getAccounts] → SQLDelight, y el
+     * server: la pantalla de Cuentas en Android leía [getAccounts] → SQLDelight y nada más, y el
      * [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae — así que un crédito creado
      * desde la app nunca aparecía en Cuentas del teléfono (sí en Créditos, que lee remoto).
+     * Desde que [getAccounts] pregunta al server, esa cuenta aparecería igual en la próxima
+     * lectura con red; el espejo se queda porque es lo que la deja visible **ya** (sin esperar
+     * otro viaje) y sin red.
      * Mismo espejo que ya hacía [adjustCreditBalance] para el caso "el crédito nació en el
      * server": la fila local se escribe con lo que el server devolvió, `syncedAt = ahora` para
      * que el SyncEngine no la vuelva a subir.
@@ -503,7 +591,12 @@ class LocalRepository(
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = remote.putCardTerms(terms)
     override suspend fun deleteCardTerms(accountId: String) = remote.deleteCardTerms(accountId)
 
-    /** Upsert local (INSERT OR REPLACE) de una cuenta que nació en el server, marcada como sincronizada. */
+    /**
+     * Upsert local (INSERT OR REPLACE) de una cuenta que nació en el server, marcada como
+     * sincronizada. Lo usan las escrituras ([createCredit], [createCard]) y también las lecturas
+     * ([getAccounts], [getAccount]) — la PK es el id, el mismo de los dos lados, así que espejar
+     * una cuenta que ya estaba la pisa en vez de duplicarla.
+     */
     private fun mirrorAccountLocally(account: Account) {
         db.accountQueries.insert(
             account.id, account.name, account.type.name,
@@ -516,8 +609,10 @@ class LocalRepository(
      *
      * El resto de las operaciones de crédito delegan y ya: se leen siempre desde el server. El
      * ajuste no puede, porque su efecto secundario —un movimiento en la cuenta— se lee desde acá:
-     * [getEvents]/[getEventsByDay] y [getAccounts] van a SQLDelight, y [com.jvillada.movi.shared.SyncEngine]
-     * solo empuja, nunca trae. Sin este espejo, en Android el ajuste no aparecía en Movimientos,
+     * [getEvents]/[getEventsByDay] van a SQLDelight (y [getAccounts] cae ahí cuando no hay red),
+     * mientras [com.jvillada.movi.shared.SyncEngine] solo empuja, nunca trae. Los eventos siguen
+     * sin bajar del server por ningún camino, así que este espejo sigue siendo la única forma de
+     * que el ajuste se vea acá. Sin él, en Android el ajuste no aparecía en Movimientos,
      * ni en Análisis, ni en Presupuestos, ni en el detalle de la cuenta, y la pantalla de Cuentas
      * seguía mostrando la deuda vieja para siempre — mientras la hoja prometía por escrito que
      * "queda como un movimiento visible en la cuenta".

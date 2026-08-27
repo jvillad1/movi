@@ -681,6 +681,138 @@ class LocalRepositoryTest {
         assertEquals("test", repo.getEvents("acc-dest").single().category)
     }
 
+    // ── Cuentas que nacieron en el server ─────────────────────────────────────
+    //
+    // El teléfono leía SOLO SQLDelight y el SyncEngine solo empuja: una cuenta creada en la web
+    // (o sembrada por API, o anterior a esta instalación) no existía para el celular. Cuentas
+    // decía «Sin cuentas aún» con la plata cargada, y la hoja de un recurrente borraba la cuenta
+    // de la regla al guardar.
+
+    private fun cuentaServer(id: String, nombre: String, saldo: Long = 0L) =
+        Account(id = id, name = nombre, type = AccountType.SAVINGS, balance = saldo)
+
+    @Test
+    fun getAccounts_trae_las_cuentas_del_server_aunque_no_esten_en_la_base_local() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Bancolombia Ahorros", 750_000L)))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        val cuentas = repoConServer.getAccounts()
+
+        assertEquals(listOf("acc-web"), cuentas.map { it.id })
+        assertEquals(750_000L, cuentas.single().balance, "el saldo es el que derivó el server")
+    }
+
+    /** El espejo es lo que deja la cuenta disponible sin red la próxima vez. */
+    @Test
+    fun getAccounts_espeja_lo_que_trajo_del_server_y_lo_sigue_mostrando_sin_red() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi", 120_000L)))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        repoConServer.getAccounts()
+        server.falla = true
+
+        val sinRed = repoConServer.getAccounts()
+        assertEquals(listOf("acc-web"), sinRed.map { it.id }, "sin red se sigue viendo lo espejado")
+        assertEquals(120_000L, sinRed.single().balance)
+    }
+
+    /** INSERT OR REPLACE sobre la misma PK: leer diez veces no crea diez cuentas. */
+    @Test
+    fun getAccounts_no_duplica_al_espejar_dos_veces() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Efectivo")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        repoConServer.getAccounts()
+        repoConServer.getAccounts()
+
+        assertEquals(1, db.accountQueries.selectAll(testUserId).executeAsList().size)
+    }
+
+    /** Espejar una cuenta del server no puede dejarla encolada para que el SyncEngine la re-suba. */
+    @Test
+    fun getAccounts_marca_como_sincronizado_lo_que_vino_del_server() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Efectivo")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        repoConServer.getAccounts()
+
+        assertTrue(db.accountQueries.selectUnsynced(testUserId).executeAsList().isEmpty())
+    }
+
+    /**
+     * Lo que se creó offline todavía no está en el server, y no por eso desaparece de la lista:
+     * el conjunto es «lo que el server tiene» ∪ «lo que este teléfono todavía no pudo subir».
+     */
+    @Test
+    fun getAccounts_conserva_las_cuentas_creadas_offline_que_el_server_no_conoce() = runBlocking {
+        val db = createDatabase("test.db")
+        val repoSinRed = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        repoSinRed.createAccount(Account("acc-offline", "Efectivo", AccountType.CASH, 0L))
+
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi")))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        val ids = repoConServer.getAccounts().map { it.id }
+        assertEquals(setOf("acc-offline", "acc-web"), ids.toSet())
+        assertEquals(
+            listOf("acc-offline"),
+            db.accountQueries.selectUnsynced(testUserId).executeAsList().map { it.id },
+            "la de offline sigue pendiente de subir",
+        )
+    }
+
+    /** El orden lo pone SQLDelight (`lower(name), id`), igual que `GET /api/accounts`. */
+    @Test
+    fun getAccounts_respeta_el_orden_alfabetico_sin_distinguir_mayusculas() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(
+            listOf(cuentaServer("acc-n", "Nequi"), cuentaServer("acc-e", "efectivo")),
+        )
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        assertEquals(listOf("efectivo", "Nequi"), repoConServer.getAccounts().map { it.name })
+    }
+
+    /**
+     * Sin red y sin nada local, «no tienes cuentas» sería una afirmación sin respaldo: se propaga
+     * el error para que la pantalla muestre su reintento en vez de un vacío que se lee como un
+     * hecho (y que, en el Inicio, invita a crear un duplicado de una cuenta que ya existe).
+     */
+    @Test
+    fun getAccounts_sin_red_y_sin_nada_local_propaga_el_error_en_vez_de_afirmar_que_no_hay_cuentas() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(falla = true)
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        assertTrue(runCatching { repoConServer.getAccounts() }.isFailure)
+    }
+
+    /** Abrir el detalle de una cuenta del server tiraba una excepción: la fila no existía local. */
+    @Test
+    fun getAccount_encuentra_una_cuenta_que_nacio_en_el_server() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Bancolombia Ahorros", 750_000L)))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        assertEquals(750_000L, repoConServer.getAccount("acc-web").balance)
+    }
+
+    /** Y sin red cae a la fila local, que es lo que el teléfono tenía de antes. */
+    @Test
+    fun getAccount_sin_red_cae_a_la_fila_local() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-web", "Nequi", 120_000L)))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+
+        server.falla = true
+        assertEquals("Nequi", repoConServer.getAccount("acc-web").name)
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,
