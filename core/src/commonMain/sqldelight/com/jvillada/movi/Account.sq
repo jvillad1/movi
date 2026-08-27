@@ -13,8 +13,14 @@ CREATE TABLE account (
     syncedAt   INTEGER
 );
 
+-- El MISMO orden que `GET /api/accounts` (ver AccountRoutes.kt, donde está escrito por qué es
+-- por nombre y no por id ni por fecha de creación). Acá hacía todavía más falta que del lado del
+-- server: sin ORDER BY, SQLite devuelve las filas en orden de rowid, y cada sincronización las
+-- reescribe con `INSERT OR REPLACE` — que borra la fila y la vuelve a insertar, con un rowid
+-- NUEVO al final de la tabla. O sea que en el teléfono el orden de las cuentas se barajaba solo
+-- cada vez que el SyncEngine pasaba, y con él la cuenta que la hoja de Agregar preseleccionaba.
 selectAll:
-SELECT * FROM account WHERE userId = :userId;
+SELECT * FROM account WHERE userId = :userId ORDER BY name ASC, id ASC;
 
 selectById:
 SELECT * FROM account WHERE id = :id;
