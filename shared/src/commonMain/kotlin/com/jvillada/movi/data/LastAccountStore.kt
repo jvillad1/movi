@@ -8,14 +8,15 @@ import com.russhwolf.settings.set
  *
  * El problema que resuelve: con varias cuentas, la hoja de Agregar preseleccionaba
  * `accounts.first()` — o sea, la primera que devolviera el server. Y «la primera» no estaba
- * definida en ninguna parte: `GET /api/accounts` no tenía `ORDER BY` (Postgres puede devolver
- * otro orden después de un UPDATE o un VACUUM) y el `selectAll` de SQLDelight tampoco (el
- * `INSERT OR REPLACE` de cada sincronización le cambia el rowid a la fila, que es justo lo que
- * SQLite usa para ordenar cuando nadie se lo pide). La cuenta preseleccionada podía cambiar
- * entre sesiones sin que nada cambiara a la vista, y la nómina se anotaba en la cuenta
- * equivocada. Esta rama arregla las dos consultas **y además** deja de depender del orden:
- * el valor por defecto pasa a ser una decisión con nombre —«la última que usaste»— en vez de
- * un accidente del motor de base de datos.
+ * definida en ninguna parte: ni `GET /api/accounts` ni el `selectAll` de SQLDelight tenían
+ * `ORDER BY`, y sin él ningún motor promete un orden. La cuenta preseleccionada podía cambiar
+ * sin que nada cambiara a la vista, y la nómina se anotaba en la cuenta equivocada.
+ *
+ * Esta rama le puso orden a las dos consultas (está detallado en `Account.sq` y en
+ * `AccountRoutes.kt`, incluido el descalce de mayúsculas entre SQLite y Postgres, que era el
+ * caso que de verdad le cambiaba la cuenta al dueño entre el teléfono y la web) **y además**
+ * deja de depender del orden: el valor por defecto pasa a ser una decisión con nombre —«la
+ * última que usaste»— en vez de un accidente del motor de base de datos.
  *
  * **Por qué recordar y no preguntar.** Casi todo el mundo mete casi todo en la misma cuenta.
  * Un selector obligatorio antes de cada gasto sería un peaje diario por una respuesta que casi

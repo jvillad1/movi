@@ -463,12 +463,19 @@ class AccountRoutesTest {
      * anotaba la plata. Este test escribe las cuentas al revés del alfabeto —y encima le hace un
      * UPDATE a la primera, que es lo que en Postgres reescribe la fila al final de la tabla—
      * para que un `selectAll` sin orden tenga todas las chances de devolverlas mal.
+     *
+     * **Los nombres van con la caja mezclada a propósito.** El cliente ordena la misma lista en
+     * SQLite, que compara con `BINARY` (todas las mayúsculas antes que cualquier minúscula), y
+     * este server con la locale de Postgres, que ignora la caja: con `ORDER BY name` a secas,
+     * «efectivo» en minúscula iba primero en la web y último en el teléfono, o sea que la app
+     * preseleccionaba una cuenta distinta en cada lado. Por eso el orden es por `lower(name)` y
+     * por eso este test lo ejercita con «efectivo» y no con «Efectivo».
      */
     @Test
-    fun `GET devuelve las cuentas en orden alfabetico, no en el que las escribio la base`() = testApplication {
+    fun `GET ordena por nombre sin importar la caja, no por como las escribio la base`() = testApplication {
         wireApp()
         createNamedAccount("acc-3", "Nequi")
-        createNamedAccount("acc-1", "Efectivo")
+        createNamedAccount("acc-1", "efectivo")
         createNamedAccount("acc-2", "Bancolombia")
         // Un UPDATE sobre la que se insertó primero: en Postgres eso la reescribe y la manda al
         // final del orden físico. Con H2 el efecto no es idéntico, pero el ORDER BY tiene que
@@ -481,7 +488,9 @@ class AccountRoutesTest {
             client.get("/api/accounts") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
         ).jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
 
-        assertEquals(listOf("Bancolombia", "Efectivo", "Nequi"), nombres)
+        // Con `ORDER BY name` a secas y una base que compara por byte, «efectivo» quedaría al
+        // final; con `lower(name)`, va donde el dueño espera verla.
+        assertEquals(listOf("Bancolombia", "efectivo", "Nequi"), nombres)
     }
 
     private suspend fun ApplicationTestBuilder.createNamedAccount(id: String, name: String) =
