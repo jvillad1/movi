@@ -88,6 +88,30 @@ data class UpdateEventTimestampRequest(val timestamp: Long)
 const val EVENT_DATE_IN_FUTURE: String =
     "Esa fecha todavía no llegó: un movimiento se anota cuando la plata ya se movió."
 
+/**
+ * La marca de «esto ya ocurrió» que un recurrente puso sobre un movimiento — respuesta de
+ * `GET /api/events/{id}/occurrence`, `null` cuando no hay ninguna.
+ *
+ * Existe para que la hoja que corrige la fecha pueda **avisar antes** de soltar un sello, en vez
+ * de dejar que el dueño se entere el día que no le llega el recordatorio.
+ *
+ * [validFrom] y [validTo] son la ventana de fechas que sostiene el sello (`occurrenceWindow` en el
+ * server, la misma que usa el emparejador para proponer). Vienen calculadas del server a propósito:
+ * la ventana es lógica del emparejador y no puede vivir en dos lados. El cliente solo compara la
+ * fecha que el dueño acaba de tocar contra estos dos días.
+ */
+@Serializable
+data class EventOccurrenceMark(
+    val ruleId: String,
+    val ruleName: String,
+    /** "YYYY-MM" del vencimiento sellado. */
+    val period: String,
+    /** "YYYY-MM-DD" inclusive. */
+    val validFrom: String,
+    /** "YYYY-MM-DD" inclusive. */
+    val validTo: String,
+)
+
 @Serializable
 data class VoidEvent(
     val id: String,

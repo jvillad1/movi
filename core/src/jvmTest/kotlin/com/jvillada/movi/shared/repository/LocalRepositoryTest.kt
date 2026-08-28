@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.db.createDatabase
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -14,6 +15,7 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.openingEventFor
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -225,6 +227,41 @@ class LocalRepositoryTest {
         assertEquals(ayer, mirrored.timestamp)
         // Cambiar la fecha no mueve plata: el saldo de la cuenta no se toca.
         assertEquals(balanceBefore, repo.getAccount("acc-fecha").balance)
+    }
+
+    /**
+     * **Las guardas corren también en el camino local.**
+     *
+     * Es el hallazgo de la revisión: el camino «evento todavía sin sincronizar» nunca llama a
+     * `remote`, así que sin estas dos líneas la guarda de futuro del server no corría para el
+     * movimiento recién anotado en el teléfono — y el `SyncEngine` lo subía después por
+     * `POST /api/events`, que no valida fecha a propósito. Hoy la UI no ofrece días futuros, pero
+     * «hoy no se llega» es exactamente lo que dejó de ser cierto todas las veces que esto salió
+     * mal.
+     */
+    @Test
+    fun updateEventTimestamp_rechaza_una_fecha_futura_sin_llamar_al_server() = runBlocking {
+        repo.createAccount(Account("acc-futuro", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-futuro", "acc-futuro", TransactionType.EXPENSE, 20_000L))
+        val original = repo.getEvents("acc-futuro").single { it.id == "evt-futuro" }.timestamp
+
+        val manana = Clock.System.now().toEpochMilliseconds() + 2 * 24 * 60 * 60 * 1000L
+        val fallo = runCatching { repo.updateEventTimestamp("evt-futuro", manana) }.exceptionOrNull()
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(EVENT_DATE_IN_FUTURE, (fallo as ApiException).serverMessage)
+
+        // Y no tocó la fila: un rechazo no puede dejar la fecha a medio cambiar.
+        assertEquals(original, repo.getEvents("acc-futuro").single { it.id == "evt-futuro" }.timestamp)
+    }
+
+    /** El piso de cordura: un epoch cerca de 0 esconde el movimiento en 1970 para siempre. */
+    @Test
+    fun updateEventTimestamp_rechaza_un_epoch_de_1970() = runBlocking {
+        repo.createAccount(Account("acc-1970", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-1970", "acc-1970", TransactionType.EXPENSE, 20_000L))
+
+        val fallo = runCatching { repo.updateEventTimestamp("evt-1970", 1_000L) }.exceptionOrNull()
+        assertTrue(fallo is ApiException && fallo.status == 400, "esperaba 400, fue $fallo")
     }
 
     /**

@@ -9,6 +9,8 @@ import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.RecurringOccurrences
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
@@ -24,6 +26,11 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.deleteWhere
+import com.jvillada.movi.server.reminders.occurrenceInMonth
+import com.jvillada.movi.server.reminders.occurrenceWindow
+import com.jvillada.movi.server.reminders.sostieneLaOcurrencia
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
@@ -82,6 +89,23 @@ fun Route.eventRoutes() {
                 else
                     body.reconciliationStatus,
             )
+
+            // **Guarda de cordura de año — y NO la guarda de futuro.** Son dos cosas distintas y
+            // conviene decirlo, porque por esta ruta entra lo que llega solo (SMS, extracto, OCR),
+            // que trae su propia fecha y no se pisa: un movimiento fechado mañana por el banco es
+            // dato del banco, no un error nuestro. Pero un epoch de un cliente con un bug —1000 ms,
+            // o un año de tres dígitos a medio parsear— **esconde el movimiento en 1970 para
+            // siempre**: no encabeza ninguna lista, no entra en ningún mes, y nadie lo va a ver
+            // para arreglarlo. Rechazarlo es lo único que lo hace visible.
+            //
+            // El rango es el mismo 2000..2100 que aplica `PUT /{id}/timestamp`, y el mismo que el
+            // selector de fecha no deja pasar por su piso. `timestamp == 0` no llega acá: la línea
+            // de arriba ya lo reemplazó por `now`, que es el default histórico de un cliente que
+            // no manda fecha.
+            val fechaDelEvento = epochMillisToAppDate(event.timestamp)
+            if (fechaDelEvento.year !in 2000..2100) {
+                return@post call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
+            }
 
             val accountExists = dbQuery {
                 Accounts.selectAll()
@@ -231,6 +255,53 @@ fun Route.eventRoutes() {
             else call.respond(updated)
         }
 
+        /**
+         * **Este movimiento, esta marcado como «esto ya ocurrio» de algun recurrente?**
+         *
+         * Existe para que la hoja que corrige la fecha pueda **avisar antes** -mismo criterio que
+         * el aviso de cambio de mes y que `avisoDeUnificacion` en Categorias- en vez de dejar que
+         * el dueno descubra el efecto el dia que no le llega el recordatorio.
+         *
+         * Devuelve tambien la **ventana de fechas que sostiene el sello** (`validFrom`/`validTo`,
+         * ver [occurrenceWindow]) en vez de hacer que el cliente recalcule la regla: la ventana es
+         * logica del emparejador y tiene que vivir de un solo lado. El cliente solo compara la
+         * fecha que el dueno acaba de tocar contra esos dos dias.
+         *
+         * 204 (y no 404) cuando no hay marca: «no hay nada que avisar» es una respuesta normal de
+         * esta pregunta, no un error, y asi el cliente no tiene que distinguirla de «ese
+         * movimiento no existe».
+         */
+        get("/{id}/occurrence") {
+            val id = call.parameters["id"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val marca = dbQuery {
+                val fila = RecurringOccurrences.selectAll()
+                    .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId eq id) }
+                    .firstOrNull() ?: return@dbQuery null
+                val regla = RecurringRules.selectAll()
+                    .where {
+                        (RecurringRules.id eq fila[RecurringOccurrences.ruleId]) and
+                            (RecurringRules.userId eq uid)
+                    }
+                    .firstOrNull() ?: return@dbQuery null
+                val period = fila[RecurringOccurrences.period]
+                val due = occurrenceInMonth(
+                    java.time.YearMonth.parse(period),
+                    regla[RecurringRules.dayOfMonth],
+                )
+                val ventana = occurrenceWindow(due)
+                EventOccurrenceMark(
+                    ruleId = regla[RecurringRules.id],
+                    ruleName = regla[RecurringRules.name],
+                    period = period,
+                    validFrom = ventana.start.toString(),
+                    validTo = ventana.endInclusive.toString(),
+                )
+            }
+            if (marca == null) call.respond(HttpStatusCode.NoContent) else call.respond(marca)
+        }
+
         // ── Corregir la FECHA de un movimiento ya anotado ────────────────────────────────
         //
         // Hasta acá lo único editable de un movimiento era su categoría: para arreglarle la fecha
@@ -251,9 +322,10 @@ fun Route.eventRoutes() {
         //    también los movimientos que llegan solos (SMS, extracto, OCR), que traen su propia
         //    fecha y no se pisan. Esta ruta, en cambio, es siempre una corrección a mano.
         //
-        // 2. **Un piso de año.** Mismo rango razonable que la fecha de desembolso de un crédito
-        //    (2000..2100 en `transferTimestampFor`): un epoch-ms cerca de 0 es un cliente con un
-        //    bug, no una intención, y dejarlo entrar esconde el movimiento en 1970 para siempre.
+        // 2. **Un piso y un techo de año (2000..2100).** Un epoch-ms cerca de 0 es un cliente con
+        //    un bug, no una intención, y dejarlo entrar esconde el movimiento en 1970 para
+        //    siempre. (Es más angosto que el 1900..2100 de `isValidCreditDate`, que tiene que
+        //    admitir una fecha de nacimiento; acá no hay ningún movimiento legítimo del siglo XX.)
         //
         // 3. **Las dos patas de un traspaso se mueven juntas.** La fecha de un traspaso es UN
         //    hecho, no dos: mover solo la pata de origen dejaría la plata saliendo un día y
@@ -288,23 +360,48 @@ fun Route.eventRoutes() {
                     null
                 } else {
                     val transferId = event.transferId
-                    if (transferId != null) {
+                    val idsAfectados: List<String> = if (transferId != null) {
                         Events.update({ (Events.userId eq uid) and (Events.transferId eq transferId) }) {
                             it[timestamp] = nuevo
                         }
+                        Events.selectAll()
+                            .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
+                            .map { it[Events.id] }
                     } else {
                         Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
                             it[timestamp] = nuevo
                         }
+                        listOf(id)
                     }
-                    // **La ocurrencia de recurrente que señale a este movimiento NO se toca, y
-                    // eso es una decisión, no un olvido.** `recurring_occurrences` sella un
-                    // PERIODO («agosto ya ocurrió») y guarda el movimiento solo como evidencia;
-                    // `loadOccurredBy` solo verifica que ese movimiento siga vivo, nunca que su
-                    // fecha caiga adentro del periodo. Es lo correcto: pagar el 30 de julio el
-                    // arriendo de agosto es lo normal, y borrar el sello porque la fecha se
-                    // corrigió volvería a preguntar «¿ya lo pagaste?» por algo que el dueño ya
-                    // respondió. Si el sello quedó mal, se deshace donde se puso, en Recurrentes.
+                    // ── EL SELLO DE RECURRENTE SE SUELTA SI LA EVIDENCIA SE FUE DEL PERIODO ──
+                    //
+                    // `recurring_occurrences` sella un PERIODO («agosto ya ocurrió») y guarda el
+                    // movimiento como **evidencia**. Mientras la evidencia siga sirviendo, el
+                    // sello vale: corregir el arriendo del 5 al 12 de agosto —o pagarlo tarde, el
+                    // 3 de septiembre, que sigue adentro de los 10 días— no lo suelta.
+                    //
+                    // Lo que no puede pasar es lo inverso, y es lo que costaba plata: el dueno
+                    // sella agosto con un movimiento, despues se da cuenta de que ese movimiento
+                    // era de julio y le corrige la fecha. Agosto quedaba **dado por pagado con
+                    // una evidencia que el emparejador nunca habria propuesto**: el arriendo de
+                    // agosto dejaba de contar en agosto Y Movi no volvia a recordarlo. Encima el
+                    // movimiento quedaba quemado - sellar julio con el daba 409.
+                    //
+                    // Asi que se suelta, y se suelta **con el mismo criterio con el que se
+                    // propone** ([sostieneLaOcurrencia]): ni un dia mas ancho, ni uno mas
+                    // angosto. Es la misma decision que `loadOccurredBy` ya tomo y escribio para
+                    // el caso hermano (el movimiento anulado): «volver a avisar de mas molesta un
+                    // toque, callar una deuda real cuesta plata».
+                    //
+                    // **Por que se suelta en vez de preguntar.** Preguntar aca le exige al dueno
+                    // decidir, sobre una pantalla que no esta mirando, algo cuya respuesta
+                    // correcta vive en Recurrentes. Soltar es el lado barato y **ruidoso** del
+                    // error: el recurrente vuelve a aparecer pendiente, con su «Ya ocurrio» a un
+                    // toque, asi que se anuncia solo. Y libera el movimiento para sellar el
+                    // periodo que si le corresponde. La hoja igual lo dice ANTES -el aviso del
+                    // cambio de fecha nombra el recurrente y el mes (ver `GET /{id}/occurrence`)-
+                    // asi que soltar no es una sorpresa: es lo que se anuncio.
+                    soltarOcurrenciasSinEvidencia(uid, idsAfectados, fecha)
                     event.copy(timestamp = nuevo).withCashFlowFlag(accountTypesFor(uid))
                 }
             }
@@ -430,3 +527,37 @@ fun Route.eventRoutes() {
     }
 }
 
+/**
+ * Suelta los sellos de `recurring_occurrences` que apuntan a [eventIds] y que, con la fecha nueva
+ * [fecha], ya no tendrian evidencia (ver [sostieneLaOcurrencia]).
+ *
+ * Corre **dentro de la misma transaccion** que movio el movimiento: o se mueve la fecha y se
+ * suelta el sello, o no pasa ninguna de las dos. Un sello huerfano -cuya regla ya no existe- se
+ * suelta tambien: no hay con que validarlo, y dejarlo puesto es exactamente el silencio que esto
+ * viene a sacar.
+ */
+private fun soltarOcurrenciasSinEvidencia(
+    uid: String,
+    eventIds: List<String>,
+    fecha: java.time.LocalDate,
+) {
+    if (eventIds.isEmpty()) return
+    val filas = RecurringOccurrences.selectAll()
+        .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId inList eventIds) }
+        .map { it[RecurringOccurrences.ruleId] to it[RecurringOccurrences.period] }
+    for ((ruleId, period) in filas) {
+        val dia = RecurringRules.selectAll()
+            .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
+            .firstOrNull()?.get(RecurringRules.dayOfMonth)
+        val sigueValiendo = dia != null && runCatching {
+            sostieneLaOcurrencia(fecha, occurrenceInMonth(java.time.YearMonth.parse(period), dia))
+        }.getOrDefault(false)
+        if (!sigueValiendo) {
+            RecurringOccurrences.deleteWhere {
+                (RecurringOccurrences.userId eq uid) and
+                    (RecurringOccurrences.ruleId eq ruleId) and
+                    (RecurringOccurrences.period eq period)
+            }
+        }
+    }
+}

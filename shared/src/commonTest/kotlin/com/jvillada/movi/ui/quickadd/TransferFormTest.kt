@@ -2,19 +2,29 @@ package com.jvillada.movi.ui.quickadd
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.validateTransfer
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * Lógica pura de la hoja de Traspaso: la fecha que escribe el dueño y el mensaje que explica qué
- * falta. Las reglas del traspaso en sí (origen ≠ destino, monto, moneda, nada de deudas) viven en
- * `validateTransfer` (:core) y las cubre `TransferTest` — acá solo se verifica que la hoja las use
- * y no invente su propia versión.
+ * Lógica pura de la hoja de Traspaso.
+ *
+ * **Ola 13 — qué desapareció de acá y por qué.** Este archivo probaba `transferTimestampFor` (el
+ * parseo de «AAAA-MM-DD» que escribía el dueño) y `transferMissingMessage` (que agregaba «La
+ * fecha tiene que ser AAAA-MM-DD» a las reglas del traspaso). Las dos funciones se fueron con el
+ * campo de texto: con el selector de fecha no hay forma de producir una fecha inválida, así que
+ * esa rama era inalcanzable y su mensaje —un reclamo de formato sobre un formato correcto— era
+ * peor que no tener mensaje. Probar código muerto no es cobertura, es lastre.
+ *
+ * Lo que queda: que la hoja use [validateTransfer] (:core) y no invente su propia versión de las
+ * reglas del traspaso, y que la conversión de fecha a instante siga cayendo en el día correcto de
+ * Bogotá — que ahora la hace `epochAlMediodia` y la cubre `FechaMovimientoTest`, así que acá solo
+ * se verifica el helper que sigue vivo.
  */
 class TransferFormTest {
 
@@ -23,66 +33,47 @@ class TransferFormTest {
 
     // ── Fecha ─────────────────────────────────────────────────────────────────
 
+    /**
+     * `todayIsoInAppZone` sobrevivió al campo de texto porque Movimientos lo usa para decidir qué
+     * día es «Hoy» en sus encabezados. Tiene que fechar en Bogotá, no en la zona del dispositivo:
+     * si no, a las 9 pm del 31 el encabezado del día diría el mes siguiente.
+     */
     @Test
-    fun `una fecha AAAA-MM-DD se convierte a un instante de ese mismo dia en Bogota`() {
-        val millis = assertNotNull(transferTimestampFor("2026-08-23"))
-
-        assertEquals(
-            "2026-08-23",
-            Instant.fromEpochMilliseconds(millis).toLocalDateTime(AppTimeZone.zone).date.toString(),
-        )
+    fun `hoy se calcula en la zona de la app y no en la del sistema`() {
+        val hoy = LocalDate.parse(todayIsoInAppZone())
+        val esperado = kotlinx.datetime.Clock.System.now()
+            .toLocalDateTime(AppTimeZone.zone).date
+        assertEquals(esperado, hoy)
     }
 
     @Test
-    fun `la barra tambien vale como separador`() {
-        assertEquals(transferTimestampFor("2026-08-23"), transferTimestampFor("2026/08/23"))
-    }
-
-    @Test
-    fun `una fecha incompleta o imposible no pasa`() {
-        assertNull(transferTimestampFor(""))
-        assertNull(transferTimestampFor("2026-08"))
-        assertNull(transferTimestampFor("2026-13-01"))
-        assertNull(transferTimestampFor("2026-02-30"))
-        assertNull(transferTimestampFor("mañana"))
-    }
-
-    @Test
-    fun `un año fuera de rango no pasa`() {
-        assertNull(transferTimestampFor("0026-08-23"))
-        assertNull(transferTimestampFor("9026-08-23"))
+    fun `un instante de las 11 de la noche en Bogota sigue siendo ese dia`() {
+        // 2026-08-24T04:30Z = 2026-08-23 23:30 en Bogotá.
+        val fecha = Instant.parse("2026-08-24T04:30:00Z")
+            .toLocalDateTime(AppTimeZone.zone).date
+        assertEquals(LocalDate(2026, 8, 23), fecha)
     }
 
     // ── Qué falta ─────────────────────────────────────────────────────────────
 
     @Test
     fun `con todo completo no falta nada`() {
-        assertNull(transferMissingMessage(ahorros, cdt, 250_000L, "2026-08-23"))
+        assertNull(validateTransfer(ahorros, cdt, 250_000L))
     }
 
+    /**
+     * El texto sale de `:core` y es el mismo que el server devuelve en su 422 — así la hoja y el
+     * rechazo del server nunca dicen cosas distintas del mismo problema.
+     */
     @Test
     fun `el motivo del traspaso invalido es el mismo texto que da el server`() {
         assertEquals(
             "El origen y el destino tienen que ser cuentas distintas",
-            transferMissingMessage(ahorros, ahorros, 250_000L, "2026-08-23"),
+            validateTransfer(ahorros, ahorros, 250_000L),
         )
         assertEquals(
             "El monto tiene que ser mayor que cero",
-            transferMissingMessage(ahorros, cdt, 0L, "2026-08-23"),
-        )
-    }
-
-    @Test
-    fun `una fecha invalida se reporta despues de las reglas del traspaso`() {
-        assertEquals(
-            "La fecha tiene que ser AAAA-MM-DD",
-            transferMissingMessage(ahorros, cdt, 250_000L, "23 de agosto"),
-        )
-        // Si además el traspaso es inválido, manda el motivo del traspaso: es el problema de
-        // fondo, y arreglar la fecha no lo destraba.
-        assertEquals(
-            "El origen y el destino tienen que ser cuentas distintas",
-            transferMissingMessage(ahorros, ahorros, 250_000L, "23 de agosto"),
+            validateTransfer(ahorros, cdt, 0L),
         )
     }
 }

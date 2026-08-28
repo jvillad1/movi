@@ -61,51 +61,18 @@ import com.jvillada.movi.ui.fecha.timestampParaFecha
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atTime
-import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
 /**
- * "AAAA-MM-DD" → el instante del **mediodía** de ese día en la zona de la app (Bogotá), o `null`
- * si la fecha no sirve.
+ * Hoy, en la zona de la app, como "AAAA-MM-DD".
  *
- * Mediodía y no medianoche a propósito: los timestamps se guardan en epoch-ms y cada pantalla los
- * vuelve a fechar en su zona. Un traspaso sellado a las 00:00 de Bogotá cae, mirado en UTC, a las
- * 05:00 del mismo día — pero uno sellado a las 00:00 UTC (que es lo que da una conversión
- * descuidada) se ve como las 7 pm del día ANTERIOR en Bogotá, y el movimiento aparece un día
- * antes de cuando pasó. El mediodía deja doce horas de margen para los dos lados: ninguna zona
- * razonable lo corre de día.
- *
- * Acepta la barra como separador por el mismo motivo que `filterDateInput` (F24): «2026/08/23» es
- * lo que mucha gente escribe, y rechazarlo dejaba el botón en gris sin explicar por qué.
+ * Nació como el valor inicial del campo de fecha del traspaso; ese campo ya no existe (lo
+ * reemplazó el selector) pero la función sigue viva y usada: Movimientos la usa para saber qué
+ * día es «Hoy» al armar sus encabezados. Vive acá por historia, no por pertenencia.
  */
-fun transferTimestampFor(date: String, zone: TimeZone = AppTimeZone.zone): Long? {
-    val normalized = date.trim().replace('/', '-')
-    val parsed = runCatching { LocalDate.parse(normalized) }.getOrNull() ?: return null
-    // Mismo rango razonable que la fecha de desembolso de un crédito: un año de tres dígitos es
-    // casi siempre un tipeo a medio terminar, no una intención.
-    if (parsed.year !in 2000..2100) return null
-    return parsed.atTime(12, 0).toInstant(zone).toEpochMilliseconds()
-}
-
-/** Hoy, en la zona de la app, como "AAAA-MM-DD" — el valor con el que arranca el campo. */
 fun todayIsoInAppZone(clock: Clock = Clock.System, zone: TimeZone = AppTimeZone.zone): String =
     clock.now().toLocalDateTime(zone).date.toString()
-
-/**
- * Lo primero que falta para poder guardar el traspaso, o `null` si no falta nada. Mismo patrón
- * que `missingFieldMessage` en la hoja de movimiento (F24): una sola frase, la más urgente.
- *
- * Las reglas del traspaso van **antes** que la fecha porque son el problema de fondo: si el
- * origen y el destino son la misma cuenta, arreglar la fecha no destraba nada. Y el texto sale de
- * [validateTransfer] (:core), el mismo que devuelve el server en su 422 — así la hoja y el
- * rechazo del server nunca dicen cosas distintas del mismo problema.
- */
-fun transferMissingMessage(from: Account?, to: Account?, amount: Long, date: String): String? =
-    validateTransfer(from, to, amount)
-        ?: if (transferTimestampFor(date) == null) "La fecha tiene que ser AAAA-MM-DD" else null
 
 /**
  * Los tres ids del traspaso que se está escribiendo. **Se generan una vez por borrador, no una
@@ -283,11 +250,13 @@ internal fun TransferBody(
     // selector nuevo de Gasto/Ingreso habría sido peor que no tocar nada: dos maneras distintas
     // de decir lo mismo, a dos toques de distancia.
     //
-    // `date` sigue existiendo como el ISO derivado, y no como la fuente: así
-    // [transferMissingMessage] y [transferTimestampFor] —y sus tests— no cambian.
+    // Con el selector, `transferTimestampFor` y `transferMissingMessage` quedaron sin llamador y
+    // se fueron con el campo: la rama «La fecha tiene que ser AAAA-MM-DD» de esa validación era
+    // inalcanzable —el selector no puede producir una fecha inválida— y un mensaje de formato
+    // sobre un formato correcto es peor que no tener mensaje. Lo que queda valida el traspaso en
+    // sí ([validateTransfer], el mismo texto que devuelve el server en su 422).
     val hoy = remember { hoyEnAppZone() }
     var fecha by remember { mutableStateOf(hoy) }
-    val date = fecha.toString()
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -299,7 +268,7 @@ internal fun TransferBody(
 
     val from = elegibles.firstOrNull { it.id == fromId }
     val to = elegibles.firstOrNull { it.id == toId }
-    val missing = transferMissingMessage(from, to, amount ?: 0L, date)
+    val missing = validateTransfer(from, to, amount ?: 0L)
     val canSave = missing == null && !saving
 
     fun save() {

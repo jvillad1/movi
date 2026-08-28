@@ -15,6 +15,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
@@ -39,6 +40,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -808,35 +810,234 @@ class EventRoutesTest {
         assertEquals(ayer, timestampDe("ev-tr-in"))
     }
 
-    /**
-     * **La ocurrencia de recurrente sobrevive al cambio de fecha, y es a propósito.**
-     *
-     * `recurring_occurrences` sella un PERIODO («agosto ya ocurrió») y guarda el movimiento solo
-     * como evidencia. Pagar el 30 de julio el arriendo de agosto es lo normal, así que corregir
-     * la fecha hacia otro mes no puede volver a abrir el periodo: sería preguntar de nuevo «¿ya
-     * lo pagaste?» por algo que el dueño ya respondió. Si el sello quedó mal, se deshace donde se
-     * puso — el «Deshacer» de Recurrentes.
-     */
-    @Test
-    fun `mover la fecha NO deshace la ocurrencia de recurrente que lo señala`() = testApplication {
-        wireApp()
-        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda")
+    // ── El sello de recurrente, cuando la fecha se corrige ───────────────────
+
+    private fun seedRegla(id: String, dayOfMonth: Int, name: String = "Arriendo") {
+        transaction {
+            RecurringRules.insert {
+                it[RecurringRules.id]         = id
+                it[RecurringRules.userId]     = userAId
+                it[RecurringRules.name]       = name
+                it[RecurringRules.category]   = "Vivienda"
+                it[RecurringRules.amount]     = 1_800_000L
+                it[RecurringRules.dayOfMonth] = dayOfMonth
+                it[RecurringRules.type]       = "EXPENSE"
+            }
+        }
+    }
+
+    private fun sellar(ruleId: String, period: String, eventId: String?) {
         transaction {
             RecurringOccurrences.insert {
                 it[userId]      = userAId
-                it[ruleId]      = "rule-arriendo"
-                it[period]      = "2026-08"
-                it[eventId]     = "ev-arriendo"
+                it[RecurringOccurrences.ruleId]  = ruleId
+                it[RecurringOccurrences.period]  = period
+                it[RecurringOccurrences.eventId] = eventId
                 it[confirmedAt] = System.currentTimeMillis()
             }
         }
+    }
 
-        assertEquals(HttpStatusCode.OK, setTimestamp("ev-arriendo", userAId, mediodiaHace(40)).status)
-        val sigueSellado = transaction {
-            RecurringOccurrences.selectAll()
-                .where { RecurringOccurrences.eventId eq "ev-arriendo" }
-                .count()
+    private fun sellosDe(ruleId: String): Long = transaction {
+        RecurringOccurrences.selectAll()
+            .where { (RecurringOccurrences.userId eq userAId) and (RecurringOccurrences.ruleId eq ruleId) }
+            .count()
+    }
+
+    /** El mediodía de Bogotá de una fecha concreta. */
+    private fun mediodiaDe(fecha: java.time.LocalDate): Long =
+        fecha.atTime(12, 0).atZone(AppClock.zone).toInstant().toEpochMilli()
+
+    /**
+     * **El mes de referencia de estos tests es siempre pasado.**
+     *
+     * Dos meses atrás, contados desde `AppClock.today()`. Fechas fijas («2026-08-05») convertirían
+     * estos tests en bombas de tiempo: el mismo caso que hoy pasa se vuelve una fecha futura el
+     * mes que viene y el endpoint responde 422 antes de llegar a mirar el sello. Relativo al reloj
+     * no puede pasar.
+     */
+    private fun mesDePrueba(): java.time.YearMonth = java.time.YearMonth.from(AppClock.today()).minusMonths(2)
+
+    /**
+     * **Corregir la fecha adentro de la ventana no suelta nada.**
+     *
+     * Vencimiento el 5 → la ventana es `[1 .. 15]` del mismo mes: diez días para adelante, y hacia
+     * atrás el piso en el primer día del mes que
+     * [com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS] documenta. Este test fija los dos
+     * bordes: sin él, un fix más simple («si cambia de mes, soltá») pasaría igual y le volvería a
+     * preguntar al dueño por un mes que ya respondió cada vez que corrige un día.
+     */
+    @Test
+    fun `mover la fecha adentro de la ventana NO suelta el sello`() = testApplication {
+        wireApp()
+        val mes = mesDePrueba()
+        seedRegla("rule-arriendo", dayOfMonth = 5)
+        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda",
+            timestamp = mediodiaDe(mes.atDay(5)))
+        sellar("rule-arriendo", mes.toString(), "ev-arriendo")
+
+        // Borde de arriba (vencimiento + 10) y borde de abajo (el piso del mes).
+        assertEquals(HttpStatusCode.OK, setTimestamp("ev-arriendo", userAId, mediodiaDe(mes.atDay(15))).status)
+        assertEquals(1L, sellosDe("rule-arriendo"))
+        assertEquals(HttpStatusCode.OK, setTimestamp("ev-arriendo", userAId, mediodiaDe(mes.atDay(1))).status)
+        assertEquals(1L, sellosDe("rule-arriendo"))
+    }
+
+    /**
+     * Un pago tarde que cruza al mes siguiente sigue sosteniendo su sello: la ventana llega diez
+     * días DESPUÉS del vencimiento. Es la otra mitad del test de arriba, y la que prueba que la
+     * regla no es «el mes».
+     */
+    @Test
+    fun `un pago tarde que cae en el mes siguiente sigue sosteniendo el sello`() = testApplication {
+        wireApp()
+        val mes = mesDePrueba()
+        val vencimiento = mes.atEndOfMonth()
+        seedRegla("rule-arriendo", dayOfMonth = 31)
+        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda",
+            timestamp = mediodiaDe(vencimiento))
+        sellar("rule-arriendo", mes.toString(), "ev-arriendo")
+
+        val res = setTimestamp("ev-arriendo", userAId, mediodiaDe(vencimiento.plusDays(3)))
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(1L, sellosDe("rule-arriendo"))
+    }
+
+    /**
+     * El caso que costaba plata: el dueño selló un mes con un movimiento, después se dio cuenta de
+     * que ese movimiento era del mes anterior y le corrigió la fecha. Antes, el mes quedaba dado
+     * por pagado con una evidencia que el emparejador nunca habría propuesto — el arriendo dejaba
+     * de contar en su mes Y Movi no lo volvía a recordar. Ahora el sello se suelta.
+     */
+    @Test
+    fun `mover la fecha fuera de la ventana suelta el sello y el mes vuelve a quedar pendiente`() = testApplication {
+        wireApp()
+        val mes = mesDePrueba()
+        seedRegla("rule-arriendo", dayOfMonth = 5)
+        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda",
+            timestamp = mediodiaDe(mes.atDay(5)))
+        sellar("rule-arriendo", mes.toString(), "ev-arriendo")
+
+        // El 15 del mes ANTERIOR: antes del piso. El emparejador nunca lo habría propuesto para
+        // este periodo, así que no puede seguir sosteniendo su sello.
+        val res = setTimestamp("ev-arriendo", userAId, mediodiaDe(mes.minusMonths(1).atDay(15)))
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(0L, sellosDe("rule-arriendo"))
+    }
+
+    /**
+     * Y el movimiento queda **libre**: antes seguía quemado por la fila vieja, así que sellar el
+     * periodo que sí le correspondía daba 409 «ya está marcado como la ocurrencia de otro
+     * periodo». Un movimiento que dejó de ser evidencia de un mes tiene que poder serlo del otro.
+     */
+    @Test
+    fun `el movimiento liberado puede sellar el periodo que si le corresponde`() = testApplication {
+        wireApp()
+        val mes = mesDePrueba()
+        val anterior = mes.minusMonths(1)
+        seedRegla("rule-arriendo", dayOfMonth = 5)
+        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda",
+            timestamp = mediodiaDe(mes.atDay(5)))
+        sellar("rule-arriendo", mes.toString(), "ev-arriendo")
+        setTimestamp("ev-arriendo", userAId, mediodiaDe(anterior.atDay(5)))
+
+        val res = client.post("/api/recurring-rules/rule-arriendo/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"period":"$anterior","eventId":"ev-arriendo"}""")
         }
-        assertEquals(1L, sigueSellado)
+        assertEquals(HttpStatusCode.Created, res.status)
+    }
+
+    /** Un sello sin movimiento («ya lo pagué») no depende de ninguna fecha y no se toca. */
+    @Test
+    fun `un sello sin movimiento no se ve afectado`() = testApplication {
+        wireApp()
+        seedRegla("rule-arriendo", dayOfMonth = 5)
+        seedRegla("rule-luz", dayOfMonth = 5, name = "Luz")
+        val mes = mesDePrueba()
+        sellar("rule-luz", mes.toString(), null)
+        seedEvent("ev-otro", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda",
+            timestamp = mediodiaDe(mes.atDay(5)))
+
+        setTimestamp("ev-otro", userAId, mediodiaDe(mes.minusMonths(3).atDay(1)))
+        assertEquals(1L, sellosDe("rule-luz"))
+    }
+
+    /**
+     * El GET que deja **avisar antes**: nombre del recurrente, periodo, y la ventana de fechas
+     * que sostiene el sello. La ventana se manda calculada del server a propósito — es lógica del
+     * emparejador y no puede tener una segunda versión en el cliente.
+     */
+    @Test
+    fun `el GET de la marca devuelve el recurrente y la ventana que la sostiene`() = testApplication {
+        wireApp()
+        seedRegla("rule-arriendo", dayOfMonth = 5)
+        val mes = mesDePrueba()
+        seedEvent("ev-arriendo", userAId, savingsAccountId, "EXPENSE", "Arriendo", "Vivienda")
+        sellar("rule-arriendo", mes.toString(), "ev-arriendo")
+
+        val res = client.get("/api/events/ev-arriendo/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("Arriendo", body["ruleName"]!!.jsonPrimitive.content)
+        assertEquals(mes.toString(), body["period"]!!.jsonPrimitive.content)
+        // Vencimiento el 5, ventana de 10 días, con piso en el primer día del mes.
+        assertEquals(mes.atDay(1).toString(), body["validFrom"]!!.jsonPrimitive.content)
+        assertEquals(mes.atDay(15).toString(), body["validTo"]!!.jsonPrimitive.content)
+    }
+
+    /** «No hay marca» es una respuesta normal, no un error: 204 y no 404. */
+    @Test
+    fun `el GET de la marca responde 204 cuando el movimiento no esta sellado`() = testApplication {
+        wireApp()
+        seedEvent("ev-suelto", userAId, savingsAccountId, "EXPENSE", "Tostao", "Comida")
+        val res = client.get("/api/events/ev-suelto/occurrence") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NoContent, res.status)
+    }
+
+    // ── Guarda de cordura de año en el POST ──────────────────────────────────
+
+    /**
+     * No es la guarda de futuro (por esta ruta entran los SMS y los extractos con su propia
+     * fecha): es el piso que impide que un epoch roto esconda un movimiento en 1970, donde nadie
+     * lo va a ver nunca para arreglarlo.
+     */
+    @Test
+    fun `POST rechaza un epoch de 1970 con 400 y no inserta nada`() = testApplication {
+        wireApp()
+        val res = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"ev-1970","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                   "category":"Comida","description":"roto","timestamp":1000,"source":"SMS"}"""
+                    .trimIndent().replace("\n", ""),
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        val existe = transaction { Events.selectAll().where { Events.id eq "ev-1970" }.count() }
+        assertEquals(0L, existe)
+    }
+
+    /** `timestamp` ausente/0 sigue cayendo en «ahora», que es el default histórico. */
+    @Test
+    fun `POST sin timestamp sigue guardando con la hora actual`() = testApplication {
+        wireApp()
+        val res = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"ev-sin-fecha","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                   "category":"Comida","description":"ok","timestamp":0,"source":"MANUAL"}"""
+                    .trimIndent().replace("\n", ""),
+            )
+        }
+        assertEquals(HttpStatusCode.Created, res.status)
+        assertEquals(AppClock.today(), epochMillisToAppDate(timestampDe("ev-sin-fecha")))
     }
 }

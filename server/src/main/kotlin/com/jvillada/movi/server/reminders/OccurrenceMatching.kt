@@ -94,6 +94,50 @@ import kotlin.math.abs
  */
 const val OCCURRENCE_WINDOW_DAYS: Long = 10
 
+/**
+ * **La ventana de un periodo, como par de fechas.** `[primer día del mes del vencimiento
+ * .. vencimiento + [windowDays]]`, o sea las dos condiciones de fecha que aplica
+ * [occurrenceCandidatesFor], escritas una sola vez.
+ *
+ * Existe porque ahora hay **dos** lugares que necesitan la misma regla y no pueden divergir:
+ * quién se PROPONE como ocurrencia de un periodo, y —desde que la fecha de un movimiento se puede
+ * corregir— quién sigue SOSTENIENDO un sello que ya se puso (ver `PUT /api/events/{id}/timestamp`
+ * y [sostieneLaOcurrencia]). Si las dos definiciones se separaran, habría movimientos que el
+ * emparejador nunca habría propuesto pero que igual mantienen un mes dado por pagado.
+ */
+fun occurrenceWindow(
+    dueDate: LocalDate,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+): ClosedRange<LocalDate> {
+    // El piso nunca cae antes del mes del vencimiento: ver el KDoc de OCCURRENCE_WINDOW_DAYS.
+    val piso = maxOf(YearMonth.from(dueDate).atDay(1), dueDate.minusDays(windowDays))
+    return piso..dueDate.plusDays(windowDays)
+}
+
+/**
+ * ¿Un movimiento fechado [fecha] puede ser la ocurrencia del vencimiento [dueDate]?
+ *
+ * Es la misma pregunta que hace [occurrenceCandidatesFor] al proponer, hecha ahora también al
+ * **corregir la fecha de un movimiento ya sellado**: si la respuesta pasa a ser «no», ese sello
+ * dejó de tener evidencia y se suelta (ver `PUT /api/events/{id}/timestamp`).
+ *
+ * La ventana **no es el mes**, y en las dos direcciones importa:
+ *
+ *  - Hacia adelante llega hasta 10 días DESPUÉS del vencimiento, así que puede cruzar al mes
+ *    siguiente: el arriendo del 31 pagado el 3 sigue sosteniendo el sello de su mes.
+ *  - Hacia atrás **se corta en el primer día del mes del vencimiento** y no antes. Eso no es un
+ *    descuido de esta función: es el piso deliberado de [OCCURRENCE_WINDOW_DAYS] (leer su KDoc),
+ *    puesto para que el pago del mes ANTERIOR no cierre el vencimiento de este.
+ *
+ * O sea que lo que suelta un sello es exactamente una fecha que el emparejador **nunca habría
+ * propuesto** para ese periodo — ni una más ancha ni una más angosta.
+ */
+fun sostieneLaOcurrencia(
+    fecha: LocalDate,
+    dueDate: LocalDate,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+): Boolean = fecha in occurrenceWindow(dueDate, windowDays)
+
 /** Cuántas propuestas se le muestran al dueño. Más de tres es una lista, no una propuesta. */
 const val MAX_OCCURRENCE_CANDIDATES: Int = 3
 
@@ -121,8 +165,9 @@ fun occurrenceCandidatesFor(
 ): List<FinancialEvent> {
     val claveRegla = claveComparableDeNombre(rule.name)
     val claveCategoria = claveComparableDeNombre(rule.category)
-    // El piso: nada anterior al mes del vencimiento. Ver el KDoc de OCCURRENCE_WINDOW_DAYS.
-    val primerDiaDelPeriodo = YearMonth.from(dueDate).atDay(1)
+    // La ventana (con su piso en el primer día del mes del vencimiento) sale de
+    // [occurrenceWindow]: es la MISMA que decide si un sello ya puesto sigue teniendo evidencia.
+    val ventana = occurrenceWindow(dueDate, windowDays)
 
     return events
         .asSequence()
@@ -139,9 +184,8 @@ fun occurrenceCandidatesFor(
         .filter { it.currency == MONEDA_DE_LAS_REGLAS }
         .mapNotNull { event ->
             val fecha = epochMillisToAppDate(event.timestamp, zone)
+            if (fecha !in ventana) return@mapNotNull null
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)
-            if (abs(dias) > windowDays) return@mapNotNull null
-            if (fecha.isBefore(primerDiaDelPeriodo)) return@mapNotNull null
             val nombrePega = claveRegla.isNotEmpty() &&
                 (claveComparableDeNombre(event.description) == claveRegla ||
                     claveComparableDeNombre(event.merchant.orEmpty()) == claveRegla)

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.fecha
 
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -151,32 +152,132 @@ class FechaMovimientoTest {
         assertEquals(casillas.sorted(), casillas)
     }
 
-    // ── el aviso ─────────────────────────────────────────────────────────────
+    /** Sin piso, la flecha de mes anterior navegaba hasta años que el server rechaza. */
+    @Test
+    fun `el calendario no deja retroceder mas alla del ano 2000`() {
+        assertTrue(puedeRetrocederMes(LocalDate(2000, 2, 1)))
+        assertFalse(puedeRetrocederMes(LocalDate(2000, 1, 1)))
+        assertFalse(puedeRetrocederMes(LocalDate(1999, 12, 1)))
+    }
+
+    // ── el aviso del cambio de mes ───────────────────────────────────────────
 
     /** Dentro del mismo mes no hay nada que avisar: no se mueve plata de un mes a otro. */
     @Test
     fun `mover un dia dentro del mismo mes no avisa nada`() {
-        assertNull(avisoDeCambioDeMes(LocalDate(2026, 8, 23), LocalDate(2026, 8, 27)))
-        assertNull(avisoDeCambioDeMes(LocalDate(2026, 8, 1), LocalDate(2026, 8, 31)))
+        assertNull(avisoDeCambioDeMes(LocalDate(2026, 8, 23), LocalDate(2026, 8, 27), hoy))
+        assertNull(avisoDeCambioDeMes(LocalDate(2026, 8, 1), LocalDate(2026, 8, 31), hoy))
     }
 
     /**
-     * Cruzar el borde del mes SÍ avisa, y nombra los dos meses: es lo único que el dueño no puede
-     * ver desde la pantalla donde lo hace — puede estar sacando plata de un mes ya cerrado.
+     * Salir del mes en curso: la plata desaparece de todo lo que el dueño puede mirar. El aviso
+     * **no** promete que vaya a poder verla sumada en julio — Movi no tiene pantalla de un mes
+     * pasado, así que esa promesa sería cierta en la base e invisible en el producto.
      */
     @Test
-    fun `cruzar el mes avisa y nombra los dos meses`() {
-        val aviso = assertNotNull(avisoDeCambioDeMes(LocalDate(2026, 8, 2), LocalDate(2026, 7, 31)))
+    fun `salir del mes en curso avisa que deja de contar en lo que se ve`() {
+        val aviso = assertNotNull(avisoDeCambioDeMes(LocalDate(2026, 8, 2), LocalDate(2026, 7, 31), hoy))
         assertTrue(aviso.contains("de agosto a julio"), aviso)
         assertTrue(aviso.contains("presupuesto"), aviso)
-        // No se promete lo que no es: esto SÍ se puede deshacer volviendo a editar la fecha.
+        assertTrue(aviso.contains("el mes que ves en la app"), aviso)
+        // Lo que NO puede decir: que empiece a contar en algún lado observable.
+        assertFalse(aviso.contains("empieza a contar"), aviso)
+        // Y tampoco puede prometer irreversibilidad: esto se deshace volviendo a editar la fecha.
         assertFalse(aviso.contains("deshacer"), aviso)
+    }
+
+    /** Traer algo hacia el mes en curso SÍ es observable, y ahí el aviso lo dice literalmente. */
+    @Test
+    fun `entrar al mes en curso avisa que empieza a contar`() {
+        val aviso = assertNotNull(avisoDeCambioDeMes(LocalDate(2026, 7, 20), LocalDate(2026, 8, 3), hoy))
+        assertTrue(aviso.contains("de julio a agosto"), aviso)
+        assertTrue(aviso.contains("empieza a contar"), aviso)
+    }
+
+    /** Entre dos meses pasados no cambia nada de lo que el dueño ve, y el aviso lo dice. */
+    @Test
+    fun `entre dos meses pasados avisa que las cifras de la pantalla no cambian`() {
+        val aviso = assertNotNull(avisoDeCambioDeMes(LocalDate(2026, 6, 10), LocalDate(2026, 5, 3), hoy))
+        assertTrue(aviso.contains("de junio a mayo"), aviso)
+        assertTrue(aviso.contains("no cambian"), aviso)
     }
 
     /** Con años distintos el aviso dice el año, o «de diciembre a enero» no diría cuál. */
     @Test
-    fun `cruzar el año pone el año en el aviso`() {
-        val aviso = assertNotNull(avisoDeCambioDeMes(LocalDate(2026, 1, 3), LocalDate(2025, 12, 30)))
+    fun `cruzar el ano pone el ano en el aviso`() {
+        val aviso = assertNotNull(
+            avisoDeCambioDeMes(LocalDate(2026, 1, 3), LocalDate(2025, 12, 30), LocalDate(2026, 1, 15)),
+        )
         assertTrue(aviso.contains("de enero de 2026 a diciembre de 2025"), aviso)
+    }
+
+    // ── el aviso del sello de recurrente ─────────────────────────────────────
+
+    private fun marca(desde: String, hasta: String) = EventOccurrenceMark(
+        ruleId = "rule-arriendo",
+        ruleName = "Arriendo",
+        period = "2026-08",
+        validFrom = desde,
+        validTo = hasta,
+    )
+
+    @Test
+    fun `sin sello no hay aviso`() {
+        assertNull(avisoDeSelloSuelto(null, LocalDate(2026, 3, 1)))
+    }
+
+    /**
+     * Adentro de la ventana no hay nada que avisar, **bordes incluidos**. La ventana la calcula el
+     * server (vencimiento el 5 de agosto → `[1 de agosto .. 15 de agosto]`, con el piso en el
+     * primer día del mes); acá solo se verifica que la comparación sea inclusiva en los dos
+     * extremos, que es donde un `<` en vez de un `<=` avisaría de más.
+     */
+    @Test
+    fun `una fecha adentro de la ventana no avisa nada, bordes incluidos`() {
+        val m = marca("2026-08-01", "2026-08-15")
+        assertNull(avisoDeSelloSuelto(m, LocalDate(2026, 8, 5)))
+        assertNull(avisoDeSelloSuelto(m, LocalDate(2026, 8, 1)))
+        assertNull(avisoDeSelloSuelto(m, LocalDate(2026, 8, 15)))
+    }
+
+    /**
+     * Y una ventana que cruza al mes siguiente —el arriendo del 31, que se puede pagar tarde—
+     * tampoco avisa por el solo hecho de cambiar de mes: **la regla es la ventana, no el mes**.
+     */
+    @Test
+    fun `una ventana que cruza de mes no avisa por cambiar de mes`() {
+        val m = marca("2026-08-01", "2026-09-10")
+        assertNull(avisoDeSelloSuelto(m, LocalDate(2026, 9, 3)))
+    }
+
+    /**
+     * El caso que cuesta plata: el movimiento era de julio 15, se corrige la fecha, y agosto
+     * quedaría sellado con una evidencia que el emparejador nunca habría propuesto. El aviso lo
+     * dice antes, con el nombre del recurrente y el mes.
+     */
+    @Test
+    fun `una fecha fuera de la ventana avisa que la marca se suelta`() {
+        val aviso = assertNotNull(
+            avisoDeSelloSuelto(marca("2026-08-01", "2026-08-15"), LocalDate(2026, 7, 15)),
+        )
+        assertTrue(aviso.contains("Arriendo"), aviso)
+        assertTrue(aviso.contains("agosto de 2026"), aviso)
+        assertTrue(aviso.contains("vuelve a recordar"), aviso)
+    }
+
+    @Test
+    fun `un periodo ilegible no inventa un aviso`() {
+        val m = EventOccurrenceMark("r", "Arriendo", "no-es-un-mes", "2026-08-01", "2026-08-15")
+        assertNull(avisoDeSelloSuelto(m, LocalDate(2026, 7, 15)))
+        val fechas = EventOccurrenceMark("r", "Arriendo", "2026-08", "ayer", "2026-08-15")
+        assertNull(avisoDeSelloSuelto(fechas, LocalDate(2026, 7, 15)))
+    }
+
+    @Test
+    fun `el periodo se lee como mes y ano`() {
+        assertEquals("agosto de 2026", etiquetaDePeriodo("2026-08"))
+        assertEquals("enero de 2025", etiquetaDePeriodo("2025-01"))
+        assertNull(etiquetaDePeriodo("2026-13"))
+        assertNull(etiquetaDePeriodo("2026"))
     }
 }

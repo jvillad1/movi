@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.CreateTransferRequest
@@ -208,6 +209,17 @@ interface WalletRepository {
      * server mueve **las dos**: la fecha de un traspaso es un solo hecho.
      */
     suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent
+
+    /**
+     * La marca de «esto ya ocurrió» que algún recurrente puso sobre este movimiento, o `null` si
+     * no hay ninguna (`GET /api/events/{id}/occurrence`, que responde 204 en ese caso).
+     *
+     * Lo usa la hoja que corrige la fecha para **avisar antes**: si la fecha nueva se sale de la
+     * ventana que sostiene el sello, ese periodo vuelve a quedar pendiente, y eso hay que decirlo
+     * antes y no después. No lanza por falta de red — un aviso que no se pudo cargar no puede
+     * impedir corregir una fecha —, devuelve `null`.
+     */
+    suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark?
 
     /**
      * Movimientos que **parecen** el pago del extracto de una tarjeta pero todavía no están

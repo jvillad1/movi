@@ -30,7 +30,9 @@ import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.ui.fecha.avisoDeCambioDeMes
+import com.jvillada.movi.ui.fecha.avisoDeSelloSuelto
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -458,6 +460,21 @@ private fun SeccionDeFecha(
     var elegida by remember(event.timestamp) { mutableStateOf(actual) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    /**
+     * El sello de «esto ya ocurrió» que algún recurrente puso sobre este movimiento, si lo hay.
+     *
+     * Se pide **al abrir el selector** y no al componer la hoja: la enorme mayoría de las veces
+     * el dueño abre esta hoja para cambiar una categoría y nunca toca la fecha, y no hay por qué
+     * gastarle un viaje de red en eso. Si la llamada falla queda en `null` y el aviso extra
+     * simplemente no aparece — un aviso que no se pudo cargar no puede impedir corregir una fecha
+     * (ver el KDoc de `getEventOccurrenceMark`).
+     */
+    var sello by remember(event.id) { mutableStateOf<EventOccurrenceMark?>(null) }
+    LaunchedEffect(event.id, abierto) {
+        if (abierto && sello == null) {
+            sello = runCatching { Repositories.wallets.getEventOccurrenceMark(event.id) }.getOrNull()
+        }
+    }
 
     fun guardar() {
         if (guardando || elegida == actual) return
@@ -508,8 +525,13 @@ private fun SeccionDeFecha(
             onPick = { elegida = it },
             enabled = !guardando,
         )
-        val aviso = avisoDeCambioDeMes(actual, elegida)
-        if (aviso != null) {
+        // Los dos avisos, y en este orden: el del sello va PRIMERO porque es el único cuyo
+        // costo es plata (un pago que deja de recordarse), y el del mes lo acompaña.
+        val avisos = listOfNotNull(
+            avisoDeSelloSuelto(sello, elegida),
+            avisoDeCambioDeMes(actual, elegida, hoy),
+        )
+        avisos.forEach { aviso ->
             Spacer(Modifier.height(12.dp))
             Text(aviso, fontSize = 12.5.sp, color = MinWarn, lineHeight = 17.sp)
         }

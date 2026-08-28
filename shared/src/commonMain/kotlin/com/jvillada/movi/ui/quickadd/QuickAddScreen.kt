@@ -601,20 +601,25 @@ private fun EditorBody(
 ) {
     // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
     //
-    // Es el presupuesto de alto de la pastilla de fecha de acá abajo, y está medido, no estimado.
-    // Esta hoja está anclada abajo y **su alto ya no le sobra a un teléfono**: a 812 dp de alto
-    // con la barra inferior, el hueco de contenido son ~736 dp y el cuerpo de «Gasto» ya mide
-    // ~764 en master. Verificado a ojo en la web local: con la fecha puesta como una CUARTA fila
-    // de la tarjeta (56 dp más), «Guardar movimiento» quedaba **debajo del recorte** y había que
-    // desplazar la hoja para verlo. Se llegaba —el `verticalScroll` de la Ola 12 hace su trabajo—
-    // pero el botón de guardar de la pantalla donde se anota la plata no puede pedir un gesto
-    // previo para aparecer.
+    // Son el presupuesto de alto de la pastilla de fecha de acá abajo.
     //
-    // Así que la fecha NO cuesta una fila: viaja en el renglón que ya existía debajo del monto,
-    // el de «COP», que estaba ocupado por una sola palabra. La cuenta cierra: el bloque del monto
-    // pasa de 22+56+8+16+18 = 120 dp a 16+56+2+26+18 = 118, o sea **dos dp MENOS que master**.
-    // Ninguna otra medida de esta hoja se toca — ni el alto de las teclas, ni los renglones de
-    // alto reservado que mantienen el teclado quieto.
+    // **Lo que se vio, a ojo, en la web local a 812 dp de alto con la barra inferior puesta:**
+    // con la fecha agregada como una CUARTA fila de la tarjeta, «Guardar movimiento» quedaba
+    // debajo del recorte y había que desplazar la hoja para verlo. Se llegaba —el
+    // `verticalScroll` de la Ola 12 hace su trabajo— pero el botón de guardar de la pantalla
+    // donde se anota la plata no puede pedir un gesto previo para aparecer. Después del cambio de
+    // acá, y en la misma pantalla, el botón se ve entero sin tocar nada.
+    //
+    // **Lo que se puede contar, y por eso se cuenta en vez de estimarse.** Llamando H al alto de
+    // un renglón de 12 sp (el mismo en los dos lados), el bloque del monto pasa de
+    // `22 + 56 + 8 + H` a `16 + 56 + 2 + (H + 10)` — la pastilla es ese mismo renglón con 5 dp de
+    // padding arriba y abajo. O sea **exactamente 2 dp menos que master**, sin depender de cuánto
+    // mida H ni de la métrica de fuente de cada plataforma. Lo que sigue igual: el `Spacer(18)`
+    // de abajo, el alto de las teclas, y los dos renglones de alto reservado que mantienen el
+    // teclado quieto.
+    //
+    // No hay ningún número «medido» acá: los altos absolutos de la hoja y del hueco de contenido
+    // no se midieron, se vieron. Lo medido es la comparación, y es la que decide.
     Spacer(Modifier.height(16.dp))
 
     Column(

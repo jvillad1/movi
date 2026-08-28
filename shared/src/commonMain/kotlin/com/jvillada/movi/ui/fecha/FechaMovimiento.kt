@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.fecha
 
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -121,21 +122,83 @@ fun esFutura(fecha: LocalDate, hoy: LocalDate): Boolean = fecha > hoy
  *
  * Lo único que hace falta avisar es el **cambio de mes**, porque es lo único que no se ve en la
  * pantalla donde se hace: dentro del mismo mes, mover un gasto del 23 al 22 cambia dos
- * encabezados de Movimientos y nada más. Cruzar el borde del mes, en cambio, **mueve plata entre
- * meses**: sale de las cifras de un mes (Inicio, Análisis) y del presupuesto de su categoría, y
- * entra en las del otro — que puede ser un mes que el dueño ya dio por cerrado y no va a volver
- * a mirar.
+ * encabezados de Movimientos y nada más.
+ *
+ * ## Por qué el aviso solo habla del mes que el dueño PUEDE mirar
+ *
+ * Movi no tiene pantalla de un mes pasado: Inicio, Presupuestos y Categorías son siempre el mes
+ * en curso, y no hay selector de mes en ninguna parte. Así que prometer «y empieza a contar en
+ * las cifras de julio» sería cierto en la base y **invisible en la app**: lo que el dueño va a
+ * observar es que la plata se fue de todos los números que tiene a la vista.
+ *
+ * Por eso el aviso dice lo que se ve, y dice adónde va la plata sin prometer que se pueda mirar
+ * ahí. Cuando el movimiento viene **hacia** el mes en curso, en cambio, la llegada sí es
+ * observable y se dice con todas las letras — por eso [enCurso] entra como parámetro y no se
+ * asume.
  *
  * A diferencia de la unificación de categorías, esto **sí se puede deshacer**: se vuelve a editar
  * la fecha y todo vuelve a donde estaba. Por eso el aviso no dice «no se puede deshacer» —decirlo
  * sería mentir— y por eso alcanza con un renglón y no hace falta una confirmación aparte.
+ *
+ * @param enCurso el mes que la app muestra hoy (cualquier día de ese mes). Se recibe y no se lee
+ *   acá para poder fijarlo por test.
  */
-fun avisoDeCambioDeMes(anterior: LocalDate, nueva: LocalDate): String? {
-    if (anterior.year == nueva.year && anterior.monthNumber == nueva.monthNumber) return null
+fun avisoDeCambioDeMes(anterior: LocalDate, nueva: LocalDate, enCurso: LocalDate): String? {
+    if (mismoMes(anterior, nueva)) return null
     val desde = etiquetaDeMesEnAviso(anterior, nueva)
     val hasta = etiquetaDeMesEnAviso(nueva, anterior)
-    return "Ojo: este movimiento pasa de $desde a $hasta. Deja de contar en las cifras y el " +
-        "presupuesto de $desde, y empieza a contar en las de $hasta."
+    val salia = mismoMes(anterior, enCurso)
+    val llega = mismoMes(nueva, enCurso)
+    return when {
+        // Se va del mes que la app muestra: la plata desaparece de Inicio, Análisis y del
+        // presupuesto de su categoría, y no hay ninguna pantalla donde volver a verla sumada.
+        salia -> "Ojo: este movimiento pasa de $desde a $hasta. Deja de contar en las cifras y " +
+            "el presupuesto de $desde, que es el mes que ves en la app."
+        // Llega al mes en curso: acá sí se puede observar el efecto.
+        llega -> "Ojo: este movimiento pasa de $desde a $hasta, así que empieza a contar en las " +
+            "cifras y el presupuesto de $hasta, el mes que ves en la app."
+        // Entre dos meses pasados: nada de lo que el dueño ve cambia, pero el movimiento se muda.
+        else -> "Ojo: este movimiento pasa de $desde a $hasta. Ninguno de los dos es el mes que " +
+            "ves en la app, así que las cifras de la pantalla no cambian."
+    }
+}
+
+/**
+ * Lo que hay que decirle **además** cuando la fecha nueva le suelta el sello de «esto ya ocurrió»
+ * a un recurrente, o `null` si no lo suelta (o si no hay sello).
+ *
+ * El sello vive del lado del server y la ventana que lo sostiene también ([EventOccurrenceMark]):
+ * acá solo se compara la fecha elegida contra los dos días que el server mandó. Eso es a
+ * propósito — la regla de qué movimiento puede ser la ocurrencia de qué periodo es del
+ * emparejador y no puede tener una segunda versión en el cliente.
+ *
+ * Es el aviso que más importa de los dos, porque es el único cuyo costo es **plata**: un periodo
+ * que se queda sellado con un movimiento que no le corresponde deja de recordarse. Se suelta a
+ * propósito (ver `PUT /api/events/{id}/timestamp`), y esto es lo que lo anuncia antes.
+ */
+fun avisoDeSelloSuelto(mark: EventOccurrenceMark?, nueva: LocalDate): String? {
+    if (mark == null) return null
+    val desde = runCatching { LocalDate.parse(mark.validFrom) }.getOrNull() ?: return null
+    val hasta = runCatching { LocalDate.parse(mark.validTo) }.getOrNull() ?: return null
+    if (nueva in desde..hasta) return null
+    val mes = etiquetaDePeriodo(mark.period) ?: return null
+    return "Este movimiento es el que marcaste como «ya ocurrió» de «${mark.ruleName}» en $mes. " +
+        "Con esta fecha deja de servir para ese mes: la marca se suelta y Movi te lo vuelve a " +
+        "recordar hasta que lo marques otra vez."
+}
+
+/** ¿Las dos fechas caen en el mismo mes civil? */
+private fun mismoMes(a: LocalDate, b: LocalDate): Boolean =
+    a.year == b.year && a.monthNumber == b.monthNumber
+
+/** «2026-08» → «agosto de 2026», o `null` si el periodo no se puede leer. */
+fun etiquetaDePeriodo(period: String): String? {
+    val partes = period.split("-")
+    if (partes.size != 2) return null
+    val anio = partes[0].toIntOrNull() ?: return null
+    val mes = partes[1].toIntOrNull() ?: return null
+    if (mes !in 1..12) return null
+    return "${MESES_DEL_ANIO[mes - 1]} de $anio"
 }
 
 /**
@@ -175,6 +238,19 @@ fun mesAnterior(mes: LocalDate): LocalDate =
 /** El mes siguiente, para la flecha derecha del calendario. Siempre día 1. */
 fun mesSiguiente(mes: LocalDate): LocalDate =
     LocalDate(mes.year, mes.monthNumber, 1).plus(DatePeriod(months = 1))
+
+/**
+ * El año más viejo que el calendario deja alcanzar.
+ *
+ * Sin piso, la flecha de «mes anterior» navega para siempre: con suficientes toques se llega a
+ * 1999, y ahí el server rechaza la fecha por su guarda de cordura de año. Un control que te deja
+ * llegar a un lugar donde nada funciona es un bug aunque nadie llegue nunca. El piso es el mismo
+ * 2000 que rechaza el server, así que **la UI no puede producir una fecha que el server rechace**.
+ */
+private const val ANIO_MINIMO = 2000
+
+/** ¿Tiene sentido ofrecer la flecha «mes anterior» estando en [mes]? Ver [ANIO_MINIMO]. */
+fun puedeRetrocederMes(mes: LocalDate): Boolean = mesAnterior(mes).year >= ANIO_MINIMO
 
 /**
  * ¿Tiene sentido ofrecer la flecha «mes siguiente» estando en [mes]?

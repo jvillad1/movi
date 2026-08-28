@@ -192,6 +192,9 @@ open class NoOpRepository(
         )
     }
 
+    /** Sin sello: el stub no modela recurrentes, y el aviso opcional simplemente no aparece. */
+    override suspend fun getEventOccurrenceMark(id: String): com.jvillada.movi.shared.model.EventOccurrenceMark? = null
+
     override suspend fun getCardPaymentCandidates() = emptyList<FinancialEvent>()
     override suspend fun dismissCardPaymentCandidate(id: String) {
         dismissedCandidateIds += id

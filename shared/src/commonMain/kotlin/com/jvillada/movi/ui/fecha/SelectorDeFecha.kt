@@ -110,7 +110,10 @@ fun SelectorDeFecha(
         ) {
             FlechaDeMes(
                 izquierda = true,
-                enabled = enabled,
+                // Con piso: ver [puedeRetrocederMes]. Sin él la flecha navegaba sin límite hasta
+                // años que el server rechaza, o sea a un lugar donde nada de lo que tocaras iba
+                // a poder guardarse.
+                enabled = enabled && puedeRetrocederMes(mesVisible),
                 onClick = { mesVisible = mesAnterior(mesVisible) },
             )
             Text(

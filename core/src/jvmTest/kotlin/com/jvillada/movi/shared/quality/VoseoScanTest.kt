@@ -20,8 +20,10 @@ import kotlin.test.fail
  * - `androidApp/src/main/kotlin` (receivers/workers de la captura de SMS).
  * - `shared/src/androidMain/kotlin` (la sección «Captura de SMS» y los textos del backfill,
  *   que se mudaron ahí desde androidApp cuando la app completa pasó a correr en el teléfono).
- * - `core/.../PasswordPolicy.kt` (el único mensaje de política de contraseña, compartido por
- *   servidor y clientes).
+ * - `core/.../shared/model` (Ola 13: el árbol entero. Muchas constantes de ese paquete son
+ *   texto de usuario compartido entre el server y la app — el rechazo de recategorizar un
+ *   traspaso, el de la categoría reservada, el de la fecha futura. Antes se escaneaba un solo
+ *   archivo y el resto del paquete era un punto ciego).
  *
  * **Por qué es un test JVM en `:core` y no un `commonTest` en `:shared`.** `java.io.File` no
  * existe en `commonMain`/`commonTest` — es JVM-only, y `:shared` compila a wasmJs/iOS además
@@ -145,8 +147,16 @@ class VoseoScanTest {
         scanKotlinTree(File(root, "server/src/main/kotlin"), root, violations)
         scanKotlinTree(File(root, "androidApp/src/main/kotlin"), root, violations)
         scanKotlinTree(File(root, "shared/src/androidMain/kotlin"), root, violations)
-        scanKotlinFile(
-            File(root, "core/src/commonMain/kotlin/com/jvillada/movi/shared/model/PasswordPolicy.kt"),
+        // Ola 13: el árbol ENTERO de modelos de :core, no un archivo suelto.
+        //
+        // Antes acá había una sola línea apuntando a PasswordPolicy.kt, y eso convertía a
+        //  en un punto ciego: media docena de constantes de ese paquete son texto que el
+        // usuario lee tal cual —TRANSFER_RECATEGORIZE_BLOCKED, CATEGORY_RESERVED_NOT_MANUAL,
+        // EVENT_DATE_IN_FUTURE…—, viven en :core justamente para que el server y la app digan lo
+        // mismo, y ninguna estaba cubierta. Escanear el árbol cierra el hueco de una vez en vez
+        // de agregarle un inquilino más a la lista cada vez que nace una constante.
+        scanKotlinTree(
+            File(root, "core/src/commonMain/kotlin/com/jvillada/movi/shared/model"),
             root,
             violations,
         )
