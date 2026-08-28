@@ -61,8 +61,9 @@ private val TYPE_OPTIONS = listOf(
  * O sea que **en un teléfono como el AVD se cortan unos 28 dp**: el renglón
  * «Falta el nombre» y el borde de abajo de «Crear cuenta», que queda pegado contra la barra
  * inferior. En una ventana de 800×620 hay 556 dp de sitio (medido: es a lo que la hoja queda
- * recortada) y se cortan 67: la mitad del botón, visto. En un iPhone SE hay menos sitio todavía. El botón se sigue pudiendo tocar por poco, así que esto es margen cero,
- * no bloqueo: por eso queda ESCRITO y no arreglado en la misma tanda que la otra hoja.
+ * recortada) y se cortan 67: la mitad del botón, visto. En un iPhone SE hay menos sitio todavía.
+ * El botón se sigue pudiendo tocar por poco, así que esto es margen cero, no bloqueo: por eso
+ * queda ESCRITO y no arreglado en la misma tanda que la otra hoja.
  *
  * **Las otras hojas ancladas abajo y sin `verticalScroll`**, contadas con grep sobre los 16
  * sitios que llaman a `SheetHandleWithClose` (2026-08-27) y confirmadas una por una:
