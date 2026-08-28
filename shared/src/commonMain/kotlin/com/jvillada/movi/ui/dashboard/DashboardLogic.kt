@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.shared.time.currentMonthPrefix
 
@@ -117,11 +118,65 @@ data class HeroBalance(
     /** [tuPlata] − [deudas]. Puede ser negativo, y con cinco créditos hipotecarios lo será. */
     val patrimonio: Long,
 ) {
-    /** Sin deudas, patrimonio y «tu plata» son el MISMO número: el hero no repite la cifra. */
-    val hasDebt: Boolean get() = deudas > 0L
+    /**
+     * ¿Hay algo que decir sobre el patrimonio? Con el grupo Deuda en cero, [patrimonio] y
+     * [tuPlata] son el MISMO número y el hero no repite la cifra.
+     *
+     * Es `!= 0`, no `> 0`: una tarjeta **sobrepagada** deja [deudas] en negativo, y ahí el
+     * patrimonio es MAYOR que «tu plata» — un dato que vale la pena mostrar y que un `> 0`
+     * escondía justo cuando la línea dejaba de ser redundante. (Ver [patrimonioExplicacion],
+     * que cambia «menos … en deudas» por «más … a favor en créditos» en ese caso.)
+     */
+    val hasDebt: Boolean get() = deudas != 0L
     /** Sin nada invertido no hay nada que desglosar: el hero no pinta la línea del desglose. */
     val hasInvestments: Boolean get() = invertido != 0L
 }
+
+/**
+ * El rótulo de la cifra grande del Inicio, **fijo en el binario y no leído de la definición SDUI**.
+ *
+ * Es lo único de la tarjeta que no se puede editar desde el Editor de pantallas, y la razón es
+ * la asimetría del despliegue: la fila de `screen_definitions` llega a TODOS los clientes en el
+ * instante del deploy, pero el renderer viaja en el binario. La PWA está a salvo (el mismo
+ * deploy sirve el wasm y la fila); un APK ya instalado no.
+ *
+ * Si el rótulo viajara en el schema, cambiar la semilla a «Tu plata» habría hecho que el APK 1.7
+ * —que sigue pintando el patrimonio— titulara **«Tu plata −$1.492.710.542»**: exactamente la
+ * lectura que esta rama existe para evitar, ahora afirmada por el rótulo. Con el rótulo en el
+ * binario no hay ventana en ninguna de las dos direcciones: el cliente viejo dice «Balance neto»
+ * sobre el patrimonio y el nuevo dice «Tu plata» sobre los activos, y **cada binario rotula lo
+ * que él mismo calcula**.
+ *
+ * Es el mismo trato que ya tenían los tres sub-rótulos de abajo («Ingresos», «Gastos», «Flujo
+ * del mes»): están cableados en el renderer, y por eso cambiar «Egresos» por «Gastos» en la Ola
+ * 8 no necesitó subir la generación del seed.
+ *
+ * El costo asumido: el hero no se puede renombrar desde el Editor. Se verificó contra producción
+ * (2026-08-28) que el dueño nunca editó el Inicio, y el resto de la definición —orden de
+ * secciones, accesos, títulos de las demás— sigue siendo editable como antes.
+ */
+const val HERO_BALANCE_TITLE = "Tu plata"
+
+/**
+ * [HERO_BALANCE_TITLE], ignorando a propósito `section.title`.
+ *
+ * Existe como función —en vez de usar la constante directo en el renderer— para que el test
+ * pueda fijar la decisión: alguien que "arregle" esto de vuelta a `section.title ?: …` reabre
+ * la ventana de desalineación descrita arriba, y eso tiene que romper una prueba, no descubrirse
+ * en el teléfono del dueño.
+ */
+fun heroBalanceTitle(@Suppress("UNUSED_PARAMETER") section: ScreenSection): String = HERO_BALANCE_TITLE
+
+/**
+ * La línea que explica de dónde sale el patrimonio — la resta escrita, que es lo que faltaba el
+ * día del reporte del dueño.
+ *
+ * Dos redacciones porque [HeroBalance.deudas] puede ser negativo (una tarjeta sobrepagada):
+ * «menos … en deudas» mentiría con un signo menos delante del monto.
+ */
+fun patrimonioExplicacion(balance: HeroBalance): String =
+    if (balance.deudas >= 0L) "Tu plata menos ${formatMoneyCompact(balance.deudas)} en deudas"
+    else "Tu plata más ${formatMoneyCompact(-balance.deudas)} a favor en créditos"
 
 /**
  * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no

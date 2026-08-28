@@ -210,6 +210,45 @@ class DashboardLogicTest {
         assertEquals(-2_000_000L, b.patrimonio)
     }
 
+    /**
+     * El rótulo del hero NO sale de la definición SDUI. Si volviera a `section.title ?: …`, un
+     * deploy que cambiara la fila titularía «Tu plata» el patrimonio en cualquier APK ya
+     * instalado — la lectura exacta que esta rama vino a evitar, afirmada por el rótulo.
+     */
+    @Test
+    fun `el rotulo del hero vive en el binario y no en la definicion guardada`() {
+        assertEquals("Tu plata", HERO_BALANCE_TITLE)
+        assertEquals("Tu plata", heroBalanceTitle(ScreenSection(type = "HERO_BALANCE", title = "Balance neto")))
+        assertEquals("Tu plata", heroBalanceTitle(ScreenSection(type = "HERO_BALANCE", title = null)))
+        assertEquals("Tu plata", heroBalanceTitle(ScreenSection(type = "HERO_BALANCE", title = "Lo que sea")))
+    }
+
+    @Test
+    fun `la explicacion del patrimonio escribe la resta del dueño`() {
+        assertEquals(
+            "Tu plata menos $1.505,1M en deudas",
+            patrimonioExplicacion(heroBalance(cuentasDelDueño)),
+        )
+    }
+
+    @Test
+    fun `una tarjeta sobrepagada no esconde el patrimonio ni le pone un menos delante`() {
+        // Deuda NEGATIVA: pagaste de más y la tarjeta te debe a vos. El patrimonio queda por
+        // ENCIMA de «tu plata», así que la línea tiene algo que decir (con `deudas > 0` se
+        // escondía justo cuando dejaba de ser redundante) y la redacción cambia de signo —
+        // «menos −$500.000 en deudas» sería una resta escrita al revés.
+        val b = heroBalance(
+            listOf(
+                Account("a1", "Ahorros", AccountType.SAVINGS, 2_000_000),
+                Account("c1", "Visa", AccountType.CREDIT_CARD, -500_000),
+            ),
+        )
+        assertEquals(-500_000L, b.deudas)
+        assertEquals(2_500_000L, b.patrimonio)
+        assertTrue(b.hasDebt, "el patrimonio ya no es el mismo número que «tu plata»: hay que mostrarlo")
+        assertEquals("Tu plata más $500.000 a favor en créditos", patrimonioExplicacion(b))
+    }
+
     @Test
     fun `las dos cifras del hero no pueden desalinearse de la fila Cuentas ni de Cuentas`() {
         // El hero, el acceso «Cuentas» del Inicio y el «Patrimonio neto» de la pantalla de

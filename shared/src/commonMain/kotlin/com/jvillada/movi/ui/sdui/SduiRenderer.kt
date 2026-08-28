@@ -37,6 +37,8 @@ import com.jvillada.movi.ui.dashboard.LinkFigure
 import com.jvillada.movi.ui.dashboard.dashboardAlerts
 import com.jvillada.movi.ui.dashboard.dueLabel
 import com.jvillada.movi.ui.dashboard.heroBalance
+import com.jvillada.movi.ui.dashboard.heroBalanceTitle
+import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
 import com.jvillada.movi.ui.dashboard.overBudgetCategories
 import com.jvillada.movi.ui.dashboard.quickLinkFigure
 import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
@@ -160,12 +162,14 @@ private fun clickHandler(
  *
  * El patrimonio **no se esconde**: con los cinco créditos del dueño (~$1.505M) es la foto
  * honesta de su situación. Se muestra con tres cuidados para que se entienda en vez de asustar:
- * - solo cuando hay deudas (sin deudas repetiría el número de arriba, y esta tarjeta ya compite
- *   con las filas «Cuentas» y «Créditos» de EXPLORA);
+ * - solo cuando el grupo Deuda no está en cero (en cero repetiría el número de arriba, y esta
+ *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA);
  * - **en gris, no en rojo** — el rojo de esta tarjeta está reservado al «Flujo del mes», que es
  *   el resultado del mes y algo sobre lo que se puede actuar hoy; un patrimonio negativo por
- *   hipotecas es una estructura de largo plazo, no una pérdida de este mes;
- * - con la resta escrita al lado («Tu plata menos $1.505,4M en deudas»), que es justamente lo
+ *   hipotecas es una estructura de largo plazo, no una pérdida de este mes. La pantalla de
+ *   Cuentas pinta ESTE MISMO número y sigue la misma regla, porque tocar la línea lleva ahí:
+ *   ver gris acá y rojo a 28 sp un toque después se leería como que algo empeoró en el camino;
+ * - con la resta escrita debajo («Tu plata menos $1.505,1M en deudas»), que es justamente lo
  *   que faltaba el día del reporte.
  *
  * Tocar esa línea abre Cuentas, cuyo hero es el mismo «PATRIMONIO NETO» desglosado en Activos
@@ -183,7 +187,10 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(22.dp),
     ) {
-        Text(text = section.title ?: "Tu plata", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
+        // `section.title` NO se lee acá: el rótulo del hero es [HERO_BALANCE_TITLE], que viaja
+        // en el binario. Ver su KDoc — es la única forma de que cada cliente rotule lo que él
+        // mismo calcula, sin ventana de desalineación con la fila del server.
+        Text(text = heroBalanceTitle(section), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
         Spacer(Modifier.height(10.dp))
         Text(
             text = formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
@@ -235,7 +242,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Tu plata menos ${formatMoneyCompact(balance.deudas)} en deudas",
+                    text = patrimonioExplicacion(balance),
                     fontSize = 11.sp,
                     color = MinTextMute,
                 )
