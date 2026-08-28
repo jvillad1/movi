@@ -55,8 +55,15 @@ import kotlinx.coroutines.delay
  *
  * Coincide por "contiene", sin tildes ni mayúsculas ("compu" encuentra "Computador",
  * "medic" encuentra "Médico"). Devuelve las predefinidas ([PREDEFINED_CATEGORIES] filtradas por
- * [type] si se pasa) junto con las [usedCategories] que no dupliquen a una predefinida
- * (comparación también sin tildes/mayúsculas).
+ * [type] si se pasa) junto con las [usedCategories] que no dupliquen a una predefinida.
+ *
+ * **Esa deduplicación compara ignorando mayúsculas pero NO tildes** (`equals(ignoreCase = true)`),
+ * al revés de lo que decía este KDoc: «Educacion» escrita a mano y «Educación» del catálogo son dos
+ * entradas, no una. Se deja así —cambiarlo haría desaparecer de la lista una categoría en la que el
+ * dueño tiene movimientos, sin decírselo—, y con la lista alfabética única las dos quedan **pegadas**
+ * en vez de en bloques distintos, que es como se ve el duplicado y se puede unificar desde
+ * «Más → Categorías».
+ *
  * Sin recortar por defecto: el que llama decide si hace falta un scroll (ver [CategoryField]).
  *
  * **El orden — «cualquier orden» era el problema.** El dueño pidió orden alfabético, y acá es
@@ -388,12 +395,21 @@ fun nombreCanonicoConocido(
     return prefs.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }
 }
 
-/** Minúsculas y sin tildes/eñe — no hay normalización Unicode común a los 3 targets acá. */
+/**
+ * Minúsculas y sin tildes/diéresis/eñe — no hay normalización Unicode común a los 3 targets acá.
+ *
+ * **Cubre las mismas letras que [categorySortKey], y difiere en una sola cosa a propósito:** acá la
+ * `ñ` se aplasta contra la `n` (buscar «nono» tiene que encontrar «Ñoño»), y allá se manda justo
+ * DESPUÉS de la n, que es donde la pone el alfabeto. Buscar y ordenar no piden lo mismo.
+ *
+ * La `ü` estaba de más acá hasta esta ola: «Pingüinos» ya ordenaba como «pinguinos» pero **no se
+ * encontraba** escribiendo «pinguinos», que es justo como se teclea sin pensarlo.
+ */
 private fun normalizeForMatch(s: String): String = buildString(s.length) {
     for (c in s.lowercase()) {
         append(
             when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ñ' -> 'n'
+                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
                 else -> c
             },
         )

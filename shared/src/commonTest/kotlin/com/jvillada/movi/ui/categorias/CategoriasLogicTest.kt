@@ -153,6 +153,16 @@ class CategoriasLogicTest {
         assertEquals(listOf("Educación"), filtrarCategorias(lista, CategoryFilter.TODAS, "EDUCACION").map { it.name })
     }
 
+    @Test
+    fun `la busqueda tambien ignora la dieresis`() {
+        // Ordenaba como «pinguinos» pero no se encontraba escribiéndolo así.
+        val lista = listOf(cat("Pingüinos"), cat("Comida"))
+        assertEquals(
+            listOf("Pingüinos"),
+            filtrarCategorias(lista, CategoryFilter.TODAS, "pinguinos").map { it.name },
+        )
+    }
+
     // ── Las etiquetas ─────────────────────────────────────────────────────────
 
     @Test

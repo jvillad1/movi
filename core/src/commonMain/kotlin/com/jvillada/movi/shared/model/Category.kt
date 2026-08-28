@@ -23,11 +23,15 @@ data class Category(
  * `filtrarCategorias`), justamente porque este de acá es el orden en que alguien las escribió y
  * el dueño lo leyó como «cualquier orden».
  *
- * Lo único que sigue dependiendo de este orden es **cuál viene prellenada** en «Agregar»: la
- * primera de cada tipo que de verdad se le vaya a ofrecer (ver `categoriaPorDefectoPara`). Por eso
- * «Comida» y «Salario» están primeras en su grupo y por eso esta lista no se ordena alfabéticamente
- * acá: hacerlo cambiaría el valor inicial del campo a «Arriendo recibido» al anotar un ingreso, que
- * es lo contrario de lo que quiere alguien que anota su sueldo.
+ * Lo que sí sigue dependiendo de este orden es **cuál viene prellenada** en «Agregar»: la primera
+ * de cada tipo que de verdad se le vaya a ofrecer (ver `categoriaPorDefectoPara`). Por eso «Comida»
+ * y «Salario» están primeras en su grupo y por eso esta lista no se ordena alfabéticamente acá:
+ * hacerlo cambiaría el valor inicial del campo a «Arriendo recibido» al anotar un ingreso, que es
+ * lo contrario de lo que quiere alguien que anota su sueldo.
+ *
+ * (El otro lugar que la recorre en este orden es `ClaudeStatementParser`, que arma con ella la
+ * lista de categorías que se le manda al modelo al leer un extracto. Ahí el orden no lo ve nadie,
+ * pero es una razón más para no reordenar la constante «porque sí».)
  */
 val PREDEFINED_CATEGORIES: List<Category> = listOf(
     // Expenses
@@ -66,8 +70,10 @@ val PREDEFINED_CATEGORIES: List<Category> = listOf(
  *   pone el alfabeto español: «Nube», «Ñu», «Oso» — y nunca al final de todo.
  *
  * Es una tabla a mano y no una colación Unicode porque no hay una común a los tres targets
- * (Android, iOS, wasm) — el mismo motivo por el que la normalización de búsqueda de `CategoryField`
- * también es a mano. Cubre lo que el español necesita.
+ * (Android, iOS, wasm) — el mismo motivo por el que la normalización de BÚSQUEDA (`normalizeForMatch`
+ * en `CategoryField`, `normalizar` en `CategoriasLogic`) también es a mano. Cubren las mismas letras
+ * y difieren en un solo punto, a propósito: para buscar, la `ñ` se aplasta contra la `n` («nono»
+ * tiene que encontrar «Ñoño»); para ordenar, va después. Cubre lo que el español necesita.
  */
 fun categorySortKey(name: String): String = buildString(name.length + 2) {
     for (c in name.trim().lowercase()) {

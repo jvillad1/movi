@@ -94,6 +94,18 @@ class CategoryFieldTest {
     }
 
     @Test
+    fun `la dieresis se ignora al buscar, igual que al ordenar`() {
+        // «Pingüinos» ordenaba como «pinguinos» pero no se encontraba escribiendo «pinguinos»
+        // —que es como se teclea sin pensarlo—: la clave de orden cubría la ü y la de búsqueda no.
+        val used = mapOf("Pingüinos" to setOf(TransactionType.EXPENSE))
+        assertEquals(listOf("Pingüinos"), suggestCategoryMatches("pinguinos", TransactionType.EXPENSE, used))
+        assertEquals(listOf("Pingüinos"), suggestCategoryMatches("pingüinos", TransactionType.EXPENSE, used))
+        // Y no se ofrece «Crear "pinguinos"» para algo que ya existe.
+        val matches = suggestCategoryMatches("pinguinos", TransactionType.EXPENSE, used)
+        assertFalse(shouldOfferCreateCategory("pinguinos", matches, used.keys))
+    }
+
+    @Test
     fun `el orden ignora tildes y pone la enie despues de la n`() {
         // La lista con la que se verificó de verdad: «Ñoquis» no puede caer después de «Zapatos»,
         // y «Ñandú» ordena entre «Nueces» y «Ñoquis».

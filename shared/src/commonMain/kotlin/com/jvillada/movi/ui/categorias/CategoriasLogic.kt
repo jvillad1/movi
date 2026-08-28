@@ -51,7 +51,7 @@ fun tiposEfectivos(c: CategoryUsage): Set<TransactionType> =
  * sobra se reconoce por contraste con lo que de verdad usa. La razón no se pierde con este cambio:
  * cada renglón sigue diciendo su uso («12 movimientos · $…» o «Sin movimientos»), así que lo que
  * sobra se sigue reconociendo de un vistazo. Lo que sí se ganó es poder **encontrar una categoría
- * por su nombre**, que es lo que el dueño pidió: con 30 categorías, «lo más usado primero» es
+ * por su nombre**: apenas la lista pasa de lo que entra en una pantalla, «lo más usado primero» es
  * indistinguible de «cualquier orden» para quien busca «Ñoquis».
  *
  * Se conservan dos cosas del orden viejo:
@@ -184,12 +184,16 @@ fun etiquetaDeTipoFijado(pinned: String?): String = when (pinned) {
     else -> "Automático"
 }
 
-/** Minúsculas y sin tildes — misma normalización que las sugerencias de categoría. */
+/**
+ * Minúsculas y sin tildes/diéresis — misma normalización que las sugerencias de categoría (ver
+ * `normalizeForMatch`), y **distinta de [CATEGORY_NAME_ORDER] en un solo punto**: para BUSCAR, la
+ * `ñ` se aplasta contra la `n`; para ORDENAR va justo después de la n.
+ */
 private fun normalizar(s: String): String = buildString(s.length) {
     for (c in s.lowercase()) {
         append(
             when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ñ' -> 'n'
+                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
                 else -> c
             },
         )
