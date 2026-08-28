@@ -9,8 +9,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -233,7 +233,10 @@ internal fun AuthField(
                 if (isPassword) {
                     Spacer(Modifier.width(8.dp))
                     Icon(
-                        imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        // `Rounded`, como los otros 61 íconos de la app. Estos dos eran los ÚNICOS `Outlined`
+                        // del repo, y por eso se leían como de otro juego al lado de los checks y las
+                        // equis del resto: `Rounded` tiene extremos redondeados y trazos más suaves.
+                        imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                         contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
                         tint = MinTextMute,
                         modifier = Modifier.size(20.dp)
