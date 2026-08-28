@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -54,7 +55,10 @@ import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.fecha.timestampParaFecha
 
 /**
  * Cuánto de una fila de la hoja puede ocupar el valor de la derecha (ver `rightMaxFraction` en
@@ -207,6 +211,18 @@ fun QuickAddScreen(
             if (sheetScroll.value == objetivo) scrollAntesDelPicker = 0
         }
     }
+    // Ola 13 — LA FECHA DEL MOVIMIENTO, con hoy por defecto.
+    //
+    // Antes esto no existía y el guardado sellaba `Clock.System.now()` a secas, así que TODO caía
+    // bajo «HOY» en Movimientos: el dueño anotaba de una sentada el gimnasio, el mercado, un café,
+    // un almuerzo y el fútbol, y varios no habían sido hoy. El default no cambia —quien anota en
+    // el momento no toca nada— pero ahora se puede corregir antes de guardar.
+    //
+    // `hoy` se calcula UNA vez por apertura de la hoja y se comparte: si el selector, la etiqueta
+    // y el guardado preguntaran cada uno por su cuenta, una hoja abierta a las 23:59:59 podría
+    // decir «Hoy» y guardar la fecha de mañana.
+    val hoy = remember { hoyEnAppZone() }
+    var fecha by remember { mutableStateOf(hoy) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreateSheet by remember { mutableStateOf(false) }
@@ -339,7 +355,10 @@ fun QuickAddScreen(
                 // acaba de escribir con sus propios dedos. Sin esto caía en el default
                 // UNCONFIRMED y desaparecía de "Gastos", que excluye lo pendiente.
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
-                timestamp = Clock.System.now().toEpochMilliseconds(),
+                // Ola 13: la fecha elegida, no «ahora» a secas. Con «Hoy» (el default) sigue
+                // siendo `Clock.System.now()` exactamente como antes — ver [timestampParaFecha],
+                // que explica por qué otro día va al mediodía de Bogotá y hoy no.
+                timestamp = timestampParaFecha(fecha, hoy),
             )
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
@@ -607,6 +626,20 @@ fun QuickAddScreen(
                             },
                             onClose = { pasarA(pickers.cerrar()) },
                         )
+                        // Ola 13: el selector de fecha entra como sub-picker, igual que Categoría,
+                        // Cuenta y Nota — reemplaza el cuerpo adentro del Box de alto fijado, así que
+                        // abrirlo no cambia el alto de la hoja ni corre el teclado. Elegir un día ES
+                        // la acción completa (no hay nada más que decidir), así que cierra al toque,
+                        // como una sugerencia de categoría.
+                        Picker.Date -> Column(modifier = Modifier.fillMaxWidth()) {
+                            PickerHeader("Fecha", onClose = { pasarA(pickers.cerrar()) })
+                            SelectorDeFecha(
+                                seleccionada = fecha,
+                                hoy = hoy,
+                                onPick = { fecha = it; pasarA(pickers.cerrar()) },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
                         Picker.Note -> NoteEditor(
                             initial = note,
                             onSave = { note = it; pasarA(pickers.cerrar()) },
@@ -657,6 +690,8 @@ fun QuickAddScreen(
                                 else avisoDeCuenta(origenCuenta, accounts.size),
                             walletHintReserved = accounts.size > 1,
                             note = note,
+                            dateLabel = etiquetaDeFecha(fecha, hoy),
+                            onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
                             onPickCategory = { pasarA(pickers.abrir(Picker.Category)) },
                             onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
                             onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
@@ -743,6 +778,9 @@ private fun EditorBody(
     /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
     walletHintReserved: Boolean = false,
     note: String,
+    /** «Hoy», «Ayer» o «23 de agosto» — ver `etiquetaDeFecha`. Se muestra debajo del monto. */
+    dateLabel: String,
+    onPickDate: () -> Unit,
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
     onEditNote: () -> Unit,
@@ -755,7 +793,28 @@ private fun EditorBody(
     hasNoAccounts: Boolean = false,
     onCreateAccount: () -> Unit = {},
 ) {
-    Spacer(Modifier.height(22.dp))
+    // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
+    //
+    // Son el presupuesto de alto de la pastilla de fecha de acá abajo.
+    //
+    // **Lo que se vio, a ojo, en la web local a 812 dp de alto con la barra inferior puesta:**
+    // con la fecha agregada como una CUARTA fila de la tarjeta, «Guardar movimiento» quedaba
+    // debajo del recorte y había que desplazar la hoja para verlo. Se llegaba —el
+    // `verticalScroll` de la Ola 12 hace su trabajo— pero el botón de guardar de la pantalla
+    // donde se anota la plata no puede pedir un gesto previo para aparecer. Después del cambio de
+    // acá, y en la misma pantalla, el botón se ve entero sin tocar nada.
+    //
+    // **Lo que se puede contar, y por eso se cuenta en vez de estimarse.** Llamando H al alto de
+    // un renglón de 12 sp (el mismo en los dos lados), el bloque del monto pasa de
+    // `22 + 56 + 8 + H` a `16 + 56 + 2 + (H + 10)` — la pastilla es ese mismo renglón con 5 dp de
+    // padding arriba y abajo. O sea **exactamente 2 dp menos que master**, sin depender de cuánto
+    // mida H ni de la métrica de fuente de cada plataforma. Lo que sigue igual: el `Spacer(18)`
+    // de abajo, el alto de las teclas, y los dos renglones de alto reservado que mantienen el
+    // teclado quieto.
+    //
+    // No hay ningún número «medido» acá: los altos absolutos de la hoja y del hueco de contenido
+    // no se midieron, se vieron. Lo medido es la comparación, y es la que decide.
+    Spacer(Modifier.height(16.dp))
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -772,8 +831,41 @@ private fun EditorBody(
             letterSpacing = (-2.2).sp,
             lineHeight = 56.sp,
         )
-        Spacer(Modifier.height(8.dp))
-        Text("COP", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
+        Spacer(Modifier.height(2.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("COP", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
+            Text("·", fontSize = 12.sp, color = MinTextFaint)
+            // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
+            // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
+            // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
+            // momento no tiene ni que interpretarla.
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MinSurfaceContainerLow)
+                    .clickable(onClick = onPickDate)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = dateLabel,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    maxLines = 1,
+                )
+                Icon(
+                    Icons.Rounded.ChevronRight,
+                    contentDescription = "Cambiar la fecha",
+                    tint = MinTextMute,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        }
     }
 
     Spacer(Modifier.height(18.dp))

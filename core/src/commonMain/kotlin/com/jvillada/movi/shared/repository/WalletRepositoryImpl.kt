@@ -47,6 +47,8 @@ import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpdateEventCategoryRequest
+import com.jvillada.movi.shared.model.EventOccurrenceMark
+import com.jvillada.movi.shared.model.UpdateEventTimestampRequest
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
@@ -436,6 +438,30 @@ class WalletRepositoryImpl(
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
         return response.body()
+    }
+
+    // Mismo idioma que updateEventCategory: el server puede rechazar con 404 (evento
+    // inexistente, de otro usuario o anulado) o 422 (fecha futura) y ese texto es lo único que
+    // le explica al dueño por qué no se guardó — se pierde si se deserializa a ciegas.
+    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/timestamp") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateEventTimestampRequest(timestamp))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // 204 = «no hay marca», que es la respuesta normal y no un error. Cualquier otro fallo
+    // (sin red, 500) también cae en null: este dato solo alimenta un aviso, y un aviso que no
+    // se pudo cargar no puede impedir que el dueño corrija una fecha.
+    override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? {
+        val response = runCatching { client.get("$baseUrl/api/events/$id/occurrence") }.getOrNull()
+            ?: return null
+        if (response.status != HttpStatusCode.OK) return null
+        return runCatching { response.body<EventOccurrenceMark>() }.getOrNull()
     }
 
     override suspend fun getCardPaymentCandidates(): List<FinancialEvent> =

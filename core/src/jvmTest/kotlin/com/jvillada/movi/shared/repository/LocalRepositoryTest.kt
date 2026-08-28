@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.db.createDatabase
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -14,6 +15,7 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.openingEventFor
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -196,6 +198,98 @@ class LocalRepositoryTest {
 
         // Recategorizar no es un movimiento de plata: el saldo de la cuenta no se toca.
         assertEquals(balanceBefore, repoSincronizado.getAccount("acc-sync").balance)
+    }
+
+
+    /**
+     * **La fecha de un movimiento todavía sin sincronizar se corrige SOLO LOCAL.**
+     *
+     * Mismo camino B que [updateEventCategory_evento_pendiente_se_resuelve_local_sin_llamar_al_server]
+     * y por el mismo motivo: `postEvent` escribe solo local y `syncedAt` sigue `null` hasta que el
+     * `SyncEngine` empuje en su ciclo de 30 s. Es exactamente la ventana en la que el dueño
+     * corrige la fecha del gasto que **acaba de anotar**, que es cuando más se corrige. El stub no
+     * conoce `"evt-fecha"`, así que si esto llamara a `remote` tiraría el 404 real y el test
+     * fallaría antes de los asserts.
+     */
+    @Test
+    fun updateEventTimestamp_evento_pendiente_se_resuelve_local_sin_llamar_al_server() = runBlocking {
+        repo.createAccount(Account("acc-fecha", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-fecha", "acc-fecha", TransactionType.EXPENSE, 20_000L))
+        val balanceBefore = repo.getAccount("acc-fecha").balance
+
+        val ayer = 1_756_000_000_000L
+        val result = repo.updateEventTimestamp("evt-fecha", ayer)
+        assertEquals(ayer, result.timestamp)
+        // Si hubiera ido al server, el stub habría devuelto accountId="acc-stub".
+        assertEquals("acc-fecha", result.accountId)
+
+        val mirrored = repo.getEvents("acc-fecha").single { it.id == "evt-fecha" }
+        assertEquals(ayer, mirrored.timestamp)
+        // Cambiar la fecha no mueve plata: el saldo de la cuenta no se toca.
+        assertEquals(balanceBefore, repo.getAccount("acc-fecha").balance)
+    }
+
+    /**
+     * **Las guardas corren también en el camino local.**
+     *
+     * Es el hallazgo de la revisión: el camino «evento todavía sin sincronizar» nunca llama a
+     * `remote`, así que sin estas dos líneas la guarda de futuro del server no corría para el
+     * movimiento recién anotado en el teléfono — y el `SyncEngine` lo subía después por
+     * `POST /api/events`, que no valida fecha a propósito. Hoy la UI no ofrece días futuros, pero
+     * «hoy no se llega» es exactamente lo que dejó de ser cierto todas las veces que esto salió
+     * mal.
+     */
+    @Test
+    fun updateEventTimestamp_rechaza_una_fecha_futura_sin_llamar_al_server() = runBlocking {
+        repo.createAccount(Account("acc-futuro", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-futuro", "acc-futuro", TransactionType.EXPENSE, 20_000L))
+        val original = repo.getEvents("acc-futuro").single { it.id == "evt-futuro" }.timestamp
+
+        val manana = Clock.System.now().toEpochMilliseconds() + 2 * 24 * 60 * 60 * 1000L
+        val fallo = runCatching { repo.updateEventTimestamp("evt-futuro", manana) }.exceptionOrNull()
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(EVENT_DATE_IN_FUTURE, (fallo as ApiException).serverMessage)
+
+        // Y no tocó la fila: un rechazo no puede dejar la fecha a medio cambiar.
+        assertEquals(original, repo.getEvents("acc-futuro").single { it.id == "evt-futuro" }.timestamp)
+    }
+
+    /** El piso de cordura: un epoch cerca de 0 esconde el movimiento en 1970 para siempre. */
+    @Test
+    fun updateEventTimestamp_rechaza_un_epoch_de_1970() = runBlocking {
+        repo.createAccount(Account("acc-1970", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-1970", "acc-1970", TransactionType.EXPENSE, 20_000L))
+
+        val fallo = runCatching { repo.updateEventTimestamp("evt-1970", 1_000L) }.exceptionOrNull()
+        assertTrue(fallo is ApiException && fallo.status == 400, "esperaba 400, fue $fallo")
+    }
+
+    /**
+     * Camino A: el evento ya está en el server, así que la corrección tiene que **pasar por él**
+     * (es quien valida que la fecha no sea futura) y recién después espejarse. Sin este test, un
+     * fix que resolviera todo localmente pasaría igual y dejaría el server con la fecha vieja.
+     */
+    @Test
+    fun updateEventTimestamp_evento_sincronizado_pasa_por_el_server_y_se_espeja() = runBlocking {
+        val repoSincronizado = LocalRepository(
+            db = db,
+            remote = NoOpRepository(knownEventIds = setOf("evt-fecha-sync")),
+            userId = { testUserId },
+        )
+        repoSincronizado.createAccount(Account("acc-fecha-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repoSincronizado.postEvent(event("evt-fecha-sync", "acc-fecha-sync", TransactionType.EXPENSE, 20_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "evt-fecha-sync")
+
+        val ayer = 1_756_000_000_000L
+        val result = repoSincronizado.updateEventTimestamp("evt-fecha-sync", ayer)
+        assertEquals(ayer, result.timestamp)
+        // El stub siempre echoa accountId="acc-stub": la prueba de que sí pasó por remote.
+        assertEquals("acc-stub", result.accountId)
+
+        assertEquals(
+            ayer,
+            repoSincronizado.getEvents("acc-fecha-sync").single { it.id == "evt-fecha-sync" }.timestamp,
+        )
     }
 
     /**

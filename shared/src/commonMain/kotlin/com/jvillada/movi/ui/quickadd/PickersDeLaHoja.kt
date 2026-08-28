@@ -12,6 +12,15 @@ internal sealed class Picker {
     data object Category : Picker()
     data object Wallet : Picker()
     data object Note : Picker()
+
+    /**
+     * Ola 13: el selector de fecha del movimiento. Es un sub-picker **propio de la hoja** —lo
+     * dibuja [QuickAddScreen] con su propio `fecha`, reemplazando el cuerpo del editor—, así que
+     * entra acá y no por [PickersDeLaHoja.conPickerDeTraspaso]. El de la pestaña Traspaso es
+     * otro: vive adentro de [TransferBody] con la fecha del traspaso, y se refleja por
+     * [PickersDeLaHoja.deTraspaso] como el de cuentas.
+     */
+    data object Date : Picker()
 }
 
 /**
@@ -43,8 +52,9 @@ internal sealed class Picker {
  *
  * @param typeIndex la pestaña elegida: 0 Gasto, 1 Ingreso, [TIPO_TRASPASO] Traspaso.
  * @param propio el sub-picker de esta pantalla (Categoría, Cuenta, Nota), o [Picker.None].
- * @param deTraspaso el sub-picker de cuentas de [TransferBody] («Desde»/«Hacia»), que es estado
- *   de allá adentro y acá solo se refleja.
+ * @param deTraspaso el sub-picker que [TransferBody] tenga abierto —el de cuentas
+ *   («Desde»/«Hacia») o, desde la Ola 13, el de su fecha—, que es estado de allá adentro y acá
+ *   solo se refleja.
  */
 internal data class PickersDeLaHoja(
     val typeIndex: Int = 0,

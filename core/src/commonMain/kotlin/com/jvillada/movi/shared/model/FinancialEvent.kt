@@ -63,6 +63,55 @@ data class FinancialEvent(
 @Serializable
 data class UpdateEventCategoryRequest(val category: String)
 
+/**
+ * Body de `PUT /api/events/{id}/timestamp` — **corregir la fecha de un movimiento ya anotado**.
+ *
+ * Es un epoch-ms y no un `"AAAA-MM-DD"` a propósito: el almacenamiento de Movi es epoch-ms y cada
+ * pantalla lo vuelve a fechar en la zona de la app (ver `AppTimeZone`), así que mandar una fecha
+ * civil obligaría al server a elegir una hora del día — y la hora que elija decide en qué día cae
+ * el movimiento visto desde otra zona. El cliente ya sabe hacer esa conversión (al **mediodía** de
+ * Bogotá, ver `epochAlMediodia`), y es el único que la hace, en un solo lugar.
+ *
+ * DTO propio y no [FinancialEvent] entero por el mismo motivo que [UpdateEventCategoryRequest]:
+ * acá el cliente solo tiene voz sobre la fecha.
+ */
+@Serializable
+data class UpdateEventTimestampRequest(val timestamp: Long)
+
+/**
+ * El rechazo de `PUT /api/events/{id}/timestamp` cuando la fecha pedida todavía no llegó.
+ *
+ * Vive en `:core` para que el server y el cliente digan **exactamente lo mismo** — mismo criterio
+ * que [TRANSFER_RECATEGORIZE_BLOCKED]: la hoja corta antes para poder explicarlo, y el server
+ * repite la guarda porque no puede confiar en que el que llama sea esa hoja.
+ */
+const val EVENT_DATE_IN_FUTURE: String =
+    "Esa fecha todavía no llegó: un movimiento se anota cuando la plata ya se movió."
+
+/**
+ * La marca de «esto ya ocurrió» que un recurrente puso sobre un movimiento — respuesta de
+ * `GET /api/events/{id}/occurrence`, `null` cuando no hay ninguna.
+ *
+ * Existe para que la hoja que corrige la fecha pueda **avisar antes** de soltar un sello, en vez
+ * de dejar que el dueño se entere el día que no le llega el recordatorio.
+ *
+ * [validFrom] y [validTo] son la ventana de fechas que sostiene el sello (`occurrenceWindow` en el
+ * server, la misma que usa el emparejador para proponer). Vienen calculadas del server a propósito:
+ * la ventana es lógica del emparejador y no puede vivir en dos lados. El cliente solo compara la
+ * fecha que el dueño acaba de tocar contra estos dos días.
+ */
+@Serializable
+data class EventOccurrenceMark(
+    val ruleId: String,
+    val ruleName: String,
+    /** "YYYY-MM" del vencimiento sellado. */
+    val period: String,
+    /** "YYYY-MM-DD" inclusive. */
+    val validFrom: String,
+    /** "YYYY-MM-DD" inclusive. */
+    val validTo: String,
+)
+
 @Serializable
 data class VoidEvent(
     val id: String,

@@ -30,6 +30,8 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.LoginRequest
@@ -634,6 +636,92 @@ class LocalRepository(
         db.financialEventQueries.updateCategory(updated.category, updated.id, uid)
         return updated
     }
+
+
+    /**
+     * Corrige la fecha de un movimiento. **Mismo esquema de dos caminos que
+     * [updateEventCategory]**, y por los mismos motivos, así que acá solo se anota lo que cambia.
+     *
+     * - Si el evento **ya está sincronizado**: manda el `PUT` y espeja lo que devolvió el server
+     *   (que es quien valida la fecha; ver la guarda de futuro en `PUT /api/events/{id}/timestamp`).
+     * - Si el evento **todavía no llegó al server** (`syncedAt == null`, la ventana normal de los
+     *   30 s del `SyncEngine`): el UPDATE es **solo local**. Llamar a `remote` ahí devolvería 404
+     *   —el server ni sabe que el evento existe— y dejaría al dueño sin poder corregir la fecha
+     *   de lo que acaba de anotar, que es justo cuando más se corrige. El `SyncEngine` sube el
+     *   evento después con `row.timestamp`, o sea con la fecha ya corregida.
+     *
+     * La carrera con el `SyncEngine` se cierra igual que en [updateEventCategory] y con las
+     * mismas dos mitades: acá se relee `syncedAt` fresco adentro de la transacción, y del otro
+     * lado `markSyncedIfUnchanged` ahora compara **también el timestamp** — sin eso, corregir la
+     * fecha mientras el POST estaba en vuelo dejaba la fila sellada con la fecha vieja en el
+     * server y la nueva solo en local, para siempre.
+     *
+     * **Las dos patas de un traspaso se mueven juntas**, igual que se anulan juntas: es UN hecho
+     * con una sola fecha. El server cascadea por `transferId` y acá se espeja lo mismo. (Por
+     * diseño una pata nunca está pendiente de sincronizar —`createTransfer` es remote-first—, así
+     * que el camino local de la cascada es la red de seguridad, no el habitual.)
+     */
+    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+        val uid = userId()
+        val types = accountTypes(uid)
+        // **Las mismas guardas que el server, ANTES de decidir por qué camino se resuelve.**
+        //
+        // No es cortesía: el camino local de más abajo (evento todavía sin sincronizar) NUNCA
+        // llama a `remote`, así que sin esto la guarda de futuro del server no corre para el
+        // movimiento que el dueño acaba de anotar en el teléfono — y el `SyncEngine` después lo
+        // sube por `POST /api/events`, que no valida fecha a propósito (por ahí entran los SMS y
+        // los extractos, que traen la suya). Es el mismo motivo por el que
+        // [updateEventCategory] repite acá las guardas de la categoría reservada.
+        //
+        // Hoy no se llega desde la UI —el selector no ofrece días futuros— pero «hoy no se llega»
+        // es exactamente lo que dejó de ser cierto todas las veces que esto salió mal.
+        //
+        // `epochMillisToAppDate` es el de `:core` (AppTimeZone), no el de `:shared`: acá no se
+        // puede importar UI. Las dos caras miran la misma zona, así que no pueden discrepar.
+        val fecha = epochMillisToAppDate(timestamp)
+        val hoy = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds())
+        if (fecha.year !in 2000..2100) throw ApiException(400, "Esa fecha no es de este siglo.")
+        if (fecha > hoy) throw ApiException(422, EVENT_DATE_IN_FUTURE)
+
+        val resolvedLocally = db.transactionWithResult {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            if (local != null && local.syncedAt == null) {
+                val transferId = local.transferId
+                if (transferId != null) {
+                    db.financialEventQueries.updateTimestampByTransferId(timestamp, transferId, uid)
+                } else {
+                    db.financialEventQueries.updateTimestamp(timestamp, id, uid)
+                }
+                local.toModel(types).copy(timestamp = timestamp)
+            } else {
+                null
+            }
+        }
+        if (resolvedLocally != null) return resolvedLocally
+
+        // **El sello de recurrente lo suelta el server** (ver `PUT /api/events/{id}/timestamp`),
+        // así que el camino local de arriba no tiene qué soltar: `recurring_occurrences` es una
+        // tabla que solo existe del lado del server —no hay espejo local— y un evento que todavía
+        // no llegó al server no puede estar sellado por ninguna regla. El sello se pone eligiendo
+        // un candidato, y los candidatos salen de un endpoint.
+        val updated = remote.updateEventTimestamp(id, timestamp)
+        val transferId = updated.transferId
+        if (transferId != null) {
+            db.financialEventQueries.updateTimestampByTransferId(updated.timestamp, transferId, uid)
+        } else {
+            db.financialEventQueries.updateTimestamp(updated.timestamp, updated.id, uid)
+        }
+        return updated
+    }
+
+    /**
+     * Delega: `recurring_occurrences` vive solo en el server (no hay espejo local), así que sin
+     * red no hay nada que responder. Devolver `null` es lo correcto y no una degradación
+     * escondida: quien llama lo usa para decidir si MUESTRA un aviso de más, no para decidir si
+     * deja guardar.
+     */
+    override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? =
+        runCatching { remote.getEventOccurrenceMark(id) }.getOrNull()
 
     // ── Delegate everything else to remote ────────────────────────────────────
 

@@ -13,6 +13,7 @@ import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.validateTransfer
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -77,6 +78,15 @@ fun Route.transferRoutes() {
             // viejo o un POST a mano no pasan por ahí.
             validateTransfer(from, to, body.amount)?.let { motivo ->
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, motivo)
+            }
+
+            // Misma guarda de cordura de año que POST /api/events y PUT /{id}/timestamp: un
+            // epoch de un cliente con un bug esconde las dos patas en 1970 y nadie las vuelve a
+            // ver. No es la guarda de futuro —un traspaso no la tiene, igual que un evento— sino
+            // el piso que hace que un timestamp roto se note en vez de desaparecer.
+            val fechaDelTraspaso = epochMillisToAppDate(body.timestamp)
+            if (fechaDelTraspaso.year !in 2000..2100) {
+                return@post call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
             }
 
             // ¿Ese `transferId` ya tiene dueño? El esquema impide que un traspaso termine con

@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.quickadd
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +46,7 @@ import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.theme.MinExpense
 import com.jvillada.movi.theme.MinOnPrimaryContainer
 import com.jvillada.movi.theme.MinPrimaryContainer
+import com.jvillada.movi.theme.MinBorder
 import com.jvillada.movi.theme.MinSurfaceContainerLow
 import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
@@ -54,55 +57,25 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
-import com.jvillada.movi.ui.credits.filterDateInput
+import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.fecha.timestampParaFecha
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atTime
-import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 
 /**
- * "AAAA-MM-DD" → el instante del **mediodía** de ese día en la zona de la app (Bogotá), o `null`
- * si la fecha no sirve.
+ * Hoy, en la zona de la app, como "AAAA-MM-DD".
  *
- * Mediodía y no medianoche a propósito: los timestamps se guardan en epoch-ms y cada pantalla los
- * vuelve a fechar en su zona. Un traspaso sellado a las 00:00 de Bogotá cae, mirado en UTC, a las
- * 05:00 del mismo día — pero uno sellado a las 00:00 UTC (que es lo que da una conversión
- * descuidada) se ve como las 7 pm del día ANTERIOR en Bogotá, y el movimiento aparece un día
- * antes de cuando pasó. El mediodía deja doce horas de margen para los dos lados: ninguna zona
- * razonable lo corre de día.
- *
- * Acepta la barra como separador por el mismo motivo que `filterDateInput` (F24): «2026/08/23» es
- * lo que mucha gente escribe, y rechazarlo dejaba el botón en gris sin explicar por qué.
+ * Nació como el valor inicial del campo de fecha del traspaso; ese campo ya no existe (lo
+ * reemplazó el selector) pero la función sigue viva y usada: Movimientos la usa para saber qué
+ * día es «Hoy» al armar sus encabezados. Vive acá por historia, no por pertenencia.
  */
-fun transferTimestampFor(date: String, zone: TimeZone = AppTimeZone.zone): Long? {
-    val normalized = date.trim().replace('/', '-')
-    val parsed = runCatching { LocalDate.parse(normalized) }.getOrNull() ?: return null
-    // Mismo rango razonable que la fecha de desembolso de un crédito: un año de tres dígitos es
-    // casi siempre un tipeo a medio terminar, no una intención.
-    if (parsed.year !in 2000..2100) return null
-    return parsed.atTime(12, 0).toInstant(zone).toEpochMilliseconds()
-}
-
-/** Hoy, en la zona de la app, como "AAAA-MM-DD" — el valor con el que arranca el campo. */
 fun todayIsoInAppZone(clock: Clock = Clock.System, zone: TimeZone = AppTimeZone.zone): String =
     clock.now().toLocalDateTime(zone).date.toString()
-
-/**
- * Lo primero que falta para poder guardar el traspaso, o `null` si no falta nada. Mismo patrón
- * que `missingFieldMessage` en la hoja de movimiento (F24): una sola frase, la más urgente.
- *
- * Las reglas del traspaso van **antes** que la fecha porque son el problema de fondo: si el
- * origen y el destino son la misma cuenta, arreglar la fecha no destraba nada. Y el texto sale de
- * [validateTransfer] (:core), el mismo que devuelve el server en su 422 — así la hoja y el
- * rechazo del server nunca dicen cosas distintas del mismo problema.
- */
-fun transferMissingMessage(from: Account?, to: Account?, amount: Long, date: String): String? =
-    validateTransfer(from, to, amount)
-        ?: if (transferTimestampFor(date) == null) "La fecha tiene que ser AAAA-MM-DD" else null
 
 /**
  * Los tres ids del traspaso que se está escribiendo. **Se generan una vez por borrador, no una
@@ -290,11 +263,26 @@ internal fun TransferBody(
     }
 
     var amount by remember { mutableStateOf<Long?>(null) }
-    var date by remember { mutableStateOf(todayIsoInAppZone()) }
+    // Ola 13 — LA FECHA DEL TRASPASO SE ELIGE, NO SE ESCRIBE.
+    //
+    // Acá había un campo de texto donde se tecleaba «AAAA-MM-DD» a mano, con su
+    // `filterDateInput` y su «La fecha tiene que ser AAAA-MM-DD» cuando no se acertaba. Era la
+    // única forma de poner una fecha en toda la app, y dejarla convivir en la MISMA hoja con el
+    // selector nuevo de Gasto/Ingreso habría sido peor que no tocar nada: dos maneras distintas
+    // de decir lo mismo, a dos toques de distancia.
+    //
+    // Con el selector, `transferTimestampFor` y `transferMissingMessage` quedaron sin llamador y
+    // se fueron con el campo: la rama «La fecha tiene que ser AAAA-MM-DD» de esa validación era
+    // inalcanzable —el selector no puede producir una fecha inválida— y un mensaje de formato
+    // sobre un formato correcto es peor que no tener mensaje. Lo que queda valida el traspaso en
+    // sí ([validateTransfer], el mismo texto que devuelve el server en su 422).
+    val hoy = remember { hoyEnAppZone() }
+    var fecha by remember { mutableStateOf(hoy) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<TransferSide?>(null) }
+    var pickingDate by remember { mutableStateOf(false) }
 
     // El aviso va ANTES de cambiar `picking`, en el toque: para cuando el estado cambie y la hoja
     // se vuelva a medir, el desplazamiento viejo ya está guardado del otro lado.
@@ -305,6 +293,24 @@ internal fun TransferBody(
 
     fun cerrarPicker() {
         picking = null
+        onPickerAbierto(false)
+    }
+
+    // Ola 13: el sub-picker de fecha pasa por el MISMO aviso que el de cuentas, y por el mismo
+    // motivo. No es adorno: es otro sub-picker que reemplaza este cuerpo adentro del `Box` de
+    // alto fijado, así que abrirlo con la hoja desplazada recorta el desplazamiento igual que
+    // «Desde». Sin el aviso, `hayPicker` no cambia allá, el efecto no guarda ni restaura, y el
+    // teclado vuelve corrido bajo el dedo — el bug caro, por un camino nuevo.
+    //
+    // Los dos reflejos no se pisan porque los dos sub-pickers no pueden estar abiertos a la vez:
+    // la fecha se abre desde el formulario, que solo se ve con `picking == null`.
+    fun abrirFecha() {
+        onPickerAbierto(true)
+        pickingDate = true
+    }
+
+    fun cerrarFecha() {
+        pickingDate = false
         onPickerAbierto(false)
     }
 
@@ -329,13 +335,15 @@ internal fun TransferBody(
 
     val from = elegibles.firstOrNull { it.id == fromId }
     val to = elegibles.firstOrNull { it.id == toId }
-    val missing = transferMissingMessage(from, to, amount ?: 0L, date)
+    val missing = validateTransfer(from, to, amount ?: 0L)
     val canSave = missing == null && !saving
 
     fun save() {
         val origen = from ?: return
         val destino = to ?: return
-        val timestamp = transferTimestampFor(date) ?: return
+        // Con «Hoy» (el default) queda la hora real, como siempre; cualquier otro día va al
+        // mediodía de Bogotá — ver [timestampParaFecha] y [epochAlMediodia].
+        val timestamp = timestampParaFecha(fecha, hoy)
         saving = true
         error = null
         coroutine.launch {
@@ -395,9 +403,25 @@ internal fun TransferBody(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (picking == null) Modifier else Modifier.heightIn(min = altoFijado)),
+            .then(
+                if (picking == null && !pickingDate) Modifier
+                else Modifier.heightIn(min = altoFijado),
+            ),
     ) {
-        if (picking != null) {
+        if (pickingDate) {
+            // Mismo sub-picker que la pestaña Gasto/Ingreso, adentro del mismo Box de alto
+            // fijado: abrirlo no cambia el alto de la hoja.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                PickerHeader("Fecha", onClose = { cerrarFecha() })
+                SelectorDeFecha(
+                    seleccionada = fecha,
+                    hoy = hoy,
+                    onPick = { fecha = it; cerrarFecha() },
+                    enabled = !saving,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+        } else if (picking != null) {
             TransferAccountPicker(
                 title = if (picking == TransferSide.FROM) "Desde" else "Hacia",
                 accounts = elegibles,
@@ -521,7 +545,26 @@ internal fun TransferBody(
         Spacer(Modifier.height(14.dp))
         Text("FECHA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
-        FieldBox("AAAA-MM-DD", date, onValueChange = { date = filterDateInput(it) })
+        // Misma caja que tenía el campo de texto (mismo alto, mismo borde, mismo lugar) pero se
+        // toca en vez de escribirse: así el formulario no cambia de alto respecto de master y el
+        // dedo la encuentra donde ya estaba.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MinSurfaceContainerLow)
+                .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                .clickable(enabled = !saving) { abrirFecha() }
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+        ) {
+            Text(
+                text = etiquetaDeFecha(fecha, hoy),
+                fontSize = 14.sp,
+                color = MinText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
 
         Spacer(Modifier.height(14.dp))
         Text("NOTA (OPCIONAL)", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
