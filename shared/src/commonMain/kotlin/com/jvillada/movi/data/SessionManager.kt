@@ -8,42 +8,89 @@ import androidx.compose.runtime.setValue
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 
-object SessionManager {
-    private val settings: Settings by lazy { Settings() }
+private const val KEY_TOKEN   = "auth_token"
+private const val KEY_USER_ID = "user_id"
+private const val KEY_NAME    = "user_name"
+private const val KEY_EMAIL   = "user_email"
+// F42 · F46: color elegido para el avatar de iniciales — se llena la primera vez que
+// PerfilScreen pide el perfil (GET /api/users/me) y se actualiza tras cada edición. Vive en
+// Settings (no solo en memoria) para que sobreviva un reinicio de la app en Android/iOS,
+// igual que userName/userEmail.
+private const val KEY_AVATAR_COLOR = "avatar_color"
+private const val KEY_REMEMBERED_EMAIL = "remembered_email"
+// F1: preferencia explícita de la casilla "Recordar mi correo en este dispositivo"
+// del login web (index.html). "0" = no recordar; ausente o "1" = sí (por defecto,
+// y también el comportamiento de siempre en Android/iOS, que no tienen la casilla).
+private const val KEY_REMEMBER_PREF = "remember_email_pref"
 
-    var loggedIn: Boolean by mutableStateOf(!settings.getStringOrNull("auth_token").isNullOrBlank())
+/**
+ * **El almacenamiento del dispositivo, que puede no existir.**
+ *
+ * Top-level y `by lazy`, igual que en `LastAccountStore` y `UsedCategoriesCache`, y por el mismo
+ * motivo que allá: `Settings()` **explota al construirse, no al leerse**. En wasm es
+ * `StorageSettings(localStorage)`, y `window.localStorage` tira `SecurityError` apenas se lo toca
+ * cuando el navegador tiene bloqueado el almacenamiento del sitio (modo incógnito con datos
+ * bloqueados, la opción «Bloquear datos de sitios», una política de empresa). En un test de JVM
+ * pura tampoco hay `Settings` que valga.
+ *
+ * El `by lazy` difiere esa construcción hasta la primera lectura, y todas las lecturas y
+ * escrituras de acá abajo pasan por [leer] / [guardar], que la envuelven en `runCatching`. Sin
+ * eso, la excepción caía **en el inicializador del object**, y una init que lanza se lleva puesta
+ * la clase entera: `SessionManager` quedaba inutilizable y con él toda la app, porque no hay
+ * pantalla de Movi que no lo toque. Es exactamente lo que ya había pasado con `AppTimeZone`
+ * llamando a `TimeZone.of("America/Bogota")` en su init — wasm no trae la base de zonas IANA y
+ * eso tumbó el Inicio entero.
+ *
+ * En la web el efecto era total: `index.html` ya se protege solo (todo su script vive adentro de
+ * un `try`), así que con el almacenamiento bloqueado su overlay de login se escondía y le pasaba
+ * la posta al login de Compose... que no podía dibujarse porque este object estaba muerto. La red
+ * de seguridad que ese archivo dice tener no existía.
+ */
+private val sessionSettings: Settings by lazy { Settings() }
+
+/**
+ * **Copia en memoria, para que un almacenamiento bloqueado no deje a nadie afuera.**
+ *
+ * No alcanza con no explotar: sin ningún lado donde anotar el token, entrar sería imposible
+ * —guardar la sesión no haría nada y el siguiente pedido saldría sin `Authorization`—, o sea que
+ * la app cargaría solo para rebotar en el login para siempre.
+ *
+ * Con esto, una sesión abierta con el almacenamiento bloqueado funciona completa **mientras dure
+ * la pestaña o el proceso**; lo único que se pierde es sobrevivir a un reinicio, que es
+ * literalmente lo que el navegador nos está prohibiendo. No cambia nada cuando el almacenamiento
+ * sí anda: [leer] pregunta primero por [sessionSettings] y solo cae acá si esa lectura lanzó.
+ */
+private val sessionMemoria = mutableMapOf<String, String>()
+
+private fun leer(key: String): String? =
+    runCatching { sessionSettings.getStringOrNull(key) }.getOrElse { sessionMemoria[key] }
+
+private fun guardar(key: String, value: String?) {
+    if (value == null) sessionMemoria.remove(key) else sessionMemoria[key] = value
+    runCatching {
+        if (value == null) sessionSettings.remove(key) else sessionSettings[key] = value
+    }
+}
+
+object SessionManager {
+    var loggedIn: Boolean by mutableStateOf(!leer(KEY_TOKEN).isNullOrBlank())
         private set
 
-    private const val KEY_TOKEN   = "auth_token"
-    private const val KEY_USER_ID = "user_id"
-    private const val KEY_NAME    = "user_name"
-    private const val KEY_EMAIL   = "user_email"
-    // F42 · F46: color elegido para el avatar de iniciales — se llena la primera vez que
-    // PerfilScreen pide el perfil (GET /api/users/me) y se actualiza tras cada edición. Vive en
-    // Settings (no solo en memoria) para que sobreviva un reinicio de la app en Android/iOS,
-    // igual que userName/userEmail.
-    private const val KEY_AVATAR_COLOR = "avatar_color"
-    private const val KEY_REMEMBERED_EMAIL = "remembered_email"
-    // F1: preferencia explícita de la casilla "Recordar mi correo en este dispositivo"
-    // del login web (index.html). "0" = no recordar; ausente o "1" = sí (por defecto,
-    // y también el comportamiento de siempre en Android/iOS, que no tienen la casilla).
-    private const val KEY_REMEMBER_PREF = "remember_email_pref"
-
     var token: String?
-        get() = settings.getStringOrNull(KEY_TOKEN)
-        set(v) { if (v == null) settings.remove(KEY_TOKEN) else settings[KEY_TOKEN] = v }
+        get() = leer(KEY_TOKEN)
+        set(v) = guardar(KEY_TOKEN, v)
 
     var userId: String?
-        get() = settings.getStringOrNull(KEY_USER_ID)
-        set(v) { if (v == null) settings.remove(KEY_USER_ID) else settings[KEY_USER_ID] = v }
+        get() = leer(KEY_USER_ID)
+        set(v) = guardar(KEY_USER_ID, v)
 
     var userName: String?
-        get() = settings.getStringOrNull(KEY_NAME)
-        set(v) { if (v == null) settings.remove(KEY_NAME) else settings[KEY_NAME] = v }
+        get() = leer(KEY_NAME)
+        set(v) = guardar(KEY_NAME, v)
 
     var userEmail: String?
-        get() = settings.getStringOrNull(KEY_EMAIL)
-        set(v) { if (v == null) settings.remove(KEY_EMAIL) else settings[KEY_EMAIL] = v }
+        get() = leer(KEY_EMAIL)
+        set(v) = guardar(KEY_EMAIL, v)
 
     /**
      * `null` hasta que PerfilScreen haga su primer `GET /api/users/me` en esta sesión — no en el
@@ -53,13 +100,13 @@ object SessionManager {
      * lo que el server devuelve para una cuenta que nunca eligió color — no hay descalce.
      */
     var avatarColor: String?
-        get() = settings.getStringOrNull(KEY_AVATAR_COLOR)
-        set(v) { if (v == null) settings.remove(KEY_AVATAR_COLOR) else settings[KEY_AVATAR_COLOR] = v }
+        get() = leer(KEY_AVATAR_COLOR)
+        set(v) = guardar(KEY_AVATAR_COLOR, v)
 
     /** Last email used to log in. Persists across logout so the login form can pre-fill it. */
     var rememberedEmail: String?
-        get() = settings.getStringOrNull(KEY_REMEMBERED_EMAIL)
-        set(v) { if (v == null) settings.remove(KEY_REMEMBERED_EMAIL) else settings[KEY_REMEMBERED_EMAIL] = v }
+        get() = leer(KEY_REMEMBERED_EMAIL)
+        set(v) = guardar(KEY_REMEMBERED_EMAIL, v)
 
     val isLoggedIn: Boolean get() = !token.isNullOrBlank()
 
@@ -90,16 +137,16 @@ object SessionManager {
     }
 
     fun clear() {
-        settings.remove(KEY_TOKEN)
-        settings.remove(KEY_USER_ID)
-        settings.remove(KEY_NAME)
-        settings.remove(KEY_EMAIL)
-        settings.remove(KEY_AVATAR_COLOR)
+        guardar(KEY_TOKEN, null)
+        guardar(KEY_USER_ID, null)
+        guardar(KEY_NAME, null)
+        guardar(KEY_EMAIL, null)
+        guardar(KEY_AVATAR_COLOR, null)
         // F1: el correo recordado solo sobrevive al logout si la persona lo eligió con
         // la casilla del login web. Sin esa preferencia (Android/iOS, o quien nunca la
         // vio) se preserva como siempre — no forzamos un opt-in donde no hay casilla.
-        if (settings.getStringOrNull(KEY_REMEMBER_PREF) == "0") {
-            settings.remove(KEY_REMEMBERED_EMAIL)
+        if (leer(KEY_REMEMBER_PREF) == "0") {
+            guardar(KEY_REMEMBERED_EMAIL, null)
         }
         consecutive401s = 0
         // Lo que el Inicio tenía cacheado es de la sesión que se va: sin esto, en Android/iOS
