@@ -64,13 +64,6 @@ import kotlinx.datetime.Clock
  */
 private const val FRACCION_VALOR_FILA = 0.55f
 
-private sealed class Picker {
-    data object None : Picker()
-    data object Category : Picker()
-    data object Wallet : Picker()
-    data object Note : Picker()
-}
-
 /**
  * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
  * @param onSaved se guardó algo. Distinto de [onDismiss] a propósito: la pantalla de atrás sigue
@@ -96,7 +89,6 @@ fun QuickAddScreen(
     onSavedEvent: (FinancialEvent) -> Unit = {},
 ) {
     val coroutine = rememberCoroutineScope()
-    var typeIndex by remember { mutableStateOf(0) }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
@@ -129,7 +121,18 @@ fun QuickAddScreen(
     var origenCuenta by remember {
         mutableStateOf(if (presetAccountId != null) OrigenCuenta.CONTEXTO else OrigenCuenta.NINGUNA)
     }
-    var picker by remember { mutableStateOf<Picker>(Picker.None) }
+    /**
+     * Qué pestaña está elegida y qué sub-picker está abierto, en UN solo estado y con
+     * transiciones puras — ver [PickersDeLaHoja], donde está el porqué (resumen: eran tres
+     * variables sueltas, una de ellas espejo de estado de [TransferBody], y el espejo se quedaba
+     * pegado en `true` al salir de Traspaso con su sub-picker abierto, matando la restauración
+     * del desplazamiento en las tres pestañas). Las transiciones se afirman en
+     * `PickersDeLaHojaTest`, sin teléfono.
+     *
+     * **No lo escribas a mano: pasa siempre por [pasarA]**, que es el que graba el
+     * desplazamiento en el toque — antes de que el cambio de estado vuelva a medir la hoja.
+     */
+    var pickers by remember { mutableStateOf(PickersDeLaHoja()) }
 
     // ── Las tres medidas de la hoja, y el desplazamiento que las une ──────────────────
     //
@@ -142,20 +145,11 @@ fun QuickAddScreen(
     var bodyHeightPx by remember { mutableStateOf(0) }
     val sheetScroll = rememberScrollState()
 
-    /**
-     * El sub-picker de cuentas de la pestaña **Traspaso** — que es estado de [TransferBody], no
-     * de acá. Se refleja en esta variable para que las dos mitades de la disciplina (el alto
-     * fijado y la restauración del desplazamiento) valgan también en esa pestaña: sin esto,
-     * corregir «Desde»/«Hacia» después de haber bajado dejaba el formulario corrido ~190 dp y
-     * el sub-picker abierto por la mitad de la lista.
-     */
-    var pickerDeTraspaso by remember { mutableStateOf(false) }
-
-    /** Hay un sub-picker abierto, sea de esta pestaña o de la de traspaso. */
-    val hayPicker = picker != Picker.None || pickerDeTraspaso
+    /** Hay un sub-picker abierto, sea de esta pestaña o el de la de traspaso. */
+    val hayPicker = pickers.hayPicker
 
     /** El cuerpo del editor está compuesto y medible: no hay ningún sub-picker tapándolo. */
-    val cuerpoCompuesto = !hayPicker
+    val cuerpoCompuesto = pickers.cuerpoCompuesto
 
     // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
@@ -176,9 +170,20 @@ fun QuickAddScreen(
         scrollAntesDelPicker = sheetScroll.value
     }
 
-    fun abrirPicker(destino: Picker) {
-        recordarScroll()
-        picker = destino
+    /**
+     * El único camino por el que [pickers] cambia — el embudo donde vive la mitad «guardar» de
+     * la disciplina.
+     *
+     * Graba el desplazamiento justo en el borde «no había ningún sub-picker → ahora sí», y lo
+     * graba ANTES de escribir el estado nuevo: cuando el estado cambie, la hoja se vuelve a
+     * medir y el valor viejo ya no existe. Que sea un embudo y no una línea repetida en cada
+     * `onClick` es a propósito: los sub-pickers se abren desde cuatro sitios (tres filas de acá
+     * y el aviso de [TransferBody]) y basta que uno se olvide de grabar para que el teclado se
+     * mueva bajo el dedo en ese camino y nada más — el modo de falla que esta hoja repite.
+     */
+    fun pasarA(siguiente: PickersDeLaHoja) {
+        if (siguiente.hayPicker && !pickers.hayPicker) recordarScroll()
+        pickers = siguiente
     }
 
     LaunchedEffect(hayPicker) {
@@ -250,7 +255,7 @@ fun QuickAddScreen(
     val categoryPrefs = UsedCategoriesCache.prefs
     val usedCategories = UsedCategoriesCache.used
 
-    LaunchedEffect(typeIndex, categoryPrefs) {
+    LaunchedEffect(pickers.typeIndex, categoryPrefs) {
         // Con categoría libre (F35) ya no hay una lista fija de la que "salirse" al cambiar de
         // tipo — pero si la actual no sirve para el tipo elegido (p. ej. "Salario" al pasar a
         // Gasto), seguir mostrándola confundiría. Una categoría propia sin nada declarado se deja
@@ -274,8 +279,8 @@ fun QuickAddScreen(
         //
         // La pestaña Traspaso (índice 2) queda fuera: un traspaso no tiene categoría elegible —
         // la suya es reservada— así que no hay nada que reconciliar al entrar ni al salir.
-        if (typeIndex > 1) return@LaunchedEffect
-        val newType = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+        if (pickers.typeIndex > 1) return@LaunchedEffect
+        val newType = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
         if (!categoriaSirveParaTipo(category, newType, usedCategories, categoryPrefs)) {
             category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs)
         }
@@ -324,7 +329,7 @@ fun QuickAddScreen(
                 // agregarse (Hallazgo Crítico de la revisión de la Ola 1). Ver newId().
                 id = newId("ev"),
                 accountId = selectedAccountId ?: accounts.firstOrNull()?.id ?: "acc_1",
-                type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                 amount = amount.toLongOrNull() ?: 0L,
                 category = trimmedCategory,
                 description = note.ifBlank { trimmedCategory },
@@ -412,7 +417,7 @@ fun QuickAddScreen(
                 //                        holgado, y el scroll no tiene a dónde ir: `maxValue` 0)
                 //   navegador 375×812  → hueco 704 dp → desborde  37,5 dp (cortaba «Falta el monto»)
                 //   navegador 800×620  → hueco 512 dp → desborde 229,5 dp (corta en «7 8 9»)
-                //   AVD Movi_Sensor    → hueco 551 dp → desborde 185 dp
+                //   AVD Movi_Sensor    → hueco 551 dp → desborde 190,5 dp
                 //     (411×731 dp; ahí las barras del sistema se comen 72 dp más — 24 de estado y
                 //      48 de navegación: 731 − 64 − 44 − 72 = 551, que es lo que midió la sonda)
                 //
@@ -433,7 +438,7 @@ fun QuickAddScreen(
                 // **El precio, dicho en voz alta.** La disciplina de la Ola 8 —la hoja no cambia
                 // de alto, así que nada se mueve bajo el dedo— era estructural porque la hoja era
                 // inamovible. Ahora lo que desborda se puede correr: 37 dp a 812 (tres cuartos de
-                // una tecla, que miden 50 dp) y 185 dp en el AVD. Un ARRASTRE sobre el teclado que
+                // una tecla, que miden 50 dp) y 190,5 dp en el AVD. Un ARRASTRE sobre el teclado que
                 // pase el umbral desplaza en vez de teclear, y el toque siguiente en el mismo punto
                 // cae en otra tecla: el modo de falla exacto de la Ola 8. Con toques no se
                 // consiguió provocar un dígito equivocado (un toque no llega al umbral), así que
@@ -535,8 +540,11 @@ fun QuickAddScreen(
                         // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
                         // habla igual — Inicio y Movimientos también dicen «Gastos».
                         labels = listOf("Gasto", "Ingreso", "Traspaso"),
-                        selected = typeIndex,
-                        onSelect = { typeIndex = it },
+                        selected = pickers.typeIndex,
+                        // Cambiar de pestaña saca de composición al formulario de la pestaña
+                        // vieja: si era Traspaso, su sub-picker se fue con él y el estado tiene
+                        // que enterarse. Eso lo hace `conTipo` — ver [PickersDeLaHoja].
+                        onSelect = { pasarA(pickers.conTipo(it)) },
                         enabled = !saving,
                     )
 
@@ -559,14 +567,17 @@ fun QuickAddScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(if (picker == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
+                            // Mira el picker DE ESTA PANTALLA y no `hayPicker` a propósito: el
+                            // de traspaso no reemplaza este `Box`, vive adentro del cuerpo y se
+                            // fija su propio alto con el mismo tope (`alturaVisible`).
+                            .then(if (pickers.propio == Picker.None) Modifier else Modifier.heightIn(min = pinnedHeight)),
                     ) {
-                    when (picker) {
+                    when (pickers.propio) {
                         // F35: campo libre con sugerencias en vez de una lista fija — tocar una
                         // sugerencia cierra el sub-picker igual que antes (onSuggestionPicked);
                         // escribir una categoría nueva la deja tal cual, sin forzar a elegir.
                         Picker.Category -> Column(modifier = Modifier.fillMaxWidth()) {
-                            PickerHeader("Categoría", onClose = { picker = Picker.None })
+                            PickerHeader("Categoría", onClose = { pasarA(pickers.cerrar()) })
                             // Ola 2 #3c: sin esto el sub-picker se abría con el campo prellenado
                             // ("Comida") pero sin foco — había que tocarlo a mano para ver las
                             // sugerencias o poder escribir.
@@ -575,11 +586,11 @@ fun QuickAddScreen(
                             CategoryField(
                                 value = category,
                                 onValueChange = { category = it },
-                                type = if (typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                                type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                                 usedCategories = usedCategories,
                                 prefs = categoryPrefs,
                                 label = null,
-                                onSuggestionPicked = { picker = Picker.None },
+                                onSuggestionPicked = { pasarA(pickers.cerrar()) },
                                 focusRequester = categoryFocusRequester,
                             )
                             Spacer(Modifier.height(4.dp))
@@ -592,14 +603,14 @@ fun QuickAddScreen(
                                 // Elegida a mano: la reconciliación de arriba ya no la pisa, y el
                                 // aviso «Última usada» desaparece — ya no lo decidió la app.
                                 origenCuenta = OrigenCuenta.ELEGIDA
-                                picker = Picker.None
+                                pasarA(pickers.cerrar())
                             },
-                            onClose = { picker = Picker.None },
+                            onClose = { pasarA(pickers.cerrar()) },
                         )
                         Picker.Note -> NoteEditor(
                             initial = note,
-                            onSave = { note = it; picker = Picker.None },
-                            onClose = { picker = Picker.None },
+                            onSave = { note = it; pasarA(pickers.cerrar()) },
+                            onClose = { pasarA(pickers.cerrar()) },
                         )
                         Picker.None -> Column(
                             modifier = Modifier
@@ -609,7 +620,7 @@ fun QuickAddScreen(
                                 // correcto si mañana el cuerpo gana o pierde una fila.
                                 .onSizeChanged { if (cuerpoCompuesto) bodyHeightPx = it.height },
                         ) {
-                            if (typeIndex == 2) {
+                            if (pickers.typeIndex == TIPO_TRASPASO) {
                                 TransferBody(
                                     accounts = accounts,
                                     accountsLoaded = accountsLoaded,
@@ -618,8 +629,7 @@ fun QuickAddScreen(
                                     // o cerró su sub-picker (su `picking` no se ve desde acá).
                                     alturaVisible = pinnedHeight,
                                     onPickerAbierto = { abierto ->
-                                        if (abierto) recordarScroll()
-                                        pickerDeTraspaso = abierto
+                                        pasarA(pickers.conPickerDeTraspaso(abierto))
                                     },
                                     // Ola 11: si la hoja se abrió desde el detalle de una cuenta, ese
                                     // contexto vale también para el ORIGEN del traspaso — es la
@@ -647,9 +657,9 @@ fun QuickAddScreen(
                                 else avisoDeCuenta(origenCuenta, accounts.size),
                             walletHintReserved = accounts.size > 1,
                             note = note,
-                            onPickCategory = { abrirPicker(Picker.Category) },
-                            onPickWallet = { abrirPicker(Picker.Wallet) },
-                            onEditNote = { abrirPicker(Picker.Note) },
+                            onPickCategory = { pasarA(pickers.abrir(Picker.Category)) },
+                            onPickWallet = { pasarA(pickers.abrir(Picker.Wallet)) },
+                            onEditNote = { pasarA(pickers.abrir(Picker.Note)) },
                             onOcr = { onNavigate(Screen.OCRCapture) },
                             canSave = canSave,
                             missingFieldMessage = missingFieldMessage,

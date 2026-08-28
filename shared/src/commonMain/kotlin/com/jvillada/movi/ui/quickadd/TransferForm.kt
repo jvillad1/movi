@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -229,6 +231,10 @@ internal fun TransferBody(
      * `QuickAddScreen` guarde y restaure el desplazamiento de la hoja igual que en Gasto/Ingreso.
      * `picking` es estado de acá adentro, así que sin este aviso el efecto de allá no se entera
      * y la hoja queda corrida bajo el dedo al volver.
+     *
+     * También se llama con `false` cuando este cuerpo SALE DE COMPOSICIÓN con el sub-picker
+     * abierto — el `DisposableEffect` de más abajo—, porque ahí `picking` deja de existir sin
+     * que nadie lo cierre.
      */
     onPickerAbierto: (Boolean) -> Unit = {},
     onSaved: () -> Unit,
@@ -301,6 +307,22 @@ internal fun TransferBody(
         picking = null
         onPickerAbierto(false)
     }
+
+    // ── El segundo cerrojo: si este cuerpo desaparece, su picker desaparece con él ──────
+    //
+    // `picking` muere cuando este `@Composable` sale de composición, pero el reflejo que
+    // [QuickAddScreen] mantiene NO se entera solo — y un reflejo pegado en «abierto» mata la
+    // restauración del desplazamiento en las tres pestañas (ver [PickersDeLaHoja]). El camino
+    // que se midió es tocar «Gasto» con «Desde» abierto, y ese ya lo cierra `conTipo` allá,
+    // que es donde tiene que estar: el estado se arregla en la misma composición y se puede
+    // afirmar en una prueba. Esto es el cinturón además de los tirantes, para cualquier otra
+    // salida de composición que alguien agregue mañana (una condición nueva alrededor de este
+    // cuerpo, un formulario que se reemplace mientras carga) sin acordarse de este reflejo.
+    //
+    // `rememberUpdatedState` porque `onDispose` corre fuera de la composición y no puede
+    // depender de qué instancia del lambda quedó capturada.
+    val avisar by rememberUpdatedState(onPickerAbierto)
+    DisposableEffect(Unit) { onDispose { avisar(false) } }
     // Los ids viven en el borrador, NO adentro de `save()`: un reintento tras un fallo tiene que
     // llevar los mismos, o el server crea un traspaso duplicado (ver [TransferDraftIds]).
     var ids by remember { mutableStateOf(TransferDraftIds.new()) }
