@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RecurringOfferGate
+import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.platform.PushOptIn
@@ -120,6 +121,10 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
     // Estado del opt-in de push, para el aviso de "tus recordatorios no te van a llegar".
     var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
     var pushRefreshTick by remember { mutableStateOf(0) }
+    // Y lo que el server dice de SUS canales — sin esto, el aviso concluía «no hay ningún canal»
+    // mirando solo el permiso del navegador. Ver [shouldShowReminderWarning].
+    val canalesDeAviso = ReminderChannelsCache.canales
+    LaunchedEffect(Unit) { ReminderChannelsCache.cargar() }
 
     // Ola 9 · B: además de su propio `loadKey`, la señal de que se guardó algo desde una hoja
     // que vive por encima de esta pantalla. Ahora se puede crear un recurrente sin salir de acá
@@ -505,7 +510,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 }
 
                 // ── Aviso: recordatorios sin canal de entrega ───────────────────
-                if (shouldShowReminderWarning(pushStatus, hayRecordatoriosPedidos)) {
+                if (shouldShowReminderWarning(pushStatus, hayRecordatoriosPedidos, canalesDeAviso)) {
                     item {
                         Spacer(Modifier.height(20.dp))
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {

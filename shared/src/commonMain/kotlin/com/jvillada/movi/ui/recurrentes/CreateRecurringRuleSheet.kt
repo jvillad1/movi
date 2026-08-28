@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +17,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -73,9 +71,9 @@ fun CreateRecurringRuleSheet(
     // Prefill state from existing rule when in edit mode
     var name by remember { mutableStateOf(existing?.name ?: prefill?.name ?: "") }
     var amount by remember { mutableStateOf(existing?.amount ?: prefill?.amount) }
-    var dayOfMonth by remember {
-        mutableStateOf(existing?.dayOfMonth?.toString() ?: prefill?.dayOfMonth?.toString() ?: "")
-    }
+    // Ola 11: el día se ELIGE, no se escribe (ver [DayOfMonthPicker]). Por eso es un `Int?` y no
+    // una cadena: el estado ya no puede contener «45», así que no hay nada que validar después.
+    var dayOfMonth by remember { mutableStateOf(existing?.dayOfMonth ?: prefill?.dayOfMonth) }
     var selectedType by remember {
         mutableStateOf(existing?.type ?: prefill?.type ?: TransactionType.EXPENSE)
     }
@@ -167,19 +165,21 @@ fun CreateRecurringRuleSheet(
     val isEditMode = existing != null
     // Editar es editar una regla; solo al crear se puede elegir dólares (ver KDoc).
     val enDolares = !isEditMode && currency == "USD"
-    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && dayOfMonth.toIntOrNull() in 1..31 && !saving
+    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (dayOfMonth ?: 0) in 1..31 && !saving
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
     val missingFieldMessage = when {
         name.isBlank() -> "Falta el nombre"
         (amount ?: 0L) <= 0L -> "Falta el monto"
-        dayOfMonth.toIntOrNull() !in 1..31 -> "El día del mes tiene que estar entre 1 y 31"
+        // Ya no puede decir «entre 1 y 31»: con la cuadrícula, un día fuera de rango no existe.
+        // Lo único que puede faltar es que el dueño todavía no haya tocado ninguno.
+        (dayOfMonth ?: 0) !in 1..31 -> "Falta el día del mes"
         else -> null
     }
 
     fun save() {
         if (!canSave) return
-        val day = dayOfMonth.toIntOrNull()?.coerceIn(1, 31) ?: return
+        val day = dayOfMonth?.coerceIn(1, 31) ?: return
         val amt = amount ?: return
         saving = true
         error = null
@@ -377,28 +377,13 @@ fun CreateRecurringRuleSheet(
                     Spacer(Modifier.height(18.dp))
 
                     // --- DÍA DEL MES ---
-                    SheetSectionLabel("DÍA DEL MES (1–31)")
+                    SheetSectionLabel("DÍA DEL MES")
                     Spacer(Modifier.height(8.dp))
-                    SheetInputBox {
-                        BasicTextField(
-                            value = dayOfMonth,
-                            onValueChange = { input ->
-                                val digits = input.filter { it.isDigit() }.take(2)
-                                dayOfMonth = digits
-                            },
-                            cursorBrush = SolidColor(MinText),
-                            textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            decorationBox = { inner ->
-                                if (dayOfMonth.isEmpty()) {
-                                    Text("Ej: 5", fontSize = 14.sp, color = MinTextMute)
-                                }
-                                inner()
-                            },
-                        )
-                    }
+                    DayOfMonthPicker(
+                        selected = dayOfMonth,
+                        enabled = !saving,
+                        onPick = { dayOfMonth = it },
+                    )
 
                     Spacer(Modifier.height(18.dp))
 
@@ -720,3 +705,124 @@ private fun RowScope.SheetChip(
         )
     }
 }
+
+/**
+ * **El día del mes se elige, no se escribe.**
+ *
+ * Era un campo de texto libre: se escribía «45», la hoja lo aceptaba, y el dueño se enteraba
+ * recién al tocar «Crear recurrente» («El día del mes tiene que estar entre 1 y 31»). Con una
+ * cuadrícula de 1 a 31 —un mes de calendario— el valor inválido **no existe**: no hay nada que
+ * validar porque no hay nada que escribir, y se resuelve con un toque y sin teclado.
+ *
+ * ## Por qué siempre abierta, y no un desplegable
+ *
+ * La forma obvia sería un campo que se abre al tocarlo, como el de CUENTA acá al lado. Se
+ * descartó por dos razones, y la segunda es la que manda:
+ *
+ * 1. **Un toque.** Con un desplegable, elegir el día son dos gestos (abrir y tocar); el punto
+ *    entero del cambio es que sea uno.
+ * 2. **La cuadrícula no se mueve, y casi nunca mueve nada.** Esta sección está en el MEDIO de una
+ *    hoja anclada abajo: un control que crece ~200dp al abrirse empujaría TIPO, CATEGORÍA, CUENTA
+ *    y RECORDATORIO hacia abajo justo mientras el dedo está apoyado. La cuadrícula mide siempre
+ *    lo mismo —cinco filas de siete, haya o no día elegido—, así que **lo que está bajo el dedo
+ *    nunca se mueve**.
+ *
+ *    Lo de abajo tampoco, salvo en un caso: elegir 29, 30 o 31 estrena la nota de los meses
+ *    cortos y empuja lo que sigue **29 px** (medido: con el 25, TIPO/Gasto/CATEGORÍA quedan en
+ *    y=216/246/281; con el 31, en 245/275/310). Es el precio de decir la verdad justo cuando
+ *    corresponde, y ocurre por debajo del dedo, no bajo él.
+ *
+ *    El campo de CUENTA sí crece al abrirse, y **no es aire lo que empuja**: debajo suyo está
+ *    toda la sección RECORDATORIO (casilla, líneas de entrega y, si aplica, el cartel ámbar).
+ *    Es un patrón que ya estaba en esta hoja y no lo trajo esta rama; se nombra para que nadie
+ *    lo cite como precedente de que «abrir en su lugar no molesta».
+ *
+ * El alto no queda librado a nada: cinco filas fijas dentro del `verticalScroll` de la hoja, con
+ * el botón «Crear recurrente» fuera del scroll (ver el comentario del `BoxWithConstraints`).
+ */
+@Composable
+private fun DayOfMonthPicker(
+    selected: Int?,
+    enabled: Boolean,
+    onPick: (Int) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 5 filas × 7 columnas = 35 casillas para 31 días. Las cuatro sobrantes van como huecos
+        // del mismo ancho para que la última fila no se estire: una cuadrícula que cambia de paso
+        // en la última línea se lee como otra cosa.
+        for (fila in 0 until 5) {
+            if (fila > 0) Spacer(Modifier.height(6.dp))
+            // 4dp entre columnas y no 6: son seis huecos, y cada 2dp que se les saca va a parar
+            // al ancho de la casilla, que es la dimensión que en un teléfono no sobra.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                for (columna in 0 until 7) {
+                    val dia = fila * 7 + columna + 1
+                    if (dia <= 31) {
+                        DayCell(day = dia, selected = dia == selected, enabled = enabled, onPick = onPick)
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        // La nota de los meses cortos, SOLO cuando aplica (ver [diaCortoHint]). Va debajo de la
+        // cuadrícula: arriba movería la cuadrícula misma bajo el dedo al elegir un 29, 30 o 31.
+        diaCortoHint(selected)?.let { nota ->
+            Spacer(Modifier.height(8.dp))
+            Text(text = nota, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+        }
+    }
+}
+
+/**
+ * Una casilla de la cuadrícula. Sin borde: 31 recuadros dibujados serían más ruido que ayuda.
+ *
+ * **44dp de alto, y el ancho es lo que dan siete columnas.** En un teléfono de 375px, con los
+ * 20dp de margen de la hoja a cada lado y 4dp entre columnas, cada casilla mide ~44,4 × 44 — por
+ * debajo de los 48dp que recomienda Material. No es un descuido ni es evitable: siete columnas de
+ * 48dp necesitan 336dp de casillas sobre 335 disponibles, así que **ningún calendario entra en
+ * 48dp en este ancho** (el propio DatePicker de Material3 usa casillas de 40dp). Lo que sí se
+ * podía elegir es el alto, y por eso se le dio 44 en vez de los 38 con los que nació: es la
+ * dimensión que no está limitada por la geometría. Verificado a ojo a 375×812.
+ */
+@Composable
+private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPick: (Int) -> Unit) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(44.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .clickable(enabled = enabled) { onPick(day) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = day.toString(),
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = when {
+                !enabled -> MinTextFaint
+                selected -> MinOnPrimaryContainer
+                else -> MinTextDim
+            },
+        )
+    }
+}
+
+/**
+ * **Qué pasa con el 29, el 30 y el 31**, dicho antes de guardar y no descubierto en febrero.
+ *
+ * No es comportamiento nuevo: el server ya recorta la fecha al largo real del mes
+ * (`occurrenceInMonth` usa `coerceIn(1, month.lengthOfMonth())`) y guarda el día tal cual, así
+ * que el mes siguiente vuelve a expandirse al día elegido. Lo único que faltaba era decirlo —
+ * hasta ahora el dueño elegía «31» sin que nada le contara qué iba a pasar en febrero.
+ *
+ * `null` para los días 1–28, que caen en todos los meses y no necesitan ninguna aclaración: una
+ * nota permanente sería ruido en el caso normal.
+ */
+fun diaCortoHint(day: Int?): String? =
+    if (day == null || day < 29) null
+    else "En los meses que no llegan al $day, se toma el último día del mes; el siguiente vuelve al $day."
