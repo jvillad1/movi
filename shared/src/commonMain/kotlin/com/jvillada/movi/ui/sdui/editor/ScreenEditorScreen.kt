@@ -39,6 +39,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.toUserMessage
+import com.jvillada.movi.ui.dashboard.HERO_BALANCE_TITLE
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -51,7 +52,9 @@ import kotlinx.serialization.json.jsonPrimitive
 private const val SLUG = "dashboard"
 
 private val SECTION_TYPE_LABELS = mapOf(
-    "HERO_BALANCE" to "Balance neto",
+    // Del mismo lugar que el rótulo que se pinta, para que el Editor no nombre la sección
+    // de una forma y el Inicio la titule de otra.
+    "HERO_BALANCE" to HERO_BALANCE_TITLE,
     "UPCOMING_PAYMENTS" to "Próximos pagos",
     "ALERTS" to "Alertas",
     "QUICK_LINKS_WITH_TOTALS" to "Accesos con cifra",
@@ -408,13 +411,23 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
         "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS" -> {
             // Secciones de datos: el contenido lo pone el cliente con lo que carga del server;
             // solo el título se ajusta desde acá (vacío = el nombre por defecto).
-            FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
-            Spacer(Modifier.height(8.dp))
+            //
+            // Menos el de «Tu plata». Ola 9: ese rótulo se cableó en el renderer
+            // (`HERO_BALANCE_TITLE`) porque la fila llega a todos los clientes en el deploy pero
+            // el renderer viaja en el binario — un APK viejo, que todavía pinta el patrimonio, lo
+            // habría titulado «Tu plata −$1.492.710.542». El campo NO se muestra en vez de
+            // mostrarse sin efecto: un editor que acepta un cambio y lo descarta en silencio es
+            // peor que uno que dice por qué no se puede.
+            if (section.type != "HERO_BALANCE") {
+                FieldBox("Título (opcional)", section.title ?: "", { onUpdate(section.copy(title = it.ifBlank { null })) })
+                Spacer(Modifier.height(8.dp))
+            }
             Text(
                 when (section.type) {
                     "UPCOMING_PAYMENTS" -> "Se muestra solo cuando hay pagos en los próximos 7 días."
                     "ALERTS" -> "Se muestra solo cuando hay algo por resolver."
-                    else -> "Balance neto, ingresos, gastos y flujo del mes: sin más campos."
+                    else -> "Tu plata, el patrimonio neto, ingresos, gastos y flujo del mes: sin más campos. " +
+                        "El título de esta sección no se cambia aquí: viaja en la app, no en la pantalla."
                 },
                 fontSize = 12.sp, color = MinTextMute,
             )

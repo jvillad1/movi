@@ -66,6 +66,26 @@ class DashboardDefaultsTest {
         assertTrue(DASHBOARD_LAYOUT_VERSION >= 4, "la Ola 8 cambió los accesos: la generación sube")
     }
 
+    /**
+     * Ola 9: el Inicio cambió de portada («Tu plata» arriba, patrimonio debajo) y aun así la
+     * generación **no se movió**, ni la lista, ni el título guardado del hero.
+     *
+     * No es un olvido, es la decisión. El rótulo del hero se cableó en el renderer
+     * (`HERO_BALANCE_TITLE`, en `:shared`) justamente para no tener que tocar esta lista: subirla
+     * habría empujado `title = "Tu plata"` a TODOS los clientes en el instante del deploy,
+     * incluido el APK ya instalado, que sigue pintando el patrimonio — y lo habría titulado «Tu
+     * plata −$1.492.710.542», la lectura exacta que la ola vino a evitar.
+     *
+     * Este test es el recordatorio: si alguien cambia el título de HERO_BALANCE en la semilla,
+     * está reabriendo esa ventana. El título es dato inerte; el rótulo vive en el binario.
+     */
+    @Test
+    fun ola9_kept_the_generation_and_the_inert_hero_title() {
+        val hero = defaultDashboardDefinition().sections.first { it.type == "HERO_BALANCE" }
+        assertEquals("Balance neto", hero.title, "el título del hero es inerte y se queda como está desplegado")
+        assertEquals(4, DASHBOARD_LAYOUT_VERSION, "la Ola 9 no tocó la definición: la generación no sube")
+    }
+
     @Test
     fun accounts_summary_and_analisis_are_gone() {
         assertTrue("ACCOUNTS_SUMMARY" !in ScreenTaxonomy.SECTION_TYPES)

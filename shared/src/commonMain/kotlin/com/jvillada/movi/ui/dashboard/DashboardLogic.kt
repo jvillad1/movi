@@ -2,7 +2,9 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -21,6 +23,7 @@ import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.shared.time.currentMonthPrefix
 
@@ -72,6 +75,124 @@ data class DashboardData(
     val hasRecurringRule: Boolean get() = upcoming.orEmpty().any {
         !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX)
     }
+}
+
+// ── Las dos cifras del Inicio ──────────────────────────────────────────────────────
+
+/**
+ * Lo que TIENES y lo que VALES, separadas y con nombre propio.
+ *
+ * Nacen de un reporte del dueño: cargó su primer crédito y dijo «lo que hizo fue descontarme
+ * de la cuenta todo el saldo del crédito». La cuenta no se tocó —la deuda vive en su propia
+ * cuenta `LOAN` y nunca entró al flujo de caja— pero el número grande del Inicio pasó de
+ * +$20.308.659 a −$28.710.542 de un día para el otro, sin nada que lo explicara. Que un dato
+ * sea correcto no lo hace legible: el Inicio mostraba el **patrimonio** bajo el rótulo
+ * «Balance neto», y con cinco créditos por cargar (~$1.505 millones) la primera cifra de cada
+ * mañana iba a ser −$1.493 millones.
+ *
+ * Por eso el Inicio muestra ahora [tuPlata] arriba y [patrimonio] debajo, rotulados distinto.
+ *
+ * **Qué cuenta como «tu plata»: Dinero + Inversión, o sea toda cuenta que no sea deuda.**
+ * Tres razones, en orden de peso:
+ * 1. Es plata suya. Un CDT o un fondo es plata guardada, no plata ajena; esconderla del número
+ *    grande obligaría a sumar dos cifras de dos pantallas para saber cuánto tiene.
+ * 2. Es exactamente lo que ya muestra la fila «Cuentas» de EXPLORA y el renglón «Activos» de
+ *    la pantalla de Cuentas (ambos, `assetsDebtsNet(...).first`). Dejar el hero en solo-Dinero
+ *    crearía un tercer número que no coincide con ninguno de los dos — el desacuerdo que la
+ *    Ola 4 tuvo que arreglar entre Créditos y el Inicio.
+ * 3. La distinción que de verdad hizo daño acá no es líquido vs. invertido, es **tuyo vs.
+ *    debido**. Esa es la que separan estas dos cifras.
+ *
+ * Lo invertido no se pierde de vista: cuando hay algo en Inversión, el hero lo desglosa
+ * ([disponible] y [invertido]) en una línea secundaria.
+ */
+data class HeroBalance(
+    /** Lo que tienes: saldo COP de toda cuenta que no sea deuda (Dinero + Inversión). */
+    val tuPlata: Long,
+    /** La parte de [tuPlata] en el grupo Dinero — efectivo, corriente, ahorros. */
+    val disponible: Long,
+    /** La parte de [tuPlata] en el grupo Inversión. */
+    val invertido: Long,
+    /** Lo que debes: tarjetas y préstamos, en COP (estimado cuando hay saldo en otra moneda). */
+    val deudas: Long,
+    /** [tuPlata] − [deudas]. Puede ser negativo, y con cinco créditos hipotecarios lo será. */
+    val patrimonio: Long,
+) {
+    /**
+     * ¿Hay algo que decir sobre el patrimonio? Con el grupo Deuda en cero, [patrimonio] y
+     * [tuPlata] son el MISMO número y el hero no repite la cifra.
+     *
+     * Es `!= 0`, no `> 0`: una tarjeta **sobrepagada** deja [deudas] en negativo, y ahí el
+     * patrimonio es MAYOR que «tu plata» — un dato que vale la pena mostrar y que un `> 0`
+     * escondía justo cuando la línea dejaba de ser redundante. (Ver [patrimonioExplicacion],
+     * que cambia «menos … en deudas» por «más … a favor en créditos» en ese caso.)
+     */
+    val hasDebt: Boolean get() = deudas != 0L
+    /** Sin nada invertido no hay nada que desglosar: el hero no pinta la línea del desglose. */
+    val hasInvestments: Boolean get() = invertido != 0L
+}
+
+/**
+ * El rótulo de la cifra grande del Inicio, **fijo en el binario y no leído de la definición SDUI**.
+ *
+ * Es lo único de la tarjeta que no se puede editar desde el Editor de pantallas, y la razón es
+ * la asimetría del despliegue: la fila de `screen_definitions` llega a TODOS los clientes en el
+ * instante del deploy, pero el renderer viaja en el binario. La PWA está a salvo (el mismo
+ * deploy sirve el wasm y la fila); un APK ya instalado no.
+ *
+ * Si el rótulo viajara en el schema, cambiar la semilla a «Tu plata» habría hecho que el APK 1.7
+ * —que sigue pintando el patrimonio— titulara **«Tu plata −$1.492.710.542»**: exactamente la
+ * lectura que esta rama existe para evitar, ahora afirmada por el rótulo. Con el rótulo en el
+ * binario no hay ventana en ninguna de las dos direcciones: el cliente viejo dice «Balance neto»
+ * sobre el patrimonio y el nuevo dice «Tu plata» sobre los activos, y **cada binario rotula lo
+ * que él mismo calcula**.
+ *
+ * Es el mismo trato que ya tenían los tres sub-rótulos de abajo («Ingresos», «Gastos», «Flujo
+ * del mes»): están cableados en el renderer, y por eso cambiar «Egresos» por «Gastos» en la Ola
+ * 8 no necesitó subir la generación del seed.
+ *
+ * El costo asumido: el hero no se puede renombrar desde el Editor. Se verificó contra producción
+ * (2026-08-28) que el dueño nunca editó el Inicio, y el resto de la definición —orden de
+ * secciones, accesos, títulos de las demás— sigue siendo editable como antes.
+ */
+const val HERO_BALANCE_TITLE = "Tu plata"
+
+/**
+ * [HERO_BALANCE_TITLE], ignorando a propósito `section.title`.
+ *
+ * Existe como función —en vez de usar la constante directo en el renderer— para que el test
+ * pueda fijar la decisión: alguien que "arregle" esto de vuelta a `section.title ?: …` reabre
+ * la ventana de desalineación descrita arriba, y eso tiene que romper una prueba, no descubrirse
+ * en el teléfono del dueño.
+ */
+fun heroBalanceTitle(@Suppress("UNUSED_PARAMETER") section: ScreenSection): String = HERO_BALANCE_TITLE
+
+/**
+ * La línea que explica de dónde sale el patrimonio — la resta escrita, que es lo que faltaba el
+ * día del reporte del dueño.
+ *
+ * Dos redacciones porque [HeroBalance.deudas] puede ser negativo (una tarjeta sobrepagada):
+ * «menos … en deudas» mentiría con un signo menos delante del monto.
+ */
+fun patrimonioExplicacion(balance: HeroBalance): String =
+    if (balance.deudas >= 0L) "Tu plata menos ${formatMoneyCompact(balance.deudas)} en deudas"
+    else "Tu plata más ${formatMoneyCompact(-balance.deudas)} a favor en créditos"
+
+/**
+ * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no
+ * reimplementa la suma— para que el hero, la fila «Cuentas» del Inicio y el «Patrimonio neto»
+ * de la pantalla de Cuentas no puedan dar tres números distintos.
+ */
+fun heroBalance(accounts: List<Account>): HeroBalance {
+    val (activos, deudas, neto) = assetsDebtsNet(accounts)
+    val invertido = accounts.filter { it.type.group == AccountGroup.INVERSION }.sumOf { it.balance }
+    return HeroBalance(
+        tuPlata = activos,
+        disponible = activos - invertido,
+        invertido = invertido,
+        deudas = deudas,
+        patrimonio = neto,
+    )
 }
 
 // ── Próximos pagos ─────────────────────────────────────────────────────────────────

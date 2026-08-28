@@ -293,8 +293,14 @@ class ScreenRoutesTest {
         }
         assertEquals(HttpStatusCode.OK, res.status)
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
-        // Sube por encima de la versión editada: un cliente con "3" en caché no recibe 304.
-        assertEquals(4, body["version"]!!.jsonPrimitive.content.toInt())
+        // Contra la constante y no contra un literal, para que una generación nueva del seed no
+        // rompa el test por el número. Pero la constante sola NO asegura lo que este test dice:
+        // pasaría con la generación en 3, y ahí un cliente con "3" en caché recibiría 304 y se
+        // quedaría con el layout viejo para siempre. El `> 3` vuelve a amarrar el invariante
+        // —«sube por encima de la versión editada»— que el número literal aseguraba.
+        val servedVersion = body["version"]!!.jsonPrimitive.content.toInt()
+        assertEquals(DASHBOARD_LAYOUT_VERSION, servedVersion)
+        assertTrue(servedVersion > 3, "tiene que superar la versión 3 que quedó editada, o el If-None-Match da 304")
         val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
         assertEquals(SCREEN_SEED.first().sections.map { it.type }, types)
 
@@ -303,6 +309,6 @@ class ScreenRoutesTest {
         val again = client.get("/api/screens/dashboard") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
         }
-        assertEquals(4, Json.parseToJsonElement(again.bodyAsText()).jsonObject["version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(DASHBOARD_LAYOUT_VERSION, Json.parseToJsonElement(again.bodyAsText()).jsonObject["version"]!!.jsonPrimitive.content.toInt())
     }
 }

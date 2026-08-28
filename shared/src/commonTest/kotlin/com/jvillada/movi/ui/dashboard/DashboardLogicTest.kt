@@ -21,6 +21,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.credits.totalDebtCop
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -109,6 +110,159 @@ class DashboardLogicTest {
         val budgets = listOf(Budget("Mercado", 100_000), Budget("Salidas", 200_000), Budget("Raro", 0))
         val spent = mapOf("Mercado" to 100_000L, "Salidas" to 150_000L, "Raro" to 5L)
         assertEquals(listOf("Mercado"), overBudgetCategories(budgets, spent))
+    }
+
+    // ── Las dos cifras del Inicio: lo que tienes vs. lo que vales ──────────────
+
+    /**
+     * La foto real del dueño el día del reporte, más los cuatro créditos que le faltaba cargar:
+     * una cuenta de ahorros con $12.383.363 y cinco créditos por $1.505.093.905. Es el caso que
+     * originó la rama — «agregué un crédito y lo que hizo fue descontarme de la cuenta todo el
+     * saldo del crédito» — y el que tiene que leerse bien.
+     */
+    private val cuentasDelDueño = listOf(
+        Account("a1", "Bancolombia Ahorros", AccountType.SAVINGS, 12_383_363),
+        Account("l1", "Hipotecario Casa", AccountType.LOAN, 768_000_000),
+        Account("l2", "Hipotecario Apto", AccountType.LOAN, 203_000_000),
+        Account("l3", "Libranza Uno", AccountType.LOAN, 262_000_000),
+        Account("l4", "Libranza Dos", AccountType.LOAN, 231_000_000),
+        Account("l5", "Libre inversión", AccountType.LOAN, 41_093_905),
+    )
+
+    @Test
+    fun `con los cinco creditos del dueño la plata no se toca y el patrimonio queda aparte`() {
+        val b = heroBalance(cuentasDelDueño)
+        // Lo que el dueño creyó que se le había descontado: no se movió ni un peso.
+        assertEquals(12_383_363L, b.tuPlata)
+        assertEquals(12_383_363L, b.disponible)
+        assertEquals(0L, b.invertido)
+        assertEquals(1_505_093_905L, b.deudas)
+        assertEquals(12_383_363L - 1_505_093_905L, b.patrimonio)
+        assertEquals(-1_492_710_542L, b.patrimonio)
+        assertTrue(b.hasDebt, "con deudas el Inicio pinta la línea del patrimonio")
+        assertEquals(false, b.hasInvestments)
+    }
+
+    @Test
+    fun `agregar un credito no cambia lo que tienes, solo el patrimonio`() {
+        // El movimiento exacto del reporte: antes del crédito y después, con la MISMA cuenta.
+        val antes = listOf(cuentasDelDueño[0])
+        val despues = listOf(cuentasDelDueño[0], cuentasDelDueño[5])  // + libre inversión $41M
+        assertEquals(heroBalance(antes).tuPlata, heroBalance(despues).tuPlata)
+        assertEquals(12_383_363L, heroBalance(antes).patrimonio)      // sin deudas: patrimonio = tu plata
+        assertEquals(-28_710_542L, heroBalance(despues).patrimonio)   // la cifra que asustó
+    }
+
+    @Test
+    fun `sin cuentas todo es cero y no hay nada secundario que pintar`() {
+        val b = heroBalance(emptyList())
+        assertEquals(0L, b.tuPlata)
+        assertEquals(0L, b.deudas)
+        assertEquals(0L, b.patrimonio)
+        assertEquals(false, b.hasDebt, "sin deudas el patrimonio repetiría el número grande")
+        assertEquals(false, b.hasInvestments)
+    }
+
+    @Test
+    fun `solo deudas deja tu plata en cero y el patrimonio en negativo`() {
+        val b = heroBalance(listOf(Account("l1", "Hipotecario", AccountType.LOAN, 768_000_000)))
+        assertEquals(0L, b.tuPlata)
+        assertEquals(768_000_000L, b.deudas)
+        assertEquals(-768_000_000L, b.patrimonio)
+        assertTrue(b.hasDebt)
+    }
+
+    @Test
+    fun `solo efectivo no muestra patrimonio porque seria el mismo numero`() {
+        val b = heroBalance(listOf(Account("a1", "Efectivo", AccountType.CASH, 350_000)))
+        assertEquals(350_000L, b.tuPlata)
+        assertEquals(0L, b.deudas)
+        assertEquals(b.tuPlata, b.patrimonio)
+        assertEquals(false, b.hasDebt)
+    }
+
+    @Test
+    fun `las inversiones entran en tu plata y se desglosan aparte`() {
+        val b = heroBalance(
+            listOf(
+                Account("a1", "Ahorros", AccountType.SAVINGS, 12_383_363),
+                Account("i1", "CDT Bancolombia", AccountType.INVESTMENT, 3_000_000),
+                Account("i2", "Fondo Nu", AccountType.INVESTMENT, 700_000),
+                Account("l1", "Libre inversión", AccountType.LOAN, 41_093_905),
+            ),
+        )
+        assertEquals(16_083_363L, b.tuPlata, "Dinero + Inversión: lo invertido sigue siendo plata suya")
+        assertEquals(12_383_363L, b.disponible)
+        assertEquals(3_700_000L, b.invertido)
+        assertTrue(b.hasInvestments, "con algo invertido el hero muestra el desglose")
+        assertEquals(16_083_363L - 41_093_905L, b.patrimonio)
+    }
+
+    @Test
+    fun `una tarjeta en otra moneda entra por su estimado en COP, igual que en Cuentas`() {
+        val b = heroBalance(
+            listOf(
+                Account("a1", "Ahorros", AccountType.SAVINGS, 2_000_000),
+                Account("c1", "Mastercard USD", AccountType.CREDIT_CARD, 0, currency = "USD", estimatedTotalCop = 4_000_000),
+            ),
+        )
+        assertEquals(4_000_000L, b.deudas)
+        assertEquals(-2_000_000L, b.patrimonio)
+    }
+
+    /**
+     * El rótulo del hero NO sale de la definición SDUI. Si volviera a `section.title ?: …`, un
+     * deploy que cambiara la fila titularía «Tu plata» el patrimonio en cualquier APK ya
+     * instalado — la lectura exacta que esta rama vino a evitar, afirmada por el rótulo.
+     */
+    @Test
+    fun `el rotulo del hero vive en el binario y no en la definicion guardada`() {
+        assertEquals("Tu plata", HERO_BALANCE_TITLE)
+        assertEquals("Tu plata", heroBalanceTitle(ScreenSection(type = "HERO_BALANCE", title = "Balance neto")))
+        assertEquals("Tu plata", heroBalanceTitle(ScreenSection(type = "HERO_BALANCE", title = null)))
+        assertEquals("Tu plata", heroBalanceTitle(ScreenSection(type = "HERO_BALANCE", title = "Lo que sea")))
+    }
+
+    @Test
+    fun `la explicacion del patrimonio escribe la resta del dueño`() {
+        assertEquals(
+            "Tu plata menos $1.505,1M en deudas",
+            patrimonioExplicacion(heroBalance(cuentasDelDueño)),
+        )
+    }
+
+    @Test
+    fun `una tarjeta sobrepagada no esconde el patrimonio ni le pone un menos delante`() {
+        // Deuda NEGATIVA: pagaste de más y la tarjeta te debe a vos. El patrimonio queda por
+        // ENCIMA de «tu plata», así que la línea tiene algo que decir (con `deudas > 0` se
+        // escondía justo cuando dejaba de ser redundante) y la redacción cambia de signo —
+        // «menos −$500.000 en deudas» sería una resta escrita al revés.
+        val b = heroBalance(
+            listOf(
+                Account("a1", "Ahorros", AccountType.SAVINGS, 2_000_000),
+                Account("c1", "Visa", AccountType.CREDIT_CARD, -500_000),
+            ),
+        )
+        assertEquals(-500_000L, b.deudas)
+        assertEquals(2_500_000L, b.patrimonio)
+        assertTrue(b.hasDebt, "el patrimonio ya no es el mismo número que «tu plata»: hay que mostrarlo")
+        assertEquals("Tu plata más $500.000 a favor en créditos", patrimonioExplicacion(b))
+    }
+
+    @Test
+    fun `las dos cifras del hero no pueden desalinearse de la fila Cuentas ni de Cuentas`() {
+        // El hero, el acceso «Cuentas» del Inicio y el «Patrimonio neto» de la pantalla de
+        // Cuentas salen todos de assetsDebtsNet — el desacuerdo entre pantallas que la Ola 4
+        // tuvo que arreglar entre Créditos y el Inicio no puede repetirse acá.
+        val (activos, deudas, neto) = assetsDebtsNet(cuentasDelDueño)
+        val b = heroBalance(cuentasDelDueño)
+        assertEquals(activos, b.tuPlata)
+        assertEquals(deudas, b.deudas)
+        assertEquals(neto, b.patrimonio)
+        assertEquals(b.tuPlata, b.disponible + b.invertido)
+        assertEquals(b.patrimonio, b.tuPlata - b.deudas)
+        // Y lo mismo que muestra la fila «Cuentas» de EXPLORA.
+        assertEquals("$12.383.363", quickLinkFigure("accounts", DashboardData(accounts = cuentasDelDueño)).value)
     }
 
     // ── Accesos con cifra ──────────────────────────────────────────────────────

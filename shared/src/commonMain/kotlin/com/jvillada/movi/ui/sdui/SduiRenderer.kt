@@ -30,13 +30,15 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.MonoText
-import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LinkFigure
 import com.jvillada.movi.ui.dashboard.dashboardAlerts
 import com.jvillada.movi.ui.dashboard.dueLabel
+import com.jvillada.movi.ui.dashboard.heroBalance
+import com.jvillada.movi.ui.dashboard.heroBalanceTitle
+import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
 import com.jvillada.movi.ui.dashboard.overBudgetCategories
 import com.jvillada.movi.ui.dashboard.quickLinkFigure
 import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
@@ -90,7 +92,7 @@ private fun SduiSection(
     uriHandler: UriHandler,
 ) {
     when (section.type) {
-        "HERO_BALANCE" -> HeroBalanceSection(section, data)
+        "HERO_BALANCE" -> HeroBalanceSection(section, data, onNavigate)
         "UPCOMING_PAYMENTS" -> UpcomingPaymentsSection(section, data, onNavigate)
         "ALERTS" -> AlertsSection(section, data, onNavigate)
         "QUICK_LINKS_WITH_TOTALS" -> QuickLinksSection(section, data, onNavigate, uriHandler)
@@ -146,11 +148,36 @@ private fun clickHandler(
     uriHandler: UriHandler,
 ): (() -> Unit)? = action?.let { { performAction(it, onNavigate, uriHandler) } }
 
-// ── HERO_BALANCE — balance neto (activos − deudas) y el flujo del mes ──────────────
+// ── HERO_BALANCE — tu plata arriba, el patrimonio debajo, y el flujo del mes ───────
 
+/**
+ * El número grande es **lo que tienes** ([HeroBalance.tuPlata]); el **patrimonio neto** queda
+ * debajo, secundario pero visible.
+ *
+ * Antes el número grande era el patrimonio bajo el rótulo «Balance neto». El dueño cargó su
+ * primer crédito y reportó «me descontó de la cuenta todo el saldo del crédito»: no había tal
+ * descuento —la deuda vive en su propia cuenta y no entra al flujo de caja—, pero la cifra de
+ * portada saltó de +$20,3M a −$28,7M sin nada que lo explicara. El dato era correcto y aun así
+ * ilegible. Ver [heroBalance] para qué cuenta como «tu plata» y por qué.
+ *
+ * El patrimonio **no se esconde**: con los cinco créditos del dueño (~$1.505M) es la foto
+ * honesta de su situación. Se muestra con tres cuidados para que se entienda en vez de asustar:
+ * - solo cuando el grupo Deuda no está en cero (en cero repetiría el número de arriba, y esta
+ *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA);
+ * - **en gris, no en rojo** — el rojo de esta tarjeta está reservado al «Flujo del mes», que es
+ *   el resultado del mes y algo sobre lo que se puede actuar hoy; un patrimonio negativo por
+ *   hipotecas es una estructura de largo plazo, no una pérdida de este mes. La pantalla de
+ *   Cuentas pinta ESTE MISMO número y sigue la misma regla, porque tocar la línea lleva ahí:
+ *   ver gris acá y rojo a 28 sp un toque después se leería como que algo empeoró en el camino;
+ * - con la resta escrita debajo («Tu plata menos $1.505,1M en deudas»), que es justamente lo
+ *   que faltaba el día del reporte.
+ *
+ * Tocar esa línea abre Cuentas, cuyo hero es el mismo «PATRIMONIO NETO» desglosado en Activos
+ * y Deudas.
+ */
 @Composable
-private fun HeroBalanceSection(section: ScreenSection, data: DashboardData) {
-    val (_, _, neto) = assetsDebtsNet(data.accounts)
+private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
+    val balance = heroBalance(data.accounts)
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
     val flujo = ingresos - egresos
@@ -160,18 +187,70 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData) {
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(22.dp),
     ) {
-        Text(text = section.title ?: "Balance neto", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
+        // `section.title` NO se lee acá: el rótulo del hero es [HERO_BALANCE_TITLE], que viaja
+        // en el binario. Ver su KDoc — es la única forma de que cada cliente rotule lo que él
+        // mismo calcula, sin ventana de desalineación con la fila del server.
+        Text(text = heroBalanceTitle(section), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
         Spacer(Modifier.height(10.dp))
         Text(
-            text = formatCOP(neto), // formatCOP ya trae el signo (F36) — no duplicarlo acá
+            text = formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
             fontSize = 44.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Normal,
-            color = if (neto < 0) MinExpense else MinText,
+            // Una cuenta en descubierto SÍ es una alarma del día: eso se queda en rojo.
+            color = if (balance.tuPlata < 0) MinExpense else MinText,
             letterSpacing = (-1.6).sp,
             lineHeight = 44.sp,
         )
-        Spacer(Modifier.height(18.dp))
+        if (balance.hasInvestments) {
+            // Las cuentas de Inversión entran en «tu plata», así que la línea dice cuánto de ese
+            // total está guardado. Usa el vocabulario de la pantalla de Cuentas ("Dinero" e
+            // "Inversión" son sus dos grupos con subtotal), no dos palabras nuevas.
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Dinero ${formatMoneyCompact(balance.disponible)} · Inversión ${formatMoneyCompact(balance.invertido)}",
+                fontSize = 11.5.sp,
+                color = MinTextMute,
+            )
+        }
+        if (balance.hasDebt) {
+            Spacer(Modifier.height(16.dp))
+            Hairline()
+            // La explicación va DEBAJO de la fila, a ancho completo, y no como sub-línea de la
+            // etiqueta: en un teléfono de 375 px compartir el renglón con la cifra la partía en
+            // «Tu plata menos $1.505,1M en / deudas», y la resta —que es todo el punto de esta
+            // línea— dejaba de leerse de un vistazo. Verificado a ojo en 375×812.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigate(Screen.Accounts) }
+                    .padding(top = 14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "Patrimonio neto",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 12.sp,
+                        color = MinTextMute,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    MonoText(formatMoneyCompact(balance.patrimonio), 15f, color = MinTextDim, fontWeight = FontWeight.Medium)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = patrimonioExplicacion(balance),
+                    fontSize = 11.sp,
+                    color = MinTextMute,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+        } else {
+            Spacer(Modifier.height(18.dp))
+        }
         Hairline()
         Spacer(Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth()) {

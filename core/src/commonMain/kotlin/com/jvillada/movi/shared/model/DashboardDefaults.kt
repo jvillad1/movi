@@ -21,13 +21,27 @@ package com.jvillada.movi.shared.model
 // nombre y otra cifra: tocaba «Suscripciones · $312.000» y aterrizaba en «Recurrentes · Flujo
 // libre», dos números sin relación visible. Ahora el acceso muestra el MISMO flujo libre que la
 // pantalla de destino (ver `quickLinkFigure("recurrentes")`).
+// Ola 9: la generación se queda en 4 A PROPÓSITO, aunque el Inicio cambió de portada.
+//
+// El hero pasó a mostrar «Tu plata» (los activos) con el patrimonio debajo, así que el título
+// guardado acá —«Balance neto»— dejó de describir la cifra grande. La reacción obvia era
+// cambiarlo y subir la generación, y es la trampa: la fila de `screen_definitions` llega a
+// TODOS los clientes en el instante del deploy, pero el renderer viaja en el binario. El APK ya
+// instalado sigue pintando el patrimonio, y con la fila nueva lo habría titulado «Tu plata
+// −$1.492.710.542» — la lectura exacta que la Ola 9 vino a evitar, ahora afirmada por el rótulo.
+//
+// Por eso el rótulo del hero se cableó en el renderer (`HERO_BALANCE_TITLE` en DashboardLogic.kt,
+// mismo trato que «Ingresos»/«Gastos»/«Flujo del mes») y esta lista **no cambió ni un byte**:
+// producción sigue en `version 4 = seed_version 4`, `seedScreens` no toca nada, y el título que
+// queda abajo es dato inerte para HERO_BALANCE — se conserva para que la semilla siga siendo
+// byte a byte lo que ya está desplegado, no porque alguien lo lea.
 const val DASHBOARD_LAYOUT_VERSION = 4
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
     version = DASHBOARD_LAYOUT_VERSION,
     sections = listOf(
-        ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),
+        ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
         ScreenSection(type = "UPCOMING_PAYMENTS", title = "Próximos pagos"),
         ScreenSection(type = "ALERTS", title = "Alertas"),
         ScreenSection(

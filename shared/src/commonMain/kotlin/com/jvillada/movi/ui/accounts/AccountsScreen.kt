@@ -198,7 +198,17 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             MonoText(
                                 text = formatCOP(neto), // formatCOP ya trae el signo (F36) — no duplicarlo acá
                                 fontSize = 28f,
-                                color = if (neto >= 0) MinIncome else MinExpense,
+                                // Ola 9: **neutro en los dos signos**, como el patrimonio del Inicio.
+                                // Antes era verde/rojo según el signo, y la línea nueva del Inicio
+                                // («Patrimonio neto», en gris) NAVEGA acá: el dueño veía −$1.492,7M en
+                                // gris, tocaba, y el MISMO número aparecía en rojo a 28 sp un toque
+                                // después. Ese salto se lee como que algo empeoró en el camino, cuando
+                                // es la misma cifra. El rojo queda para lo que sí es alarma del día
+                                // (el flujo del mes, una cuenta en descubierto); un patrimonio negativo
+                                // por hipotecas es estructura de largo plazo, no una pérdida — y el
+                                // desglose de acá abajo (Activos en verde, Deudas en rojo) es el que
+                                // carga la lectura de signo, con más información que un solo color.
+                                color = MinText,
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(12.dp))
