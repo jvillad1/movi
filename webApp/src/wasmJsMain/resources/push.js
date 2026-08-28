@@ -3,8 +3,26 @@
 (function () {
     var _status = 'unsupported';
 
+    // El token, sin poder tirar NUNCA. `localStorage` no es una propiedad que siempre
+    // esté: con el almacenamiento del sitio bloqueado, tocarla tira SecurityError.
+    //
+    // Y esto no era un detalle cosmético: `supported()` la llama el interop de wasm de
+    // forma SÍNCRONA (ver PushOptIn.wasmjs.kt), o sea que la excepción entraba a Kotlin
+    // en mitad de una composición. Medido: con el almacenamiento bloqueado, tocar
+    // «Recurrentes» o el avatar → Perfil no solo no abría la pantalla — dejaba la
+    // navegación CLAVADA, sin responder a ningún otro toque. Y como en ese modo la
+    // sesión vive solo en memoria, recargar para descongelar te devolvía al login.
+    // O sea: el dueño entra, toca Recurrentes, y queda afuera otra vez.
+    //
+    // Sin token no hay push que valga, así que "no se pudo leer" y "no hay" se tratan
+    // igual: `false` / cadena vacía. Es la misma degradación silenciosa que ya tenía
+    // esta función para un navegador sin ServiceWorker.
+    function token() {
+        try { return localStorage.getItem('auth_token') || ''; } catch (e) { return ''; }
+    }
+
     function supported() {
-        return 'serviceWorker' in navigator && 'PushManager' in window && !!localStorage.getItem('auth_token');
+        return 'serviceWorker' in navigator && 'PushManager' in window && !!token();
     }
 
     function b64ToU8(b64) {
@@ -39,7 +57,7 @@
             var json = sub.toJSON();
             var postRes = await fetch('/api/push/subscribe', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('auth_token') },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
                 body: JSON.stringify({ endpoint: sub.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth })
             });
             if (!postRes.ok) {
@@ -57,7 +75,7 @@
             if (sub) {
                 await fetch('/api/push/subscribe', {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('auth_token') },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
                     body: JSON.stringify({ endpoint: sub.endpoint })
                 });
                 await sub.unsubscribe();

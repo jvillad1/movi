@@ -30,8 +30,13 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
     }
     install(HttpCallValidator) {
         validateResponse { response ->
+            // Ver `cuentaComoSesionVencida`: el 401 del propio login no es una sesión que
+            // venció — es una contraseña equivocada, y contarlo hacía que al tercer intento
+            // la app se cerrara sola encima de la persona.
             if (response.status == HttpStatusCode.Unauthorized) {
-                SessionManager.onUnauthorized()
+                if (cuentaComoSesionVencida(response.call.request.url.encodedPath)) {
+                    SessionManager.onUnauthorized()
+                }
             } else if (response.status.value in 200..299) {
                 SessionManager.onAuthSuccess()
             }

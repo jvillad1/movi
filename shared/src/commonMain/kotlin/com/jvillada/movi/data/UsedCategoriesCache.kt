@@ -162,12 +162,11 @@ object UsedCategoriesCache {
      * verdad — no puede ser el motivo de que nada arranque.
      */
     /**
-     * **Vecino conocido, ajeno a esta ola:** `SessionManager` lee `settings.getStringOrNull(
-     * "auth_token")` **en el inicializador de su object y sin protección**. Con el almacenamiento
-     * del sitio bloqueado, esa clase muere antes de que este caché llegue a cargarse, y el
-     * `runCatching` de acá abajo no lo tapa: son dos objects distintos. Es de `master`, no de esta
-     * rama, y arreglarlo toca la sesión —que no es lo que esta ola vino a mover—, así que queda
-     * escrito y no tocado.
+     * **Aquel vecino ya está arreglado:** `SessionManager` leía `auth_token` en el inicializador
+     * de su object y sin protección, así que con el almacenamiento del sitio bloqueado esa clase
+     * moría antes de que este caché llegara a cargarse —y el `runCatching` de acá abajo no lo
+     * tapaba, porque son dos objects distintos—. Ahora usa este mismo patrón (`by lazy` +
+     * `runCatching`, ver `SessionManager.kt`).
      */
     private fun leerPrefsGuardadas(): Map<String, CategoryPref> = runCatching {
         val raw = prefsSettings.getStringOrNull(KEY_CATEGORY_PREFS) ?: return@runCatching emptyMap()

@@ -38,8 +38,9 @@ import com.russhwolf.settings.set
  * `null` y la hoja cae en la primera cuenta de la lista, que es exactamente el comportamiento
  * de antes de esta rama. Es una comodidad, no una fuente de verdad.
  *
- * Contraejemplo vivo en el repo, y a propósito no imitado: `SessionManager` lee su token en el
- * inicializador de su `object` y sin protección.
+ * Lo mismo hace hoy `SessionManager`, que era el contraejemplo vivo del repo —leía su token en el
+ * inicializador de su `object` y sin protección— hasta que eso dejó a la app entera sin arrancar
+ * con el almacenamiento bloqueado.
  */
 private const val KEY_LAST_ACCOUNT = "last_account_id"
 private const val KEY_LAST_TRANSFER_FROM = "last_transfer_from_id"
