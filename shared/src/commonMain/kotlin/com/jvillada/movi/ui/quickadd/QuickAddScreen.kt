@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -583,7 +584,7 @@ private fun EditorBody(
     /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
     walletHintReserved: Boolean = false,
     note: String,
-    /** «Hoy», «Ayer» o «23 de agosto» — ver `etiquetaDeFecha`. */
+    /** «Hoy», «Ayer» o «23 de agosto» — ver `etiquetaDeFecha`. Se muestra debajo del monto. */
     dateLabel: String,
     onPickDate: () -> Unit,
     onPickCategory: () -> Unit,
@@ -598,7 +599,23 @@ private fun EditorBody(
     hasNoAccounts: Boolean = false,
     onCreateAccount: () -> Unit = {},
 ) {
-    Spacer(Modifier.height(22.dp))
+    // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
+    //
+    // Es el presupuesto de alto de la pastilla de fecha de acá abajo, y está medido, no estimado.
+    // Esta hoja está anclada abajo y **su alto ya no le sobra a un teléfono**: a 812 dp de alto
+    // con la barra inferior, el hueco de contenido son ~736 dp y el cuerpo de «Gasto» ya mide
+    // ~764 en master. Verificado a ojo en la web local: con la fecha puesta como una CUARTA fila
+    // de la tarjeta (56 dp más), «Guardar movimiento» quedaba **debajo del recorte** y había que
+    // desplazar la hoja para verlo. Se llegaba —el `verticalScroll` de la Ola 12 hace su trabajo—
+    // pero el botón de guardar de la pantalla donde se anota la plata no puede pedir un gesto
+    // previo para aparecer.
+    //
+    // Así que la fecha NO cuesta una fila: viaja en el renglón que ya existía debajo del monto,
+    // el de «COP», que estaba ocupado por una sola palabra. La cuenta cierra: el bloque del monto
+    // pasa de 22+56+8+16+18 = 120 dp a 16+56+2+26+18 = 118, o sea **dos dp MENOS que master**.
+    // Ninguna otra medida de esta hoja se toca — ni el alto de las teclas, ni los renglones de
+    // alto reservado que mantienen el teclado quieto.
+    Spacer(Modifier.height(16.dp))
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -615,8 +632,41 @@ private fun EditorBody(
             letterSpacing = (-2.2).sp,
             lineHeight = 56.sp,
         )
-        Spacer(Modifier.height(8.dp))
-        Text("COP", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
+        Spacer(Modifier.height(2.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("COP", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
+            Text("·", fontSize = 12.sp, color = MinTextFaint)
+            // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
+            // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
+            // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
+            // momento no tiene ni que interpretarla.
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MinSurfaceContainerLow)
+                    .clickable(onClick = onPickDate)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = dateLabel,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    maxLines = 1,
+                )
+                Icon(
+                    Icons.Rounded.ChevronRight,
+                    contentDescription = "Cambiar la fecha",
+                    tint = MinTextMute,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        }
     }
 
     Spacer(Modifier.height(18.dp))
@@ -685,39 +735,6 @@ private fun EditorBody(
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
-        )
-        // Ola 13 — LA FECHA, entre la cuenta y la nota.
-        //
-        // Una fila más en una hoja anclada abajo es exactamente lo que esta pantalla no puede
-        // regalar, así que vale la pena decir por qué esta sí:
-        //
-        // - **Es estática.** El teclado se mueve cuando algo aparece o desaparece mientras se
-        //   tipea (por eso el aviso de la cuenta y el error de red reservan su alto). Esta fila
-        //   está siempre, diga «Hoy» o «23 de agosto»: no puede mover nada.
-        // - **No crece.** El valor de la derecha tiene el mismo techo que las otras filas
-        //   (`rightMaxFraction`) y una sola línea; el texto más largo posible acá es «23 de
-        //   septiembre de 2025», que entra con aire en 167 dp.
-        // - **El sub-picker no cambia el alto de la hoja**: vive adentro del `Box` de alto
-        //   fijado, igual que Categoría, Cuenta y Nota.
-        //
-        // Va DESPUÉS de «Cuenta» y no arriba de todo porque el orden de la tarjeta sigue el de la
-        // decisión: cuánto (el teclado), en qué (categoría), de dónde (cuenta), cuándo (fecha), y
-        // el detalle opcional al final.
-        CardRow(
-            left = { Text("Fecha", fontSize = 14.5.sp, color = MinTextMute) },
-            right = {
-                Text(
-                    text = dateLabel,
-                    fontSize = 14.5.sp,
-                    color = MinText,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            rightMaxFraction = FRACCION_VALOR_FILA,
-            showChevron = true,
-            onClick = onPickDate,
         )
         CardRow(
             left = { Text("Nota", fontSize = 14.5.sp, color = MinTextMute) },
