@@ -62,8 +62,30 @@ private val sessionSettings: Settings by lazy { Settings() }
  */
 private val sessionMemoria = mutableMapOf<String, String>()
 
-private fun leer(key: String): String? =
-    runCatching { sessionSettings.getStringOrNull(key) }.getOrElse { sessionMemoria[key] }
+/**
+ * Lee del almacenamiento y, de paso, **recuerda lo último que sí se pudo leer**.
+ *
+ * Ese «de paso» es lo que cubre el segundo momento en que el almacenamiento se puede caer: no al
+ * cargar la página, sino **a mitad de sesión** (el navegador revoca el permiso, la persona
+ * bloquea los datos del sitio con la app abierta). Ahí `Settings` ya está construido y lo que
+ * empieza a lanzar es cada lectura.
+ *
+ * Sin este recuerdo, el caso medido en el navegador era: la app no se cae, pero el token deja de
+ * poder leerse —lo había escrito el overlay de `index.html` directo en `localStorage`, así que
+ * nunca pasó por acá— y **todos** los pedidos salen sin `Authorization` y vuelven 401. Sesión
+ * perdida sin decir nada. Con el recuerdo, lo que ya se venía leyendo bien sigue disponible y la
+ * sesión aguanta hasta la próxima recarga, que es exactamente lo mismo que promete el arranque
+ * bloqueado.
+ *
+ * No es un caché que pueda quedar viejo: mientras el almacenamiento funcione **manda él** y esto
+ * solo se actualiza con lo que él devolvió. Un `null` también se recuerda —borrando la entrada—
+ * porque «no está» es una lectura tan buena como cualquier otra.
+ */
+private fun leer(key: String): String? = runCatching {
+    val valor = sessionSettings.getStringOrNull(key)
+    if (valor == null) sessionMemoria.remove(key) else sessionMemoria[key] = valor
+    valor
+}.getOrElse { sessionMemoria[key] }
 
 private fun guardar(key: String, value: String?) {
     if (value == null) sessionMemoria.remove(key) else sessionMemoria[key] = value
