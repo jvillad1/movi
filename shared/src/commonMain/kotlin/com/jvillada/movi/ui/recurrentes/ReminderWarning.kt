@@ -82,11 +82,16 @@ import com.jvillada.movi.ui.components.MinCardVariant
  *                    para mostrar una acción ("Activar") o una instrucción
  *                    ("reactiva en el navegador"), pero ambos cuentan como "avisar".
  *
- * **Hueco conocido, y a propósito:** si el navegador dice "enabled" pero el server ya no tiene
- * claves VAPID (`canales.push == false`), el push tampoco saldría y acá no se avisa nada. Se
- * eligió el silencio: los cuatro textos del cartel hablan de notificaciones apagadas, y ninguno
- * sería cierto en ese estado. Callarse en un caso que requiere borrarle las claves al server
- * después de que alguien ya se suscribió es mejor que estrenar una quinta afirmación falsa.
+ * **DEFERIDO (no resuelto, y no cerrado):** si el navegador dice "enabled" pero el server ya no
+ * tiene claves VAPID (`canales.push == false`), el push tampoco saldría y acá no se avisa nada.
+ * El estado se detecta —`canales.push` ya viene en el wire justamente para esto— pero falta lo
+ * que hay que decir: los cuatro textos del cartel hablan de notificaciones apagadas y ninguno
+ * sería cierto ahí, así que arreglarlo es **escribir un quinto texto**, no reusar uno.
+ *
+ * Que hoy se calle NO es la conclusión de esta rama, que sostiene lo contrario (callarse es
+ * peor). Es lo que quedó afuera por alcance: llegar a este estado exige borrarle las claves al
+ * server DESPUÉS de que alguien ya se suscribió, y estrenar un texto nuevo para él, sin poder
+ * reproducirlo a ojo, era peor que dejarlo escrito. Queda pendiente, no decidido.
  */
 fun shouldShowReminderWarning(
     pushStatus: String,

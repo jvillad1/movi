@@ -186,8 +186,15 @@ fun Route.reminderRoutes() {
      * navegador necesita la clave antes de tener sesión): acá se devuelve **a qué dirección**
      * sale el correo, y eso es un dato del usuario.
      *
-     * Lo que se afirma sale de [ReminderConfig], el mismo objeto que lee el barrido. No hay un
-     * segundo criterio que pueda quedar desfasado.
+     * Lo que se afirma sale de [ReminderConfig], el mismo objeto —y, desde que el barrido relee
+     * en cada pasada, en el mismo momento— que decide si el correo sale. Queda un único desfase
+     * posible, y está acotado: el barrido decide **al arrancar** si existe, así que agregarle la
+     * clave a un server ya andando haría que este endpoint dijera «hay correo» hasta el próximo
+     * reinicio. En Railway no se alcanza, porque tocar una variable reinicia el deploy.
+     *
+     * Y lo que este endpoint NO puede afirmar está declarado en el modelo: `email = true`
+     * significa «hay una clave», no «la entrega funciona» (ver
+     * [com.jvillada.movi.shared.model.ReminderChannels.email]).
      */
     get("/api/reminders/channels") {
         val uid = call.userId()

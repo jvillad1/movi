@@ -33,7 +33,6 @@ import com.jvillada.movi.server.time.AppClock
  * (which has a SupervisorJob cancelled on app stop), so it cleans up automatically.
  */
 fun Application.startReminderScheduler() {
-    val apiKey = ReminderConfig.resendApiKey()
     val emailEnabled = ReminderConfig.emailEnabled()
     val pushEnabled = WebPushSender.isConfigured()
     if (!emailEnabled) log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")
@@ -46,18 +45,32 @@ fun Application.startReminderScheduler() {
     // Las MISMAS lecturas que contesta `GET /api/reminders/channels` (ver [ReminderConfig]): si
     // el endpoint dijera «hay correo» leyendo otras variables que las que usa este barrido, el
     // aviso del cliente volvería a poder mentir, solo que del otro lado.
-    val from      = ReminderConfig.from()
-    val leadDays  = ReminderConfig.leadDays()
-    val sweepHours = ReminderConfig.sweepHours()
-
-    log.info("ReminderScheduler: starting (sweepHours=$sweepHours, leadDays=$leadDays, from=$from)")
+    log.info(
+        "ReminderScheduler: starting (sweepHours=${ReminderConfig.sweepHours()}, " +
+            "leadDays=${ReminderConfig.leadDays()}, from=${ReminderConfig.from()})",
+    )
 
     launch {
         // Run once at startup, then on each interval
         while (true) {
-            runCatching { sweep(apiKey, from, leadDays) }
-                .onFailure { log.error("ReminderScheduler: unhandled sweep error: ${it.message}", it) }
-            delay(sweepHours * 3_600_000L)
+            // **Se relee en CADA barrido, no una sola vez al arrancar.**
+            //
+            // Compartir la fuente con el endpoint no alcanzaba: `/api/reminders/channels`
+            // resuelve la configuración en cada request y este bucle usaba la foto del arranque,
+            // así que los dos podían decir cosas distintas sobre el MISMO momento. Es un desfase
+            // que en Railway no se alcanza —las variables no cambian sin reinicio— pero el
+            // argumento de esta rama es que la respuesta y el comportamiento no puedan divergir,
+            // y «misma fuente» no era lo mismo que «mismo momento».
+            //
+            // Lo único que sigue decidiéndose al arrancar es SI este bucle existe: agregar la
+            // clave a un server ya andando no lo enciende hasta el próximo reinicio. Ahí el
+            // endpoint diría «hay correo» sobre un barrido apagado, así que el gate de arriba
+            // queda como el último desfase posible — y es el que Railway resuelve solo, porque
+            // tocar una variable reinicia el deploy.
+            runCatching {
+                sweep(ReminderConfig.resendApiKey(), ReminderConfig.from(), ReminderConfig.leadDays())
+            }.onFailure { log.error("ReminderScheduler: unhandled sweep error: ${it.message}", it) }
+            delay(ReminderConfig.sweepHours() * 3_600_000L)
         }
     }
 }

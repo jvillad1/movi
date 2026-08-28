@@ -25,6 +25,17 @@ data class ReminderChannels(
     /**
      * ¿Hay canal de correo? Es exactamente la condición con la que `startReminderScheduler`
      * decide mandar correos: `RESEND_API_KEY` presente y no vacía.
+     *
+     * **DEUDA DECLARADA — esto dice «hay una clave», nunca «la entrega funciona».** Con una clave
+     * vencida o revocada, acá sigue viniendo `true`, la app promete el aviso y **apaga el cartel
+     * ámbar**, mientras el barrido registra un `401` por envío y el único rastro queda en el log
+     * del server. El dueño se enteraría el día que no le llega el recordatorio de un crédito.
+     *
+     * El trueque es deliberado —antes el cartel gritaba SIEMPRE, incluso cuando el correo
+     * funcionaba, y un aviso que grita en falso se termina ignorando— pero la mitad mala hay que
+     * nombrarla: **antes gritaba de más, ahora puede callar de menos.** Se cierra guardando el
+     * resultado del último envío por usuario y devolviéndolo acá (`emailLastFailed` o similar);
+     * eso necesita una columna y un lugar donde escribirla, y es otra rama.
      */
     val email: Boolean = false,
     /**
@@ -41,9 +52,26 @@ data class ReminderChannels(
      * declare—, así que tampoco puede afirmar «a ti no te va a llegar». Lo que sí puede es no
      * ocultarlo: el cliente lo cuenta como canal (nunca dice que el aviso no va a llegar) y
      * agrega una línea diciendo a quién alcanza. Ver `reminderDeliveryLines`.
+     *
+     * **DEUDA DECLARADA — este razonamiento se sostiene HOY, y solo hoy.** Es correcto porque
+     * producción tiene un solo usuario y ese usuario ES el dueño de la cuenta de Resend: para él
+     * el correo llega. Para un segundo usuario, la app le diría «por correo a ella@…», le
+     * apagaría el cartel, y le dejaría una línea que **ella no puede evaluar** — «la dirección
+     * con la que se configuró Movi» no le dice si es la suya. Esa es la mitad mala de la
+     * asimetría, y se cierra barato: una variable que declare la dirección dueña de la cuenta
+     * (`REMINDER_SANDBOX_TO`) alcanza para que el server compare y conteste la verdad por
+     * usuario. Hasta que exista, queda declarado acá y no supuesto.
      */
     val emailSandbox: Boolean = false,
-    /** ¿El server tiene claves VAPID? Sin ellas no puede empujar ninguna notificación. */
+    /**
+     * ¿El server tiene claves VAPID? Sin ellas no puede empujar ninguna notificación.
+     *
+     * **Hoy el cliente NO lo usa para decidir nada** — está puesto para el deferido que se
+     * describe en `shouldShowReminderWarning`: el navegador puede decir «enabled» sobre una
+     * suscripción que el server ya no puede usar, y ahí hace falta un texto que hoy no existe.
+     * Se manda desde ahora para que ese arreglo no necesite tocar el wire ni esperar a que el
+     * APK instalado se actualice.
+     */
     val push: Boolean = false,
     /**
      * Cuántos días antes avisa el barrido (`REMINDER_LEAD_DAYS`). El cliente lo tenía cableado en

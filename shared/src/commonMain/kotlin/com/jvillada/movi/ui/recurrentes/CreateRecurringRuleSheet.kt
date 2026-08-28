@@ -721,11 +721,21 @@ private fun RowScope.SheetChip(
  *
  * 1. **Un toque.** Con un desplegable, elegir el día son dos gestos (abrir y tocar); el punto
  *    entero del cambio es que sea uno.
- * 2. **Nada se mueve bajo el dedo.** Esta sección está en el MEDIO de una hoja anclada abajo:
- *    un control que crece 200dp al abrirse empujaría TIPO, CATEGORÍA y CUENTA hacia abajo justo
- *    mientras el dedo está apoyado. La cuadrícula mide siempre lo mismo —cinco filas de siete,
- *    haya o no día elegido— así que tocar un día no cambia una sola altura. El campo de CUENTA
- *    sí se abre en su lugar, pero está al final: lo único que empuja es el aire sobre el botón.
+ * 2. **La cuadrícula no se mueve, y casi nunca mueve nada.** Esta sección está en el MEDIO de una
+ *    hoja anclada abajo: un control que crece ~200dp al abrirse empujaría TIPO, CATEGORÍA, CUENTA
+ *    y RECORDATORIO hacia abajo justo mientras el dedo está apoyado. La cuadrícula mide siempre
+ *    lo mismo —cinco filas de siete, haya o no día elegido—, así que **lo que está bajo el dedo
+ *    nunca se mueve**.
+ *
+ *    Lo de abajo tampoco, salvo en un caso: elegir 29, 30 o 31 estrena la nota de los meses
+ *    cortos y empuja lo que sigue **29 px** (medido: con el 25, TIPO/Gasto/CATEGORÍA quedan en
+ *    y=216/246/281; con el 31, en 245/275/310). Es el precio de decir la verdad justo cuando
+ *    corresponde, y ocurre por debajo del dedo, no bajo él.
+ *
+ *    El campo de CUENTA sí crece al abrirse, y **no es aire lo que empuja**: debajo suyo está
+ *    toda la sección RECORDATORIO (casilla, líneas de entrega y, si aplica, el cartel ámbar).
+ *    Es un patrón que ya estaba en esta hoja y no lo trajo esta rama; se nombra para que nadie
+ *    lo cite como precedente de que «abrir en su lugar no molesta».
  *
  * El alto no queda librado a nada: cinco filas fijas dentro del `verticalScroll` de la hoja, con
  * el botón «Crear recurrente» fuera del scroll (ver el comentario del `BoxWithConstraints`).
@@ -742,9 +752,11 @@ private fun DayOfMonthPicker(
         // en la última línea se lee como otra cosa.
         for (fila in 0 until 5) {
             if (fila > 0) Spacer(Modifier.height(6.dp))
+            // 4dp entre columnas y no 6: son seis huecos, y cada 2dp que se les saca va a parar
+            // al ancho de la casilla, que es la dimensión que en un teléfono no sobra.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 for (columna in 0 until 7) {
                     val dia = fila * 7 + columna + 1
@@ -765,13 +777,23 @@ private fun DayOfMonthPicker(
     }
 }
 
-/** Una casilla de la cuadrícula. Sin borde: 31 recuadros dibujados serían más ruido que ayuda. */
+/**
+ * Una casilla de la cuadrícula. Sin borde: 31 recuadros dibujados serían más ruido que ayuda.
+ *
+ * **44dp de alto, y el ancho es lo que dan siete columnas.** En un teléfono de 375px, con los
+ * 20dp de margen de la hoja a cada lado y 4dp entre columnas, cada casilla mide ~44,4 × 44 — por
+ * debajo de los 48dp que recomienda Material. No es un descuido ni es evitable: siete columnas de
+ * 48dp necesitan 336dp de casillas sobre 335 disponibles, así que **ningún calendario entra en
+ * 48dp en este ancho** (el propio DatePicker de Material3 usa casillas de 40dp). Lo que sí se
+ * podía elegir es el alto, y por eso se le dio 44 en vez de los 38 con los que nació: es la
+ * dimensión que no está limitada por la geometría. Verificado a ojo a 375×812.
+ */
 @Composable
 private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPick: (Int) -> Unit) {
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(38.dp)
+            .height(44.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
             .clickable(enabled = enabled) { onPick(day) },
