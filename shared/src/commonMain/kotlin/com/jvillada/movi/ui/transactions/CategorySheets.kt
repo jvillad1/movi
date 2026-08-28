@@ -26,6 +26,7 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
@@ -163,6 +164,10 @@ fun ChangeCategorySheet(
             val efectivos = effectiveCategoryTypes(cat.name, pref?.pinnedType)
             efectivos.isEmpty() || event.type in efectivos
         }
+            // La tercera lista de categorías que ve el dueño, y la misma queja: el catálogo se
+            // mostraba en el orden en que alguien lo escribió. Alfabético, igual que las
+            // sugerencias de `CategoryField` y que «Más → Categorías».
+            .sortedWith(compareBy(CATEGORY_NAME_ORDER) { it.name })
     }
     // Los extractos importados traen categorías libres del parser (ver ClaudeStatementParser)
     // que pueden no estar en el catálogo. Si la actual no aparece en `options`, se agrega igual

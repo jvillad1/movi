@@ -9,7 +9,6 @@ import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildPushPayload
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
-import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import io.ktor.server.application.Application
@@ -21,7 +20,6 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
-import java.io.File
 import java.time.LocalDate
 import com.jvillada.movi.server.time.AppClock
 
@@ -35,8 +33,7 @@ import com.jvillada.movi.server.time.AppClock
  * (which has a SupervisorJob cancelled on app stop), so it cleans up automatically.
  */
 fun Application.startReminderScheduler() {
-    val apiKey = readEnv("RESEND_API_KEY")
-    val emailEnabled = !apiKey.isNullOrBlank()
+    val emailEnabled = ReminderConfig.emailEnabled()
     val pushEnabled = WebPushSender.isConfigured()
     if (!emailEnabled) log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")
     if (!pushEnabled) log.warn("ReminderScheduler: VAPID keys not set — push reminders disabled")
@@ -45,18 +42,35 @@ fun Application.startReminderScheduler() {
         return
     }
 
-    val from      = readEnv("REMINDER_FROM") ?: "movi <reminders@movi.app>"
-    val leadDays  = readEnv("REMINDER_LEAD_DAYS")?.toIntOrNull()  ?: DEFAULT_REMINDER_LEAD_DAYS
-    val sweepHours = readEnv("REMINDER_SWEEP_HOURS")?.toLongOrNull() ?: 12L
-
-    log.info("ReminderScheduler: starting (sweepHours=$sweepHours, leadDays=$leadDays, from=$from)")
+    // Las MISMAS lecturas que contesta `GET /api/reminders/channels` (ver [ReminderConfig]): si
+    // el endpoint dijera «hay correo» leyendo otras variables que las que usa este barrido, el
+    // aviso del cliente volvería a poder mentir, solo que del otro lado.
+    log.info(
+        "ReminderScheduler: starting (sweepHours=${ReminderConfig.sweepHours()}, " +
+            "leadDays=${ReminderConfig.leadDays()}, from=${ReminderConfig.from()})",
+    )
 
     launch {
         // Run once at startup, then on each interval
         while (true) {
-            runCatching { sweep(apiKey, from, leadDays) }
-                .onFailure { log.error("ReminderScheduler: unhandled sweep error: ${it.message}", it) }
-            delay(sweepHours * 3_600_000L)
+            // **Se relee en CADA barrido, no una sola vez al arrancar.**
+            //
+            // Compartir la fuente con el endpoint no alcanzaba: `/api/reminders/channels`
+            // resuelve la configuración en cada request y este bucle usaba la foto del arranque,
+            // así que los dos podían decir cosas distintas sobre el MISMO momento. Es un desfase
+            // que en Railway no se alcanza —las variables no cambian sin reinicio— pero el
+            // argumento de esta rama es que la respuesta y el comportamiento no puedan divergir,
+            // y «misma fuente» no era lo mismo que «mismo momento».
+            //
+            // Lo único que sigue decidiéndose al arrancar es SI este bucle existe: agregar la
+            // clave a un server ya andando no lo enciende hasta el próximo reinicio. Ahí el
+            // endpoint diría «hay correo» sobre un barrido apagado, así que el gate de arriba
+            // queda como el último desfase posible — y es el que Railway resuelve solo, porque
+            // tocar una variable reinicia el deploy.
+            runCatching {
+                sweep(ReminderConfig.resendApiKey(), ReminderConfig.from(), ReminderConfig.leadDays())
+            }.onFailure { log.error("ReminderScheduler: unhandled sweep error: ${it.message}", it) }
+            delay(ReminderConfig.sweepHours() * 3_600_000L)
         }
     }
 }
@@ -249,20 +263,4 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded
-}
-
-/**
- * Reads a key from environment variables, then falls back to server/.env or .env files
- * (same resolution order as [DatabaseFactory] and [JwtConfig]).
- */
-private fun readEnv(key: String): String? {
-    System.getenv(key)?.let { return it }
-    val files = listOf(
-        File(System.getProperty("user.dir"), "server/.env"),
-        File(System.getProperty("user.dir"), ".env"),
-    )
-    return files.firstNotNullOfOrNull { f ->
-        if (!f.exists()) null
-        else f.readLines().firstOrNull { it.startsWith("$key=") }?.substringAfter("=")?.trim()
-    }
 }

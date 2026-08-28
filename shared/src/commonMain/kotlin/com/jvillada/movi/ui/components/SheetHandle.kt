@@ -22,9 +22,11 @@ import com.jvillada.movi.theme.MinTextMute
 
 /**
  * F37: manija (32×4.dp, centrada) + X para cerrar (44.dp de área tocable, arriba a la derecha),
- * en el mismo renglón. Reemplaza la manija suelta que traía cada una de las 8 hojas — antes solo
- * se cerraban tocando afuera o arrastrando la manija, sin ninguna pista visual, y en escritorio
- * con mouse ese gesto no es obvio.
+ * en el mismo renglón. Reemplaza la manija suelta que traía cada hoja — antes solo se cerraban
+ * tocando afuera o arrastrando la manija, sin ninguna pista visual, y en escritorio con mouse ese
+ * gesto no es obvio. Hoy lo llaman **16 sitios** (contados con grep el 2026-08-27); el «8 hojas»
+ * que decía acá era de cuando se escribió F37 y quedó sin recontar — justo en el archivo del
+ * componente, que es el que más engaña.
  *
  * [enabled] debe ir atado al mismo `!saving` (o equivalente) que ya deshabilita el tap-afuera de
  * cada hoja — no tiene sentido dejar cerrar por la X mientras un guardado está en vuelo.
