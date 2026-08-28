@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.LastAccountStore
@@ -216,6 +217,20 @@ internal fun TransferBody(
     accounts: List<Account>,
     accountsLoaded: Boolean,
     presetAccountId: String? = null,
+    /**
+     * El hueco donde este cuerpo se VE, que en una pantalla corta es más chico que el cuerpo.
+     * Es el tope del alto que se le fija al sub-picker de cuentas: sin él, el mínimo era el alto
+     * del formulario medido con altura infinita y el sub-picker quedaba más alto que la pantalla
+     * — la losa vacía. `Dp.Unspecified` (el default) = sin tope, que es el comportamiento viejo.
+     */
+    alturaVisible: Dp = Dp.Unspecified,
+    /**
+     * Avisa que se abrió (`true`) o se cerró (`false`) el sub-picker de cuentas, para que
+     * `QuickAddScreen` guarde y restaure el desplazamiento de la hoja igual que en Gasto/Ingreso.
+     * `picking` es estado de acá adentro, así que sin este aviso el efecto de allá no se entera
+     * y la hoja queda corrida bajo el dedo al volver.
+     */
+    onPickerAbierto: (Boolean) -> Unit = {},
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -274,6 +289,18 @@ internal fun TransferBody(
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<TransferSide?>(null) }
+
+    // El aviso va ANTES de cambiar `picking`, en el toque: para cuando el estado cambie y la hoja
+    // se vuelva a medir, el desplazamiento viejo ya está guardado del otro lado.
+    fun abrirPicker(lado: TransferSide) {
+        onPickerAbierto(true)
+        picking = lado
+    }
+
+    fun cerrarPicker() {
+        picking = null
+        onPickerAbierto(false)
+    }
     // Los ids viven en el borrador, NO adentro de `save()`: un reintento tras un fallo tiene que
     // llevar los mismos, o el server crea un traspaso duplicado (ver [TransferDraftIds]).
     var ids by remember { mutableStateOf(TransferDraftIds.new()) }
@@ -336,13 +363,17 @@ internal fun TransferBody(
     // mínimo al picker de cuentas, así la hoja no cambia de alto al elegir una cuenta.
     var formHeightPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
+    // Ola 12 (revisión): el mínimo se acota al hueco visible. `formHeightPx` se mide con altura
+    // infinita —este cuerpo vive adentro del scroll de la hoja—, así que en una pantalla corta
+    // vale más que la pantalla: fijarlo tal cual dejaba el sub-picker de cuentas más alto que el
+    // hueco y se abría mostrando el final de la lista, sin el título «Desde»/«Hacia» ni su X.
+    // Cuando el formulario entra, `alturaVisible` es su propio alto y esto no cambia nada.
+    val altoFijado = with(density) { formHeightPx.toDp() }
+        .let { if (alturaVisible == Dp.Unspecified) it else minOf(it, alturaVisible) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (picking == null) Modifier
-                else Modifier.heightIn(min = with(density) { formHeightPx.toDp() }),
-            ),
+            .then(if (picking == null) Modifier else Modifier.heightIn(min = altoFijado)),
     ) {
         if (picking != null) {
             TransferAccountPicker(
@@ -370,12 +401,19 @@ internal fun TransferBody(
                             origenTo = reemplazo.origen
                         }
                     } else {
+                        // **Anotado, no arreglado (revisión de la Ola 12; es de master).** Esta
+                        // rama NO tiene la guarda simétrica de la de arriba: si en «Hacia» se
+                        // elige la MISMA cuenta que está en «Desde», las dos filas quedan iguales
+                        // y el formulario se traba en «Elige dos cuentas distintas», con el dueño
+                        // teniendo que adivinar cuál de las dos cambiar. Arreglarlo pide decidir
+                        // qué se mueve —¿el origen, como hace la otra rama al revés?— y eso es
+                        // producto, no geometría; no entra en la tanda del scroll.
                         toId = id
                         origenTo = OrigenCuenta.ELEGIDA
                     }
-                    picking = null
+                    cerrarPicker()
                 },
-                onClose = { picking = null },
+                onClose = { cerrarPicker() },
             )
         } else {
         Column(modifier = Modifier.fillMaxWidth().onSizeChanged { formHeightPx = it.height }) {
@@ -425,7 +463,7 @@ internal fun TransferBody(
                 // `rightMaxFraction` en CardRow).
                 rightMaxFraction = FRACCION_VALOR_FILA_TRASPASO,
                 showChevron = true,
-                onClick = { picking = TransferSide.FROM },
+                onClick = { abrirPicker(TransferSide.FROM) },
             )
             CardRow(
                 left = {
@@ -451,7 +489,7 @@ internal fun TransferBody(
                 rightMaxFraction = FRACCION_VALOR_FILA_TRASPASO,
                 showChevron = true,
                 isLast = true,
-                onClick = { picking = TransferSide.TO },
+                onClick = { abrirPicker(TransferSide.TO) },
             )
         }
 

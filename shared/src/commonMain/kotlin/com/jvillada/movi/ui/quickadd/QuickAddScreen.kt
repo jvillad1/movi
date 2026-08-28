@@ -51,7 +51,9 @@ import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 
 /**
@@ -138,41 +140,66 @@ fun QuickAddScreen(
     var huecoVisiblePx by remember { mutableStateOf(0) }
     var contenidoPx by remember { mutableStateOf(0) }
     var bodyHeightPx by remember { mutableStateOf(0) }
-    val cuerpoCompuesto = picker == Picker.None
     val sheetScroll = rememberScrollState()
 
-    // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [abrirPicker].
+    /**
+     * El sub-picker de cuentas de la pestaña **Traspaso** — que es estado de [TransferBody], no
+     * de acá. Se refleja en esta variable para que las dos mitades de la disciplina (el alto
+     * fijado y la restauración del desplazamiento) valgan también en esa pestaña: sin esto,
+     * corregir «Desde»/«Hacia» después de haber bajado dejaba el formulario corrido ~190 dp y
+     * el sub-picker abierto por la mitad de la lista.
+     */
+    var pickerDeTraspaso by remember { mutableStateOf(false) }
+
+    /** Hay un sub-picker abierto, sea de esta pestaña o de la de traspaso. */
+    val hayPicker = picker != Picker.None || pickerDeTraspaso
+
+    /** El cuerpo del editor está compuesto y medible: no hay ningún sub-picker tapándolo. */
+    val cuerpoCompuesto = !hayPicker
+
+    // Dónde estaba la hoja ANTES de abrir un sub-picker. Ver [recordarScroll].
     var scrollAntesDelPicker by remember { mutableStateOf(0) }
 
     /**
-     * Abrir un sub-picker guardando el desplazamiento — la mitad de la disciplina de la Ola 8
-     * que el scroll podía romper.
+     * Guardar el desplazamiento — la mitad de la disciplina de la Ola 8 que el scroll podía
+     * romper.
      *
      * Con la hoja quieta, abrir y cerrar «Nota» devolvía el teclado al mismo píxel porque no
      * había otro lugar donde ponerlo. Ahora la hoja se puede desplazar: si el dueño bajó hasta
      * el botón, abrió un sub-picker y lo cerró, el teclado volvería ARRIBA (el sub-picker mide
      * lo que el hueco, así que el desplazamiento se recorta a 0) y la tecla que estaba bajo su
      * dedo sería otra — exactamente el «escribías 0 y salía 8» de la Ola 8. Por eso se guarda
-     * acá, en el toque, y no en el efecto de abajo: para cuando el efecto corre, el recorte ya
-     * pasó y el valor viejo ya no existe.
+     * en el TOQUE y no en el efecto de abajo: para cuando el efecto corre, el recorte ya pasó y
+     * el valor viejo ya no existe.
      */
-    fun abrirPicker(destino: Picker) {
+    fun recordarScroll() {
         scrollAntesDelPicker = sheetScroll.value
+    }
+
+    fun abrirPicker(destino: Picker) {
+        recordarScroll()
         picker = destino
     }
 
-    LaunchedEffect(picker) {
-        if (picker != Picker.None) {
+    LaunchedEffect(hayPicker) {
+        if (hayPicker) {
             // Que el sub-picker se vea desde su encabezado —su título y su X— y no desde la
             // mitad. Casi siempre ya está en 0 porque el alto fijado deja el contenido del
             // tamaño del hueco; esto cubre el caso en que el sub-picker es más alto que el hueco.
             sheetScroll.scrollTo(0)
         } else if (scrollAntesDelPicker > 0) {
-            // Un cuadro de espera: el cuerpo tiene que volver a medirse antes de restaurar, si
-            // no el valor se recorta contra el máximo viejo (el del sub-picker) y no restaura nada.
-            withFrameNanos { }
-            sheetScroll.scrollTo(scrollAntesDelPicker)
-            scrollAntesDelPicker = 0
+            val objetivo = scrollAntesDelPicker
+            // Se ESPERA a que el cuerpo vuelva a medirse, no se cuenta un cuadro: si se restaura
+            // antes, el valor se recorta contra el `maxValue` del sub-picker (0) y la posición se
+            // pierde para siempre. El timeout es un seguro contra colgarse si el contenido
+            // quedara más corto que el objetivo — ahí se restaura lo que se pueda.
+            withTimeoutOrNull(timeMillis = 1_000) {
+                snapshotFlow { sheetScroll.maxValue }.first { it >= objetivo }
+            }
+            sheetScroll.scrollTo(objetivo)
+            // Solo se olvida el valor si de verdad se restauró. Si no, queda para que el próximo
+            // toque lo pise, y el defecto queda a la vista en vez de escondido en un cero.
+            if (sheetScroll.value == objetivo) scrollAntesDelPicker = 0
         }
     }
     var saving by remember { mutableStateOf(false) }
@@ -352,7 +379,9 @@ fun QuickAddScreen(
                     .padding(horizontal = 20.dp)
                     .clickable(enabled = false) {},
             ) {
-                // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
+                // F37: manija + X para cerrar, el mismo componente en toda la app — 16 sitios
+                // llaman a `SheetHandleWithClose` (contado con grep el 2026-08-27; el «8 hojas»
+                // que decía acá y que sigue copiado en otras pantallas ya no era cierto).
                 // Queda FUERA de lo que se desplaza (ver el bloque de abajo): en iOS la X es la
                 // única salida de esta hoja —no hay botón atrás, y el gesto de atrás cierra la
                 // hoja entera perdiendo lo escrito— así que no puede irse de la pantalla solo
@@ -370,23 +399,33 @@ fun QuickAddScreen(
                 // «Por defecto» reservado. En el navegador la densidad es 2, así que un dp es un
                 // píxel CSS; en el AVD la densidad es 2,625:
                 //
-                //   cuerpo del editor «Gasto»       678 dp
-                //   + selector de tipo y respiro     63 dp  →  741 dp que se desplazan
-                //   + manija con su X                52 dp  →  793 dp de hoja
-                //   hueco = alto de la ventana − 56 dp de barra inferior − 52 dp de manija
+                //   cuerpo del editor «Gasto»       678,5 dp
+                //   + selector de tipo y respiro     63,0 dp  →  741,5 dp que se desplazan
+                //   + manija con su X                44,0 dp  →  785,5 dp de hoja
+                //     (`SheetHandle.kt:40` es `height(44.dp)` y `MinBottomNav.kt:63` es
+                //      `height(64.dp)`: los dos, leídos del código, no estimados a ojo)
                 //
-                //   navegador 800×1000  → hueco 741 dp → desborde   0 dp (entra justo)
-                //   navegador 375×812   → hueco 704 dp → desborde  37 dp (cortaba «Falta el monto»)
-                //   navegador 800×620   → hueco 512 dp → desborde 229 dp (corta en la fila «7 8 9»)
-                //   AVD Movi_Sensor (411×731 dp) → hueco 551 dp → desborde 185 dp
+                //   hueco = alto de la ventana − 64 de barra inferior − 44 de manija
+                //           − las barras del sistema, donde las haya
+                //
+                //   navegador 800×1000 → tope 892 dp, contenido 741,5 → SOBRAN 150,5 dp (entra
+                //                        holgado, y el scroll no tiene a dónde ir: `maxValue` 0)
+                //   navegador 375×812  → hueco 704 dp → desborde  37,5 dp (cortaba «Falta el monto»)
+                //   navegador 800×620  → hueco 512 dp → desborde 229,5 dp (corta en «7 8 9»)
+                //   AVD Movi_Sensor    → hueco 551 dp → desborde 185 dp
+                //     (411×731 dp; ahí las barras del sistema se comen 72 dp más — 24 de estado y
+                //      48 de navegación: 731 − 64 − 44 − 72 = 551, que es lo que midió la sonda)
                 //
                 // El AVD es el caso que importa: **la fila «7 8 9» es el último renglón visible y
                 // «Guardar movimiento» queda entero afuera** — verificado a ojo en `Movi_Sensor`,
                 // que es el AVD que manda usar la nota del proyecto. O sea que en el APK 1.7 que
-                // el dueño ya tiene instalado, y en la PWA desplegada abierta desde un teléfono,
-                // se podía llenar el formulario entero y quedarse sin forma de guardar. En el
-                // iPhone donde se vio primero pasa lo mismo y con menos margen todavía, porque a
-                // la barra inferior se le suman la barra de estado y el indicador de inicio.
+                // el dueño ya tiene instalado se podía llenar el formulario entero y quedarse sin
+                // forma de guardar. En la PWA depende del alto de la ventana: **a 375×812 el botón
+                // SÍ se ve** —lo que se cortaba eran los 37 dp de «Falta el monto»— y hay que
+                // bajar hasta ~620 de alto para que el botón se vaya de la pantalla. En iOS, que
+                // es donde se vio primero, sobra todavía menos que en el navegador porque a la
+                // barra inferior se le suman la barra de estado y el indicador de inicio; nadie
+                // volvió a medirlo con este código.
                 //
                 // `verticalScroll` no mueve nada mientras el contenido entra: a 800×1000 el
                 // `maxValue` del scroll es 0, así que no hay a dónde desplazarse.
@@ -399,16 +438,32 @@ fun QuickAddScreen(
                 // cae en otra tecla: el modo de falla exacto de la Ola 8. Con toques no se
                 // consiguió provocar un dígito equivocado (un toque no llega al umbral), así que
                 // es RIESGO, no defecto observado. Lo que sí quedó cerrado con código es el viaje
-                // de ida y vuelta a un sub-picker (ver [abrirPicker]), que era el camino seguro a
-                // que el teclado se moviera. Si el arrastre llega a doler, el arreglo barato es
-                // que el área del teclado no desplace (un `pointerInput` que consuma el arrastre
-                // vertical ahí), no sacar el scroll y volver a dejar el botón inalcanzable.
+                // de ida y vuelta a un sub-picker (ver [recordarScroll]), que era el camino seguro
+                // a que el teclado se moviera — **en las tres pestañas**: la de traspaso tiene su
+                // propio `picking` adentro de [TransferBody] y por eso se le pasan el tope del
+                // alto fijado y el aviso de apertura, si no quedaba con el bug entero (medido a
+                // 800×620: la hoja se corría 190 dp y no volvía). Si el arrastre llega a doler,
+                // el arreglo barato es que el área del teclado no desplace (un `pointerInput` que
+                // consuma el arrastre vertical ahí), no sacar el scroll y volver a dejar el botón
+                // inalcanzable.
+                //
+                // **Lo que la restauración todavía no garantiza.** Al cerrar se espera a que el
+                // cuerpo se vuelva a medir (`snapshotFlow` sobre `maxValue`) y recién ahí se
+                // restaura, con un timeout de un segundo como seguro; si ese timeout venciera, la
+                // posición se pierde y el teclado queda corrido. En el navegador no se pudo
+                // provocar; **en iOS —donde el reloj de cuadros es más caprichoso— y en el AVD
+                // nadie probó ese camino**. Y queda un fogonazo de un cuadro con la hoja saltada
+                // al tope antes de volver a su lugar: se ve, no rompe nada, y arreglarlo pide
+                // dibujar el sub-picker sin tocar el desplazamiento.
                 //
                 // **Por qué el scroll va en una Column interna con `weight(1f, fill = false)`.**
-                // Es el idioma de las otras cinco hojas que se desplazan (`EditProfileSheet`,
-                // `CreditTermsSheet`, `CardTermsSheet`, `ChangePasswordSheet`,
-                // `CreateRecurringRuleSheet`), y de paso deja la manija con su X afuera del
-                // desplazamiento. **Ojo con el atajo de pegar ese modificador en la Column de la
+                // Es el idioma de las demás hojas que se desplazan —`EditProfileSheet:92`,
+                // `ChangePasswordSheet:121`, `CreditTermsSheet:176`, `CardTermsSheet:140`,
+                // `CreditBalanceSheet:88`, `CreateRecurringRuleSheet:284`, y los cuerpos que les
+                // pasan los andamios de `CategorySheets.kt` y `CategoriasScreen.kt`— y de paso
+                // deja la manija con su X afuera del desplazamiento. (No doy un total: los
+                // andamios compartidos se usan desde varios llamadores y el número dependería de
+                // cuál de ellos se cuente.) **Ojo con el atajo de pegar ese modificador en la Column de la
                 // hoja**: ahí NO es equivalente, porque su hermano es el `Box(weight(1f))` que la
                 // empuja contra el borde, y dos hijos con peso se reparten el alto. Probado: con
                 // el peso puesto en la Column de la hoja, a 800×1000 el hueco cae de 741 a 424 dp
@@ -421,10 +476,12 @@ fun QuickAddScreen(
                 // reciben la altura infinita de este contenedor.
                 Column(
                     modifier = Modifier
+                        // El peso va primero por lectura: no mide nada, solo le dice a la Column
+                        // de la hoja que este hijo se lleva lo que sobre (y nada más).
+                        .weight(1f, fill = false)
                         // AFUERA del scroll: el alto que la hoja ocupa DE VERDAD en pantalla.
                         .onSizeChanged { huecoVisiblePx = it.height }
                         .verticalScroll(sheetScroll)
-                        .weight(1f, fill = false)
                         // ADENTRO del scroll: el alto del contenido, que puede pasarse del hueco.
                         .onSizeChanged { if (cuerpoCompuesto) contenidoPx = it.height },
                 ) {
@@ -453,8 +510,19 @@ fun QuickAddScreen(
                     //    [TypeSegments] vive AHORA fuera de este `Box`: la franja de arriba es la
                     //    misma en los dos estados, el sub-picker empieza por debajo de ella y su X
                     //    cae sobre el monto — un `Text` sin `clickable`, donde un segundo toque no
-                    //    hace nada. Es geometría garantizada, no un margen a ojo: mientras el
-                    //    selector de tipo esté afuera, no hay control suyo bajo la X.
+                    //    hace nada.
+                    //
+                    //    **Ola 12: esto ya NO es geometría garantizada, y hay que decirlo.** Era
+                    //    una garantía porque la hoja no se movía: la X del sub-picker caía siempre
+                    //    en el mismo punto, y en ese punto había un `Text`. Ahora, al restaurar el
+                    //    desplazamiento, ese punto puede caer sobre cualquier cosa: a scroll 459,
+                    //    donde estaba la X queda la fila «Cuenta», y un toque ahí abre el selector
+                    //    de cuentas. La revisión lo comprobó a esa altura (no en la x exacta de la
+                    //    X, así que el «segundo toque impaciente» quedó como probable, no como
+                    //    demostrado). Lo que sigue en pie es lo de siempre: el selector de tipo
+                    //    está afuera del `Box`, así que ninguna de las tres pestañas se cambia
+                    //    sola. Recuperar la garantía entera pediría no restaurar el
+                    //    desplazamiento, que es peor: mueve el teclado, que es el bug caro.
                     //
                     // Que el cuerpo no esté compuesto durante un picker (el `when` lo reemplaza)
                     // ya garantiza además que no haya teclado fantasma debajo: no hay eventos que
@@ -539,12 +607,20 @@ fun QuickAddScreen(
                                 // El alto que los sub-pickers van a respetar (ver el comentario de
                                 // arriba). Se mide acá y no se calcula a mano: así sigue siendo
                                 // correcto si mañana el cuerpo gana o pierde una fila.
-                                .onSizeChanged { bodyHeightPx = it.height },
+                                .onSizeChanged { if (cuerpoCompuesto) bodyHeightPx = it.height },
                         ) {
                             if (typeIndex == 2) {
                                 TransferBody(
                                     accounts = accounts,
                                     accountsLoaded = accountsLoaded,
+                                    // Las dos mitades de la disciplina, prestadas a la pestaña de
+                                    // traspaso: el tope del alto fijado y el aviso de que se abrió
+                                    // o cerró su sub-picker (su `picking` no se ve desde acá).
+                                    alturaVisible = pinnedHeight,
+                                    onPickerAbierto = { abierto ->
+                                        if (abierto) recordarScroll()
+                                        pickerDeTraspaso = abierto
+                                    },
                                     // Ola 11: si la hoja se abrió desde el detalle de una cuenta, ese
                                     // contexto vale también para el ORIGEN del traspaso — es la
                                     // cuenta que el dueño estaba mirando cuando tocó «Agregar».

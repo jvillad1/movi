@@ -51,24 +51,27 @@ private val TYPE_OPTIONS = listOf(
  * la misma estructura y el mismo riesgo, y encima **se abre desde ahí** («+ Crear cuenta» cuando
  * todavía no hay cuentas): es de lo primero que toca un dueño nuevo.
  *
- * Medido a ojo en el navegador (densidad 2, dp = píxel CSS), con el campo de nombre vacío, que
- * es como se abre siempre:
+ * Medido con una sonda en el navegador (densidad 2, dp = píxel CSS), con el campo de nombre
+ * vacío, que es como se abre siempre:
  *
- *   contenido de esta hoja               631 dp
- *   sitio que hay en el AVD Movi_Sensor  603 dp   (medido con la hoja de «Agregar» instrumentada)
+ *   contenido de esta hoja               623 dp
+ *   sitio que hay en el AVD Movi_Sensor  595 dp   (551 de hueco + 44 de manija, medidos con la
+ *                                                  hoja de «Agregar» instrumentada)
  *
- * O sea que **en un teléfono como el AVD se cortan unos 28 dp**: el renglón «Falta el nombre» y
- * el borde de abajo de «Crear cuenta», que queda pegado contra la barra inferior. En una ventana
- * de 620 se corta la mitad del botón — visto. En un iPhone SE hay menos sitio todavía. El botón
- * se sigue pudiendo tocar por poco, así que esto es margen cero, no bloqueo: por eso queda
- * ESCRITO y no arreglado en la misma tanda que la otra hoja.
+ * O sea que **en un teléfono como el AVD se cortan unos 28 dp**: el renglón
+ * «Falta el nombre» y el borde de abajo de «Crear cuenta», que queda pegado contra la barra
+ * inferior. En una ventana de 800×620 hay 556 dp de sitio (medido: es a lo que la hoja queda
+ * recortada) y se cortan 67: la mitad del botón, visto. En un iPhone SE hay menos sitio todavía. El botón se sigue pudiendo tocar por poco, así que esto es margen cero,
+ * no bloqueo: por eso queda ESCRITO y no arreglado en la misma tanda que la otra hoja.
  *
- * Las otras hojas ancladas abajo y sin desplazamiento, por si alguien hace la ronda completa:
- * [com.jvillada.movi.ui.goals.GoalSheet], [VoidEventSheet] y [DeleteAccountSheet] — ninguna se
- * midió acá. (`CreditBalanceSheet` figuraba en esa lista pero **ya se desplaza**: tiene el
- * `verticalScroll` + `weight(1f, fill = false)` del idioma; verificado en el código.)
+ * **Las otras hojas ancladas abajo y sin `verticalScroll`**, contadas con grep sobre los 16
+ * sitios que llaman a `SheetHandleWithClose` (2026-08-27) y confirmadas una por una:
+ * [com.jvillada.movi.ui.goals.GoalSheet] (:122), [VoidEventSheet] (:76), [DeleteAccountSheet]
+ * (:83), la hoja de presupuesto de `PresupuestosScreen:440`, la de «¿qué deuda?» de
+ * `CreditosScreen:359` y `NotificationsPanel:52` — seis además de esta, y ninguna se midió acá.
+ * (`CreditBalanceSheet` figuró en esa lista por error: **ya se desplaza**, `:88`.)
  *
- * El arreglo, cuando toque, es el de las seis hojas que sí se desplazan: la manija afuera y el
+ * El arreglo, cuando toque, es el idioma de las que sí se desplazan: la manija afuera y el
  * cuerpo en una `Column` con `verticalScroll(...)` + `weight(1f, fill = false)`. Ojo con
  * copiar el modificador a la `Column` de la hoja: su hermano es el `Box(weight(1f))` que la
  * ancla abajo, y dos hijos con peso se reparten el alto (medido en «Agregar»: la hoja quedaba
