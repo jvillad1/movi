@@ -233,9 +233,10 @@ internal fun AuthField(
                 if (isPassword) {
                     Spacer(Modifier.width(8.dp))
                     Icon(
-                        // `Rounded`, como los otros 61 íconos de la app. Estos dos eran los ÚNICOS `Outlined`
-                        // del repo, y por eso se leían como de otro juego al lado de los checks y las
-                        // equis del resto: `Rounded` tiene extremos redondeados y trazos más suaves.
+                        // `Rounded`, como el resto de la app: 33 íconos distintos en 63 usos. Estos dos
+                        // eran los ÚNICOS `Outlined` del repo, y por eso se leían como de otro juego
+                        // al lado de los checks y las equis: `Rounded` tiene extremos redondeados y
+                        // trazos más suaves.
                         imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                         contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
                         tint = MinTextMute,

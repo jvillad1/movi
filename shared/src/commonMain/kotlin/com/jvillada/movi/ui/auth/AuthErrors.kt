@@ -91,10 +91,11 @@ private const val NO_ES_TU_CONTRASENA = "No es tu contraseña."
 fun mensajeDeLogin(error: Throwable): String = when (clasificarFalloDeAuth(error)) {
     FalloDeAuth.CREDENCIALES -> CREDENCIALES_RECHAZADAS
     FalloDeAuth.DEMASIADOS_INTENTOS -> DEMASIADOS_INTENTOS_AUTH
-    // Un 4xx que no es 401 ni 429 trae el motivo escrito por una ruta nuestra, en español.
-    FalloDeAuth.MOTIVO_DEL_SERVIDOR -> error.toUserMessage()
-    FalloDeAuth.SERVIDOR_FALLO, FalloDeAuth.SIN_SERVIDOR ->
-        "${error.toUserMessage()} $NO_ES_TU_CONTRASENA"
+    // TODO lo demás lleva la aclaración, no solo la red y el 5xx. Un 4xx que no es 401 tampoco es
+    // un rechazo de credenciales —el 404 de un proxy mal apuntado, por ejemplo— y sin la coletilla
+    // se leía «Recurso no encontrado.» a secas al lado del campo de contraseña, que es justo la
+    // clase de mensaje que deja a alguien sospechando de lo que escribió.
+    else -> "${error.toUserMessage()} $NO_ES_TU_CONTRASENA"
 }
 
 /**
@@ -112,7 +113,12 @@ fun mensajeDeRegistro(error: Throwable): String = when (clasificarFalloDeAuth(er
     FalloDeAuth.MOTIVO_DEL_SERVIDOR ->
         if ((error as? ApiException)?.status == 409) "Ese correo ya tiene una cuenta. Entra con tu contraseña."
         else error.toUserMessage()
-    FalloDeAuth.CREDENCIALES, FalloDeAuth.SERVIDOR_FALLO, FalloDeAuth.SIN_SERVIDOR ->
+    // Un 401 acá no debería poder pasar —al registrarse no hay credenciales que rechazar— pero
+    // tiene rama propia igual, y no por prolijidad: 401 cae DENTRO del rango 400..422 con el que
+    // [toUserMessage] contesta usando el cuerpo del servidor, así que mandarlo al saco de abajo
+    // habría impreso «Invalid credentials» en inglés. Es la misma trampa que el login ya esquiva.
+    FalloDeAuth.CREDENCIALES -> "No se pudo crear la cuenta. Intenta de nuevo."
+    FalloDeAuth.SERVIDOR_FALLO, FalloDeAuth.SIN_SERVIDOR ->
         "${error.toUserMessage()} La cuenta no se creó."
 }
 
@@ -127,5 +133,8 @@ fun mensajeDeRegistro(error: Throwable): String = when (clasificarFalloDeAuth(er
 fun mensajeDeRecuperacion(error: Throwable): String = when (clasificarFalloDeAuth(error)) {
     FalloDeAuth.DEMASIADOS_INTENTOS -> DEMASIADOS_INTENTOS_AUTH
     FalloDeAuth.MOTIVO_DEL_SERVIDOR -> error.toUserMessage()
+    // Rama propia por el mismo motivo que en el registro: sin ella, el cuerpo de un 401 se
+    // imprimiría tal cual, en inglés.
+    FalloDeAuth.CREDENCIALES -> "No se pudo pedir el enlace. Intenta de nuevo."
     else -> "${error.toUserMessage()} No se pudo pedir el enlace."
 }

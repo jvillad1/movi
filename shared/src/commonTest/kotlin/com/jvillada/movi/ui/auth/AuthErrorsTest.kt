@@ -105,6 +105,25 @@ class AuthErrorsTest {
     }
 
     @Test
+    fun `un 4xx que no es 401 tampoco culpa a la contrasena`() {
+        // El caso real: un proxy mal apuntado devolviendo 404. Antes se leía «Recurso no
+        // encontrado.» a secas, al lado del campo de contraseña.
+        val texto = mensajeDeLogin(ApiException(404, null))
+        assertTrue(texto.contains("No es tu contraseña."), texto)
+    }
+
+    @Test
+    fun `el cuerpo de un 5xx no puede reclasificar el error por lo que diga adentro`() {
+        // `toUserMessage` clasificaba buscando subcadenas dentro del mensaje de la excepción, que
+        // incluye el CUERPO. El HTML de error de un proxy que diga «Not Found» en cualquier parte
+        // hacía que un 500 se leyera «Recurso no encontrado.».
+        val texto = mensajeDeLogin(ApiException(502, "<html><h1>404 Not Found</h1><p>Unauthorized</p></html>"))
+        assertTrue(texto.contains("Error en el servidor"), texto)
+        assertFalse(texto.contains("Recurso no encontrado"), texto)
+        assertFalse(texto.contains("Sesión expirada"), texto)
+    }
+
+    @Test
     fun `el Invalid credentials en ingles del servidor nunca se muestra tal cual`() {
         // 401 cae dentro del rango 400..422 que `toUserMessage` contesta con el cuerpo del
         // servidor. Si el mapeo del login se apoyara solo en esa función, el dueño leería
@@ -129,6 +148,15 @@ class AuthErrorsTest {
     }
 
     @Test
+    fun `un 401 registrando tampoco filtra el ingles del servidor`() {
+        // 401 cae dentro del rango 400..422 que `toUserMessage` contesta con el cuerpo. Sin una
+        // rama propia, registrarse habría impreso «Invalid credentials».
+        val texto = mensajeDeRegistro(ApiException(401, "Invalid credentials"))
+        assertFalse(texto.contains("Invalid"), texto)
+        assertTrue(texto.contains("crear la cuenta"), texto)
+    }
+
+    @Test
     fun `si no se llego al servidor, el registro dice que la cuenta no se creo`() {
         val texto = mensajeDeRegistro(RuntimeException("Fail to fetch"))
         assertTrue(texto.contains("No se pudo conectar al servidor"), texto)
@@ -144,5 +172,7 @@ class AuthErrorsTest {
         assertTrue(mensajeDeRecuperacion(RuntimeException("Unable to resolve host")).contains("Sin conexión"))
         assertEquals(DEMASIADOS_INTENTOS_AUTH, mensajeDeRecuperacion(ApiException(429, null)))
         assertEquals("Correo inválido", mensajeDeRecuperacion(ApiException(400, "Correo inválido")))
+        // Misma trampa del 401 dentro de 400..422 que en el registro.
+        assertFalse(mensajeDeRecuperacion(ApiException(401, "Invalid credentials")).contains("Invalid"))
     }
 }
