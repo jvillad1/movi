@@ -294,7 +294,9 @@ class ScreenRoutesTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         // Sube por encima de la versión editada: un cliente con "3" en caché no recibe 304.
-        assertEquals(4, body["version"]!!.jsonPrimitive.content.toInt())
+        // Contra la constante, no contra un literal: cada generación nueva del seed (la Ola 9
+        // subió a 5) tiene que llegar sola a esta fila vieja.
+        assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
         assertEquals(SCREEN_SEED.first().sections.map { it.type }, types)
 
@@ -303,6 +305,6 @@ class ScreenRoutesTest {
         val again = client.get("/api/screens/dashboard") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
         }
-        assertEquals(4, Json.parseToJsonElement(again.bodyAsText()).jsonObject["version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(DASHBOARD_LAYOUT_VERSION, Json.parseToJsonElement(again.bodyAsText()).jsonObject["version"]!!.jsonPrimitive.content.toInt())
     }
 }

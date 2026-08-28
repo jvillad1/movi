@@ -66,6 +66,20 @@ class DashboardDefaultsTest {
         assertTrue(DASHBOARD_LAYOUT_VERSION >= 4, "la Ola 8 cambió los accesos: la generación sube")
     }
 
+    /**
+     * Ola 9: el hero ya no se llama «Balance neto». Ese rótulo nombraba el patrimonio (activos −
+     * deudas) mientras era la cifra de portada; ahora la cifra de portada es «Tu plata» y el
+     * patrimonio va debajo, con su propio rótulo. El título viaja en el schema, así que el
+     * cambio obliga a subir la generación: si no, una instalación ya desplegada seguiría
+     * titulando «Balance neto» un número que ya no es el balance neto.
+     */
+    @Test
+    fun ola9_renamed_the_hero_and_bumped_the_generation() {
+        val hero = defaultDashboardDefinition().sections.first { it.type == "HERO_BALANCE" }
+        assertEquals("Tu plata", hero.title)
+        assertTrue(DASHBOARD_LAYOUT_VERSION >= 5, "cambió el rótulo del hero: la generación sube")
+    }
+
     @Test
     fun accounts_summary_and_analisis_are_gone() {
         assertTrue("ACCOUNTS_SUMMARY" !in ScreenTaxonomy.SECTION_TYPES)

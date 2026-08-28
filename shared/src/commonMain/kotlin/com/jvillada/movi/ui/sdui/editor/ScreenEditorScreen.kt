@@ -51,7 +51,7 @@ import kotlinx.serialization.json.jsonPrimitive
 private const val SLUG = "dashboard"
 
 private val SECTION_TYPE_LABELS = mapOf(
-    "HERO_BALANCE" to "Balance neto",
+    "HERO_BALANCE" to "Tu plata",
     "UPCOMING_PAYMENTS" to "Próximos pagos",
     "ALERTS" to "Alertas",
     "QUICK_LINKS_WITH_TOTALS" to "Accesos con cifra",
@@ -414,7 +414,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
                 when (section.type) {
                     "UPCOMING_PAYMENTS" -> "Se muestra solo cuando hay pagos en los próximos 7 días."
                     "ALERTS" -> "Se muestra solo cuando hay algo por resolver."
-                    else -> "Balance neto, ingresos, gastos y flujo del mes: sin más campos."
+                    else -> "Tu plata, el patrimonio neto, ingresos, gastos y flujo del mes: sin más campos."
                 },
                 fontSize = 12.sp, color = MinTextMute,
             )

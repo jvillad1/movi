@@ -21,13 +21,27 @@ package com.jvillada.movi.shared.model
 // nombre y otra cifra: tocaba «Suscripciones · $312.000» y aterrizaba en «Recurrentes · Flujo
 // libre», dos números sin relación visible. Ahora el acceso muestra el MISMO flujo libre que la
 // pantalla de destino (ver `quickLinkFigure("recurrentes")`).
-const val DASHBOARD_LAYOUT_VERSION = 4
+// Ola 9: generación 5 = el hero deja de titularse «Balance neto». Ese rótulo nombraba el
+// PATRIMONIO (activos − deudas) y era la cifra de portada: el dueño cargó su primer crédito y
+// el número grande pasó de +$20.308.659 a −$28.710.542 de un día para el otro, y lo reportó
+// como «me descontó de la cuenta todo el saldo del crédito». No hubo descuento —la aritmética
+// estaba bien—, pero la portada era ilegible, y con sus otros cuatro créditos (~$1.500
+// millones) iba a mostrar −$1.493 millones cada mañana. Ahora el número grande es «Tu plata»
+// (lo que tiene) y el patrimonio va debajo, rotulado y explicado (ver `HeroBalanceSection`).
+//
+// El título viaja en el schema, así que el cambio de rótulo EXIGE subir la generación: sin
+// esto, una instalación ya desplegada seguiría titulando «Balance neto» una cifra que ya no es
+// el balance neto — el peor de los dos mundos. Verificado en producción el 2026-08-28 (lectura,
+// `SELECT` sobre `screen_definitions`): el dashboard estaba en `version 4 = seed_version 4` y su
+// `sections_json` era byte a byte el del seed, o sea que el dueño nunca lo editó desde el Editor
+// de pantallas y subir la generación no le pisa nada.
+const val DASHBOARD_LAYOUT_VERSION = 5
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
     version = DASHBOARD_LAYOUT_VERSION,
     sections = listOf(
-        ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),
+        ScreenSection(type = "HERO_BALANCE", title = "Tu plata"),
         ScreenSection(type = "UPCOMING_PAYMENTS", title = "Próximos pagos"),
         ScreenSection(type = "ALERTS", title = "Alertas"),
         ScreenSection(

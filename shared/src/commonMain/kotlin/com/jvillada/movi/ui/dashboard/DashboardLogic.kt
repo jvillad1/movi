@@ -2,7 +2,9 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -72,6 +74,70 @@ data class DashboardData(
     val hasRecurringRule: Boolean get() = upcoming.orEmpty().any {
         !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX)
     }
+}
+
+// ── Las dos cifras del Inicio ──────────────────────────────────────────────────────
+
+/**
+ * Lo que TIENES y lo que VALES, separadas y con nombre propio.
+ *
+ * Nacen de un reporte del dueño: cargó su primer crédito y dijo «lo que hizo fue descontarme
+ * de la cuenta todo el saldo del crédito». La cuenta no se tocó —la deuda vive en su propia
+ * cuenta `LOAN` y nunca entró al flujo de caja— pero el número grande del Inicio pasó de
+ * +$20.308.659 a −$28.710.542 de un día para el otro, sin nada que lo explicara. Que un dato
+ * sea correcto no lo hace legible: el Inicio mostraba el **patrimonio** bajo el rótulo
+ * «Balance neto», y con cinco créditos por cargar (~$1.505 millones) la primera cifra de cada
+ * mañana iba a ser −$1.493 millones.
+ *
+ * Por eso el Inicio muestra ahora [tuPlata] arriba y [patrimonio] debajo, rotulados distinto.
+ *
+ * **Qué cuenta como «tu plata»: Dinero + Inversión, o sea toda cuenta que no sea deuda.**
+ * Tres razones, en orden de peso:
+ * 1. Es plata suya. Un CDT o un fondo es plata guardada, no plata ajena; esconderla del número
+ *    grande obligaría a sumar dos cifras de dos pantallas para saber cuánto tiene.
+ * 2. Es exactamente lo que ya muestra la fila «Cuentas» de EXPLORA y el renglón «Activos» de
+ *    la pantalla de Cuentas (ambos, `assetsDebtsNet(...).first`). Dejar el hero en solo-Dinero
+ *    crearía un tercer número que no coincide con ninguno de los dos — el desacuerdo que la
+ *    Ola 4 tuvo que arreglar entre Créditos y el Inicio.
+ * 3. La distinción que de verdad hizo daño acá no es líquido vs. invertido, es **tuyo vs.
+ *    debido**. Esa es la que separan estas dos cifras.
+ *
+ * Lo invertido no se pierde de vista: cuando hay algo en Inversión, el hero lo desglosa
+ * ([disponible] y [invertido]) en una línea secundaria.
+ */
+data class HeroBalance(
+    /** Lo que tienes: saldo COP de toda cuenta que no sea deuda (Dinero + Inversión). */
+    val tuPlata: Long,
+    /** La parte de [tuPlata] en el grupo Dinero — efectivo, corriente, ahorros. */
+    val disponible: Long,
+    /** La parte de [tuPlata] en el grupo Inversión. */
+    val invertido: Long,
+    /** Lo que debes: tarjetas y préstamos, en COP (estimado cuando hay saldo en otra moneda). */
+    val deudas: Long,
+    /** [tuPlata] − [deudas]. Puede ser negativo, y con cinco créditos hipotecarios lo será. */
+    val patrimonio: Long,
+) {
+    /** Sin deudas, patrimonio y «tu plata» son el MISMO número: el hero no repite la cifra. */
+    val hasDebt: Boolean get() = deudas > 0L
+    /** Sin nada invertido no hay nada que desglosar: el hero no pinta la línea del desglose. */
+    val hasInvestments: Boolean get() = invertido != 0L
+}
+
+/**
+ * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no
+ * reimplementa la suma— para que el hero, la fila «Cuentas» del Inicio y el «Patrimonio neto»
+ * de la pantalla de Cuentas no puedan dar tres números distintos.
+ */
+fun heroBalance(accounts: List<Account>): HeroBalance {
+    val (activos, deudas, neto) = assetsDebtsNet(accounts)
+    val invertido = accounts.filter { it.type.group == AccountGroup.INVERSION }.sumOf { it.balance }
+    return HeroBalance(
+        tuPlata = activos,
+        disponible = activos - invertido,
+        invertido = invertido,
+        deudas = deudas,
+        patrimonio = neto,
+    )
 }
 
 // ── Próximos pagos ─────────────────────────────────────────────────────────────────
