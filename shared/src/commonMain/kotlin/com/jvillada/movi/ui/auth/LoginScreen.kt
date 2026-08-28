@@ -66,7 +66,9 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 loading = false
                 onNavigate(Screen.Dashboard)
             }.onFailure {
-                error = "Correo o contraseña incorrectos"
+                // Ver AuthErrors.kt: acá se decidía a ciegas que la culpa era de la contraseña,
+                // pasara lo que pasara. Ahora el 401 —y solo el 401— dice eso.
+                error = mensajeDeLogin(it)
                 loading = false
             }
         }
@@ -104,7 +106,9 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 }
                 loading = false
             }.onFailure {
-                error = "No se pudo conectar. Prueba de nuevo."
+                // Mismo problema que el login, al revés: esto afirmaba «no se pudo conectar»
+                // aunque el servidor sí hubiera contestado y fallado por otra cosa.
+                error = mensajeDeRecuperacion(it)
                 loading = false
             }
         }

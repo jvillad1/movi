@@ -65,8 +65,11 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 loading = false
                 onNavigate(Screen.Dashboard)
             }.onFailure {
-                error = if (it.message?.contains("409") == true) "Ese correo ya está registrado"
-                        else "Error al crear la cuenta"
+                // Ver AuthErrors.kt. El 409 se detectaba buscando "409" DENTRO del texto del
+                // error, que además de frágil solo acertaba de casualidad: sin `expectSuccess`,
+                // lo que llegaba acá era el fallo de deserializar un cuerpo de texto, y ese
+                // mensaje no tenía por qué mencionar el código. Ahora el código es un dato.
+                error = mensajeDeRegistro(it)
                 loading = false
             }
         }

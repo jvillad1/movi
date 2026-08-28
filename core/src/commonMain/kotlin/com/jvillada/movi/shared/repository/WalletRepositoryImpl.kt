@@ -63,6 +63,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
@@ -476,17 +477,36 @@ class WalletRepositoryImpl(
         }
     }
 
+    // ── Por qué acá NO alcanza con `.body()` ──────────────────────────────────────────────
+    //
+    // El cliente no tiene `expectSuccess`, así que un 401 no lanza nada por sí solo: lo que
+    // explotaba era `.body()`, intentando deserializar `AuthResponse` de un cuerpo que el
+    // servidor mandó como `text/plain` ("Invalid credentials"). El error resultante no dice
+    // "401" en ninguna parte — y es EXACTAMENTE el mismo error que sale de un 500 cuyo cuerpo
+    // es el HTML del proxy. Con la red caída sale un tercer error distinto, pero el `onFailure`
+    // de la pantalla los trataba a los tres igual y acusaba a la contraseña.
+    //
+    // Mismo idioma que `dismissCardPaymentCandidate` y compañía: si no fue 2xx, se lanza
+    // [ApiException] con el código, que es el dato que la pantalla necesita para distinguir
+    // "te rechazaron las credenciales" de "no se pudo hablar con el servidor".
     override suspend fun register(request: RegisterRequest): AuthResponse =
         client.post("$baseUrl/api/auth/register") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.bodyOrApiException()
 
     override suspend fun login(request: LoginRequest): AuthResponse =
         client.post("$baseUrl/api/auth/login") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.bodyOrApiException()
+
+    private suspend fun HttpResponse.bodyOrApiException(): AuthResponse {
+        if (!status.isSuccess()) {
+            throw ApiException(status.value, runCatching { bodyAsText() }.getOrNull())
+        }
+        return body()
+    }
 
     // No se usa .body(): la respuesta puede ser 202 o 503 y lo que la UI necesita es el código.
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int =

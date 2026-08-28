@@ -23,7 +23,16 @@ fun Throwable.toUserMessage(): String {
 
         msg.contains("Connection refused", ignoreCase = true) ||
         msg.contains("ConnectException", ignoreCase = true) ||
-        msg.contains("Failed to connect", ignoreCase = true)
+        msg.contains("Failed to connect", ignoreCase = true) ||
+        // Lo que dice el navegador cuando `fetch` no llega a ningún lado (wasm). Sin estos, un
+        // servidor caído en la web caía en «Algo salió mal», que en la pantalla de entrada era
+        // justo lo que dejaba al dueño sospechando de su contraseña. Chrome dice "Failed to
+        // fetch", Safari "Load failed", Firefox "NetworkError when attempting to fetch"; Ktor/JS
+        // los reenvía como "Fail to fetch".
+        msg.contains("Fail to fetch", ignoreCase = true) ||
+        msg.contains("Failed to fetch", ignoreCase = true) ||
+        msg.contains("NetworkError", ignoreCase = true) ||
+        msg.contains("Load failed", ignoreCase = true)
             -> "No se pudo conectar al servidor. Intenta más tarde."
 
         msg.contains("timeout", ignoreCase = true) ||
