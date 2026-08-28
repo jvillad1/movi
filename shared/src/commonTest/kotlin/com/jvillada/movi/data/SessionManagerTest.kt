@@ -26,6 +26,14 @@ import kotlin.test.assertTrue
  * Y prueban lo segundo, que es lo que hace que el arreglo sirva de algo: sin ningún lado donde
  * anotar el token, entrar tiene que seguir funcionando **durante la sesión**. Si `save()` no
  * dejara rastro, la app cargaría solo para rebotar en el login para siempre.
+ *
+ * **Lo que este archivo NO cubre, para que nadie lo lea como cobertura completa.** Justamente
+ * porque acá `Settings()` nunca se construye, todo lo de abajo ejercita **solo el camino
+ * degradado** (la copia en memoria). El camino normal —almacenamiento que funciona, sesión que
+ * sobrevive a un reinicio, la lectura pasante que llena la copia— no lo toca ninguna prueba
+ * automática: se verificó a ojo en el navegador, con `localStorage` sano y con `Storage.prototype`
+ * roto a mitad de sesión. Cubrirlo acá pediría un `Settings` falso inyectable, que es un cambio de
+ * diseño mucho más grande que el arreglo.
  */
 class SessionManagerTest {
 
@@ -89,6 +97,27 @@ class SessionManagerTest {
         assertEquals("azul", SessionManager.avatarColor)
         SessionManager.avatarColor = null
         assertNull(SessionManager.avatarColor)
+    }
+
+    @Test
+    fun `el 401 del propio login NO cuenta como sesion vencida`() {
+        // El bug: tres contraseñas equivocadas seguidas disparaban `clear()`, y en la web eso
+        // recarga la página. Los campos quedaban vacíos y sin ningún mensaje — una pantalla en
+        // blanco, justo cuando la persona ya estaba dudando de su contraseña.
+        assertFalse(cuentaComoSesionVencida("/api/auth/login"))
+        assertFalse(cuentaComoSesionVencida("/api/auth/register"))
+        assertFalse(cuentaComoSesionVencida("/api/auth/password-reset/request"))
+        assertFalse(cuentaComoSesionVencida("https://movi.example/api/auth/login?x=1"))
+    }
+
+    @Test
+    fun `todo lo demas si cuenta - un token que caduco tiene que cerrar la sesion`() {
+        assertTrue(cuentaComoSesionVencida("/api/accounts"))
+        assertTrue(cuentaComoSesionVencida("/api/dashboard/summary"))
+        assertTrue(cuentaComoSesionVencida("/api/users/me"))
+        // Ojo con relajar la regla a "contiene auth": esta ruta no existe hoy, pero si existiera
+        // sería un pedido autenticado normal y su 401 SÍ tendría que contar.
+        assertTrue(cuentaComoSesionVencida("/api/sms/authors"))
     }
 
     @Test

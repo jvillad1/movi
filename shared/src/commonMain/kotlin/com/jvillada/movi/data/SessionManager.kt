@@ -94,6 +94,32 @@ private fun guardar(key: String, value: String?) {
     }
 }
 
+/**
+ * **¿Este 401 significa «tu sesión venció»?**
+ *
+ * Los tres validadores HTTP (Android, iOS, wasm) le avisan a [SessionManager.onUnauthorized] de
+ * CADA 401, y a los tres seguidos [SessionManager.clear] cierra la sesión. Eso está bien para un
+ * token que caducó, y estaba mal para un pedido que **no lleva token ninguno**: el propio login.
+ *
+ * Medido en el navegador: tres contraseñas equivocadas seguidas y, al tercer intento,
+ * `clear()` → `reloadForLogout()` → la página se recarga sola. Los campos quedan vacíos y **no se
+ * muestra ningún mensaje**: una pantalla en blanco sin explicación, justo cuando la persona ya
+ * estaba dudando de su contraseña. No es un caso raro: equivocarse tres veces al escribir una
+ * contraseña larga es lo más normal del mundo.
+ *
+ * Por qué recién ahora muerde: en la web «normal» el login es el overlay HTML de `index.html`,
+ * que usa su propio `fetch` y nunca pasa por el cliente de Ktor; y en Android/iOS
+ * `reloadForLogout()` es un no-op. El único camino donde esto se nota es el login de Compose sobre
+ * wasm — que es exactamente el que esta rama volvió alcanzable.
+ *
+ * La regla es de una línea y no necesita saber nada del cliente HTTP: **registro, login y
+ * recuperación de contraseña no tienen sesión que perder.** Todo lo demás sí.
+ *
+ * @param ruta el camino del pedido (`url.encodedPath`), con o sin el host adelante.
+ */
+fun cuentaComoSesionVencida(ruta: String): Boolean =
+    !ruta.substringBefore('?').substringBefore('#').contains("/api/auth/")
+
 object SessionManager {
     var loggedIn: Boolean by mutableStateOf(!leer(KEY_TOKEN).isNullOrBlank())
         private set
@@ -142,6 +168,11 @@ object SessionManager {
      * Call on every 401 response. Clears the session only after [MAX_CONSECUTIVE_401S]
      * consecutive failures — avoids logging out on a single transient background-sync 401.
      * Network errors (no connectivity) must NOT call this.
+     *
+     * **Ojo con quién lo llama.** Un 401 de cualquier ruta bajo `/api/auth/` NO es una sesión que
+     * venció: es la respuesta normal a una contraseña equivocada, y no hay sesión que cerrar
+     * porque todavía no empezó. Los validadores de las tres plataformas filtran esos pedidos con
+     * [cuentaComoSesionVencida] antes de llegar acá — ver el porqué completo allá.
      */
     fun onUnauthorized() {
         consecutive401s++
