@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
+import kotlin.concurrent.Volatile
 
 private const val KEY_TOKEN   = "auth_token"
 private const val KEY_USER_ID = "user_id"
@@ -60,7 +61,35 @@ private val sessionSettings: Settings by lazy { Settings() }
  * literalmente lo que el navegador nos está prohibiendo. No cambia nada cuando el almacenamiento
  * sí anda: [leer] pregunta primero por [sessionSettings] y solo cae acá si esa lectura lanzó.
  */
-private val sessionMemoria = mutableMapOf<String, String>()
+@Volatile
+private var sessionMemoria: Map<String, String> = emptyMap()
+
+/**
+ * Anota en [sessionMemoria] **solo si algo cambió**, y nunca mutando el mapa que otro pueda estar
+ * leyendo: se reemplaza la referencia por un mapa nuevo e inmutable.
+ *
+ * Las dos mitades importan, y las dos son por Android, donde `SessionManager.token` se lee desde
+ * hilos de fondo (`SmsSyncWorker`, `SmsBackfill`, y el `defaultRequest` del cliente en los hilos
+ * de Ktor) al mismo tiempo que la UI:
+ *
+ * - **Inmutable**: un `mutableMapOf` escrito en cada lectura era una escritura concurrente en
+ *   cada pedido HTTP. Un `HashMap` que se redimensiona mientras otro hilo lo recorre no devuelve
+ *   un valor raro: puede quedar girando para siempre. Acá el que lee tiene una foto que ya nadie
+ *   toca.
+ * - **Solo si cambió**: en Android e iOS el almacenamiento nunca falla, así que la copia en
+ *   memoria no compra nada — y con esta guarda tampoco cuesta nada. Después de la primera lectura
+ *   de cada clave, el estado normal es *cero* escrituras y *cero* asignaciones de memoria; se
+ *   paga una copia de un mapa de seis entradas solo cuando el valor de verdad cambia (entrar,
+ *   salir, editar el perfil).
+ *
+ * Sin `@Volatile` un hilo de fondo podría leer una referencia vieja; con él, no. Igual el peor
+ * caso posible acá es una lectura de reserva desactualizada, nunca un mapa corrupto.
+ */
+private fun recordar(key: String, valor: String?) {
+    val actual = sessionMemoria
+    if (actual[key] == valor) return
+    sessionMemoria = if (valor == null) actual - key else actual + (key to valor)
+}
 
 /**
  * Lee del almacenamiento y, de paso, **recuerda lo último que sí se pudo leer**.
@@ -80,15 +109,24 @@ private val sessionMemoria = mutableMapOf<String, String>()
  * No es un caché que pueda quedar viejo: mientras el almacenamiento funcione **manda él** y esto
  * solo se actualiza con lo que él devolvió. Un `null` también se recuerda —borrando la entrada—
  * porque «no está» es una lectura tan buena como cualquier otra.
+ *
+ * **Hasta dónde llega la promesa, dicho con todas las letras.** Esto cubre el almacenamiento que
+ * **lanza** (bloqueado, permiso revocado), que es el caso que dejaba al dueño afuera. NO cubre el
+ * que **se vacía en silencio**: si el navegador borra los datos del sitio sin fallar —el ITP de
+ * Safari, «borrar datos al cerrar», un desalojo por cuota—, la lectura devuelve `null` sin
+ * excepción, este `null` se recuerda y la red de seguridad se limpia sola. Es a propósito: no hay
+ * forma de distinguir ese `null` de un logout hecho en otra pestaña, y preferir la copia vieja
+ * significaría resucitar una sesión que alguien cerró. En ese caso lo que pasa es lo de siempre y
+ * lo esperable — la app pide entrar de nuevo, con su pantalla y su mensaje.
  */
 private fun leer(key: String): String? = runCatching {
     val valor = sessionSettings.getStringOrNull(key)
-    if (valor == null) sessionMemoria.remove(key) else sessionMemoria[key] = valor
+    recordar(key, valor)
     valor
 }.getOrElse { sessionMemoria[key] }
 
 private fun guardar(key: String, value: String?) {
-    if (value == null) sessionMemoria.remove(key) else sessionMemoria[key] = value
+    recordar(key, value)
     runCatching {
         if (value == null) sessionSettings.remove(key) else sessionSettings[key] = value
     }
@@ -169,9 +207,9 @@ object SessionManager {
      * consecutive failures — avoids logging out on a single transient background-sync 401.
      * Network errors (no connectivity) must NOT call this.
      *
-     * **Ojo con quién lo llama.** Un 401 de cualquier ruta bajo `/api/auth/` NO es una sesión que
-     * venció: es la respuesta normal a una contraseña equivocada, y no hay sesión que cerrar
-     * porque todavía no empezó. Los validadores de las tres plataformas filtran esos pedidos con
+     * **Ojo con quién lo llama.** Un 401 de cualquier ruta bajo `/api/auth/` NO es una sesión que venció: es la
+     * respuesta normal a una contraseña equivocada, y no hay sesión que cerrar porque todavía no
+     * empezó. Los validadores de las tres plataformas filtran esos pedidos con
      * [cuentaComoSesionVencida] antes de llegar acá — ver el porqué completo allá.
      */
     fun onUnauthorized() {
