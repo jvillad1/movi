@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.categorias
 
+import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
@@ -43,7 +44,21 @@ fun tiposEfectivos(c: CategoryUsage): Set<TransactionType> =
  *   deshacer.
  *
  * [query] busca por nombre sin distinguir mayúsculas ni tildes, igual que las sugerencias.
- * El orden se respeta tal como llega del server (lo más usado primero, reservadas al final).
+ *
+ * **El orden lo decide acá, alfabético** ([CATEGORY_NAME_ORDER]: sin tildes, sin mayúsculas, la ñ
+ * después de la n). Antes se respetaba el que llega del server — lo más usado primero — y ese orden
+ * tenía su razón escrita: la pregunta que trae al dueño a esta pantalla es «¿qué sobra?», y lo que
+ * sobra se reconoce por contraste con lo que de verdad usa. La razón no se pierde con este cambio:
+ * cada renglón sigue diciendo su uso («12 movimientos · $…» o «Sin movimientos»), así que lo que
+ * sobra se sigue reconociendo de un vistazo. Lo que sí se ganó es poder **encontrar una categoría
+ * por su nombre**: apenas la lista pasa de lo que entra en una pantalla, «lo más usado primero» es
+ * indistinguible de «cualquier orden» para quien busca «Ñoquis».
+ *
+ * Se conservan dos cosas del orden viejo:
+ * - **Las reservadas al final.** No se pueden tocar (ni renombrar, ni unificar, ni esconder), así
+ *   que intercaladas entre las demás serían cuatro renglones muertos en medio de la lista.
+ * - **Lo que empieza con lo buscado va antes que lo que apenas lo contiene**, igual que en las
+ *   sugerencias de `CategoryField`: buscando «co», «Comida» arriba de «Bancolombia».
  */
 fun filtrarCategorias(
     todas: List<CategoryUsage>,
@@ -65,6 +80,11 @@ fun filtrarCategorias(
             }
         }
         .filter { q.isEmpty() || normalizar(it.name).contains(q) }
+        .sortedWith(
+            compareBy<CategoryUsage> { it.reserved }
+                .thenBy { if (q.isEmpty() || normalizar(it.name).startsWith(q)) 0 else 1 }
+                .thenBy(CATEGORY_NAME_ORDER) { it.name },
+        )
 }
 
 /**
@@ -164,12 +184,16 @@ fun etiquetaDeTipoFijado(pinned: String?): String = when (pinned) {
     else -> "Automático"
 }
 
-/** Minúsculas y sin tildes — misma normalización que las sugerencias de categoría. */
+/**
+ * Minúsculas y sin tildes/diéresis — misma normalización que las sugerencias de categoría (ver
+ * `normalizeForMatch`), y **distinta de [CATEGORY_NAME_ORDER] en un solo punto**: para BUSCAR, la
+ * `ñ` se aplasta contra la `n`; para ORDENAR va justo después de la n.
+ */
 private fun normalizar(s: String): String = buildString(s.length) {
     for (c in s.lowercase()) {
         append(
             when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ñ' -> 'n'
+                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
                 else -> c
             },
         )

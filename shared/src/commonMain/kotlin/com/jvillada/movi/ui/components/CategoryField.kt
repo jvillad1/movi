@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
@@ -53,11 +54,37 @@ import kotlinx.coroutines.delay
  * `@Composable` para poder testearla en `:shared:commonTest` sin arrancar Compose.
  *
  * Coincide por "contiene", sin tildes ni mayúsculas ("compu" encuentra "Computador",
- * "medic" encuentra "Médico"). Orden: primero las predefinidas ([PREDEFINED_CATEGORIES]
- * filtradas por [type] si se pasa, en su orden original), después las [usedCategories] que
- * no dupliquen a una predefinida (comparación también sin tildes/mayúsculas) — así una
- * categoría nueva escrita a mano no compite por el primer lugar con el catálogo fijo.
+ * "medic" encuentra "Médico"). Devuelve las predefinidas ([PREDEFINED_CATEGORIES] filtradas por
+ * [type] si se pasa) junto con las [usedCategories] que no dupliquen a una predefinida.
+ *
+ * **Esa deduplicación compara ignorando mayúsculas pero NO tildes** (`equals(ignoreCase = true)`),
+ * al revés de lo que decía este KDoc: «Educacion» escrita a mano y «Educación» del catálogo son dos
+ * entradas, no una. Se deja así —cambiarlo haría desaparecer de la lista una categoría en la que el
+ * dueño tiene movimientos, sin decírselo—, y con la lista alfabética única las dos quedan **pegadas**
+ * en vez de en bloques distintos, que es como se ve el duplicado y se puede unificar desde
+ * «Más → Categorías».
+ *
  * Sin recortar por defecto: el que llama decide si hace falta un scroll (ver [CategoryField]).
+ *
+ * **El orden — «cualquier orden» era el problema.** El dueño pidió orden alfabético, y acá es
+ * [CATEGORY_NAME_ORDER]: sin tildes, sin mayúsculas, con la ñ después de la n. Dos cosas que
+ * cambiaron con eso, y por qué:
+ *
+ * - **Una sola lista, sin separar catálogo de propias.** Antes iban primero las del catálogo «así
+ *   una categoría nueva escrita a mano no compite por el primer lugar con el catálogo fijo». Ese
+ *   argumento era sobre el PRIMER LUGAR, y con orden alfabético el primer lugar ya no es un premio
+ *   —lo decide la letra—; lo único que de verdad dependía de «la primera que se ofrece» es el valor
+ *   con el que arranca el campo, y eso ahora lo resuelve [categoriaPorDefectoPara] leyendo el
+ *   catálogo en su orden, no esta lista. Mantener los dos grupos, en cambio, partía el alfabeto en
+ *   dos y obligaba a recorrer la lista dos veces para encontrar «Colegio» — que es exactamente la
+ *   queja que este cambio vino a resolver.
+ * - **Lo que empieza con lo tecleado va antes que lo que apenas lo contiene.** Con «co» escrito,
+ *   alfabético puro pondría «Bancolombia» arriba de «Comida». Es un solo desempate, dicho en una
+ *   línea: primero las que empiezan con lo que escribiste, y dentro de cada grupo, alfabético. Con
+ *   el campo vacío no hay dos grupos: es una sola lista alfabética.
+ *
+ * Lo que el orden **no** toca: nada reservado se sugiere, nada escondido se ofrece, y el filtro por
+ * tipo sigue igual — ordenar es lo último que pasa, sobre lo que ya quedó filtrado.
  *
  * **Ola 9 · A3 — las propias también se filtran por tipo.** [usedCategories] no es una lista de
  * nombres sino nombre → tipos con los que se la vio usada (ver
@@ -80,6 +107,26 @@ fun suggestCategoryMatches(
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     prefs: Map<String, CategoryPref> = emptyMap(),
 ): List<String> {
+    val (delCatalogo, propias) = categoriasQueCoinciden(query, type, usedCategories, prefs)
+    return ordenarSugerencias(delCatalogo + propias, query)
+}
+
+/**
+ * **Qué coincide**, sin decidir todavía en qué orden se muestra: las del catálogo y las propias, por
+ * separado y cada una en el orden en el que vino.
+ *
+ * Existe separada de [suggestCategoryMatches] por un solo motivo, y conviene que quede escrito: el
+ * orden del catálogo sigue significando algo para [categoriaPorDefectoPara] —cuál viene prellenada
+ * en «Agregar»— y ese significado se perdía si lo único disponible era la lista ya alfabetizada. Con
+ * esto, las dos cosas comparten el filtro (reservadas, escondidas, tipo) y difieren solo en el
+ * orden, que es justo lo que se quería.
+ */
+private fun categoriasQueCoinciden(
+    query: String,
+    type: TransactionType?,
+    usedCategories: Map<String, Set<TransactionType>>,
+    prefs: Map<String, CategoryPref>,
+): Pair<List<String>, List<String>> {
     // El caché guarda los nombres tal cual los escribió el dueño; las preferencias vienen del
     // server con el mismo nombre. Se cruzan sin distinguir mayúsculas ni tildes para que una
     // diferencia de tipeo no haga que una categoría escondida reaparezca.
@@ -127,7 +174,23 @@ fun suggestCategoryMatches(
         .distinct()
         .filterNot { used -> todasLasDelCatalogo.any { it.equals(used, ignoreCase = true) } }
         .filter { normalizeForMatch(it).contains(q) }
-    return predefinedMatches + usedMatches
+    return predefinedMatches to usedMatches
+}
+
+/**
+ * **El orden de las sugerencias**: alfabético, con un solo desempate arriba — las que empiezan con
+ * lo que se escribió van antes que las que apenas lo contienen. Ver el KDoc de
+ * [suggestCategoryMatches] para el porqué de cada mitad de esa regla.
+ *
+ * Con [query] en blanco no hay desempate posible (todas «empiezan» con la nada) y queda una sola
+ * lista alfabética, que es como se ve el panel apenas se abre el campo.
+ */
+private fun ordenarSugerencias(nombres: List<String>, query: String): List<String> {
+    val q = normalizeForMatch(query.trim())
+    return nombres.sortedWith(
+        compareBy<String> { if (q.isEmpty() || normalizeForMatch(it).startsWith(q)) 0 else 1 }
+            .then(CATEGORY_NAME_ORDER),
+    )
 }
 
 /**
@@ -193,19 +256,30 @@ fun categoriaSirveParaTipo(
 
 /**
  * Con qué categoría **arranca** un campo para un tipo dado: la primera que de verdad se le va a
- * ofrecer. Sale de [suggestCategoryMatches] y no de `PREDEFINED_CATEGORIES.first { … }` para que
- * no pueda volver a pasar lo de antes — el campo prellenado con una categoría escondida, a un
- * toque de «Guardar» de anotar un gasto en la que el dueño acababa de retirar.
+ * ofrecer. Pasa por el mismo filtro que las sugerencias y no por `PREDEFINED_CATEGORIES.first { … }`
+ * a secas, para que no pueda volver a pasar lo de antes — el campo prellenado con una categoría
+ * escondida, a un toque de «Guardar» de anotar un gasto en la que el dueño acababa de retirar.
  *
- * Si escondió TODAS las del catálogo de ese lado, cae a la primera del catálogo igual: quedarse
- * sin ningún valor inicial sería peor que uno imperfecto.
+ * **«La primera» es la primera del catálogo, no la primera del alfabeto.** Desde que las
+ * sugerencias se ordenan alfabéticamente, tomar el primer elemento de [suggestCategoryMatches]
+ * habría cambiado el valor inicial al anotar un ingreso de «Salario» a «Arriendo recibido»: un
+ * cambio que nadie pidió, en la pantalla que el dueño usa todos los días. Por eso lee el catálogo
+ * en su orden (ver el KDoc de [PREDEFINED_CATEGORIES], que es hoy su único significado) y recién
+ * después cae a lo que sea que se esté ofreciendo.
+ *
+ * Si escondió TODAS las del catálogo de ese lado, cae a las propias y por último a la primera del
+ * catálogo igual: quedarse sin ningún valor inicial sería peor que uno imperfecto.
  */
 fun categoriaPorDefectoPara(
     type: TransactionType,
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     prefs: Map<String, CategoryPref> = emptyMap(),
-): String = suggestCategoryMatches("", type, usedCategories, prefs).firstOrNull()
-    ?: PREDEFINED_CATEGORIES.first { it.type == type.name }.name
+): String {
+    val (delCatalogo, propias) = categoriasQueCoinciden("", type, usedCategories, prefs)
+    return delCatalogo.firstOrNull()
+        ?: propias.firstOrNull()
+        ?: PREDEFINED_CATEGORIES.first { it.type == type.name }.name
+}
 
 /**
  * Ola 9 · A1: ¿hay que ofrecer «Crear "lo que escribió"» arriba de las sugerencias?
@@ -321,12 +395,21 @@ fun nombreCanonicoConocido(
     return prefs.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }
 }
 
-/** Minúsculas y sin tildes/eñe — no hay normalización Unicode común a los 3 targets acá. */
+/**
+ * Minúsculas y sin tildes/diéresis/eñe — no hay normalización Unicode común a los 3 targets acá.
+ *
+ * **Cubre las mismas letras que [categorySortKey], y difiere en una sola cosa a propósito:** acá la
+ * `ñ` se aplasta contra la `n` (buscar «nono» tiene que encontrar «Ñoño»), y allá se manda justo
+ * DESPUÉS de la n, que es donde la pone el alfabeto. Buscar y ordenar no piden lo mismo.
+ *
+ * La `ü` estaba de más acá hasta esta ola: «Pingüinos» ya ordenaba como «pinguinos» pero **no se
+ * encontraba** escribiendo «pinguinos», que es justo como se teclea sin pensarlo.
+ */
 private fun normalizeForMatch(s: String): String = buildString(s.length) {
     for (c in s.lowercase()) {
         append(
             when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ñ' -> 'n'
+                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
                 else -> c
             },
         )

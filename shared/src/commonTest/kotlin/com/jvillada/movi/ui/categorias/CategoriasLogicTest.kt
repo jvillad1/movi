@@ -49,7 +49,66 @@ class CategoriasLogicTest {
         // Un filtro llamado «Todas» que esconde cosas sería mentir — y además es donde el dueño
         // va a buscar la que escondió por error.
         val lista = listOf(cat("Ropa", hidden = true), cat("Comida"))
-        assertEquals(listOf("Ropa", "Comida"), filtrarCategorias(lista, CategoryFilter.TODAS).map { it.name })
+        // (Salen alfabéticas, no en el orden en que llegaron — ver los tests de orden más abajo.)
+        assertEquals(listOf("Comida", "Ropa"), filtrarCategorias(lista, CategoryFilter.TODAS).map { it.name })
+    }
+
+    // ── El orden de la lista ──────────────────────────────────────────────────
+    // «No me gusta que las categorías no estén tipo orden alfabético sino en cualquier orden.»
+    // El «cualquier orden» era el del server: lo más usado primero. Ese orden tenía su razón
+    // escrita —reconocer lo que sobra por contraste con lo que se usa— y no se pierde: cada
+    // renglón sigue diciendo su uso. Lo que se gana es poder encontrar una por su nombre.
+
+    @Test
+    fun `la lista sale en orden alfabetico, no por uso`() {
+        val lista = listOf(
+            cat("Vivienda", movements = 90),
+            cat("Comida", movements = 300),
+            cat("Ñoquis", movements = 1),
+            cat("Educación", movements = 40),
+            cat("Ácido fólico", movements = 0),
+        )
+        assertEquals(
+            listOf("Ácido fólico", "Comida", "Educación", "Ñoquis", "Vivienda"),
+            filtrarCategorias(lista, CategoryFilter.TODAS).map { it.name },
+        )
+    }
+
+    @Test
+    fun `las reservadas quedan al final aunque el alfabeto las pusiera antes`() {
+        // No se pueden tocar: intercaladas serían renglones muertos en medio de la lista.
+        val lista = listOf(cat("Vivienda"), cat("Cuenta eliminada", reserved = true), cat("Comida"))
+        assertEquals(
+            listOf("Comida", "Vivienda", "Cuenta eliminada"),
+            filtrarCategorias(lista, CategoryFilter.TODAS).map { it.name },
+        )
+    }
+
+    @Test
+    fun `buscando, lo que empieza con lo escrito va antes que lo que apenas lo contiene`() {
+        val lista = listOf(cat("Bancolombia"), cat("Comida"))
+        assertEquals(
+            listOf("Comida", "Bancolombia"),
+            filtrarCategorias(lista, CategoryFilter.TODAS, "co").map { it.name },
+        )
+    }
+
+    @Test
+    fun `el orden dentro de cada pastilla de filtro tambien es alfabetico`() {
+        val lista = listOf(
+            cat("Vivienda", usedTypes = listOf(TransactionType.EXPENSE), hidden = true),
+            cat("Comida", usedTypes = listOf(TransactionType.EXPENSE), hidden = true),
+            cat("Salud", usedTypes = listOf(TransactionType.EXPENSE)),
+            cat("Arriendo", usedTypes = listOf(TransactionType.EXPENSE)),
+        )
+        assertEquals(
+            listOf("Arriendo", "Salud"),
+            filtrarCategorias(lista, CategoryFilter.GASTOS).map { it.name },
+        )
+        assertEquals(
+            listOf("Comida", "Vivienda"),
+            filtrarCategorias(lista, CategoryFilter.ESCONDIDAS).map { it.name },
+        )
     }
 
     @Test
@@ -92,6 +151,16 @@ class CategoriasLogicTest {
     fun `la busqueda ignora tildes y mayusculas`() {
         val lista = listOf(cat("Educación"), cat("Comida"))
         assertEquals(listOf("Educación"), filtrarCategorias(lista, CategoryFilter.TODAS, "EDUCACION").map { it.name })
+    }
+
+    @Test
+    fun `la busqueda tambien ignora la dieresis`() {
+        // Ordenaba como «pinguinos» pero no se encontraba escribiéndolo así.
+        val lista = listOf(cat("Pingüinos"), cat("Comida"))
+        assertEquals(
+            listOf("Pingüinos"),
+            filtrarCategorias(lista, CategoryFilter.TODAS, "pinguinos").map { it.name },
+        )
     }
 
     // ── Las etiquetas ─────────────────────────────────────────────────────────

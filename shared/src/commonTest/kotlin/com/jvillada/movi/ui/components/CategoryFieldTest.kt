@@ -18,9 +18,15 @@ import kotlin.test.assertTrue
 class CategoryFieldTest {
 
     @Test
-    fun `sin texto sugiere las predefinidas del tipo, en su orden del catalogo`() {
+    fun `sin texto sugiere las predefinidas del tipo, en orden alfabetico`() {
+        // Antes salían en el orden en que alguien las escribió en `PREDEFINED_CATEGORIES`
+        // («Salario, Freelance, Arriendo recibido, …»), que es lo que el dueño leyó como
+        // «cualquier orden».
         val result = suggestCategoryMatches(query = "", type = TransactionType.INCOME)
-        assertEquals(listOf("Salario", "Freelance", "Arriendo recibido", "Inversiones", "Otros ingresos"), result)
+        assertEquals(
+            listOf("Arriendo recibido", "Freelance", "Inversiones", "Otros ingresos", "Salario"),
+            result,
+        )
     }
 
     @Test
@@ -51,14 +57,67 @@ class CategoryFieldTest {
     }
 
     @Test
-    fun `las usadas van despues de las predefinidas`() {
+    fun `una sola lista alfabetica - las propias no van en un bloque aparte`() {
+        // Cambio deliberado: antes las propias iban DESPUÉS de todo el catálogo. Con las dos
+        // listas ordenadas por separado, el alfabeto arrancaba dos veces y había que recorrer la
+        // lista dos veces para encontrar «Mascotas» — la queja que este cambio vino a resolver.
         val result = suggestCategoryMatches(
             query = "",
             type = TransactionType.EXPENSE,
             usedCategories = mapOf("Mascotas" to setOf(TransactionType.EXPENSE)),
         )
-        assertEquals("Mascotas", result.last())
-        assert(result.indexOf("Comida") < result.indexOf("Mascotas"))
+        assertEquals(
+            listOf(
+                "Comida", "Educación", "Entretenimiento", "Mascotas", "Otros",
+                "Ropa", "Salud", "Servicios", "Tecnología", "Transporte", "Vivienda",
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `lo que empieza con lo tecleado va antes que lo que apenas lo contiene`() {
+        // «co» está adentro de «Bancolombia» y al principio de «Comida». Alfabético puro pondría
+        // «Bancolombia» arriba, que es peor que el orden viejo: el resultado que empieza con lo
+        // escrito no puede quedar debajo.
+        val used = mapOf("Bancolombia" to setOf(TransactionType.EXPENSE))
+        val result = suggestCategoryMatches("co", TransactionType.EXPENSE, used)
+        assertEquals(listOf("Comida", "Bancolombia"), result)
+    }
+
+    @Test
+    fun `dentro del grupo que empieza con lo tecleado, tambien alfabetico`() {
+        val result = suggestCategoryMatches("sal", TransactionType.EXPENSE)
+        assertEquals(listOf("Salud"), result)
+        assertEquals(listOf("Salario"), suggestCategoryMatches("sal", TransactionType.INCOME))
+        assertEquals(listOf("Salario", "Salud"), suggestCategoryMatches("sal", type = null))
+    }
+
+    @Test
+    fun `la dieresis se ignora al buscar, igual que al ordenar`() {
+        // «Pingüinos» ordenaba como «pinguinos» pero no se encontraba escribiendo «pinguinos»
+        // —que es como se teclea sin pensarlo—: la clave de orden cubría la ü y la de búsqueda no.
+        val used = mapOf("Pingüinos" to setOf(TransactionType.EXPENSE))
+        assertEquals(listOf("Pingüinos"), suggestCategoryMatches("pinguinos", TransactionType.EXPENSE, used))
+        assertEquals(listOf("Pingüinos"), suggestCategoryMatches("pingüinos", TransactionType.EXPENSE, used))
+        // Y no se ofrece «Crear "pinguinos"» para algo que ya existe.
+        val matches = suggestCategoryMatches("pinguinos", TransactionType.EXPENSE, used)
+        assertFalse(shouldOfferCreateCategory("pinguinos", matches, used.keys))
+    }
+
+    @Test
+    fun `el orden ignora tildes y pone la enie despues de la n`() {
+        // La lista con la que se verificó de verdad: «Ñoquis» no puede caer después de «Zapatos»,
+        // y «Ñandú» ordena entre «Nueces» y «Ñoquis».
+        val used = listOf("Zapatos", "Ñoquis", "Ñandú", "Nueces", "Árbol", "Ángel")
+            .associateWith { emptySet<TransactionType>() }
+        val result = suggestCategoryMatches("", TransactionType.EXPENSE, used)
+        val propias = result.filter { it in used.keys }
+        assertEquals(listOf("Ángel", "Árbol", "Nueces", "Ñandú", "Ñoquis", "Zapatos"), propias)
+        // Y quedan intercaladas con el catálogo, no en un bloque aparte: «Ángel» va primera de
+        // toda la lista y «Zapatos» última.
+        assertEquals("Ángel", result.first())
+        assertEquals("Zapatos", result.last())
     }
 
     @Test
@@ -289,6 +348,16 @@ class CategoryFieldTest {
         val inicial = categoriaPorDefectoPara(TransactionType.EXPENSE, prefs = prefs)
         assertFalse(inicial == "Comida")
         assertEquals("Comida", categoriaPorDefectoPara(TransactionType.EXPENSE))
+    }
+
+    @Test
+    fun `ordenar alfabeticamente NO cambia con que categoria arranca el campo`() {
+        // El orden alfabético es de las LISTAS. Si el valor inicial saliera de «la primera
+        // sugerencia», anotar un ingreso arrancaría en «Arriendo recibido» en vez de «Salario»:
+        // un cambio que nadie pidió, en la pantalla que se usa todos los días.
+        assertEquals("Salario", categoriaPorDefectoPara(TransactionType.INCOME))
+        assertEquals("Comida", categoriaPorDefectoPara(TransactionType.EXPENSE))
+        assertEquals("Arriendo recibido", suggestCategoryMatches("", TransactionType.INCOME).first())
     }
 
     @Test
