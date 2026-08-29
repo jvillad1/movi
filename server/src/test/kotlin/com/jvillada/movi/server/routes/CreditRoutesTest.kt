@@ -388,6 +388,14 @@ class CreditRoutesTest {
         }
         val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
         assertEquals(true, hasMovements(body))
+        // Y **la clave no viaja**, que es la mitad que el helper de arriba no puede afirmar: él
+        // lee la ausencia como `true`, así que pasaría igual si el server la mandara explícita.
+        // Esta línea es la que fija la compatibilidad con el APK 1.8, que no la conoce.
+        assertEquals(
+            null,
+            body["hasMovements"],
+            "hasMovements=true no debe viajar: es el default y un cliente viejo no lo espera",
+        )
     }
 
     // ── POST /{accountId}/balance-adjustment ──────────────────────────────────

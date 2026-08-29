@@ -207,7 +207,14 @@ fun defaultTransferAccounts(accounts: List<Account>): List<Account> =
 fun deudaDespuesDelTraspaso(from: Account?, to: Account?, amount: Long?): String? {
     if (from == null || to == null || amount == null || amount <= 0L) return null
     val credito = listOf(from, to).firstOrNull { it.type == AccountType.LOAN } ?: return null
-    val despues = credito.balance + if (credito.id == from.id) amount else -amount
+    // El saldo EN LA MONEDA DEL CRÉDITO, no `account.balance` a secas: ese campo es el componente
+    // COP (ver `enrichWith`), así que sobre un préstamo en dólares el renglón leía «US$0 pasa a
+    // US$1.000» — un rótulo en una moneda sobre una cifra de otra. Antes se callaba; decir el
+    // número equivocado con confianza es peor. `balancesByCurrency` viene derivado junto al saldo,
+    // y para COP vale exactamente lo mismo que `balance`.
+    val moneda = credito.currency
+    val deudaActual = credito.balancesByCurrency[moneda] ?: credito.balance
+    val despues = deudaActual + if (credito.id == from.id) amount else -amount
     // [signedMoney] y no [formatCOP] por dos razones, las dos de la revisión de esta rama:
     //
     // 1. **Un crédito en otra moneda también tiene derecho a la aritmética.** La primera versión
@@ -218,8 +225,7 @@ fun deudaDespuesDelTraspaso(from: Account?, to: Account?, amount: Long?): String
     // 2. **El signo.** [formatMoney] lo descarta, y una deuda que queda negativa —abonar de más,
     //    que es exactamente lo que hace quien cancela un crédito— tiene que leerse «−$500.000»
     //    y no «$500.000».
-    val moneda = credito.currency
-    return "Deuda de ${credito.name}: ${signedMoney(credito.balance, moneda)} " +
+    return "Deuda de ${credito.name}: ${signedMoney(deudaActual, moneda)} " +
         "pasa a ${signedMoney(despues, moneda)}"
 }
 
@@ -541,7 +547,11 @@ internal fun TransferBody(
         } else {
         Column(modifier = Modifier.fillMaxWidth().onSizeChanged { formHeightPx = it.height }) {
 
-        if (accountsLoaded && elegibles.size < 2) {
+        // `paraDefecto.isEmpty()` además del conteo: con dos créditos y ninguna cuenta de dinero
+        // hay dos elegibles, pero [validateTransfer] rechaza crédito↔crédito, así que el
+        // formulario se abría con las dos puntas vacías y sin salida. El mensaje de abajo dice
+        // exactamente lo que falta.
+        if (accountsLoaded && (elegibles.size < 2 || paraDefecto.isEmpty())) {
             Spacer(Modifier.height(18.dp))
             Text(
                 text = "Un traspaso necesita dos cuentas tuyas. Un crédito sirve de punta " +
