@@ -33,8 +33,12 @@ class CreditosLogicTest {
         paidPct: Double?,
         hasMovements: Boolean,
         terms: CreditTerms? = terminos,
+        porMoneda: Map<String, Long> = emptyMap(),
     ) = CreditSummary(
-        account = Account("acc_loan", "Libranza", AccountType.LOAN, balance = deuda),
+        account = Account(
+            "acc_loan", "Libranza", AccountType.LOAN,
+            balance = deuda, balancesByCurrency = porMoneda,
+        ),
         terms = terms,
         paidPct = paidPct,
         hasMovements = hasMovements,
@@ -92,6 +96,57 @@ class CreditosLogicTest {
         assertEquals("0% pagado", progreso.etiqueta)
         assertEquals(0f, progreso.fraccion)
         assertEquals(false, progreso.esAviso, "«0% pagado» es una cifra aunque no haya movimientos")
+    }
+
+    // ── Las otras dos puertas a «100% pagado», de la re-revisión ──────────────
+
+    /**
+     * **El caso que reabrió el bloqueante.** Crédito creado en $0 y después un abono
+     * extraordinario —la operación que esta ola estrena—: la deuda queda NEGATIVA, así que sí hubo
+     * un movimiento (`hasMovements = true`, la guarda de arriba no dispara) y `paidPctFor` clampa
+     * a 1.0. La tarjeta decía «100% pagado» sobre un crédito que nunca recibió su desembolso.
+     */
+    @Test
+    fun `una deuda negativa no es un credito pagado`() {
+        val progreso = progresoDeCredito(
+            credito(deuda = -1_500_000L, paidPct = 1.0, hasMovements = true),
+        )
+
+        assertEquals("Deuda en negativo — revísala", progreso.etiqueta)
+        assertEquals(0f, progreso.fraccion)
+        assertEquals(true, progreso.esAviso)
+    }
+
+    /**
+     * El primo hermano, preexistente: `account.balance` es el componente **COP** del saldo, así
+     * que un préstamo cuyos movimientos son todos en dólares tiene `balance = 0` con movimientos,
+     * y daba «100% pagado» sobre una deuda intacta. El porcentaje se calcula contra un `principal`
+     * en COP: sobre un saldo que no está en COP no hay nada que comparar.
+     */
+    @Test
+    fun `una deuda en otra moneda no se anuncia como pagada`() {
+        val progreso = progresoDeCredito(
+            credito(
+                deuda = 0L, paidPct = 1.0, hasMovements = true,
+                porMoneda = mapOf("COP" to 0L, "USD" to 12_000L),
+            ),
+        )
+
+        assertEquals("Deuda en otra moneda", progreso.etiqueta)
+        assertEquals(0f, progreso.fraccion)
+    }
+
+    /** Un préstamo COP con el mapa por moneda cargado sigue mostrando su porcentaje. */
+    @Test
+    fun `un prestamo en pesos con el mapa por moneda no cambia`() {
+        val progreso = progresoDeCredito(
+            credito(
+                deuda = 65_000_000L, paidPct = 0.18, hasMovements = true,
+                porMoneda = mapOf("COP" to 65_000_000L),
+            ),
+        )
+
+        assertEquals("18% pagado", progreso.etiqueta)
     }
 
     /**
