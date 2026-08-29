@@ -253,6 +253,9 @@ private fun summaryFor(
         terms           = terms,
         paidPct         = terms?.let { paidPctFor(it.principal, account.balance) },
         adjustmentEvent = adjustment,
+        // Los mismos eventos de los que sale la deuda: si no hay ninguno, el $0 de esta cuenta
+        // significa «todavía no se registró nada», no «pagado». Ver [CreditSummary.hasMovements].
+        hasMovements    = events.isNotEmpty(),
     )
 }
 

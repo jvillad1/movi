@@ -350,6 +350,44 @@ class CreditRoutesTest {
             transaction { Events.selectAll().where { Events.accountId eq accountId }.count() },
             "un crédito en cero no deja evento de apertura que después haya que corregir",
         )
+        // Y lo dice en el wire: sin esta bandera la tarjeta de Créditos leía `paidPct = 1.0` y
+        // anunciaba «100% pagado» sobre un crédito de $257.000.000 recién creado.
+        assertEquals(
+            false,
+            hasMovements(body),
+            "un crédito sin un solo movimiento no está pagado: está sin registrar",
+        )
+    }
+
+    /**
+     * **La clave AUSENTE significa `true`, y eso no es un descuido: es el default del campo.**
+     *
+     * kotlinx-serialization omite lo que vale igual que su default (`encodeDefaults = false`), así
+     * que `hasMovements = true` no viaja. Da la compatibilidad que se quería de los dos lados: un
+     * cliente viejo ignora un campo que no conoce, y un cliente nuevo contra un server viejo —que
+     * nunca manda la clave— cae en `true` y muestra el porcentaje de siempre, en vez de reclamarle
+     * un desembolso a cada crédito. La primera versión de estos tests hacía `body[...]!!` y
+     * explotaba con un NPE justo en el caso sano.
+     */
+    private fun hasMovements(body: JsonObject): Boolean =
+        body["hasMovements"]?.jsonPrimitive?.content?.toBoolean() ?: true
+
+    /**
+     * El contracaso, en el mismo endpoint: un crédito creado CON deuda inicial sí tiene un
+     * movimiento (su apertura) desde el primer instante, así que su porcentaje se muestra normal.
+     */
+    @Test
+    fun `un credito creado con deuda inicial si tiene movimientos desde el arranque`() = testApplication {
+        wireApp()
+        val terms = """"terms":{"accountId":"","bank":"X","principal":100000000,"rateEa":10.0,
+                        "termMonths":12,"installment":10,"dayOfMonth":1,"startDate":"2026-01-01"}"""
+        val response = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Crédito viejo","initialDebt":60000000,$terms}""")
+        }
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals(true, hasMovements(body))
     }
 
     // ── POST /{accountId}/balance-adjustment ──────────────────────────────────

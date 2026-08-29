@@ -211,7 +211,10 @@ private fun LoanCard(
     onEdit: () -> Unit,
     onAdjust: () -> Unit,
 ) {
-    val pct = (credit.paidPct ?: 0.0).toFloat()
+    // Ola 14: no siempre es un porcentaje. Un crédito recién creado en $0 —el paso 1 de registrar
+    // un desembolso— decía «100% pagado» con la barra llena. Ver [progresoDeCredito].
+    val progreso = progresoDeCredito(credit)
+    val pct = progreso.fraccion
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
@@ -235,7 +238,13 @@ private fun LoanCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(formatCOP(credit.account.balance), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-            Text("${(pct * 100).toInt()}% pagado", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+            // Sin monoespaciada cuando no es una cifra (ver [ProgresoDeCredito.esAviso]).
+            Text(
+                progreso.etiqueta,
+                fontSize = 12.sp,
+                fontFamily = if (progreso.esAviso) FontFamily.Default else FontFamily.Monospace,
+                color = MinTextMute,
+            )
         }
         Spacer(Modifier.height(8.dp))
         Box(
