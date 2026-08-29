@@ -113,6 +113,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     // evento. Una pata ya huérfana (de un borrado anterior) lo tiene en null y no cuenta: su otra
     // punta ya no existe, así que borrar esta cuenta no le hace nada a nadie más.
     val transferLegs = days.sumOf { day -> day.items.count { it.transferId != null } }
+    // Ola 14: y cuánta plata suman. El aviso de borrado decía cuántos movimientos eran pero no
+    // cuánto valían, y desde que una punta de un traspaso puede ser un crédito ese renglón puede
+    // valer el crédito entero — ver [transferWarningLabel]. Solo la moneda de la cuenta: mezclar
+    // monedas en un total daría una cifra que no es de nadie.
+    val transferLegsAmount = days.sumOf { day ->
+        day.items.filter { it.transferId != null && it.currency == (account?.currency ?: "COP") }
+            .sumOf { it.amount }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -392,6 +400,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     accountName = acc.name,
                     eventCount = totalEvents,
                     transferCount = transferLegs,
+                    transferAmount = transferLegsAmount,
+                    transferCurrency = account?.currency ?: "COP",
                     onDismiss = { showDeleteAccount = false },
                     onDeleted = {
                         // F22: mismo destino de reserva que la flecha de volver de acá arriba —

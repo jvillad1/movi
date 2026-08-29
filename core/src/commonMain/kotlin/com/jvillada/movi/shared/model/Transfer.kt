@@ -106,10 +106,17 @@ const val TRANSFER_ID_ALREADY_USED =
  * ## Ola 14 — esto dejó de ser un caso raro, y quien lo tome después tiene que saberlo
  *
  * Desde que un préstamo puede ser una punta del traspaso ([validateTransfer]), la pata que
- * sobrevive puede valer **el monto entero de un crédito**. Medido en el navegador: borrada la
- * cuenta del crédito, la pata del banco —un INCOME de $257.000.000 en una cuenta de activo—
- * vuelve a entrar al flujo de caja por esta categoría, e Inicio pasó a decir **«Ingresos
- * $269,4M»** para alguien que había ganado $12,4M.
+ * sobrevive puede valer **el monto entero de un crédito**. Medido en el navegador, borrada la
+ * cuenta del crédito desembolsado:
+ *
+ * - La pata del banco —un INCOME de $257.000.000 en una cuenta de activo— vuelve a entrar al
+ *   flujo de caja por esta categoría, e Inicio pasó a decir **«Ingresos $269,4M»** para alguien
+ *   que había ganado $12,4M.
+ * - Y lo más caro, que la primera versión de esta nota no registraba: **la deuda desaparece
+ *   entera y queda el efectivo prestado**, así que el patrimonio saltó de **−$244.600.000 a
+ *   +$269.400.000**. Medio billón de pesos de diferencia, en la única cifra que —según la
+ *   revisión de esta rama— no miente en ninguno de los otros modos de falla: el patrimonio queda
+ *   quieto ante el doble conteo y ante el desembolso faltante, pero no ante esto.
  *
  * Y no es que la rama haya dejado la probabilidad igual: **la sube**. El camino más corto para
  * llegar acá es la recuperación del propio error que la rama evita — crear el crédito con su
