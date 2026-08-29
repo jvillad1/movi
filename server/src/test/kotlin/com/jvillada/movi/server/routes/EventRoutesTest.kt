@@ -427,6 +427,79 @@ class EventRoutesTest {
         assertEquals("Pago de tarjeta", row[Events.category])
     }
 
+    // ── Ola 16 · «Saldo inicial» tampoco se escribe ni se saca por esta ruta ───
+    //
+    // Hallazgo de la revisión de la rama que sacó las aperturas de Movimientos. Esta ruta ya
+    // bloqueaba «Traspaso» y «Cuenta eliminada», pero no la cuarta reservada, y era la más cara:
+    // `isCashFlow` decide por el NOMBRE de la categoría, así que escribirla o sacarla mueve las
+    // cifras del mes en silencio, en los dos sentidos.
+
+    /**
+     * **El sentido caro.** Un gasto real de una cuenta de activo recibe la categoría «Saldo
+     * inicial» y desaparece de «Gastos del mes» sin que nada lo diga. Medido en el server local
+     * antes de la guarda: 200 OK, `countsAsCashFlow` en `false`, gastos del mes de $165.289 a
+     * $115.289. Es el mismo daño que `POST /api/events` cierra desde la Ola 10, por la otra
+     * puerta — y desde que Movimientos no lista las aperturas, la fila envenenada además
+     * desaparece de la vista.
+     */
+    @Test
+    fun `PUT category rechaza escribir Saldo inicial sobre un gasto real`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-gasto-real", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Tienda", category = "Hija", amount = 50_000L,
+        )
+
+        val res = putCategory("evt-gasto-real", "Saldo inicial", userAId)
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, res.bodyAsText())
+
+        // Y la fila no se tocó: un rechazo que igual escribe no es un rechazo.
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-gasto-real" }.single() }
+        assertEquals("Hija", row[Events.category])
+    }
+
+    /**
+     * **El sentido inverso.** Sacar una apertura de su categoría reservada la convierte de golpe
+     * en flujo de caja: en una cuenta de activo, un «Saldo inicial» de $3.000.000 pasaba a sumar
+     * como ingreso del mes. En una cuenta de deuda no se notaba —LOAN/CREDIT_CARD nunca son
+     * flujo— lo que hacía al agujero más difícil de ver, no menos real.
+     */
+    @Test
+    fun `PUT category rechaza sacar una apertura de su categoria`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-apertura", userId = userAId, accountId = savingsAccountId,
+            type = "INCOME", description = "Saldo inicial", category = "Saldo inicial",
+            amount = 3_000_000L,
+        )
+
+        val res = putCategory("evt-apertura", "Otros ingresos", userAId)
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, res.bodyAsText())
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-apertura" }.single() }
+        assertEquals("Saldo inicial", row[Events.category])
+    }
+
+    /**
+     * La guarda es **precisa**, no un portazo: recategorizar un movimiento normal sigue
+     * funcionando después de agregarla. Sin este test, cerrar la ruta entera pasaría igual de
+     * verde y nadie se enteraría hasta que el dueño no pudiera arreglar un gasto mal clasificado.
+     */
+    @Test
+    fun `PUT category sigue dejando recategorizar un movimiento normal`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-normal", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Almuerzo", category = "Otros",
+        )
+
+        val res = putCategory("evt-normal", "Comida", userAId)
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-normal" }.single() }
+        assertEquals("Comida", row[Events.category])
+    }
+
     @Test
     fun `PUT category responde 404 en vez de 403 si el evento es de otro usuario`() = testApplication {
         wireApp()

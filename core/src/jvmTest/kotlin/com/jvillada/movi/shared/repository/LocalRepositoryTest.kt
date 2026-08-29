@@ -10,6 +10,8 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
+import com.jvillada.movi.shared.model.OPENING_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.OPENING_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -803,6 +805,52 @@ class LocalRepositoryTest {
         val quedo = repo.getEvents("acc-huerf").single()
         assertEquals("test", quedo.category, "el gasto real se queda donde estaba")
         assertTrue(quedo.countsAsCashFlow, "y sigue contando en el mes")
+    }
+
+    /**
+     * Ola 16: **«Saldo inicial» tampoco**, y por el mismo modo de falla que la de arriba — con un
+     * agravante propio. Escribirla sobre un gasto real lo saca del mes en el teléfono, el
+     * `SyncEngine` lo empuja, el server (que desde esta ola también la bloquea) contesta 422 y la
+     * fila se reintenta cada 30 segundos para siempre. Y desde que Movimientos no lista las
+     * aperturas, esa fila envenenada además **desaparece de la pantalla**: el dueño no tendría ni
+     * cómo notar que su gasto se fue.
+     */
+    @Test
+    fun updateEventCategory_rechaza_Saldo_inicial_como_destino() = runBlocking {
+        repo.createAccount(Account("acc-open-dest", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-gasto-50", "acc-open-dest", TransactionType.EXPENSE, 50_000L))
+
+        val fallo = runCatching { repo.updateEventCategory("ev-gasto-50", OPENING_CATEGORY) }
+            .exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(OPENING_CATEGORY_RESERVED, (fallo as ApiException).serverMessage)
+        val quedo = repo.getEvents("acc-open-dest").single()
+        assertEquals("test", quedo.category, "el gasto real se queda donde estaba")
+        assertTrue(quedo.countsAsCashFlow, "y sigue contando en el mes")
+    }
+
+    /**
+     * Y el sentido inverso: una apertura no se saca de su categoría. Sin esta guarda, un «Saldo
+     * inicial» de una cuenta de activo recategorizado a «Otros ingresos» se convierte en un
+     * ingreso del mes de golpe — la cifra entera de apertura presentada como plata que llegó.
+     */
+    @Test
+    fun updateEventCategory_rechaza_sacar_una_apertura_de_su_categoria() = runBlocking {
+        repo.createAccount(Account("acc-open-src", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(
+            event("ev-apertura", "acc-open-src", TransactionType.INCOME, 3_000_000L)
+                .copy(category = OPENING_CATEGORY, description = "Saldo inicial"),
+        )
+
+        val fallo = runCatching { repo.updateEventCategory("ev-apertura", "Otros ingresos") }
+            .exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(OPENING_RECATEGORIZE_BLOCKED, (fallo as ApiException).serverMessage)
+        val quedo = repo.getEvents("acc-open-src").single { it.id == "ev-apertura" }
+        assertEquals(OPENING_CATEGORY, quedo.category)
+        assertFalse(quedo.countsAsCashFlow, "y sigue fuera del mes")
     }
 
     // ── Cuentas que nacieron en el server ─────────────────────────────────────

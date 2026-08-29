@@ -116,6 +116,21 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
+    // **Filas, no `movementCount`** — y desde la Ola 16 conviene decir por qué, porque el resto de
+    // la app se movió en la dirección contraria y esto va a parecer un olvido.
+    //
+    // `movementCount` (`:core`) no cuenta las aperturas, y ahora tampoco las lista Movimientos.
+    // Acá sí se listan, a propósito y por la misma razón por la que el total del día de esta
+    // pantalla usa `accountDayTotal` y no `countsAsCashFlow` (ver el bloque de arriba): las otras
+    // pantallas agregan VARIAS cuentas para contestar «¿qué hice con mi plata?», donde una
+    // apertura no es un hecho; esta contesta «¿de dónde sale el saldo de ESTA cuenta?», y ahí la
+    // apertura es el primer renglón de la respuesta — es el ancla de la que sale todo lo demás.
+    //
+    // Por eso el número tiene que ser el de filas: es el rótulo de la lista que está justo abajo,
+    // y ponerle `movementCount` diría «13» sobre 14 renglones visibles — exactamente la
+    // contradicción entre un contador y una lista que la Ola 16 vino a sacar de Movimientos,
+    // reintroducida acá. El mismo número alimenta el aviso de borrado (`DeleteAccountSheet`), que
+    // enumera lo que se va con la cuenta: ahí también son filas, porque la apertura se borra.
     val totalEvents = days.sumOf { it.items.size }
     // Cuántos de esos movimientos tienen su otra mitad en OTRA cuenta. Sale de lo que ya está en
     // pantalla —no hay endpoint nuevo, y funciona igual sin red— porque `transferId` viaja en cada

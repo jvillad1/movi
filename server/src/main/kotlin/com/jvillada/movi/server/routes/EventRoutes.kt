@@ -253,17 +253,35 @@ fun Route.eventRoutes() {
             if (category == ORPHANED_LEG_CATEGORY) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, ORPHANED_LEG_NOT_MANUAL)
             }
+            // Ola 16: ni a «Saldo inicial». Es la reservada que faltaba, y era la más cara de las
+            // cuatro por esta puerta — ver [OPENING_CATEGORY_RESERVED], que trae la medición: un
+            // gasto real de $50.000 recategorizado así contestaba 200 y bajaba «Gastos del mes» de
+            // $165.289 a $115.289, sin decir nada. `POST /api/events` ya cerraba este daño desde la
+            // Ola 10; `PUT` no, y la app ofrecía el camino con el botón «Usar "…"» del campo libre
+            // (cerrado también en esta ola, ver `ofreceCategoriaEscritaAMano`).
+            if (category == OPENING_CATEGORY) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, OPENING_CATEGORY_RESERVED)
+            }
             // Y nadie sale tampoco: sacar una pata de la categoría reservada la devolvería al
             // flujo de caja del mes —el gasto fantasma que esta feature vino a matar— y dejaría
             // a su hermana adentro, contando la mitad de un movimiento que nunca ocurrió.
-            val esPataDeTraspaso = dbQuery {
+            //
+            // Ola 16: la apertura de una cuenta tampoco sale. El sentido inverso del anterior y el
+            // mismo daño al revés: sacar un «Saldo inicial» de una cuenta de activo a «Otros
+            // ingresos» lo convierte en un ingreso del mes de golpe (medido: de $0 a $3.000.000).
+            // Se leen las dos cosas de la MISMA fila para no pagar dos consultas por lo mismo.
+            val fila = dbQuery {
                 Events.selectAll()
                     .where { (Events.id eq id) and (Events.userId eq uid) }
                     .firstOrNull()
-                    ?.let { it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY } == true
+                    ?.let { it[Events.transferId] to it[Events.category] }
             }
+            val esPataDeTraspaso = fila != null && (fila.first != null || fila.second == TRANSFER_CATEGORY)
             if (esPataDeTraspaso) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_RECATEGORIZE_BLOCKED)
+            }
+            if (fila?.second == OPENING_CATEGORY) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, OPENING_RECATEGORIZE_BLOCKED)
             }
 
             val updated: FinancialEvent? = dbQuery {
