@@ -125,7 +125,14 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         loading = false
     }
 
-    val progresses = remember(budgets, days, serverSpent) {
+    // El gasto del período por categoría, una sola vez: lo usan las barras de progreso y también
+    // el aviso de la hoja de crear (ver [avisoDeCategoria]). Calcularlo en dos lados abriría la
+    // puerta a que la pantalla y su hoja dijeran cifras distintas.
+    val gastoPorCategoria = remember(days, serverSpent) {
+        serverSpent ?: spentByCategoryForMonth(days, currentMonthPrefixApp())
+    }
+
+    val progresses = remember(budgets, gastoPorCategoria) {
         // countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin él, un ajuste de
         // saldo de un crédito caía en la categoría "Otros" y ponía en OVER al instante a un
         // presupuesto con ese nombre.
@@ -133,8 +140,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // (spentByCategoryForMonth): solo el mes en curso y solo COP. Antes esta pantalla sumaba
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
-        val spentByCategory = serverSpent ?: spentByCategoryForMonth(days, currentMonthPrefixApp())
-        budgets.map { b -> BudgetProgress(b, spentByCategory[b.category] ?: 0L) }
+        budgets.map { b -> BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L) }
             .sortedByDescending { it.pctRaw }
     }
 
@@ -234,6 +240,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             is Sheet.Edit -> BudgetSheet(
                 error = sheetError,
                 title = "Editar presupuesto",
+                gastoPorCategoria = gastoPorCategoria,
                 initialCategory = s.current.category,
                 // F17: la categoría dejó de ser de solo lectura — antes era una limitación
                 // técnica filtrada a la pantalla (la categoría es la PK en el server), ahora
@@ -278,6 +285,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 initialCategory = "",
                 categoryEditable = true,
                 initialAmount = 0,
+                gastoPorCategoria = gastoPorCategoria,
                 onDismiss = { sheet = null; sheetError = null },
                 onDelete = null,
                 onSave = { cat, amt ->
@@ -396,6 +404,8 @@ private fun BudgetSheet(
     initialCategory: String,
     categoryEditable: Boolean,
     initialAmount: Long,
+    /** Gasto del período por categoría, para poder decir la verdad antes de guardar. */
+    gastoPorCategoria: Map<String, Long>,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (String, Long) -> Unit,
@@ -477,6 +487,36 @@ private fun BudgetSheet(
                         color = MinTextMute,
                         lineHeight = 15.sp,
                     )
+                }
+                // La verdad sobre la categoría escrita, ANTES de guardar. El dueño creó un
+                // presupuesto en «Mercado» —que es la descripción de su gasto, no su categoría—
+                // y la app lo dejó crear algo que no vigilaba nada, en silencio. Ver
+                // [avisoDeCategoria].
+                avisoDeCategoria(category, gastoPorCategoria, ::formatCOP)?.let { aviso ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = aviso.texto,
+                        fontSize = 11.5.sp,
+                        color = if (aviso.esAdvertencia) MinWarn else MinTextMute,
+                        lineHeight = 15.sp,
+                    )
+                    if (aviso.sugerencias.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            aviso.sugerencias.forEach { sugerida ->
+                                Text(
+                                    text = sugerida,
+                                    fontSize = 12.sp,
+                                    color = MinPrimary,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { category = sugerida }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
