@@ -426,15 +426,127 @@ class LocalRepository(
      * intercambiarse entre lecturas. El comparador compartido cierra ese hueco con el mismo
      * criterio que el server, y no en la consulta a propósito: ver [masRecientePrimero].
      */
+    /**
+     * **Server primero, espejo local después** — mismo trato que [getAccounts], y por el mismo
+     * motivo, que hasta ahora los movimientos no tenían.
+     *
+     * El dueño anotó un movimiento desde el teléfono y en Movimientos le figuró **ese solo
+     * renglón**: preguntó si había perdido su salario y sus gastos del mes. No había perdido
+     * nada — estaban los 18 en el server. Lo que pasaba es que esta función leía **solo** la
+     * base local, y el [com.jvillada.movi.shared.SyncEngine] **solo empuja**: nada de lo que él
+     * escribía en la web bajaba nunca al teléfono, ni iba a bajar.
+     *
+     * Media app preguntaba y la otra media no: `getAccounts` ya era server-primero (por eso sus
+     * cuentas sí se veían bien) y esto no. Varias piezas del repo existen para tapar ese hueco de
+     * a una —`detachOrphanedLeg`, `renameCategory`, y sus KDoc dicen textualmente «hace falta
+     * porque el SyncEngine solo EMPUJA»—; esta es la causa que las hacía necesarias.
+     *
+     * Tres reglas, y ninguna es opcional:
+     *
+     * 1. **Lo que este teléfono escribió y todavía no subió se sigue viendo.** Un gasto anotado
+     *    sin señal no puede desaparecer de la pantalla porque la lista ahora salga del server.
+     *    Son las filas sin sellar, y salen del espejo local, no de la respuesta remota.
+     * 2. **Lo anulado acá no se muestra, aunque el server todavía lo devuelva.** Ver
+     *    `selectAllVoidedIds`: entre la anulación y su empuje hay una ventana en la que el server
+     *    sigue conociendo el evento. Sin este filtro el movimiento reaparecería solo y se iría de
+     *    nuevo al rato.
+     * 3. **Sin red se contesta con lo local**, que es el modo normal en el bus — no un caso raro.
+     *    Solo cuando no hay NADA local se propaga el error: contestar «no tienes movimientos» sin
+     *    haber podido preguntar es una afirmación sin respaldo.
+     *
+     * La regla de los fantasmas es la de [getAccounts], con la misma foto previa: una fila que
+     * estaba **sellada** y que el server ya no tiene se dejó de mostrar, porque se borró en otro
+     * lado. Una fila sin sellar nunca es fantasma — es algo que falta subir.
+     */
     override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
         val uid = userId()
+        // La foto va ANTES de preguntar, igual que en getAccounts: es lo que hace que la regla
+        // de los fantasmas solo pueda ocultar filas por las que el server ya fue consultado.
+        val filasAntesDePreguntar = leerFilasLocales(uid, accountId)
+        val selladasAntesDePreguntar = filasAntesDePreguntar
+            .filter { it.syncedAt != null }
+            .mapTo(mutableSetOf()) { it.id }
+        val habiaAlgoLocal = filasAntesDePreguntar.isNotEmpty()
+
+        val remotos = try {
+            if (habiaAlgoLocal) {
+                withTimeoutOrNull(PRESUPUESTO_DE_RED_MS) { remote.getEvents(accountId) }
+                    ?: return leerEventosLocales(uid, accountId)
+            } else {
+                remote.getEvents(accountId)
+            }
+        } catch (e: CancellationException) {
+            // La pantalla se fue mientras el request estaba en vuelo (mismo caso que getAccounts):
+            // tragarlo haría que el `runCatching` del llamador lo leyera como éxito con lista vacía.
+            throw e
+        } catch (e: Exception) {
+            val locales = leerEventosLocales(uid, accountId)
+            if (locales.isEmpty()) throw e
+            return locales
+        }
+
+        db.transaction { remotos.forEach { mirrorEventLocally(it, uid) } }
+        val porId = remotos.associateBy { it.id }
+        // La regla de los fantasmas solo corre sobre la lista COMPLETA, y esa condición no es un
+        // detalle: para poder leer «no vino» como «se anuló o se borró», la respuesta del server
+        // tiene que ser el conjunto entero del mismo alcance. `GET /api/events` lo es —devuelve
+        // todo lo no anulado del usuario, sin límite ni paginado (ver loadNonVoidedEvents)—, pero
+        // una respuesta **filtrada por cuenta** no: ahí «no vino» también puede significar «el
+        // server lo tiene en otra cuenta», y esconderlo sería inventar una desaparición.
+        //
+        // El caso que originó todo esto es el de la lista completa (Movimientos), así que el
+        // arreglo llega igual. En el detalle de una cuenta se prefiere mostrar de más: el dueño
+        // acaba de pasar el susto de creer que había perdido su mes.
+        //
+        // Y nunca sobre una respuesta VACÍA: si el server contesta 200 sin nada mientras el
+        // teléfono tiene filas selladas, la explicación más probable no es que el dueño haya
+        // borrado su historia entera, sino un filtro nuevo, un `uid` mal resuelto o un cambio de
+        // alcance del endpoint. Ante la duda se muestra de más — una lista vacía no es evidencia
+        // suficiente para hacer desaparecerle el mes a alguien.
+        val fantasmas = when {
+            accountId != null -> emptySet()
+            remotos.isEmpty() -> emptySet()
+            else -> selladasAntesDePreguntar - porId.keys
+        }
+        // El contenido de lo que el server conoce sale del server; lo que solo existe acá (todavía
+        // sin subir) sale del espejo; y lo que el server ya no tiene se deja de mostrar.
+        return leerEventosLocales(uid, accountId)
+            .filterNot { it.id in fantasmas }
+            // Misma regla que en el espejo, y por el mismo motivo: **una fila sin sellar gana**.
+            // Sin sello significa que el teléfono tiene algo que el server todavía no sabe —una
+            // recategorización, una fecha corregida—, así que devolver la versión remota le
+            // mostraría al dueño el valor viejo que él acaba de cambiar.
+            //
+            // Para las selladas manda el server, que es la autoridad, salvo `syncedAt`: ese es un
+            // dato del espejo —«¿esta fila ya se subió?»— que la respuesta remota no siempre trae.
+            // Dejar que el nulo del server pisara el sello local haría que el SyncEngine volviera
+            // a empujar todo lo que acaba de bajar, en un ciclo eterno de 30 segundos.
+            .map { local ->
+                if (local.syncedAt == null) local
+                else porId[local.id]?.copy(syncedAt = local.syncedAt) ?: local
+            }
+            .masRecientePrimero()
+    }
+
+    /** Las filas crudas del espejo, sin mapear — para la foto previa a preguntar. */
+    private fun leerFilasLocales(uid: String, accountId: String?) =
+        if (accountId != null) db.financialEventQueries.selectByAccount(accountId, uid).executeAsList()
+        else db.financialEventQueries.selectAll(uid).executeAsList()
+
+    /**
+     * El espejo local ya ordenado y **sin lo anulado en este dispositivo**.
+     *
+     * Ese filtro arregla además un defecto propio del modo local, anterior a este cambio:
+     * [voidEvent] ajusta el saldo pero **no borra la fila**, así que un movimiento anulado en el
+     * teléfono se seguía listando.
+     */
+    private fun leerEventosLocales(uid: String, accountId: String?): List<FinancialEvent> {
         val types = accountTypes(uid)
-        return if (accountId != null)
-            db.financialEventQueries.selectByAccount(accountId, uid).executeAsList().map { it.toModel(types) }
-                .masRecientePrimero()
-        else
-            db.financialEventQueries.selectAll(uid).executeAsList().map { it.toModel(types) }
-                .masRecientePrimero()
+        val anulados = db.voidEventQueries.selectAllVoidedIds().executeAsList().toSet()
+        return leerFilasLocales(uid, accountId)
+            .filterNot { it.id in anulados }
+            .map { it.toModel(types) }
+            .masRecientePrimero()
     }
 
     override suspend fun getEventsByDay(): List<EventDay> =
@@ -451,7 +563,14 @@ class LocalRepository(
                     // es flujo de caja, así que los movimientos de cuentas de deuda no entran.
                     // El renglón se sigue listando; solo no encabeza el día.
                     date = date,
-                    total = items.filter { it.countsAsCashFlow }.sumOf {
+                    // `currency == "COP"` NO es de adorno: es la mitad del criterio que usa el
+                    // server (ver `/api/events/by-day`) y acá faltaba. Mientras el espejo local
+                    // solo tenía lo que este teléfono había escrito no se notaba; desde que baja
+                    // lo del server, un gasto en dólares entraba al total como si fueran pesos —
+                    // con un COP de $10.000 y un USD de 100, el server decía −10.000 y el
+                    // teléfono −10.100. La columna `currency` ni siquiera existe en el espejo
+                    // (todo se lee como COP), así que sin este filtro la diferencia es invisible.
+                    total = items.filter { it.currency == "COP" && it.countsAsCashFlow }.sumOf {
                         if (it.type == TransactionType.INCOME) it.amount else -it.amount
                     },
                     items = items,
@@ -880,6 +999,44 @@ class LocalRepository(
             account.id, account.name, account.type.name,
             account.balance, account.currency, userId(),
             Clock.System.now().toEpochMilliseconds(),
+        )
+    }
+
+    /**
+     * Copia local de un movimiento que vino del server, para que [getEvents] tenga qué contestar
+     * sin red la próxima vez.
+     *
+     * **Se escribe sellado** (`syncedAt` = el del server, o el instante de la copia si el server
+     * no lo mandó). Es lo que impide que el [com.jvillada.movi.shared.SyncEngine] lo vuelva a
+     * subir: sin sello entraría en `selectUnsynced` y el teléfono empezaría a empujar de vuelta
+     * al server cada cosa que acaba de bajar.
+     *
+     * **Una fila local SIN SELLAR no se pisa nunca.** La primera versión de esto decía que «lo
+     * que el teléfono escribió y todavía no subió no pasa por acá, porque no está en la respuesta
+     * remota», y era **falso**: una fila puede estar en el server *y* sin sellar en local, que es
+     * exactamente la ventana que `markSyncedIfUnchanged` existe para cubrir. El dueño anota un
+     * gasto, el ciclo lo empuja como «Comida», él lo recategoriza a «Mercado» —la fila queda sin
+     * sellar a propósito— y la siguiente lectura le escribía «Comida» encima **y la sellaba**:
+     * `selectUnsynced` pasaba de 1 a 0 y ningún ciclo futuro volvía a empujarla. Silencioso y
+     * permanente. Lo mismo con una fecha corregida.
+     *
+     * Eso reabría por la puerta de la LECTURA los dos agujeros que el repo ya cerró dos veces
+     * (ver los KDoc de `SyncEngine.syncEvents` y `updateEventCategory`). Y no hacía falta una
+     * carrera fina: alcanza con un POST que el server confirma y cuya respuesta se pierde.
+     *
+     * Para el resto, `INSERT OR REPLACE`: si la fila ya estaba **y ya estaba sellada**, gana la
+     * del server, que es la autoridad.
+     */
+    private fun mirrorEventLocally(event: FinancialEvent, uid: String) {
+        val local = db.financialEventQueries.selectById(event.id, uid).executeAsOneOrNull()
+        if (local != null && local.syncedAt == null) return
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        db.financialEventQueries.insert(
+            event.id, event.accountId, event.type.name, event.amount,
+            event.category, event.description, event.merchant,
+            event.timestamp, event.source.name, event.rawPayload,
+            event.reconciliationStatus.name, event.syncedAt ?: ahora, uid,
+            event.transferId, event.createdAt,
         )
     }
     /**

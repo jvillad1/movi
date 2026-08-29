@@ -22,3 +22,14 @@ deleteByAccount:
 DELETE FROM void_event WHERE originalEventId IN (
     SELECT id FROM financial_event WHERE accountId = :accountId AND userId = :userId
 );
+
+-- Los ids de todo lo anulado en este dispositivo, para que la lista no los muestre.
+--
+-- Hace falta porque `voidEvent` NO borra la fila de `financial_event`: ajusta el saldo y deja el
+-- movimiento donde estaba. Mientras la lista salía solo de local, un movimiento anulado en el
+-- teléfono se seguía viendo (bug propio, anterior a este cambio). Y ahora que la lista pregunta
+-- al server, hace falta igual por otro motivo: entre que el dueño anula y el SyncEngine empuja,
+-- el server todavía devuelve ese evento — sin este filtro reaparecería solo, y volvería a
+-- desaparecer al rato. Un movimiento que parpadea es peor que uno que se queda.
+selectAllVoidedIds:
+SELECT originalEventId FROM void_event;
