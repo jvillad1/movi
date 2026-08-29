@@ -487,6 +487,55 @@ class LocalRepositoryTest {
         assertEquals(AccountType.LOAN, local.type)
     }
 
+    /**
+     * **Ola 16 — el desembolso que nace con el crédito también se espeja, y el saldo del crédito
+     * NO se toca dos veces.**
+     *
+     * Las dos patas las escribió el server en su transacción, así que en el teléfono solo existen
+     * si esta respuesta las trae y este espejo las guarda: Movimientos, Cuentas y el detalle leen
+     * de SQLDelight, y el `SyncEngine` solo empuja.
+     *
+     * La aserción que de verdad importa es la del saldo del crédito. `mirrorAccountLocally` ya
+     * escribió la deuda que el server derivó de TODOS sus eventos —el desembolso incluido—, así
+     * que aplicarle además el delta de su propia pata lo dejaría en $514.000.000 sobre un crédito
+     * de $257.000.000: el número inflado que toda esta rama existe para evitar, entrando por la
+     * puerta de atrás del espejo.
+     */
+    @Test
+    fun createCredit_espeja_el_desembolso_sin_contar_la_deuda_dos_veces() = runBlocking {
+        repo.createAccount(Account("acc-corriente", "Bancolombia", AccountType.SAVINGS, 12_400_000L))
+
+        val summary = repo.createCredit(
+            com.jvillada.movi.shared.model.CreateCreditRequest(
+                name = "Libranza",
+                initialDebt = 0L,
+                terms = com.jvillada.movi.shared.model.CreditTerms(
+                    accountId = "acc-libranza", bank = "Bancolombia", principal = 257_000_000L,
+                    rateEa = 12.0, termMonths = 120, installment = 3_500_000L,
+                    dayOfMonth = 5, startDate = "2026-08-25",
+                ),
+                disbursement = com.jvillada.movi.shared.model.CreditDisbursement(
+                    toAccountId = "acc-corriente", amount = 257_000_000L,
+                ),
+            ),
+        )
+        val idDelCredito = summary.account.id
+
+        // Las dos patas quedaron, una en cada cuenta, con la categoría reservada.
+        val delCredito = repo.getEvents(idDelCredito).single()
+        val deLaCuenta = repo.getEvents("acc-corriente").single()
+        assertEquals(TransactionType.EXPENSE, delCredito.type)
+        assertEquals(TransactionType.INCOME, deLaCuenta.type)
+        assertEquals(TRANSFER_CATEGORY, deLaCuenta.category)
+        assertFalse(deLaCuenta.countsAsCashFlow)
+        assertEquals(delCredito.transferId, deLaCuenta.transferId)
+
+        // El efectivo subió lo que entró…
+        assertEquals(269_400_000L, repo.getAccount("acc-corriente").balance)
+        // …y la deuda vale el capital, NO el doble.
+        assertEquals(257_000_000L, repo.getAccount(idDelCredito).balance)
+    }
+
     /** Mismo espejo que createCredit, para `POST /api/cards`. */
     @Test
     fun createCard_mirrors_the_server_account_locally() = runBlocking {

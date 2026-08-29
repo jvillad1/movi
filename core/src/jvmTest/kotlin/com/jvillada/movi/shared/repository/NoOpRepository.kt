@@ -46,8 +46,38 @@ open class NoOpRepository(
     }
 
     override suspend fun getCredits() = emptyList<CreditSummary>()
-    override suspend fun createCredit(request: CreateCreditRequest) =
-        putCreditTerms(request.terms).also { cuentasDelServer += it.account }
+
+    /**
+     * Imita `POST /api/credits`, **incluido el desembolso**: cuando el pedido lo trae, el server
+     * escribe las dos patas y devuelve la cuenta del crédito con la deuda **ya completa** (la
+     * apertura de los costos financiados más el desembolso, o sea el capital). Ese detalle es todo
+     * lo que este stub existe para reproducir: si devolviera la deuda sin el desembolso adentro, el
+     * test del espejo local no podría distinguir el doble conteo de lo correcto.
+     */
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary {
+        val base = putCreditTerms(request.terms)
+        val desembolso = request.disbursement
+            ?: return base.also { cuentasDelServer += it.account }
+        val cuentaDelCredito = base.account.copy(
+            name = request.name,
+            balance = request.terms.principal,
+        )
+        fun stub(id: String) = Account(id = id, name = id, type = AccountType.SAVINGS, balance = 0L)
+        val (from, to) = transferLegsFor(
+            CreateTransferRequest(
+                transferId = "tr-desembolso", fromEventId = "ev-desembolso-from",
+                toEventId = "ev-desembolso-to", fromAccountId = cuentaDelCredito.id,
+                toAccountId = desembolso.toAccountId, amount = desembolso.amount,
+                timestamp = 1_700_000_000_000L,
+            ),
+            from = cuentaDelCredito.copy(balance = 0L),
+            to = stub(desembolso.toAccountId),
+        )
+        return base.copy(
+            account = cuentaDelCredito,
+            disbursement = TransferResult(from = from, to = to),
+        ).also { cuentasDelServer += it.account }
+    }
     override suspend fun putCreditTerms(terms: CreditTerms) = CreditSummary(
         account = Account(id = terms.accountId, name = "", type = AccountType.LOAN, balance = 0),
         terms = terms,
