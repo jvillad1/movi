@@ -73,6 +73,13 @@ class LocalRepositoryTest {
         assertEquals(10_000L, account.balance)
     }
 
+    /**
+     * Este test se llamaba así desde siempre y **afirmaba lo contrario de su nombre**: que el
+     * evento anulado seguía saliendo, con un comentario que lo justificaba («callers filter by
+     * checking void_events»). Ningún llamador filtraba: en el teléfono, anular un movimiento
+     * ajustaba el saldo y dejaba el renglón en la lista. El nombre decía la verdad y la aserción
+     * documentaba el defecto.
+     */
     @Test
     fun getEvents_excludes_voided_events() = runBlocking {
         repo.createAccount(Account("acc3", "Savings", AccountType.SAVINGS, 0L))
@@ -81,11 +88,81 @@ class LocalRepositoryTest {
 
         repo.voidEvent("evt3")
 
-        // getEvents still returns all events (voiding doesn't delete, it records a VoidEvent)
-        // the voided event remains in financial_events; callers filter by checking void_events
         val events = repo.getEvents("acc3")
-        assertTrue(events.any { it.id == "evt3" })
-        assertTrue(events.any { it.id == "evt4" })
+        assertTrue(events.none { it.id == "evt3" }, "el movimiento anulado no se lista")
+        assertTrue(events.any { it.id == "evt4" }, "el que no se anuló sigue estando")
+    }
+
+    /**
+     * El caso del dueño, que es el que originó todo esto: cargó un movimiento desde el teléfono y
+     * en Movimientos le figuró **ese solo renglón**, y preguntó si había perdido su salario y sus
+     * gastos del mes. No había perdido nada: estaban en el server, y el teléfono no los pedía.
+     */
+    @Test
+    fun la_base_local_vacia_muestra_lo_que_el_server_tiene() = runBlocking {
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accS", "Bancolombia", AccountType.SAVINGS, 0L)
+        repeat(18) { i ->
+            remoto.eventosDelServer += event("srv$i", "accS", TransactionType.EXPENSE, 1_000L)
+                .copy(syncedAt = 1L)
+        }
+        val soloLectura = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val eventos = soloLectura.getEvents()
+
+        assertEquals(18, eventos.size, "los 18 del server se ven aunque el teléfono no tuviera nada")
+    }
+
+    /**
+     * La regla que puede convertir este arreglo en una pérdida de datos aparente: un gasto anotado
+     * **sin señal** todavía no está en el server, y no puede desaparecer de la pantalla porque la
+     * lista ahora salga de allá.
+     */
+    @Test
+    fun lo_anotado_y_no_subido_sigue_viendose() = runBlocking {
+        repo.createAccount(Account("accP", "Efectivo", AccountType.CASH, 0L))
+        repo.postEvent(event("pendiente", "accP", TransactionType.EXPENSE, 7_000L))
+        // El server no lo conoce: es justo lo que la cola de subida todavía no empujó.
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accP", "Efectivo", AccountType.CASH, 0L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val eventos = conRed.getEvents("accP")
+
+        assertTrue(eventos.any { it.id == "pendiente" }, "lo que falta subir se sigue viendo")
+    }
+
+    /**
+     * La otra mitad: entre que el dueño anula y el `SyncEngine` empuja, el server **todavía**
+     * devuelve ese evento. Sin este filtro el movimiento reaparecería solo y se iría de nuevo al
+     * rato — un renglón que parpadea es peor que uno que se queda.
+     */
+    @Test
+    fun una_anulacion_sin_empujar_gana_sobre_lo_que_el_server_devuelve() = runBlocking {
+        repo.createAccount(Account("accA", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("anulado", "accA", TransactionType.EXPENSE, 5_000L))
+        repo.voidEvent("anulado")
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accA", "Ahorros", AccountType.SAVINGS, 0L)
+        remoto.eventosDelServer += event("anulado", "accA", TransactionType.EXPENSE, 5_000L)
+            .copy(syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val eventos = conRed.getEvents("accA")
+
+        assertTrue(eventos.none { it.id == "anulado" }, "lo anulado acá no revive aunque el server lo mande")
+    }
+
+    /** Un evento que está en las dos fuentes sale una sola vez. */
+    @Test
+    fun no_se_duplica_lo_que_esta_en_las_dos_fuentes() = runBlocking {
+        repo.createAccount(Account("accD", "CDT", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("comun", "accD", TransactionType.INCOME, 3_000L))
+
+        val eventos = repo.getEvents("accD")
+
+        assertEquals(1, eventos.count { it.id == "comun" })
     }
 
     /**
@@ -742,14 +819,24 @@ class LocalRepositoryTest {
             override suspend fun createTransfer(request: com.jvillada.movi.shared.model.CreateTransferRequest) =
                 throw ApiException(409, "Ese traspaso ya está registrado")
         }
+        // Un 409 significa que el server YA tiene ese traspaso, así que su GET siguiente lo
+        // devuelve. Sin esto el doble se contradiría —rechaza por duplicado algo que después jura
+        // no tener— y las patas locales selladas quedarían como fantasmas de una historia que
+        // ningún server real cuenta.
+        yaRegistrado.cuentasDelServer += repo.getAccounts()
+        yaRegistrado.eventosDelServer += com.jvillada.movi.shared.model.transferLegsFor(
+            transferRequest(),
+            repo.getAccount("acc-ahorros"),
+            repo.getAccount("acc-cdt"),
+        ).toList()
         val repoConflicto = LocalRepository(db = db, remote = yaRegistrado, userId = { testUserId })
 
         val result = repoConflicto.createTransfer(transferRequest())
 
         assertEquals("ev-tr-from", result.from.id)
         assertEquals("ev-tr-to", result.to.id)
-        assertEquals(1, repo.getEvents("acc-ahorros").size, "la pata de origen tiene que quedar local")
-        assertEquals(1, repo.getEvents("acc-cdt").size, "y la de destino también")
+        assertEquals(1, repoConflicto.getEvents("acc-ahorros").size, "la pata de origen tiene que quedar local")
+        assertEquals(1, repoConflicto.getEvents("acc-cdt").size, "y la de destino también")
         assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
         assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
     }

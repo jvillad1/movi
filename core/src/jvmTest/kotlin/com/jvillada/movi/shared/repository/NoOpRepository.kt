@@ -35,6 +35,19 @@ open class NoOpRepository(
     val cuentasDelServer = mutableListOf<Account>()
 
     /**
+     * Deja el evento en [eventosDelServer], reemplazando el que tuviera ese id.
+     *
+     * Todo lo que este stub "escribe" tiene que quedar visible en el `GET` siguiente: desde que
+     * `LocalRepository.getEvents` pregunta al server y la respuesta remota gana, un stub que
+     * devolviera la versión vieja le pisaría al espejo local el cambio que el server sí aplicó.
+     */
+    protected fun recordarEnElServer(event: FinancialEvent) {
+        val i = eventosDelServer.indexOfFirst { it.id == event.id }
+        if (i >= 0) eventosDelServer[i] = event else eventosDelServer += event
+    }
+
+
+    /**
      * Imita `POST /api/transfers`: construye las dos patas con la MISMA función que usa el
      * server ([transferLegsFor]), sobre cuentas de nombre igual a su id — el stub no tiene un
      * catálogo de cuentas y lo que se ejercita del otro lado es el espejo local, no el texto.
@@ -42,6 +55,8 @@ open class NoOpRepository(
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
         fun stub(id: String) = Account(id = id, name = id, type = AccountType.SAVINGS, balance = 0L)
         val (from, to) = transferLegsFor(request, stub(request.fromAccountId), stub(request.toAccountId))
+        eventosDelServer += from
+        eventosDelServer += to
         return TransferResult(from = from, to = to)
     }
 
@@ -73,6 +88,8 @@ open class NoOpRepository(
             from = cuentaDelCredito.copy(balance = 0L),
             to = stub(desembolso.toAccountId),
         )
+        eventosDelServer += from
+        eventosDelServer += to
         return base.copy(
             account = cuentaDelCredito,
             disbursement = TransferResult(from = from, to = to),
@@ -89,11 +106,8 @@ open class NoOpRepository(
      * registró para llegar ahí. Ese `adjustmentEvent` es lo que [LocalRepository] tiene que
      * espejar en la DB local, así que sin él el stub no ejercitaría nada.
      */
-    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long) = CreditSummary(
-        account = Account(id = accountId, name = "Crédito", type = AccountType.LOAN, balance = targetBalance),
-        terms = null,
-        paidPct = null,
-        adjustmentEvent = FinancialEvent(
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
+        val ajuste = FinancialEvent(
             id                   = "ev-ajuste-$accountId",
             accountId            = accountId,
             type                 = TransactionType.INCOME,
@@ -103,8 +117,22 @@ open class NoOpRepository(
             timestamp            = 1_700_000_000_000L,
             source               = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.RECONCILED,
-        ),
-    )
+            // El server calcula esta bandera y la manda (ver EventQueries.withCashFlowFlag): la
+            // cuenta es LOAN, así que un ajuste de deuda NO es flujo de caja. El stub tiene que
+            // decir lo mismo — desde que la respuesta remota gana, un `true` por defecto acá se
+            // vería como "+$60.000.000 de ingresos" en la pantalla del dueño.
+            countsAsCashFlow     = false,
+        )
+        // El server que acaba de registrar el ajuste lo devuelve en el GET siguiente: sin esto,
+        // la fila local sellada del espejo sería un fantasma que en la realidad no existe.
+        eventosDelServer += ajuste
+        return CreditSummary(
+            account = Account(id = accountId, name = "Crédito", type = AccountType.LOAN, balance = targetBalance),
+            terms = null,
+            paidPct = null,
+            adjustmentEvent = ajuste,
+        )
+    }
     override suspend fun getCards() = emptyList<CardSummary>()
     override suspend fun createCard(request: CreateCardRequest) = CardSummary(
         account = Account(id = "acc-card-stub", name = request.name, type = AccountType.CREDIT_CARD, balance = request.initialDebt, currency = request.currency),
@@ -173,9 +201,55 @@ open class NoOpRepository(
     // puede sobrescribirlo para devolver una cuenta de verdad — ver [ServerAccountsRepository].
     override suspend fun getAccount(id: String): Account = error("stub")
     override suspend fun createAccount(account: Account) = account.also { cuentasDelServer += it }
-    override suspend fun deleteAccount(id: String) {}
-    override suspend fun postEvent(event: FinancialEvent) = event
-    override suspend fun getEvents(accountId: String?) = emptyList<FinancialEvent>()
+    /**
+     * Imita `DELETE /api/accounts/{id}`: borra los movimientos de esa cuenta y **desenlaza la
+     * pata hermana** que vive en otra cuenta (ver `desenlazarPatasHermanas` en AccountRoutes).
+     *
+     * Antes era un no-op, y eso alcanzaba mientras nada bajaba del server. Desde que
+     * `LocalRepository.getEvents` pregunta y la respuesta remota gana, un stub que siguiera
+     * devolviendo la pata enlazada le pisaría al espejo local el desenlace que el server sí hizo
+     * — y el test fallaría por una contradicción del doble, no por un defecto del código.
+     */
+    override suspend fun deleteAccount(id: String) {
+        val huerfanas = eventosDelServer
+            .filter { it.accountId == id && it.transferId != null }
+            .mapNotNull { it.transferId }
+            .toSet()
+        eventosDelServer.removeAll { it.accountId == id }
+        huerfanas.forEach { tid ->
+            val i = eventosDelServer.indexOfFirst { it.transferId == tid }
+            if (i >= 0) {
+                eventosDelServer[i] = eventosDelServer[i].copy(
+                    transferId = null,
+                    category = ORPHANED_LEG_CATEGORY,
+                    description = orphanedLegDescription(eventosDelServer[i].description),
+                )
+            }
+        }
+        cuentasDelServer.removeAll { it.id == id }
+    }
+    /**
+     * Los movimientos que este "server" tiene, y que por lo tanto devuelve en [getEvents].
+     *
+     * Existe por la misma razón que [cuentasDelServer], y la razón se volvió obligatoria desde
+     * que `LocalRepository.getEvents` pregunta al server y **deja de mostrar** la fila sellada
+     * que el server ya no devuelve: un stub que aceptara un `postEvent` y en el GET siguiente
+     * jurara que no tiene ningún movimiento no imita a **ningún** server posible, y los tests
+     * fallarían por un fantasma que en la realidad no existe.
+     *
+     * Un test que quiera imitar "el server tiene cosas que este teléfono nunca vio" —el caso del
+     * dueño: base local vacía, 18 eventos arriba— escribe directo en esta lista.
+     */
+    val eventosDelServer = mutableListOf<FinancialEvent>()
+
+    override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+        eventosDelServer += event
+        return event
+    }
+
+    override suspend fun getEvents(accountId: String?): List<FinancialEvent> =
+        eventosDelServer.filter { accountId == null || it.accountId == accountId }
+
     override suspend fun getEventsByDay() = emptyList<EventDay>()
     override suspend fun voidEvent(id: String, reason: String?) = error("stub")
     /**
@@ -201,7 +275,7 @@ open class NoOpRepository(
             timestamp = 1_700_000_000_000L,
             source = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.RECONCILED,
-        )
+        ).also { recordarEnElServer(it) }
     }
     /**
      * Mismo criterio que [updateEventCategory]: 404 para un evento que no está en [knownEventIds]
@@ -220,7 +294,7 @@ open class NoOpRepository(
             timestamp = timestamp,
             source = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.RECONCILED,
-        )
+        ).also { recordarEnElServer(it) }
     }
 
     /** Sin sello: el stub no modela recurrentes, y el aviso opcional simplemente no aparece. */
