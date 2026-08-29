@@ -150,22 +150,86 @@ data class TransferResult(
  * - **Origen ≠ destino.** Traspasar una cuenta a sí misma es un no-op con dos eventos de ruido.
  * - **Monto > 0.** Un traspaso de $0 no mueve nada; uno negativo es el traspaso al revés escrito
  *   mal, y aceptarlo sería adivinar la intención.
- * - **Nada del grupo DEUDA** (tarjeta o préstamo), ni como origen ni como destino. Pagar la
- *   tarjeta ya tiene su propio camino y su propia regla de flujo de caja
- *   ([CARD_PAYMENT_CATEGORY]); convertirlo en traspaso duplicaría esa lógica y le cambiaría el
- *   signo a la deuda. Los préstamos se manejan en Créditos.
+ * - **Ninguna tarjeta de crédito**, ni como origen ni como destino ([TRANSFER_CARD_BLOCKED]).
+ * - **No entre dos préstamos** ([TRANSFER_BOTH_LOANS_BLOCKED]).
  * - **Misma moneda.** Un traspaso entre monedas necesita una tasa y decidir cuál de los dos
  *   montos manda; hasta que eso exista, se dice que no en vez de inventar una conversión.
+ *
+ * ## Por qué un préstamo SÍ puede ser una de las dos puntas (y la tarjeta no)
+ *
+ * Hasta la Ola 14 esta función rechazaba **todo** el grupo [AccountGroup.DEUDA] con un solo
+ * argumento: que meter deuda en un traspaso *«duplicaría esa lógica y le cambiaría el signo a la
+ * deuda»*. La segunda mitad de esa frase se comprobó y **es falsa para los préstamos**:
+ * [signedDelta] ya usa la convención de la cuenta, así que en una cuenta LOAN un EXPENSE **sube**
+ * la deuda y un INCOME la **baja** — exactamente los dos hechos que hay que registrar:
+ *
+ * | Movimiento real | Pata de origen (EXPENSE) | Pata de destino (INCOME) |
+ * |---|---|---|
+ * | **Desembolso** — el banco deposita el crédito | préstamo: la deuda **sube** | cuenta: el efectivo **sube** |
+ * | **Abono extraordinario** — plata extra contra el capital | cuenta: el efectivo **baja** | préstamo: la deuda **baja** |
+ *
+ * Los cuatro signos salen bien sin tocar una línea de `signedDelta`/`computeBalances`, y las dos
+ * patas quedan fuera del mes por [TRANSFER_CATEGORY] — que es justo lo que hacía falta: **un
+ * desembolso no es un ingreso.** Anotar la libranza de $257.000.000 como ingreso decía que el mes
+ * había entrado $257 millones sin que el dueño ganara un peso.
+ *
+ * La primera mitad del argumento —la duplicación— **sí se sostiene para la tarjeta**, y por eso
+ * la tarjeta se sigue rechazando: pagar el extracto ya tiene su camino ([CARD_PAYMENT_CATEGORY])
+ * con su propia regla en [isCashFlow] y su propio detector de candidatos (`looksLikeCardPayment`).
+ * Dos formas de anotar el mismo hecho, con dos categorías distintas y dos reglas distintas, es
+ * cómo se rompe el mes. El préstamo no tenía ninguna: ese era el agujero.
+ *
+ * **Dos préstamos tampoco**, aunque los signos también darían: mover deuda de un crédito a otro
+ * es una refinanciación, no un traspaso, y no hay forma de que quien la anote así entienda qué
+ * quedó registrado. Se dice que no y se explica.
  */
 fun validateTransfer(from: Account?, to: Account?, amount: Long): String? = when {
     from == null || to == null -> "Elige la cuenta de origen y la de destino"
     from.id == to.id -> "El origen y el destino tienen que ser cuentas distintas"
     amount <= 0L -> "El monto tiene que ser mayor que cero"
-    from.type.group == AccountGroup.DEUDA || to.type.group == AccountGroup.DEUDA ->
-        "Las tarjetas y los préstamos se manejan en Créditos, no con un traspaso"
+    from.type == AccountType.CREDIT_CARD || to.type == AccountType.CREDIT_CARD -> TRANSFER_CARD_BLOCKED
+    from.type == AccountType.LOAN && to.type == AccountType.LOAN -> TRANSFER_BOTH_LOANS_BLOCKED
     from.currency != to.currency -> "Por ahora solo entre cuentas de la misma moneda"
     else -> null
 }
+
+/**
+ * Qué está registrando este traspaso. Lo decide el **tipo de las dos cuentas**, no una opción que
+ * el dueño elija: si sale de un préstamo es un desembolso y si entra a uno es un abono, no hay
+ * tercera lectura posible. Existe para que la hoja de Agregar, la descripción de las patas y las
+ * pruebas hablen del mismo hecho con el mismo nombre.
+ */
+enum class TransferKind {
+    /** Del préstamo a una cuenta tuya: el banco desembolsó. La deuda sube y el efectivo sube. */
+    DESEMBOLSO,
+
+    /** De una cuenta tuya al préstamo: plata extra contra el capital. El efectivo baja y la deuda baja. */
+    ABONO_EXTRAORDINARIO,
+
+    /** Entre dos cuentas de dinero o inversión: el traspaso de toda la vida. */
+    ENTRE_CUENTAS,
+}
+
+/** [TransferKind] de este par de cuentas. Solo tiene sentido sobre un par que [validateTransfer] aceptó. */
+fun transferKindFor(from: Account, to: Account): TransferKind = when {
+    from.type == AccountType.LOAN -> TransferKind.DESEMBOLSO
+    to.type == AccountType.LOAN -> TransferKind.ABONO_EXTRAORDINARIO
+    else -> TransferKind.ENTRE_CUENTAS
+}
+
+/**
+ * Lo que se le dice a quien pone una **tarjeta de crédito** en cualquiera de las dos puntas.
+ *
+ * No es un «no» seco: dice a dónde ir. El pago del extracto se anota como un gasto normal desde
+ * Agregar con la categoría [CARD_PAYMENT_CATEGORY], que es la que [isCashFlow] ya sabe dejar
+ * fuera del mes — la misma que propone la hoja de candidatos a pago de tarjeta.
+ */
+const val TRANSFER_CARD_BLOCKED =
+    "El pago de una tarjeta se anota como gasto con la categoría «Pago de tarjeta». Un traspaso no la toca."
+
+/** Lo que se le dice a quien pone un préstamo en las DOS puntas. Ver [validateTransfer]. */
+const val TRANSFER_BOTH_LOANS_BLOCKED =
+    "Un traspaso va entre un crédito y una cuenta tuya, no entre dos créditos."
 
 /**
  * Las dos patas de un traspaso: un EXPENSE en [from] y un INCOME en [to], enlazados por
@@ -184,9 +248,10 @@ fun validateTransfer(from: Account?, to: Account?, amount: Long): String? = when
  *
  * La descripción dice hacia dónde va la plata ("Traspaso a CDT" / "Traspaso desde Ahorros") en
  * vez de repetir "Traspaso" de los dos lados: en el detalle de UNA cuenta, que es donde se lee
- * la pata suelta, lo que falta saber es cuál es la otra punta. La nota, si la hay, se agrega
- * después de un separador — no reemplaza la descripción, porque perder la otra punta para
- * mostrar "alquiler" dejaría la pata sin contexto.
+ * la pata suelta, lo que falta saber es cuál es la otra punta. Cuando una de las puntas es un
+ * préstamo el sustantivo cambia a "Desembolso"/"Abono extraordinario" — ver
+ * [transferLegHeadlines]. La nota, si la hay, se agrega después de un separador — no reemplaza la
+ * descripción, porque perder la otra punta para mostrar "alquiler" dejaría la pata sin contexto.
  */
 fun transferLegsFor(
     request: CreateTransferRequest,
@@ -213,6 +278,31 @@ fun transferLegsFor(
         // el objeto que devuelve esta función coherente consigo mismo desde el primer instante.
         countsAsCashFlow = false,
     )
-    return leg(request.fromEventId, from.id, TransactionType.EXPENSE, describe("Traspaso a ${to.name}")) to
-        leg(request.toEventId, to.id, TransactionType.INCOME, describe("Traspaso desde ${from.name}"))
+    val (haciaAlla, desdeAca) = transferLegHeadlines(from, to)
+    return leg(request.fromEventId, from.id, TransactionType.EXPENSE, describe(haciaAlla)) to
+        leg(request.toEventId, to.id, TransactionType.INCOME, describe(desdeAca))
 }
+
+/**
+ * El encabezado de cada pata: primero el de **origen** («… a Destino»), después el de **destino**
+ * («… desde Origen»). Siempre nombra la OTRA punta, por el mismo motivo de siempre — en el detalle
+ * de una cuenta, lo que falta saber es de dónde vino o a dónde fue.
+ *
+ * Lo que cambia con el crédito es el sustantivo, y no es cosmético: en Movimientos el dueño ve una
+ * fila, no un diagrama de cuentas. «Traspaso a Bancolombia» desde una libranza no dice nada;
+ * **«Desembolso a Bancolombia»** dice exactamente qué pasó, y **«Abono extraordinario a
+ * Libranza»** lo separa a la vista de la cuota mensual — que se anota como un gasto normal y sí
+ * cuenta en el mes (ver [isCashFlow] y el texto de la hoja de Traspaso).
+ *
+ * Sigue siendo la misma categoría reservada [TRANSFER_CATEGORY] en las dos patas: el nombre que se
+ * lee cambia, la mecánica del mes y de los saldos no.
+ */
+internal fun transferLegHeadlines(from: Account, to: Account): Pair<String, String> =
+    when (transferKindFor(from, to)) {
+        TransferKind.DESEMBOLSO ->
+            "Desembolso a ${to.name}" to "Desembolso de ${from.name}"
+        TransferKind.ABONO_EXTRAORDINARIO ->
+            "Abono extraordinario a ${to.name}" to "Abono extraordinario desde ${from.name}"
+        TransferKind.ENTRE_CUENTAS ->
+            "Traspaso a ${to.name}" to "Traspaso desde ${from.name}"
+    }
