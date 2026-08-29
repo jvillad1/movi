@@ -23,6 +23,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MinTextMute
+import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.HeaderLeading
@@ -64,10 +65,14 @@ import kotlinx.coroutines.launch
  *
  * De los mismos endpoints que ya alimentan la guía en el Inicio, y arrancando de
  * [DashboardDataCache] para que la pantalla se pinte llena desde el primer cuadro (a esta
- * pantalla se llega desde «Más», o sea después de haber pasado por el Inicio). Las cuatro
+ * pantalla se llega desde «Más», o sea después de haber pasado por el Inicio). Las cinco
  * llamadas se hacen igual y en paralelo, porque una caché puede estar vieja y esta pantalla es
  * justamente la que contesta «¿me falta algo?». Si alguna falla, no se pinta un error: queda el
  * dato de la caché, que es la misma política del Inicio para las secciones secundarias.
+ *
+ * Y se vuelven a hacer con cada `LocalRefreshTick`, no solo al entrar — ver la nota junto al
+ * `LaunchedEffect`: sin eso la lista de tareas se quedaba vieja justo después de que el dueño
+ * completara una.
  */
 @Composable
 fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
@@ -75,7 +80,17 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     var showCreateSheet by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(refreshKey) {
+    // **Sin esto la pantalla miente sobre lo que el dueño acaba de hacer.** «Agregar» es una
+    // MODAL (ver `opensAsOverlay`): se dibuja encima y esta pantalla nunca sale de la
+    // composición, así que al guardar el movimiento no hay ningún reingreso que dispare la
+    // recarga — el paso «Registra un movimiento» seguía sin tildar y el contador seguía diciendo
+    // «1 de 4» con el evento ya guardado en el server. [LocalRefreshTick] es la señal que la hoja
+    // emite justo para eso, y la leen las otras seis pantallas que pueden quedar viejas por
+    // debajo de ella. Acá duele más que en ninguna: esta pantalla existe para contestar «¿me
+    // falta algo?».
+    val refreshTick = LocalRefreshTick.current
+
+    LaunchedEffect(refreshKey, refreshTick) {
         coroutineScope {
             launch {
                 runCatching { Repositories.wallets.getAccounts() }
