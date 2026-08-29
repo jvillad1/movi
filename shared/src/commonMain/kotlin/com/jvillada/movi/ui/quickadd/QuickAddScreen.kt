@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -67,6 +68,9 @@ import com.jvillada.movi.ui.fecha.timestampParaFecha
  * nombre más largo se corta con «…» en vez de partir la etiqueta letra por letra.
  */
 private const val FRACCION_VALOR_FILA = 0.55f
+
+/** La X del encabezado de un sub-picker. Ver el porqué en [PickerHeader]. */
+internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
 
 /**
  * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
@@ -1147,6 +1151,13 @@ internal fun PickerHeader(title: String, onClose: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(28.dp)
+                // Lo único que este archivo cambió por los tests. La X de la hoja
+                // (`SheetHandleWithClose`) y esta X dicen las dos «Cerrar», así que con un
+                // sub-picker abierto hay DOS nodos con esa descripción y elegir «el segundo»
+                // sería una prueba que se rompe sola el día que el orden cambie. Ver
+                // `HojaAgregarGeometriaTest`, que abre y cierra sub-pickers para afirmar que el
+                // teclado no se mueve.
+                .testTag(TAG_CERRAR_SUB_PICKER)
                 .clip(CircleShape)
                 .background(MinSurfaceContainerLow)
                 .clickable(onClick = onClose),
