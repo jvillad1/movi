@@ -51,6 +51,43 @@ data class FinancialEvent(
      * histórico y el conservador para cuentas de activo.
      */
     val countsAsCashFlow: Boolean = true,
+    /**
+     * **Cuándo se anotó** el movimiento — no cuándo ocurrió. Eso es [timestamp], y son dos cosas
+     * distintas desde que la fecha se elige a mano.
+     *
+     * Hace falta porque [timestamp] dejó de poder ordenar el día. Al elegir una fecha que no es
+     * hoy, el cliente la convierte al **mediodía** de Bogotá (`timestampParaFecha`): solo «Hoy»
+     * conserva la hora real. Así que cinco gastos de ayer anotados uno detrás del otro quedan
+     * **todos con el mismo instante**, y ordenar por [timestamp] no decide nada entre ellos — el
+     * orden que ve el dueño es el que salga. Con esto, el que anotó último queda arriba.
+     *
+     * **Es el desempate, no el criterio principal** (ver `MAS_RECIENTE_PRIMERO`): [timestamp]
+     * sigue mandando. Un SMS del banco de ayer a las 23:00 tiene hora real y tiene que quedar
+     * arriba de un gasto de ayer anotado a mano (mediodía), aunque este último se haya escrito
+     * después. La creación solo entra cuando los dos instantes son iguales, que es exactamente el
+     * caso que estaba roto.
+     *
+     * **Nullable, y sin inventar nada.** Los movimientos que ya existen no la tienen y no hay de
+     * dónde sacarla: la tabla nunca guardó cuándo se creó una fila. Un `null` cae a [timestamp]
+     * en el comparador.
+     *
+     * Eso **no** quiere decir que esos movimientos queden donde estaban. Entre dos filas viejas
+     * del mismo instante el respaldo empata también, y el orden lo termina fijando el `id`, que es
+     * un UUID al azar: estable en cada lectura, pero arbitrario. O sea que lo que ya está cargado
+     * no recibe el arreglo — solo deja de bailar. El detalle, con el porqué de no hacer backfill,
+     * está en `MAS_RECIENTE_PRIMERO`.
+     *
+     * **La pone el cliente al escribir el movimiento**, y el server solo la completa si no viene:
+     * es el único instante que el cliente conoce y el server no. Si la estampara el server al
+     * recibir, un movimiento anotado sin señal y sincronizado dos días después quedaría «creado»
+     * dos días más tarde y saltaría al tope de su día sin motivo. El riesgo del reloj del
+     * teléfono está acotado a propósito: esto **no** decide a qué día pertenece el movimiento ni
+     * entra en ningún total — solo desempata renglones dentro de un mismo día.
+     *
+     * Lo que entra solo (SMS, extracto, OCR) trae su propia fecha en [timestamp] pero se «anota»
+     * cuando se captura o se importa, así que ahí la creación es ese momento.
+     */
+    val createdAt: Long? = null,
 )
 
 /**

@@ -79,6 +79,19 @@ fun Route.eventRoutes() {
             val event = body.copy(
                 id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
                 timestamp = if (body.timestamp == 0L) now else body.timestamp,
+                // **Cuándo lo anotó** (ver FinancialEvent.createdAt): lo manda el cliente, porque
+                // es el único que sabe en qué momento el dueño lo escribió — el server solo sabe
+                // cuándo LLEGÓ, y con la app offline eso puede ser dos días después. Un cliente
+                // que no lo mande (la web, que postea apenas se guarda) queda sellado con `now`,
+                // que ahí es el mismo instante.
+                //
+                // El único filtro es de cordura, no de confianza: un epoch fuera del rango de
+                // milisegundos plausible —un reloj sin sincronizar en 1970, o un cliente con un
+                // bug— se descarta y se usa `now`. No hace falta más: esto NO decide a qué día
+                // pertenece el movimiento (eso es `timestamp`) ni entra en ningún total; solo
+                // desempata renglones dentro de un mismo día, así que un reloj corrido puede
+                // desordenar dos líneas y nada más.
+                createdAt = body.createdAt?.takeIf { epochMillisToAppDate(it).year in 2000..2100 } ?: now,
                 // F12, capa 2: "por confirmar" es para lo que entra solo (SMS, OCR, extracto) —
                 // no para lo que el usuario anotó a mano, que ya está confirmado por definición.
                 // Esto es la red de seguridad del server, no solo de QuickAdd: cualquier cliente
@@ -130,6 +143,7 @@ fun Route.eventRoutes() {
                     it[rawPayload]           = event.rawPayload
                     it[reconciliationStatus] = event.reconciliationStatus.name
                     it[syncedAt]             = event.syncedAt
+                    it[createdAt]            = event.createdAt
                 }
             }
             // El eco lleva la bandera derivada, no la que mandó el cliente: countsAsCashFlow
@@ -150,13 +164,19 @@ fun Route.eventRoutes() {
         get {
             val uid = call.userId()
             val accountId = call.request.queryParameters["accountId"]
-            val result = loadNonVoidedEvents(uid, accountId).sortedByDescending { it.timestamp }
+            val result = loadNonVoidedEvents(uid, accountId).masRecientePrimero()
             call.respond(result)
         }
 
         get("/by-day") {
             val uid = call.userId()
             val result = loadNonVoidedEvents(uid)
+                // Ordenar ANTES de agrupar: `groupBy` conserva el orden de llegada dentro de cada
+                // grupo, así que una sola pasada deja los días ordenados por dentro. Antes acá no
+                // había criterio ninguno y los renglones del día salían en el orden físico de la
+                // tabla —el que un UPDATE o un VACUUM puede cambiar sin avisar—, mientras el
+                // endpoint hermano de arriba sí ordenaba. Ver MAS_RECIENTE_PRIMERO.
+                .masRecientePrimero()
                 .groupBy { epochMillisToAppDateString(it.timestamp) }
                 .map { (date, items) ->
                     EventDay(

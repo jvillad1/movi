@@ -136,6 +136,13 @@ class SyncEngine(
                         rawPayload = row.rawPayload,
                         reconciliationStatus = ReconciliationStatus.valueOf(row.reconciliationStatus),
                         syncedAt = row.syncedAt,
+                        // **El sello de creación viaja con el evento**, y es la razón por la que
+                        // lo pone el cliente y no el server: este POST puede salir dos días
+                        // después de que el dueño escribió el movimiento (el teléfono estuvo sin
+                        // señal). Si el server lo estampara al recibir, ese movimiento quedaría
+                        // «creado» dos días más tarde y saltaría al tope de su día. Ver
+                        // FinancialEvent.createdAt.
+                        createdAt = row.createdAt,
                     )
                 )
                 db.financialEventQueries.markSyncedIfUnchanged(
