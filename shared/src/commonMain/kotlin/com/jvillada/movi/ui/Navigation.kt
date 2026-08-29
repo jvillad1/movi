@@ -34,6 +34,12 @@ sealed class Screen {
      * otra pantalla.
      */
     data object Categorias : Screen()
+    /**
+     * Ola 14 — «Más → Primeros pasos»: la guía de arranque, que hasta acá solo existía como
+     * tarjeta del Inicio y se apagaba sola sin ninguna forma de volver a verla. Misma puerta que
+     * [Categorias]: una ficha de Más, no un enlace escondido adentro de otra pantalla.
+     */
+    data object PrimerosPasos : Screen()
     data object OCRCapture : Screen()
     data object OCRConfirm : Screen()
     data object SMSInbox : Screen()
@@ -85,7 +91,9 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile,
     // Ola 10: Categorías vive en Más y no tiene destino propio — es una pantalla de
     // mantenimiento, no un lugar al que se vuelva todos los días.
-    Screen.Categorias -> NavTab.MORE
+    // Ola 14: la guía de arranque se abre desde Más y se vuelve a Más — no es un destino de
+    // todos los días, es un sitio al que se va a mirar si quedó algo pendiente.
+    Screen.Categorias, Screen.PrimerosPasos -> NavTab.MORE
     else -> null
 }
 

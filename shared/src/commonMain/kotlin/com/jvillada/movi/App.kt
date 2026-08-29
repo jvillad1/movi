@@ -37,6 +37,7 @@ import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
+import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
 import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
@@ -234,6 +235,7 @@ fun App() {
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 Screen.Recurrentes       -> RecurrentesScreen(navigate)
                 Screen.Categorias        -> CategoriasScreen(navigate)
+                Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                 Screen.OCRConfirm        -> OCRConfirmScreen(navigate)
                 Screen.SMSInbox          -> SMSInboxScreen(navigate)
