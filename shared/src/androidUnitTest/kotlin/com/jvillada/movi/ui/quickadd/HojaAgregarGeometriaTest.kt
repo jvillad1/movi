@@ -19,6 +19,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.theme.MoviTheme
 import kotlin.math.abs
 import org.junit.Assert.assertTrue
@@ -178,6 +180,59 @@ class HojaAgregarGeometriaTest {
     }
 
     /**
+     * **2b — y tampoco se mueve si el sub-picker SE DESPLAZÓ.** Es el modo de falla que abrió la
+     * Ola 14 al estirar la lista de categorías.
+     *
+     * Mientras ningún sub-picker se podía desplazar, el invariante salía casi solo: el
+     * desplazamiento de la hoja no cambiaba durante la visita al sub-picker. Con la lista de
+     * categorías estirada eso dejó de ser cierto — el dueño baja hasta el final de la lista para
+     * elegir— y al cerrar, el desplazamiento heredado se recorta contra el `maxValue` del editor
+     * y deja el teclado en cualquier lado. La restauración incondicional de
+     * `LaunchedEffect(hayPicker)` es lo que lo evita; esta prueba es la que lo sostiene.
+     *
+     * A diferencia de [elTecladoNoSeMueveAlAbrirYCerrarUnSubPicker], acá la hoja arranca **sin
+     * desplazar**: el objetivo a restaurar es 0, que es justamente el caso que la rama vieja
+     * (`else if (scrollAntesDelPicker > 0)`) no atendía.
+     *
+     * Corre a [TELEFONO_CON_TECLADO] y no al alto del AVD porque hace falta que el sub-picker se
+     * DESBORDE, y con las 10 categorías del catálogo (acá no hay red, así que no hay categorías
+     * propias) a 731 dp entran todas y no habría nada que desplazar — la prueba pasaría sin
+     * ejercitar una sola línea. En el teléfono del dueño se desborda por las dos puntas: tiene
+     * más categorías Y el teclado del sistema le come la mitad de la ventana.
+     *
+     * Mide los límites **sin recortar**: a esta altura el teclado numérico cae fuera de la
+     * ventana, y dos rectángulos recortados contra el mismo borde se ven iguales aunque el
+     * contenido se haya movido.
+     */
+    @Test
+    @Config(qualifiers = TELEFONO_CON_TECLADO)
+    fun elTecladoNoSeMueveAunqueSeDesplaceLaListaDelSubPicker() {
+        montarHoja()
+        val enReposo = tecla9SinRecortar()
+
+        tocar("Categoría")
+        // Bajar hasta la última categoría de la lista: eso desplaza la HOJA (el panel ya no
+        // tiene scroll propio), que es exactamente lo que hace el dedo del dueño.
+        //
+        // «La última» se mide, no se deduce: [CATEGORIAS_OFRECIDAS] viene en el orden del
+        // catálogo y el panel las muestra alfabéticamente, así que su `.last()` («Otros») cae en
+        // el medio de la lista y desplazaría casi nada — la prueba pasaría sin ejercitar nada.
+        val ultima = CATEGORIAS_OFRECIDAS.maxByOrNull {
+            composeRule.onNodeWithText(it, useUnmergedTree = true).getUnclippedBoundsInRoot().top.value
+        }!!
+        composeRule.onNodeWithText(ultima, useUnmergedTree = true).performScrollTo()
+        composeRule.waitForIdle()
+        cerrarSubPicker()
+
+        val despues = tecla9SinRecortar()
+        assertTrue(
+            "La tecla «9» se movió al ir y volver de «Categoría» habiendo desplazado la lista: " +
+                "antes $enReposo, después $despues. Ese es el «escribías 0 y salía 8».",
+            mismoRect(enReposo, despues),
+        )
+    }
+
+    /**
      * **3 — la losa vacía: el encabezado del sub-picker se ve al abrirlo.**
      *
      * Al sub-picker se le fija un alto mínimo igual al del hueco visible para que la hoja no
@@ -202,6 +257,39 @@ class HojaAgregarGeometriaTest {
             composeRule.onNodeWithTag(TAG_CERRAR_SUB_PICKER).assertSeVeEntero("la X de «$titulo»")
             cerrarSubPicker()
         }
+    }
+
+    /**
+     * **4 — las categorías se VEN. Sin desplazar una ventanita adentro de la hoja.**
+     *
+     * El reporte del dueño, textual, desde el navegador del teléfono: «cuando quiero ver las
+     * categorías para hacer un nuevo movimiento, al hacer scroll desaparecen».
+     *
+     * Medido acá, con el sub-picker abierto a 411×731 y sin ningún gesto: el panel de
+     * sugerencias tenía tope de 220 dp y scroll propio, así que se veían **3 de las 9**
+     * categorías que se ofrecen… con la losa vacía del alto fijado justo debajo, adentro del
+     * mismo sub-picker. Ver el resto pedía desplazar esa ventanita, que es **un scroll adentro
+     * del scroll de la hoja**: dos áreas desplazables anidadas peleándose el gesto del dedo.
+     *
+     * La afirmación es «se ven casi todas», no «se ven todas»: el catálogo puede crecer, y el día
+     * que no entren en un teléfono la lista se desplazará **con la hoja**, que es un solo
+     * desplazamiento y no dos. Lo que esta prueba impide es volver a la ventanita.
+     *
+     * Cuenta solo las que se ven ENTERAS (ver [assertSeVeEntero] para por qué
+     * `assertIsDisplayed()` a secas no alcanza), y deja «Comida» afuera de la cuenta porque es el
+     * valor inicial del campo: su texto aparece dos veces y `onNodeWithText` no sabría cuál medir.
+     */
+    @Test
+    fun lasCategoriasSeVenEnElSubPickerDelTelefono() {
+        montarHoja()
+        tocar("Categoría")
+        val visibles = CATEGORIAS_OFRECIDAS.filter { seVeEntera(it) }
+        assertTrue(
+            "Solo se ven ${visibles.size} de ${CATEGORIAS_OFRECIDAS.size} categorías sin mover " +
+                "nada (${visibles.joinToString()}). El panel volvió a ser una ventanita con " +
+                "scroll propio adentro de la hoja: eso es el «al hacer scroll desaparecen».",
+            visibles.size >= CATEGORIAS_OFRECIDAS.size - 1,
+        )
     }
 
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
@@ -258,6 +346,11 @@ class HojaAgregarGeometriaTest {
      */
     private fun tecla9(): DpRect = composeRule.onNodeWithText("9").getBoundsInRoot()
 
+    /** La misma tecla, medida donde ESTÁ aunque la ventana la corte. Ver el KDoc de
+     *  [elTecladoNoSeMueveAunqueSeDesplaceLaListaDelSubPicker]. */
+    private fun tecla9SinRecortar(): DpRect =
+        composeRule.onNodeWithText("9").getUnclippedBoundsInRoot()
+
     /**
      * Se ve **entero**: dentro de la ventana y sin que ningún ancestro le recorte un pedazo.
      *
@@ -275,6 +368,16 @@ class HojaAgregarGeometriaTest {
         )
     }
 
+    /**
+     * Versión no-fatal de [assertSeVeEntero]: `false` si el texto no está, si no se ve, si está
+     * recortado o si aparece más de una vez (`onNodeWithText` no elige por nosotros).
+     */
+    private fun seVeEntera(texto: String): Boolean = runCatching {
+        val nodo = composeRule.onNodeWithText(texto, useUnmergedTree = true)
+        nodo.assertIsDisplayed()
+        mismoRect(nodo.getBoundsInRoot(), nodo.getUnclippedBoundsInRoot())
+    }.getOrDefault(false)
+
     private fun mismoRect(a: DpRect, b: DpRect): Boolean =
         abs(a.left.value - b.left.value) < TOLERANCIA_DP &&
             abs(a.top.value - b.top.value) < TOLERANCIA_DP &&
@@ -287,6 +390,16 @@ private const val AVD_MOVI_SENSOR = "w411dp-h731dp-xhdpi"
 
 /** Un iPhone 16: 393×852 pt. Sin sus áreas seguras — Robolectric no las modela. */
 private const val IPHONE_16 = "w393dp-h852dp-xhdpi"
+
+/**
+ * El mismo teléfono del AVD **con el teclado del sistema abierto**: 411×520 dp.
+ *
+ * No es un dispositivo: es el estado en el que el dueño usa el sub-picker de Categoría, porque
+ * abrirlo pide el foco del campo y eso levanta el teclado. La ventana se parte al medio, y ahí
+ * cualquier cosa que se desborde se desborda de verdad. Los 520 salen de restarle ~210 dp
+ * (teclado del sistema) a los 731 del AVD.
+ */
+private const val TELEFONO_CON_TECLADO = "w411dp-h520dp-xhdpi"
 
 /** `MinBottomNav.kt:63` — leído del código, no estimado. */
 private val ALTO_BARRA_INFERIOR = 64.dp
@@ -306,3 +419,15 @@ private val SUB_PICKERS = listOf(
     "Agregar nota…" to "Nota",
     "Categoría" to "Categoría",
 )
+
+/**
+ * Las categorías que el sub-picker ofrece para un GASTO en esta prueba: las del catálogo, sin las
+ * reservadas (`CategoryField` no las sugiere) y sin «Comida», que es el valor inicial del campo.
+ *
+ * Se calculan del catálogo y no se listan a mano: agregar una categoría nueva no debería obligar
+ * a tocar esta prueba. Acá no hay red, así que no hay categorías propias del dueño — solo estas.
+ */
+private val CATEGORIAS_OFRECIDAS: List<String> = PREDEFINED_CATEGORIES
+    .filter { it.type == "EXPENSE" && !isReservedCategory(it.name) }
+    .map { it.name }
+    .filterNot { it == "Comida" }

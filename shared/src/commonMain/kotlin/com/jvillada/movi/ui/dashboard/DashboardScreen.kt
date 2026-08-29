@@ -268,9 +268,15 @@ fun DashboardScreen(
  *
  * El pie ("Deja que la app se llene sola") no tiene "hecho" propio: no es una acción puntual
  * sino un hábito (subir extractos / dejar el SMS corriendo). Se muestra como acceso puro.
+ *
+ * Ola 14 — **la misma tarjeta la usa [PrimerosPasosScreen]**, que es la puerta de vuelta desde
+ * «Más» (el dueño: «no veo el onboarding o FTU que tenía ciertas tareas, quisiera poder verlo si
+ * aún me faltan tareas»). Por eso pasó de `private` a `internal`: una sola tarjeta, no dos que
+ * se van separando. Lo que NO cambió es cuándo aparece sola en el Inicio — se sigue apagando con
+ * cuenta + movimiento, y no vuelve a asomarse por su cuenta.
  */
 @Composable
-private fun PrimerosPasosCard(
+internal fun PrimerosPasosCard(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onShowCreateSheet: () -> Unit,

@@ -61,6 +61,10 @@ private val items = listOf(
     // dos pantallas que se cruzan con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño
     // va a acordarse de que quería arreglar un nombre.
     MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
+    // Ola 14: la guía de arranque, que se apaga sola en el Inicio y hasta acá no tenía forma de
+    // volver a abrirse. Va en Más y no en el Inicio a propósito: el dueño pidió *poder volver*,
+    // no que la guía le reaparezca (ver PrimerosPasosScreen).
+    MasItem("Primeros pasos", Icons.Rounded.Checklist,      Color(0xFFFFD479), Color(0x24FFD479), Screen.PrimerosPasos),
     // F40: "Análisis" no analizaba — era un índice con cifras, y eso ahora es el Inicio.
     MasItem("Perfil",       Icons.Rounded.ManageAccounts,   Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Profile),
 )
