@@ -42,7 +42,8 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.isOpeningBalance
+import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -97,57 +98,6 @@ sealed class MovementRow {
 /** ¿Este movimiento es una pata de traspaso? */
 fun isTransferLeg(event: FinancialEvent): Boolean =
     event.transferId != null || event.category == TRANSFER_CATEGORY
-
-/**
- * ¿Este renglón es la **apertura de una cuenta** y no plata que entró o salió?
- *
- * El saldo inicial se guarda como un movimiento (INCOME por lo que había, EXPENSE por lo que se
- * debía) para que el saldo de la cuenta cuadre solo, pero no es un ingreso ni un gasto: es la
- * foto de lo que ya existía el día que la cuenta entró a la app. `isCashFlow` ya lo sabe y lo
- * deja fuera de todos los totales — esto es solo el lado de la presentación, para que la lista
- * lo diga con las mismas palabras que las cuentas.
- */
-fun isOpeningBalance(event: FinancialEvent): Boolean = event.category == OPENING_CATEGORY
-
-/**
- * ¿Este renglón entra en la **lista** de Movimientos?
- *
- * Ola 16. Movimientos contesta «¿qué hice?». Un saldo inicial no es algo que el dueño hizo: es el
- * ancla desde la que Movi deriva el saldo de la cuenta —la app nunca guarda saldos, los suma de
- * los eventos— o sea la foto de lo que ya existía el día que la cuenta entró a la app.
- *
- * Lo que lo volvió urgente no fue un número mal sumado: **los números ya estaban bien**. Medido
- * contra producción el 2026-08-29, el día 2026-08-28 tenía 8 filas y «Flujo del día −$4.558.789»,
- * que es exactamente la suma de las OTRAS 7 — la «Deuda inicial · Libre inversión 9695» de
- * $41.093.905 no estaba adentro, porque [isCashFlow] la excluye desde F54 y [rowShowsSign] ya le
- * quitaba signo y color. El problema era de ubicación: la cifra más grande de la pantalla,
- * encabezando el día del dueño, sin participar de ningún total. «Si no es un desembolso, ¿para
- * qué lo estamos contando como movimiento?».
- *
- * **Sacarla de acá no esconde nada, y además destapa una contradicción que ya existía**:
- * [movementCount] —la misma función que alimenta `FinanceSummary.eventCount`, o sea el contador de
- * movimientos del Inicio y la guía de primeros pasos— nunca contó las aperturas. Con los datos de
- * arriba el server decía **15** y esta lista mostraba **16** renglones. Después de este cambio
- * dicen los dos 15. El caso extremo es el que más se notaba: un dueño que solo creó cuentas con
- * saldo veía renglones acá mientras la guía le seguía diciendo «Registra un movimiento»; ahora ve
- * el estado vacío, que es lo que el resto de la app ya afirmaba.
- *
- * **La búsqueda es la excepción, a propósito.** Con una consulta escrita el saldo inicial vuelve a
- * aparecer: buscar es pedirlo explícitamente, y una app que no encuentra algo que sí existe es
- * peor que una que lo lista de más. La regla se cuelga de «hay consulta» y no de «la consulta dice
- * *saldo inicial*» para no depender de que el dueño adivine las palabras exactas: buscar el nombre
- * de la cuenta, o «deuda», o «inicial», llega igual. Lo que se elimina es que aparezca **sin que
- * la pida**.
- *
- * Es cliente y no server (`GET /api/events/by-day`) por una razón concreta: `LocalRepository`
- * sirve esta misma lista cuando no hay red, con su propia implementación de `getEventsByDay`.
- * Filtrar en la capa de datos obligaría a escribir la regla dos veces y a mantenerlas iguales para
- * siempre; filtrarla acá, donde online y offline ya convergen, hace que **no puedan** discrepar.
- * Y el endpoint sigue devolviendo la historia completa, que es lo correcto para sus otros
- * consumidores (Presupuestos) y para cualquiera que mañana necesite re-derivar un saldo.
- */
-fun showsInMovements(event: FinancialEvent, query: String): Boolean =
-    !isOpeningBalance(event) || query.isNotBlank()
 
 /**
  * Los días que Movimientos pinta, ya filtrados por el chip [chip] y la búsqueda [query], con el

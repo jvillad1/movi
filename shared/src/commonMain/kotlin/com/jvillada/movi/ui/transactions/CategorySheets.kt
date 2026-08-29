@@ -25,6 +25,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.OPENING_BALANCE_EXPLAINER
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.isOpeningBalance
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.ORPHANED_LEG_EXPLAINER
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -117,6 +120,39 @@ private fun CategoryRow(
         }
         if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
     }
+}
+
+/**
+ * ¿Se dibuja el botón «Usar "…"» del campo libre de [ChangeCategorySheet]?
+ *
+ * Función aparte del `@Composable` para poder testearla, y porque la tercera condición es una
+ * **guarda de plata**, no un detalle de dibujo.
+ *
+ * Las dos primeras estaban desde siempre: hay algo escrito, y no es la categoría que el
+ * movimiento ya tiene. La tercera —**no es una categoría reservada**— es de la Ola 16, y la
+ * encontró la revisión de esta rama. Hasta acá el campo mostraba el cartel de arriba («"Saldo
+ * inicial" la usa Movi sola — es una categoría reservada») y **dejaba el botón habilitado justo
+ * debajo**: tocarlo mandaba `PUT /api/events/{id}/category`, que no bloqueaba [OPENING_CATEGORY],
+ * y un gasto real de $50.000 quedaba anotado con esa categoría y FUERA de «Gastos del mes» —
+ * medido: de $165.289 a $115.289, en silencio.
+ *
+ * Es **literalmente el bug que la Ola 10 cerró en QuickAdd**, palabra por palabra: «el aviso era
+ * un cartel: se cerraba el selector con la categoría puesta, el botón seguía habilitado, y el
+ * gasto quedaba anotado y FUERA de "Gastos del mes" sin que nada lo dijera» (ver
+ * `QuickAddScreen.kt`). Ahí la puerta era `POST /api/events`, que sí quedó cerrada; esta era la
+ * otra puerta, por `PUT`, y quedó abierta.
+ *
+ * Y entra **en esta rama** y no en una siguiente porque es esta rama la que sube el precio del
+ * error: desde que [showsInMovements] saca las aperturas de la lista, la fila envenenada ya no se
+ * queda a la vista sin signo — **desaparece**.
+ *
+ * La guarda es de la UI. La del server y la del espejo local van aparte, en la misma ola: acá se
+ * corta antes para no ofrecer una acción que iba a fallar, allá se corta porque la app no es la
+ * única que puede llamar a esa ruta.
+ */
+fun ofreceCategoriaEscritaAMano(freeText: String, currentCategory: String): Boolean {
+    val escrita = freeText.trim()
+    return escrita.isNotEmpty() && escrita != currentCategory && !isReservedCategory(escrita)
 }
 
 /**
@@ -344,7 +380,7 @@ fun ChangeCategorySheet(
                 placeholder = "Ej: Colegio",
             )
             val trimmedFreeText = freeText.trim()
-            if (trimmedFreeText.isNotEmpty() && trimmedFreeText != event.category) {
+            if (ofreceCategoriaEscritaAMano(freeText, event.category)) {
                 Spacer(Modifier.height(10.dp))
                 Box(
                     modifier = Modifier

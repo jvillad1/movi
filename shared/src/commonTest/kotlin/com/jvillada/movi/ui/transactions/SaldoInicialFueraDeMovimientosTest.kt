@@ -3,6 +3,9 @@ package com.jvillada.movi.ui.transactions
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.RESERVED_CATEGORIES
+import com.jvillada.movi.shared.model.isOpeningBalance
+import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.movementCount
@@ -198,5 +201,60 @@ class SaldoInicialFueraDeMovimientosTest {
     @Test
     fun `buscarla no la devuelve al chip Gastos`() {
         assertTrue(diasVisibles(listOf(DIA_DE_PRODUCCION), CHIP_GASTOS, "deuda inicial").isEmpty())
+    }
+}
+
+/**
+ * **El botón «Usar "…"» del campo libre de la hoja de categoría** — la puerta que la revisión de
+ * esta rama encontró abierta.
+ *
+ * Vive en su propia clase porque no es sobre la lista de Movimientos: es sobre la única acción de
+ * escritura que quedaba disponible para envenenar un movimiento con una categoría reservada. El
+ * campo de arriba ya mostraba el cartel («"Saldo inicial" la usa Movi sola — es una categoría
+ * reservada») y el botón habilitado quedaba justo debajo — literalmente el bug que la Ola 10
+ * cerró en QuickAdd, por la otra puerta.
+ *
+ * Que esté acá y no en otro archivo es a propósito: **este cambio sube el precio de ese bug**. Un
+ * gasto real que recibe «Saldo inicial» antes se quedaba a la vista, sin signo; ahora desaparece
+ * de la lista, así que el dueño no tendría ni cómo notarlo.
+ */
+class CategoriaEscritaAManoTest {
+
+    @Test
+    fun `una categoria propia si se puede usar`() {
+        assertTrue(ofreceCategoriaEscritaAMano("Colegio", currentCategory = "Otros"))
+    }
+
+    @Test
+    fun `el boton no aparece sin texto ni con la categoria que ya tiene`() {
+        assertFalse(ofreceCategoriaEscritaAMano("", currentCategory = "Otros"))
+        assertFalse(ofreceCategoriaEscritaAMano("   ", currentCategory = "Otros"))
+        assertFalse(ofreceCategoriaEscritaAMano("Otros", currentCategory = "Otros"))
+        assertFalse(ofreceCategoriaEscritaAMano("  Otros  ", currentCategory = "Otros"))
+    }
+
+    /** El bloqueante: escribir «Saldo inicial» a mano sacaría el gasto del mes en silencio. */
+    @Test
+    fun `Saldo inicial escrito a mano no se puede usar`() {
+        assertFalse(ofreceCategoriaEscritaAMano("Saldo inicial", currentCategory = "Hija"))
+    }
+
+    /**
+     * Y las otras tres reservadas tampoco, por el mismo motivo: `isReservedCategory` compara sin
+     * distinguir mayúsculas justamente para que «saldo inicial» en minúscula —un nombre a un
+     * carácter de distancia del reservado— no se cuele por el costado.
+     */
+    @Test
+    fun `ninguna reservada se puede escribir a mano, ni en minuscula`() {
+        for (reservada in RESERVED_CATEGORIES) {
+            assertFalse(
+                ofreceCategoriaEscritaAMano(reservada, currentCategory = "Otros"),
+                "«$reservada» no debería poder escribirse a mano",
+            )
+            assertFalse(
+                ofreceCategoriaEscritaAMano(reservada.lowercase(), currentCategory = "Otros"),
+                "«${reservada.lowercase()}» tampoco",
+            )
+        }
     }
 }
