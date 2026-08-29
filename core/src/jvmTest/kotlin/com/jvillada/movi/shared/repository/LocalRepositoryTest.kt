@@ -611,9 +611,12 @@ class LocalRepositoryTest {
         assertNull(pata.transferId, "ya no es media pareja")
         assertEquals(ORPHANED_LEG_CATEGORY, pata.category)
         assertEquals("Traspaso a acc-cdt$ORPHANED_LEG_SUFFIX", pata.description)
-        // Y vuelve a ser flujo de caja: es la consecuencia que la hoja de borrado avisa.
-        assertTrue(pata.countsAsCashFlow)
-        // El saldo de Ahorros NO se toca: la plata salió de verdad.
+        // Y NO vuelve a ser flujo de caja (ola 15): la bandera derivada del espejo local tiene que
+        // decir lo mismo que `isCashFlow` del lado del server, o el teléfono y la web muestran dos
+        // «Ingresos del mes» distintos para los mismos datos.
+        assertFalse(pata.countsAsCashFlow)
+        // El saldo de Ahorros NO se toca: la plata salió de verdad. Este par de líneas es la
+        // promesa entera — el saldo se mueve, el mes no.
         assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
     }
 
@@ -630,6 +633,9 @@ class LocalRepositoryTest {
         assertNull(pata.transferId)
         assertEquals(ORPHANED_LEG_CATEGORY, pata.category)
         assertEquals("Traspaso desde acc-ahorros$ORPHANED_LEG_SUFFIX", pata.description)
+        // El lado caro: acá la pata que sobrevive es un INGRESO, y es la que con un crédito de por
+        // medio valía $257.000.000 de plata «ganada» que nadie ganó.
+        assertFalse(pata.countsAsCashFlow)
         assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
     }
 

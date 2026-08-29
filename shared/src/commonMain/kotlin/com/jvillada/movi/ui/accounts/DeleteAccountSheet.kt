@@ -188,14 +188,19 @@ private fun eventCountLabel(count: Int): String =
  * —tiene que sobrevivir: la plata salió de verdad y el saldo de esa cuenta lo refleja— pero se
  * queda sin la mitad que la explicaba, así que el server la suelta del par y le pone una
  * categoría propia (ver `desenlazarPatasHermanas` en `AccountRoutes.kt` y
- * `ORPHANED_LEG_CATEGORY` en `:core`). Eso cambia las cifras de un mes que el dueño ya daba por cerrado, y esa es justo
- * la clase de cosa de la que no puede enterarse después: se dice acá, con el número real, antes
- * de tocar el botón rojo.
+ * `ORPHANED_LEG_CATEGORY` en `:core`).
  *
- * **Se nombra la categoría de destino** porque sin ella el aviso no es accionable: quien tenga un
- * presupuesto necesita saber en qué renglón va a aparecer ese monto. Y se dice **«un mes que ya
- * diste por cerrado»** en vez de «el mes en que ocurrió»: las dos son ciertas, pero solo la
- * primera dice lo que importa — que lo que va a cambiar son totales viejos, no los de este mes.
+ * **Qué dice el aviso, después de la ola 15.** Antes prometía que ese movimiento «vuelve a contar
+ * en los gastos o ingresos de un mes que ya diste por cerrado». Eso ya no pasa —`isCashFlow`
+ * excluye la categoría, justamente porque con un crédito de por medio esa promesa fabricaba un
+ * ingreso de $257.000.000— así que el aviso tiene que decir lo que sí pasa, que es distinto y
+ * también hay que saberlo antes de tocar el botón rojo: los **saldos** de las otras cuentas no se
+ * mueven, esos movimientos quedan sueltos y rotulados, y **la que desaparece es esta cuenta** —
+ * con su saldo, que en un crédito es la deuda. Prometer un cambio en los totales del mes que ya
+ * no ocurre sería peor que no avisar: manda al dueño a revisar meses viejos que están intactos.
+ *
+ * **Se nombra la categoría de destino** porque sin ella el aviso no es accionable: es el renglón
+ * con el que va a encontrarse esa fila en Movimientos, y el nombre que tiene que buscar.
  *
  * Nota de alcance (L2): [transferCount] se cuenta sobre los movimientos que esta pantalla ya
  * tiene cargados. En Android eso sale del espejo local, y el `SyncEngine` **solo empuja** — nada
@@ -212,14 +217,15 @@ private fun transferWarningLabel(count: Int, amount: Long, currency: String): St
     val cuanto = if (amount > 0L) ", por ${formatMoney(amount, currency)} en total," else ""
     return if (count == 1) {
         "1 de esos movimientos es un traspaso con otra cuenta$cuanto. Esa cuenta conserva su " +
-            "mitad y su saldo no cambia, pero ese movimiento deja de ser un traspaso: pasa a la " +
-            "categoría «$ORPHANED_LEG_CATEGORY» y vuelve a contar en los gastos o ingresos de un " +
-            "mes que ya diste por cerrado. Puedes cambiarle la categoría después."
+            "mitad y su saldo no cambia, pero ese movimiento deja de ser un traspaso: queda " +
+            "suelto, en la categoría «$ORPHANED_LEG_CATEGORY». No suma a tus gastos ni a tus " +
+            "ingresos del mes; si esa plata sí se movió de verdad, puedes cambiarle la categoría " +
+            "después."
     } else {
         "$count de esos movimientos son traspasos con otras cuentas$cuanto. Esas cuentas " +
             "conservan su mitad y sus saldos no cambian, pero esos movimientos dejan de ser " +
-            "traspasos: pasan a la categoría «$ORPHANED_LEG_CATEGORY» y vuelven a contar en los " +
-            "gastos o ingresos de meses que ya diste por cerrados. Puedes cambiarles la " +
-            "categoría después."
+            "traspasos: quedan sueltos, en la categoría «$ORPHANED_LEG_CATEGORY». No suman a tus " +
+            "gastos ni a tus ingresos del mes; si esa plata sí se movió de verdad, puedes " +
+            "cambiarles la categoría después."
     }
 }

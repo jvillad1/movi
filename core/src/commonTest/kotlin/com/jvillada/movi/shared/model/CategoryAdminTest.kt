@@ -30,22 +30,25 @@ class CategoryAdminTest {
     }
 
     @Test
-    fun `las tres que isCashFlow excluye por nombre estan todas en la lista de reservadas`() {
+    fun `las cuatro que isCashFlow excluye por nombre estan todas en la lista de reservadas`() {
         // Si alguna dejara de estar, la pantalla la dejaría renombrar y el mes entero cambiaría.
-        for (categoria in listOf(TRANSFER_CATEGORY, OPENING_CATEGORY, CARD_PAYMENT_CATEGORY)) {
+        //
+        // Ola 15: son CUATRO, no tres. [ORPHANED_LEG_CATEGORY] se sumó a la familia — la pata de
+        // un traspaso que perdió a su hermana no es plata ganada ni gastada, y mientras contaba,
+        // borrar un crédito desembolsado de $257.000.000 subía «Ingresos del mes» de $12,4M a
+        // $269,4M. Que el bucle las recorra a las cuatro es lo que hace que sacar una del
+        // `isCashFlow` rompa este test en vez de romperle el mes al dueño.
+        for (categoria in RESERVED_CATEGORIES) {
             assertFalse(
                 isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, categoria),
                 "«$categoria» queda fuera del flujo de caja: tiene que ser reservada",
             )
+            assertFalse(
+                isCashFlow(AccountType.CHECKING, TransactionType.INCOME, categoria),
+                "«$categoria» tampoco es un ingreso, y ese es el lado que costó plata",
+            )
             assertTrue(isReservedCategory(categoria), "«$categoria» tiene que estar protegida")
         }
-    }
-
-    @Test
-    fun `la pata huerfana tambien esta protegida`() {
-        // No la excluye isCashFlow, pero la escribe el server sola (DELETE de una cuenta) y
-        // renombrarla dejaría movimientos explicando algo que ya no dice nada.
-        assertTrue(isReservedCategory(ORPHANED_LEG_CATEGORY))
     }
 
     @Test

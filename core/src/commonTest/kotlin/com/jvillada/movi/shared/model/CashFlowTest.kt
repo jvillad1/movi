@@ -137,4 +137,37 @@ class CashFlowTest {
     fun `la categoria de traspaso gana sobre la regla de CREDIT_CARD, que si contaria la compra`() {
         assertFalse(isCashFlow(AccountType.CREDIT_CARD, TransactionType.EXPENSE, TRANSFER_CATEGORY))
     }
+
+    // ── Categoría ORPHANED_LEG_CATEGORY: la pata que sobrevivió al borrado ──────────────────
+    //
+    // Ola 15. Perder a la hermana es un hecho sobre el REGISTRO de Movi, no sobre la plata: nadie
+    // ganó ni gastó nada el día que el dueño borró una cuenta. Mientras esta categoría contaba,
+    // borrar el crédito de $257.000.000 que se había desembolsado a la cuenta corriente subía
+    // «Ingresos del mes» de $12.400.000 a $269.400.000 — plata prestada como plata ganada.
+
+    @Test
+    fun `la pata huerfana de un traspaso no es un ingreso del mes`() {
+        assertFalse(isCashFlow(AccountType.CHECKING, TransactionType.INCOME, ORPHANED_LEG_CATEGORY))
+    }
+
+    @Test
+    fun `la pata huerfana de un traspaso tampoco es un egreso del mes`() {
+        assertFalse(isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, ORPHANED_LEG_CATEGORY))
+    }
+
+    @Test
+    fun `la pata huerfana gana sobre la regla de CREDIT_CARD, que si contaria la compra`() {
+        assertFalse(isCashFlow(AccountType.CREDIT_CARD, TransactionType.EXPENSE, ORPHANED_LEG_CATEGORY))
+    }
+
+    /**
+     * La comparación es por **nombre exacto**, igual que para las otras tres. Un nombre parecido
+     * es otra categoría y sí cuenta: si esto dejara de ser así, cualquiera podría escribir a mano
+     * algo cercano y sacar un gasto real del mes sin darse cuenta.
+     */
+    @Test
+    fun `una categoria parecida no se cuela en la exclusion`() {
+        assertTrue(isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, "Cuentas eliminadas"))
+        assertTrue(isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, "cuenta eliminada"))
+    }
 }

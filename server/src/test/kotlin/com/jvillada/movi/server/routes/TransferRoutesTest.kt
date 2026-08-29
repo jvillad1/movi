@@ -19,6 +19,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.TRANSFER_BOTH_LOANS_BLOCKED
 import com.jvillada.movi.shared.model.TRANSFER_CARD_BLOCKED
@@ -386,13 +387,129 @@ class TransferRoutesTest {
         }.bodyAsText()
         assertEquals(750_000L, balanceOf(accounts, ahorrosId))
 
-        // Y ahora sí es un gasto del mes: con el CDT fuera de Movi, esa plata salió del perímetro
-        // que la app lleva.
+        // Y sigue SIN ser un gasto del mes (ola 15): un traspaso nunca lo fue, y que la otra punta
+        // ya no exista es un hecho sobre el registro de Movi, no sobre la plata. El saldo de
+        // arriba es el que carga con la salida real; el mes, no.
         val summary = client.get("/api/dashboard/summary") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
         }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
-        assertEquals(250_000L, summary["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+        assertEquals(0L, summary["monthSpent"]?.jsonPrimitive?.long ?: 0L)
     }
+
+    // ── Ola 15 · la pata huérfana no puede inventar plata ─────────────────────
+
+    /**
+     * **La medición de esta rama, con el escenario real y sus cifras reales.**
+     *
+     * El dueño gana $12.400.000 en el mes. Aparte, saca un crédito de $257.000.000 que el banco
+     * le deposita en la cuenta: desde la ola 14 eso es un traspaso (deuda ↑, efectivo ↑) y por
+     * eso no toca ni ingresos ni gastos. Después borra la cuenta del crédito —el camino más
+     * corto para llegar acá es descubrir que contó la deuda dos veces y borrarla para rehacerla—
+     * y la pata del banco sobrevive, como tiene que sobrevivir.
+     *
+     * Antes de esta rama, esa pata volvía al flujo de caja por su categoría nueva y el Inicio
+     * pasaba a decir **«Ingresos $269.400.000»** para alguien que había ganado $12,4M: la plata
+     * prestada, presentada como plata ganada. Acá se fija que eso no vuelve a pasar, y que el
+     * **saldo** de la cuenta que el dueño no tocó no se mueve ni un peso — que es el otro lado
+     * de la promesa y la razón por la que la pata no se borra.
+     */
+    @Test
+    fun `borrar el credito desembolsado no convierte la plata prestada en ingreso del mes`() = testApplication {
+        wireApp()
+        sembrarSueldoDelMes()
+
+        // El desembolso: el crédito (que arranca en $0) deposita en Ahorros.
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = vehiculoId, toAccountId = ahorrosId, amount = 257_000_000L))
+        }
+
+        assertEquals(12_400_000L, monthIncome(), "un desembolso no es un ingreso: es deuda")
+        val saldoAntes = balanceOf(cuentas(), ahorrosId)
+        assertEquals(270_400_000L, saldoAntes, "el millón de la apertura + el sueldo + lo prestado")
+
+        val borrado = client.delete("/api/accounts/$vehiculoId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NoContent, borrado.status)
+
+        // La pata del banco sigue viva y quedó rotulada, como antes de esta rama.
+        val pata = transaction { Events.selectAll().where { Events.id eq "ev-to-1" }.single() }
+        assertEquals(ORPHANED_LEG_CATEGORY, pata[Events.category])
+        assertEquals(257_000_000L, pata[Events.amount])
+
+        // Y ESTO es lo que cambia: la cifra que decía $269.400.000.
+        assertEquals(
+            12_400_000L,
+            monthIncome(),
+            "la plata prestada no se convierte en plata ganada por borrar la otra punta",
+        )
+        // El invariante que no se negocia: el saldo de la cuenta que el dueño NO tocó.
+        assertEquals(saldoAntes, balanceOf(cuentas(), ahorrosId), "el saldo de Ahorros no se mueve")
+    }
+
+    /**
+     * El caso espejo, y el que cierra la otra mitad del agujero: si la que se borra es la cuenta
+     * de DESTINO, la pata que sobrevive es un EXPENSE, y sin esta rama inflaba «Gastos del mes» y
+     * además aparecía en el desglose por categoría —o sea, en Presupuestos— con el nombre
+     * «Cuenta eliminada».
+     */
+    @Test
+    fun `la pata huerfana de salida tampoco infla los gastos del mes`() = testApplication {
+        wireApp()
+        sembrarSueldoDelMes()
+
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(amount = 250_000L))
+        }
+        client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+
+        val resumen = dashboardSummary()
+        assertEquals(0L, resumen["monthSpent"]?.jsonPrimitive?.long ?: 0L, "no salió plata del bolsillo")
+        // `spentByCategory` puede venir ausente cuando queda vacío (es un default de kotlinx), y
+        // que quede vacío ES el resultado esperado: `orEmpty()` cubre las dos formas.
+        assertFalse(
+            resumen["spentByCategory"]?.jsonObject.orEmpty().containsKey(ORPHANED_LEG_CATEGORY),
+            "y ningún presupuesto de un mes viejo se entera",
+        )
+        // El saldo de Ahorros SÍ bajó y se queda abajo: los $250.000 salieron de verdad.
+        assertEquals(750_000L + 12_400_000L, balanceOf(cuentas(), ahorrosId))
+    }
+
+    /** El sueldo del mes: lo único que el dueño ganó de verdad en estas mediciones. */
+    private fun sembrarSueldoDelMes() = transaction {
+        Events.insert {
+            it[id] = "ev-sueldo"
+            it[userId] = userAId
+            it[accountId] = ahorrosId
+            it[type] = "INCOME"
+            it[amount] = 12_400_000L
+            it[currency] = "COP"
+            it[category] = "Salario"
+            it[description] = "Sueldo"
+            it[timestamp] = System.currentTimeMillis()
+            it[eventSource] = "MANUAL"
+            it[reconciliationStatus] = "RECONCILED"
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.dashboardSummary() =
+        client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+
+    private suspend fun ApplicationTestBuilder.monthIncome(): Long =
+        dashboardSummary()["monthIncome"]?.jsonPrimitive?.long ?: 0L
+
+    private suspend fun ApplicationTestBuilder.cuentas(): String =
+        client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
 
     /**
      * El caso espejo, y el que destapó M2: si la borrada es la cuenta de ORIGEN, la pata que
@@ -424,9 +541,12 @@ class TransferRoutesTest {
     /**
      * M3: la categoría de la pata suelta no puede ser «Otros». Este código ya cometió ese error
      * con el ajuste de saldo —`ADJUSTMENT_CATEGORY` existe justamente porque bajo «Otros»
-     * *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al instante»*—
-     * y acá el choque sería peor: esta pata SÍ vuelve al flujo de caja, así que caería derecho en
-     * `spentByCategory` y podría poner en OVER un presupuesto de un mes viejo.
+     * *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al instante»*—.
+     *
+     * Ola 15: ahora ni siquiera aparece en `spentByCategory`, porque `isCashFlow` la excluye. Este
+     * test sigue afirmando las DOS cosas —ni «Otros» ni nada— a propósito: si alguien vuelve a
+     * meter esta categoría al flujo de caja, la de acá abajo lo rompe, y si además le cambia el
+     * nombre a «Otros», lo rompe la de arriba. Son dos defensas distintas del mismo presupuesto.
      */
     @Test
     fun `la pata suelta no contamina un presupuesto llamado Otros`() = testApplication {
@@ -446,7 +566,10 @@ class TransferRoutesTest {
             .let { Json.parseToJsonElement(it).jsonObject["spentByCategory"]?.jsonObject.orEmpty() }
 
         assertFalse(porCategoria.containsKey("Otros"), "un presupuesto «Otros» no se entera de esto")
-        assertEquals(250_000L, porCategoria[ORPHANED_LEG_CATEGORY]?.jsonPrimitive?.long)
+        assertFalse(
+            porCategoria.containsKey(ORPHANED_LEG_CATEGORY),
+            "ni ningún otro presupuesto: la pata huérfana no es gasto del mes",
+        )
     }
 
     @Test
@@ -825,6 +948,53 @@ class TransferRoutesTest {
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertEquals(TRANSFER_CATEGORY_RESERVED, response.bodyAsText())
+    }
+
+    /**
+     * Ola 15. Hasta acá esta puerta estaba abierta y **no escondía nada**: «Cuenta eliminada»
+     * contaba en el mes como cualquier otra categoría. Desde que `isCashFlow` la excluye sí
+     * esconde, así que hay que cerrarla — un gasto real rotulado así desaparecería de «Gastos del
+     * mes» sin que nada lo dijera, exactamente el daño que la guarda de la ola 10 cerró en
+     * `POST /api/events` para las otras reservadas.
+     */
+    @Test
+    fun `no se puede rotular a mano un movimiento como Cuenta eliminada`() = testApplication {
+        wireApp()
+        val response = client.put("/api/events/ev-apertura-ahorros/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"$ORPHANED_LEG_CATEGORY"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertEquals(ORPHANED_LEG_NOT_MANUAL, response.bodyAsText())
+    }
+
+    /**
+     * Y la puerta de SALIDA sigue abierta, que es la otra mitad de la decisión: si esa plata sí se
+     * fue del hogar, el dueño lo dice en un toque y el movimiento vuelve a contar en el mes. Es lo
+     * único que la categoría reservada le negaba, y por eso la pata no se queda en «Traspaso».
+     */
+    @Test
+    fun `salir de Cuenta eliminada se puede, y ahi si vuelve a contar en el mes`() = testApplication {
+        wireApp()
+        sembrarSueldoDelMes()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(amount = 250_000L))
+        }
+        client.delete("/api/accounts/$cdtId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(0L, dashboardSummary()["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+
+        val response = client.put("/api/events/ev-from-1/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"Mercado"}""")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(250_000L, dashboardSummary()["monthSpent"]?.jsonPrimitive?.long ?: 0L)
     }
 
     @Test

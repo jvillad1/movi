@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -116,6 +117,55 @@ class TransactionsScreenTest {
     fun `el renglon del saldo inicial no lleva signo`() {
         assertFalse(rowShowsSign(apertura()))
         assertTrue(rowShowsSign(event()))
+    }
+
+    // ── Ola 15 · la pata huérfana tampoco es un ingreso ni un gasto ───────────────
+    //
+    // Misma decisión y mismo motivo que V6, un año después y con una cifra mucho más cara: el
+    // borrado del crédito de $257.000.000 desembolsado dejaba un «+$257.000.000» verde arriba de
+    // todo, bajo el chip Ingresos, mientras el total del mes —correctamente— ya no lo contaba.
+
+    private fun pataHuerfana(tipo: TransactionType = TransactionType.INCOME) = FinancialEvent(
+        id = "ph1",
+        accountId = "a1",
+        type = tipo,
+        amount = 257_000_000,
+        category = ORPHANED_LEG_CATEGORY,
+        description = "Desembolso desde Crédito · cuenta eliminada",
+        timestamp = 0L,
+    )
+
+    @Test
+    fun `la pata huerfana no entra en el chip Ingresos`() {
+        assertFalse(matchesChip(pataHuerfana(), CHIP_INGRESOS))
+    }
+
+    @Test
+    fun `la pata huerfana de salida no entra en el chip Gastos`() {
+        assertFalse(matchesChip(pataHuerfana(TransactionType.EXPENSE), CHIP_GASTOS))
+    }
+
+    @Test
+    fun `la pata huerfana si aparece en Todo, que es donde se la puede arreglar`() {
+        // No puede desaparecer de la lista: es la única puerta para recategorizarla si esa plata
+        // sí se movió de verdad.
+        assertTrue(matchesChip(pataHuerfana(), CHIP_TODO))
+    }
+
+    @Test
+    fun `el renglon de la pata huerfana no lleva signo`() {
+        assertFalse(rowShowsSign(pataHuerfana()))
+    }
+
+    /**
+     * `isTransferLeg` dice `false` para ella **a propósito**: el borrado le sacó el `transferId`,
+     * no hay hermana con la que juntarla en un renglón único y sí se puede recategorizar. Las dos
+     * preguntas son distintas y este test las mantiene distintas.
+     */
+    @Test
+    fun `la pata huerfana ya no es una pata de traspaso para collapseTransfers`() {
+        assertFalse(isTransferLeg(pataHuerfana()))
+        assertTrue(isOrphanedTransferLeg(pataHuerfana()))
     }
 
     // ── Ola 8 · V13 — encabezados de día legibles ─────────────────────────────────

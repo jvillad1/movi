@@ -51,6 +51,26 @@ const val TRANSFER_CATEGORY = "Traspaso"
  *   migración — los eventos de apertura viejos (si los hay) quedaron con categoría "Otros
  *   ingresos"/"Otros" y NO se benefician de esta regla; ver el commit de F54.
  *
+ * - **Categoría [ORPHANED_LEG_CATEGORY] → nunca**, sin importar tipo de cuenta ni tipo de
+ *   movimiento. Es la pata de un traspaso que **sobrevivió al borrado de la cuenta de la otra
+ *   punta** (ver `desenlazarPatasHermanas` en `AccountRoutes.kt`). Nació sin ser flujo de caja, y
+ *   perder a la hermana es un hecho sobre el REGISTRO de Movi, no sobre la plata: nada se ganó ni
+ *   se gastó el día que el dueño borró una cuenta. Durante una ola esta categoría estuvo del otro
+ *   lado, con el argumento de que «con la otra cuenta fuera de Movi, esa plata salió del perímetro
+ *   que la app lleva». El argumento se cae solo en el caso que la ola 14 volvió probable: un
+ *   crédito de $257.000.000 desembolsado a la cuenta corriente, y después el crédito borrado. Ahí
+ *   la plata no salió del perímetro — **entró**, y es prestada. Medido: «Ingresos del mes»
+ *   pasaba de $12.400.000 a **$269.400.000** por un borrado, o sea plata prestada presentada como
+ *   plata ganada. El **saldo** de la cuenta sobreviviente sigue moviéndose (esta función no lo
+ *   toca), que es justo lo que tiene que pasar: la plata está ahí.
+ *
+ *   Es la única de las cuatro reservadas de la que se puede **salir**: `PUT
+ *   /api/events/{id}/category` bloquea recategorizar una pata de traspaso viva, pero no una
+ *   huérfana. Ese es el escape para el caso contrario —el traspaso a una cuenta que dejó de ser
+ *   del hogar, donde la plata SÍ se fue—: el dueño le pone la categoría real y vuelve a contar,
+ *   en un toque. Por defecto no se inventa un ingreso; contarlo es una decisión suya, no del
+ *   borrado.
+ *
  * - **Categoría [CARD_PAYMENT_CATEGORY] → nunca**, sin importar de qué cuenta salga. Una
  *   compra con tarjeta ya se contó como EXPENSE en la cuenta CREDIT_CARD — el momento real
  *   en que el hogar consumió. Pagar el extracto es plata saliendo de la cuenta de ahorros
@@ -86,6 +106,7 @@ fun isCashFlow(accountType: AccountType, type: TransactionType, category: String
     category == TRANSFER_CATEGORY -> false
     category == OPENING_CATEGORY -> false
     category == CARD_PAYMENT_CATEGORY -> false
+    category == ORPHANED_LEG_CATEGORY -> false
     accountType == AccountType.LOAN        -> false
     accountType == AccountType.CREDIT_CARD -> type == TransactionType.EXPENSE
     else                                    -> true

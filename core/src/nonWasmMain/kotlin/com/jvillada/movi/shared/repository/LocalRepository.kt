@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.orphanedLegDescription
 import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
@@ -643,6 +644,12 @@ class LocalRepository(
         // Y hacia la categoría reservada tampoco: sería fabricar media pata — un movimiento que
         // se deja de contar en el mes sin ninguna pata del otro lado que explique adónde fue.
         if (category == TRANSFER_CATEGORY) throw ApiException(422, TRANSFER_CATEGORY_RESERVED)
+        // Y a «Cuenta eliminada» tampoco (ola 15): la escribe el borrado de una cuenta y nadie
+        // más. Desde que queda fuera del flujo de caja, escribirla a mano sacaría un gasto REAL
+        // del mes en el teléfono, el `SyncEngine` lo empujaría, el server contestaría 422 y la
+        // fila se reintentaría cada 30 segundos para siempre — el mismo modo de falla que ya
+        // documenta la guarda de `postEvent` acá arriba.
+        if (category == ORPHANED_LEG_CATEGORY) throw ApiException(422, ORPHANED_LEG_NOT_MANUAL)
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
