@@ -141,6 +141,21 @@ class TransferRoutesTest {
                 it[reconciliationStatus] = "RECONCILED"
             }
 
+            // Y sus TÉRMINOS de verdad, no solo la cuenta: sin esta fila, el test de que un
+            // desembolso no toca el contrato del crédito comparaba 0 filas contra 0 filas y
+            // pasaba aunque el endpoint las destrozara (hallazgo de la revisión de esta rama).
+            Credits.insert {
+                it[accountId]   = libranzaId
+                it[userId]      = userAId
+                it[bank]        = "Bancolombia"
+                it[principal]   = 80_000_000L
+                it[rateEa]      = 12.5
+                it[termMonths]  = 120
+                it[installment] = 1_200_000L
+                it[dayOfMonth]  = 5
+                it[startDate]   = "2022-03-01"
+            }
+
             // La libranza arranca debiendo $50.000.000, también como evento real (EXPENSE sube la
             // deuda en una cuenta LOAN — ver signedDelta).
             Events.insert {
@@ -522,7 +537,7 @@ class TransferRoutesTest {
 
         val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
         assertEquals("Desembolso a Ahorros", body["from"]!!.jsonObject["description"]!!.jsonPrimitive.content)
-        assertEquals("Desembolso de Libranza", body["to"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+        assertEquals("Desembolso desde Libranza", body["to"]!!.jsonObject["description"]!!.jsonPrimitive.content)
 
         val accounts = client.get("/api/accounts") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
@@ -604,18 +619,31 @@ class TransferRoutesTest {
     @Test
     fun `un desembolso no toca los terminos del credito`() = testApplication {
         wireApp()
-        val terminos = transaction {
-            Credits.selectAll().where { Credits.accountId eq libranzaId }.count()
-        }
+        val antes = terminosDeLaLibranza()
         client.post("/api/transfers") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             contentType(ContentType.Application.Json)
             setBody(transferBody(fromAccountId = libranzaId, toAccountId = ahorrosId, amount = 20_000_000L))
         }
-        assertEquals(
-            terminos,
-            transaction { Credits.selectAll().where { Credits.accountId eq libranzaId }.count() },
-        )
+        assertEquals(antes, terminosDeLaLibranza(), "el contrato del crédito no se mueve")
+        // Y para que la comparación de arriba signifique algo: los términos EXISTEN.
+        assertEquals(listOf<Any>("Bancolombia", 80_000_000L, 12.5, 120, 1_200_000L, 5, "2022-03-01"), antes)
+    }
+
+    /**
+     * Los valores del contrato, no un conteo de filas.
+     *
+     * La primera versión de este test contaba filas de `credit_terms` para la libranza, y el
+     * harness no sembraba ninguna: afirmaba `0 == 0` y habría pasado igual si el endpoint hubiera
+     * borrado los términos. Con los valores, la aserción dice lo que promete el nombre.
+     */
+    private fun terminosDeLaLibranza(): List<Any> = transaction {
+        Credits.selectAll().where { Credits.accountId eq libranzaId }.single().let {
+            listOf(
+                it[Credits.bank], it[Credits.principal], it[Credits.rateEa], it[Credits.termMonths],
+                it[Credits.installment], it[Credits.dayOfMonth], it[Credits.startDate],
+            )
+        }
     }
 
     @Test

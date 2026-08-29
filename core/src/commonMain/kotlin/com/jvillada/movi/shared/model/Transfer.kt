@@ -102,6 +102,25 @@ const val TRANSFER_ID_ALREADY_USED =
  *
  * **No es reservada.** A diferencia de [TRANSFER_CATEGORY], nada bloquea entrar ni salir de acá:
  * el dueño puede recategorizar la fila desde Movimientos, que es justo lo que antes no podía.
+ *
+ * ## Ola 14 — esto dejó de ser un caso raro, y quien lo tome después tiene que saberlo
+ *
+ * Desde que un préstamo puede ser una punta del traspaso ([validateTransfer]), la pata que
+ * sobrevive puede valer **el monto entero de un crédito**. Medido en el navegador: borrada la
+ * cuenta del crédito, la pata del banco —un INCOME de $257.000.000 en una cuenta de activo—
+ * vuelve a entrar al flujo de caja por esta categoría, e Inicio pasó a decir **«Ingresos
+ * $269,4M»** para alguien que había ganado $12,4M.
+ *
+ * Y no es que la rama haya dejado la probabilidad igual: **la sube**. El camino más corto para
+ * llegar acá es la recuperación del propio error que la rama evita — crear el crédito con su
+ * deuda (la costumbre de siempre), anotar además el desembolso, ver la deuda al doble, y **borrar
+ * el crédito para empezar de nuevo**. Eso es lo que hace cualquiera al descubrir un duplicado.
+ *
+ * **No se arregló acá a propósito**, y no por tamaño: arreglarlo es cambiarle el significado a
+ * esta categoría, que este mismo KDoc defiende con detalle (vuelve a entrar al flujo porque «esa
+ * plata sí se movió»). Que una pata huérfana **de un crédito** sea la excepción a esa regla es
+ * una decisión de producto con su propia discusión, no un ajuste al pasar. Queda escrito para que
+ * quien la tome no lo lea como una rareza teórica.
  */
 const val ORPHANED_LEG_CATEGORY = "Cuenta eliminada"
 
@@ -210,7 +229,26 @@ enum class TransferKind {
     ENTRE_CUENTAS,
 }
 
-/** [TransferKind] de este par de cuentas. Solo tiene sentido sobre un par que [validateTransfer] aceptó. */
+/**
+ * Si sale de un préstamo es un desembolso; si entra a uno, un abono extraordinario.
+ *
+ * ## Qué pasa si el dueño confunde la cuota mensual con un abono extraordinario
+ *
+ * Las tres señales que separan un caso del otro —el texto de la hoja al elegir el crédito, el
+ * nombre del renglón en Movimientos, y la descripción que queda guardada— alcanzan para quien
+ * las lee. Si igual se equivoca y anota la cuota como traspaso, el fallo es **silencioso en las
+ * cifras**: «Gastos del mes» queda subestimado en la cuota entera, y la deuda baja por el monto
+ * completo cuando buena parte de una cuota es interés y no capital.
+ *
+ * Pero no queda sin ninguna alarma, y conviene tenerlo escrito: la conciliación de recurrentes
+ * **descarta las patas de traspaso** (`occurrenceCandidatesFor` filtra `transferId != null`), así
+ * que el recordatorio de esa cuota **no se cierra y le sigue insistiendo**. Un aviso que vuelve
+ * sobre una cuota que él sabe que pagó es exactamente la pista de que usó la herramienta
+ * equivocada. Ese filtro se escribió para otra cosa; acá hace de red, y por eso no se toca.
+ *
+ * Devuelve el [TransferKind] de este par de cuentas. Solo tiene sentido sobre un par que
+ * [validateTransfer] aceptó.
+ */
 fun transferKindFor(from: Account, to: Account): TransferKind = when {
     from.type == AccountType.LOAN -> TransferKind.DESEMBOLSO
     to.type == AccountType.LOAN -> TransferKind.ABONO_EXTRAORDINARIO
@@ -296,11 +334,16 @@ fun transferLegsFor(
  *
  * Sigue siendo la misma categoría reservada [TRANSFER_CATEGORY] en las dos patas: el nombre que se
  * lee cambia, la mecánica del mes y de los saldos no.
+ *
+ * Las tres formas dicen «… a Destino» / «… desde Origen», con la MISMA preposición en los tres
+ * casos. La primera versión tenía «Desembolso **de** Libranza» junto a «Abono extraordinario
+ * **desde** Ahorros»: dos formas de decir lo mismo en renglones que se leen uno debajo del otro,
+ * sin que la diferencia significara nada.
  */
 internal fun transferLegHeadlines(from: Account, to: Account): Pair<String, String> =
     when (transferKindFor(from, to)) {
         TransferKind.DESEMBOLSO ->
-            "Desembolso a ${to.name}" to "Desembolso de ${from.name}"
+            "Desembolso a ${to.name}" to "Desembolso desde ${from.name}"
         TransferKind.ABONO_EXTRAORDINARIO ->
             "Abono extraordinario a ${to.name}" to "Abono extraordinario desde ${from.name}"
         TransferKind.ENTRE_CUENTAS ->

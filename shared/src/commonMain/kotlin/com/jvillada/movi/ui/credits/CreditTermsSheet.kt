@@ -90,8 +90,13 @@ fun CreditTermsSheet(
     // origen), que es el mismo movimiento que pone la plata en la cuenta corriente. Exigir la
     // deuda acá obligaba a declararla dos veces y la dejaba al doble. Un crédito viejo se sigue
     // creando igual que siempre: se escribe lo que se debe hoy y no lleva traspaso.
+    //
+    // Lo único que queda validado del lado de la cuenta nueva es el nombre. NO hay una guarda de
+    // «no puede ser negativa»: `MoneyField` no produce negativos (el filtro solo deja pasar
+    // dígitos), así que sería una condición que aparenta cubrir algo y nunca se evalúa a false.
+    // El server sí la tiene, que es donde importa — ahí sí llegan cuerpos escritos a mano.
     val accountValid = if (editing != null) true
-        else if (newAccountMode) newAccountName.isNotBlank() && (newAccountDebt ?: 0L) >= 0L
+        else if (newAccountMode) newAccountName.isNotBlank()
         else selectedAccountId != null
     val canSave = termsValid && accountValid && !saving
 
@@ -99,7 +104,6 @@ fun CreditTermsSheet(
     // mismo orden en que aparecen los campos en la hoja.
     val missingFieldMessage = when {
         editing == null && newAccountMode && newAccountName.isBlank() -> "Falta el nombre de la cuenta"
-        editing == null && newAccountMode && (newAccountDebt ?: 0L) < 0L -> "La deuda no puede ser negativa"
         editing == null && !newAccountMode && selectedAccountId == null -> "Elige una cuenta"
         bank.isBlank() -> "Falta el banco"
         (principal ?: 0L) <= 0L -> "Falta el capital original"

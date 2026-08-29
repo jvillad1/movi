@@ -55,7 +55,7 @@ import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
 import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.components.CardRow
-import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
@@ -186,8 +186,9 @@ fun defaultTransferAccounts(accounts: List<Account>): List<Account> =
  * Es la pieza que hace que el error caro sea imposible de no ver. Un desembolso **sube** la
  * deuda, y el dueño que ya creó el crédito en Créditos con su deuda actual no tiene por qué
  * saber que registrarlo otra vez acá se la deja al doble. Un aviso genérico se lee y se olvida;
- * la aritmética con sus dos cifras, no: «Deuda de Libranza: $257.000.000 → $514.000.000» se
- * discute sola con lo que él sabe que debe.
+ * la aritmética con sus dos cifras, no: «Deuda de Libranza: $257.000.000 pasa a $514.000.000» se
+ * discute sola con lo que él sabe que debe. (Dice «pasa a» y no «→» porque la flecha sale como ▯
+ * en wasm — la fuente del canvas no trae el glifo, ver [transferRowSubtitle].)
  *
  * El saldo de una cuenta LOAN es deuda positiva y sale derivado de los eventos
  * (`enrichWith`/`computeBalances`), así que el «después» es una suma, no una predicción: es
@@ -206,9 +207,20 @@ fun defaultTransferAccounts(accounts: List<Account>): List<Account> =
 fun deudaDespuesDelTraspaso(from: Account?, to: Account?, amount: Long?): String? {
     if (from == null || to == null || amount == null || amount <= 0L) return null
     val credito = listOf(from, to).firstOrNull { it.type == AccountType.LOAN } ?: return null
-    if (credito.currency != "COP") return null
     val despues = credito.balance + if (credito.id == from.id) amount else -amount
-    return "Deuda de ${credito.name}: ${formatCOP(credito.balance)} pasa a ${formatCOP(despues)}"
+    // [signedMoney] y no [formatCOP] por dos razones, las dos de la revisión de esta rama:
+    //
+    // 1. **Un crédito en otra moneda también tiene derecho a la aritmética.** La primera versión
+    //    devolvía `null` cuando el préstamo no era COP, o sea que el renglón desaparecía justo
+    //    donde más falta hace: en la cuenta cuyo monto el dueño NO puede verificar de memoria.
+    //    Hoy solo se llega ahí por `POST /api/accounts` (la UI de Créditos crea únicamente
+    //    cuentas COP), pero el silencio era la peor respuesta posible para ese caso.
+    // 2. **El signo.** [formatMoney] lo descarta, y una deuda que queda negativa —abonar de más,
+    //    que es exactamente lo que hace quien cancela un crédito— tiene que leerse «−$500.000»
+    //    y no «$500.000».
+    val moneda = credito.currency
+    return "Deuda de ${credito.name}: ${signedMoney(credito.balance, moneda)} " +
+        "pasa a ${signedMoney(despues, moneda)}"
 }
 
 /**

@@ -140,11 +140,16 @@ class TransferTest {
         }
     }
 
+    /**
+     * Las tres formas usan la MISMA preposición en la pata de destino («… desde Origen»). La
+     * primera versión decía «Desembolso **de** Libranza» junto a «Abono extraordinario **desde**
+     * Ahorros»: dos maneras de decir lo mismo en renglones que se leen uno debajo del otro.
+     */
     @Test
     fun `las patas de un credito se llaman desembolso y abono extraordinario, no traspaso`() {
         val (delPrestamo, aLaCuenta) = transferLegsFor(request(), prestamo, ahorros)
         assertEquals("Desembolso a Ahorros", delPrestamo.description)
-        assertEquals("Desembolso de Libranza", aLaCuenta.description)
+        assertEquals("Desembolso desde Libranza", aLaCuenta.description)
 
         val (deLaCuenta, alPrestamo) = transferLegsFor(request(), ahorros, prestamo)
         assertEquals("Abono extraordinario a Libranza", deLaCuenta.description)
