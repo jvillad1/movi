@@ -1,7 +1,9 @@
 package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.SubConfidence
@@ -278,10 +280,74 @@ class DashboardLogicTest {
         goals = listOf(Goal(id = "g1", name = "Viaje", target = 5_000_000, accountId = "a1", targetDate = "2027-01-01", saved = 1_200_000)),
     )
 
+    /**
+     * El conteo de la fila «Cuentas» tiene que hablar del MISMO conjunto que su cifra —los
+     * activos, o sea toda cuenta que no sea deuda— y que el de la pantalla a la que lleva, que
+     * desde F61 solo lista los grupos Dinero e Inversión. Contar `accounts.size` decía
+     * «6 cuentas» al lado de la cifra de una sola, y al tocar aparecía «DINERO · 1».
+     */
+    @Test
+    fun `el conteo de Cuentas nombra el mismo conjunto que su cifra y que la pantalla de destino`() {
+        val fig = quickLinkFigure("accounts", DashboardData(accounts = cuentasDelDueño))
+        assertEquals("$12.383.363", fig.value)
+        assertEquals("1 cuenta", fig.sub, "cinco de las seis son deuda y no entran en la cifra")
+        // Lo que el dueño ve al llegar: la suma de los dos grupos que lista la pantalla.
+        val enPantalla = cuentasDelDueño.count {
+            it.type.group == AccountGroup.DINERO || it.type.group == AccountGroup.INVERSION
+        }
+        assertEquals("$enPantalla cuenta", fig.sub)
+    }
+
+    @Test
+    fun `las cuentas de inversion cuentan y suman, las de deuda ni una cosa ni la otra`() {
+        val d = DashboardData(
+            accounts = listOf(
+                Account("a1", "Ahorros", AccountType.SAVINGS, 12_383_363),
+                Account("i1", "CDT Bancolombia", AccountType.INVESTMENT, 3_000_000),
+                Account("i2", "Fondo Nu", AccountType.INVESTMENT, 700_000),
+                Account("l1", "Libre inversión", AccountType.LOAN, 41_093_905),
+            ),
+        )
+        val fig = quickLinkFigure("accounts", d)
+        assertEquals("$16.083.363", fig.value)
+        assertEquals("3 cuentas", fig.sub)
+    }
+
+    /**
+     * El estado de quien arranca cargando sus deudas: la cifra es $0 porque no hay activos, y
+     * «0 cuentas» al lado de un cero se lee como que algo se perdió. La fila dice lo mismo que
+     * los dos grupos vacíos de la pantalla de destino, y las deudas siguen contadas y sumadas
+     * en la fila «Créditos», justo debajo.
+     */
+    @Test
+    fun `con solo creditos la fila Cuentas no dice 0 cuentas`() {
+        val soloDeudas = DashboardData(
+            accounts = cuentasDelDueño.filter { it.type == AccountType.LOAN },
+            credits = cuentasDelDueño.filter { it.type == AccountType.LOAN }
+                .map { CreditSummary(it, terms = null, paidPct = null) },
+        )
+        val fig = quickLinkFigure("accounts", soloDeudas)
+        assertNull(fig.value, "sin activos no hay cifra que mostrar — nunca un $0 grande")
+        assertEquals("Sin cuentas aún", fig.sub)
+        // Y las deudas no desaparecen del Inicio: la fila de abajo las cuenta y las suma.
+        assertEquals("5 créditos", quickLinkFigure("credits", soloDeudas).sub)
+        assertEquals("$1.505.093.905", quickLinkFigure("credits", soloDeudas).value)
+    }
+
+    @Test
+    fun `una tarjeta sola tampoco cuenta como cuenta`() {
+        val soloTarjeta = DashboardData(
+            accounts = listOf(Account("c1", "Visa", AccountType.CREDIT_CARD, 500_000)),
+        )
+        assertNull(quickLinkFigure("accounts", soloTarjeta).value)
+        assertEquals("Sin cuentas aún", quickLinkFigure("accounts", soloTarjeta).sub)
+    }
+
     @Test
     fun `cada acceso muestra la cifra de su destino`() {
         assertEquals("$2.000.000", quickLinkFigure("accounts", data).value)   // activos, sin la tarjeta
-        assertEquals("2 cuentas", quickLinkFigure("accounts", data).sub)
+        // La tarjeta tampoco cuenta: la cifra no la suma y la pantalla de Cuentas no la lista.
+        assertEquals("1 cuenta", quickLinkFigure("accounts", data).sub)
         assertEquals("$10.000.000", quickLinkFigure("credits", data).value)
         assertEquals("1 crédito", quickLinkFigure("credits", data).sub)
         val b = quickLinkFigure("budgets", data)
