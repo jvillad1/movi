@@ -15,6 +15,15 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 /** Non-voided events for a user, optionally filtered to one account. */
+/**
+ * ⚠️ **No agregar `LIMIT`, `OFFSET` ni paginado acá sin tocar `LocalRepository.getEvents`.**
+ *
+ * El cliente lee «un evento sellado en el teléfono que el server NO devolvió» como «se anuló o se
+ * borró en otro lado», y deja de mostrarlo. Esa lectura solo es válida mientras la respuesta sea
+ * el conjunto **entero** del mismo alcance. Si algún día esto pagina, el teléfono empezaría a
+ * esconder movimientos viejos **en silencio**: sin error, sin log y sin nada en pantalla que lo
+ * delate — justo el susto que ese arreglo vino a curar.
+ */
 suspend fun loadNonVoidedEvents(uid: String, accountId: String? = null): List<FinancialEvent> =
     dbQuery { loadNonVoidedEventsIn(uid, accountId) }
 

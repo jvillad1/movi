@@ -497,16 +497,34 @@ class LocalRepository(
         // El caso que originó todo esto es el de la lista completa (Movimientos), así que el
         // arreglo llega igual. En el detalle de una cuenta se prefiere mostrar de más: el dueño
         // acaba de pasar el susto de creer que había perdido su mes.
-        val fantasmas = if (accountId == null) selladasAntesDePreguntar - porId.keys else emptySet()
+        //
+        // Y nunca sobre una respuesta VACÍA: si el server contesta 200 sin nada mientras el
+        // teléfono tiene filas selladas, la explicación más probable no es que el dueño haya
+        // borrado su historia entera, sino un filtro nuevo, un `uid` mal resuelto o un cambio de
+        // alcance del endpoint. Ante la duda se muestra de más — una lista vacía no es evidencia
+        // suficiente para hacer desaparecerle el mes a alguien.
+        val fantasmas = when {
+            accountId != null -> emptySet()
+            remotos.isEmpty() -> emptySet()
+            else -> selladasAntesDePreguntar - porId.keys
+        }
         // El contenido de lo que el server conoce sale del server; lo que solo existe acá (todavía
         // sin subir) sale del espejo; y lo que el server ya no tiene se deja de mostrar.
         return leerEventosLocales(uid, accountId)
             .filterNot { it.id in fantasmas }
-            // El contenido gana el server, pero `syncedAt` NO: es un dato del espejo —«¿esta fila
-            // ya se subió?»— que la respuesta remota no siempre trae. Dejar que el nulo del server
-            // pisara el sello local haría que el SyncEngine volviera a empujar todo lo que acaba
-            // de bajar, en un ciclo eterno de 30 segundos.
-            .map { local -> porId[local.id]?.copy(syncedAt = local.syncedAt) ?: local }
+            // Misma regla que en el espejo, y por el mismo motivo: **una fila sin sellar gana**.
+            // Sin sello significa que el teléfono tiene algo que el server todavía no sabe —una
+            // recategorización, una fecha corregida—, así que devolver la versión remota le
+            // mostraría al dueño el valor viejo que él acaba de cambiar.
+            //
+            // Para las selladas manda el server, que es la autoridad, salvo `syncedAt`: ese es un
+            // dato del espejo —«¿esta fila ya se subió?»— que la respuesta remota no siempre trae.
+            // Dejar que el nulo del server pisara el sello local haría que el SyncEngine volviera
+            // a empujar todo lo que acaba de bajar, en un ciclo eterno de 30 segundos.
+            .map { local ->
+                if (local.syncedAt == null) local
+                else porId[local.id]?.copy(syncedAt = local.syncedAt) ?: local
+            }
             .masRecientePrimero()
     }
 
@@ -545,7 +563,14 @@ class LocalRepository(
                     // es flujo de caja, así que los movimientos de cuentas de deuda no entran.
                     // El renglón se sigue listando; solo no encabeza el día.
                     date = date,
-                    total = items.filter { it.countsAsCashFlow }.sumOf {
+                    // `currency == "COP"` NO es de adorno: es la mitad del criterio que usa el
+                    // server (ver `/api/events/by-day`) y acá faltaba. Mientras el espejo local
+                    // solo tenía lo que este teléfono había escrito no se notaba; desde que baja
+                    // lo del server, un gasto en dólares entraba al total como si fueran pesos —
+                    // con un COP de $10.000 y un USD de 100, el server decía −10.000 y el
+                    // teléfono −10.100. La columna `currency` ni siquiera existe en el espejo
+                    // (todo se lee como COP), así que sin este filtro la diferencia es invisible.
+                    total = items.filter { it.currency == "COP" && it.countsAsCashFlow }.sumOf {
                         if (it.type == TransactionType.INCOME) it.amount else -it.amount
                     },
                     items = items,
@@ -986,11 +1011,25 @@ class LocalRepository(
      * subir: sin sello entraría en `selectUnsynced` y el teléfono empezaría a empujar de vuelta
      * al server cada cosa que acaba de bajar.
      *
-     * `INSERT OR REPLACE` a propósito: si la fila ya estaba, gana la del server, que es la
-     * autoridad. Lo que el teléfono escribió y todavía no subió **no pasa por acá** —no está en
-     * la respuesta remota— así que este reemplazo no puede pisarlo.
+     * **Una fila local SIN SELLAR no se pisa nunca.** La primera versión de esto decía que «lo
+     * que el teléfono escribió y todavía no subió no pasa por acá, porque no está en la respuesta
+     * remota», y era **falso**: una fila puede estar en el server *y* sin sellar en local, que es
+     * exactamente la ventana que `markSyncedIfUnchanged` existe para cubrir. El dueño anota un
+     * gasto, el ciclo lo empuja como «Comida», él lo recategoriza a «Mercado» —la fila queda sin
+     * sellar a propósito— y la siguiente lectura le escribía «Comida» encima **y la sellaba**:
+     * `selectUnsynced` pasaba de 1 a 0 y ningún ciclo futuro volvía a empujarla. Silencioso y
+     * permanente. Lo mismo con una fecha corregida.
+     *
+     * Eso reabría por la puerta de la LECTURA los dos agujeros que el repo ya cerró dos veces
+     * (ver los KDoc de `SyncEngine.syncEvents` y `updateEventCategory`). Y no hacía falta una
+     * carrera fina: alcanza con un POST que el server confirma y cuya respuesta se pierde.
+     *
+     * Para el resto, `INSERT OR REPLACE`: si la fila ya estaba **y ya estaba sellada**, gana la
+     * del server, que es la autoridad.
      */
     private fun mirrorEventLocally(event: FinancialEvent, uid: String) {
+        val local = db.financialEventQueries.selectById(event.id, uid).executeAsOneOrNull()
+        if (local != null && local.syncedAt == null) return
         val ahora = Clock.System.now().toEpochMilliseconds()
         db.financialEventQueries.insert(
             event.id, event.accountId, event.type.name, event.amount,

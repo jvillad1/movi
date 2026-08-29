@@ -117,19 +117,105 @@ class LocalRepositoryTest {
      * La regla que puede convertir este arreglo en una pérdida de datos aparente: un gasto anotado
      * **sin señal** todavía no está en el server, y no puede desaparecer de la pantalla porque la
      * lista ahora salga de allá.
+     *
+     * Va sobre `getEvents()` **sin cuenta** a propósito: es la lista completa la única donde corre
+     * la regla anti-fantasma, así que preguntar por una cuenta probaría el caso fácil. La primera
+     * versión de este test hacía justamente eso y pasaba igual con el código viejo.
      */
     @Test
     fun lo_anotado_y_no_subido_sigue_viendose() = runBlocking {
         repo.createAccount(Account("accP", "Efectivo", AccountType.CASH, 0L))
         repo.postEvent(event("pendiente", "accP", TransactionType.EXPENSE, 7_000L))
-        // El server no lo conoce: es justo lo que la cola de subida todavía no empujó.
+        // El server conoce OTRO evento, no el pendiente: así la respuesta remota no está vacía
+        // (que desactivaría la regla) y el pendiente es lo único que la regla podría tapar.
         val remoto = NoOpRepository()
         remoto.cuentasDelServer += Account("accP", "Efectivo", AccountType.CASH, 0L)
+        remoto.eventosDelServer += event("otro", "accP", TransactionType.EXPENSE, 1_000L)
+            .copy(syncedAt = 1L)
         val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
 
-        val eventos = conRed.getEvents("accP")
+        val eventos = conRed.getEvents()
 
         assertTrue(eventos.any { it.id == "pendiente" }, "lo que falta subir se sigue viendo")
+        assertTrue(eventos.any { it.id == "otro" }, "y lo del server también")
+    }
+
+    /**
+     * El lado positivo de la regla anti-fantasma, que no tenía ni un test: un movimiento que el
+     * dueño **borró en la web** tiene que dejar de verse en el teléfono. Es la mitad que justifica
+     * que la regla exista.
+     */
+    @Test
+    fun lo_que_el_server_ya_no_tiene_deja_de_verse() = runBlocking {
+        repo.createAccount(Account("accF", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("borrado-en-la-web", "accF", TransactionType.EXPENSE, 9_000L))
+        repo.postEvent(event("sigue-vivo", "accF", TransactionType.EXPENSE, 4_000L))
+        // Selladas las dos: ya se subieron, o sea que el server las conocía.
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "borrado-en-la-web")
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "sigue-vivo")
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accF", "Ahorros", AccountType.SAVINGS, 0L)
+        remoto.eventosDelServer += event("sigue-vivo", "accF", TransactionType.EXPENSE, 4_000L)
+            .copy(syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val eventos = conRed.getEvents()
+
+        assertTrue(eventos.none { it.id == "borrado-en-la-web" }, "lo que el server ya no tiene se deja de mostrar")
+        assertTrue(eventos.any { it.id == "sigue-vivo" }, "lo que sí tiene se queda")
+    }
+
+    /**
+     * Y la guarda: una respuesta **vacía** no es evidencia de que el dueño haya borrado su
+     * historia. Un filtro nuevo del lado del server, o un `uid` mal resuelto, no pueden costarle
+     * el mes entero.
+     */
+    @Test
+    fun una_respuesta_vacia_no_borra_la_pantalla() = runBlocking {
+        repo.createAccount(Account("accV", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("sellado", "accV", TransactionType.EXPENSE, 9_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "sellado")
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accV", "Ahorros", AccountType.SAVINGS, 0L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val eventos = conRed.getEvents()
+
+        assertTrue(eventos.any { it.id == "sellado" }, "con el server en blanco se muestra de más, no de menos")
+    }
+
+    /**
+     * El defecto que encontró la revisión de este mismo cambio: una corrección local que todavía
+     * no se pudo subir **no puede** ser pisada por lo que baja del server.
+     *
+     * El dueño anota un gasto, el ciclo lo empuja como «Comida», él lo recategoriza a «Mercado»
+     * —la fila queda sin sellar a propósito, ver `markSyncedIfUnchanged`— y la lectura siguiente
+     * le escribía «Comida» encima **y sellaba la fila**: la corrección se perdía para siempre,
+     * en silencio, y ningún ciclo futuro volvía a intentarlo.
+     */
+    @Test
+    fun lo_que_baja_del_server_no_pisa_una_correccion_sin_subir() = runBlocking {
+        repo.createAccount(Account("accC", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("corregido", "accC", TransactionType.EXPENSE, 50_000L))
+        // Lo que el dueño acaba de corregir en el teléfono, todavía sin subir.
+        db.financialEventQueries.updateCategory("Mercado", "corregido", testUserId)
+
+        // El server sigue teniendo la versión vieja: es justo la ventana del problema.
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accC", "Ahorros", AccountType.SAVINGS, 0L)
+        remoto.eventosDelServer += event("corregido", "accC", TransactionType.EXPENSE, 50_000L)
+            .copy(category = "Comida", syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val leido = conRed.getEvents().single { it.id == "corregido" }
+
+        assertEquals("Mercado", leido.category, "la corrección local gana sobre la versión vieja del server")
+        assertTrue(
+            db.financialEventQueries.selectUnsynced(testUserId).executeAsList().any { it.id == "corregido" },
+            "y la fila sigue en la cola de subida, para que el ciclo la empuje",
+        )
     }
 
     /**
@@ -154,15 +240,33 @@ class LocalRepositoryTest {
         assertTrue(eventos.none { it.id == "anulado" }, "lo anulado acá no revive aunque el server lo mande")
     }
 
-    /** Un evento que está en las dos fuentes sale una sola vez. */
+    /**
+     * Un evento que está en las dos fuentes sale una sola vez, **y gana el contenido del server**.
+     *
+     * La primera versión de este test solo contaba ocurrencias, y la clave primaria del espejo ya
+     * lo impedía: no podía fallar. Lo que sí se puede romper es la mezcla — que el server sea la
+     * autoridad para una fila ya sellada.
+     */
     @Test
     fun no_se_duplica_lo_que_esta_en_las_dos_fuentes() = runBlocking {
         repo.createAccount(Account("accD", "CDT", AccountType.SAVINGS, 0L))
         repo.postEvent(event("comun", "accD", TransactionType.INCOME, 3_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "comun")
 
-        val eventos = repo.getEvents("accD")
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accD", "CDT", AccountType.SAVINGS, 0L)
+        remoto.eventosDelServer += event("comun", "accD", TransactionType.INCOME, 3_000L)
+            .copy(description = "el nombre que puso la web", syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
 
-        assertEquals(1, eventos.count { it.id == "comun" })
+        val eventos = conRed.getEvents()
+
+        assertEquals(1, eventos.count { it.id == "comun" }, "una sola vez")
+        assertEquals(
+            "el nombre que puso la web",
+            eventos.single { it.id == "comun" }.description,
+            "y para una fila ya sellada manda el server",
+        )
     }
 
     /**
