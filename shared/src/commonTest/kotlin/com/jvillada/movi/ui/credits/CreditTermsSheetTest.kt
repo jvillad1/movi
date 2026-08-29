@@ -1,8 +1,11 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -76,5 +79,87 @@ class CreditTermsSheetTest {
     @Test
     fun `isValidCreditDate rechaza vacio`() {
         assertFalse(isValidCreditDate(""))
+    }
+
+    // ── Ola 16: la hoja pregunta si el crédito acaba de desembolsarse ─────────────────────
+
+    private fun cuenta(
+        id: String,
+        nombre: String,
+        tipo: AccountType = AccountType.CHECKING,
+        moneda: String = "COP",
+    ) = Account(id = id, name = nombre, type = tipo, balance = 0L, currency = moneda)
+
+    @Test
+    fun `el selector solo ofrece cuentas de dinero o inversion en pesos`() {
+        val todas = listOf(
+            cuenta("a", "Bancolombia"),
+            cuenta("b", "CDT", AccountType.INVESTMENT),
+            cuenta("c", "Efectivo", AccountType.CASH),
+            cuenta("d", "Otra libranza", AccountType.LOAN),
+            cuenta("e", "Visa", AccountType.CREDIT_CARD),
+            cuenta("f", "Cuenta en dólares", AccountType.SAVINGS, moneda = "USD"),
+        )
+        assertEquals(listOf("a", "b", "c"), cuentasParaDesembolso(todas).map { it.id })
+    }
+
+    @Test
+    fun `sin cuentas no hay ninguna a la que ofrecer el desembolso`() {
+        assertTrue(cuentasParaDesembolso(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `el monto del desembolso viene con el capital puesto`() {
+        assertEquals(257_000_000L, montoDelDesembolso(editado = null, capital = 257_000_000L))
+    }
+
+    @Test
+    fun `lo que el dueno escribe le gana al capital`() {
+        // El desembolso neto de costos: $250M de un capital de $257M.
+        assertEquals(250_000_000L, montoDelDesembolso(editado = 250_000_000L, capital = 257_000_000L))
+    }
+
+    @Test
+    fun `borrar el campo vuelve al capital en vez de dejarlo vacio`() {
+        // `MoneyField` devuelve null cuando el campo queda en blanco: el efectivo tiene que seguir
+        // siendo lo que se ve en el campo, y lo que se ve vuelve a ser el capital.
+        assertEquals(257_000_000L, montoDelDesembolso(editado = null, capital = 257_000_000L))
+        assertNull(montoDelDesembolso(editado = null, capital = null))
+    }
+
+    @Test
+    fun `la aritmetica dice las dos cifras cuando coinciden`() {
+        assertEquals(
+            "Entran \$257.000.000 a Bancolombia y el crédito arranca debiendo \$257.000.000.",
+            explicacionDelDesembolso(capital = 257_000_000L, entro = 257_000_000L, destino = "Bancolombia"),
+        )
+    }
+
+    @Test
+    fun `la aritmetica explica la diferencia cuando el banco descuenta costos`() {
+        val linea = explicacionDelDesembolso(capital = 257_000_000L, entro = 250_000_000L, destino = "Bancolombia")
+        assertTrue(linea!!.contains("\$250.000.000"), "tiene que decir lo que entró")
+        assertTrue(linea.contains("\$257.000.000"), "y lo que se debe")
+        assertTrue(linea.contains("\$7.000.000"), "y de dónde sale la diferencia")
+    }
+
+    @Test
+    fun `la aritmetica se calla mientras falten datos`() {
+        assertNull(explicacionDelDesembolso(capital = null, entro = 1L, destino = "X"))
+        assertNull(explicacionDelDesembolso(capital = 1L, entro = null, destino = "X"))
+        assertNull(explicacionDelDesembolso(capital = 0L, entro = 1L, destino = "X"))
+    }
+
+    @Test
+    fun `la aritmetica no le pone buena cara a un monto mayor que el capital`() {
+        // Ese caso es un rechazo, no una explicación: lo cubre validateCreditDisbursement con su
+        // propio mensaje. Dos textos sobre el mismo error, uno diciendo que está bien, es peor.
+        assertNull(explicacionDelDesembolso(capital = 257_000_000L, entro = 260_000_000L, destino = "Bancolombia"))
+    }
+
+    @Test
+    fun `sin cuenta elegida la aritmetica sigue diciendo las cifras`() {
+        val linea = explicacionDelDesembolso(capital = 100_000L, entro = 100_000L, destino = null)
+        assertEquals("Entran \$100.000 a tu cuenta y el crédito arranca debiendo \$100.000.", linea)
     }
 }

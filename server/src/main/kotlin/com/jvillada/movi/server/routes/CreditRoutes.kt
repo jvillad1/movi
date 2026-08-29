@@ -18,11 +18,20 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.CreateCreditRequest
+import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DISBURSEMENT_WITH_INITIAL_DEBT
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MAX_CREDIT_DEBT_COP
+import com.jvillada.movi.shared.model.TransferResult
+import com.jvillada.movi.shared.model.aperturaDeCreditoDesembolsado
+import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.openingEventFor
+import com.jvillada.movi.shared.model.transferLegsFor
+import com.jvillada.movi.shared.model.validateCreditDisbursement
+import com.jvillada.movi.server.time.appDateToEpochMillis
+import java.time.LocalDate
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -39,6 +48,14 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.vendors.ForUpdateOption
+
+/**
+ * Medio día en milisegundos. El desembolso se sella al mediodía de la zona de la app y no a la
+ * medianoche, por el mismo motivo que `epochAlMediodia` en el cliente: la medianoche está a un
+ * desfase de distancia de caer en el día anterior, y ahí el movimiento aparece un día antes de
+ * lo que dice el crédito.
+ */
+private const val MEDIODIA_MILLIS = 12L * 60 * 60 * 1000
 
 fun Route.creditRoutes() {
     route("/api/credits") {
@@ -87,17 +104,97 @@ fun Route.creditRoutes() {
             // `POST /api/cards`, que acepta 0 desde siempre.
             if (body.initialDebt < 0L) return@post call.respond(HttpStatusCode.BadRequest, "La deuda no puede ser negativa")
 
-            val account = Account(
-                id       = "acc_${System.currentTimeMillis()}",
+            // ── Ola 16 — el desembolso nace CON el crédito, o no nace ─────────────────────
+            //
+            // La ola 14 dejó las dos formas posibles pero le pedía al dueño entender el
+            // mecanismo: «si te acaban de desembolsar, deja la deuda en blanco y después anota
+            // el traspaso». Dos pasos, y el intermedio miente: un crédito de $257.000.000 en $0
+            // que la tarjeta anunciaba como «100% pagado». Ahora la hoja PREGUNTA («¿acabas de
+            // recibir esta plata?») y, si la respuesta es que sí, el desembolso llega acá en el
+            // mismo cuerpo y se escribe en la MISMA transacción. La ventana desapareció.
+            //
+            // El KDoc de `CreateCreditRequest.disbursement` tiene el porqué de las dos reglas
+            // que se validan a continuación; acá va solo lo que hace falta para leer el código.
+            val disbursement = body.disbursement
+            if (disbursement != null && body.initialDebt != 0L) {
+                return@post call.respond(HttpStatusCode.BadRequest, DISBURSEMENT_WITH_INITIAL_DEBT)
+            }
+            // La cuenta destino se lee ANTES de escribir nada: si no existe (o es de otro
+            // usuario) no se crea el crédito tampoco. Un crédito a medias es exactamente lo que
+            // esta rama vino a evitar; devolver 404 con la base intacta es la única respuesta
+            // honesta. 404 y no 403, mismo criterio de aislamiento que el resto de las rutas.
+            val destino = if (disbursement == null) null else dbQuery {
+                Accounts.selectAll()
+                    .where { (Accounts.id eq disbursement.toAccountId) and (Accounts.userId eq uid) }
+                    .firstOrNull()?.toAccount()
+            }
+            if (disbursement != null && destino == null) {
+                return@post call.respond(HttpStatusCode.NotFound, "Cuenta no encontrada")
+            }
+            // Última línea de defensa: la hoja ya apagó el botón con esta misma función y este
+            // mismo texto (vive en :core justamente para eso). Un cliente viejo o un POST a mano
+            // no pasan por ahí.
+            if (disbursement != null) {
+                validateCreditDisbursement(body.terms.principal, destino, disbursement.amount)?.let { motivo ->
+                    return@post call.respond(HttpStatusCode.UnprocessableEntity, motivo)
+                }
+            }
+            // La fecha del desembolso es `startDate`, el campo que la hoja YA pide («Desembolso
+            // AAAA-MM-DD»): preguntarla dos veces sería preguntar dos veces lo mismo, y usar
+            // «hoy» pondría el movimiento en un día en que no pasó nada. Se sella al mediodía de
+            // la zona de la app, igual que cualquier movimiento fechado en otro día
+            // (`epochAlMediodia`): la medianoche se corre de día con cualquier desfase.
+            val desembolsoMillis = if (disbursement == null) null else {
+                val fecha = runCatching { LocalDate.parse(body.terms.startDate.trim()) }.getOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, "La fecha de desembolso tiene que ser AAAA-MM-DD")
+                // Misma guarda de cordura de año que POST /api/events y POST /api/transfers: un
+                // desembolso fechado en 1970 se esconde al fondo de Movimientos y no se ve nunca más.
+                if (fecha.year !in 2000..2100) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
+                }
+                appDateToEpochMillis(fecha) + MEDIODIA_MILLIS
+            }
+
+            // La apertura NO es `initialDebt` cuando hay desembolso: es el pedazo del capital que
+            // nunca se volvió plata (costos financiados). Sumada a la pata del desembolso, la
+            // deuda arranca valiendo exactamente el capital. Ver `aperturaDeCreditoDesembolsado`.
+            val deudaDeApertura = if (disbursement == null) body.initialDebt
+                else aperturaDeCreditoDesembolsado(body.terms.principal, disbursement.amount)
+            val accountId = "acc_${System.currentTimeMillis()}"
+            val cuentaAlAbrir = Account(
+                id       = accountId,
                 name     = name,
                 type     = AccountType.LOAN,
-                balance  = body.initialDebt,
+                balance  = deudaDeApertura,
                 currency = "COP",
             )
             val terms = body.terms
-                .copy(accountId = account.id)
+                .copy(accountId = accountId)
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
-            val opening = openingEventFor(account, now = System.currentTimeMillis())
+            val opening = openingEventFor(cuentaAlAbrir, now = System.currentTimeMillis())
+            // Las patas se construyen con `transferLegsFor`, la MISMA función que usa
+            // `POST /api/transfers` (vive en :core justamente para eso): misma categoría
+            // reservada, mismo `countsAsCashFlow = false`, y el encabezado «Desembolso a
+            // Bancolombia» / «Desembolso desde Libranza» que ya sabe poner cuando una punta es un
+            // préstamo. Un desembolso no es un ingreso, y eso lo garantiza esa función, no esta.
+            val legs = if (disbursement == null || destino == null || desembolsoMillis == null) null else
+                transferLegsFor(
+                    CreateTransferRequest(
+                        transferId    = newId("tr"),
+                        fromEventId   = newId("ev"),
+                        toEventId     = newId("ev"),
+                        fromAccountId = accountId,
+                        toAccountId   = destino.id,
+                        amount        = disbursement.amount,
+                        timestamp     = desembolsoMillis,
+                    ),
+                    from = cuentaAlAbrir,
+                    to   = destino,
+                )
+            // El saldo que se escribe en la fila `accounts` incluye las dos cosas: la apertura y
+            // el desembolso. (El GET no lo lee —la deuda se deriva de los eventos, ver
+            // `enrichWith`— pero el espejo local del teléfono sí, y ahí tiene que estar completo.)
+            val account = cuentaAlAbrir.copy(balance = deudaDeApertura + (disbursement?.amount ?: 0L))
 
             dbQuery {
                 Accounts.insert {
@@ -109,11 +206,19 @@ fun Route.creditRoutes() {
                     it[currency] = account.currency
                 }
                 if (opening != null) insertEventRow(uid, opening)
+                if (legs != null) {
+                    insertEventRow(uid, legs.first)
+                    insertEventRow(uid, legs.second)
+                }
                 Credits.insert { fillTerms(it, uid, terms) }
             }
+            // Solo la pata del PRÉSTAMO entra al cálculo del resumen: `summaryFor` deriva el
+            // saldo de ESTA cuenta, y la otra pata es de la cuenta corriente.
+            val eventosDelCredito = listOfNotNull(opening, legs?.first)
             call.respond(
                 HttpStatusCode.Created,
-                summaryFor(account, terms, listOfNotNull(opening), FxRateService.usdToCop()),
+                summaryFor(account, terms, eventosDelCredito, FxRateService.usdToCop())
+                    .copy(disbursement = legs?.let { TransferResult(from = it.first, to = it.second) }),
             )
         }
 

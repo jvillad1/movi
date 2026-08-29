@@ -792,8 +792,55 @@ class LocalRepository(
      * — pero el saldo espejado ya lo incluye, que es lo que Cuentas muestra. Traerlo requeriría
      * ampliar el wire (como `adjustmentEvent`); queda anotado como deferido, no como olvido.
      */
-    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary =
-        remote.createCredit(request).also { mirrorAccountLocally(it.account) }
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary {
+        val summary = remote.createCredit(request)
+        mirrorAccountLocally(summary.account)
+        // Ola 16: si el alta trajo desembolso, sus DOS patas se espejan acá. Sin esto, en el
+        // teléfono el crédito aparecía con su deuda pero la plata no llegaba nunca a la cuenta
+        // corriente: Movimientos y Cuentas leen de SQLDelight y el SyncEngine solo empuja.
+        summary.disbursement?.let { mirrorDisbursementLocally(it, summary.account.id) }
+        return summary
+    }
+
+    /**
+     * Espeja las dos patas del desembolso que `POST /api/credits` acabó de escribir.
+     *
+     * Es [mirrorTransferLocally] con **una** diferencia, y es la que importa: el saldo de la
+     * cuenta del crédito NO se toca. [mirrorAccountLocally] lo acaba de escribir con lo que el
+     * server derivó de todos sus eventos —la apertura de los costos financiados **más** la pata
+     * del desembolso—, así que volver a aplicarle el delta de esa pata dejaría la deuda del
+     * crédito al doble en el teléfono: el mismo número inflado que toda esta rama vino a matar,
+     * entrando por la puerta de atrás.
+     *
+     * La otra cuenta sí se mueve acá: al server no se le pidió su fila (esta respuesta solo trae
+     * la del crédito) y su saldo local está viejo hasta el próximo [getAccounts].
+     *
+     * La guarda de "ya estaba" se conserva del original: es barata y deja el espejo idempotente
+     * si alguna vez se llama dos veces sobre la misma respuesta.
+     */
+    private fun mirrorDisbursementLocally(legs: TransferResult, loanAccountId: String) {
+        val uid = userId()
+        val now = Clock.System.now().toEpochMilliseconds()
+        db.transaction {
+            listOf(legs.from, legs.to).forEach { leg ->
+                val yaEstaba = db.financialEventQueries.selectById(leg.id, uid).executeAsOneOrNull() != null
+                if (yaEstaba) return@forEach
+                db.financialEventQueries.insert(
+                    leg.id, leg.accountId, leg.type.name, leg.amount,
+                    leg.category, leg.description, leg.merchant,
+                    leg.timestamp, leg.source.name, leg.rawPayload,
+                    leg.reconciliationStatus.name, leg.syncedAt ?: now, uid,
+                    leg.transferId,
+                    leg.createdAt ?: now,
+                )
+                if (leg.accountId == loanAccountId) return@forEach
+                val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
+                db.accountQueries.updateBalance(
+                    acct.balance + signedDelta(AccountType.valueOf(acct.type), leg.type, leg.amount), acct.id,
+                )
+            }
+        }
+    }
 
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
