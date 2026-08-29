@@ -24,6 +24,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.ui.components.isDebtAccount
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.shared.time.currentMonthPrefix
 
@@ -277,9 +278,24 @@ data class LinkFigure(val value: String? = null, val sub: String? = null, val is
  */
 fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (target) {
     "accounts" -> {
+        // El conteo nombra EXACTAMENTE el conjunto que suma la cifra: las cuentas que no son
+        // deuda. Mismo predicado que usa [assetsDebtsNet] para sus «activos» —no una copia que
+        // pueda separarse— y mismo conjunto que lista la pantalla de destino, que desde F61
+        // muestra solo los grupos Dinero e Inversión (las deudas viven en Créditos).
+        //
+        // Contar `data.accounts.size` era correcto en la Ola 4, cuando Cuentas listaba TODO.
+        // F61 (Ola 7) dejó las deudas afuera de esa pantalla y el conteo quedó hablando de otra
+        // cosa que la cifra: con un ahorro y cinco créditos, la fila decía «$12.383.363 ·
+        // 6 cuentas» y al tocarla aparecía «DINERO · 1 / INVERSIÓN · 0». Las deudas no se
+        // pierden de vista: la fila «Créditos», justo debajo, las cuenta y las suma.
         val (activos, _, _) = assetsDebtsNet(data.accounts)
-        if (data.accounts.isEmpty()) LinkFigure(sub = "Sin cuentas aún")
-        else LinkFigure(formatCOP(activos), plural(data.accounts.size, "cuenta", "cuentas"))
+        val propias = data.accounts.count { !isDebtAccount(it.type) }
+        // Solo deudas cargadas (el estado de quien arranca por sus créditos) es «sin cuentas»,
+        // no «0 cuentas» al lado de un $0: es lo que dicen los dos grupos vacíos de la pantalla
+        // de destino, y un cero grande en el Inicio se lee como que algo se perdió. Sigue la
+        // regla de toda esta función: sin nada que contar, no se pinta cifra.
+        if (propias == 0) LinkFigure(sub = "Sin cuentas aún")
+        else LinkFigure(formatCOP(activos), plural(propias, "cuenta", "cuentas"))
     }
     "credits" -> {
         // F20: préstamos + tarjetas, con la MISMA función que usa la pantalla de Créditos para
