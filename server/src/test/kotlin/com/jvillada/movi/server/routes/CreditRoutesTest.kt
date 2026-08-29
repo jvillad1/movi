@@ -13,6 +13,9 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.CreditTerms
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -43,6 +46,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
@@ -71,6 +75,9 @@ class CreditRoutesTest {
 
     private val loanAccountId = "acc-loan-a"
     private val cashAccountId = "acc-cash-a"
+
+    /** Ola 16 — la cuenta corriente del usuario B, destino del desembolso. */
+    private val corrienteId = "acc-corriente-b"
 
     private val validTermsJson =
         """{"accountId":"acc-loan-a","bank":"Bancolombia","principal":262000000,"rateEa":17.46,"termMonths":72,"installment":4888000,"dayOfMonth":5,"startDate":"2024-01-15"}"""
@@ -692,5 +699,281 @@ class CreditRoutesTest {
         val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
         assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean)
         assertEquals(5_000_000L, terms["installment"]!!.jsonPrimitive.long)
+    }
+
+    // ══ Ola 16 — el desembolso nace con el crédito ════════════════════════════════════════
+    //
+    // El escenario real, y el que se mide de punta a punta más abajo: una libranza de
+    // $257.000.000 que el banco acaba de girar a la cuenta corriente del dueño, que tenía
+    // $12.400.000. Los cuatro números que tienen que quedar bien son deuda, efectivo, patrimonio
+    // e ingresos del mes — y el último es el que más fácil se rompe: **un desembolso no es un
+    // ingreso**, aunque sea plata que entró a la cuenta.
+
+    /** La cuenta corriente del dueño con sus $12.400.000, para el usuario B (que arranca sin nada). */
+    private fun sembrarCuentaCorriente(saldo: Long = 12_400_000L) {
+        transaction {
+            Accounts.insert {
+                it[id]       = corrienteId
+                it[userId]   = userBId
+                it[name]     = "Bancolombia"
+                it[type]     = "CHECKING"
+                it[balance]  = saldo
+                it[currency] = "COP"
+            }
+            Events.insert {
+                it[id]                   = "evt-corriente-opening"
+                it[userId]               = userBId
+                it[accountId]            = corrienteId
+                it[type]                 = "INCOME"
+                it[amount]               = saldo
+                it[currency]             = "COP"
+                it[category]             = "Saldo inicial"   // OPENING_CATEGORY: fuera del flujo de caja del mes
+                it[description]          = "Saldo inicial"
+                it[timestamp]            = System.currentTimeMillis()
+                it[eventSource]          = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+    }
+
+    /** Hoy en formato AAAA-MM-DD: el desembolso se fecha dentro del mes en curso a propósito. */
+    private fun hoyIso(): String = java.time.LocalDate.now(com.jvillada.movi.server.time.AppClock.zone).toString()
+
+    private fun cuerpoDeLibranza(
+        desembolso: Long?,
+        capital: Long = 257_000_000L,
+        deudaActual: Long = 0L,
+        cuenta: String = corrienteId,
+    ): String {
+        val terms = """"terms":{"accountId":"","bank":"Bancolombia","principal":$capital,"rateEa":12.0,
+                        "termMonths":120,"installment":3500000,"dayOfMonth":5,"startDate":"${hoyIso()}"}"""
+        val disb = if (desembolso == null) ""
+            else ""","disbursement":{"toAccountId":"$cuenta","amount":$desembolso}"""
+        return """{"name":"Libranza Bancolombia","initialDebt":$deudaActual,$terms$disb}"""
+    }
+
+    private suspend fun ApplicationTestBuilder.crearLibranza(cuerpo: String) =
+        client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpo)
+        }
+
+    /**
+     * **Las cuatro cifras del escenario real, en una sola operación.**
+     *
+     * Deuda $257.000.000 · Efectivo $269.400.000 · Patrimonio $12.400.000 · Ingresos del mes $0.
+     *
+     * El patrimonio no se mueve, y eso es lo correcto: pedir prestado no te hace ni más rico ni
+     * más pobre, te deja con la plata y con la deuda. Los ingresos tampoco, y ese es el que la
+     * ola 14 vino a arreglar — anotar la libranza como ingreso decía que el mes había entrado
+     * $257 millones sin que el dueño ganara un peso.
+     */
+    @Test
+    fun `un credito recien recibido crea la deuda y la plata en un solo guardado`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 257_000_000L))
+        assertEquals(HttpStatusCode.Created, post.status)
+        // Se decodifica al modelo y no se miran las claves crudas: kotlinx.serialization omite los
+        // valores por defecto, así que `hasMovements: true` no viaja por el cable. Lo que hay que
+        // afirmar es lo que lee el cliente, no lo que aparece en el texto.
+        val created = Json.decodeFromJsonElement<CreditSummary>(Json.parseToJsonElement(post.bodyAsText()))
+
+        // 1 · Deuda: el capital entero, y NO el doble.
+        assertEquals(257_000_000L, created.account.balance)
+        assertEquals(0.0, created.paidPct!!, 1e-9)
+        // 2 · Y con movimientos: la tarjeta no puede decir «Falta registrar el desembolso» sobre
+        //     un crédito cuyo desembolso acaba de registrarse en el mismo guardado.
+        assertTrue(created.hasMovements)
+
+        // 3 · Las dos patas vuelven en la respuesta, para que el espejo local las escriba.
+        val patas = created.disbursement!!
+        assertEquals(TransactionType.EXPENSE, patas.from.type)
+        assertEquals(TransactionType.INCOME, patas.to.type)
+        assertEquals(257_000_000L, patas.to.amount)
+        assertEquals(corrienteId, patas.to.accountId)
+        // Categoría reservada y fuera del flujo de caja: es lo que hace que un desembolso no sea
+        // un ingreso. Lo garantiza `transferLegsFor`, la misma función que usa POST /api/transfers.
+        assertEquals(TRANSFER_CATEGORY, patas.to.category)
+        assertEquals(false, patas.to.countsAsCashFlow)
+        // Y las dos son el mismo traspaso.
+        assertEquals(patas.from.transferId, patas.to.transferId)
+        assertTrue(patas.to.transferId != null)
+        // El encabezado dice qué pasó, no «Traspaso»: es lo que el dueño va a leer en Movimientos.
+        assertTrue(patas.to.description.startsWith("Desembolso desde"), patas.to.description)
+
+        // 4 · Efectivo: la cuenta corriente pasó de $12.400.000 a $269.400.000.
+        val cuentas = client.get("/api/accounts") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }
+        val corriente = Json.parseToJsonElement(cuentas.bodyAsText()).jsonArray
+            .map { it.jsonObject }.first { it["id"]!!.jsonPrimitive.content == corrienteId }
+        assertEquals(269_400_000L, corriente["balance"]!!.jsonPrimitive.long)
+
+        // 5 · Patrimonio e ingresos del mes: intactos los dos.
+        val resumen = client.get("/api/finance-summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}")
+        }
+        val fin = Json.parseToJsonElement(resumen.bodyAsText()).jsonObject
+        assertEquals(12_400_000L, fin["balance"]!!.jsonPrimitive.long, "patrimonio: la plata y la deuda se cancelan")
+        assertEquals(0L, fin["ingresos"]!!.jsonPrimitive.long, "un desembolso no es un ingreso")
+        assertEquals(0L, fin["egresos"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * El desembolso se fecha con `startDate` —el campo «Desembolso (AAAA-MM-DD)» que la hoja ya
+     * pide—, no con «hoy». Un crédito girado el día 3 y anotado el día 20 tiene que aparecer en
+     * Movimientos el día 3, que es cuando pasó.
+     */
+    @Test
+    fun `el desembolso se fecha el dia que dice el credito, no el dia que se anota`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val cuerpo = cuerpoDeLibranza(desembolso = 257_000_000L).replace("\"startDate\":\"${hoyIso()}\"", "\"startDate\":\"2026-03-03\"")
+        val post = crearLibranza(cuerpo)
+        assertEquals(HttpStatusCode.Created, post.status)
+        val pata = Json.parseToJsonElement(post.bodyAsText()).jsonObject["disbursement"]!!
+            .jsonObject["to"]!!.jsonObject
+        val millis = pata["timestamp"]!!.jsonPrimitive.long
+        assertEquals("2026-03-03", com.jvillada.movi.server.time.epochMillisToAppDateString(millis))
+    }
+
+    /**
+     * **El desembolso neto de costos deja la deuda en el capital, no en lo que entró.**
+     *
+     * $250.000.000 de un capital de $257.000.000: entra a la cuenta lo que el banco giró, y los
+     * $7.000.000 que descontó quedan como deuda igual — porque se deben igual. Sin esto, el
+     * crédito nacería debiendo $250M y `paidPct` diría «2% pagado» sobre un crédito que nadie
+     * pagó todavía: la misma mentira optimista que la ola anterior cerró, por otra puerta.
+     */
+    @Test
+    fun `un desembolso neto de costos deja la deuda valiendo el capital`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 250_000_000L))
+        assertEquals(HttpStatusCode.Created, post.status)
+        val created = Json.parseToJsonElement(post.bodyAsText()).jsonObject
+        assertEquals(257_000_000L, created["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long)
+        assertEquals(0.0, created["paidPct"]!!.jsonPrimitive.double, 1e-9)
+
+        val cuentas = client.get("/api/accounts") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }
+        val corriente = Json.parseToJsonElement(cuentas.bodyAsText()).jsonArray
+            .map { it.jsonObject }.first { it["id"]!!.jsonPrimitive.content == corrienteId }
+        assertEquals(262_400_000L, corriente["balance"]!!.jsonPrimitive.long, "solo entró lo que el banco giró")
+
+        // Patrimonio: $12.400.000 de antes MENOS los $7.000.000 de costos que quedaron debiéndose.
+        val fin = Json.parseToJsonElement(
+            client.get("/api/finance-summary") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }.bodyAsText(),
+        ).jsonObject
+        assertEquals(5_400_000L, fin["balance"]!!.jsonPrimitive.long)
+        assertEquals(0L, fin["ingresos"]!!.jsonPrimitive.long)
+    }
+
+    /** Los dos números juntos son, literalmente, cómo se contaba la deuda dos veces. */
+    @Test
+    fun `pedir deuda actual y desembolso a la vez es 400`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val antes = huellaDe(userBId)
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 257_000_000L, deudaActual = 257_000_000L))
+        assertEquals(HttpStatusCode.BadRequest, post.status)
+        assertEquals(antes, huellaDe(userBId), "no queda nada a medias: ni cuenta, ni eventos, ni términos")
+    }
+
+    @Test
+    fun `un desembolso mayor que el capital es 422 y no crea nada`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val antes = huellaDe(userBId)
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 260_000_000L))
+        assertEquals(HttpStatusCode.UnprocessableEntity, post.status)
+        assertEquals(antes, huellaDe(userBId))
+    }
+
+    @Test
+    fun `un desembolso en cero es 422 y no crea nada`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val antes = huellaDe(userBId)
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 0L))
+        assertEquals(HttpStatusCode.UnprocessableEntity, post.status)
+        assertEquals(antes, huellaDe(userBId))
+    }
+
+    /**
+     * La cuenta destino se lee ANTES de escribir nada. Si es de otro usuario —o no existe— el
+     * crédito tampoco se crea: un crédito sin su desembolso es exactamente el estado a medias que
+     * esta rama vino a evitar.
+     */
+    @Test
+    fun `un desembolso a una cuenta ajena es 404 y no crea el credito`() = testApplication {
+        wireApp()
+        val antes = huellaDe(userBId)
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 257_000_000L, cuenta = cashAccountId))
+        assertEquals(HttpStatusCode.NotFound, post.status)
+        assertEquals(antes, huellaDe(userBId))
+    }
+
+    /** Un desembolso a otra deuda no es un desembolso. */
+    @Test
+    fun `un desembolso a una cuenta de deuda es 422`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert {
+                it[id]       = "acc-otra-libranza-b"
+                it[userId]   = userBId
+                it[name]     = "Otra libranza"
+                it[type]     = "LOAN"
+                it[currency] = "COP"
+            }
+        }
+        val antes = huellaDe(userBId)
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = 1_000_000L, cuenta = "acc-otra-libranza-b"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, post.status)
+        assertEquals(antes, huellaDe(userBId))
+    }
+
+    /**
+     * **El camino viejo, sin un solo cambio.** Es el cuerpo exacto que manda el APK 1.9 que el
+     * dueño tiene instalado: sin la clave `disbursement`, con su deuda actual, y sin ningún
+     * movimiento de traspaso de por medio.
+     */
+    @Test
+    fun `el cuerpo del APK 1_9 sigue creando el credito como siempre`() = testApplication {
+        wireApp()
+        sembrarCuentaCorriente()
+        val post = crearLibranza(cuerpoDeLibranza(desembolso = null, deudaActual = 200_000_000L))
+        assertEquals(HttpStatusCode.Created, post.status)
+        val created = Json.parseToJsonElement(post.bodyAsText()).jsonObject
+        assertEquals(200_000_000L, created["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long)
+        assertTrue(created["disbursement"] == null || created["disbursement"] is JsonNull)
+        // La cuenta corriente no se movió: un crédito viejo no pone plata en ningún lado.
+        val cuentas = client.get("/api/accounts") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }
+        val corriente = Json.parseToJsonElement(cuentas.bodyAsText()).jsonArray
+            .map { it.jsonObject }.first { it["id"]!!.jsonPrimitive.content == corrienteId }
+        assertEquals(12_400_000L, corriente["balance"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * **Todo lo que un alta puede dejar escrito: la cuenta, sus eventos y sus términos.**
+     *
+     * La primera versión de estas guardas contaba solo `Credits` —los términos— y por eso **no
+     * podía fallar cuando debía**: la revisión mutó la ruta para insertar la cuenta LOAN huérfana
+     * ANTES de cada validación y los cuatro tests siguieron en verde, porque una cuenta sin
+     * términos no movía el contador. El código de producción estaba bien; la aserción no servía
+     * para saberlo.
+     *
+     * Se comparan las tres cifras contra la foto de antes del POST, y no contra cero, para que la
+     * misma función sirva en el test que siembra una cuenta LOAN a propósito (el del desembolso a
+     * una cuenta de deuda). La tesis entera de la rama es «nada a medias»: la única forma de
+     * afirmarla es mirar todo lo que la transacción pudo haber tocado.
+     */
+    private data class HuellaEnLaBase(val cuentas: Long, val eventos: Long, val creditos: Long)
+
+    private fun huellaDe(uid: String): HuellaEnLaBase = transaction {
+        HuellaEnLaBase(
+            cuentas  = Accounts.selectAll().where { Accounts.userId eq uid }.count(),
+            eventos  = Events.selectAll().where { Events.userId eq uid }.count(),
+            creditos = Credits.selectAll().where { Credits.userId eq uid }.count(),
+        )
     }
 }

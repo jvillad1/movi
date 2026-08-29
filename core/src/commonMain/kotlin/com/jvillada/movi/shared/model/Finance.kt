@@ -89,6 +89,21 @@ data class CreditSummary(
      * que no manda el campo: se muestra el porcentaje, que es lo que se mostraba antes.
      */
     val hasMovements: Boolean = true,
+    /**
+     * Las dos patas del **desembolso que el alta acaba de registrar**, o null si no registró
+     * ninguno (que es siempre, salvo en `POST /api/credits` con [CreateCreditRequest.disbursement]).
+     *
+     * Existe por el mismo motivo que [adjustmentEvent], y no es simetría de adorno: en Android
+     * Movimientos, Cuentas y el detalle leen de SQLDelight, y el `SyncEngine` **solo empuja,
+     * nunca trae**. Sin estas dos patas en la respuesta, el desembolso que el server escribió en
+     * su transacción quedaría invisible en el teléfono —la plata no aparecería en la cuenta
+     * corriente— hasta que alguien abriera la web. El cliente las espeja tal cual, con los ids
+     * que el server les puso, ya marcadas como sincronizadas.
+     *
+     * Default null para que un cliente que hable con un server viejo (que no manda el campo)
+     * siga deserializando igual que siempre.
+     */
+    val disbursement: TransferResult? = null,
 )
 
 /**
@@ -97,13 +112,140 @@ data class CreditSummary(
  */
 const val CREDIT_RULE_PREFIX = "credit_"
 
-/** Alta atómica de un crédito: cuenta LOAN + evento de apertura + términos en una sola operación server-side. */
+/**
+ * **A qué cuenta le entró la plata de un crédito recién desembolsado, y cuánto.**
+ *
+ * Viaja adentro de [CreateCreditRequest] —no en un `POST /api/transfers` aparte— porque el
+ * desembolso y el crédito tienen que nacer juntos. El porqué completo está en
+ * [CreateCreditRequest.disbursement].
+ *
+ * El **monto es editable y no se asume igual al capital**: muchos créditos desembolsan neto de
+ * costos (estudio, seguros, papeleo, financiados adentro del propio crédito). Si de un capital de
+ * $257.000.000 al dueño le entraron $250.000.000, las dos cifras son ciertas y distintas, y Movi
+ * tiene que poder decir las dos. Qué pasa con los $7.000.000 de diferencia también está en
+ * [CreateCreditRequest.disbursement].
+ *
+ * Los ids de las patas NO viajan acá, a diferencia de [CreateTransferRequest], donde los pone el
+ * cliente para que un reintento no duplique el traspaso. Este endpoint no puede ser idempotente
+ * de todos modos —cada POST crea una cuenta nueva—, así que ids del cliente no comprarían nada.
+ * El server los genera y los devuelve en [CreditSummary.disbursement], que es lo que el espejo
+ * local necesita para escribir exactamente las mismas filas.
+ */
+@Serializable
+data class CreditDisbursement(
+    val toAccountId: String,    // cuenta de dinero/inversión (COP) donde el banco depositó
+    val amount: Long,           // lo que efectivamente entró a esa cuenta (COP), > 0
+)
+
+/**
+ * Alta atómica de un crédito: cuenta LOAN + evento de apertura + términos (+ desembolso, si lo
+ * hay) en una sola operación server-side.
+ */
 @Serializable
 data class CreateCreditRequest(
     val name: String,           // nombre de la cuenta LOAN a crear
     val initialDebt: Long,      // deuda actual (COP) — genera el evento "Deuda inicial"
     val terms: CreditTerms,     // accountId se ignora; el server asigna el de la cuenta nueva
+    /**
+     * **El desembolso, cuando es un crédito que el dueño acaba de recibir.** `null` = el crédito
+     * ya venía de antes y entra a Movi con su deuda de hoy en [initialDebt]: el camino de
+     * siempre, el único que existía hasta la Ola 16 y el único que manda el APK 1.9 que el dueño
+     * tiene instalado. Por eso el campo es opcional con default null y no un parámetro más.
+     *
+     * ## Por qué viaja con el alta y no como un segundo paso
+     *
+     * Es el mismo argumento con el que se escribió `POST /api/credits`: el flujo cliente en dos
+     * pasos *«dejaba cuentas huérfanas/duplicadas ante fallos parciales»*. Acá el estado parcial
+     * tiene nombre y cifra: crear el crédito, ser interrumpido, y quedarse con un crédito de
+     * $257.000.000 que la app declara **«100% pagado»** — deuda de menos y patrimonio de más, en
+     * la dirección optimista, que es la peor. Si el desembolso nace con el crédito, esa ventana
+     * no existe. El aviso «Falta registrar el desembolso» de `progresoDeCredito` pasa a ser la
+     * red para los casos raros (anular el desembolso después), no el camino normal.
+     *
+     * ## Qué pasa con la diferencia entre el capital y lo que entró
+     *
+     * **La cubre [initialDebt], y la calcula el server: con `disbursement != null`, `initialDebt`
+     * TIENE que llegar en 0** (si no, 400 con [DISBURSEMENT_WITH_INITIAL_DEBT]). El server abre
+     * la cuenta con `terms.principal − disbursement.amount` de deuda —ver
+     * [aperturaDeCreditoDesembolsado]— y encima le suma la pata del desembolso, así que la deuda
+     * del crédito arranca valiendo **exactamente el capital** y el efectivo sube **exactamente lo
+     * que entró**.
+     *
+     * No es un refinamiento contable: si el desembolso fuera lo único que crea deuda, un crédito
+     * desembolsado neto ($250M de $257M) nacería debiendo $250M y `paidPct` diría **«2% pagado»
+     * sobre un crédito que nadie ha pagado todavía** — la misma familia de mentira optimista que
+     * la ola anterior cerró, más chica pero por la misma puerta.
+     *
+     * Y derivarla en el server, en vez de dejar que el cliente mande los dos números, es lo que
+     * hace estructuralmente imposible el otro error, el caro: la deuda contada dos veces
+     * ($514M por $257M reales). Con esta regla no hay ningún cuerpo, ni siquiera escrito a mano,
+     * que pueda pedir deuda inicial **y** desembolso a la vez.
+     */
+    val disbursement: CreditDisbursement? = null,
 )
+
+/**
+ * Lo que se le dice a quien manda una deuda inicial junto con un desembolso. Ver
+ * [CreateCreditRequest.disbursement]: los dos números juntos son, exactamente, cómo se cuenta la
+ * deuda dos veces.
+ */
+const val DISBURSEMENT_WITH_INITIAL_DEBT =
+    "Un crédito recién recibido no lleva deuda actual: la deuda la arma el desembolso."
+
+/** Ver [validateCreditDisbursement]. La plata de un crédito entra a una cuenta tuya, no a otra deuda. */
+const val DISBURSEMENT_TARGET_NOT_MONEY =
+    "La plata del crédito entra a una cuenta tuya de dinero o inversión, no a otra deuda."
+
+/** Ver [validateCreditDisbursement]. La cuenta del crédito nace en pesos y el traspaso no cruza monedas. */
+const val DISBURSEMENT_ONLY_COP =
+    "Por ahora el desembolso solo se puede registrar en una cuenta en pesos."
+
+/** Ver [validateCreditDisbursement]. Más plata que capital = uno de los dos números está mal tecleado. */
+const val DISBURSEMENT_OVER_PRINCIPAL =
+    "Lo que te entró no puede ser mayor que el capital del crédito. Revisa las dos cifras."
+
+/**
+ * ¿Se puede registrar este desembolso junto con el alta del crédito? `null` si sí; si no, **el
+ * mensaje en español** que se le muestra al dueño.
+ *
+ * Mismo idioma que [validateTransfer], y por el mismo motivo: hace falta la misma frase en dos
+ * lugares —la hoja de crear crédito, que apaga el botón y explica por qué, y el 422 del server,
+ * última defensa para un cliente viejo o un POST a mano—. Con un enum, las dos puntas habrían
+ * escrito su propia versión del texto y se habrían ido separando.
+ *
+ * Las reglas, en orden, y qué mentira evita cada una:
+ * - **Falta la cuenta.** No hay a dónde poner la plata.
+ * - **La cuenta no es de dinero ni de inversión.** Un «desembolso» a otro crédito o a una tarjeta
+ *   no es un desembolso; [validateTransfer] ya lo rechaza del otro lado con sus propias palabras.
+ * - **La cuenta no es COP.** La cuenta del crédito se crea siempre en pesos, y un traspaso entre
+ *   monedas todavía no existe (ver [validateTransfer]).
+ * - **Monto > 0.** Un desembolso de $0 es el camino viejo escrito de la forma difícil, y dejaría
+ *   el crédito diciendo «Falta registrar el desembolso» justo después de registrarlo.
+ * - **Monto ≤ capital.** Que entre MÁS plata que el capital del crédito significa que uno de los
+ *   dos números está mal tecleado, y guardarlo dejaría efectivo sin deuda que lo respalde:
+ *   patrimonio inflado, en silencio. Se dice que no en vez de adivinar cuál de los dos corregir.
+ */
+fun validateCreditDisbursement(principal: Long, destino: Account?, amount: Long): String? = when {
+    destino == null -> "Elige a qué cuenta te entró la plata"
+    destino.type.group == AccountGroup.DEUDA -> DISBURSEMENT_TARGET_NOT_MONEY
+    destino.currency != "COP" -> DISBURSEMENT_ONLY_COP
+    amount <= 0L -> "Escribe cuánto te entró a la cuenta"
+    amount > principal -> DISBURSEMENT_OVER_PRINCIPAL
+    else -> null
+}
+
+/**
+ * La deuda con la que **abre** la cuenta del crédito cuando hay desembolso: el pedazo del capital
+ * que nunca se volvió plata en el bolsillo (costos, seguros, papeleo — financiados adentro del
+ * crédito). Sumada a la pata del desembolso da el capital exacto.
+ *
+ * Es una función y no una resta suelta porque la calculan dos lugares que tienen que dar lo
+ * mismo: el server, que la escribe, y la hoja, que la explica antes de guardar. Se pisa en 0 por
+ * si acaso — [validateCreditDisbursement] ya rechaza `amount > principal`, y de todos modos una
+ * apertura negativa sería una cuenta de deuda que arranca a favor.
+ */
+fun aperturaDeCreditoDesembolsado(principal: Long, disbursed: Long): Long =
+    (principal - disbursed).coerceAtLeast(0L)
 
 /**
  * Ajusta la deuda de un crédito ya existente al saldo real que reporta el banco.
@@ -124,6 +266,14 @@ data class AdjustCreditBalanceRequest(
  *
  * Vive en `:core` a propósito — el server lo aplica y la hoja de ajuste lo espeja para poder
  * explicar el rechazo *antes* de llamar, en vez de que el usuario reciba un error genérico.
+ *
+ * **Deuda conocida, anotada y NO arreglada acá (revisión de la Ola 16):** este techo solo lo
+ * aplica `POST /api/credits/{id}/balance-adjustment`. `POST /api/credits` **no lo mira**, así que
+ * un alta con capital 9×10¹⁵ responde 201. Y por el mismo camino viejo, un `startDate` más largo
+ * que su columna o un banco de más de 80 caracteres revientan en el INSERT y salen como **500**
+ * en vez de 400. El alta con desembolso quedó mejor validada que la de siempre (le agregamos el
+ * `LocalDate.parse` y su guarda de año); emparejar las dos es su propia tarea, no la de la rama
+ * que estrenó el desembolso.
  */
 const val MAX_CREDIT_DEBT_COP = 1_000_000_000_000L // un billón de pesos
 
