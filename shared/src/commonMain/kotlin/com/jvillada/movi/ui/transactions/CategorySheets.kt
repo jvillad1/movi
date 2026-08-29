@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_BALANCE_EXPLAINER
 import com.jvillada.movi.shared.model.ORPHANED_LEG_EXPLAINER
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -144,6 +145,13 @@ fun ChangeCategorySheet(
      * recibe cierra la hoja y recarga, que es lo mismo en los dos casos.
      */
     onEventChanged: (FinancialEvent) -> Unit,
+    /**
+     * Ola 16: llevar al detalle de la cuenta de este movimiento. Solo lo usa la rama del saldo
+     * inicial de abajo, y es opcional porque quien abre la hoja puede no saber a qué grupo va
+     * ese detalle (la lista de cuentas todavía no llegó): sin destino confiable no se ofrece el
+     * botón, en vez de mandarlo a la pantalla equivocada.
+     */
+    onVerCuenta: (() -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -205,6 +213,63 @@ fun ChangeCategorySheet(
                 // ninguna contabilidad que romper —las dos patas se mueven juntas, el server
                 // cascadea por `transferId`— y sin esto un traspaso mal fechado seguiría sin
                 // arreglo posible que no fuera anularlo entero y rehacerlo.
+                SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+        return
+    }
+
+    // Ola 16 · un saldo inicial tampoco se recategoriza desde acá, y esta rama es la mitad
+    // indispensable del cambio que lo sacó de la lista de Movimientos.
+    //
+    // Dos motivos, y el segundo es el que obliga:
+    //
+    // 1. **No hay nada que recategorizar.** La apertura no es un gasto ni un ingreso mal
+    //    clasificado: es el ancla del saldo. Ofrecerle veinte categorías es ofrecerle una acción
+    //    que no responde a ninguna pregunta que el dueño se esté haciendo frente a esta fila.
+    //
+    // 2. **La acción que se ofrecía era destructiva y silenciosa.** Medido leyendo el server:
+    //    `PUT /api/events/{id}/category` bloquea TRANSFER_CATEGORY y ORPHANED_LEG_CATEGORY, pero
+    //    NO OPENING_CATEGORY — el opening se puede sacar de su categoría reservada. Y sacarlo es
+    //    justo lo que `isCashFlow` mira: en una cuenta de activo, mover un «Saldo inicial» de
+    //    $9.000.000 a «Otros ingresos» lo convierte de golpe en +$9.000.000 de «Ingresos del
+    //    mes», sin un solo aviso. La puerta estaba abierta y esta hoja era la única forma de
+    //    llegar a ella; se cierra donde se puede explicar, que es acá.
+    //
+    // La fecha SÍ se sigue pudiendo corregir, igual que en la rama del traspaso de arriba: un
+    // opening mal fechado no rompe ningún saldo (el saldo suma todos los eventos sin mirar el
+    // día) pero sí manda la fila a un día que no es, y no hay otro lugar donde arreglarlo.
+    if (isOpeningBalance(event)) {
+        BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = true) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                SheetLabel("SALDO INICIAL")
+                Spacer(Modifier.height(8.dp))
+                Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                Spacer(Modifier.height(16.dp))
+                Text(OPENING_BALANCE_EXPLAINER, fontSize = 13.5.sp, color = MinTextMute, lineHeight = 19.sp)
+                if (onVerCuenta != null) {
+                    Spacer(Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MinPrimaryContainer)
+                            .clickable(onClick = onVerCuenta),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "Ver la cuenta",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinOnPrimaryContainer,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                Hairline()
+                Spacer(Modifier.height(16.dp))
                 SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
                 Spacer(Modifier.height(24.dp))
             }
