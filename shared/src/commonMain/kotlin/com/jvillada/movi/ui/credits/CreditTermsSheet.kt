@@ -98,13 +98,22 @@ fun CreditTermsSheet(
     var montoDesembolsoEditado by remember { mutableStateOf<Long?>(null) }
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     var cuentasCargadas by remember { mutableStateOf(false) }
+    // **«No pudimos cargar» y «no tienes ninguna» no son lo mismo, y confundirlos es cruel.**
+    // La primera versión hacía `runCatching { … }.onSuccess { … }` sin rama de falla: un corte de
+    // red, un 401 o un timeout dejaban la lista vacía y la hoja le decía a alguien que SÍ tiene su
+    // cuenta de Bancolombia que se fuera a crearla. Con este estado aparte, el caso de red dice lo
+    // que pasó y ofrece reintentar; el de «no tienes ninguna» sigue mandando a Cuentas.
+    var falloCargarCuentas by remember { mutableStateOf(false) }
+    var intentoDeCarga by remember { mutableStateOf(0) }
 
-    // Las cuentas solo hacen falta en el alta (al editar términos no hay desembolso que registrar),
-    // y se piden una vez al abrir la hoja: si fallan, la lista queda vacía y la hoja lo dice en vez
-    // de ofrecer un selector con nada adentro.
-    LaunchedEffect(editing) {
+    // Las cuentas solo hacen falta en el alta: al editar términos no hay desembolso que registrar.
+    LaunchedEffect(editing, intentoDeCarga) {
         if (editing != null) { cuentasCargadas = true; return@LaunchedEffect }
-        runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
+        cuentasCargadas = false
+        falloCargarCuentas = false
+        runCatching { Repositories.wallets.getAccounts() }
+            .onSuccess { cuentas = it }
+            .onFailure { falloCargarCuentas = true }
         cuentasCargadas = true
     }
 
@@ -143,13 +152,29 @@ fun CreditTermsSheet(
     // existe (la rama de [candidates]) no crea plata en ningún lado, así que no hay desembolso
     // posible que registrar.
     val preguntaVisible = editing == null && newAccountMode
-    val sinCuentasDestino = cuentasCargadas && cuentasDestino.isEmpty()
-    val motivoDelDesembolso: String? = when {
+    val sinCuentasDestino = cuentasCargadas && !falloCargarCuentas && cuentasDestino.isEmpty()
+
+    // **El callejón sin salida se dice apenas se sabe, no al final.**
+    //
+    // Esto se parte en dos a propósito. Que el dueño no tenga NINGUNA cuenta en pesos donde
+    // pudiera haber entrado la plata —o que no hayamos podido cargar sus cuentas— se sabe en el
+    // instante en que contesta «Sí»: no depende de un solo campo del formulario. Antes caía junto
+    // con el resto al final, y la hoja paseaba a alguien con cuentas solo en dólares por los ocho
+    // campos diciéndole «Falta el nombre de la cuenta» para recién entonces avisarle que no podía
+    // seguir. Ahora sale primero, al lado de la pregunta que lo provocó.
+    //
+    // Lo que SÍ se queda al final es [motivoDelDesembolso]: la cuenta elegida y el monto viven en
+    // el bloque de abajo, y el monto necesita el capital escrito para tener su valor por defecto.
+    val bloqueoDeCuentas: String? = when {
         !preguntaVisible || recienRecibido != true -> null
         !cuentasCargadas -> "Cargando tus cuentas…"
+        falloCargarCuentas -> NO_PUDIMOS_CARGAR_TUS_CUENTAS
         sinCuentasDestino -> SIN_CUENTA_PARA_EL_DESEMBOLSO
-        else -> validateCreditDisbursement(principal ?: 0L, destinoDelDesembolso, montoDesembolso ?: 0L)
+        else -> null
     }
+    val motivoDelDesembolso: String? =
+        if (!preguntaVisible || recienRecibido != true || bloqueoDeCuentas != null) null
+        else validateCreditDisbursement(principal ?: 0L, destinoDelDesembolso, montoDesembolso ?: 0L)
 
     // Ola 14 — la deuda actual dejó de ser obligatoria, y sigue sin serlo: en la rama «ya lo venía
     // pagando» se puede dar de alta un crédito sin saber todavía cuánto se debe hoy.
@@ -164,7 +189,8 @@ fun CreditTermsSheet(
     // aparenta cubrir algo y nunca se evalúa a false. El server sí la tiene, que es donde importa
     // — ahí sí llegan cuerpos escritos a mano.
     val accountValid = if (editing != null) true
-        else if (newAccountMode) newAccountName.isNotBlank() && recienRecibido != null && motivoDelDesembolso == null
+        else if (newAccountMode) newAccountName.isNotBlank() && recienRecibido != null &&
+            bloqueoDeCuentas == null && motivoDelDesembolso == null
         else selectedAccountId != null
     val canSave = termsValid && accountValid && !saving
 
@@ -172,6 +198,9 @@ fun CreditTermsSheet(
     // mismo orden en que aparecen los campos en la hoja.
     val missingFieldMessage = when {
         preguntaVisible && recienRecibido == null -> "Falta decir si acabas de recibir esta plata"
+        // Arriba de todo lo demás: si no hay a dónde poner la plata, ningún campo de abajo va a
+        // cambiar eso, y hacérselo descubrir al final es una tomadura de pelo.
+        bloqueoDeCuentas != null -> bloqueoDeCuentas
         editing == null && newAccountMode && newAccountName.isBlank() -> "Falta el nombre de la cuenta"
         editing == null && !newAccountMode && selectedAccountId == null -> "Elige una cuenta"
         bank.isBlank() -> "Falta el banco"
@@ -319,6 +348,15 @@ fun CreditTermsSheet(
                         // dueño usa la palabra desembolso, pero la hoja no puede depender de
                         // que la use. Las dos opciones son afirmaciones completas y no un
                         // «sí/no» suelto: cada una se entiende sola, leída sin la pregunta.
+                        //
+                        // **Ninguna de las dos afirma un hecho que no sabemos.** La primera
+                        // versión de la segunda opción decía «No, ya lo venía pagando · Viene de
+                        // antes y ya le has pagado cuotas», y eso es falso para un caso real: un
+                        // crédito desembolsado hace tres meses al que todavía no se le pagó
+                        // ninguna cuota entra igual por acá, y las dos líneas le decían que ya
+                        // había pagado. Lo único que esta pregunta necesita separar es si la
+                        // plata acaba de entrar a una cuenta suya, así que eso es lo único que
+                        // dicen las opciones.
                         Text(
                             "¿Acabas de recibir la plata de este crédito?",
                             fontSize = 13.5.sp,
@@ -335,8 +373,8 @@ fun CreditTermsSheet(
                         )
                         Spacer(Modifier.height(6.dp))
                         OpcionDeAlta(
-                            titulo = "No, ya lo venía pagando",
-                            detalle = "Viene de antes y ya le has pagado cuotas.",
+                            titulo = "No, ya lo tenía desde antes",
+                            detalle = "Viene de antes; la plata no acaba de entrar a tu cuenta.",
                             selected = recienRecibido == false,
                             enabled = !saving,
                             onClick = { recienRecibido = false },
@@ -403,6 +441,22 @@ fun CreditTermsSheet(
                     Spacer(Modifier.height(8.dp))
                     when {
                         !cuentasCargadas -> Text("Cargando tus cuentas…", fontSize = 12.sp, color = MinTextMute)
+                        // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
+                        // ofrece volver a intentar, en vez de mandar a crear una cuenta que ya
+                        // existe. Ver [falloCargarCuentas].
+                        falloCargarCuentas -> {
+                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, fontSize = 12.sp, color = MinTextMute)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Reintentar",
+                                fontSize = 13.sp,
+                                color = MinText,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clickable(enabled = !saving) { intentoDeCarga++ }
+                                    .padding(vertical = 4.dp),
+                            )
+                        }
                         // Sin ninguna cuenta en pesos no hay dónde poner la plata, y el alta se
                         // detiene acá a propósito. La alternativa —crear el crédito igual, sin
                         // desembolso— dejaría exactamente el estado que esta rama vino a matar:
@@ -443,10 +497,13 @@ fun CreditTermsSheet(
                                 destino = destinoDelDesembolso?.name,
                             )
                             Text(
-                                explicacion ?: "Por defecto es el capital del crédito. Cámbialo si " +
+                                explicacion?.texto ?: "Por defecto es el capital del crédito. Cámbialo si " +
                                     "el banco te depositó menos porque descontó costos.",
                                 fontSize = 11.5.sp,
-                                color = MinTextMute,
+                                // Una brecha implausible se pinta distinto: es lo único que
+                                // separa a la vista «esto está bien» de «revisa lo que
+                                // escribiste». Ver [ExplicacionDelDesembolso].
+                                color = if (explicacion?.esAdvertencia == true) MinExpense else MinTextMute,
                             )
                         }
                     }
@@ -603,6 +660,16 @@ const val SIN_CUENTA_PARA_EL_DESEMBOLSO =
         "primero en Cuentas y vuelve a este crédito."
 
 /**
+ * Lo que se le dice cuando **no se pudieron leer** sus cuentas.
+ *
+ * Es un mensaje aparte de [SIN_CUENTA_PARA_EL_DESEMBOLSO] y no un detalle: decirle «créala primero
+ * en Cuentas» a alguien cuya cuenta de Bancolombia existe y solo se cayó la red es mandarlo a
+ * duplicar una cuenta que ya tiene. Los dos casos dejan la lista vacía; solo el estado los separa.
+ */
+const val NO_PUDIMOS_CARGAR_TUS_CUENTAS =
+    "No pudimos cargar tus cuentas. Revisa tu conexión e inténtalo de nuevo."
+
+/**
  * A qué cuentas puede entrar la plata de un desembolso: **de dinero o inversión, y en pesos**.
  *
  * Fuera quedan las cuentas de deuda (otro crédito, una tarjeta) porque un desembolso a otra deuda
@@ -628,6 +695,27 @@ fun cuentasParaDesembolso(accounts: List<Account>): List<Account> =
 fun montoDelDesembolso(editado: Long?, capital: Long?): Long? = editado ?: capital
 
 /**
+ * La línea que dice, con las dos cifras, en qué queda el crédito si se guarda así.
+ *
+ * @property texto lo que se lee debajo del monto.
+ * @property esAdvertencia si la brecha entre el capital y lo que entró es demasiado grande para
+ *   ser costos financiados. Lo decide esta función y no la pantalla, por el mismo motivo que
+ *   `ProgresoDeCredito.esAviso`: la pantalla solo elige el color, el juicio vive donde están las
+ *   cifras y se puede probar.
+ */
+data class ExplicacionDelDesembolso(val texto: String, val esAdvertencia: Boolean)
+
+/**
+ * **Debajo de qué fracción del capital una brecha deja de ser «costos financiados».**
+ *
+ * Los costos que un banco descuenta del desembolso —estudio, seguros, papeleo— son porcentajes de
+ * un dígito: 70% es holgadísimo para el caso que la frase tranquilizadora describe. Por debajo de
+ * eso, la explicación más probable ya no es «el banco descontó costos» sino que uno de los dos
+ * números está mal tecleado.
+ */
+private const val FRACCION_PLAUSIBLE_DEL_DESEMBOLSO = 0.70
+
+/**
  * La línea que dice, con las dos cifras, **en qué queda el crédito si se guarda así**. `null` si
  * todavía no hay con qué armarla.
  *
@@ -640,18 +728,51 @@ fun montoDelDesembolso(editado: Long?, capital: Long?): Long? = editado ?: capit
  * crédito naciera debiendo solo lo que entró, y entonces la tarjeta diría «2% pagado» sobre un
  * crédito que nadie pagó todavía. Ver `CreateCreditRequest.disbursement`.
  *
+ * ## La guarda que faltaba: el dedo que se come dígitos
+ *
+ * [validateCreditDisbursement] rechaza que entre MÁS plata que el capital porque «uno de los dos
+ * números está mal tecleado». **El mismo error en la otra dirección —comerse dígitos, que es más
+ * común que agregarlos— no lo atrapa nadie**, y esta línea llegaba a decir, sobre un desembolso de
+ * $2 en un crédito de $257.000.000: *«los $256.999.998 de diferencia también los debes — es lo que
+ * pasa cuando el banco descuenta costos del desembolso»*. La aritmética seguía coherente (la deuda
+ * vale el capital), pero el efectivo quedaba mal **y encima con una justificación que le decía al
+ * dueño que era normal.**
+ *
+ * **Avisa, no bloquea**, y eso es a propósito: una brecha enorme puede ser real. En una compra de
+ * cartera el banco gira la mayor parte directo al otro acreedor y a la cuenta del dueño le entra
+ * solo el resto — capital $257.000.000, a la cuenta $57.000.000, y las dos cifras son ciertas.
+ * Bloquearlo le impediría registrar un crédito que sí existe. Así que por debajo de
+ * [FRACCION_PLAUSIBLE_DEL_DESEMBOLSO] se cambia el texto: se le quita la atribución a los costos
+ * (que es la parte que tranquiliza), se nombra la consecuencia sobre la plata, y se le pide que
+ * revise. El color lo pone la hoja a partir de [ExplicacionDelDesembolso.esAdvertencia].
+ *
  * No dice nada cuando lo que entró es MAYOR que el capital: ese caso no es una explicación sino un
  * rechazo, y lo cubre [validateCreditDisbursement] con su propio mensaje debajo del botón. Dos
  * textos hablando del mismo error, uno diciendo que está bien, sería peor que uno solo.
+ *
+ * Tampoco dice nada **mientras no haya cuenta elegida**: decir «Entran $257.000.000 a tu cuenta»
+ * se lee como una frase cerrada, y quedaba debajo de un botón apagado justamente porque falta
+ * elegir la cuenta. Ahí se muestra en su lugar la ayuda del valor por defecto, que es lo que toca
+ * hacer en ese momento.
  */
-fun explicacionDelDesembolso(capital: Long?, entro: Long?, destino: String?): String? {
+fun explicacionDelDesembolso(capital: Long?, entro: Long?, destino: String?): ExplicacionDelDesembolso? {
     if (capital == null || capital <= 0L || entro == null || entro <= 0L || entro > capital) return null
-    val cuenta = destino ?: "tu cuenta"
+    if (destino == null) return null
     val diferencia = capital - entro
-    val base = "Entran ${formatCOP(entro)} a $cuenta y el crédito arranca debiendo ${formatCOP(capital)}"
-    return if (diferencia == 0L) "$base."
-    else "$base: los ${formatCOP(diferencia)} de diferencia también los debes — es lo que pasa " +
-        "cuando el banco descuenta costos del desembolso."
+    val base = "Entran ${formatCOP(entro)} a $destino y el crédito arranca debiendo ${formatCOP(capital)}"
+    return when {
+        diferencia == 0L -> ExplicacionDelDesembolso("$base.", esAdvertencia = false)
+        entro >= capital * FRACCION_PLAUSIBLE_DEL_DESEMBOLSO -> ExplicacionDelDesembolso(
+            "$base: los ${formatCOP(diferencia)} de diferencia también los debes — es lo que pasa " +
+                "cuando el banco descuenta costos del desembolso.",
+            esAdvertencia = false,
+        )
+        else -> ExplicacionDelDesembolso(
+            "$base. Revisa el monto: quedarían ${formatCOP(diferencia)} de deuda que nunca te " +
+                "entraron a la cuenta.",
+            esAdvertencia = true,
+        )
+    }
 }
 
 @Composable

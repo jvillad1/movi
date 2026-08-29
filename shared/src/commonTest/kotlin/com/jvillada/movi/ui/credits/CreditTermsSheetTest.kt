@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.credits
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.validateCreditDisbursement
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -129,18 +130,22 @@ class CreditTermsSheetTest {
 
     @Test
     fun `la aritmetica dice las dos cifras cuando coinciden`() {
+        val linea = explicacionDelDesembolso(capital = 257_000_000L, entro = 257_000_000L, destino = "Bancolombia")
         assertEquals(
             "Entran \$257.000.000 a Bancolombia y el crédito arranca debiendo \$257.000.000.",
-            explicacionDelDesembolso(capital = 257_000_000L, entro = 257_000_000L, destino = "Bancolombia"),
+            linea!!.texto,
         )
+        assertFalse(linea.esAdvertencia)
     }
 
     @Test
     fun `la aritmetica explica la diferencia cuando el banco descuenta costos`() {
-        val linea = explicacionDelDesembolso(capital = 257_000_000L, entro = 250_000_000L, destino = "Bancolombia")
-        assertTrue(linea!!.contains("\$250.000.000"), "tiene que decir lo que entró")
-        assertTrue(linea.contains("\$257.000.000"), "y lo que se debe")
-        assertTrue(linea.contains("\$7.000.000"), "y de dónde sale la diferencia")
+        val linea = explicacionDelDesembolso(capital = 257_000_000L, entro = 250_000_000L, destino = "Bancolombia")!!
+        assertTrue(linea.texto.contains("\$250.000.000"), "tiene que decir lo que entró")
+        assertTrue(linea.texto.contains("\$257.000.000"), "y lo que se debe")
+        assertTrue(linea.texto.contains("\$7.000.000"), "y de dónde sale la diferencia")
+        assertTrue(linea.texto.contains("descuenta costos"), "un 3% de brecha sí son costos")
+        assertFalse(linea.esAdvertencia)
     }
 
     @Test
@@ -158,8 +163,51 @@ class CreditTermsSheetTest {
     }
 
     @Test
-    fun `sin cuenta elegida la aritmetica sigue diciendo las cifras`() {
-        val linea = explicacionDelDesembolso(capital = 100_000L, entro = 100_000L, destino = null)
-        assertEquals("Entran \$100.000 a tu cuenta y el crédito arranca debiendo \$100.000.", linea)
+    fun `sin cuenta elegida la aritmetica todavia no habla`() {
+        // «Entran $100.000 a tu cuenta» se lee como frase cerrada, y quedaba debajo de un botón
+        // apagado justamente porque falta elegir la cuenta. En ese momento se muestra en su lugar
+        // la ayuda del valor por defecto.
+        assertNull(explicacionDelDesembolso(capital = 100_000L, entro = 100_000L, destino = null))
+    }
+
+    /**
+     * **El dedo que se come dígitos.** $2 sobre un capital de $257.000.000 dejaba el botón
+     * habilitado y la hoja decía que los $256.999.998 de diferencia eran «lo que pasa cuando el
+     * banco descuenta costos». Un error de dedo no puede recibir una justificación.
+     */
+    @Test
+    fun `una brecha implausible avisa en vez de justificarla`() {
+        val linea = explicacionDelDesembolso(capital = 257_000_000L, entro = 2L, destino = "Bancolombia")!!
+        assertTrue(linea.esAdvertencia)
+        assertTrue(linea.texto.contains("Revisa el monto"), "tiene que pedir que revise")
+        assertFalse(linea.texto.contains("descuenta costos"), "y NO puede decirle que es normal")
+        assertTrue(linea.texto.contains("\$256.999.998"), "nombrando la plata que no le entró")
+    }
+
+    @Test
+    fun `el umbral esta donde dejan de ser costos y no antes`() {
+        // 70% del capital: costos financiados reales son porcentajes de un dígito, así que el
+        // umbral es holgado a propósito y el caso común nunca lo toca.
+        assertFalse(explicacionDelDesembolso(100_000_000L, 70_000_000L, "X")!!.esAdvertencia)
+        assertTrue(explicacionDelDesembolso(100_000_000L, 69_000_000L, "X")!!.esAdvertencia)
+    }
+
+    /**
+     * Y avisa en vez de bloquear porque la brecha enorme **puede ser real**: en una compra de
+     * cartera el banco gira la mayor parte directo al otro acreedor y a la cuenta del dueño le
+     * entra el resto. Bloquearlo le impediría registrar un crédito que sí existe.
+     */
+    @Test
+    fun `la compra de cartera avisa pero se puede guardar`() {
+        val linea = explicacionDelDesembolso(capital = 257_000_000L, entro = 57_000_000L, destino = "Bancolombia")!!
+        assertTrue(linea.esAdvertencia)
+        // La validación —la que apaga el botón— sigue dejándolo pasar: avisar no es bloquear.
+        assertNull(
+            validateCreditDisbursement(
+                257_000_000L,
+                cuenta("a", "Bancolombia"),
+                57_000_000L,
+            ),
+        )
     }
 }

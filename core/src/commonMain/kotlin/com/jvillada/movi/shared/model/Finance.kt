@@ -266,6 +266,14 @@ data class AdjustCreditBalanceRequest(
  *
  * Vive en `:core` a propósito — el server lo aplica y la hoja de ajuste lo espeja para poder
  * explicar el rechazo *antes* de llamar, en vez de que el usuario reciba un error genérico.
+ *
+ * **Deuda conocida, anotada y NO arreglada acá (revisión de la Ola 16):** este techo solo lo
+ * aplica `POST /api/credits/{id}/balance-adjustment`. `POST /api/credits` **no lo mira**, así que
+ * un alta con capital 9×10¹⁵ responde 201. Y por el mismo camino viejo, un `startDate` más largo
+ * que su columna o un banco de más de 80 caracteres revientan en el INSERT y salen como **500**
+ * en vez de 400. El alta con desembolso quedó mejor validada que la de siempre (le agregamos el
+ * `LocalDate.parse` y su guarda de año); emparejar las dos es su propia tarea, no la de la rama
+ * que estrenó el desembolso.
  */
 const val MAX_CREDIT_DEBT_COP = 1_000_000_000_000L // un billón de pesos
 

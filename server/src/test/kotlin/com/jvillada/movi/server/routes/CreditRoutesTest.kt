@@ -873,27 +873,30 @@ class CreditRoutesTest {
     fun `pedir deuda actual y desembolso a la vez es 400`() = testApplication {
         wireApp()
         sembrarCuentaCorriente()
+        val antes = huellaDe(userBId)
         val post = crearLibranza(cuerpoDeLibranza(desembolso = 257_000_000L, deudaActual = 257_000_000L))
         assertEquals(HttpStatusCode.BadRequest, post.status)
-        assertEquals(0, contarCreditosDe(userBId), "y no queda ningún crédito a medias")
+        assertEquals(antes, huellaDe(userBId), "no queda nada a medias: ni cuenta, ni eventos, ni términos")
     }
 
     @Test
     fun `un desembolso mayor que el capital es 422 y no crea nada`() = testApplication {
         wireApp()
         sembrarCuentaCorriente()
+        val antes = huellaDe(userBId)
         val post = crearLibranza(cuerpoDeLibranza(desembolso = 260_000_000L))
         assertEquals(HttpStatusCode.UnprocessableEntity, post.status)
-        assertEquals(0, contarCreditosDe(userBId))
+        assertEquals(antes, huellaDe(userBId))
     }
 
     @Test
     fun `un desembolso en cero es 422 y no crea nada`() = testApplication {
         wireApp()
         sembrarCuentaCorriente()
+        val antes = huellaDe(userBId)
         val post = crearLibranza(cuerpoDeLibranza(desembolso = 0L))
         assertEquals(HttpStatusCode.UnprocessableEntity, post.status)
-        assertEquals(0, contarCreditosDe(userBId))
+        assertEquals(antes, huellaDe(userBId))
     }
 
     /**
@@ -904,9 +907,10 @@ class CreditRoutesTest {
     @Test
     fun `un desembolso a una cuenta ajena es 404 y no crea el credito`() = testApplication {
         wireApp()
+        val antes = huellaDe(userBId)
         val post = crearLibranza(cuerpoDeLibranza(desembolso = 257_000_000L, cuenta = cashAccountId))
         assertEquals(HttpStatusCode.NotFound, post.status)
-        assertEquals(0, contarCreditosDe(userBId))
+        assertEquals(antes, huellaDe(userBId))
     }
 
     /** Un desembolso a otra deuda no es un desembolso. */
@@ -922,9 +926,10 @@ class CreditRoutesTest {
                 it[currency] = "COP"
             }
         }
+        val antes = huellaDe(userBId)
         val post = crearLibranza(cuerpoDeLibranza(desembolso = 1_000_000L, cuenta = "acc-otra-libranza-b"))
         assertEquals(HttpStatusCode.UnprocessableEntity, post.status)
-        assertEquals(0, contarCreditosDe(userBId))
+        assertEquals(antes, huellaDe(userBId))
     }
 
     /**
@@ -948,8 +953,27 @@ class CreditRoutesTest {
         assertEquals(12_400_000L, corriente["balance"]!!.jsonPrimitive.long)
     }
 
-    /** Cuántos créditos completos (con términos) tiene este usuario. Cero = no quedó nada a medias. */
-    private fun contarCreditosDe(uid: String): Int = transaction {
-        Credits.selectAll().where { Credits.userId eq uid }.count().toInt()
+    /**
+     * **Todo lo que un alta puede dejar escrito: la cuenta, sus eventos y sus términos.**
+     *
+     * La primera versión de estas guardas contaba solo `Credits` —los términos— y por eso **no
+     * podía fallar cuando debía**: la revisión mutó la ruta para insertar la cuenta LOAN huérfana
+     * ANTES de cada validación y los cuatro tests siguieron en verde, porque una cuenta sin
+     * términos no movía el contador. El código de producción estaba bien; la aserción no servía
+     * para saberlo.
+     *
+     * Se comparan las tres cifras contra la foto de antes del POST, y no contra cero, para que la
+     * misma función sirva en el test que siembra una cuenta LOAN a propósito (el del desembolso a
+     * una cuenta de deuda). La tesis entera de la rama es «nada a medias»: la única forma de
+     * afirmarla es mirar todo lo que la transacción pudo haber tocado.
+     */
+    private data class HuellaEnLaBase(val cuentas: Long, val eventos: Long, val creditos: Long)
+
+    private fun huellaDe(uid: String): HuellaEnLaBase = transaction {
+        HuellaEnLaBase(
+            cuentas  = Accounts.selectAll().where { Accounts.userId eq uid }.count(),
+            eventos  = Events.selectAll().where { Events.userId eq uid }.count(),
+            creditos = Credits.selectAll().where { Credits.userId eq uid }.count(),
+        )
     }
 }
