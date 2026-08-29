@@ -37,9 +37,12 @@ import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.shared.model.TransferKind
 import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.model.transferKindFor
 import com.jvillada.movi.shared.model.validateTransfer
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.time.AppTimeZone
@@ -52,6 +55,7 @@ import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
 import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.components.CardRow
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MoneyField
@@ -143,14 +147,69 @@ fun isAlreadyRegistered(error: Throwable): Boolean =
     error is ApiException && error.status == 409
 
 /**
- * Cuentas donde tiene sentido mover plata: todo lo que no sea del grupo DEUDA.
+ * Cuentas que se pueden poner en cualquiera de las dos puntas: **todo menos las tarjetas de
+ * crédito**.
  *
  * Se filtran del selector y no solo de la validación: ofrecer una tarjeta para después decir que
- * no se puede es peor que no ofrecerla. Pagar la tarjeta y abonar a un préstamo ya tienen su
- * propio camino en Créditos, con su propia regla de flujo de caja.
+ * no se puede es peor que no ofrecerla. Pagar el extracto de la tarjeta se anota como un gasto
+ * normal con la categoría «Pago de tarjeta» (ver [TRANSFER_CARD_BLOCKED]).
+ *
+ * **Ola 14 — los préstamos entran.** Antes esta lista sacaba el grupo DEUDA entero, y con eso se
+ * iba el desembolso: un crédito nuevo entraba a Créditos como deuda y la plata que el banco
+ * depositaba en la cuenta corriente no existía para Movi. Ahora los créditos aparecen en el
+ * selector, en su propio grupo y al final (ver [TransferAccountPicker]), para las dos direcciones
+ * reales — desembolso y abono extraordinario.
  */
 fun transferableAccounts(accounts: List<Account>): List<Account> =
+    accounts.filter { it.type != AccountType.CREDIT_CARD }
+
+/**
+ * De dónde puede salir la cuenta **preseleccionada** de cada lado: solo cuentas de dinero o
+ * inversión, nunca un crédito.
+ *
+ * Es la mitad menos vistosa de dejar entrar los préstamos, y la que evita el accidente: si un
+ * crédito pudiera quedar elegido solo —porque es el último que se usó, o porque quedó primero en
+ * la lista—, dos toques distraídos anotarían un desembolso de $257.000.000 que nadie pidió. Un
+ * crédito en un traspaso se elige **siempre con el dedo**; la app no lo propone jamás.
+ *
+ * Consecuencia buscada: quien tiene una sola cuenta de dinero y un crédito ve «Desde
+ * Bancolombia» y «Hacia · Elegir cuenta», con el botón apagado hasta que elija. Antes ni siquiera
+ * veía el formulario.
+ */
+fun defaultTransferAccounts(accounts: List<Account>): List<Account> =
     accounts.filter { it.type.group != AccountGroup.DEUDA }
+
+/**
+ * El renglón que dice **en qué queda la deuda del crédito** si se guarda este traspaso, o `null`
+ * si ninguna punta es un crédito (o falta el monto).
+ *
+ * Es la pieza que hace que el error caro sea imposible de no ver. Un desembolso **sube** la
+ * deuda, y el dueño que ya creó el crédito en Créditos con su deuda actual no tiene por qué
+ * saber que registrarlo otra vez acá se la deja al doble. Un aviso genérico se lee y se olvida;
+ * la aritmética con sus dos cifras, no: «Deuda de Libranza: $257.000.000 → $514.000.000» se
+ * discute sola con lo que él sabe que debe.
+ *
+ * El saldo de una cuenta LOAN es deuda positiva y sale derivado de los eventos
+ * (`enrichWith`/`computeBalances`), así que el «después» es una suma, no una predicción: es
+ * exactamente lo que [signedDelta] le va a aplicar a esa pata.
+ *
+ * **Y sirve igual sobre un crédito con el saldo ajustado a mano.** «Ajustar saldo» (la deuda real
+ * según el banco) no sobrescribe nada: registra un evento más, así que la deuda derivada ya
+ * incluye el ajuste y este renglón parte de ahí. Lo que hay que saber es que la suma no mira
+ * fechas —el saldo de una cuenta es la suma de TODOS sus eventos, en cualquier orden—, así que
+ * anotar un desembolso VIEJO después de haber cuadrado la deuda contra el banco la sube por
+ * encima de lo que el banco dice: ese desembolso ya estaba dentro de la cifra que se cuadró. Es
+ * exactamente lo que este renglón deja ver antes de guardar, y si se guarda igual se arregla con
+ * otro «Ajustar saldo». La alternativa —ignorar los eventos anteriores a un ajuste— sería
+ * convertir el ajuste en un saldo escrito a mano, que es justo lo que este sistema no hace.
+ */
+fun deudaDespuesDelTraspaso(from: Account?, to: Account?, amount: Long?): String? {
+    if (from == null || to == null || amount == null || amount <= 0L) return null
+    val credito = listOf(from, to).firstOrNull { it.type == AccountType.LOAN } ?: return null
+    if (credito.currency != "COP") return null
+    val despues = credito.balance + if (credito.id == from.id) amount else -amount
+    return "Deuda de ${credito.name}: ${formatCOP(credito.balance)} pasa a ${formatCOP(despues)}"
+}
 
 /**
  * Igual que `FRACCION_VALOR_FILA` en la hoja de un movimiento, y por el mismo motivo. Un poco más
@@ -214,6 +273,10 @@ internal fun TransferBody(
 ) {
     val coroutine = rememberCoroutineScope()
     val elegibles = remember(accounts) { transferableAccounts(accounts) }
+    // Ola 14: de acá salen los valores POR DEFECTO, y a propósito no incluye los créditos — ver
+    // [defaultTransferAccounts]. `elegibles` (que sí los trae) es lo que se ofrece en el selector
+    // y lo que valida el botón.
+    val paraDefecto = remember(elegibles) { defaultTransferAccounts(elegibles) }
 
     var fromId by remember { mutableStateOf<String?>(null) }
     var toId by remember { mutableStateOf<String?>(null) }
@@ -242,7 +305,7 @@ internal fun TransferBody(
         val origenFirme = origenFrom == OrigenCuenta.ELEGIDA && elegibles.any { it.id == fromId }
         if (!origenFirme) {
             val elegida = resolverCuenta(
-                cuentas = elegibles,
+                cuentas = paraDefecto,
                 contexto = presetAccountId,
                 ultima = LastAccountStore.lastTransferFromId,
             )
@@ -253,7 +316,7 @@ internal fun TransferBody(
             elegibles.any { it.id == toId } && toId != fromId
         if (!destinoFirme) {
             val elegida = resolverCuenta(
-                cuentas = elegibles,
+                cuentas = paraDefecto,
                 ultima = destinoSugerido(fromId),
                 excluir = fromId,
             )
@@ -437,7 +500,9 @@ internal fun TransferBody(
                         // lo eligió la app— así que no es una decisión escondida.
                         if (toId == id) {
                             val reemplazo = resolverCuenta(
-                                cuentas = elegibles,
+                                // Sobre `paraDefecto` y no sobre `elegibles`: lo que la app elige
+                                // sola nunca puede ser un crédito (ver [defaultTransferAccounts]).
+                                cuentas = paraDefecto,
                                 // [destinoSugerido]: si la cuenta que acaba de pasar a origen era
                                 // el destino habitual, lo que se propone es el traspaso de vuelta.
                                 ultima = destinoSugerido(id),
@@ -467,8 +532,9 @@ internal fun TransferBody(
         if (accountsLoaded && elegibles.size < 2) {
             Spacer(Modifier.height(18.dp))
             Text(
-                text = "Un traspaso necesita dos cuentas tuyas. Las tarjetas y los préstamos no cuentan: " +
-                    "esos se manejan en Créditos.",
+                text = "Un traspaso necesita dos cuentas tuyas. Un crédito sirve de punta " +
+                    "—para el desembolso o para un abono extraordinario— pero la tarjeta no: el pago " +
+                    "de la tarjeta se anota como gasto.",
                 fontSize = 13.sp,
                 color = MinTextMute,
                 textAlign = TextAlign.Center,
@@ -541,6 +607,43 @@ internal fun TransferBody(
 
         Spacer(Modifier.height(16.dp))
         MoneyField(value = amount, onValueChange = { amount = it }, label = "MONTO")
+
+        // ── Ola 14 · lo que este traspaso le hace al crédito ────────────────────────────────
+        //
+        // Solo aparece cuando una de las dos puntas ES un crédito, y entonces aparece SIEMPRE:
+        // primero qué se está registrando (desembolso o abono extraordinario, con la frase que lo
+        // separa de la cuota mensual) y, apenas hay monto, la deuda antes y después.
+        //
+        // El alto NO se reserva a propósito, al revés que el error y el «falta el monto» de más
+        // abajo: esas dos cajas van pegadas al botón de guardar y su aparición lo corría bajo el
+        // dedo. Este bloque vive arriba de la fecha, en medio del formulario, y solo cambia
+        // cuando el dueño acaba de elegir un crédito con el dedo —o sea, mirando esta zona— así
+        // que reservarle 60 dp a todo el mundo por un caso que la mayoría no usa habría dejado un
+        // hueco permanente en la hoja para no mover nada que el dedo esté tocando.
+        // «Exactamente uno» y no «alguno»: con un crédito de los dos lados el traspaso está
+        // rechazado (ver validateTransfer) y explicarlo como desembolso sería contradecir el
+        // motivo que ya se muestra debajo del botón.
+        val unSoloCredito = from != null && to != null &&
+            (from.type == AccountType.LOAN) != (to.type == AccountType.LOAN)
+        val claseDeTraspaso = if (unSoloCredito) transferKindFor(from!!, to!!) else null
+        if (claseDeTraspaso == TransferKind.DESEMBOLSO || claseDeTraspaso == TransferKind.ABONO_EXTRAORDINARIO) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = if (claseDeTraspaso == TransferKind.DESEMBOLSO) {
+                    "Desembolso: la plata que el banco te prestó entra a tu cuenta y la deuda del " +
+                        "crédito sube. No es un ingreso del mes."
+                } else {
+                    "Abono extraordinario: plata extra que baja el capital. La cuota mensual no va " +
+                        "aquí — esa se anota como gasto en Agregar."
+                },
+                fontSize = 12.sp,
+                color = MinTextMute,
+            )
+            deudaDespuesDelTraspaso(from, to, amount)?.let { renglon ->
+                Spacer(Modifier.height(6.dp))
+                Text(renglon, fontSize = 12.sp, color = MinText, fontWeight = FontWeight.Medium)
+            }
+        }
 
         Spacer(Modifier.height(14.dp))
         Text("FECHA", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
@@ -632,6 +735,19 @@ internal fun TransferBody(
 
 internal enum class TransferSide { FROM, TO }
 
+/**
+ * El sub-picker de «Desde»/«Hacia».
+ *
+ * **Ola 14 — dos grupos, no una lista larga.** Al dejar entrar los préstamos, el dueño con cinco
+ * créditos reales pasaba de ver tres cuentas a ver ocho renglones donde antes solo había plata
+ * disponible, sin nada que dijera cuáles eran cuáles. Las cuentas de dinero e inversión van
+ * primero (es lo que se elige el 99 % de las veces) y los créditos al final, bajo un rótulo con
+ * una línea que explica para qué sirven ahí — que es la pregunta que se hace quien los ve
+ * aparecer por primera vez en esta hoja.
+ *
+ * El orden dentro de cada grupo es el que trae la lista (`GET /api/accounts` ordena por nombre):
+ * agrupar no reordena nada más.
+ */
 @Composable
 private fun TransferAccountPicker(
     title: String,
@@ -640,29 +756,61 @@ private fun TransferAccountPicker(
     onPick: (String) -> Unit,
     onClose: () -> Unit,
 ) {
+    val creditos = accounts.filter { it.type == AccountType.LOAN }
+    val cuentas = accounts.filter { it.type != AccountType.LOAN }
     Column(modifier = Modifier.fillMaxWidth()) {
         PickerHeader(title, onClose)
-        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-            accounts.forEach { account ->
-                CardRow(
-                    left = {
-                        Text(
-                            text = account.name,
-                            fontSize = 14.5.sp,
-                            color = MinText,
-                            fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
-                        )
-                    },
-                    right = {
-                        if (account.id == selectedId) {
-                            Text("Elegida", fontSize = 12.sp, color = MinTextMute)
-                        }
-                    },
-                    onClick = { onPick(account.id) },
-                    isLast = account.id == accounts.last().id,
-                )
-            }
+        if (cuentas.isNotEmpty()) {
+            GrupoDeCuentas(cuentas, selectedId, onPick)
+        }
+        if (creditos.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "CRÉDITOS",
+                fontSize = 11.sp,
+                color = MinTextMute,
+                letterSpacing = 0.4.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Elige uno para registrar el desembolso que te entró a la cuenta, o un abono " +
+                    "extraordinario que sale de ella.",
+                fontSize = 11.5.sp,
+                color = MinTextFaint,
+            )
+            Spacer(Modifier.height(8.dp))
+            GrupoDeCuentas(creditos, selectedId, onPick)
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun GrupoDeCuentas(
+    accounts: List<Account>,
+    selectedId: String?,
+    onPick: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        accounts.forEach { account ->
+            CardRow(
+                left = {
+                    Text(
+                        text = account.name,
+                        fontSize = 14.5.sp,
+                        color = MinText,
+                        fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
+                    )
+                },
+                right = {
+                    if (account.id == selectedId) {
+                        Text("Elegida", fontSize = 12.sp, color = MinTextMute)
+                    }
+                },
+                onClick = { onPick(account.id) },
+                isLast = account.id == accounts.last().id,
+            )
+        }
     }
 }

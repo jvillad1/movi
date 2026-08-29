@@ -10,6 +10,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Lógica pura de la hoja de Traspaso.
@@ -30,6 +31,9 @@ class TransferFormTest {
 
     private val ahorros = Account("acc_ahorros", "Ahorros", AccountType.SAVINGS, balance = 1_000_000L)
     private val cdt = Account("acc_cdt", "CDT", AccountType.INVESTMENT, balance = 0L)
+    private val tarjeta = Account("acc_tc", "Visa", AccountType.CREDIT_CARD, balance = 500_000L)
+    private val libranza = Account("acc_loan", "Libranza", AccountType.LOAN, balance = 257_000_000L)
+    private val todas = listOf(ahorros, cdt, tarjeta, libranza)
 
     // ── Fecha ─────────────────────────────────────────────────────────────────
 
@@ -75,5 +79,48 @@ class TransferFormTest {
             "El monto tiene que ser mayor que cero",
             validateTransfer(ahorros, cdt, 0L),
         )
+    }
+
+    // ── Ola 14 · qué se ofrece y qué se preselecciona ─────────────────────────
+
+    @Test
+    fun `el selector ofrece los creditos y deja fuera las tarjetas`() {
+        assertEquals(listOf(ahorros, cdt, libranza), transferableAccounts(todas))
+    }
+
+    /**
+     * La otra mitad: un crédito **nunca** queda elegido solo. Si pudiera, dos toques distraídos
+     * anotarían un desembolso que nadie pidió.
+     */
+    @Test
+    fun `lo que la app preselecciona sola jamas incluye un credito`() {
+        assertEquals(listOf(ahorros, cdt), defaultTransferAccounts(todas))
+        assertTrue(defaultTransferAccounts(listOf(libranza)).isEmpty())
+    }
+
+    // ── Ola 14 · en qué queda la deuda ────────────────────────────────────────
+
+    @Test
+    fun `un desembolso muestra la deuda subiendo`() {
+        assertEquals(
+            "Deuda de Libranza: $257.000.000 pasa a $277.000.000",
+            deudaDespuesDelTraspaso(libranza, ahorros, 20_000_000L),
+        )
+    }
+
+    @Test
+    fun `un abono extraordinario muestra la deuda bajando`() {
+        assertEquals(
+            "Deuda de Libranza: $257.000.000 pasa a $252.000.000",
+            deudaDespuesDelTraspaso(ahorros, libranza, 5_000_000L),
+        )
+    }
+
+    @Test
+    fun `sin credito, sin monto o con monto cero no hay nada que anticipar`() {
+        assertNull(deudaDespuesDelTraspaso(ahorros, cdt, 250_000L))
+        assertNull(deudaDespuesDelTraspaso(libranza, ahorros, null))
+        assertNull(deudaDespuesDelTraspaso(libranza, ahorros, 0L))
+        assertNull(deudaDespuesDelTraspaso(null, ahorros, 100L))
     }
 }
