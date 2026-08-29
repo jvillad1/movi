@@ -85,8 +85,13 @@ fun CreditTermsSheet(
         (installment ?: 0L) > 0L &&
         (dayOfMonth.toIntOrNull() in 1..31) &&
         isValidCreditDate(startDate)
+    // Ola 14 — la deuda actual dejó de ser obligatoria. Un crédito que **acaban de desembolsar**
+    // se crea en $0 y la deuda la registra el desembolso (Agregar → Traspaso, con el crédito como
+    // origen), que es el mismo movimiento que pone la plata en la cuenta corriente. Exigir la
+    // deuda acá obligaba a declararla dos veces y la dejaba al doble. Un crédito viejo se sigue
+    // creando igual que siempre: se escribe lo que se debe hoy y no lleva traspaso.
     val accountValid = if (editing != null) true
-        else if (newAccountMode) newAccountName.isNotBlank() && (newAccountDebt ?: 0L) > 0L
+        else if (newAccountMode) newAccountName.isNotBlank() && (newAccountDebt ?: 0L) >= 0L
         else selectedAccountId != null
     val canSave = termsValid && accountValid && !saving
 
@@ -94,7 +99,7 @@ fun CreditTermsSheet(
     // mismo orden en que aparecen los campos en la hoja.
     val missingFieldMessage = when {
         editing == null && newAccountMode && newAccountName.isBlank() -> "Falta el nombre de la cuenta"
-        editing == null && newAccountMode && (newAccountDebt ?: 0L) <= 0L -> "Falta la deuda actual"
+        editing == null && newAccountMode && (newAccountDebt ?: 0L) < 0L -> "La deuda no puede ser negativa"
         editing == null && !newAccountMode && selectedAccountId == null -> "Elige una cuenta"
         bank.isBlank() -> "Falta el banco"
         (principal ?: 0L) <= 0L -> "Falta el capital original"
@@ -131,7 +136,9 @@ fun CreditTermsSheet(
                     Repositories.wallets.createCredit(
                         CreateCreditRequest(
                             name = newAccountName.trim(),
-                            initialDebt = newAccountDebt!!,
+                            // Ola 14: en blanco = $0 (crédito recién desembolsado, la deuda la
+                            // crea el traspaso del desembolso). Ver [accountValid] más arriba.
+                            initialDebt = newAccountDebt ?: 0L,
                             terms = terms,
                         )
                     )
@@ -216,7 +223,17 @@ fun CreditTermsSheet(
                     if (newAccountMode) {
                         FieldBox("Nombre (p.ej. Crédito Vehículo Santander)", newAccountName, { newAccountName = it })
                         Spacer(Modifier.height(8.dp))
-                        MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP)")
+                        MoneyField(newAccountDebt, { newAccountDebt = it }, placeholder = "Deuda actual (COP, opcional)")
+                        Spacer(Modifier.height(6.dp))
+                        // Ola 14: la frase que evita contar la deuda dos veces. Va debajo del
+                        // campo y no en una ayuda escondida porque es justo acá donde se decide.
+                        Text(
+                            "Si te acaban de desembolsar este crédito, déjala en blanco: la deuda " +
+                                "y la plata que entró a tu cuenta las registra el desembolso, en " +
+                                "Agregar, pestaña Traspaso.",
+                            fontSize = 11.5.sp,
+                            color = MinTextMute,
+                        )
                     }
                     Spacer(Modifier.height(16.dp))
                 }

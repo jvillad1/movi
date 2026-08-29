@@ -42,6 +42,8 @@ import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.BeforeTest
@@ -300,7 +302,7 @@ class CreditRoutesTest {
     }
 
     @Test
-    fun `POST with blank name or non-positive debt is 400`() = testApplication {
+    fun `POST with blank name or negative debt is 400`() = testApplication {
         wireApp()
         val terms = """"terms":{"accountId":"","bank":"X","principal":100,"rateEa":10.0,
                         "termMonths":12,"installment":10,"dayOfMonth":1,"startDate":"2026-01-01"}"""
@@ -310,12 +312,44 @@ class CreditRoutesTest {
             setBody("""{"name":"  ","initialDebt":100,$terms}""")
         }
         assertEquals(HttpStatusCode.BadRequest, blankName.status)
-        val zeroDebt = client.post("/api/credits") {
+        val negativeDebt = client.post("/api/credits") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             header(HttpHeaders.ContentType, "application/json")
-            setBody("""{"name":"Préstamo","initialDebt":0,$terms}""")
+            setBody("""{"name":"Préstamo","initialDebt":-1,$terms}""")
         }
-        assertEquals(HttpStatusCode.BadRequest, zeroDebt.status)
+        assertEquals(HttpStatusCode.BadRequest, negativeDebt.status)
+    }
+
+    /**
+     * **Ola 14 — deuda inicial en cero es válida, y este test dice lo contrario que el anterior.**
+     * Hasta acá el cero era 400. Era la regla que hacía imposible registrar bien un crédito recién
+     * desembolsado: la deuda quedaba declarada en la apertura y, si además se anotaba el desembolso
+     * como traspaso (lo único que pone la plata en la cuenta corriente), quedaba contada dos veces.
+     * Ahora el crédito puede nacer en $0 y la deuda la crea el desembolso — sin evento de apertura
+     * de por medio, porque `openingEventFor` devuelve null con saldo cero.
+     */
+    @Test
+    fun `un credito recien desembolsado se crea en cero y sin evento de apertura`() = testApplication {
+        wireApp()
+        val terms = """"terms":{"accountId":"","bank":"Bancolombia","principal":257000000,"rateEa":12.0,
+                        "termMonths":120,"installment":3500000,"dayOfMonth":5,"startDate":"2026-08-28"}"""
+        val response = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Libranza nueva","initialDebt":0,$terms}""")
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        val accountId = body["account"]!!.jsonObject["id"]!!.jsonPrimitive.content
+        assertEquals(0L, body["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long)
+        // Los términos sí quedaron: el capital original es el contrato, no la deuda de hoy.
+        assertEquals(257_000_000L, body["terms"]!!.jsonObject["principal"]!!.jsonPrimitive.long)
+        assertEquals(
+            0L,
+            transaction { Events.selectAll().where { Events.accountId eq accountId }.count() },
+            "un crédito en cero no deja evento de apertura que después haya que corregir",
+        )
     }
 
     // ── POST /{accountId}/balance-adjustment ──────────────────────────────────

@@ -70,7 +70,22 @@ fun Route.creditRoutes() {
             val body = call.receive<CreateCreditRequest>()
             val name = body.name.trim()
             if (name.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Nombre de cuenta requerido")
-            if (body.initialDebt <= 0L) return@post call.respond(HttpStatusCode.BadRequest, "Deuda inicial debe ser mayor a 0")
+            // Ola 14 — la deuda inicial puede ser CERO, y eso es lo que hace usable el desembolso.
+            //
+            // Antes el mínimo era 1: había que declarar la deuda al crear el crédito. Para un
+            // crédito viejo eso está bien (es la foto de lo que ya se debía cuando entró a Movi),
+            // pero para uno que **acaban de desembolsar** era una trampa: la deuda quedaba
+            // registrada por la apertura y, si además se anotaba el desembolso como traspaso —que
+            // es lo que pone la plata en la cuenta corriente—, la misma deuda quedaba contada dos
+            // veces. Los $257.000.000 de la libranza se veían como $514.000.000.
+            //
+            // Con cero permitido las dos formas son limpias y no se pisan: un crédito viejo se
+            // crea con lo que se debe hoy y no lleva traspaso; uno recién desembolsado se crea en
+            // $0 y la deuda la crea el desembolso, junto con la plata que entró. Un `initialDebt`
+            // de 0 no genera evento de apertura (ver `openingEventFor`), así que la cuenta arranca
+            // sin ninguna fila que después haya que corregir. Mismo criterio que ya usaba
+            // `POST /api/cards`, que acepta 0 desde siempre.
+            if (body.initialDebt < 0L) return@post call.respond(HttpStatusCode.BadRequest, "La deuda no puede ser negativa")
 
             val account = Account(
                 id       = "acc_${System.currentTimeMillis()}",
