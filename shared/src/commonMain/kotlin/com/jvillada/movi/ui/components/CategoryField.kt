@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -464,16 +464,14 @@ fun CategoryField(
      *   la hoja o la lista, y de ahí sale el «desaparecen».
      *
      * Por eso el sub-picker de pantalla completa pasa `null`: una sola área desplazable —la de
-     * la hoja— y la lista entera a la vista. Las otras dos pantallas que usan este campo lo
-     * siguen llamando sin tocar nada y conservan su tope: ahí el panel se abre **encima** de un
-     * formulario y sin tope lo empujaría hacia abajo.
+     * la hoja— y la lista entera a la vista. Las otras **tres** pantallas que usan este campo
+     * (`CreateRecurringRuleSheet`, `CategorySheets` y `PresupuestosScreen`) lo siguen llamando sin
+     * tocar nada y conservan su tope: ahí el panel se abre **encima** de un formulario y sin tope
+     * lo empujaría hacia abajo.
      */
     maxSuggestionsHeight: Dp? = 220.dp,
 ) {
     var focused by remember { mutableStateOf(false) }
-    // Se recuerda siempre, se usa solo cuando hay tope: un `remember` no puede quedar colgado de
-    // una rama que aparece y desaparece.
-    val suggestionsScroll = rememberScrollState()
     // F62: la lista NO puede desmontarse en el mismo frame en que el campo pierde el foco.
     // En táctil (web/PWA), el down del tap sobre una sugerencia desenfoca el campo ANTES de
     // que llegue el up: si la lista se condiciona a `focused` a secas, se desmonta entre el
@@ -489,6 +487,15 @@ fun CategoryField(
             suggestionsVisible = false
         }
     }
+    // El desplazamiento del panel acotado. Se recuerda acá arriba y no adentro de la rama que lo
+    // usa, porque un `remember` colgado de una rama que aparece y desaparece es frágil de leer.
+    //
+    // **La clave está en el `suggestionsVisible`**: con él, el estado se rehace cada vez que el
+    // panel se muestra, que es exactamente lo que hacía el `rememberScrollState()` de adentro del
+    // `if` — el panel se abría arriba de todo. Sin la clave, en las tres pantallas acotadas el
+    // panel reabría donde el dueño lo había dejado desplazado, y este cambio dejaba de ser
+    // «no toca nada» para ellas.
+    val suggestionsScroll = remember(suggestionsVisible) { ScrollState(0) }
     val focusManager = LocalFocusManager.current
     // Estado interno de texto+selección: separado de [value] para poder seleccionar todo el
     // texto al enfocar (Ola 2 #3b) sin pelearse con el `value: String` que ya usan las 3

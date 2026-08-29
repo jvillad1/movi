@@ -213,9 +213,18 @@ fun QuickAddScreen(
             // Restaurar el 0 explícitamente es lo que lo devuelve a su sitio.
             if (objetivo > 0) {
                 // Se ESPERA a que el cuerpo vuelva a medirse, no se cuenta un cuadro: si se
-                // restaura antes, el valor se recorta contra el `maxValue` del sub-picker (0) y la
+                // restaura antes, el valor se recorta contra el `maxValue` del sub-picker y la
                 // posición se pierde para siempre. El timeout es un seguro contra colgarse si el
                 // contenido quedara más corto que el objetivo — ahí se restaura lo que se pueda.
+                //
+                // **Ola 14, para que se lea bien: esta espera ya no espera lo mismo en todos los
+                // sub-pickers.** Se escribió cuando el `maxValue` de TODOS ellos era 0 (el alto
+                // fijado los dejaba del tamaño del hueco), así que la espera era la única forma
+                // de no perder la posición. Con la lista de categorías estirada, el `maxValue`
+                // del picker de Categoría es MAYOR que el del editor, y en ese camino la
+                // condición ya se cumple en el primer cuadro: la espera no espera nada y el
+                // resultado sale igual de correcto. Sigue haciendo falta para Fecha, Nota y
+                // Cuenta, que sí siguen midiendo lo que el hueco.
                 withTimeoutOrNull(timeMillis = 1_000) {
                     snapshotFlow { sheetScroll.maxValue }.first { it >= objetivo }
                 }
@@ -509,10 +518,18 @@ fun QuickAddScreen(
                 // —la mitad— y el teclado entero queda fuera de la pantalla en una ventana donde
                 // hoy entra todo.
                 //
-                // Los dos sub-pickers que traen su propio scroll (la lista de cuentas de
-                // [WalletPicker], `heightIn(max = 360.dp)`, y las sugerencias de `CategoryField`,
-                // `heightIn(max = 220.dp)`) ya tienen alto acotado ANTES de su scroll, así que no
-                // reciben la altura infinita de este contenedor.
+                // **Quién recibe la altura infinita de este contenedor, y quién no.** Hasta la
+                // Ola 13 no la recibía nadie: los dos sub-pickers con scroll propio —la lista de
+                // cuentas de [WalletPicker], `heightIn(max = 360.dp)`, y las sugerencias de
+                // `CategoryField`, `heightIn(max = 220.dp)`— tenían el alto acotado ANTES de su
+                // scroll. [WalletPicker] sigue así.
+                //
+                // **Las sugerencias de categoría ya NO** (Ola 14): este mismo archivo les pasa
+                // `maxSuggestionsHeight = null` unas líneas más abajo, así que no traen scroll
+                // propio y sí se estiran con la altura infinita de acá — que es exactamente el
+                // arreglo, porque el tope de 220 dp era lo que dejaba 4 categorías a la vista con
+                // una losa vacía debajo. Lo que las contiene no es un tope propio sino el
+                // desplazamiento de la hoja, uno solo. Ver el KDoc de `maxSuggestionsHeight`.
                 Column(
                     modifier = Modifier
                         // El peso va primero por lectura: no mide nada, solo le dice a la Column
@@ -562,6 +579,19 @@ fun QuickAddScreen(
                     //    está afuera del `Box`, así que ninguna de las tres pestañas se cambia
                     //    sola. Recuperar la garantía entera pediría no restaurar el
                     //    desplazamiento, que es peor: mueve el teclado, que es el bug caro.
+                    //
+                    //    **Ola 14 — y ahora la X del sub-picker se puede ir de la pantalla.**
+                    //    Con la lista de categorías estirada, bajar hasta el final la saca de la
+                    //    ventana: medido, su `top` pasa de 94 dp a −120,5 dp. Lo incómodo no es
+                    //    que se vaya (se recupera subiendo) sino lo que queda en su lugar: la
+                    //    única X visible arriba a la derecha pasa a ser la de LA HOJA ENTERA, así
+                    //    que quien se arrepiente a media lista y va «a la X» descarta el
+                    //    movimiento en vez de cerrar el sub-picker. Queda ANOTADO y no arreglado:
+                    //    las salidas (fijar el encabezado fuera del desplazamiento, o volver a
+                    //    acotar la lista) son cambios de disposición de esta hoja, que es la que
+                    //    ya se llevó nueve rondas — y ninguna se toca de pasada. Ojo también con
+                    //    lo que NO cubre `HojaAgregarGeometriaTest`: su prueba de la X mira el
+                    //    sub-picker **al abrirlo**, no después de desplazarlo.
                     //
                     // Que el cuerpo no esté compuesto durante un picker (el `when` lo reemplaza)
                     // ya garantiza además que no haya teclado fantasma debajo: no hay eventos que
