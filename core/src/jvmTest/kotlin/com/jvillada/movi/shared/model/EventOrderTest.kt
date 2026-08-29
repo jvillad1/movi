@@ -146,19 +146,29 @@ class EventOrderTest {
     }
 
     /**
-     * Los movimientos que ya existían no tienen creación y no se les inventa una: caen a su
-     * `timestamp`. Entre dos sin creación, el orden lo sigue fijando el `id` — o sea, quedan
-     * exactamente como estaban.
+     * **Lo que ya existía queda en un orden estable, pero arbitrario.** Los movimientos viejos no
+     * tienen creación y no se les inventa una: caen a su `timestamp`. Si los dos empatan ahí —que
+     * es el caso normal de un día pasado— el respaldo empata también y el que decide es el `id`,
+     * un UUID al azar. Así que el orden previo **no** se conserva: acá se siembra `zzz` primero y
+     * sale `aaa` primero. Lo que sí se gana es que no baile: las dos lecturas dan lo mismo.
      */
     @Test
-    fun `sin fecha de creacion se cae al timestamp y nada se mueve`() {
+    fun `sin fecha de creacion el orden queda estable aunque arbitrario`() {
         val mismoInstante = 1_700_000_000_000L
-        val ordenados = listOf(
+        val comoEstaban = listOf(
             ev("ev_zzz_viejo", mismoInstante),
             ev("ev_aaa_viejo", mismoInstante),
-        ).masRecientePrimero()
+        )
+        val ordenados = comoEstaban.masRecientePrimero()
 
+        // Arbitrario: manda el id, no el orden en que estaban.
         assertEquals(listOf("ev_aaa_viejo", "ev_zzz_viejo"), ordenados.map { it.id })
+        assertTrue(
+            ordenados.map { it.id } != comoEstaban.map { it.id },
+            "si esto empieza a pasar, el respaldo dejó de caer en el id y el KDoc hay que releerlo",
+        )
+        // Estable: la lista contraria sale igual.
+        assertEquals(ordenados.map { it.id }, comoEstaban.reversed().masRecientePrimero().map { it.id })
     }
 
     /**

@@ -36,6 +36,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.accountDayTotal
+import com.jvillada.movi.shared.model.masRecientePrimero
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
@@ -86,7 +87,15 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         // ajuste de $60.000.000 — y en CREDIT_CARD el abono habría desaparecido
                         // del total aunque sí mueve la deuda. Ver el KDoc de accountDayTotal.
                         total = accountDayTotal(acc.type, items),
-                        items = items.sortedByDescending { it.timestamp },
+                        // masRecientePrimero, no `sortedByDescending { it.timestamp }` (que es
+                        // lo que había): sin desempate, dos movimientos del mismo milisegundo
+                        // —las dos patas de un traspaso, un lote de extracto, o cualquier día
+                        // pasado, donde la fecha elegida a mano se sella al mediodía— quedaban en
+                        // el orden en que hubieran llegado. Hoy llegan bien porque `getEvents` ya
+                        // ordena y `sortedByDescending` es estable, así que esto no cambia nada en
+                        // pantalla: cambia que deje de depender de eso. Es el quinto lugar que
+                        // ordena la misma lista — ver MAS_RECIENTE_PRIMERO, que los enumera.
+                        items = items.masRecientePrimero(),
                     )
                 }
                 .sortedByDescending { it.date }

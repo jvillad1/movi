@@ -1210,17 +1210,22 @@ class EventRoutesTest {
         )
     }
 
-    /** Los movimientos que ya existían no tienen creación: caen a su timestamp y no se mueven. */
+    /**
+     * Los movimientos que ya existían no tienen creación: caen a su timestamp, empatan ahí también
+     * y los ordena el `id`. **No quedan donde estaban** — se siembra `ev-zzz` primero y la lista
+     * sale con `ev-aaa` arriba. Lo que se gana es que el orden sea el mismo en cada lectura.
+     */
     @Test
-    fun `los movimientos sin fecha de creacion siguen donde estaban`() = testApplication {
+    fun `los movimientos sin fecha de creacion quedan en un orden estable aunque arbitrario`() = testApplication {
         wireApp()
         val ayer = mediodiaDeHace(1)
         seedEvent("ev-zzz", userAId, savingsAccountId, "EXPENSE", "Viejo Z", "Comida", timestamp = ayer)
         seedEvent("ev-aaa", userAId, savingsAccountId, "EXPENSE", "Viejo A", "Comida", timestamp = ayer)
 
         val ids = idsDelDia(userAId, AppClock.today().minusDays(1).toString())
+        // Arbitrario: se sembró zzz primero y manda el id.
         assertEquals(listOf("ev-aaa", "ev-zzz"), ids)
-        // Y sigue siendo el mismo orden en la lectura siguiente.
+        // Estable: sigue siendo el mismo orden en la lectura siguiente.
         assertEquals(ids, idsDelDia(userAId, AppClock.today().minusDays(1).toString()))
     }
 

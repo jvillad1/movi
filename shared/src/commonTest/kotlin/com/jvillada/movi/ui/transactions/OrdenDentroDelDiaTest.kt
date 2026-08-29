@@ -55,14 +55,31 @@ class OrdenDentroDelDiaTest {
         )
     }
 
-    /** Cada chip conserva el orden de la lista que filtra: filtrar quita renglones, no los baraja. */
+    /**
+     * Cada chip conserva el orden de la lista que filtra: filtrar quita renglones, no los baraja.
+     *
+     * La salida esperada va **escrita a mano**, no derivada de `filtrado`. La primera versión de
+     * este test comparaba contra `ordenado.filter { it in filtrado }`, que es exactamente
+     * `filtrado`: una tautología que pasaba aunque el filtro barajara la lista entera.
+     */
     @Test
     fun `el orden sobrevive a cada chip`() {
         val ordenado = dia()
-        for (chip in listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_POR_CONFIRMAR)) {
+        val esperadoPorChip = mapOf(
+            // Todo: el día entero, tal cual entró.
+            CHIP_TODO to listOf(
+                "ev-tarde", "ev-sueldo", "ev-pendiente", "ev_aaa", "ev_bbb",
+                "ev-tr-in", "ev-tr-out", "ev-apertura",
+            ),
+            // Gastos: sin el pendiente, sin las patas del traspaso y sin la apertura.
+            CHIP_GASTOS to listOf("ev-tarde", "ev_aaa", "ev_bbb"),
+            // Ingresos: el sueldo y nada más (la pata IN es traspaso; la apertura no es ingreso).
+            CHIP_INGRESOS to listOf("ev-sueldo"),
+            CHIP_POR_CONFIRMAR to listOf("ev-pendiente"),
+        )
+        for ((chip, esperado) in esperadoPorChip) {
             val filtrado = ordenado.filter { matchesChip(it, chip) }
-            val esperado = ordenado.filter { it in filtrado }.map { it.id }
-            assertEquals(esperado, filtrado.map { it.id }, "el chip $chip barajó la lista")
+            assertEquals(esperado, filtrado.map { it.id }, "el chip $chip barajó o cambió la lista")
             // Y sigue siendo decreciente por instante.
             filtrado.zipWithNext { a, b ->
                 assertTrue(a.timestamp >= b.timestamp, "chip $chip: ${a.id} quedó arriba de ${b.id}")

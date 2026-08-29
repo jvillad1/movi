@@ -69,7 +69,13 @@ data class FinancialEvent(
      *
      * **Nullable, y sin inventar nada.** Los movimientos que ya existen no la tienen y no hay de
      * dónde sacarla: la tabla nunca guardó cuándo se creó una fila. Un `null` cae a [timestamp]
-     * (ver el comparador), que deja a esos movimientos exactamente como estaban.
+     * en el comparador.
+     *
+     * Eso **no** quiere decir que esos movimientos queden donde estaban. Entre dos filas viejas
+     * del mismo instante el respaldo empata también, y el orden lo termina fijando el `id`, que es
+     * un UUID al azar: estable en cada lectura, pero arbitrario. O sea que lo que ya está cargado
+     * no recibe el arreglo — solo deja de bailar. El detalle, con el porqué de no hacer backfill,
+     * está en `MAS_RECIENTE_PRIMERO`.
      *
      * **La pone el cliente al escribir el movimiento**, y el server solo la completa si no viene:
      * es el único instante que el cliente conoce y el server no. Si la estampara el server al
