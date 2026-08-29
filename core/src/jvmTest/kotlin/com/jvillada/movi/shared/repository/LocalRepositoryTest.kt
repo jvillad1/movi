@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.openingEventFor
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import kotlinx.datetime.toInstant
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1068,4 +1069,70 @@ class LocalRepositoryTest {
             source = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.UNCONFIRMED,
         )
+
+    // ── Ola 10 · El orden DENTRO de cada día ────────────────────────────────
+
+    /** Un instante del 20 de agosto de 2026 a la hora de Bogotá que se pida. */
+    private fun eseDiaALas(hora: Int, minuto: Int = 0): Long =
+        kotlinx.datetime.LocalDateTime(2026, 8, 20, hora, minuto)
+            .toInstant(com.jvillada.movi.shared.time.AppTimeZone.zone)
+            .toEpochMilliseconds()
+
+    private fun eventoConFecha(
+        id: String,
+        ts: Long,
+        type: TransactionType = TransactionType.EXPENSE,
+        amount: Long = 10_000L,
+        category: String = "Comida",
+    ) = FinancialEvent(
+        id = id, accountId = "acc-orden", type = type, amount = amount,
+        category = category, description = "test", timestamp = ts,
+        source = EventSource.MANUAL, reconciliationStatus = ReconciliationStatus.RECONCILED,
+    )
+
+    /**
+     * El espejo local ya traía `ORDER BY timestamp DESC` en `selectAll`, así que el grueso del
+     * orden estaba; lo que faltaba era que fuera el MISMO criterio que el del server. Este test
+     * lo fija: si alguien cambia la consulta, la pantalla del teléfono no se cae con el cambio.
+     */
+    @Test
+    fun `getEventsByDay lista el mas reciente arriba dentro del dia`() = runBlocking {
+        repo.createAccount(Account("acc-orden", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(eventoConFecha("ev-8am", eseDiaALas(8)))
+        repo.postEvent(eventoConFecha("ev-19pm", eseDiaALas(19)))
+        repo.postEvent(eventoConFecha("ev-13pm", eseDiaALas(13)))
+
+        val dia = repo.getEventsByDay().first { it.date == "2026-08-20" }
+        assertEquals(listOf("ev-19pm", "ev-13pm", "ev-8am"), dia.items.map { it.id })
+    }
+
+    /**
+     * Dos movimientos del mismo milisegundo (un lote de SMS, o de extracto) tienen que salir
+     * siempre en el mismo orden. SQLite no promete nada para el empate de `ORDER BY timestamp
+     * DESC`, así que el desempate por `id` es lo único que hace que la lista no se reordene sola.
+     */
+    @Test
+    fun `dos movimientos del mismo instante salen siempre igual en el telefono`() = runBlocking {
+        repo.createAccount(Account("acc-orden", "Ahorros", AccountType.SAVINGS, 0L))
+        val instante = eseDiaALas(10, 30)
+        repo.postEvent(eventoConFecha("ev_zzz", instante))
+        repo.postEvent(eventoConFecha("ev_aaa", instante))
+
+        val primera = repo.getEventsByDay().first { it.date == "2026-08-20" }.items.map { it.id }
+        val segunda = repo.getEventsByDay().first { it.date == "2026-08-20" }.items.map { it.id }
+        assertEquals(primera, segunda)
+        assertEquals(listOf("ev_aaa", "ev_zzz"), primera)
+    }
+
+    /** El total del día no depende del orden — pero es la cifra que el dueño lee. */
+    @Test
+    fun `el total del dia no se mueve con el orden nuevo`() = runBlocking {
+        repo.createAccount(Account("acc-orden", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(eventoConFecha("ev-in", eseDiaALas(9), TransactionType.INCOME, 500_000L, "Salario"))
+        repo.postEvent(eventoConFecha("ev-out1", eseDiaALas(20), TransactionType.EXPENSE, 120_000L))
+        repo.postEvent(eventoConFecha("ev-out2", eseDiaALas(20), TransactionType.EXPENSE, 80_000L))
+
+        val dia = repo.getEventsByDay().first { it.date == "2026-08-20" }
+        assertEquals(300_000L, dia.total)
+    }
 }

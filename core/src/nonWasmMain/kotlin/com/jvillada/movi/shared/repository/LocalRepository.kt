@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.masRecientePrimero
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
@@ -404,17 +405,33 @@ class LocalRepository(
         return resolved
     }
 
+    /**
+     * Espejo local de `GET /api/events`, **con su mismo orden**.
+     *
+     * El `ORDER BY timestamp DESC` de `selectByAccount`/`selectAll` ya traía lo más nuevo
+     * arriba, pero **no desempata**: dos movimientos del mismo milisegundo —las dos patas de un
+     * traspaso, o un lote de SMS— salían de SQLite en un orden que nadie promete, así que podían
+     * intercambiarse entre lecturas. El comparador compartido cierra ese hueco con el mismo
+     * criterio que el server, y no en la consulta a propósito: ver [masRecientePrimero].
+     */
     override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
         val uid = userId()
         val types = accountTypes(uid)
         return if (accountId != null)
             db.financialEventQueries.selectByAccount(accountId, uid).executeAsList().map { it.toModel(types) }
+                .masRecientePrimero()
         else
             db.financialEventQueries.selectAll(uid).executeAsList().map { it.toModel(types) }
+                .masRecientePrimero()
     }
 
     override suspend fun getEventsByDay(): List<EventDay> =
         getEvents()
+            // Explícito, aunque [getEvents] ya venga ordenado: es el mismo lugar donde lo hace
+            // `GET /api/events/by-day`, y el día que alguien cambie de dónde salen los eventos
+            // el orden de la pantalla no se cae con el cambio. `groupBy` conserva el orden de
+            // llegada dentro de cada grupo, así que esto es lo que ordena cada día por dentro.
+            .masRecientePrimero()
             .groupBy { epochMillisToDate(it.timestamp) }
             .map { (date, items) ->
                 EventDay(

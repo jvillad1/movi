@@ -1040,4 +1040,122 @@ class EventRoutesTest {
         assertEquals(HttpStatusCode.Created, res.status)
         assertEquals(AppClock.today(), epochMillisToAppDate(timestampDe("ev-sin-fecha")))
     }
+
+    // ── Ola 10 · El orden DENTRO de cada día ────────────────────────────────
+
+    /**
+     * Los renglones de un día en el orden en que los devuelve `/by-day`, en orden de aparición.
+     */
+    private suspend fun ApplicationTestBuilder.idsDelDia(userId: String, fecha: String): List<String> {
+        val res = client.get("/api/events/by-day") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val dia = Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject }
+            .first { it["date"]!!.jsonPrimitive.content == fecha }
+        return dia["items"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+    }
+
+    private suspend fun ApplicationTestBuilder.totalDelDia(userId: String, fecha: String): Long {
+        val res = client.get("/api/events/by-day") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        return Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject }
+            .first { it["date"]!!.jsonPrimitive.content == fecha }["total"]!!.jsonPrimitive.long
+    }
+
+    /** Un instante de HOY, a la hora de Bogotá que se pida. */
+    private fun hoyALas(hora: Int, minuto: Int = 0): Long =
+        AppClock.today().atTime(hora, minuto).atZone(AppClock.zone).toInstant().toEpochMilli()
+
+    /**
+     * El pedido del dueño: «el último arriba en cada grupo y el más viejo de último».
+     *
+     * Antes de esta corrección `/by-day` ordenaba **los días** y dentro de cada día dejaba pasar
+     * lo que devolviera el `SELECT` sin `ORDER BY` — el orden físico de la tabla, que un UPDATE o
+     * un VACUUM pueden cambiar. Se siembra a propósito **al revés** del orden esperado, que es
+     * como sale de la tabla cuando se inserta así.
+     */
+    @Test
+    fun `by-day lista el mas reciente arriba y el mas viejo abajo dentro del dia`() = testApplication {
+        wireApp()
+        seedEvent("ev-8am",  userAId, savingsAccountId, "EXPENSE", "Café",    "Comida", timestamp = hoyALas(8))
+        seedEvent("ev-13pm", userAId, savingsAccountId, "EXPENSE", "Almuerzo", "Comida", timestamp = hoyALas(13))
+        seedEvent("ev-19pm", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado", timestamp = hoyALas(19))
+
+        assertEquals(
+            listOf("ev-19pm", "ev-13pm", "ev-8am"),
+            idsDelDia(userAId, AppClock.today().toString()),
+        )
+    }
+
+    /**
+     * Dos movimientos con el MISMO instante al milisegundo —lo normal en un lote de SMS o de
+     * extracto— tienen que salir siempre igual. Sin desempate, la lista se reordenaba sola entre
+     * recargas: la otra mitad del defecto.
+     */
+    @Test
+    fun `dos movimientos del mismo instante salen en el mismo orden en cada lectura`() = testApplication {
+        wireApp()
+        val mismoInstante = hoyALas(10, 30)
+        seedEvent("ev-zzz", userAId, savingsAccountId, "EXPENSE", "Uno", "Comida", timestamp = mismoInstante)
+        seedEvent("ev-aaa", userAId, savingsAccountId, "EXPENSE", "Dos", "Comida", timestamp = mismoInstante)
+
+        val hoy = AppClock.today().toString()
+        val primera = idsDelDia(userAId, hoy)
+        val segunda = idsDelDia(userAId, hoy)
+        assertEquals(primera, segunda)
+        assertEquals(listOf("ev-aaa", "ev-zzz"), primera)
+    }
+
+    /**
+     * Las dos patas de un traspaso comparten instante. Si el orden nuevo las separara, el renglón
+     * colapsado de Movimientos (ver `collapseTransfers`) caería en un lugar raro del día.
+     */
+    @Test
+    fun `las dos patas de un traspaso quedan pegadas dentro del dia`() = testApplication {
+        wireApp()
+        val instante = hoyALas(15)
+        seedEvent("ev-otro-tarde", userAId, savingsAccountId, "EXPENSE", "Taxi", "Transporte", timestamp = hoyALas(18))
+        seedEvent("ev-otro-temprano", userAId, savingsAccountId, "EXPENSE", "Pan", "Comida", timestamp = hoyALas(7))
+        transaction {
+            listOf("ev-tr-a" to "EXPENSE", "ev-tr-b" to "INCOME").forEach { (evId, tipo) ->
+                Events.insert {
+                    it[id]                   = evId
+                    it[userId]               = userAId
+                    it[accountId]            = savingsAccountId
+                    it[type]                 = tipo
+                    it[amount]               = 500_000L
+                    it[currency]             = "COP"
+                    it[category]             = "Traspaso"
+                    it[description]          = "Traspaso"
+                    it[timestamp]            = instante
+                    it[eventSource]          = "MANUAL"
+                    it[reconciliationStatus] = "RECONCILED"
+                    it[transferId]           = "tr-orden"
+                }
+            }
+        }
+
+        val ids = idsDelDia(userAId, AppClock.today().toString())
+        val posiciones = ids.withIndex().filter { it.value.startsWith("ev-tr-") }.map { it.index }
+        assertEquals(2, posiciones.size, ids.toString())
+        assertEquals(1, posiciones[1] - posiciones[0], "las patas quedaron separadas: $ids")
+    }
+
+    /** El total del día es una suma: reordenar no lo puede mover. */
+    @Test
+    fun `el total del dia sigue siendo el mismo con el orden nuevo`() = testApplication {
+        wireApp()
+        seedEvent("ev-t1", userAId, savingsAccountId, "INCOME", "Sueldo", "Salario",
+            amount = 500_000L, timestamp = hoyALas(9))
+        seedEvent("ev-t2", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado",
+            amount = 120_000L, timestamp = hoyALas(20))
+        seedEvent("ev-t3", userAId, savingsAccountId, "EXPENSE", "Café", "Comida",
+            amount = 80_000L, timestamp = hoyALas(20))
+
+        assertEquals(300_000L, totalDelDia(userAId, AppClock.today().toString()))
+    }
 }

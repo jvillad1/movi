@@ -150,13 +150,19 @@ fun Route.eventRoutes() {
         get {
             val uid = call.userId()
             val accountId = call.request.queryParameters["accountId"]
-            val result = loadNonVoidedEvents(uid, accountId).sortedByDescending { it.timestamp }
+            val result = loadNonVoidedEvents(uid, accountId).masRecientePrimero()
             call.respond(result)
         }
 
         get("/by-day") {
             val uid = call.userId()
             val result = loadNonVoidedEvents(uid)
+                // Ordenar ANTES de agrupar: `groupBy` conserva el orden de llegada dentro de cada
+                // grupo, así que una sola pasada deja los días ordenados por dentro. Antes acá no
+                // había criterio ninguno y los renglones del día salían en el orden físico de la
+                // tabla —el que un UPDATE o un VACUUM puede cambiar sin avisar—, mientras el
+                // endpoint hermano de arriba sí ordenaba. Ver MAS_RECIENTE_PRIMERO.
+                .masRecientePrimero()
                 .groupBy { epochMillisToAppDateString(it.timestamp) }
                 .map { (date, items) ->
                     EventDay(
