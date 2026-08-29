@@ -28,6 +28,9 @@ bcprov = "1.85"
 httpcore = "4.4.15"
 workmanager = "2.11.2"
 orgJson = "20231013"
+robolectric = "4.14.1"
+junit = "4.13.2"
+androidx-composeUi = "1.8.2"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -93,6 +96,13 @@ webpush = { module = "nl.martijndwars:web-push", version.ref = "webpush" }
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcprov" }
 httpcore = { module = "org.apache.httpcomponents:httpcore", version.ref = "httpcore" }
 org-json = { module = "org.json:json", version.ref = "orgJson" }
+
+# Pruebas de interfaz en la JVM (Robolectric + Compose UI test).
+# Ver el KDoc de HojaAgregarGeometriaTest para qué cubren y qué NO.
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+junit = { module = "junit:junit", version.ref = "junit" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "androidx-composeUi" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "androidx-composeUi" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

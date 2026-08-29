@@ -99,6 +99,14 @@ kotlin {
             // stubbea org.json para tirar en runtime, así que parsear de verdad
             // (SmsSync/SmsFilterConfigStore) necesita la implementación real.
             implementation(libs.org.json)
+            // Pruebas de GEOMETRÍA de la interfaz, en la JVM. Ver el KDoc de
+            // `HojaAgregarGeometriaTest` para qué cubren y —sobre todo— qué NO.
+            implementation(libs.junit)
+            implementation(libs.robolectric)
+            implementation(libs.androidx.compose.ui.test.junit4)
+            // Trae el `<activity android:name="ComponentActivity">` que `createComposeRule()`
+            // lanza. Sin él, Robolectric muere con «Unable to find explicit activity class».
+            implementation(libs.androidx.compose.ui.test.manifest)
         }
     }
 }
@@ -112,6 +120,13 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    testOptions {
+        unitTests {
+            // Robolectric necesita el AndroidManifest fusionado y los recursos empaquetados
+            // para arrancar; sin esto, `createComposeRule()` no encuentra la actividad.
+            isIncludeAndroidResources = true
+        }
     }
     lint {
         // The NullSafeMutableLiveData detector crashes lint analysis ("Unexpected
