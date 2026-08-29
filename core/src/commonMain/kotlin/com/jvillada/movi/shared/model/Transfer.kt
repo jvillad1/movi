@@ -169,13 +169,21 @@ const val ORPHANED_LEG_NOT_MANUAL: String =
  * movimiento que dejó de sumar, sin ninguna forma de saber por qué. El texto tiene que contestar
  * las tres preguntas en ese orden —qué era, por qué no cuenta, qué puede hacer— porque la tercera
  * es la única accionable y es justo la que la categoría reservada le negaba.
+ *
+ * Dos cosas están redactadas así a propósito, y las dos por quién lo lee: alguien confundido, que
+ * acaba de encontrarse un movimiento raro y lee rápido.
+ * - **«un traspaso nunca fue un gasto ni un ingreso»**, y no «nunca lo fue»: el antecedente de
+ *   «lo» no está dicho en la frase, y leído de corrido se invierte en «nunca fue un traspaso» —
+ *   exactamente lo contrario de la primera oración.
+ * - **«y ese movimiento vuelve a contar»**, y no «y vuelve a contar»: pegado a «elige», que es
+ *   imperativo, «vuelve» se lee como una segunda orden al lector en vez de como la consecuencia.
  */
 const val ORPHANED_LEG_EXPLAINER: String =
     "Esto era un traspaso con una cuenta que borraste. Su otra mitad se fue con esa cuenta, así " +
         "que este movimiento quedó solo. El saldo de tu cuenta ya lo tiene contado y no cambia, " +
-        "pero no suma a tus gastos ni a tus ingresos del mes: un traspaso nunca lo fue. Si esa " +
-        "plata sí salió (o entró) de verdad, elige abajo la categoría que le corresponde y vuelve " +
-        "a contar en el mes."
+        "pero no suma a tus gastos ni a tus ingresos del mes: un traspaso nunca fue un gasto ni " +
+        "un ingreso. Si esa plata sí salió (o entró) de verdad, elige abajo la categoría que le " +
+        "corresponde y ese movimiento vuelve a contar en el mes."
 
 
 /** Largo de `financial_events.description` (ver `Tables.kt`) y de su espejo local. */

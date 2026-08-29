@@ -47,7 +47,12 @@ class CategoryAdminTest {
                 isCashFlow(AccountType.CHECKING, TransactionType.INCOME, categoria),
                 "«$categoria» tampoco es un ingreso, y ese es el lado que costó plata",
             )
-            assertTrue(isReservedCategory(categoria), "«$categoria» tiene que estar protegida")
+        }
+        // Y la vuelta: `isReservedCategory` compara sobre RESERVED_CATEGORIES, así que
+        // preguntárselo por cada elemento del mismo conjunto no probaría nada. Lo que sí prueba
+        // algo es que la lista de arriba —la de nombres literales— caiga entera adentro.
+        for (nombre in listOf("Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada")) {
+            assertTrue(isReservedCategory(nombre), "«$nombre» tiene que estar protegida")
         }
     }
 

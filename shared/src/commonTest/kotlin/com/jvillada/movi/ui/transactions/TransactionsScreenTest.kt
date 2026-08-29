@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.transactions
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -125,6 +126,15 @@ class TransactionsScreenTest {
     // borrado del crédito de $257.000.000 desembolsado dejaba un «+$257.000.000» verde arriba de
     // todo, bajo el chip Ingresos, mientras el total del mes —correctamente— ya no lo contaba.
 
+    /**
+     * **`reconciliationStatus` va explícito y es lo que hace real al test del chip Gastos.**
+     *
+     * El default de [FinancialEvent] es `UNCONFIRMED`, y `CHIP_GASTOS` descarta lo no confirmado
+     * ANTES de mirar la categoría: con el default, ese test pasaba sin tocar la cláusula que dice
+     * probar — medido, borrando `!isOrphanedTransferLeg` de los dos chips solo se ponía rojo el de
+     * Ingresos. Y no es un tecnicismo del fixture: `transferLegsFor` crea las patas `RECONCILED`,
+     * así que la pata huérfana real SÍ llega hasta la cláusula nueva.
+     */
     private fun pataHuerfana(tipo: TransactionType = TransactionType.INCOME) = FinancialEvent(
         id = "ph1",
         accountId = "a1",
@@ -133,6 +143,7 @@ class TransactionsScreenTest {
         category = ORPHANED_LEG_CATEGORY,
         description = "Desembolso desde Crédito · cuenta eliminada",
         timestamp = 0L,
+        reconciliationStatus = ReconciliationStatus.RECONCILED,
     )
 
     @Test
