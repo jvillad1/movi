@@ -200,14 +200,25 @@ fun QuickAddScreen(
             // mitad. Casi siempre ya está en 0 porque el alto fijado deja el contenido del
             // tamaño del hueco; esto cubre el caso en que el sub-picker es más alto que el hueco.
             sheetScroll.scrollTo(0)
-        } else if (scrollAntesDelPicker > 0) {
+        } else {
             val objetivo = scrollAntesDelPicker
-            // Se ESPERA a que el cuerpo vuelva a medirse, no se cuenta un cuadro: si se restaura
-            // antes, el valor se recorta contra el `maxValue` del sub-picker (0) y la posición se
-            // pierde para siempre. El timeout es un seguro contra colgarse si el contenido
-            // quedara más corto que el objetivo — ahí se restaura lo que se pueda.
-            withTimeoutOrNull(timeMillis = 1_000) {
-                snapshotFlow { sheetScroll.maxValue }.first { it >= objetivo }
+            // **Ola 14: se restaura SIEMPRE, también cuando el objetivo es 0.** Antes esta rama
+            // pedía `> 0`, y estaba bien mientras ningún sub-picker se pudiera desplazar: el
+            // desplazamiento no cambiaba durante la visita, así que volver a 0 era volver a donde
+            // ya se estaba. Desde que la lista de categorías se estira (ver `maxSuggestionsHeight`
+            // en la rama Picker.Category), el sub-picker SÍ se desplaza — el dueño baja hasta
+            // «Vivienda», elige, y al cerrarse el cuerpo vuelve a ser corto: el desplazamiento
+            // heredado del picker se recorta contra el `maxValue` del editor y queda en cualquier
+            // lado, no en 0. O sea el teclado movido bajo el dedo, otra vez, por el camino nuevo.
+            // Restaurar el 0 explícitamente es lo que lo devuelve a su sitio.
+            if (objetivo > 0) {
+                // Se ESPERA a que el cuerpo vuelva a medirse, no se cuenta un cuadro: si se
+                // restaura antes, el valor se recorta contra el `maxValue` del sub-picker (0) y la
+                // posición se pierde para siempre. El timeout es un seguro contra colgarse si el
+                // contenido quedara más corto que el objetivo — ahí se restaura lo que se pueda.
+                withTimeoutOrNull(timeMillis = 1_000) {
+                    snapshotFlow { sheetScroll.maxValue }.first { it >= objetivo }
+                }
             }
             sheetScroll.scrollTo(objetivo)
             // Solo se olvida el valor si de verdad se restauró. Si no, queda para que el próximo
@@ -615,6 +626,15 @@ fun QuickAddScreen(
                                 label = null,
                                 onSuggestionPicked = { pasarA(pickers.cerrar()) },
                                 focusRequester = categoryFocusRequester,
+                                // Ola 14 — «al hacer scroll desaparecen». Acá el campo NO es un
+                                // renglón de un formulario: es la pantalla entera del
+                                // sub-picker, con la hoja desplazándose por debajo. Un panel
+                                // acotado a 220 dp con scroll propio dejaba 4 categorías de 24 a
+                                // la vista, una losa vacía debajo, y el gesto del dedo repartido
+                                // entre dos áreas desplazables. Sin tope, la lista se estira
+                                // hasta donde llegue y la desplaza la hoja — una sola área. Ver
+                                // el KDoc de `maxSuggestionsHeight`.
+                                maxSuggestionsHeight = null,
                             )
                             Spacer(Modifier.height(4.dp))
                         }
