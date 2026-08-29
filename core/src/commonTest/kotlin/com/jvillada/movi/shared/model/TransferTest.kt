@@ -49,16 +49,111 @@ class TransferTest {
 
     @Test
     fun `una tarjeta no puede ser origen ni destino de un traspaso`() {
-        val esperado = "Las tarjetas y los préstamos se manejan en Créditos, no con un traspaso"
-        assertEquals(esperado, validateTransfer(tarjeta, cdt, 100_000L))
-        assertEquals(esperado, validateTransfer(ahorros, tarjeta, 100_000L))
+        assertEquals(TRANSFER_CARD_BLOCKED, validateTransfer(tarjeta, cdt, 100_000L))
+        assertEquals(TRANSFER_CARD_BLOCKED, validateTransfer(ahorros, tarjeta, 100_000L))
+    }
+
+    /**
+     * **Ola 14 — este test dice lo contrario que antes, a propósito.** Hasta acá afirmaba que un
+     * préstamo tampoco podía ser punta de un traspaso; era la regla que dejaba sin registrar el
+     * desembolso de un crédito (la deuda entraba a Créditos y la plata que el banco depositaba no
+     * existía para Movi). El KDoc de [validateTransfer] tiene la comprobación de por qué la
+     * objeción de entonces —«le cambiaría el signo a la deuda»— no aplica a los préstamos.
+     */
+    @Test
+    fun `un prestamo si puede ser una de las dos puntas — desembolso y abono extraordinario`() {
+        assertNull(validateTransfer(prestamo, ahorros, 257_000_000L))  // desembolso
+        assertNull(validateTransfer(ahorros, prestamo, 5_000_000L))    // abono extraordinario
     }
 
     @Test
-    fun `un prestamo tampoco puede ser origen ni destino`() {
-        val esperado = "Las tarjetas y los préstamos se manejan en Créditos, no con un traspaso"
-        assertEquals(esperado, validateTransfer(prestamo, cdt, 100_000L))
-        assertEquals(esperado, validateTransfer(ahorros, prestamo, 100_000L))
+    fun `pero no las dos puntas a la vez`() {
+        val otro = Account("acc_loan2", "Vehículo", AccountType.LOAN, balance = 40_000_000L)
+        assertEquals(TRANSFER_BOTH_LOANS_BLOCKED, validateTransfer(prestamo, otro, 1_000_000L))
+    }
+
+    @Test
+    fun `la tarjeta se rechaza aunque la otra punta sea un prestamo`() {
+        assertEquals(TRANSFER_CARD_BLOCKED, validateTransfer(tarjeta, prestamo, 100_000L))
+        assertEquals(TRANSFER_CARD_BLOCKED, validateTransfer(prestamo, tarjeta, 100_000L))
+    }
+
+    @Test
+    fun `el mensaje de la tarjeta dice a donde ir, no solo que no`() {
+        assertTrue(TRANSFER_CARD_BLOCKED.contains(CARD_PAYMENT_CATEGORY))
+    }
+
+    // ── Qué clase de traspaso es ──────────────────────────────────────────────
+
+    @Test
+    fun `del prestamo a una cuenta es un desembolso, y al reves un abono`() {
+        assertEquals(TransferKind.DESEMBOLSO, transferKindFor(prestamo, ahorros))
+        assertEquals(TransferKind.ABONO_EXTRAORDINARIO, transferKindFor(ahorros, prestamo))
+        assertEquals(TransferKind.ENTRE_CUENTAS, transferKindFor(ahorros, cdt))
+    }
+
+    // ── Los signos: lo que este cambio tenía que comprobar antes de existir ───
+
+    /**
+     * **La comprobación que decidió la dirección de esta rama.** Un desembolso tiene que subir la
+     * deuda y subir el efectivo; un abono extraordinario tiene que bajar los dos. Las patas son
+     * eventos comunes y los saldos salen de [signedDelta], así que basta con sumarle a cada cuenta
+     * lo que su propia pata le aporta — sin una línea nueva en `computeBalances`.
+     */
+    @Test
+    fun `un desembolso sube la deuda y sube el efectivo, cada saldo una sola vez`() {
+        val pedido = request().copy(
+            fromAccountId = prestamo.id,
+            toAccountId = ahorros.id,
+            amount = 257_000_000L,
+        )
+        val (patePrestamo, pataCuenta) = transferLegsFor(pedido, prestamo, ahorros)
+
+        assertEquals(257_000_000L, signedDelta(prestamo.type, patePrestamo.type, patePrestamo.amount))
+        assertEquals(257_000_000L, signedDelta(ahorros.type, pataCuenta.type, pataCuenta.amount))
+    }
+
+    @Test
+    fun `un abono extraordinario baja la deuda y baja el efectivo`() {
+        val pedido = request().copy(
+            fromAccountId = ahorros.id,
+            toAccountId = prestamo.id,
+            amount = 5_000_000L,
+        )
+        val (pataCuenta, pataPrestamo) = transferLegsFor(pedido, ahorros, prestamo)
+
+        assertEquals(-5_000_000L, signedDelta(ahorros.type, pataCuenta.type, pataCuenta.amount))
+        assertEquals(-5_000_000L, signedDelta(prestamo.type, pataPrestamo.type, pataPrestamo.amount))
+    }
+
+    /** Ni el desembolso ni el abono son ingreso o gasto del mes: los dos son patas de traspaso. */
+    @Test
+    fun `ninguna pata de un desembolso ni de un abono cuenta en el mes`() {
+        val desembolso = transferLegsFor(request(), prestamo, ahorros)
+        val abono = transferLegsFor(request(), ahorros, prestamo)
+        listOf(
+            prestamo.type to desembolso.first, ahorros.type to desembolso.second,
+            ahorros.type to abono.first, prestamo.type to abono.second,
+        ).forEach { (tipoCuenta, pata) ->
+            assertFalse(isCashFlow(tipoCuenta, pata.type, pata.category))
+            assertFalse(pata.countsAsCashFlow)
+        }
+    }
+
+    /**
+     * Las tres formas usan la MISMA preposición en la pata de destino («… desde Origen»). La
+     * primera versión decía «Desembolso **de** Libranza» junto a «Abono extraordinario **desde**
+     * Ahorros»: dos maneras de decir lo mismo en renglones que se leen uno debajo del otro.
+     */
+    @Test
+    fun `las patas de un credito se llaman desembolso y abono extraordinario, no traspaso`() {
+        val (delPrestamo, aLaCuenta) = transferLegsFor(request(), prestamo, ahorros)
+        assertEquals("Desembolso a Ahorros", delPrestamo.description)
+        assertEquals("Desembolso desde Libranza", aLaCuenta.description)
+
+        val (deLaCuenta, alPrestamo) = transferLegsFor(request(), ahorros, prestamo)
+        assertEquals("Abono extraordinario a Libranza", deLaCuenta.description)
+        assertEquals("Abono extraordinario desde Ahorros", alPrestamo.description)
     }
 
     @Test

@@ -17,6 +17,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.formatMoney
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -39,6 +40,16 @@ fun DeleteAccountSheet(
      * cuenta sin traspasos— siga viendo la hoja de siempre.
      */
     transferCount: Int = 0,
+    /**
+     * Cuánta plata suman esas patas, en la moneda de la cuenta. Va en el aviso porque **el número
+     * es la mitad del aviso**: desde que un crédito puede ser una punta de un traspaso, «1 de esos
+     * movimientos es un traspaso» puede querer decir $50.000 o $257.000.000, y de eso depende si
+     * el mes que vuelve a contarlo queda irreconocible. Con default en 0 = no se dice el monto,
+     * que es el aviso de antes.
+     */
+    transferAmount: Long = 0L,
+    /** Moneda de [transferAmount] — la de la cuenta que se está por borrar. */
+    transferCurrency: String = "COP",
     onDismiss: () -> Unit,
     onDeleted: () -> Unit,
 ) {
@@ -110,7 +121,7 @@ fun DeleteAccountSheet(
             if (transferCount > 0) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = transferWarningLabel(transferCount),
+                    text = transferWarningLabel(transferCount, transferAmount, transferCurrency),
                     fontSize = 14.sp,
                     color = MinText,
                     lineHeight = 19.sp,
@@ -193,15 +204,22 @@ private fun eventCountLabel(count: Int): String =
  * no algo que este aviso introduzca; el borrado del server igual desenlaza todas las patas, así
  * que el dato que puede quedar corto es el aviso, nunca la base.
  */
-private fun transferWarningLabel(count: Int): String =
-    if (count == 1) {
-        "1 de esos movimientos es un traspaso con otra cuenta. Esa cuenta conserva su mitad y su " +
-            "saldo no cambia, pero ese movimiento deja de ser un traspaso: pasa a la categoría " +
-            "«$ORPHANED_LEG_CATEGORY» y vuelve a contar en los gastos o ingresos de un mes que ya " +
-            "diste por cerrado. Puedes cambiarle la categoría después."
+private fun transferWarningLabel(count: Int, amount: Long, currency: String): String {
+    // Ola 14 — el monto entra al aviso. Antes decía cuántos movimientos eran, no cuánta plata:
+    // suficiente cuando un traspaso era entre dos cuentas de dinero, insuficiente desde que una
+    // punta puede ser un crédito y ese renglón puede valer el crédito entero. «1 movimiento» y
+    // «$257.000.000» piden decisiones distintas.
+    val cuanto = if (amount > 0L) ", por ${formatMoney(amount, currency)} en total," else ""
+    return if (count == 1) {
+        "1 de esos movimientos es un traspaso con otra cuenta$cuanto. Esa cuenta conserva su " +
+            "mitad y su saldo no cambia, pero ese movimiento deja de ser un traspaso: pasa a la " +
+            "categoría «$ORPHANED_LEG_CATEGORY» y vuelve a contar en los gastos o ingresos de un " +
+            "mes que ya diste por cerrado. Puedes cambiarle la categoría después."
     } else {
-        "$count de esos movimientos son traspasos con otras cuentas. Esas cuentas conservan su " +
-            "mitad y sus saldos no cambian, pero esos movimientos dejan de ser traspasos: pasan " +
-            "a la categoría «$ORPHANED_LEG_CATEGORY» y vuelven a contar en los gastos o ingresos " +
-            "de meses que ya diste por cerrados. Puedes cambiarles la categoría después."
+        "$count de esos movimientos son traspasos con otras cuentas$cuanto. Esas cuentas " +
+            "conservan su mitad y sus saldos no cambian, pero esos movimientos dejan de ser " +
+            "traspasos: pasan a la categoría «$ORPHANED_LEG_CATEGORY» y vuelven a contar en los " +
+            "gastos o ingresos de meses que ya diste por cerrados. Puedes cambiarles la " +
+            "categoría después."
     }
+}

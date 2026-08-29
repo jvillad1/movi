@@ -68,6 +68,27 @@ data class CreditSummary(
      * en movimientos ni movía el saldo cacheado de la cuenta.
      */
     val adjustmentEvent: FinancialEvent? = null,
+    /**
+     * ¿Esta cuenta LOAN tiene **algún** movimiento vivo (no anulado)?
+     *
+     * Existe por una sola pregunta que `paidPct` no sabe responder: **una deuda en $0 puede
+     * significar dos cosas opuestas.** O el crédito está pagado —se llegó ahí con eventos: la
+     * apertura, las cuotas, los abonos— o todavía no se registró nada y el $0 es "no sé", no
+     * "cero". Desde que un crédito se puede crear con deuda inicial $0 (para que el desembolso
+     * sea lo que crea la deuda, ver `POST /api/credits`), el segundo caso existe de verdad, y
+     * sin este dato la tarjeta de Créditos anunciaba **«100% pagado» sobre un crédito de
+     * $257.000.000 recién creado**, con la barra llena. El error caro que esta rama evitaba —la
+     * deuda contada dos veces— venía con un aviso a la vista; este no tenía ninguno, y encima
+     * erraba hacia el lado optimista.
+     *
+     * "Vivo" y no "alguna vez": sale de los mismos eventos no anulados de los que se deriva la
+     * deuda, así que anular el desembolso devuelve la tarjeta a "falta registrarlo" en vez de
+     * dejarla diciendo que está pagado.
+     *
+     * Default `true` = la respuesta conservadora para un cliente que hable con un server viejo
+     * que no manda el campo: se muestra el porcentaje, que es lo que se mostraba antes.
+     */
+    val hasMovements: Boolean = true,
 )
 
 /**

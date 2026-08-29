@@ -20,6 +20,8 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
+import com.jvillada.movi.shared.model.TRANSFER_BOTH_LOANS_BLOCKED
+import com.jvillada.movi.shared.model.TRANSFER_CARD_BLOCKED
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.TRANSFER_ID_ALREADY_USED
@@ -48,6 +50,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -82,6 +85,8 @@ class TransferRoutesTest {
     private val cdtId = "acc-cdt"
     private val efectivoUsdId = "acc-usd"
     private val tarjetaId = "acc-tarjeta"
+    private val libranzaId = "acc-libranza"
+    private val vehiculoId = "acc-vehiculo"
     private val ajenaId = "acc-de-b"
 
     @BeforeTest
@@ -114,6 +119,10 @@ class TransferRoutesTest {
             account(cdtId, userAId, "CDT", "INVESTMENT", "COP")
             account(efectivoUsdId, userAId, "Efectivo USD", "CASH", "USD")
             account(tarjetaId, userAId, "Visa", "CREDIT_CARD", "COP")
+            // Ola 14: dos préstamos — uno para el desembolso y el abono extraordinario, el otro
+            // solo para comprobar que crédito→crédito se sigue rechazando.
+            account(libranzaId, userAId, "Libranza", "LOAN", "COP")
+            account(vehiculoId, userAId, "Vehículo", "LOAN", "COP")
             account(ajenaId, userBId, "Ahorros de B", "SAVINGS", "COP")
 
             // Ahorros arranca con $1.000.000 declarados como apertura — un evento real, porque
@@ -127,6 +136,37 @@ class TransferRoutesTest {
                 it[currency] = "COP"
                 it[category] = "Saldo inicial"
                 it[description] = "Saldo inicial"
+                it[timestamp] = System.currentTimeMillis()
+                it[eventSource] = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+
+            // Y sus TÉRMINOS de verdad, no solo la cuenta: sin esta fila, el test de que un
+            // desembolso no toca el contrato del crédito comparaba 0 filas contra 0 filas y
+            // pasaba aunque el endpoint las destrozara (hallazgo de la revisión de esta rama).
+            Credits.insert {
+                it[accountId]   = libranzaId
+                it[userId]      = userAId
+                it[bank]        = "Bancolombia"
+                it[principal]   = 80_000_000L
+                it[rateEa]      = 12.5
+                it[termMonths]  = 120
+                it[installment] = 1_200_000L
+                it[dayOfMonth]  = 5
+                it[startDate]   = "2022-03-01"
+            }
+
+            // La libranza arranca debiendo $50.000.000, también como evento real (EXPENSE sube la
+            // deuda en una cuenta LOAN — ver signedDelta).
+            Events.insert {
+                it[id] = "ev-apertura-libranza"
+                it[userId] = userAId
+                it[accountId] = libranzaId
+                it[type] = "EXPENSE"
+                it[amount] = 50_000_000L
+                it[currency] = "COP"
+                it[category] = "Saldo inicial"
+                it[description] = "Deuda inicial"
                 it[timestamp] = System.currentTimeMillis()
                 it[eventSource] = "MANUAL"
                 it[reconciliationStatus] = "RECONCILED"
@@ -194,6 +234,14 @@ class TransferRoutesTest {
     }
 
     private fun eventCount(): Long = transaction { Events.selectAll().count() }
+
+    /**
+     * Cuántos eventos deja sembrados [setUp] antes de que ninguna prueba haga nada: la apertura de
+     * Ahorros y la deuda inicial de la Libranza. Se resta donde una prueba cuenta filas de la base,
+     * para que agregar una cuenta más al harness no vuelva a romper una aserción que no tiene nada
+     * que ver — que es lo que pasó al sembrar la Libranza de la Ola 14.
+     */
+    private val eventosSembrados = 2L
 
     private fun balanceOf(accounts: String, id: String): Long =
         Json.parseToJsonElement(accounts).jsonArray
@@ -292,7 +340,7 @@ class TransferRoutesTest {
             setBody(transferBody())
         }
 
-        assertEquals(2L, eventCount() - 1L, "en la base siguen siendo dos filas")
+        assertEquals(2L, eventCount() - eventosSembrados, "en la base siguen siendo dos filas")
         assertEquals(1, financeSummaryEventCount(), "pero para el dueño pasó una sola cosa")
     }
 
@@ -460,10 +508,143 @@ class TransferRoutesTest {
 
     @Test
     fun `rechaza una tarjeta como destino`() =
+        assertRejected(TRANSFER_CARD_BLOCKED, transferBody(toAccountId = tarjetaId))
+
+    @Test
+    fun `rechaza un traspaso entre dos creditos`() =
         assertRejected(
-            "Las tarjetas y los préstamos se manejan en Créditos, no con un traspaso",
-            transferBody(toAccountId = tarjetaId),
+            TRANSFER_BOTH_LOANS_BLOCKED,
+            transferBody(fromAccountId = libranzaId, toAccountId = vehiculoId),
         )
+
+    // ── Ola 14 · el crédito como una de las dos puntas ────────────────────────
+
+    /**
+     * **El agujero que abrió esta rama.** Un crédito nuevo entraba a Créditos como deuda y la plata
+     * que el banco depositaba en la cuenta corriente no existía para Movi. Ahora el desembolso es
+     * un traspaso: la deuda sube y el efectivo sube, cada uno una sola vez y por el mismo camino
+     * de siempre (`transferLegsFor` + `signedDelta`, sin una línea nueva en `computeBalances`).
+     */
+    @Test
+    fun `un desembolso sube la deuda del credito y el saldo de la cuenta`() = testApplication {
+        wireApp()
+        val response = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = libranzaId, toAccountId = ahorrosId, amount = 20_000_000L))
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals("Desembolso a Ahorros", body["from"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+        assertEquals("Desembolso desde Libranza", body["to"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(70_000_000L, balanceOf(accounts, libranzaId), "la deuda sube")
+        assertEquals(21_000_000L, balanceOf(accounts, ahorrosId), "el efectivo sube")
+    }
+
+    @Test
+    fun `un abono extraordinario baja la deuda y baja el saldo de la cuenta`() = testApplication {
+        wireApp()
+        val response = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = ahorrosId, toAccountId = libranzaId, amount = 400_000L))
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals(
+            "Abono extraordinario a Libranza",
+            body["from"]!!.jsonObject["description"]!!.jsonPrimitive.content,
+        )
+        assertEquals(
+            "Abono extraordinario desde Ahorros",
+            body["to"]!!.jsonObject["description"]!!.jsonPrimitive.content,
+        )
+
+        val accounts = client.get("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText()
+        assertEquals(49_600_000L, balanceOf(accounts, libranzaId), "la deuda baja")
+        assertEquals(600_000L, balanceOf(accounts, ahorrosId), "el efectivo baja")
+    }
+
+    /**
+     * Un desembolso de $20.000.000 no puede aparecer como «Ingresos del mes: $20.000.000», y un
+     * abono extraordinario tampoco como gasto: las dos patas llevan la categoría reservada.
+     */
+    @Test
+    fun `ni el desembolso ni el abono tocan ingresos ni gastos del mes`() = testApplication {
+        wireApp()
+        val antes = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = libranzaId, toAccountId = ahorrosId, amount = 20_000_000L))
+        }
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                transferBody(
+                    transferId = "tr-2", fromEventId = "ev-from-2", toEventId = "ev-to-2",
+                    fromAccountId = ahorrosId, toAccountId = libranzaId, amount = 400_000L,
+                ),
+            )
+        }
+
+        val despues = client.get("/api/dashboard/summary") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }.bodyAsText().let { Json.parseToJsonElement(it).jsonObject }
+
+        assertEquals(antes["monthIncome"], despues["monthIncome"])
+        assertEquals(antes["monthSpent"], despues["monthSpent"])
+        assertEquals(antes["spentByCategory"], despues["spentByCategory"])
+        assertEquals(0L, despues["monthIncome"]?.jsonPrimitive?.long ?: 0L)
+        assertEquals(0L, despues["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+    }
+
+    /**
+     * Los términos del crédito son el contrato (capital original, tasa, plazo, cuota) y un
+     * desembolso no los toca: `POST /api/transfers` no escribe en `credits`. Lo único que se mueve
+     * es la deuda derivada, que es justamente lo que tiene que moverse.
+     */
+    @Test
+    fun `un desembolso no toca los terminos del credito`() = testApplication {
+        wireApp()
+        val antes = terminosDeLaLibranza()
+        client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(transferBody(fromAccountId = libranzaId, toAccountId = ahorrosId, amount = 20_000_000L))
+        }
+        assertEquals(antes, terminosDeLaLibranza(), "el contrato del crédito no se mueve")
+        // Y para que la comparación de arriba signifique algo: los términos EXISTEN.
+        assertEquals(listOf<Any>("Bancolombia", 80_000_000L, 12.5, 120, 1_200_000L, 5, "2022-03-01"), antes)
+    }
+
+    /**
+     * Los valores del contrato, no un conteo de filas.
+     *
+     * La primera versión de este test contaba filas de `credit_terms` para la libranza, y el
+     * harness no sembraba ninguna: afirmaba `0 == 0` y habría pasado igual si el endpoint hubiera
+     * borrado los términos. Con los valores, la aserción dice lo que promete el nombre.
+     */
+    private fun terminosDeLaLibranza(): List<Any> = transaction {
+        Credits.selectAll().where { Credits.accountId eq libranzaId }.single().let {
+            listOf(
+                it[Credits.bank], it[Credits.principal], it[Credits.rateEa], it[Credits.termMonths],
+                it[Credits.installment], it[Credits.dayOfMonth], it[Credits.startDate],
+            )
+        }
+    }
 
     @Test
     fun `una cuenta que no existe da 404 y no deja nada`() = testApplication {

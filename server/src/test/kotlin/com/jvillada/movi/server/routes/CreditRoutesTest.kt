@@ -42,6 +42,8 @@ import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.BeforeTest
@@ -300,7 +302,7 @@ class CreditRoutesTest {
     }
 
     @Test
-    fun `POST with blank name or non-positive debt is 400`() = testApplication {
+    fun `POST with blank name or negative debt is 400`() = testApplication {
         wireApp()
         val terms = """"terms":{"accountId":"","bank":"X","principal":100,"rateEa":10.0,
                         "termMonths":12,"installment":10,"dayOfMonth":1,"startDate":"2026-01-01"}"""
@@ -310,12 +312,90 @@ class CreditRoutesTest {
             setBody("""{"name":"  ","initialDebt":100,$terms}""")
         }
         assertEquals(HttpStatusCode.BadRequest, blankName.status)
-        val zeroDebt = client.post("/api/credits") {
+        val negativeDebt = client.post("/api/credits") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             header(HttpHeaders.ContentType, "application/json")
-            setBody("""{"name":"Préstamo","initialDebt":0,$terms}""")
+            setBody("""{"name":"Préstamo","initialDebt":-1,$terms}""")
         }
-        assertEquals(HttpStatusCode.BadRequest, zeroDebt.status)
+        assertEquals(HttpStatusCode.BadRequest, negativeDebt.status)
+    }
+
+    /**
+     * **Ola 14 — deuda inicial en cero es válida, y este test dice lo contrario que el anterior.**
+     * Hasta acá el cero era 400. Era la regla que hacía imposible registrar bien un crédito recién
+     * desembolsado: la deuda quedaba declarada en la apertura y, si además se anotaba el desembolso
+     * como traspaso (lo único que pone la plata en la cuenta corriente), quedaba contada dos veces.
+     * Ahora el crédito puede nacer en $0 y la deuda la crea el desembolso — sin evento de apertura
+     * de por medio, porque `openingEventFor` devuelve null con saldo cero.
+     */
+    @Test
+    fun `un credito recien desembolsado se crea en cero y sin evento de apertura`() = testApplication {
+        wireApp()
+        val terms = """"terms":{"accountId":"","bank":"Bancolombia","principal":257000000,"rateEa":12.0,
+                        "termMonths":120,"installment":3500000,"dayOfMonth":5,"startDate":"2026-08-28"}"""
+        val response = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Libranza nueva","initialDebt":0,$terms}""")
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        val accountId = body["account"]!!.jsonObject["id"]!!.jsonPrimitive.content
+        assertEquals(0L, body["account"]!!.jsonObject["balance"]!!.jsonPrimitive.long)
+        // Los términos sí quedaron: el capital original es el contrato, no la deuda de hoy.
+        assertEquals(257_000_000L, body["terms"]!!.jsonObject["principal"]!!.jsonPrimitive.long)
+        assertEquals(
+            0L,
+            transaction { Events.selectAll().where { Events.accountId eq accountId }.count() },
+            "un crédito en cero no deja evento de apertura que después haya que corregir",
+        )
+        // Y lo dice en el wire: sin esta bandera la tarjeta de Créditos leía `paidPct = 1.0` y
+        // anunciaba «100% pagado» sobre un crédito de $257.000.000 recién creado.
+        assertEquals(
+            false,
+            hasMovements(body),
+            "un crédito sin un solo movimiento no está pagado: está sin registrar",
+        )
+    }
+
+    /**
+     * **La clave AUSENTE significa `true`, y eso no es un descuido: es el default del campo.**
+     *
+     * kotlinx-serialization omite lo que vale igual que su default (`encodeDefaults = false`), así
+     * que `hasMovements = true` no viaja. Da la compatibilidad que se quería de los dos lados: un
+     * cliente viejo ignora un campo que no conoce, y un cliente nuevo contra un server viejo —que
+     * nunca manda la clave— cae en `true` y muestra el porcentaje de siempre, en vez de reclamarle
+     * un desembolso a cada crédito. La primera versión de estos tests hacía `body[...]!!` y
+     * explotaba con un NPE justo en el caso sano.
+     */
+    private fun hasMovements(body: JsonObject): Boolean =
+        body["hasMovements"]?.jsonPrimitive?.content?.toBoolean() ?: true
+
+    /**
+     * El contracaso, en el mismo endpoint: un crédito creado CON deuda inicial sí tiene un
+     * movimiento (su apertura) desde el primer instante, así que su porcentaje se muestra normal.
+     */
+    @Test
+    fun `un credito creado con deuda inicial si tiene movimientos desde el arranque`() = testApplication {
+        wireApp()
+        val terms = """"terms":{"accountId":"","bank":"X","principal":100000000,"rateEa":10.0,
+                        "termMonths":12,"installment":10,"dayOfMonth":1,"startDate":"2026-01-01"}"""
+        val response = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Crédito viejo","initialDebt":60000000,$terms}""")
+        }
+        val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+        assertEquals(true, hasMovements(body))
+        // Y **la clave no viaja**, que es la mitad que el helper de arriba no puede afirmar: él
+        // lee la ausencia como `true`, así que pasaría igual si el server la mandara explícita.
+        // Esta línea es la que fija la compatibilidad con el APK 1.8, que no la conoce.
+        assertEquals(
+            null,
+            body["hasMovements"],
+            "hasMovements=true no debe viajar: es el default y un cliente viejo no lo espera",
+        )
     }
 
     // ── POST /{accountId}/balance-adjustment ──────────────────────────────────

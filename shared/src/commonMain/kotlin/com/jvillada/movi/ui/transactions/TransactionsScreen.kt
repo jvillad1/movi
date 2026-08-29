@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -237,6 +238,27 @@ fun transferRowSubtitle(row: MovementRow.Transfer, accountNames: Map<String, Str
 }
 
 /**
+ * **Cómo se llama este renglón** — «Traspaso», «Desembolso» o «Abono extraordinario».
+ *
+ * Ola 14: desde que un crédito puede ser una de las dos puntas ([validateTransfer]), «Traspaso» a
+ * secas dejó de alcanzar. Los tres hechos se guardan igual —dos patas con la categoría reservada,
+ * fuera del mes— pero para el dueño no son lo mismo: **un desembolso es plata prestada que le
+ * entró** y un abono extraordinario **es capital que pagó de más**. Confundir el segundo con la
+ * cuota mensual (que sí se anota como gasto normal y sí cuenta en el mes) es el error que este
+ * nombre evita a la vista, sin abrir el renglón.
+ *
+ * Sale de los **tipos de cuenta**, no de la descripción de las patas: la descripción es texto que
+ * quedó guardado el día del traspaso y podría venir de una versión anterior de la app; el tipo de
+ * la cuenta es el dato de hoy. Si la lista de cuentas todavía no llegó, el mapa está vacío y se
+ * dice «Traspaso», que es lo que ya se decía — nunca un nombre inventado.
+ */
+fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): String = when {
+    accountTypes[row.out.accountId] == AccountType.LOAN -> "Desembolso"
+    accountTypes[row.into.accountId] == AccountType.LOAN -> "Abono extraordinario"
+    else -> "Traspaso"
+}
+
+/**
  * Minúsculas y sin tildes/eñe — mismo criterio que usa `CategoryField` (F35) para sus
  * sugerencias, pero definido acá aparte: esta pantalla no puede tocar `CategoryField.kt` en esta
  * tarea (Ola 4 la reserva para otro trabajo en paralelo), así que se duplica el normalizador en
@@ -289,6 +311,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // Los nombres de las cuentas, para que el renglón de un traspaso diga de dónde a dónde fue la
     // plata (ver [transferRowSubtitle]). Un evento suelto no los necesita: la cuenta no se muestra.
     val accountNames = remember(accounts) { accounts.associate { it.id to it.name } }
+    // Y sus tipos, para que el renglón de un traspaso con un crédito de una punta se llame
+    // «Desembolso» o «Abono extraordinario» en vez de «Traspaso» (ver [transferRowTitle]).
+    val accountTypes = remember(accounts) { accounts.associate { it.id to it.type } }
     // V13: «hoy» en la zona de la app (Bogotá), para que los encabezados digan «HOY»/«AYER».
     // Se calcula una vez por composición y no dentro del bucle de días.
     val hoyIso = remember { todayIsoInAppZone() }
@@ -577,6 +602,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                         is MovementRow.Transfer -> TransferRow(
                                             row = row,
                                             accountNames = accountNames,
+                                            accountTypes = accountTypes,
                                             // Al tocarlo se abre la hoja de categoría sobre la
                                             // pata de origen — que se niega a recategorizar y
                                             // explica por qué. Es la única acción que un traspaso
@@ -644,6 +670,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 private fun TransferRow(
     row: MovementRow.Transfer,
     accountNames: Map<String, String>,
+    accountTypes: Map<String, AccountType>,
     onClick: () -> Unit,
 ) {
     Row(
@@ -656,7 +683,7 @@ private fun TransferRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Traspaso",
+                text = transferRowTitle(row, accountTypes),
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = MinText,

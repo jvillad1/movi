@@ -11,6 +11,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import com.jvillada.movi.ui.LocalRefreshTick
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +52,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los créditos reales.
     var loading by remember { mutableStateOf(true) }
-    LaunchedEffect(reloadKey) {
+    // Ola 14 — Créditos también escucha el «se guardó algo» de la hoja de Agregar.
+    //
+    // Hasta esta rama no hacía falta: nada de lo que se podía guardar desde Agregar movía la
+    // deuda de un crédito, así que `reloadKey` (los cambios hechos EN esta pantalla) alcanzaba.
+    // Ahora un desembolso o un abono extraordinario sí la mueven, y sin este tick la pantalla
+    // se quedaba mostrando la deuda vieja —verificado en el navegador: se guardó el abono de
+    // $5.000.000 y Créditos siguió diciendo $70.000.000 hasta salir y volver a entrar—. Mismo
+    // mecanismo que ya usaba Movimientos, y por el mismo motivo: la hoja es una modal y esta
+    // pantalla nunca sale de la composición.
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(reloadKey, refreshTick) {
         loading = true
         val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it } }
         val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it } }
@@ -200,7 +211,10 @@ private fun LoanCard(
     onEdit: () -> Unit,
     onAdjust: () -> Unit,
 ) {
-    val pct = (credit.paidPct ?: 0.0).toFloat()
+    // Ola 14: no siempre es un porcentaje. Un crédito recién creado en $0 —el paso 1 de registrar
+    // un desembolso— decía «100% pagado» con la barra llena. Ver [progresoDeCredito].
+    val progreso = progresoDeCredito(credit)
+    val pct = progreso.fraccion
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
@@ -224,7 +238,13 @@ private fun LoanCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(formatCOP(credit.account.balance), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-            Text("${(pct * 100).toInt()}% pagado", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+            // Sin monoespaciada cuando no es una cifra (ver [ProgresoDeCredito.esAviso]).
+            Text(
+                progreso.etiqueta,
+                fontSize = 12.sp,
+                fontFamily = if (progreso.esAviso) FontFamily.Default else FontFamily.Monospace,
+                color = MinTextMute,
+            )
         }
         Spacer(Modifier.height(8.dp))
         Box(

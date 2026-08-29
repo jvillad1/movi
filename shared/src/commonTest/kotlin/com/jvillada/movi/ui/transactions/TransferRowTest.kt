@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -133,6 +134,40 @@ class TransferRowTest {
         val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
 
         assertEquals("De Origen a Destino", transferRowSubtitle(fila, emptyMap()))
+    }
+
+    // ── Ola 14 · cómo se llama el renglón cuando una punta es un crédito ──────
+
+    private val soloCuentas = mapOf(
+        "acc_ahorros" to AccountType.SAVINGS,
+        "acc_cdt" to AccountType.INVESTMENT,
+    )
+
+    @Test
+    fun `entre dos cuentas de dinero se sigue llamando Traspaso`() {
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
+        assertEquals("Traspaso", transferRowTitle(fila, soloCuentas))
+    }
+
+    @Test
+    fun `si la plata sale del credito el renglon dice Desembolso`() {
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
+        val conCredito = soloCuentas + ("acc_ahorros" to AccountType.LOAN)
+        assertEquals("Desembolso", transferRowTitle(fila, conCredito))
+    }
+
+    @Test
+    fun `si la plata entra al credito el renglon dice Abono extraordinario`() {
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
+        val conCredito = soloCuentas + ("acc_cdt" to AccountType.LOAN)
+        assertEquals("Abono extraordinario", transferRowTitle(fila, conCredito))
+    }
+
+    /** Igual que el subtítulo: sin la lista de cuentas no se inventa un nombre. */
+    @Test
+    fun `sin los tipos de cuenta cargados el renglon dice lo de siempre`() {
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
+        assertEquals("Traspaso", transferRowTitle(fila, emptyMap()))
     }
 
     // ── La categoría reservada no se toca desde la UI ─────────────────────────

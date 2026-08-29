@@ -42,7 +42,13 @@ import org.jetbrains.exposed.sql.Transaction
  *
  * Lo que este endpoint NO hace: convertir el pago de una tarjeta en traspaso. Eso ya tiene su
  * propio camino y su propia regla de flujo de caja ([com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY]),
- * y por eso [validateTransfer] rechaza cualquier cuenta del grupo DEUDA de los dos lados.
+ * y por eso [validateTransfer] rechaza una tarjeta en cualquiera de los dos lados.
+ *
+ * **Un préstamo sí puede ser UNA de las dos puntas** (Ola 14): del crédito a la cuenta es el
+ * desembolso, de la cuenta al crédito un abono extraordinario. No hizo falta tocar nada de este
+ * handler para soportarlo —las patas se siguen construyendo con `transferLegsFor` y los saldos se
+ * siguen derivando con `signedDelta`, que ya usa la convención de deuda— salvo que ahora
+ * [validateTransfer] las deja pasar. El KDoc de esa función tiene la comprobación de los signos.
  */
 fun Route.transferRoutes() {
     route("/api/transfers") {

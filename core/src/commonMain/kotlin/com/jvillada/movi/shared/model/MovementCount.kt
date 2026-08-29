@@ -15,8 +15,10 @@ package com.jvillada.movi.shared.model
  *   El criterio no es *idéntico* al de `collapseTransfers`, y conviene saber en qué difiere:
  *   aquella junta solo cuando encuentra **un EXPENSE y un INCOME**, y si no emite cada pata por
  *   separado; esta agrupa por `transferId` a secas. Coinciden en toda forma que el sistema pueda
- *   producir hoy —`validateTransfer` prohíbe las cuentas de deuda de los dos lados, así que las
- *   dos patas nunca son del mismo tipo—, y discreparían solo ante un par heredado del mismo lado:
+ *   producir hoy —[transferLegsFor] siempre emite un EXPENSE en el origen y un INCOME en el
+ *   destino, sin mirar el tipo de las cuentas, así que las dos patas nunca son del mismo tipo; eso
+ *   sigue valiendo desde la Ola 14, con un préstamo como una de las dos puntas—, y discreparían
+ *   solo ante un par heredado del mismo lado:
  *   ahí Movimientos mostraría dos renglones y esto contaría uno. Son justo las filas que impiden
  *   crear el índice único de `Migrations.createUniqueTransferLegIndex`, o sea que las dos
  *   divergencias aparecerían en la misma cuenta y con la misma alarma en el log.
