@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.orphanedLegDescription
 import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
@@ -630,8 +631,9 @@ class LocalRepository(
         // la fila quedaba sincronizada con la categoría vieja en el server y la nueva solo en
         // local — y como ya no sale en `selectUnsynced`, ningún ciclo futuro la volvía a
         // empujar. La divergencia era silenciosa y permanente.
-        // Nadie sale de la categoría reservada, y nadie entra tampoco. Las dos guardas son
-        // simétricas a las del server (ver PUT /api/events/{id}/category), y hacen falta acá
+        // Nadie sale de la categoría reservada, y nadie entra tampoco. Las guardas son las mismas
+        // que las del server (ver PUT /api/events/{id}/category) —aunque no en el mismo orden,
+        // ver la nota de abajo— y hacen falta acá
         // porque el camino "local, todavía sin sincronizar" de más abajo escribe sin preguntarle
         // a nadie — así que sin esto la fila local divergía en silencio del server.
         //
@@ -643,6 +645,21 @@ class LocalRepository(
         // Y hacia la categoría reservada tampoco: sería fabricar media pata — un movimiento que
         // se deja de contar en el mes sin ninguna pata del otro lado que explique adónde fue.
         if (category == TRANSFER_CATEGORY) throw ApiException(422, TRANSFER_CATEGORY_RESERVED)
+        // Y a «Cuenta eliminada» tampoco (ola 15): la escribe el borrado de una cuenta y nadie
+        // más. Desde que queda fuera del flujo de caja, escribirla a mano sacaría un gasto REAL
+        // del mes en el teléfono, el `SyncEngine` lo empujaría, el server contestaría 422 y la
+        // fila se reintentaría cada 30 segundos para siempre — el mismo modo de falla que ya
+        // documenta la guarda de `postEvent` acá arriba.
+        //
+        // **El ORDEN de estas dos guardas no es el del server, y hay que saberlo antes de tocar
+        // acá.** El server pregunta primero por la categoría de destino y después si el evento es
+        // una pata viva; acá es al revés, y es preexistente. La consecuencia es un solo caso —
+        // poner «Cuenta eliminada» sobre una pata de traspaso VIVA— que responde
+        // ORPHANED_LEG_NOT_MANUAL con red y TRANSFER_RECATEGORIZE_BLOCKED sin ella. Los dos son
+        // 422, los dos rechazan, y ninguna pantalla ofrece ese camino (la hoja de una pata viva
+        // ni siquiera muestra la lista de categorías). Se deja igualar el orden para cuando se
+        // toque el server, en vez de mover una guarda de plata por un texto de error.
+        if (category == ORPHANED_LEG_CATEGORY) throw ApiException(422, ORPHANED_LEG_NOT_MANUAL)
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()

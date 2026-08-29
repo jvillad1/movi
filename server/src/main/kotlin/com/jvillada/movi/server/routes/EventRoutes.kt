@@ -241,6 +241,18 @@ fun Route.eventRoutes() {
             if (category == TRANSFER_CATEGORY) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_CATEGORY_RESERVED)
             }
+            // Ola 15: ni a «Cuenta eliminada» tampoco. Hasta acá esta puerta estaba abierta y no
+            // escondía nada —esa categoría todavía contaba en el mes—, pero desde que `isCashFlow`
+            // la excluye, escribirla en un gasto real lo haría desaparecer de «Gastos del mes» sin
+            // que nada lo dijera: el mismo daño silencioso que la guarda de la ola 10 cerró en
+            // `POST /api/events` para las otras reservadas.
+            //
+            // Y se bloquea SOLO esta, no toda categoría reservada: por esta misma ruta pasa la
+            // confirmación de un pago de tarjeta (ver GET /card-payment-candidates arriba), que
+            // escribe CARD_PAYMENT_CATEGORY a propósito y es correcta.
+            if (category == ORPHANED_LEG_CATEGORY) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, ORPHANED_LEG_NOT_MANUAL)
+            }
             // Y nadie sale tampoco: sacar una pata de la categoría reservada la devolvería al
             // flujo de caja del mes —el gasto fantasma que esta feature vino a matar— y dejaría
             // a su hermana adentro, contando la mitad de un movimiento que nunca ocurrió.

@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -611,9 +612,12 @@ class LocalRepositoryTest {
         assertNull(pata.transferId, "ya no es media pareja")
         assertEquals(ORPHANED_LEG_CATEGORY, pata.category)
         assertEquals("Traspaso a acc-cdt$ORPHANED_LEG_SUFFIX", pata.description)
-        // Y vuelve a ser flujo de caja: es la consecuencia que la hoja de borrado avisa.
-        assertTrue(pata.countsAsCashFlow)
-        // El saldo de Ahorros NO se toca: la plata salió de verdad.
+        // Y NO vuelve a ser flujo de caja (ola 15): la bandera derivada del espejo local tiene que
+        // decir lo mismo que `isCashFlow` del lado del server, o el teléfono y la web muestran dos
+        // «Ingresos del mes» distintos para los mismos datos.
+        assertFalse(pata.countsAsCashFlow)
+        // El saldo de Ahorros NO se toca: la plata salió de verdad. Este par de líneas es la
+        // promesa entera — el saldo se mueve, el mes no.
         assertEquals(750_000L, repo.getAccount("acc-ahorros").balance)
     }
 
@@ -630,6 +634,9 @@ class LocalRepositoryTest {
         assertNull(pata.transferId)
         assertEquals(ORPHANED_LEG_CATEGORY, pata.category)
         assertEquals("Traspaso desde acc-ahorros$ORPHANED_LEG_SUFFIX", pata.description)
+        // El lado caro: acá la pata que sobrevive es un INGRESO, y es la que con un crédito de por
+        // medio valía $257.000.000 de plata «ganada» que nadie ganó.
+        assertFalse(pata.countsAsCashFlow)
         assertEquals(250_000L, repo.getAccount("acc-cdt").balance)
     }
 
@@ -774,6 +781,28 @@ class LocalRepositoryTest {
 
         assertTrue(fallo.isFailure)
         assertEquals("test", repo.getEvents("acc-dest").single().category)
+    }
+
+    /**
+     * Ola 15: **«Cuenta eliminada» tampoco se escribe a mano**, y en el espejo local la guarda
+     * hace tanta falta como en el server — más, porque acá escribe PRIMERO y pregunta después.
+     * Desde que `isCashFlow` excluye esa categoría, dejarla pasar sacaría un gasto REAL de
+     * «Gastos del mes» en el teléfono, el `SyncEngine` lo empujaría, el server contestaría 422 y
+     * la fila se reintentaría cada 30 segundos para siempre.
+     */
+    @Test
+    fun updateEventCategory_rechaza_Cuenta_eliminada_como_destino() = runBlocking {
+        repo.createAccount(Account("acc-huerf", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-gasto-real", "acc-huerf", TransactionType.EXPENSE, 80_000L))
+
+        val fallo = runCatching { repo.updateEventCategory("ev-gasto-real", ORPHANED_LEG_CATEGORY) }
+            .exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(ORPHANED_LEG_NOT_MANUAL, (fallo as ApiException).serverMessage)
+        val quedo = repo.getEvents("acc-huerf").single()
+        assertEquals("test", quedo.category, "el gasto real se queda donde estaba")
+        assertTrue(quedo.countsAsCashFlow, "y sigue contando en el mes")
     }
 
     // ── Cuentas que nacieron en el server ─────────────────────────────────────

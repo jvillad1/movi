@@ -241,11 +241,20 @@ fun Route.accountRoutes() {
  *   de `POST /api/events/{id}/void`, [movementCount], `collapseTransfers`).
  * - **Se la saca de la categoría reservada** hacia una propia que dice qué pasó
  *   ([ORPHANED_LEG_CATEGORY]; ahí está escrito por qué no es «Otros» ni una por dirección), y la
- *   descripción nombra la cuenta que ya no está ([orphanedLegDescription]). Sí, eso hace que ese movimiento
- *   vuelva a contar como gasto (o ingreso) del mes en que ocurrió — y es lo correcto: con la otra
- *   cuenta fuera de Movi, esa plata efectivamente salió del perímetro que la app lleva. Es además
- *   el mismo criterio que ya aplicaba `StatementRoutes` con una fila de extracto etiquetada
- *   «Traspaso» sin hermana.
+ *   descripción nombra la cuenta que ya no está ([orphanedLegDescription]). Lo que se gana con eso
+ *   es que la fila **se pueda arreglar**: la categoría reservada la dejaba congelada para siempre.
+ *   Es además el mismo criterio que ya aplicaba `StatementRoutes` con una fila de extracto
+ *   etiquetada «Traspaso» sin hermana.
+ * - **Pero NO vuelve a contar como gasto ni como ingreso del mes** (ola 15). Durante una ola sí
+ *   contó, con el argumento de que «con la otra cuenta fuera de Movi, esa plata salió del
+ *   perímetro que la app lleva». El argumento no sobrevive al caso que la ola 14 volvió probable:
+ *   borrado el crédito de $257.000.000 que se había desembolsado a la cuenta corriente, la pata
+ *   del banco es un INGRESO de ese monto, y el Inicio pasaba de «$12,4M» a «$269,4M» — plata
+ *   prestada presentada como plata ganada. Ahí la plata no salió del perímetro: entró, y es
+ *   deuda. `isCashFlow` excluye la categoría por nombre; el **saldo** de la cuenta sobreviviente
+ *   se sigue moviendo, que es el invariante de arriba. Si esa plata sí se fue de verdad, el dueño
+ *   recategoriza la fila en un toque y vuelve a contar — algo que la categoría reservada le
+ *   negaba.
  *
  * Corre dentro de la misma transacción que el resto del borrado.
  *

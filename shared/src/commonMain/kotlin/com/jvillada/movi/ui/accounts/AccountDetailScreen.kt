@@ -340,6 +340,16 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                     )
                                                 }
                                             }
+                                            // Acá el signo se pinta SIEMPRE, y no es un olvido de
+                                            // la ola 15: en Movimientos `rowShowsSign` se lo quita
+                                            // a la pata huérfana (y a la apertura) porque ahí el
+                                            // total del día es flujo de caja y la fila lo
+                                            // contradecía. Esta pantalla suma con `accountDayTotal`
+                                            // /`signedDelta`, que cuentan TODO lo que mueve el
+                                            // saldo — la pata huérfana incluida, que es justo lo
+                                            // que hay que mostrar acá. Sin signo, la fila
+                                            // contradiría el total de ESTA pantalla. Por eso «Saldo
+                                            // inicial» tampoco está exento acá desde siempre.
                                             Text(
                                                 text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
                                                 fontSize = 14.5.sp,
@@ -410,6 +420,22 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     eventCount = totalEvents,
                     transferCount = transferLegs,
                     transferAmount = transferLegsAmount,
+                    // El saldo de ESTA cuenta, que es lo que de verdad se va con ella. En una
+                    // deuda se usa el estimado en COP si lo hay (una tarjeta en USD), que es la
+                    // misma cifra con la que `assetsDebtsNet` arma el patrimonio: el aviso tiene
+                    // que decir el número que el dueño va a ver cambiar, no otro.
+                    accountBalance = if (isDebtAccount(acc.type)) {
+                        acc.estimatedTotalCop ?: acc.balance
+                    } else {
+                        acc.balance
+                    },
+                    accountIsDebt = isDebtAccount(acc.type),
+                    // Si se usó el estimado, la cifra ya está en COP aunque la cuenta sea en USD.
+                    accountBalanceCurrency = if (isDebtAccount(acc.type) && acc.estimatedTotalCop != null) {
+                        "COP"
+                    } else {
+                        acc.currency
+                    },
                     transferCurrency = account?.currency ?: "COP",
                     onDismiss = { showDeleteAccount = false },
                     onDeleted = {

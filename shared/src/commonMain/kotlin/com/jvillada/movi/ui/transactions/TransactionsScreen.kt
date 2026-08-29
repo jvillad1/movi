@@ -42,6 +42,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
@@ -108,14 +109,31 @@ fun isTransferLeg(event: FinancialEvent): Boolean =
 fun isOpeningBalance(event: FinancialEvent): Boolean = event.category == OPENING_CATEGORY
 
 /**
+ * ¿Este renglón es una **pata de traspaso que se quedó sin la otra mitad** porque el dueño borró
+ * la cuenta de la otra punta? (ver `ORPHANED_LEG_CATEGORY` en `:core`).
+ *
+ * Se pregunta por la categoría y no por `transferId`, que es justamente lo que el borrado le
+ * saca: para el resto de la app ya es un movimiento suelto. `isTransferLeg` de arriba, entonces,
+ * dice `false` para esta fila — a propósito: no hay hermana con la que juntarla en un solo renglón
+ * y sí se puede recategorizar, que son las dos cosas que aquella pregunta decide.
+ */
+fun isOrphanedTransferLeg(event: FinancialEvent): Boolean = event.category == ORPHANED_LEG_CATEGORY
+
+/**
  * ¿El renglón lleva signo y color de ingreso/gasto?
  *
- * `false` para lo que no movió plata del bolsillo — hoy, la apertura de una cuenta. Es
- * **exactamente el mismo criterio** que ya usa el renglón de un traspaso, con el mismo motivo
- * escrito ahí abajo: ponerle «+» y pintarlo de verde a algo que después se excluye de todos los
- * totales de ingresos es contradecirse dentro de una misma pantalla (Ola 8 · V6).
+ * `false` para lo que no movió plata del bolsillo — la apertura de una cuenta y la pata huérfana
+ * de un traspaso. Es **exactamente el mismo criterio** que ya usa el renglón de un traspaso, con
+ * el mismo motivo escrito ahí abajo: ponerle «+» y pintarlo de verde a algo que después se excluye
+ * de todos los totales de ingresos es contradecirse dentro de una misma pantalla (Ola 8 · V6).
+ *
+ * Ola 15: la pata huérfana entra acá el mismo día en que `isCashFlow` la deja fuera del mes. Sin
+ * esto, el borrado de un crédito desembolsado dejaba un **«+$257.000.000» en verde** arriba de
+ * todo, bajo un total de ingresos que —correctamente— no lo cuenta. El monto se sigue viendo, en
+ * gris y sin signo: el saldo de la cuenta sí se movió y la fila no puede esconderlo.
  */
-fun rowShowsSign(event: FinancialEvent): Boolean = !isOpeningBalance(event)
+fun rowShowsSign(event: FinancialEvent): Boolean =
+    !isOpeningBalance(event) && !isOrphanedTransferLeg(event)
 
 private val MESES = listOf(
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -172,7 +190,7 @@ const val CHIP_POR_CONFIRMAR = 3
 fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
         event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED &&
-        !isTransferLeg(event) && !isOpeningBalance(event)
+        !isTransferLeg(event) && !isOpeningBalance(event) && !isOrphanedTransferLeg(event)
     // Ola 8 · V6: **la apertura de una cuenta tampoco es un ingreso**, por la misma razón que
     // no lo es una pata de traspaso. El chip «Ingresos» listaba dos «Saldo inicial» en verde y
     // con «+», y arriba el total decía «+$4.500.000» sin contarlos: filas pintadas como
@@ -180,8 +198,13 @@ fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
     // ingresos. La contradicción vivía entera en una sola pantalla. `isCashFlow` ya sabía la
     // respuesta desde siempre (OPENING_CATEGORY nunca es flujo); lo único que faltaba era que
     // el filtro dijera lo mismo. En «Todo» sí aparece, que es donde tiene sentido verlo.
+    // Ola 15 · lo mismo para la pata huérfana de un traspaso, por la MISMA razón y no por
+    // analogía: desde que `isCashFlow` la deja fuera del mes, listarla bajo «Ingresos» sería
+    // repetir exacto la contradicción de V6 — y con la cifra de un crédito entero, que es el
+    // caso que la volvió urgente. En «Todo» sigue apareciendo, y ahí se la puede tocar para
+    // recategorizarla, que es la acción que esta fila pide.
     CHIP_INGRESOS -> event.type == TransactionType.INCOME &&
-        !isTransferLeg(event) && !isOpeningBalance(event)
+        !isTransferLeg(event) && !isOpeningBalance(event) && !isOrphanedTransferLeg(event)
     CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
     else -> true
 }

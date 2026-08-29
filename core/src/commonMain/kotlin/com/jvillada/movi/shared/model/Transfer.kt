@@ -71,21 +71,27 @@ const val TRANSFER_ID_ALREADY_USED =
  * Categoría de la pata que **sobrevive al borrado de la cuenta de la otra punta** (ver
  * `DELETE /api/accounts/{id}`).
  *
- * **Por qué no se queda en [TRANSFER_CATEGORY]:** en este sistema, una pata sin la otra no puede
- * quedarse en la categoría reservada. Ahí adentro es un fantasma permanente — fuera del mes por
- * [isCashFlow], fuera de los chips Gastos e Ingresos, y encima imposible de arreglar, porque
- * `PUT /api/events/{id}/category` rechaza recategorizar cualquier pata de traspaso
- * ([TRANSFER_RECATEGORIZE_BLOCKED]). Mismo criterio que ya aplica `StatementRoutes` con una fila
- * de extracto etiquetada «Traspaso» sin hermana.
+ * **Por qué no se queda en [TRANSFER_CATEGORY]:** una pata sin la otra no puede quedarse en la
+ * categoría reservada. Ahí adentro queda **imposible de arreglar**: `PUT /api/events/{id}/category`
+ * rechaza recategorizar cualquier pata de traspaso ([TRANSFER_RECATEGORIZE_BLOCKED]), así que el
+ * dueño no tiene forma de decir «esa plata sí se fue» el día que sí se fue. Y encima el renglón
+ * seguiría diciendo «Traspaso» de algo que ya no es un par. Mismo criterio que ya aplica
+ * `StatementRoutes` con una fila de extracto etiquetada «Traspaso» sin hermana.
+ *
+ * **Lo que NO cambia al salir de la reservada: sigue fuera del flujo de caja** ([isCashFlow] la
+ * excluye por nombre, igual que a las otras tres). Perder a la hermana es un hecho sobre el
+ * registro de Movi, no sobre la plata: nadie ganó ni gastó nada el día que se borró una cuenta.
+ * Lo que sí se mueve —y tiene que moverse— es el **saldo** de la cuenta sobreviviente:
+ * `signedDelta`/`computeBalances` no pasan por [isCashFlow].
  *
  * **Por qué NO es «Otros», que era la primera respuesta:** este código ya cometió ese error y lo
  * dejó escrito. Ver `ADJUSTMENT_CATEGORY` en `BalanceAdjustment.kt`: el ajuste de saldo vivía en
  * «Otros» y ahí *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al
  * instante»*. Acá el choque sería peor, no mejor: el ajuste al menos queda fuera del flujo de
- * caja, y esta pata **vuelve a entrar** (esa es toda la idea), así que cae derecho en
- * `spentByCategory` y podría poner en OVER el presupuesto «Otros» de un mes viejo, meses después,
- * por un traspaso que el dueño no tiene cómo relacionar con eso. Con nombre propio no hay
- * presupuesto que ensuciar y el desglose se explica solo.
+ * caja, y bajo «Otros» esta pata quedaría con el tipo equivocado y sin nada que la distinga de un
+ * gasto misceláneo real. Con nombre propio el desglose se explica solo — y si el dueño la
+ * recategoriza a «Otros» a propósito (que ahora puede), ahí sí entra al presupuesto, porque ahí sí
+ * lo decidió él.
  *
  * **Y por qué UNA sola categoría y no una por dirección**, que fue el primer intento («Traspaso a
  * cuenta eliminada» / «Traspaso desde cuenta eliminada»). Ese intento existía para no repetir el
@@ -100,34 +106,34 @@ const val TRANSFER_ID_ALREADY_USED =
  * verificado en el navegador, con 27 caracteres el renglón de Movimientos no tenía ancho para el
  * subtítulo «categoría · origen» y partía «MANUAL» en una letra por línea.
  *
- * **No es reservada.** A diferencia de [TRANSFER_CATEGORY], nada bloquea entrar ni salir de acá:
- * el dueño puede recategorizar la fila desde Movimientos, que es justo lo que antes no podía.
+ * **No es reservada para el dueño.** A diferencia de [TRANSFER_CATEGORY], se puede **salir** de
+ * acá: el dueño recategoriza la fila desde Movimientos y ese movimiento vuelve a contar en el mes.
+ * Ese es el escape para el caso en que la plata SÍ se fue del hogar (un traspaso a una cuenta que
+ * dejó de ser suya). Lo que no se puede es **entrar** a mano — ni por `POST /api/events` ni por
+ * `PUT /api/events/{id}/category`, ver [ORPHANED_LEG_NOT_MANUAL]—: desde que queda fuera del flujo
+ * de caja, escribir «Cuenta eliminada» en un gasto real lo haría desaparecer del mes en silencio,
+ * que es exactamente lo que la guarda de la ola 10 vino a cerrar para las otras reservadas.
  *
- * ## Ola 14 — esto dejó de ser un caso raro, y quien lo tome después tiene que saberlo
+ * ## Ola 14 → 15: por qué esto vale un crédito entero, y qué se hizo
  *
  * Desde que un préstamo puede ser una punta del traspaso ([validateTransfer]), la pata que
- * sobrevive puede valer **el monto entero de un crédito**. Medido en el navegador, borrada la
- * cuenta del crédito desembolsado:
+ * sobrevive puede valer **el monto entero de un crédito**. Medido con el escenario real —un
+ * crédito de $257.000.000 desembolsado a la cuenta corriente, y después el crédito borrado—
+ * mientras esta categoría volvía al flujo de caja:
  *
- * - La pata del banco —un INCOME de $257.000.000 en una cuenta de activo— vuelve a entrar al
- *   flujo de caja por esta categoría, e Inicio pasó a decir **«Ingresos $269,4M»** para alguien
- *   que había ganado $12,4M.
- * - Y lo más caro, que la primera versión de esta nota no registraba: **la deuda desaparece
- *   entera y queda el efectivo prestado**, así que el patrimonio saltó de **−$244.600.000 a
- *   +$269.400.000**. Medio billón de pesos de diferencia, en la única cifra que —según la
- *   revisión de esta rama— no miente en ninguno de los otros modos de falla: el patrimonio queda
- *   quieto ante el doble conteo y ante el desembolso faltante, pero no ante esto.
+ * - La pata del banco —un INCOME de $257.000.000 en una cuenta de activo— entraba al mes, e
+ *   Inicio decía **«Ingresos $269,4M»** para alguien que había ganado $12,4M: plata prestada
+ *   presentada como plata ganada.
+ * - Y el camino más corto para llegar ahí era la recuperación del propio error que la ola 14
+ *   evita — crear el crédito con su deuda, anotar además el desembolso, ver la deuda al doble y
+ *   **borrar el crédito para empezar de nuevo**.
  *
- * Y no es que la rama haya dejado la probabilidad igual: **la sube**. El camino más corto para
- * llegar acá es la recuperación del propio error que la rama evita — crear el crédito con su
- * deuda (la costumbre de siempre), anotar además el desembolso, ver la deuda al doble, y **borrar
- * el crédito para empezar de nuevo**. Eso es lo que hace cualquiera al descubrir un duplicado.
- *
- * **No se arregló acá a propósito**, y no por tamaño: arreglarlo es cambiarle el significado a
- * esta categoría, que este mismo KDoc defiende con detalle (vuelve a entrar al flujo porque «esa
- * plata sí se movió»). Que una pata huérfana **de un crédito** sea la excepción a esa regla es
- * una decisión de producto con su propia discusión, no un ajuste al pasar. Queda escrito para que
- * quien la tome no lo lea como una rareza teórica.
+ * La ola 15 lo cierra sumando esta categoría a la familia de [isCashFlow]. Queda **fuera de
+ * alcance**, y hay que saberlo: borrar la cuenta del crédito **sí** hace desaparecer la deuda del
+ * patrimonio y deja el efectivo prestado del lado de los activos. Eso no lo causa esta categoría
+ * —lo causa borrar la cuenta, que es lo que el dueño pidió— y arreglarlo sería no dejar borrar, o
+ * tocarle el saldo a una cuenta que él no tocó. Lo que se hace en cambio es **avisarlo antes**,
+ * con la cifra, en `DeleteAccountSheet`.
  */
 const val ORPHANED_LEG_CATEGORY = "Cuenta eliminada"
 
@@ -139,6 +145,46 @@ const val ORPHANED_LEG_CATEGORY = "Cuenta eliminada"
  * que apunta a una cuenta que no puede abrir.
  */
 const val ORPHANED_LEG_SUFFIX = " · cuenta eliminada"
+
+/**
+ * Lo que se le dice a quien intenta escribir [ORPHANED_LEG_CATEGORY] **a mano** en un movimiento.
+ *
+ * Es la misma guarda que [CATEGORY_RESERVED_NOT_MANUAL] impone en `POST /api/events`, extendida a
+ * `PUT /api/events/{id}/category` — que hasta la ola 15 solo cerraba la puerta de «Traspaso»
+ * porque «Cuenta eliminada» todavía contaba en el mes y por eso no escondía nada. Ahora sí
+ * esconde: un gasto real rotulado así desaparecería de «Gastos del mes» sin que nada lo dijera.
+ *
+ * La puerta queda abierta en el otro sentido a propósito: **salir** de esta categoría se puede
+ * (ver el KDoc de [ORPHANED_LEG_CATEGORY]).
+ */
+const val ORPHANED_LEG_NOT_MANUAL: String =
+    "«$ORPHANED_LEG_CATEGORY» la escribe Movi sola cuando borras una cuenta que era parte de un " +
+        "traspaso, y los movimientos que la llevan quedan fuera de tus gastos e ingresos del mes. " +
+        "Elige otra."
+
+/**
+ * Lo que la hoja del movimiento le explica al dueño cuando abre una pata huérfana.
+ *
+ * Sin esto, la fila dice «Cuenta eliminada» y nada más: una categoría que él nunca escribió, en un
+ * movimiento que dejó de sumar, sin ninguna forma de saber por qué. El texto tiene que contestar
+ * las tres preguntas en ese orden —qué era, por qué no cuenta, qué puede hacer— porque la tercera
+ * es la única accionable y es justo la que la categoría reservada le negaba.
+ *
+ * Dos cosas están redactadas así a propósito, y las dos por quién lo lee: alguien confundido, que
+ * acaba de encontrarse un movimiento raro y lee rápido.
+ * - **«un traspaso nunca fue un gasto ni un ingreso»**, y no «nunca lo fue»: el antecedente de
+ *   «lo» no está dicho en la frase, y leído de corrido se invierte en «nunca fue un traspaso» —
+ *   exactamente lo contrario de la primera oración.
+ * - **«y ese movimiento vuelve a contar»**, y no «y vuelve a contar»: pegado a «elige», que es
+ *   imperativo, «vuelve» se lee como una segunda orden al lector en vez de como la consecuencia.
+ */
+const val ORPHANED_LEG_EXPLAINER: String =
+    "Esto era un traspaso con una cuenta que borraste. Su otra mitad se fue con esa cuenta, así " +
+        "que este movimiento quedó solo. El saldo de tu cuenta ya lo tiene contado y no cambia, " +
+        "pero no suma a tus gastos ni a tus ingresos del mes: un traspaso nunca fue un gasto ni " +
+        "un ingreso. Si esa plata sí salió (o entró) de verdad, elige abajo la categoría que le " +
+        "corresponde y ese movimiento vuelve a contar en el mes."
+
 
 /** Largo de `financial_events.description` (ver `Tables.kt`) y de su espejo local. */
 private const val MAX_DESCRIPTION_LENGTH = 255

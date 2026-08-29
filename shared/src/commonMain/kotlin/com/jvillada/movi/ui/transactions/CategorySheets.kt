@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.ORPHANED_LEG_EXPLAINER
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
@@ -215,6 +216,23 @@ fun ChangeCategorySheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
             Spacer(Modifier.height(18.dp))
+            // Ola 15 · la pata huérfana se explica sola, acá y no en la fila.
+            //
+            // La fila de Movimientos no tiene lugar: su subtítulo es «categoría · cuenta» con una
+            // línea y ellipsis (verificado en el navegador cuando se descartó partir esta
+            // categoría en dos por dirección). Y esta hoja es donde el dueño llega justo cuando se
+            // pregunta qué es esa fila — la abre para tocarle la categoría.
+            //
+            // Va ARRIBA de la fecha y de la lista, no al final, por lo mismo que la fecha: lo que
+            // queda debajo de veinte renglones de categorías, en la práctica, no existe.
+            if (isOrphanedTransferLeg(event)) {
+                SheetLabel("ERA UN TRASPASO")
+                Spacer(Modifier.height(8.dp))
+                Text(ORPHANED_LEG_EXPLAINER, fontSize = 13.5.sp, color = MinTextMute)
+                Spacer(Modifier.height(20.dp))
+                Hairline()
+                Spacer(Modifier.height(16.dp))
+            }
             // La fecha va ARRIBA de la lista de categorías, no al final: la lista mide veinte
             // renglones y todo lo que quede debajo de ella es, en la práctica, invisible.
             SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)

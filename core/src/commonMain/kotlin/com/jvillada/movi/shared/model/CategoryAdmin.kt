@@ -216,8 +216,8 @@ data class CategoryRewriteResult(
 
 fun categoriaReservadaMensaje(name: String): String =
     "«$name» es una categoría reservada de Movi: la escribe la app sola para traspasos, saldos " +
-        "iniciales y pagos de tarjeta, y de su nombre exacto dependen las cifras de tu mes. " +
-        "No se puede renombrar, unificar ni esconder."
+        "iniciales, pagos de tarjeta y cuentas eliminadas, y de su nombre exacto dependen las " +
+        "cifras de tu mes. No se puede renombrar, unificar ni esconder."
 
 const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
     "Las categorías del catálogo de Movi no se renombran: el catálogo es el mismo para todos y " +
@@ -245,8 +245,9 @@ const val CATEGORY_NAME_REQUIRED: String = "Falta el nombre de la categoría."
 const val CATEGORY_RESERVED_SHORT: String = "Esa categoría la usa Movi sola: elige otra"
 
 const val CATEGORY_RESERVED_NOT_MANUAL: String =
-    "Esa categoría la usa Movi sola (traspasos, saldos iniciales y pagos de tarjeta) y los " +
-        "movimientos que la llevan quedan fuera de tus gastos del mes. Elige otra."
+    "Esa categoría la usa Movi sola (traspasos, saldos iniciales, pagos de tarjeta y cuentas " +
+        "eliminadas) y los movimientos que la llevan quedan fuera de tus gastos del mes. " +
+        "Elige otra."
 
 /**
  * El mismo tope que ya impone `PUT /api/events/{id}/category` — la columna aguanta 100, pero un

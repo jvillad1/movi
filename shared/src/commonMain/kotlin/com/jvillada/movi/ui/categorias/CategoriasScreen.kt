@@ -546,7 +546,8 @@ private fun HojaDetalle(
                         color = MinWarn,
                     )
                     Text(
-                        "La escribe la app sola para traspasos, saldos iniciales y pagos de tarjeta, " +
+                        "La escribe la app sola para traspasos, saldos iniciales, pagos de tarjeta " +
+                            "y cuentas eliminadas, " +
                             "y de su nombre exacto dependen las cifras de tu mes. No se puede renombrar, " +
                             "unificar ni esconder.",
                         fontSize = 12.5.sp,
