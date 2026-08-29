@@ -39,9 +39,11 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.isOpeningBalance
+import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -98,15 +100,40 @@ fun isTransferLeg(event: FinancialEvent): Boolean =
     event.transferId != null || event.category == TRANSFER_CATEGORY
 
 /**
- * ¿Este renglón es la **apertura de una cuenta** y no plata que entró o salió?
+ * Los días que Movimientos pinta, ya filtrados por el chip [chip] y la búsqueda [query], con el
+ * total de cada uno **recalculado sobre lo que quedó**.
  *
- * El saldo inicial se guarda como un movimiento (INCOME por lo que había, EXPENSE por lo que se
- * debía) para que el saldo de la cuenta cuadre solo, pero no es un ingreso ni un gasto: es la
- * foto de lo que ya existía el día que la cuenta entró a la app. `isCashFlow` ya lo sabe y lo
- * deja fuera de todos los totales — esto es solo el lado de la presentación, para que la lista
- * lo diga con las mismas palabras que las cuentas.
+ * Estaba en línea dentro del `@Composable` y se extrajo en la Ola 16 para poder medirlo: es la
+ * pieza donde el filtro de aperturas se cruza con el total del día, y la pregunta que hay que
+ * poder contestar con un test —«¿sacar la fila cambia alguna cifra?»— no se contesta mirando el
+ * predicado suelto.
+ *
+ * El total sigue el mismo criterio que el del server (ver `EventRoutes` `/by-day`):
+ * `countsAsCashFlow` deja fuera los movimientos de cuentas de deuda. Sin ese recálculo el
+ * encabezado del día decía $0 en «Todo» y +$60.000.000 en «Ingresos» — el mismo número engañoso
+ * que esa rama vino a matar, una pestaña más allá. Y por esa misma bandera **quitar una apertura
+ * no puede mover el total**: ya estaba excluida de la suma.
+ *
+ * Un día que se queda sin filas se descarta entero (encabezado incluido): un día vacío con su
+ * «Flujo del día» no le dice nada a nadie.
  */
-fun isOpeningBalance(event: FinancialEvent): Boolean = event.category == OPENING_CATEGORY
+fun diasVisibles(days: List<EventDay>, chip: Int, query: String): List<EventDay> =
+    days.mapNotNull { day ->
+        val filtered = day.items
+            // Ola 16: la apertura de una cuenta no se lista salvo que la busquen — ver
+            // [showsInMovements], que también explica por qué el filtro vive acá y no en
+            // `/by-day` ni en `LocalRepository`.
+            .filter { showsInMovements(it, query) }
+            .filter { matchesChip(it, chip) }
+            .filter { matchesQuery(it, query) }
+        if (filtered.isEmpty()) null
+        else day.copy(
+            items = filtered,
+            total = filtered.filter { it.countsAsCashFlow }.sumOf {
+                if (it.type == TransactionType.EXPENSE) -it.amount else it.amount
+            },
+        )
+    }
 
 /**
  * ¿Este renglón es una **pata de traspaso que se quedó sin la otra mitad** porque el dueño borró
@@ -382,21 +409,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    fun signedAmount(tx: FinancialEvent): Long =
-        if (tx.type == TransactionType.EXPENSE) -tx.amount else tx.amount
-
     val visibleDays = remember(activeFilter, allDays, searchQuery) {
-        allDays.mapNotNull { day ->
-            val filtered = day.items
-                .filter { matchesChip(it, activeFilter) }
-                .filter { matchesQuery(it, searchQuery) }
-            if (filtered.isEmpty()) null
-            // El total recalculado sigue el mismo criterio que el del server (ver EventRoutes
-            // /by-day): countsAsCashFlow deja fuera los movimientos de cuentas de deuda. Sin
-            // esto, el encabezado del día decía $0 en "Todo" y +$60.000.000 en "Ingresos" —
-            // el mismo número engañoso que esta rama vino a matar, una pestaña más allá.
-            else day.copy(items = filtered, total = filtered.filter { it.countsAsCashFlow }.sumOf { signedAmount(it) })
-        }
+        diasVisibles(allDays, activeFilter, searchQuery)
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
@@ -660,6 +674,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             event = event,
             onDismiss = { selectedEvent = null },
             onEventChanged = { selectedEvent = null; refreshKey++ },
+            // Ola 16: el saldo inicial ya no se lista acá, pero la búsqueda lo sigue
+            // encontrando — y quien lo busca es justamente el que se pregunta «¿de dónde
+            // salieron estos $41 millones?». La hoja lo explica y esto lo lleva a donde de
+            // verdad se arregla, en un toque, en vez de dejarle una instrucción para seguir a
+            // mano. Null si la lista de cuentas todavía no llegó: sin el tipo no se sabe a qué
+            // grupo pertenece el detalle, y un botón que navega al lugar equivocado es peor
+            // que ningún botón.
+            onVerCuenta = accountTypes[event.accountId]?.let { tipo ->
+                { onNavigate(Screen.AccountDetail(event.accountId, tipo.group)) }
+            },
         )
     }
 

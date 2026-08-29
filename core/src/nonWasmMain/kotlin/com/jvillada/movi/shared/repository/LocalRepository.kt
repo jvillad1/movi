@@ -19,6 +19,9 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY_RESERVED
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY_RESERVED
+import com.jvillada.movi.shared.model.OPENING_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.orphanedLegDescription
 import com.jvillada.movi.shared.model.TRANSFER_LEG_NOT_STANDALONE
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
@@ -660,6 +663,19 @@ class LocalRepository(
         // ni siquiera muestra la lista de categorías). Se deja igualar el orden para cuando se
         // toque el server, en vez de mover una guarda de plata por un texto de error.
         if (category == ORPHANED_LEG_CATEGORY) throw ApiException(422, ORPHANED_LEG_NOT_MANUAL)
+        // Ola 16 · las dos guardas del saldo inicial, y **este par sí está en el mismo orden que
+        // el server** (a diferencia del de arriba): primero la categoría de destino, después la
+        // del evento. Es a propósito y vale escribir por qué. Con este orden, los tres cruces
+        // posibles entre una apertura y las otras reservadas dan el MISMO mensaje con red y sin
+        // ella —«Saldo inicial»→«Traspaso» contesta TRANSFER_CATEGORY_RESERVED en los dos lados,
+        // «Saldo inicial»→«Cuenta eliminada» contesta ORPHANED_LEG_NOT_MANUAL en los dos—, así que
+        // no se agrega una divergencia nueva a la que ya está documentada acá arriba.
+        //
+        // El porqué de cada una está en :core, con la medición: [OPENING_CATEGORY_RESERVED] (un
+        // gasto real que desaparece de «Gastos del mes») y [OPENING_RECATEGORIZE_BLOCKED] (una
+        // apertura que se convierte en ingreso del mes).
+        if (category == OPENING_CATEGORY) throw ApiException(422, OPENING_CATEGORY_RESERVED)
+        if (fila?.category == OPENING_CATEGORY) throw ApiException(422, OPENING_RECATEGORIZE_BLOCKED)
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
