@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +32,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
@@ -444,6 +445,31 @@ fun CategoryField(
     /** Ola 2 #3: si se pasa, QuickAdd la usa para pedir foco al abrir el sub-picker (el campo
      *  arranca prellenado — sin esto nunca se veía el teclado ni la lista de sugerencias). */
     focusRequester: FocusRequester? = null,
+    /**
+     * Alto máximo del panel de sugerencias, **con scroll propio adentro**; `null` = sin tope y
+     * **sin scroll propio**, o sea el panel se estira con sus filas y lo desplaza quien lo
+     * contenga.
+     *
+     * Ola 14 — nace de un reporte del dueño desde el navegador del teléfono: «cuando quiero ver
+     * las categorías para hacer un nuevo movimiento, al hacer scroll desaparecen». El tope de
+     * 220 dp nació cuando este campo era un renglón más de un formulario que NO se desplazaba:
+     * ahí acotarlo era lo correcto, porque si no el panel tapaba la pantalla entera. Desde que
+     * la hoja de «Agregar» se desplaza (Ola 12), en el sub-picker de Categoría ese mismo tope
+     * dejó dos defectos juntos, medidos en un teléfono de 375×812:
+     *
+     * - **Se ven 4 categorías** en una ventanita de 220 dp… con ~370 px de losa vacía justo
+     *   debajo, adentro del mismo sub-picker (medido en el navegador a 375×812, con una cuenta
+     *   sembrada que ofrece 24). Para ver el resto hay que desplazar la ventanita.
+     * - Y desplazarla es **un scroll adentro de otro scroll**: el gesto del dedo lo puede tomar
+     *   la hoja o la lista, y de ahí sale el «desaparecen».
+     *
+     * Por eso el sub-picker de pantalla completa pasa `null`: una sola área desplazable —la de
+     * la hoja— y la lista entera a la vista. Las otras **tres** pantallas que usan este campo
+     * (`CreateRecurringRuleSheet`, `CategorySheets` y `PresupuestosScreen`) lo siguen llamando sin
+     * tocar nada y conservan su tope: ahí el panel se abre **encima** de un formulario y sin tope
+     * lo empujaría hacia abajo.
+     */
+    maxSuggestionsHeight: Dp? = 220.dp,
 ) {
     var focused by remember { mutableStateOf(false) }
     // F62: la lista NO puede desmontarse en el mismo frame en que el campo pierde el foco.
@@ -461,6 +487,15 @@ fun CategoryField(
             suggestionsVisible = false
         }
     }
+    // El desplazamiento del panel acotado. Se recuerda acá arriba y no adentro de la rama que lo
+    // usa, porque un `remember` colgado de una rama que aparece y desaparece es frágil de leer.
+    //
+    // **La clave está en el `suggestionsVisible`**: con él, el estado se rehace cada vez que el
+    // panel se muestra, que es exactamente lo que hacía el `rememberScrollState()` de adentro del
+    // `if` — el panel se abría arriba de todo. Sin la clave, en las tres pantallas acotadas el
+    // panel reabría donde el dueño lo había dejado desplazado, y este cambio dejaba de ser
+    // «no toca nada» para ellas.
+    val suggestionsScroll = remember(suggestionsVisible) { ScrollState(0) }
     val focusManager = LocalFocusManager.current
     // Estado interno de texto+selección: separado de [value] para poder seleccionar todo el
     // texto al enfocar (Ola 2 #3b) sin pelearse con el `value: String` que ya usan las 3
@@ -568,8 +603,16 @@ fun CategoryField(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 220.dp)
-                    .verticalScroll(rememberScrollState())
+                    // Ver [maxSuggestionsHeight]: con tope, el panel trae su propio scroll; sin
+                    // tope no trae ninguno, y ese es justamente el punto — dos áreas
+                    // desplazables anidadas es lo que se lleva el gesto del dedo.
+                    .then(
+                        if (maxSuggestionsHeight != null) {
+                            Modifier.heightIn(max = maxSuggestionsHeight).verticalScroll(suggestionsScroll)
+                        } else {
+                            Modifier
+                        },
+                    )
                     .clip(RoundedCornerShape(12.dp))
                     .background(MinSurfaceContainerHigh)
                     .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),

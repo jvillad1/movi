@@ -48,6 +48,7 @@ import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -184,6 +185,7 @@ class EventRoutesTest {
         category: String,
         amount: Long = 100_000L,
         timestamp: Long = System.currentTimeMillis(),
+        createdAt: Long? = null,
     ) {
         transaction {
             Events.insert {
@@ -198,6 +200,7 @@ class EventRoutesTest {
                 it[Events.timestamp]            = timestamp
                 it[Events.eventSource]          = "STATEMENT"
                 it[Events.reconciliationStatus] = "UNCONFIRMED"
+                it[Events.createdAt]            = createdAt
             }
         }
     }
@@ -1040,4 +1043,285 @@ class EventRoutesTest {
         assertEquals(HttpStatusCode.Created, res.status)
         assertEquals(AppClock.today(), epochMillisToAppDate(timestampDe("ev-sin-fecha")))
     }
+
+    // ── Ola 10 · El orden DENTRO de cada día ────────────────────────────────
+
+    /**
+     * Los renglones de un día en el orden en que los devuelve `/by-day`, en orden de aparición.
+     */
+    private suspend fun ApplicationTestBuilder.idsDelDia(userId: String, fecha: String): List<String> {
+        val res = client.get("/api/events/by-day") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val dia = Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject }
+            .first { it["date"]!!.jsonPrimitive.content == fecha }
+        return dia["items"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+    }
+
+    private suspend fun ApplicationTestBuilder.totalDelDia(userId: String, fecha: String): Long {
+        val res = client.get("/api/events/by-day") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        return Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject }
+            .first { it["date"]!!.jsonPrimitive.content == fecha }["total"]!!.jsonPrimitive.long
+    }
+
+    /** Un instante de HOY, a la hora de Bogotá que se pida. */
+    private fun hoyALas(hora: Int, minuto: Int = 0): Long =
+        AppClock.today().atTime(hora, minuto).atZone(AppClock.zone).toInstant().toEpochMilli()
+
+    /**
+     * El pedido del dueño: «el último arriba en cada grupo y el más viejo de último».
+     *
+     * Antes de esta corrección `/by-day` ordenaba **los días** y dentro de cada día dejaba pasar
+     * lo que devolviera el `SELECT` sin `ORDER BY` — el orden físico de la tabla, que un UPDATE o
+     * un VACUUM pueden cambiar. Se siembra a propósito **al revés** del orden esperado, que es
+     * como sale de la tabla cuando se inserta así.
+     */
+    @Test
+    fun `by-day lista el mas reciente arriba y el mas viejo abajo dentro del dia`() = testApplication {
+        wireApp()
+        seedEvent("ev-8am",  userAId, savingsAccountId, "EXPENSE", "Café",    "Comida", timestamp = hoyALas(8))
+        seedEvent("ev-13pm", userAId, savingsAccountId, "EXPENSE", "Almuerzo", "Comida", timestamp = hoyALas(13))
+        seedEvent("ev-19pm", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado", timestamp = hoyALas(19))
+
+        assertEquals(
+            listOf("ev-19pm", "ev-13pm", "ev-8am"),
+            idsDelDia(userAId, AppClock.today().toString()),
+        )
+    }
+
+    /**
+     * Dos movimientos con el MISMO instante al milisegundo —lo normal en un lote de SMS o de
+     * extracto— tienen que salir siempre igual. Sin desempate, la lista se reordenaba sola entre
+     * recargas: la otra mitad del defecto.
+     */
+    @Test
+    fun `dos movimientos del mismo instante salen en el mismo orden en cada lectura`() = testApplication {
+        wireApp()
+        val mismoInstante = hoyALas(10, 30)
+        seedEvent("ev-zzz", userAId, savingsAccountId, "EXPENSE", "Uno", "Comida", timestamp = mismoInstante)
+        seedEvent("ev-aaa", userAId, savingsAccountId, "EXPENSE", "Dos", "Comida", timestamp = mismoInstante)
+
+        val hoy = AppClock.today().toString()
+        val primera = idsDelDia(userAId, hoy)
+        val segunda = idsDelDia(userAId, hoy)
+        assertEquals(primera, segunda)
+        assertEquals(listOf("ev-aaa", "ev-zzz"), primera)
+    }
+
+    /**
+     * Las dos patas de un traspaso comparten instante. Si el orden nuevo las separara, el renglón
+     * colapsado de Movimientos (ver `collapseTransfers`) caería en un lugar raro del día.
+     */
+    @Test
+    fun `las dos patas de un traspaso quedan pegadas dentro del dia`() = testApplication {
+        wireApp()
+        val instante = hoyALas(15)
+        seedEvent("ev-otro-tarde", userAId, savingsAccountId, "EXPENSE", "Taxi", "Transporte", timestamp = hoyALas(18))
+        seedEvent("ev-otro-temprano", userAId, savingsAccountId, "EXPENSE", "Pan", "Comida", timestamp = hoyALas(7))
+        transaction {
+            listOf("ev-tr-a" to "EXPENSE", "ev-tr-b" to "INCOME").forEach { (evId, tipo) ->
+                Events.insert {
+                    it[id]                   = evId
+                    it[userId]               = userAId
+                    it[accountId]            = savingsAccountId
+                    it[type]                 = tipo
+                    it[amount]               = 500_000L
+                    it[currency]             = "COP"
+                    it[category]             = "Traspaso"
+                    it[description]          = "Traspaso"
+                    it[timestamp]            = instante
+                    it[eventSource]          = "MANUAL"
+                    it[reconciliationStatus] = "RECONCILED"
+                    it[transferId]           = "tr-orden"
+                }
+            }
+        }
+
+        val ids = idsDelDia(userAId, AppClock.today().toString())
+        val posiciones = ids.withIndex().filter { it.value.startsWith("ev-tr-") }.map { it.index }
+        assertEquals(2, posiciones.size, ids.toString())
+        assertEquals(1, posiciones[1] - posiciones[0], "las patas quedaron separadas: $ids")
+    }
+
+    /** El total del día es una suma: reordenar no lo puede mover. */
+    @Test
+    fun `el total del dia sigue siendo el mismo con el orden nuevo`() = testApplication {
+        wireApp()
+        seedEvent("ev-t1", userAId, savingsAccountId, "INCOME", "Sueldo", "Salario",
+            amount = 500_000L, timestamp = hoyALas(9))
+        seedEvent("ev-t2", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado",
+            amount = 120_000L, timestamp = hoyALas(20))
+        seedEvent("ev-t3", userAId, savingsAccountId, "EXPENSE", "Café", "Comida",
+            amount = 80_000L, timestamp = hoyALas(20))
+
+        assertEquals(300_000L, totalDelDia(userAId, AppClock.today().toString()))
+    }
+    // ── Cuándo se anotó, que no es cuándo ocurrió ───────────────────────────
+
+    /** El mediodía de Bogotá de hace `dias` días: donde cae toda fecha elegida a mano. */
+    private fun mediodiaDeHace(dias: Long): Long = mediodiaHace(dias)
+
+    /**
+     * **El caso que el dueño estaba viendo.** Cinco gastos de AYER, anotados uno detrás del otro:
+     * al elegir una fecha que no es hoy, el cliente la guarda al mediodía, así que los cinco
+     * quedan con el mismo `timestamp` y ordenar por ahí no decide nada. Con `created_at`, arriba
+     * queda el que anotó último.
+     */
+    @Test
+    fun `entre gastos del mismo dia pasado manda el que se anoto ultimo`() = testApplication {
+        wireApp()
+        val ayer = mediodiaDeHace(1)
+        val anotadoALas = { minuto: Long -> 1_800_000_000_000L + minuto * 60_000L }
+        seedEvent("ev-3ro", userAId, savingsAccountId, "EXPENSE", "Tercero", "Comida",
+            timestamp = ayer, createdAt = anotadoALas(3))
+        seedEvent("ev-1ro", userAId, savingsAccountId, "EXPENSE", "Primero", "Comida",
+            timestamp = ayer, createdAt = anotadoALas(1))
+        seedEvent("ev-2do", userAId, savingsAccountId, "EXPENSE", "Segundo", "Comida",
+            timestamp = ayer, createdAt = anotadoALas(2))
+
+        assertEquals(
+            listOf("ev-3ro", "ev-2do", "ev-1ro"),
+            idsDelDia(userAId, AppClock.today().minusDays(1).toString()),
+        )
+    }
+
+    /**
+     * La creación desempata, no manda: un SMS de ayer a las 23:00 tiene hora real y queda arriba
+     * de un gasto de ayer anotado hoy a mano (que quedó al mediodía).
+     */
+    @Test
+    fun `la hora real le gana a la hora en que se anoto`() = testApplication {
+        wireApp()
+        val ayerMediodia = mediodiaDeHace(1)
+        val ayer23 = ayerMediodia + 11 * 3_600_000L
+        seedEvent("ev-manual", userAId, savingsAccountId, "EXPENSE", "Anotado hoy", "Comida",
+            timestamp = ayerMediodia, createdAt = 1_900_000_000_000L)
+        seedEvent("ev-sms", userAId, savingsAccountId, "EXPENSE", "SMS de las 23", "Otros",
+            timestamp = ayer23, createdAt = ayer23)
+
+        assertEquals(
+            listOf("ev-sms", "ev-manual"),
+            idsDelDia(userAId, AppClock.today().minusDays(1).toString()),
+        )
+    }
+
+    /**
+     * Los movimientos que ya existían no tienen creación: caen a su timestamp, empatan ahí también
+     * y los ordena el `id`. **No quedan donde estaban** — se siembra `ev-zzz` primero y la lista
+     * sale con `ev-aaa` arriba. Lo que se gana es que el orden sea el mismo en cada lectura.
+     */
+    @Test
+    fun `los movimientos sin fecha de creacion quedan en un orden estable aunque arbitrario`() = testApplication {
+        wireApp()
+        val ayer = mediodiaDeHace(1)
+        seedEvent("ev-zzz", userAId, savingsAccountId, "EXPENSE", "Viejo Z", "Comida", timestamp = ayer)
+        seedEvent("ev-aaa", userAId, savingsAccountId, "EXPENSE", "Viejo A", "Comida", timestamp = ayer)
+
+        val ids = idsDelDia(userAId, AppClock.today().minusDays(1).toString())
+        // Arbitrario: se sembró zzz primero y manda el id.
+        assertEquals(listOf("ev-aaa", "ev-zzz"), ids)
+        // Estable: sigue siendo el mismo orden en la lectura siguiente.
+        assertEquals(ids, idsDelDia(userAId, AppClock.today().minusDays(1).toString()))
+    }
+
+    /**
+     * **El sello lo manda el cliente y el server lo respeta**: es la razón de todo el diseño. Un
+     * movimiento anotado sin señal y sincronizado dos días después tiene que conservar el momento
+     * en que el dueño lo escribió, no el momento en que llegó.
+     */
+    @Test
+    fun `el POST guarda la fecha de creacion que manda el cliente`() = testApplication {
+        wireApp()
+        val anotadoHaceDosDias = mediodiaDeHace(2)
+        val res = postEvent(
+            userAId,
+            """{"id":"ev-offline","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                "category":"Comida","description":"anotado sin señal","source":"MANUAL",
+                "timestamp":${mediodiaDeHace(2)},"createdAt":$anotadoHaceDosDias}""",
+        )
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        assertEquals(anotadoHaceDosDias, createdAtDe("ev-offline"))
+    }
+
+    /** Un cliente que no lo mande (la web, que postea apenas se guarda) queda sellado con `now`. */
+    @Test
+    fun `el POST sin fecha de creacion la sella con la hora del server`() = testApplication {
+        wireApp()
+        val antes = System.currentTimeMillis()
+        val res = postEvent(
+            userAId,
+            """{"id":"ev-web","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                "category":"Comida","description":"desde la web","source":"MANUAL","timestamp":0}""",
+        )
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        val sello = createdAtDe("ev-web")
+        assertNotNull(sello)
+        assertTrue(sello >= antes, "el sello quedó antes de que empezara el test: $sello")
+    }
+
+    /**
+     * Filtro de cordura, no de confianza: un epoch absurdo (un reloj sin sincronizar en 1970) se
+     * descarta y se usa la hora del server. No hace falta más — esto no decide a qué día pertenece
+     * el movimiento ni entra en ningún total.
+     */
+    @Test
+    fun `un reloj absurdo del cliente no se guarda`() = testApplication {
+        wireApp()
+        val antes = System.currentTimeMillis()
+        val res = postEvent(
+            userAId,
+            """{"id":"ev-reloj-roto","accountId":"$savingsAccountId","type":"EXPENSE","amount":1000,
+                "category":"Comida","description":"reloj en 1970","source":"MANUAL",
+                "timestamp":0,"createdAt":1000}""",
+        )
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        val sello = createdAtDe("ev-reloj-roto")
+        assertNotNull(sello)
+        assertTrue(sello >= antes, "se guardó el epoch absurdo del cliente: $sello")
+    }
+
+    /**
+     * Las dos patas de un traspaso pasan por `insertEventRow`, el embudo único de escritura, así
+     * que heredan el sello sin que `TransferRoutes` tuviera que cambiar. Sin sello, un traspaso de
+     * un día pasado no se podría ordenar contra los gastos anotados a mano de ese mismo día.
+     */
+    @Test
+    fun `las patas de un traspaso tambien quedan selladas`() = testApplication {
+        wireApp()
+        val antes = System.currentTimeMillis()
+        // Destino de activo: un traspaso a una tarjeta o a un préstamo se rechaza a propósito
+        // (eso se maneja en Créditos), y acá lo que se prueba es el sello, no esa guarda.
+        transaction {
+            Accounts.insert {
+                it[id]       = "acc-cdt-sello"
+                it[userId]   = userAId
+                it[name]     = "CDT"
+                it[type]     = "INVESTMENT"
+                it[currency] = "COP"
+            }
+        }
+        val res = client.post("/api/transfers") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"transferId":"tr-sello","fromEventId":"ev-sello-out","toEventId":"ev-sello-in",
+                    "fromAccountId":"$savingsAccountId","toAccountId":"acc-cdt-sello",
+                    "amount":100000,"timestamp":${mediodiaHace(0)}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        for (id in listOf("ev-sello-out", "ev-sello-in")) {
+            val sello = createdAtDe(id)
+            assertNotNull(sello, "la pata $id quedó sin sello de creación")
+            assertTrue(sello >= antes, "el sello de $id es anterior al test: $sello")
+        }
+    }
+
+    private fun createdAtDe(id: String): Long? =
+        transaction { Events.selectAll().where { Events.id eq id }.first()[Events.createdAt] }
 }

@@ -22,4 +22,5 @@ fun ResultRow.toFinancialEvent(): FinancialEvent = FinancialEvent(
     reconciliationStatus = ReconciliationStatus.valueOf(this[Events.reconciliationStatus]),
     syncedAt             = this[Events.syncedAt],
     transferId           = this[Events.transferId],
+    createdAt            = this[Events.createdAt],
 )

@@ -350,6 +350,28 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
             it[syncedAt]             = null
             it[statementImportId]    = importId
+            // La fila del extracto trae SU fecha en `timestamp` (la del banco), pero se «anota»
+            // ahora, al importarla — ver FinancialEvent.createdAt. Lo que esto arregla es que un
+            // movimiento importado hoy para un día viejo no compita a ciegas con los que el dueño
+            // anotó a mano en ese mismo día.
+            //
+            // Ojo con lo que pasa ENTRE las filas de un mismo extracto. Esta función se llama
+            // dentro de un `for` y cada llamada abre su propio `dbQuery` (su propia transacción),
+            // así que `currentTimeMillis()` se evalúa una vez por fila y normalmente da distinto:
+            // el desempate NO cae en el `id`, lo decide `createdAt`. Y como todas las filas del
+            // extracto que caen en el mismo día civil comparten `timestamp` al milisegundo —la
+            // medianoche de Bogotá que sella el bloque de arriba—, `createdAt` termina siendo el
+            // único criterio dentro de ese día: queda arriba la ÚLTIMA fila parseada, o sea el
+            // orden del extracto dado vuelta.
+            //
+            // Que eso sea lo correcto depende de en qué orden venga el extracto, y nada acá lo
+            // promete: `decision.imports` sale del parser (FamiriosParser emite en el orden de las
+            // filas de la hoja; ClaudeStatementParser, en el que devuelva el LLM). Si el banco
+            // lista el día de más viejo a más nuevo, darlo vuelta es justo lo que se quiere; si lo
+            // lista al revés, sale invertido. Fijar ese orden es material para otra rama —habría
+            // que ordenar `decision.imports` antes del `for`, o sellar la serie a propósito—; acá
+            // solo queda escrito lo que el código hace hoy.
+            it[createdAt]            = System.currentTimeMillis()
         }
     }
 }
