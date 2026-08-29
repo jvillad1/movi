@@ -219,12 +219,14 @@ class SyncEngineTest {
         db.financialEventQueries.insert(
             "ev-pata-suelta", "acc-tr", "EXPENSE", 100_000L, "Traspaso", "Traspaso a CDT", null,
             1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, "tr-huerfano",
+            1_700_000_000_000L,
         )
         // Y un evento normal al lado, para que el test distinga "no empuja la pata" de
         // "no empuja nada".
         db.financialEventQueries.insert(
             "ev-normal", "acc-tr", "EXPENSE", 5_000L, "Mercado", "pan", null,
             1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, null,
+            1_700_000_000_000L,
         )
 
         SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()

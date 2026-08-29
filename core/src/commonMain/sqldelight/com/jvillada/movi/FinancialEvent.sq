@@ -16,7 +16,19 @@ CREATE TABLE financial_event (
     -- lo demás. Se guarda acá y no solo en el server porque la anulación local tiene que poder
     -- encontrar a la pata hermana: anular una sola dejaría el saldo de una de las dos cuentas
     -- mintiendo en el teléfono hasta el próximo arranque. Columna nueva → migración 2.sqm.
-    transferId              TEXT
+    transferId              TEXT,
+    -- **Cuándo se anotó** el movimiento, que no es cuándo ocurrió (`timestamp`). Ver
+    -- FinancialEvent.createdAt en :core para el porqué completo. El resumen: una fecha elegida a
+    -- mano se guarda al MEDIODÍA, así que todos los movimientos que el dueño anota para un mismo
+    -- día pasado quedan con el mismo `timestamp` y ordenar por ahí no decide nada entre ellos.
+    -- Columna nueva → migración 3.sqm.
+    --
+    -- Nullable: las filas que ya están en el teléfono no la tienen y no hay de dónde sacarla. El
+    -- comparador las hace caer a su `timestamp` en vez de inventarles una fecha de creación.
+    --
+    -- No lleva índice ni entra en ningún ORDER BY: el orden se decide en Kotlin, con un solo
+    -- comparador compartido con el server (ver MAS_RECIENTE_PRIMERO).
+    createdAt               INTEGER
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -52,8 +64,9 @@ SELECT * FROM financial_event WHERE transferId = :transferId AND userId = :userI
 insert:
 INSERT OR REPLACE INTO financial_event(
     id, accountId, type, amount, category, description, merchant,
-    timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId,
+    createdAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;

@@ -1,0 +1,18 @@
+-- Migración 3 → 4: agrega financial_event.createdAt — **cuándo se anotó** el movimiento, que no
+-- es lo mismo que cuándo ocurrió (`timestamp`). Ver FinancialEvent.createdAt en :core.
+--
+-- Mismo mecanismo que 1.sqm y 2.sqm: SQLDelight deriva `schemaVersion` del .sqm con el número más
+-- alto, y sin este archivo `AndroidSqliteDriver(MoviDatabase.Schema, ...)` no llamaría a
+-- `onUpgrade` — la tabla `financial_event` ya instalada en el teléfono del dueño se quedaría sin
+-- la columna, y el primer `insert` (que ahora la nombra) fallaría con "no such column" en TODO
+-- movimiento nuevo, no solo en los que necesitan desempate.
+--
+-- **No hay nada que migrar, y a propósito.** Las filas que ya están en el teléfono arrancan en
+-- NULL porque no hay de dónde sacar cuándo se crearon: la tabla nunca guardó ese dato. Ponerles
+-- `timestamp` acá sería escribir en disco una fecha de creación que nadie observó; el comparador
+-- ya hace esa caída en memoria (`createdAt ?: timestamp`) y así el NULL sigue significando lo que
+-- significa: "no se sabe".
+--
+-- Sin índice: esta columna nunca se filtra ni se ordena en SQL. El orden dentro del día se decide
+-- en Kotlin, con un comparador compartido con el server (MAS_RECIENTE_PRIMERO).
+ALTER TABLE financial_event ADD COLUMN createdAt INTEGER;

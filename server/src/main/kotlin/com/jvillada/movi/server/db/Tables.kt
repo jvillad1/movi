@@ -84,6 +84,23 @@ object Events : Table("financial_events") {
      * agrega sola al arrancar sobre una base ya desplegada.
      */
     val transferId           = varchar("transfer_id", 50).nullable()
+    /**
+     * **Cuándo se anotó** el movimiento, que no es cuándo ocurrió ([timestamp]). Ver
+     * [com.jvillada.movi.shared.model.FinancialEvent.createdAt] para el porqué completo; el
+     * resumen es que una fecha elegida a mano se guarda al mediodía, así que `timestamp` empata
+     * entre todos los movimientos que el dueño anota para un mismo día pasado y no alcanza para
+     * ordenarlos.
+     *
+     * Nullable, y por el mismo motivo que [transferId]: la agrega sola
+     * `createMissingTablesAndColumns(Events)` al arrancar sobre la base ya desplegada. **Una
+     * columna nullable por esa vía es segura sobre una tabla con datos** — lo que sí puede dejar
+     * el server sin levantar es un `CREATE INDEX` que falle, y acá no se crea ninguno: esta
+     * columna solo desempata en memoria, nunca se filtra ni se ordena por ella en SQL.
+     *
+     * Las filas que ya existen quedan en NULL a propósito: no hay de dónde sacar cuándo se
+     * crearon, y el comparador las hace caer a su `timestamp` en vez de inventarles una fecha.
+     */
+    val createdAt            = long("created_at").nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)

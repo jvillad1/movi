@@ -380,7 +380,14 @@ class LocalRepository(
         // reemplazaría al primero en vez de agregarse, y si el segundo llegaba a sincronizarse
         // antes que el ciclo de 30s levantara al primero, este último nunca subía: el teléfono y
         // el server terminaban mostrando movimientos distintos.
-        val resolved = if (event.id.isBlank()) event.copy(id = newId("ev")) else event
+        val conId = if (event.id.isBlank()) event.copy(id = newId("ev")) else event
+        // **Acá nace el sello de creación**, y no cuando el evento llegue al server: este es el
+        // instante real en que el dueño escribió el movimiento. El teléfono puede estar sin señal
+        // y el `SyncEngine` empujarlo dos días después — si lo sellara el server al recibir, el
+        // movimiento saltaría al tope de su día por haber viajado tarde. Ver
+        // FinancialEvent.createdAt. Si el llamador ya trajo uno (un evento que vino del server,
+        // por ejemplo), se respeta.
+        val resolved = conId.copy(createdAt = conId.createdAt ?: Clock.System.now().toEpochMilliseconds())
         db.transaction {
             db.financialEventQueries.insert(
                 resolved.id, resolved.accountId, resolved.type.name, resolved.amount,
@@ -390,6 +397,7 @@ class LocalRepository(
                 // Siempre null por esta puerta: un traspaso entra por [createTransfer], nunca
                 // como evento suelto (el server rechaza un POST /api/events con transferId).
                 resolved.transferId,
+                resolved.createdAt,
             )
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
@@ -566,6 +574,10 @@ class LocalRepository(
                     leg.timestamp, leg.source.name, leg.rawPayload,
                     leg.reconciliationStatus.name, leg.syncedAt ?: now, uid,
                     leg.transferId ?: transferId,
+                    // Las dos patas se anotaron en el mismo acto: el sello del server viaja en la
+                    // respuesta y se copia tal cual; `now` es solo el respaldo por si un server
+                    // viejo no lo mandara.
+                    leg.createdAt ?: now,
                 )
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
@@ -825,6 +837,8 @@ class LocalRepository(
                     event.syncedAt ?: Clock.System.now().toEpochMilliseconds(),
                     uid,
                     event.transferId,
+                    // El ajuste lo creó el server; se copia su sello, no uno nuevo de acá.
+                    event.createdAt ?: Clock.System.now().toEpochMilliseconds(),
                 )
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
@@ -1014,6 +1028,7 @@ class LocalRepository(
         reconciliationStatus = ReconciliationStatus.valueOf(reconciliationStatus),
         syncedAt = syncedAt,
         transferId = transferId,
+        createdAt = createdAt,
         countsAsCashFlow = typeByAccount[accountId]
             ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,

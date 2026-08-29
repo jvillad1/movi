@@ -350,6 +350,12 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
             it[syncedAt]             = null
             it[statementImportId]    = importId
+            // La fila del extracto trae SU fecha en `timestamp` (la del banco), pero se «anota»
+            // ahora, al importarla — ver FinancialEvent.createdAt. Todas las de un mismo extracto
+            // quedan con instantes casi iguales, así que entre ellas termina desempatando el `id`;
+            // lo que esto sí arregla es que un movimiento importado hoy para un día viejo no
+            // compita a ciegas con los que el dueño anotó a mano en ese mismo día.
+            it[createdAt]            = System.currentTimeMillis()
         }
     }
 }

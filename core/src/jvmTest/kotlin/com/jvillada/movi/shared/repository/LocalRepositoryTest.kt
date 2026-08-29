@@ -1135,4 +1135,49 @@ class LocalRepositoryTest {
         val dia = repo.getEventsByDay().first { it.date == "2026-08-20" }
         assertEquals(300_000L, dia.total)
     }
+    /**
+     * **El caso del dueño, en el teléfono.** Tres gastos de un día pasado, anotados uno detrás del
+     * otro: los tres quedan con el mismo `timestamp` (mediodía) y el orden lo decide el sello de
+     * creación que pone [LocalRepository.postEvent] al escribirlos. Arriba, el último anotado.
+     *
+     * Se anotan con una pausa real entre uno y otro porque el sello sale del reloj: sin la pausa,
+     * los tres podrían caer en el mismo milisegundo y el test no probaría nada.
+     */
+    @Test
+    fun `entre gastos del mismo dia pasado manda el que se anoto ultimo`() = runBlocking {
+        repo.createAccount(Account("acc-orden", "Ahorros", AccountType.SAVINGS, 0L))
+        val mediodia = eseDiaALas(12)
+        for (id in listOf("ev-1ro", "ev-2do", "ev-3ro")) {
+            repo.postEvent(eventoConFecha(id, mediodia))
+            kotlinx.coroutines.delay(5)
+        }
+
+        val dia = repo.getEventsByDay().first { it.date == "2026-08-20" }
+        assertEquals(listOf("ev-3ro", "ev-2do", "ev-1ro"), dia.items.map { it.id })
+    }
+
+    /** `postEvent` sella la creación al escribir: es el instante que el server no conoce. */
+    @Test
+    fun `postEvent sella cuando se anoto el movimiento`() = runBlocking {
+        repo.createAccount(Account("acc-orden", "Ahorros", AccountType.SAVINGS, 0L))
+        val antes = Clock.System.now().toEpochMilliseconds()
+        repo.postEvent(eventoConFecha("ev-sellado", eseDiaALas(12)))
+
+        val sello = repo.getEvents().first { it.id == "ev-sellado" }.createdAt
+        assertNotNull(sello)
+        assertTrue(sello >= antes, "el sello quedó antes de que empezara el test: $sello")
+    }
+
+    /** La creación desempata, no manda: la hora real de un movimiento le sigue ganando. */
+    @Test
+    fun `la hora real le gana a la hora en que se anoto, tambien en el telefono`() = runBlocking {
+        repo.createAccount(Account("acc-orden", "Ahorros", AccountType.SAVINGS, 0L))
+        // El de las 23:00 se anota PRIMERO, así que su sello es más viejo; igual queda arriba.
+        repo.postEvent(eventoConFecha("ev-23h", eseDiaALas(23)))
+        kotlinx.coroutines.delay(5)
+        repo.postEvent(eventoConFecha("ev-mediodia", eseDiaALas(12)))
+
+        val dia = repo.getEventsByDay().first { it.date == "2026-08-20" }
+        assertEquals(listOf("ev-23h", "ev-mediodia"), dia.items.map { it.id })
+    }
 }
