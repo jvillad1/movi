@@ -11,6 +11,17 @@ object Users : Table("users") {
     // porque toda cuenta existente hoy no tiene ninguno — `UserRoutes.kt` cae a
     // AvatarPalette.DEFAULT en la lectura, así que el cliente nunca ve `null`.
     val avatarColor  = varchar("avatar_color", 7).nullable()
+    /**
+     * Día del mes en que arranca el período financiero del usuario (ver [PeriodSettings] en
+     * :core). Vive acá y no en el dispositivo para que el teléfono y la web digan el mismo mes:
+     * un corte distinto en cada lado sería la clase de contradicción que Movi viene eliminando.
+     *
+     * **Nullable a propósito**, y se lee como 1 (mes de calendario) cuando falta: las cuentas que
+     * ya existen no lo tienen, y una columna nullable es lo único que `createMissingTablesAndColumns`
+     * puede agregar sin riesgo dentro de la transacción de arranque. Un `NOT NULL DEFAULT` sobre
+     * una tabla con filas es justo el DDL que deja el server sin arrancar.
+     */
+    val periodCutoffDay = integer("period_cutoff_day").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

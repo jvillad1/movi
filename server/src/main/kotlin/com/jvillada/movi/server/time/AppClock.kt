@@ -6,6 +6,13 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.ventanaDe
+import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.db.dbQuery
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 /**
  * Zona horaria civil del server, en java.time.
@@ -53,3 +60,32 @@ fun monthWindowOf(now: ZonedDateTime): MonthWindow {
 
 /** Ventana del mes en curso en la zona de la app. */
 fun currentMonthWindow(zone: ZoneId = AppClock.zone): MonthWindow = monthWindowOf(AppClock.now(zone))
+
+/**
+ * La ventana del **período financiero** del usuario, que reemplaza al mes de calendario en todo
+ * lo que dice «del mes».
+ *
+ * Con `cutoffDay = 1` devuelve exactamente lo mismo que [currentMonthWindow] — es la garantía que
+ * hace seguro adoptarlo: quien no cambió el ajuste no ve ninguna cifra distinta.
+ *
+ * El cálculo vive en `:core` ([ventanaDe]) para que el server y los tres clientes usen **la misma
+ * función**. Que Inicio diga un mes y Presupuestos otro es la contradicción que esto viene a
+ * eliminar, y tener dos implementaciones es cómo se llega ahí.
+ */
+fun currentPeriodWindow(cutoffDay: Int, zone: ZoneId = AppClock.zone): MonthWindow {
+    val settings = PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31))
+    val ahora = AppClock.now(zone).toInstant().toEpochMilli()
+    val ventana = ventanaDe(periodoDe(ahora, settings), settings)
+    return MonthWindow(
+        startMillis = ventana.first,
+        // `ventanaDe` devuelve un rango con el último milisegundo INCLUIDO; `MonthWindow` usa fin
+        // exclusivo. El +1 es la traducción entre las dos convenciones, y omitirlo dejaría el
+        // primer milisegundo del período siguiente fuera de los dos.
+        endMillisExclusive = ventana.last + 1,
+    )
+}
+
+/** El día de corte del usuario, o 1 (mes de calendario) si nunca lo eligió. */
+suspend fun cutoffDayOf(uid: String): Int = dbQuery {
+    Users.selectAll().where { Users.id eq uid }.firstOrNull()?.get(Users.periodCutoffDay) ?: 1
+}

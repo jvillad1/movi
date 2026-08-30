@@ -7,7 +7,8 @@ import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
-import com.jvillada.movi.server.time.currentMonthWindow
+import com.jvillada.movi.server.time.currentPeriodWindow
+import com.jvillada.movi.server.time.cutoffDayOf
 import com.jvillada.movi.shared.model.CATEGORY_CATALOG_RENAME_BLOCKED
 import com.jvillada.movi.shared.model.CATEGORY_MERGE_SAME
 import com.jvillada.movi.shared.model.CATEGORY_NAME_MAX_LENGTH
@@ -71,7 +72,9 @@ fun Route.categoryRoutes() {
      */
     get("/api/categories") {
         val uid = call.userId()
-        val (monthStart, monthEnd) = currentMonthWindow()
+        // La ventana del PERÍODO del usuario (ver PeriodSettings en :core), no el mes de
+        // calendario. Con corte 1 —el default— da exactamente lo mismo que antes.
+        val (monthStart, monthEnd) = currentPeriodWindow(cutoffDayOf(uid))
         call.respond(dbQuery { categoryUsage(uid, monthStart, monthEnd) })
     }
 
@@ -211,7 +214,9 @@ fun Route.categoryRoutes() {
                 }
             }
         }
-        val (monthStart, monthEnd) = currentMonthWindow()
+        // La ventana del PERÍODO del usuario (ver PeriodSettings en :core), no el mes de
+        // calendario. Con corte 1 —el default— da exactamente lo mismo que antes.
+        val (monthStart, monthEnd) = currentPeriodWindow(cutoffDayOf(uid))
         val actualizada = dbQuery { categoryUsage(uid, monthStart, monthEnd) }
             .firstOrNull { it.name == name }
             ?: CategoryUsage(name = name, hidden = body.hidden, pinnedType = pinned)

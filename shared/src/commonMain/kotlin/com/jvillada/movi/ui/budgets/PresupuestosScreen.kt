@@ -29,7 +29,10 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.dashboard.currentMonthPrefixApp
-import com.jvillada.movi.ui.dashboard.spentByCategoryForMonth
+import com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.ventanaDe
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Month
@@ -81,6 +84,7 @@ private sealed class Sheet {
 @Composable
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
+    var cutoffDay by remember { mutableStateOf(1) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     // Gasto del mes por categoría según el server (la misma fuente que el Inicio); null hasta
     // que llegue o si no hay red — ver `progresses`.
@@ -122,14 +126,22 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // conoce lo de este aparato, así que el Inicio podía decir «Comida superado» y esta
         // pantalla no. Si falla (sin red) queda el cálculo local de abajo como fallback.
         runCatching { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { serverSpent = it.spentByCategory }
+        // El corte del período: define qué ventana usa el cálculo local de respaldo. Si falla,
+        // queda en 1 —mes de calendario— que es el comportamiento de siempre.
+        runCatching { Repositories.wallets.getUserProfile() }.onSuccess { cutoffDay = it.periodCutoffDay }
         loading = false
     }
 
     // El gasto del período por categoría, una sola vez: lo usan las barras de progreso y también
     // el aviso de la hoja de crear (ver [avisoDeCategoria]). Calcularlo en dos lados abriría la
     // puerta a que la pantalla y su hoja dijeran cifras distintas.
-    val gastoPorCategoria = remember(days, serverSpent) {
-        serverSpent ?: spentByCategoryForMonth(days, currentMonthPrefixApp())
+    // El período del usuario, no el mes de calendario. `serverSpent` ya viene calculado con la
+    // ventana correcta (el server usa `currentPeriodWindow`); el cálculo local es el respaldo y
+    // tiene que usar la MISMA ventana o las dos mitades de la app dirían cifras distintas.
+    val gastoPorCategoria = remember(days, serverSpent, cutoffDay) {
+        val settings = PeriodSettings(cutoffDay = cutoffDay)
+        val ventana = ventanaDe(periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings), settings)
+        serverSpent ?: spentByCategoryForPeriod(days, ventana)
     }
 
     val progresses = remember(budgets, gastoPorCategoria) {

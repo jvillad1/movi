@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,8 +24,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import kotlinx.coroutines.launch
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.platform.PushOptIn
+import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
@@ -41,6 +44,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var showEditProfile by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
+    var showPeriodo by remember { mutableStateOf(false) }
+    var guardandoPeriodo by remember { mutableStateOf(false) }
+    var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
     LaunchedEffect(profileReloadKey) {
         runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
@@ -140,8 +146,27 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         CardRow(
                             left = { Text("Cambiar contraseña", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                             showChevron = true,
-                            isLast = true,
                             onClick = { showChangePassword = true },
+                        )
+                        // El día en que arranca el período. Vive en «Cuenta» y no escondido en
+                        // una pantalla aparte porque cambia el significado de TODAS las cifras
+                        // del mes: quien lo busca lo busca acá.
+                        CardRow(
+                            left = {
+                                Column {
+                                    Text("Inicio del mes", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
+                                    Text(
+                                        text = profile?.periodCutoffDay?.let { d ->
+                                            if (d == 1) "Mes de calendario" else "Cada día $d"
+                                        } ?: "Mes de calendario",
+                                        fontSize = 12.sp,
+                                        color = MinTextMute,
+                                    )
+                                }
+                            },
+                            showChevron = true,
+                            isLast = true,
+                            onClick = { errorPeriodo = null; showPeriodo = true },
                         )
                     }
                 }
@@ -294,6 +319,33 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         ChangePasswordSheet(
             onDismiss = { showChangePassword = false },
             onSaved = { showChangePassword = false },
+        )
+    }
+    val alcancePeriodo = rememberCoroutineScope()
+    if (showPeriodo) {
+        PeriodoSheet(
+            cutoffActual = profile?.periodCutoffDay ?: 1,
+            saving = guardandoPeriodo,
+            error = errorPeriodo,
+            onDismiss = { showPeriodo = false; errorPeriodo = null },
+            onSave = { dia ->
+                guardandoPeriodo = true
+                errorPeriodo = null
+                alcancePeriodo.launch {
+                    runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodCutoffDay = dia)) }
+                        .onSuccess {
+                            guardandoPeriodo = false
+                            showPeriodo = false
+                            profileReloadKey++
+                        }
+                        .onFailure {
+                            guardandoPeriodo = false
+                            // Mandarlo a reintentar es más útil que un código de error: lo único
+                            // que puede hacer desde acá es volver a tocar Guardar.
+                            errorPeriodo = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                        }
+                }
+            },
         )
     }
     }
