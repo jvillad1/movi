@@ -68,13 +68,26 @@ class ApiNotFoundTest {
         application { testModule() }
     }
 
-    // ── /api/** inexistente → 404 JSON ────────────────────────────────────────
+    // ── /api/… inexistente → 404 JSON ─────────────────────────────────────────
+
+    /**
+     * Un path RESERVADO para estos tests, no un nombre de recurso plausible.
+     *
+     * La primera versión de este archivo usaba `/api/documents` como ejemplo de «ruta que no
+     * existe» —era el caso del reporte original—. Duró un merge: el PR #110 creó `/api/documents`
+     * de verdad, el POST pasó a dar 401 en vez de 404 y el test se puso rojo en master sin que
+     * nada del comportamiento bajo prueba hubiera cambiado.
+     *
+     * La moraleja va más allá de este archivo: un test que afirma «esta ruta NO existe» no puede
+     * apoyarse en un nombre que alguien vaya a querer usar. Este segmento es feo a propósito.
+     */
+    private val rutaFantasma = "/api/__ruta-que-nadie-va-a-registrar__"
 
     @Test
     fun `una ruta api inexistente da 404 con cuerpo JSON, no el HTML de la SPA`() = testApplication {
         wireApp()
 
-        val res = client.get("/api/no-existe")
+        val res = client.get(rutaFantasma)
 
         assertEquals(HttpStatusCode.NotFound, res.status)
         assertEquals(
@@ -86,18 +99,21 @@ class ApiNotFoundTest {
         assertTrue("<!doctype html" !in body.lowercase(), "no debe devolver el index de la SPA: $body")
         val obj = Json.parseToJsonElement(body).jsonObject
         assertEquals("not_found", obj["error"]!!.jsonPrimitive.content)
-        assertEquals("/api/no-existe", obj["path"]!!.jsonPrimitive.content)
+        assertEquals(rutaFantasma, obj["path"]!!.jsonPrimitive.content)
     }
 
     @Test
     fun `el 404 de api tambien aplica a rutas anidadas y a otros metodos`() = testApplication {
         wireApp()
 
-        val anidada = client.get("/api/documents/42/lineas")
+        val anidada = client.get("$rutaFantasma/42/anidada")
         assertEquals(HttpStatusCode.NotFound, anidada.status)
-        assertEquals("/api/documents/42/lineas", Json.parseToJsonElement(anidada.bodyAsText()).jsonObject["path"]!!.jsonPrimitive.content)
+        assertEquals(
+            "$rutaFantasma/42/anidada",
+            Json.parseToJsonElement(anidada.bodyAsText()).jsonObject["path"]!!.jsonPrimitive.content,
+        )
 
-        val post = client.post("/api/documents")
+        val post = client.post(rutaFantasma)
         assertEquals(HttpStatusCode.NotFound, post.status)
         assertEquals(ContentType.Application.Json.contentType, post.contentType()?.contentType)
     }
