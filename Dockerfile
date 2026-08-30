@@ -1,17 +1,33 @@
+# syntax=docker/dockerfile:1
 FROM gradle:8.11-jdk17 AS build
 WORKDIR /app
 
-# ── Capa de dependencias ──────────────────────────────────────────────────────
+# ── Por qué este Dockerfile es así ────────────────────────────────────────────
 #
-# El build de Railway se estaba pasando de su límite de 20 minutos: seis intentos
-# terminaron en «Build image ✗ (20:02)» — un timeout, no un error de compilación.
-# Por eso el log se cortaba a mitad de una tarea sin mensaje y sin «FAILURE», y por
-# eso morían en puntos distintos cada vez.
+# El build de Railway se moría a los 20:02 con «Build image ✗», sin error y sin
+# «FAILURE» en el log — la firma de un timeout, no de una compilación fallida.
+# El panel lo mostró en una columna que el CLI no devuelve:
 #
-# La causa es que `COPY . .` invalida la capa con CUALQUIER cambio de código, así
-# que cada despliegue volvía a resolver y descargar todas las dependencias desde
-# cero. Copiando primero solo los archivos de build, esa capa se reusa mientras no
-# cambien las dependencias — que es casi siempre.
+#     RUN gradle :webApp:wasmJsBrowserDistribution …     19m 23s
+#
+# El wasm solo consume casi todo el presupuesto y el jar del servidor nunca llega
+# a terminar. Y el límite no se puede subir: es del plan, no un ajuste.
+#
+# Entonces el build tiene que caber. Tres cosas, en orden de cuánto ahorran:
+#
+# 1. CACHÉ QUE SOBREVIVE ENTRE DESPLIEGUES (`--mount=type=cache`). Vive fuera de
+#    las capas, así que persiste incluso cuando el build falla: las dependencias
+#    descargadas, el caché de Kotlin y el de Gradle quedan listos para el próximo
+#    intento. Es lo que convierte 19 minutos en algo repetible.
+# 2. CAPA DE DEPENDENCIAS APARTE: `COPY . .` invalida todo con cualquier cambio de
+#    código. Copiando primero solo los archivos de build, resolver el grafo deja
+#    de repetirse en cada despliegue.
+# 3. CACHÉ DE BUILD DE GRADLE (`--build-cache`), que no estaba activado: reusa las
+#    salidas de tareas cuyas entradas no cambiaron.
+#
+# Sin `--quiet`, y guardando la salida para imprimir la cola si algo falla de
+# verdad: con `--quiet`, el motivo de un fallo nunca llegaba al log.
+
 COPY gradle/ gradle/
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY core/build.gradle.kts core/
@@ -20,25 +36,22 @@ COPY webApp/build.gradle.kts webApp/
 COPY server/build.gradle.kts server/
 COPY androidApp/build.gradle.kts androidApp/
 
-# Baja el grafo de dependencias sin compilar nada. `|| true`: sin las fuentes, la
-# resolución puede quedar incompleta y no importa — lo que se busca es dejar el
-# caché de Gradle caliente en esta capa.
-RUN gradle --no-daemon --console=plain -q dependencies --configuration compileClasspath > /dev/null 2>&1 || true
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle --no-daemon --console=plain -q dependencies --configuration compileClasspath > /dev/null 2>&1 || true
 
-# ── Fuentes ───────────────────────────────────────────────────────────────────
 COPY . .
 
 RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 
-# Sin `--quiet`, y guardando la salida para imprimir la cola si algo falla: con
-# `--quiet` el motivo de un fallo nunca llegaba al log de Railway.
-RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain > /tmp/wasm.log 2>&1 \
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --build-cache > /tmp/wasm.log 2>&1 \
     || (echo "══ FALLÓ EL WASM ══" && tail -120 /tmp/wasm.log && false)
 
 RUN mkdir -p server/src/main/resources/static && \
     cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
 
-RUN gradle :server:buildFatJar --no-daemon --console=plain > /tmp/jar.log 2>&1 \
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle :server:buildFatJar --no-daemon --console=plain --build-cache > /tmp/jar.log 2>&1 \
     || (echo "══ FALLÓ EL JAR ══" && tail -120 /tmp/jar.log && false)
 
 FROM eclipse-temurin:17-jre-alpine
