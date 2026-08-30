@@ -48,6 +48,7 @@ import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.accounts.VoidEventSheet
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -380,6 +381,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var resolvedIds by remember { mutableStateOf(emptySet<String>()) }
     val pendingCandidates = candidates.filterNot { it.id in resolvedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    var eventoAAnular by remember { mutableStateOf<FinancialEvent?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshKey, refreshTick) {
@@ -683,6 +685,21 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             // que ningún botón.
             onVerCuenta = accountTypes[event.accountId]?.let { tipo ->
                 { onNavigate(Screen.AccountDetail(event.accountId, tipo.group)) }
+            },
+            onAnular = { eventoAAnular = event },
+        )
+    }
+
+    // Anular se pide desde la hoja de categoría y se confirma en su propia hoja — la misma que
+    // usa el detalle de la cuenta, no una copia. Se dibuja DESPUÉS para quedar encima.
+    eventoAAnular?.let { event ->
+        VoidEventSheet(
+            event = event,
+            onDismiss = { eventoAAnular = null },
+            onVoided = {
+                eventoAAnular = null
+                selectedEvent = null
+                refreshKey++
             },
         )
     }

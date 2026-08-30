@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
@@ -29,6 +31,9 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.dashboard.currentMonthPrefixApp
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.periodoDe
@@ -480,6 +485,13 @@ private fun BudgetSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Esta hoja NO tenía scroll, y con la lista de movimientos deja de alcanzar: bajo
+                // ella van el teclado (192 dp) y «Guardar»/«Eliminar», así que con tres
+                // movimientos los botones caían fuera de la pantalla, recortados por el `clip` de
+                // la propia hoja — el presupuesto quedaba imposible de editar. Y la lista existe
+                // justamente para las categorías con muchos movimientos. Lo midió la revisión
+                // antes de que llegara a producción.
+                .verticalScroll(rememberScrollState())
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .background(MinSurfaceContainerHigh)
                 .padding(horizontal = 20.dp)
@@ -510,6 +522,11 @@ private fun BudgetSheet(
                     prefs = UsedCategoriesCache.prefs,
                     label = "Categoría",
                     placeholder = "Mercado, Salud, Restaurantes…",
+                    // Desde que esta hoja se desplaza, el tope de 220 dp del panel sería un
+                    // scroll adentro de otro scroll — el defecto que el dueño reportó con
+                    // «cuando quiero ver las categorías, al hacer scroll desaparecen». Ver el
+                    // KDoc de `maxSuggestionsHeight`.
+                    maxSuggestionsHeight = null,
                 )
                 // F17: onDelete solo viene no-nulo al editar un presupuesto EXISTENTE (Sheet.Add
                 // lo manda null) — ahí es donde "cambiar el nombre" significa renombrar una
@@ -614,6 +631,94 @@ private fun BudgetSheet(
                         color = MinText,
                         modifier = Modifier.padding(vertical = 6.dp),
                     )
+                }
+            }
+
+            // El dueño: «En presupuestos yo debería ver cada uno de los movimientos asociados a
+            // ese presupuesto». Había una barra y dos números, sin manera de contestar la
+            // pregunta que sigue: ¿en qué? Un presupuesto excedido sin la lista es una acusación
+            // sin pruebas — no se distingue un gasto mal archivado de uno real.
+            //
+            // Va FUERA del `if (categoryEditable)`. La primera versión de esto quedó dentro del
+            // `else`, que **no se dibuja nunca**: los dos call sites (Sheet.Add y Sheet.Edit)
+            // pasan `categoryEditable = true`. La feature compilaba, su test pasaba —prueba la
+            // función pura, no la pantalla— y en la app no aparecía nada. Lo encontró la
+            // revisión. Ese `else` es deuda anterior: la rama «al editar la categoría es su
+            // clave» quedó inalcanzable cuando editar pasó a permitir renombrar.
+            //
+            // Sirve igual al crear: escribir «Mercado» y ver ahí mismo lo que ya se gastó es
+            // justo lo que hace falta para elegir el monto.
+            val movimientos = gastosDelPresupuesto(category, dias, ventana)
+            // Se calcula FUERA del `if`: el caso en que este mensaje más falta hace es
+            // justamente cuando no hay nada que listar —la barra dice \$2.000.000 y este
+            // dispositivo no bajó ni un movimiento— y ahí un bloque vacío sin explicación es
+            // peor que el problema que la lista vino a resolver.
+            val faltante = faltanMovimientosPorVer(
+                gastoPorCategoria[category.trim()] ?: 0L,
+                movimientos.sumOf { it.amount },
+            )
+            if (faltante != 0L && movimientos.isEmpty() && category.isNotBlank()) {
+                Spacer(Modifier.height(18.dp))
+                Hairline()
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "Hay ${formatCOP(faltante)} contados en esta categoría que este dispositivo todavía no bajó.",
+                    fontSize = 11.5.sp,
+                    color = MinTextMute,
+                    lineHeight = 15.sp,
+                )
+            }
+            if (movimientos.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Hairline()
+                Spacer(Modifier.height(14.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (movimientos.size == 1) "1 movimiento" else "${movimientos.size} movimientos",
+                        fontSize = 11.sp,
+                        color = MinTextMute,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.4.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = formatCOP(movimientos.sumOf { it.amount }),
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MinTextMute,
+                    )
+                }
+                // Si el server contó plata que este aparato todavía no bajó, se dice — no se
+                // deja que el dueño reste dos números y desconfíe de los dos.
+                if (faltante != 0L) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = if (faltante > 0L)
+                            "Hay ${formatCOP(faltante)} más contados en esta categoría que todavía no bajaron a este dispositivo."
+                        else
+                            "Este dispositivo tiene ${formatCOP(-faltante)} que el total de arriba todavía no cuenta.",
+                        fontSize = 11.sp,
+                        color = MinTextMute,
+                        lineHeight = 15.sp,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                movimientos.forEach { ev ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(ev.description, fontSize = 13.5.sp, color = MinText)
+                            Text(etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone()), fontSize = 11.sp, color = MinTextMute)
+                        }
+                        Text(
+                            text = formatCOP(ev.amount),
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MinText,
+                        )
+                    }
                 }
             }
 
