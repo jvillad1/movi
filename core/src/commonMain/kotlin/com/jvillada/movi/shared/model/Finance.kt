@@ -303,6 +303,22 @@ data class RecurringRule(
     val dayOfMonth: Int,
     val type: TransactionType,
     /**
+     * **Desde cuándo corre esta regla.** ISO `"2026-09-01"`, o `null` = desde siempre.
+     *
+     * Existe por la cuota de un crédito. El dueño registró un préstamo desembolsado el 1 de
+     * septiembre con pago el día 1, y Movi le anunció la primera cuota **para ese mismo día**:
+     * *«no entiendo por qué quedó cargado el desembolso el mismo día que es la cuota; normalmente
+     * un desembolso es un mes aproximadamente antes de la primera cuota»*. Tenía razón — la regla
+     * sintética se armaba solo con el día del mes e ignoraba la fecha de desembolso.
+     *
+     * Con esto, una ocurrencia **anterior o igual** a esta fecha no existe: la primera cuota es
+     * la primera vez que cae el día de pago **después** del desembolso.
+     *
+     * `null` para las reglas que el dueño escribió a mano (un salario, un gimnasio): esas no
+     * tienen «desembolso» y corren desde siempre, como hasta ahora.
+     */
+    val activeFrom: String? = null,
+    /**
      * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
      * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el
      * 25 pero no dónde — y al ofrecer «esto se repite» desde un movimiento (Ola 9 · B) el dato

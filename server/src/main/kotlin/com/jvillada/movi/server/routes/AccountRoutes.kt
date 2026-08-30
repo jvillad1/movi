@@ -38,6 +38,9 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
 import org.slf4j.LoggerFactory
+import io.ktor.server.routing.put
+import com.jvillada.movi.shared.model.RenameAccountRequest
+import com.jvillada.movi.shared.model.MAX_ACCOUNT_NAME_LENGTH
 
 private val accountsLog = LoggerFactory.getLogger("AccountRoutes")
 
@@ -117,6 +120,37 @@ fun Route.accountRoutes() {
         // call site, `CreateAccountSheet.kt`) — esta ruta ni sabe que existe. La columna cruda
         // `accounts.balance` no se lee para nada más: el balance que ve el cliente sale siempre
         // de `enrichWith`/`computeBalances`, derivado de los eventos reales.
+        /**
+         * Renombrar una cuenta.
+         *
+         * No existía, y por eso el nombre de un crédito era lo único que no se podía corregir:
+         * el dueño cargó «Libranza 4817» donde iba «4818» —un dígito, pero es el que identifica
+         * la obligación contra el extracto del banco— y tuvo que pedir que se arreglara por base
+         * de datos. Un dato que solo un desarrollador puede corregir no es un dato del usuario.
+         *
+         * Solo toca `accounts.name`: el saldo se deriva de los eventos y no se ve afectado, y los
+         * movimientos apuntan por `accountId`, así que ninguno se despega al renombrar. Es una
+         * diferencia con renombrar una CATEGORÍA, donde el cruce es por nombre y sí corta la
+         * relación con lo viejo (ver `CategoryRoutes.rewriteCategory`).
+         */
+        put("/{id}/name") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val nombre = call.receive<RenameAccountRequest>().name.trim()
+            if (nombre.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "El nombre no puede estar vacío")
+            if (nombre.length > MAX_ACCOUNT_NAME_LENGTH) {
+                return@put call.respond(HttpStatusCode.BadRequest, "El nombre no puede superar los $MAX_ACCOUNT_NAME_LENGTH caracteres")
+            }
+            val filas = dbQuery {
+                Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) { it[Accounts.name] = nombre }
+            }
+            if (filas == 0) return@put call.respond(HttpStatusCode.NotFound)
+            val actualizada = dbQuery {
+                Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.first().toAccount()
+            }
+            call.respond(actualizada)
+        }
+
         post {
             val body = call.receive<Account>()
             val uid = call.userId()

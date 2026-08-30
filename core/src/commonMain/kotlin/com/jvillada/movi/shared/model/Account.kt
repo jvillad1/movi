@@ -40,3 +40,16 @@ val AccountType.groupLabel: String
         AccountGroup.INVERSION -> "Inversión"
         AccountGroup.DEUDA -> "Deuda"
     }
+
+/**
+ * `PUT /api/accounts/{id}/name`.
+ *
+ * Renombrar una cuenta es seguro: los movimientos apuntan por `accountId` y el saldo se deriva de
+ * ellos, así que nada se despega. Es distinto de renombrar una **categoría**, donde el cruce con
+ * el gasto es por nombre y sí corta la relación con lo viejo.
+ */
+@Serializable
+data class RenameAccountRequest(val name: String)
+
+/** Largo de la columna `accounts.name`. */
+const val MAX_ACCOUNT_NAME_LENGTH = 100

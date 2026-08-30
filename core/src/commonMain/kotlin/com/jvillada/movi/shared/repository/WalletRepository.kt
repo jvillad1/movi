@@ -255,6 +255,9 @@ interface WalletRepository {
     suspend fun login(request: LoginRequest): AuthResponse
 
     /** F42 · F46: perfil editable — `GET /api/users/me`. `avatarColor` nunca llega `null`. */
+    /** Renombra una cuenta. Ver [RenameAccountRequest]. */
+    suspend fun renameAccount(id: String, name: String): Account
+
     suspend fun getUserProfile(): UserProfile
 
     /** `PUT /api/users/me`. Campos opcionales — solo se toca lo que viene en [request]. */

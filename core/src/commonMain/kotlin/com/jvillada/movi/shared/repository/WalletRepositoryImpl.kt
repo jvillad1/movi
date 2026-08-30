@@ -53,6 +53,7 @@ import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
+import com.jvillada.movi.shared.model.RenameAccountRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -381,6 +382,17 @@ class WalletRepositoryImpl(
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
+    }
+
+    override suspend fun renameAccount(id: String, name: String): Account {
+        val response = client.put("$baseUrl/api/accounts/$id/name") {
+            contentType(ContentType.Application.Json)
+            setBody(RenameAccountRequest(name))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
     }
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent =

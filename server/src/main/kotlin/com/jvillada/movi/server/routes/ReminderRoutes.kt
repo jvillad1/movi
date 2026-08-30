@@ -18,6 +18,7 @@ import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
 import com.jvillada.movi.server.reminders.occurrenceInMonth
+import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
 
@@ -288,6 +289,9 @@ fun Route.reminderRoutes() {
                 // Además, mirar el mes en curso mantiene el «Ya ocurrió» y su «Deshacer» a la
                 // vista TODO el mes, en vez de hacerlos desaparecer a los pocos días.
                 val due = occurrenceInMonth(mesEnCurso, rule.dayOfMonth)
+                // Una regla que todavía no arrancó no tiene ocurrencia este mes: es lo que evita
+                // que la primera cuota de un crédito caiga el mismo día del desembolso.
+                if (!ruleIsActiveOn(rule, due)) return@mapNotNull null
                 val cerrado = periodoEnCurso in ocurridos[rule.id].orEmpty()
                 when {
                     cerrado -> {

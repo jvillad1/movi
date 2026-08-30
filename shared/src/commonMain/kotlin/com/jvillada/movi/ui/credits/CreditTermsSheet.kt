@@ -77,6 +77,11 @@ fun CreditTermsSheet(
     // es SIEMPRE el default al crear; las candidatas, si existen, se ofrecen aparte y discretas.
     var newAccountMode by remember { mutableStateOf(editing == null) }
     var newAccountName by remember { mutableStateOf("") }
+    // El nombre en modo EDICIÓN. No existía: era el único dato de un crédito que no se podía
+    // corregir, y el dueño cargó «Libranza 4817» donde iba «4818» —un dígito, pero es el que
+    // identifica la obligación contra el extracto— y tuvo que pedir que se arreglara por base de
+    // datos. Un dato que solo un desarrollador puede corregir no es un dato del usuario.
+    var nombreEditado by remember(editing) { mutableStateOf(editing?.account?.name ?: "") }
     var newAccountDebt by remember { mutableStateOf<Long?>(null) }
 
     // ── Ola 16 — la pregunta que reemplaza al «déjala en blanco» ──────────────────────────
@@ -259,6 +264,12 @@ fun CreditTermsSheet(
                     )
                 } else {
                     val accountId = editing?.account?.id ?: selectedAccountId!!
+                    // El nombre va primero: si falla, el `runCatching` corta antes de guardar los
+                    // términos y el dueño ve el error en vez de un guardado a medias.
+                    val nombreNuevo = nombreEditado.trim()
+                    if (editing != null && nombreNuevo.isNotBlank() && nombreNuevo != editing.account.name) {
+                        Repositories.wallets.renameAccount(accountId, nombreNuevo)
+                    }
                     Repositories.wallets.putCreditTerms(terms.copy(accountId = accountId))
                 }
             }
@@ -299,7 +310,8 @@ fun CreditTermsSheet(
                 if (editing != null) {
                     SectionLabel("CRÉDITO")
                     Spacer(Modifier.height(8.dp))
-                    Text(editing.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                    // Editable, no un rótulo: ver [nombreEditado].
+                    FieldBox("Nombre del crédito", nombreEditado, { nombreEditado = it })
                     Spacer(Modifier.height(16.dp))
                 } else {
                     // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"

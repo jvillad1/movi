@@ -26,6 +26,9 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         type       = TransactionType.EXPENSE,
         // La regla es sintética, pero la decisión de avisar es del dueño y vive en credit_terms.
         remindMe   = terms.remindMe,
+        // La primera cuota va DESPUÉS del desembolso, no el mismo día. Sin esto, un crédito
+        // desembolsado el 1 con pago el día 1 anunciaba su primera cuota para ese mismo día.
+        activeFrom = terms.startDate,
     )
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */
