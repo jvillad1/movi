@@ -19,7 +19,17 @@ RUN echo "── recursos del contenedor ──" && \
     cat gradle.properties
 
 # Build wasmJs production bundle
-RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain
+# La salida se guarda y solo se imprime la COLA si falla.
+#
+# El log de Railway devuelve una ventana acotada: en cuatro intentos el error nunca
+# entró en ella —el log terminaba a mitad de una tarea y parecía un proceso muerto—
+# y eso mandó a perseguir memoria y disco durante tres despliegues. Los recursos
+# resultaron ser 58 GB de RAM y 672 GB libres: nunca fue eso.
+#
+# Con `tail` sobre el archivo, el motivo real queda en las últimas líneas, que son
+# las que sí se ven.
+RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --stacktrace > /tmp/wasm.log 2>&1 \
+    || (echo "══ FALLÓ EL WASM — últimas 120 líneas ══" && tail -120 /tmp/wasm.log && false)
 
 RUN echo "── después del wasm ──" && df -h /app /tmp && (free -m || true)
 
@@ -28,7 +38,8 @@ RUN mkdir -p server/src/main/resources/static && \
     cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
 
 # Build server fat JAR (now includes the web app)
-RUN gradle :server:buildFatJar --no-daemon --console=plain
+RUN gradle :server:buildFatJar --no-daemon --console=plain --stacktrace > /tmp/jar.log 2>&1 \
+    || (echo "══ FALLÓ EL JAR — últimas 120 líneas ══" && tail -120 /tmp/jar.log && false)
 
 RUN echo "── después del jar ──" && df -h /app /tmp && ls -la server/build/libs/
 
