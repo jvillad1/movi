@@ -17,8 +17,8 @@ android {
         // El APK es de instalación única pero sideloaded: sin bump, un instalador
         // consciente de versiones rechaza la actualización por "misma versión".
         // 1.3: la app deja de ser solo el sensor — MainActivity monta la app completa.
-        versionCode = 12
-        versionName = "1.11"
+        versionCode = 13
+        versionName = "1.12"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
