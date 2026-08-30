@@ -279,9 +279,13 @@ open class NoOpRepository(
      */
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
         if (id !in knownEventIds) throw ApiException(404)
+        // La cuenta se CONSERVA: ningún server real mueve un evento de cuenta al recategorizarlo,
+        // y desde que el espejo escribe lo que el server devuelve, un accountId inventado se
+        // llevaba la fila a una cuenta que no existe. Lo que prueba que pasó por remoto es la
+        // descripción «stub», que el camino local no produce.
         return FinancialEvent(
             id = id,
-            accountId = "acc-stub",
+            accountId = eventosDelServer.firstOrNull { it.id == id }?.accountId ?: "acc-stub",
             type = TransactionType.EXPENSE,
             amount = 50_000L,
             category = category,
@@ -289,6 +293,10 @@ open class NoOpRepository(
             timestamp = 1_700_000_000_000L,
             source = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.RECONCILED,
+            // El server calcula la bandera y la manda: una categoría reservada nunca es flujo del
+            // mes. Sin esto, el default `true` del wire se copiaba al espejo y «Pago de tarjeta»
+            // aparecía como gasto.
+            countsAsCashFlow = isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, category),
         ).also { recordarEnElServer(it) }
     }
     /**
@@ -300,7 +308,7 @@ open class NoOpRepository(
         if (id !in knownEventIds) throw ApiException(404)
         return FinancialEvent(
             id = id,
-            accountId = "acc-stub",
+            accountId = eventosDelServer.firstOrNull { it.id == id }?.accountId ?: "acc-stub",
             type = TransactionType.EXPENSE,
             amount = 50_000L,
             category = "Comida",

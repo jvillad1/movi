@@ -361,9 +361,16 @@ class LocalRepositoryTest {
     @Test
     fun updateEventCategory_evento_sincronizado_pasa_por_el_server_y_se_espeja() = runBlocking {
         val db = createDatabase("test.db")
+        // `markSynced` de abajo simula que la fila YA se subió, así que el server tiene que
+        // conocerla: un stub que la ignorara sería un server que rechaza por duplicado algo que
+        // después jura no tener.
+        val remoto = NoOpRepository(knownEventIds = setOf("evt-pago-sync"))
+        remoto.cuentasDelServer += Account("acc-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L)
+        remoto.eventosDelServer += event("evt-pago-sync", "acc-sync", TransactionType.EXPENSE, 300_000L)
+            .copy(syncedAt = 1_700_000_000_000L)
         val repoSincronizado = LocalRepository(
             db = db,
-            remote = NoOpRepository(knownEventIds = setOf("evt-pago-sync")),
+            remote = remoto,
             userId = { testUserId },
         )
         repoSincronizado.createAccount(Account("acc-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L))
@@ -373,9 +380,12 @@ class LocalRepositoryTest {
 
         val result = repoSincronizado.updateEventCategory("evt-pago-sync", CARD_PAYMENT_CATEGORY)
         assertEquals(CARD_PAYMENT_CATEGORY, result.category)
-        // El stub siempre echoa accountId="acc-stub" (ver NoOpRepository): que el resultado lo
-        // traiga es la prueba de que sí pasó por remote y no se resolvió local.
-        assertEquals("acc-stub", result.accountId)
+        // El stub echoa description="stub" (ver NoOpRepository): que el resultado lo traiga es la
+        // prueba de que sí pasó por remote y no se resolvió local. Antes se usaba un accountId
+        // inventado, pero ningún server mueve un evento de cuenta al recategorizarlo — y desde
+        // que el espejo escribe lo que el server devuelve, esa ficción se llevaba la fila a una
+        // cuenta inexistente.
+        assertEquals("stub", result.description)
 
         val mirrored = repoSincronizado.getEvents("acc-sync").single { it.id == "evt-pago-sync" }
         assertEquals(CARD_PAYMENT_CATEGORY, mirrored.category)
@@ -456,9 +466,15 @@ class LocalRepositoryTest {
      */
     @Test
     fun updateEventTimestamp_evento_sincronizado_pasa_por_el_server_y_se_espeja() = runBlocking {
+        // Igual que en el test de categoría: `markSynced` simula que ya se subió, así que el
+        // server tiene que conocer la fila.
+        val remoto = NoOpRepository(knownEventIds = setOf("evt-fecha-sync"))
+        remoto.cuentasDelServer += Account("acc-fecha-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L)
+        remoto.eventosDelServer += event("evt-fecha-sync", "acc-fecha-sync", TransactionType.EXPENSE, 20_000L)
+            .copy(syncedAt = 1_700_000_000_000L)
         val repoSincronizado = LocalRepository(
             db = db,
-            remote = NoOpRepository(knownEventIds = setOf("evt-fecha-sync")),
+            remote = remoto,
             userId = { testUserId },
         )
         repoSincronizado.createAccount(Account("acc-fecha-sync", "Ahorros", AccountType.SAVINGS, 1_000_000L))
@@ -469,7 +485,9 @@ class LocalRepositoryTest {
         val result = repoSincronizado.updateEventTimestamp("evt-fecha-sync", ayer)
         assertEquals(ayer, result.timestamp)
         // El stub siempre echoa accountId="acc-stub": la prueba de que sí pasó por remote.
-        assertEquals("acc-stub", result.accountId)
+        // Mismo criterio que el test de categoría: la prueba de que pasó por remote es la
+        // descripción «stub», no un accountId inventado que el espejo después escribiría.
+        assertEquals("stub", result.description)
 
         assertEquals(
             ayer,
@@ -1496,5 +1514,34 @@ class LocalRepositoryTest {
 
         val dia = repo.getEventsByDay().first { it.date == "2026-08-20" }
         assertEquals(listOf("ev-23h", "ev-mediodia"), dia.items.map { it.id })
+    }
+
+    /**
+     * Las dos pantallas cuentan lo mismo.
+     *
+     * Antes, la regla anti-fantasma corría solo sobre la lista completa: un movimiento borrado en
+     * la web desaparecía de Movimientos y **seguía viéndose para siempre en el detalle de la
+     * cuenta**. Dos pantallas de la misma app contando cosas distintas.
+     */
+    @Test
+    fun lo_borrado_en_la_web_desaparece_tambien_del_detalle_de_la_cuenta() = runBlocking {
+        repo.createAccount(Account("accX", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("borrado-en-la-web", "accX", TransactionType.EXPENSE, 9_000L))
+        repo.postEvent(event("sigue-vivo", "accX", TransactionType.EXPENSE, 4_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "borrado-en-la-web")
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "sigue-vivo")
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accX", "Ahorros", AccountType.SAVINGS, 0L)
+        remoto.eventosDelServer += event("sigue-vivo", "accX", TransactionType.EXPENSE, 4_000L)
+            .copy(syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        val enLaLista = conRed.getEvents().map { it.id }
+        val enElDetalle = conRed.getEvents("accX").map { it.id }
+
+        assertTrue(enLaLista.none { it == "borrado-en-la-web" }, "no está en Movimientos")
+        assertTrue(enElDetalle.none { it == "borrado-en-la-web" }, "y tampoco en el detalle de la cuenta")
+        assertTrue(enElDetalle.any { it == "sigue-vivo" }, "lo vivo sigue estando")
     }
 }
