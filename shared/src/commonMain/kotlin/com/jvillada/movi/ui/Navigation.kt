@@ -193,3 +193,23 @@ val LocalRefreshTick = compositionLocalOf { 0 }
  * el default es un no-op para que un preview o test aislado no explote.
  */
 val LocalGoBack = staticCompositionLocalOf<(Screen) -> Unit> { {} }
+
+/**
+ * Navegar a una pantalla desde donde no llega el `onNavigate` de nadie.
+ *
+ * Existe por un pedido concreto del dueño: *«Necesito un editor de categorías en las diferentes
+ * secciones»*. El editor ya existía —«Más → Categorías», con renombrar, unificar, esconder y
+ * fijar el tipo— pero solo se llegaba saliendo a «Más», o sea abandonando lo que uno estaba
+ * haciendo. El campo de categoría, en cambio, aparece en las cuatro secciones donde la pregunta
+ * se hace ([com.jvillada.movi.ui.components.CategoryField]: Movimientos, Agregar, Presupuestos y
+ * Recurrentes), y es un componente compartido: ponerle el acceso ahí lo resuelve en los cuatro
+ * lados de una vez.
+ *
+ * Se agrega un local en vez de enhebrar un `onNavigate` por cuatro pantallas y sus hojas porque
+ * tres de esos cuatro puntos están dentro de hojas modales que ya reciben media docena de
+ * callbacks. Es `staticCompositionLocalOf` por el mismo motivo que [LocalGoBack]: la función que
+ * se provee no cambia nunca.
+ *
+ * El default es un no-op para que un preview o un test aislado no explote.
+ */
+val LocalNavigate = staticCompositionLocalOf<(Screen) -> Unit> { {} }

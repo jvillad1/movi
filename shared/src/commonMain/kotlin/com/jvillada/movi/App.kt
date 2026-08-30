@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.LocalGoBack
+import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
@@ -208,7 +209,7 @@ fun App() {
                 Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
-                CompositionLocalProvider(LocalGoBack provides goBackTo) {
+                CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
                 when (currentScreen) {
                 Screen.Login             -> LoginScreen(navigate)
                 Screen.Register          -> RegisterScreen(navigate)
@@ -268,7 +269,7 @@ fun App() {
                 // La pantalla de atrás no se descompone —sigue en `SaveableStateProvider`— así
                 // que vuelve intacta al cerrar la hoja.
                 quickAdd?.let { request ->
-                    CompositionLocalProvider(LocalGoBack provides goBackTo) {
+                    CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
                         QuickAddScreen(
                             onDismiss = { quickAdd = null },
                             // Guardar cierra la hoja Y avisa: la pantalla de atrás nunca salió de
