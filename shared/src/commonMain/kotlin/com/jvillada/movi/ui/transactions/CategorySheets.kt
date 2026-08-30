@@ -58,15 +58,15 @@ private fun BottomSheetScaffold(
     dismissEnabled: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.6f))
             .clickable(enabled = dismissEnabled, onClick = onDismiss),
     ) {
-        Box(modifier = Modifier.weight(1f))
         Column(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .background(MinSurfaceContainerHigh)
@@ -188,6 +188,18 @@ fun ChangeCategorySheet(
      * botón, en vez de mandarlo a la pantalla equivocada.
      */
     onVerCuenta: (() -> Unit)? = null,
+    /**
+     * Anular este movimiento. El dueño: *«No tengo cómo eliminar un movimiento que fue un
+     * error»* — y tenía razón desde Movimientos, que es donde uno mira sus gastos: anular
+     * existía **solo** en el detalle de la cuenta, donde tocar una fila abre directamente la
+     * hoja de anular y NO deja cambiar categoría ni fecha. O sea, dos hojas distintas para el
+     * mismo movimiento según por dónde se llegara, y a cada una le faltaba lo de la otra.
+     *
+     * Se ofrece como acción aparte y no como una fila más de la lista de categorías: anular
+     * saca la plata de todas las cifras, y eso no puede quedar a un toque de distancia de
+     * «Comida».
+     */
+    onAnular: (() -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -408,6 +420,32 @@ fun ChangeCategorySheet(
                 Spacer(Modifier.height(10.dp))
                 Text(it, fontSize = 12.sp, color = MinExpense)
             }
+
+            // Va al FINAL y separado por una línea: es la única acción de esta hoja que quita
+            // plata de las cifras, y no comparte lugar con las que solo la reclasifican.
+            if (onAnular != null) {
+                Spacer(Modifier.height(20.dp))
+                Hairline()
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Anular este movimiento",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinExpense,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(enabled = !saving) { onAnular() }
+                        .padding(vertical = 12.dp),
+                )
+                // «Anular», no «borrar»: el movimiento no se pierde, deja de contar. Decirlo acá
+                // evita que alguien no lo toque por miedo a perder el registro.
+                Text(
+                    text = "Deja de contar en tus cifras. El registro no se pierde.",
+                    fontSize = 11.5.sp,
+                    color = MinTextMute,
+                )
+            }
             Spacer(Modifier.height(20.dp))
         }
     }
@@ -547,6 +585,7 @@ fun CardPaymentCandidatesSheet(
                 Spacer(Modifier.height(10.dp))
                 Text(it, fontSize = 12.sp, color = MinExpense)
             }
+
             Spacer(Modifier.height(20.dp))
         }
     }

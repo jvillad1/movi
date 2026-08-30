@@ -29,6 +29,9 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.dashboard.currentMonthPrefixApp
+import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.periodoDe
@@ -469,16 +472,15 @@ private fun BudgetSheet(
         else -> null
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.6f))
             .clickable(onClick = onDismiss),
     ) {
-        Box(modifier = Modifier.weight(1f))
-
         Column(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .background(MinSurfaceContainerHigh)
@@ -614,6 +616,53 @@ private fun BudgetSheet(
                         color = MinText,
                         modifier = Modifier.padding(vertical = 6.dp),
                     )
+
+                    // El dueño: «yo debería ver cada uno de los movimientos asociados a ese
+                    // presupuesto». Hasta acá había una barra y dos números, sin manera de
+                    // contestar la pregunta que sigue: ¿en qué? Un presupuesto excedido sin la
+                    // lista es una acusación sin pruebas — no se puede distinguir un gasto mal
+                    // archivado de uno real. Ver [gastosDelPresupuesto]: es el MISMO filtro que
+                    // suma la barra, con un test que lo ata a esa función.
+                    val movimientos = gastosDelPresupuesto(category, dias, ventana)
+                    if (movimientos.isNotEmpty()) {
+                        Spacer(Modifier.height(18.dp))
+                        Hairline()
+                        Spacer(Modifier.height(14.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (movimientos.size == 1) "1 movimiento" else "${movimientos.size} movimientos",
+                                fontSize = 11.sp,
+                                color = MinTextMute,
+                                fontWeight = FontWeight.Medium,
+                                letterSpacing = 0.4.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = formatCOP(movimientos.sumOf { it.amount }),
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = MinTextMute,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        movimientos.forEach { ev ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(ev.description, fontSize = 13.5.sp, color = MinText)
+                                    Text(etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone()), fontSize = 11.sp, color = MinTextMute)
+                                }
+                                Text(
+                                    text = formatCOP(ev.amount),
+                                    fontSize = 13.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MinText,
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
