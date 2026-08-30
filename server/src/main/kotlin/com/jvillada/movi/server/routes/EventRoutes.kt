@@ -34,6 +34,7 @@ import com.jvillada.movi.server.reminders.sostieneLaOcurrencia
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
 
 fun Route.eventRoutes() {
     route("/api/events") {
@@ -252,6 +253,17 @@ fun Route.eventRoutes() {
             // escribe CARD_PAYMENT_CATEGORY a propósito y es correcta.
             if (category == ORPHANED_LEG_CATEGORY) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, ORPHANED_LEG_NOT_MANUAL)
+            }
+            // Ola 17: ni a «Descuento de nómina». Es la reservada más nueva y llegó con el mismo
+            // peligro que las anteriores: `isCashFlow` la excluye del mes POR NOMBRE, así que
+            // escribirla sobre un gasto real lo haría desaparecer de «Gastos del mes» sin decir
+            // nada. La guarda se agrega en la misma ola que la categoría, no una ola después —
+            // que es como las otras tres llegaron acá.
+            if (category == PAYROLL_DEDUCTION_CATEGORY) {
+                return@put call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "«Descuento de nómina» la escribe Movi cuando registras la cuota de una libranza",
+                )
             }
             // Ola 16: ni a «Saldo inicial». Es la reservada que faltaba, y era la más cara de las
             // cuatro por esta puerta — ver [OPENING_CATEGORY_RESERVED], que trae la medición: un

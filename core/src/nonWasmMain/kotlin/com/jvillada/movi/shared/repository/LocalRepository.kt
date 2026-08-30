@@ -520,7 +520,20 @@ class LocalRepository(
             return locales
         }
 
-        db.transaction { remotos.forEach { mirrorEventLocally(it, uid) } }
+        // **Solo se escribe lo que cambió.** Antes se reescribían las N filas en cada lectura,
+        // aunque nada se hubiera movido: medido, 5.000 eventos costaban ~272 ms y la segunda
+        // lectura costaba lo mismo que la primera, porque el trabajo no dependía de si algo había
+        // cambiado. Y son TRES pantallas las que disparan esto (Movimientos, Presupuestos y el
+        // detalle de cuenta), así que el costo se paga varias veces por visita.
+        //
+        // Con 23 movimientos no se nota; con dos años de SMS del banco, sí. Comparar contra la
+        // foto que ya se leyó es gratis: las filas están en memoria desde el arranque de esta
+        // misma función.
+        val localesPorId = filasAntesDePreguntar.associateBy { it.id }
+        val cambiados = remotos.filter { remoto -> difiereDeLoGuardado(remoto, localesPorId[remoto.id]) }
+        if (cambiados.isNotEmpty()) {
+            db.transaction { cambiados.forEach { mirrorEventLocally(it, uid) } }
+        }
         val porId = remotos.associateBy { it.id }
         // La regla de los fantasmas ya corre igual pidan una cuenta o todas, porque arriba
         // siempre se pide el conjunto entero: «no vino» solo puede significar «se anuló o se
@@ -550,6 +563,35 @@ class LocalRepository(
                 else porId[local.id]?.copy(syncedAt = local.syncedAt) ?: local
             }
             .masRecientePrimero()
+    }
+
+
+    /**
+     * ¿Vale la pena reescribir esta fila?
+     *
+     * Compara solo lo que el server manda y el espejo guarda. `syncedAt` queda fuera a propósito:
+     * es un dato local —«¿ya se subió?»— que la respuesta remota no siempre trae, así que
+     * incluirlo marcaría como distinta a cada fila en cada lectura y anularía el ahorro.
+     *
+     * Una fila que no está localmente siempre «difiere»: hay que escribirla.
+     */
+    private fun difiereDeLoGuardado(
+        remoto: FinancialEvent,
+        local: com.jvillada.movi.Financial_event?,
+    ): Boolean {
+        if (local == null) return true
+        return remoto.accountId != local.accountId ||
+            remoto.type.name != local.type ||
+            remoto.amount != local.amount ||
+            remoto.category != local.category ||
+            remoto.description != local.description ||
+            remoto.merchant != local.merchant ||
+            remoto.timestamp != local.timestamp ||
+            remoto.source.name != local.source ||
+            remoto.rawPayload != local.rawPayload ||
+            remoto.reconciliationStatus.name != local.reconciliationStatus ||
+            remoto.transferId != local.transferId ||
+            remoto.createdAt != local.createdAt
     }
 
     /** Las filas crudas del espejo, sin mapear — para la foto previa a preguntar. */
@@ -930,7 +972,9 @@ class LocalRepository(
 
     // ── Delegate everything else to remote ────────────────────────────────────
 
-    override suspend fun getCredits(): List<CreditSummary> = remote.getCredits()
+    /** Con caché de última respuesta buena — ver [leerConCache]. Sin señal, Créditos no queda en blanco. */
+    override suspend fun getCredits(): List<CreditSummary> =
+        leerConCache("credits") { remote.getCredits() }
 
     /**
      * Crea contra el server y **espeja la cuenta devuelta en la DB local** (F20, Ola 5).
@@ -1004,7 +1048,9 @@ class LocalRepository(
     override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary = remote.putCreditTerms(terms)
     override suspend fun deleteCreditTerms(accountId: String) = remote.deleteCreditTerms(accountId)
 
-    override suspend fun getCards(): List<CardSummary> = remote.getCards()
+    /** Con caché, por el mismo motivo que [getCredits]. */
+    override suspend fun getCards(): List<CardSummary> =
+        leerConCache("cards") { remote.getCards() }
     /** Mismo espejo (y mismo porqué) que [createCredit]: sin él la tarjeta no aparece en Cuentas de Android. */
     override suspend fun createCard(request: CreateCardRequest): CardSummary =
         remote.createCard(request).also { mirrorAccountLocally(it.account) }
@@ -1126,7 +1172,9 @@ class LocalRepository(
     // Igual que getCardPaymentCandidates arriba: no hay nada que espejar localmente — "No es" no
     // toca la categoría del evento, así que no hay ninguna fila local que quedaría desactualizada.
     override suspend fun dismissCardPaymentCandidate(id: String) = remote.dismissCardPaymentCandidate(id)
-    override suspend fun getGoals(): List<Goal> = remote.getGoals()
+    /** Con caché: una meta sin señal es igual de útil que con señal — no cambia sola. */
+    override suspend fun getGoals(): List<Goal> =
+        leerConCache("goals") { remote.getGoals() }
     // F26: metas remote-only, igual que presupuestos/recurrentes — no hay flujo offline que
     // las necesite todavía.
     override suspend fun createGoal(goal: Goal): Goal = remote.createGoal(goal)
@@ -1149,7 +1197,9 @@ class LocalRepository(
     // Presupuestos usa esta misma fuente para que las dos pantallas coincidan; el cálculo local
     // queda solo como fallback sin red.
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = remote.getDashboardSummary(scope)
-    override suspend fun getBudgets(): List<Budget> = remote.getBudgets()
+    /** Con caché. El GASTO contra el presupuesto sale de los eventos, que ya tienen espejo propio. */
+    override suspend fun getBudgets(): List<Budget> =
+        leerConCache("budgets") { remote.getBudgets() }
     override suspend fun createBudget(budget: Budget): Budget = remote.createBudget(budget)
     override suspend fun updateBudget(category: String, budget: Budget): Budget = remote.updateBudget(category, budget)
     override suspend fun deleteBudget(category: String) = remote.deleteBudget(category)
