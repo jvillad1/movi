@@ -287,7 +287,19 @@ private fun LoanCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Cuota · día ${t.dayOfMonth}", fontSize = 12.sp, color = MinTextMute)
+                // Quién paga va PEGADO a la cuota, no en una fila aparte: es lo que decide si
+                // ese número sale del bolsillo del dueño, y leerlo suelto —«$9.147.408» a secas—
+                // es exactamente el malentendido que esta feature vino a evitar. Sin esto, la
+                // pantalla de Créditos sumaría $13,1 millones al mes de cuotas que él no paga.
+                Text(
+                    text = when {
+                        t.payrollDeduction -> "Cuota · día ${t.dayOfMonth} · de tu nómina"
+                        !t.paidBy.isNullOrBlank() -> "Cuota · día ${t.dayOfMonth} · la paga ${t.paidBy}"
+                        else -> "Cuota · día ${t.dayOfMonth}"
+                    },
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                )
                 Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
             }
             // Plazo y fecha de desembolso: son los dos datos que uno compara contra el extracto,
@@ -324,6 +336,24 @@ private fun LoanCard(
         ) {
             // Una libranza no se «paga»: ya se descontó del sueldo. Lo único que falta es que la
             // deuda lo refleje, y eso es un toque — no anotar un gasto que no existió.
+            // Y una cuota que paga OTRO tampoco se «paga» desde acá: la giró Skandia, o la pagó
+            // Caro. Lo único que falta es que la deuda lo refleje. Mismo endpoint que la
+            // libranza (ver POST /credits/{id}/payroll-deduction), distinto rótulo — el rótulo
+            // es lo que le dice al dueño qué está confirmando.
+            val quienPaga = credit.terms?.paidBy?.takeIf { it.isNotBlank() }
+            if (quienPaga != null && credit.terms?.payrollDeduction != true) {
+                Text(
+                    "Registrar pago de $quienPaga",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinPrimary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickableSimple(onPayrollDeduction)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+            }
             if (credit.terms?.payrollDeduction == true) {
                 Text(
                     "Registrar descuento",

@@ -35,6 +35,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
+import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
 
 fun Route.eventRoutes() {
     route("/api/events") {
@@ -263,6 +264,16 @@ fun Route.eventRoutes() {
                 return@put call.respond(
                     HttpStatusCode.UnprocessableEntity,
                     "«Descuento de nómina» la escribe Movi cuando registras la cuota de una libranza",
+                )
+            }
+            // Ola 18: ni a «Pago de un tercero», por lo mismo y en la misma ola en que nace la
+            // categoría. Esta es la sexta reservada y la segunda que llega con su guarda puesta
+            // desde el primer día; las cuatro primeras llegaron acá tarde, cada una después de
+            // que el daño ya fuera posible.
+            if (category == THIRD_PARTY_PAYMENT_CATEGORY) {
+                return@put call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "«Pago de un tercero» la escribe Movi cuando registras la cuota de un crédito que paga otro",
                 )
             }
             // Ola 16: ni a «Saldo inicial». Es la reservada que faltaba, y era la más cara de las

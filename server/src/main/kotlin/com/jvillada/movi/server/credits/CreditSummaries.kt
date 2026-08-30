@@ -27,4 +27,5 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     remindMe   = this[Credits.remindMe],
     // Nullable en la base, `false` en el wire: las filas viejas no la tienen.
     payrollDeduction = this[Credits.payrollDeduction] ?: false,
+    paidBy = this[Credits.paidBy]?.takeIf { it.isNotBlank() },
 )

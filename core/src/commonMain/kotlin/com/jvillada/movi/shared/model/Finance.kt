@@ -62,6 +62,20 @@ data class CreditTerms(
      * Ver [PAYROLL_DEDUCTION_CATEGORY] para cómo se registra sin romper ninguna de las dos cosas.
      */
     val payrollDeduction: Boolean = false,
+    /**
+     * Quién paga esta cuota, cuando **no** es el dueño: «Skandia», «Caro», «Mi papá».
+     *
+     * `null` = la paga él, que es el caso normal. Con valor, la cuota deja de contar en su flujo
+     * del mes y deja de generarle avisos de vencimiento — la deuda sigue siendo suya y sigue
+     * sumando entera en su deuda total. Ver [THIRD_PARTY_PAYMENT_CATEGORY] para el porqué y de
+     * dónde salió.
+     *
+     * Es texto libre y no un enum a propósito: quién paga la cuota de alguien es una lista que
+     * nadie puede enumerar de antemano (una pensión voluntaria, la esposa, un papá, una empresa),
+     * y obligar a elegir de un menú cerrado dejaría afuera justo el caso raro que hace falta
+     * anotar.
+     */
+    val paidBy: String? = null,
 )
 
 @Serializable

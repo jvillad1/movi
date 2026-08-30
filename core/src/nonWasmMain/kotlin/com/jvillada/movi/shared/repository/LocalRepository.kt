@@ -1,6 +1,8 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.db.MoviDatabase
+import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -861,6 +863,21 @@ class LocalRepository(
         // apertura que se convierte en ingreso del mes).
         if (category == OPENING_CATEGORY) throw ApiException(422, OPENING_CATEGORY_RESERVED)
         if (fila?.category == OPENING_CATEGORY) throw ApiException(422, OPENING_RECATEGORIZE_BLOCKED)
+        // Ola 18 · las dos que faltaban, y **la red que evita que vuelva a faltar una**.
+        //
+        // El KDoc de acá arriba dice «las guardas son las mismas que las del server», y hacía
+        // dos olas que había dejado de ser cierto: la 17 agregó «Descuento de nómina» al server
+        // y no acá, y la 18 repitió el olvido con «Pago de un tercero». Lo encontró la revisión.
+        //
+        // Por eso esta última no nombra categorías una por una: recorre RESERVED_CATEGORIES y
+        // deja pasar solo la excepción declarada. Así la próxima reservada queda cerrada acá el
+        // día que nazca, sin depender de que alguien se acuerde de agregar un `if`.
+        //
+        // La excepción es [CARD_PAYMENT_CATEGORY], y es la misma del server: confirmar un pago de
+        // tarjeta la escribe a propósito y es el camino correcto (ver la guarda del `PUT`).
+        if (category != CARD_PAYMENT_CATEGORY && isReservedCategory(category)) {
+            throw ApiException(422, "«$category» la escribe Movi sola: no se puede poner a mano")
+        }
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()

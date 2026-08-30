@@ -41,6 +41,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
@@ -52,6 +55,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
+import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
 import com.jvillada.movi.server.time.AppClock
 
 /**
@@ -239,9 +243,39 @@ fun Route.creditRoutes() {
             if (account.type != AccountType.LOAN) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, "Solo cuentas LOAN llevan términos de crédito")
             }
-            val body = call.receive<CreditTerms>()
+            // Se recibe el JSON CRUDO además del objeto, para poder distinguir «el cliente mandó
+            // este campo» de «el cliente no lo conoce».
+            //
+            // `fillTerms` sobrescribe TODAS las columnas, y `paidBy`/`payrollDeduction` tienen
+            // default, así que un APK anterior que edite cualquier cosa del crédito —la nota, el
+            // día de pago— manda un cuerpo sin esos campos y los DEJA EN NULL. Consecuencia
+            // medida por la revisión: los tres créditos que paga otro vuelven al barrido de
+            // avisos y el dueño empieza a recibir recordatorios de $13,1M/mes que nadie le debe,
+            // y el botón «Registrar pago de Skandia» desaparece.
+            //
+            // La distinción no se puede hacer con el objeto deserializado —ahí «ausente» y
+            // «null» son lo mismo— ni con un valor centinela, que sería un valor legítimo el día
+            // que alguien lo escriba. Mirar las claves del JSON es exacto y no inventa nada.
+            //
+            // Aplica también a `payrollDeduction`, que arrastra este mismo agujero desde la ola
+            // 17 sin que nadie lo hubiera nombrado.
+            val crudo = call.receive<JsonObject>()
+            val recibido = Json.decodeFromJsonElement<CreditTerms>(crudo)
+            val previo = dbQuery {
+                Credits.selectAll()
+                    .where { (Credits.accountId eq accountId) and (Credits.userId eq uid) }
+                    .firstOrNull()?.toCreditTerms()
+            }
+            val body = recibido
                 .copy(accountId = accountId)
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
+                .let { if ("paidBy" in crudo) it else it.copy(paidBy = previo?.paidBy) }
+                .let { if ("payrollDeduction" in crudo) it else it.copy(payrollDeduction = previo?.payrollDeduction ?: false) }
+                // El tope de la columna es varchar(60): un nombre más largo hacía fallar el
+                // INSERT en Postgres y se caía el guardado ENTERO del crédito con un 500 sin
+                // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
+                // pierde un crédito por haber escrito de más en un rótulo.
+                .let { it.copy(paidBy = it.paidBy?.trim()?.take(60)?.takeIf { v -> v.isNotBlank() }) }
             // upsert atómico por PK (accountId): elimina la carrera check-then-insert.
             // lastRemindedPeriod no está en el body del upsert, así que se conserva
             // a propósito: un cambio de día aplica desde el mes siguiente (v1).
@@ -347,7 +381,7 @@ fun Route.creditRoutes() {
                     .firstOrNull()?.toAccount()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
             if (cuenta.type != AccountType.LOAN) {
-                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Solo un crédito tiene descuento de nómina")
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Solo un crédito tiene cuotas que paga otro")
             }
 
             val terms = dbQuery {
@@ -355,8 +389,17 @@ fun Route.creditRoutes() {
                     .where { (Credits.accountId eq accountId) and (Credits.userId eq uid) }
                     .firstOrNull()?.toCreditTerms()
             } ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, "Este crédito no tiene términos cargados")
-            if (!terms.payrollDeduction) {
-                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Este crédito no está marcado como libranza")
+            // Este endpoint cubre las DOS formas de «esta cuota no sale de mi cuenta»: la
+            // libranza (la retiene el empleador) y el tercero que paga (Skandia, la esposa, un
+            // papá). El movimiento que escribe es idéntico salvo la categoría y el texto — lo
+            // que importa en ambos casos es que la deuda baje sin inventar un gasto. Duplicar la
+            // ruta habría dejado dos idempotencias que mantener en paralelo.
+            val quienPaga = terms.paidBy
+            if (!terms.payrollDeduction && quienPaga == null) {
+                return@post call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "Este crédito lo pagas tú: regístralo como un pago normal",
+                )
             }
 
             val ahora = System.currentTimeMillis()
@@ -367,13 +410,33 @@ fun Route.creditRoutes() {
                 .toLocalDate()
                 .toString()
                 .take(7)
+            // **Un id, no dos.** La primera versión de esto usaba un prefijo distinto según el
+            // caso (`ev_nomina_` vs `ev_tercero_`) con el argumento de que un crédito que cambia
+            // de esquema no podía quedar con el pago del mes bloqueado por la idempotencia del
+            // otro. El argumento estaba invertido, y lo midió la revisión:
+            //
+            // 5 de agosto, la hipoteca 1254 marcada libranza → «Registrar descuento» inserta
+            // `ev_nomina_acc-1254_2026-08` y la deuda baja $9.147.408. El 10 el dueño corrige y
+            // pone «la paga Skandia». La tarjeta ahora ofrece «Registrar pago de Skandia», él lo
+            // toca, y como la clave es otra el INSERT no choca: la deuda baja OTROS $9.147.408.
+            // Agosto queda $9.147.408 por debajo de lo real, en silencio.
+            //
+            // La cuota de agosto es UNA sola, y quién la pagó no cambia eso. El costo de
+            // unificar es un 4xx honesto en el mes en que se corrige el esquema; el de separar
+            // era una deuda mal contada. La categoría y el texto sí siguen dependiendo del flag
+            // —eso describe el movimiento— pero el id describe la CUOTA.
+            //
+            // Cambiar el prefijo no rompe idempotencia de lo ya registrado: se consultó la base
+            // de producción antes de tocarlo y no existía ningún `ev_nomina_%` (el dueño nunca
+            // había usado «Registrar descuento»). Si algún día hubiera datos viejos con ese
+            // prefijo, habría que mirar los dos ids antes de insertar.
             val evento = FinancialEvent(
-                id = "ev_nomina_${accountId}_$periodo",
+                id = "ev_cuota_${accountId}_$periodo",
                 accountId = accountId,
                 type = TransactionType.INCOME,
                 amount = terms.installment,
-                category = PAYROLL_DEDUCTION_CATEGORY,
-                description = "Cuota descontada de la nómina",
+                category = if (terms.payrollDeduction) PAYROLL_DEDUCTION_CATEGORY else THIRD_PARTY_PAYMENT_CATEGORY,
+                description = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga",
                 timestamp = ahora,
                 source = EventSource.MANUAL,
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
@@ -415,6 +478,7 @@ private fun fillTerms(
     it[Credits.notes]       = terms.notes
     it[Credits.remindMe]    = terms.remindMe
     it[Credits.payrollDeduction] = terms.payrollDeduction
+    it[Credits.paidBy] = terms.paidBy?.trim()?.takeIf { v -> v.isNotBlank() }
 }
 
 private fun summaryFor(

@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
@@ -229,7 +230,12 @@ fun Route.statementRoutes() {
                     // mes se inflaba con plata que nunca salió del bolsillo — encima con la pata
                     // hermana todavía excluida, así que ni siquiera se compensaba.
                     // Descripción y comercio sí se dejan enriquecer: no cambian ningún cálculo.
-                    val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT && !esPataDeTraspaso) dec.parsed.category    else existCat
+                    // Y tampoco entra ninguna otra reservada por esta puerta, por lo mismo que
+                    // la pata de traspaso: este `Events.update` no pasa por la guarda del
+                    // `PUT /api/events/{id}/category`, así que la validación tiene que estar acá.
+                    val categoriaDelExtractoEsSegura =
+                        !esPataDeTraspaso && !isReservedCategory(dec.parsed.category)
+                    val finalCategory    = if (dec.categorySource    == FieldSource.STATEMENT && categoriaDelExtractoEsSegura) dec.parsed.category    else existCat
                     val finalDescription = if (dec.descriptionSource == FieldSource.STATEMENT) dec.parsed.description else existDesc
                     val finalMerchant    = if (dec.merchantSource    == FieldSource.STATEMENT) dec.parsed.merchant    else existMerchant
 
@@ -341,7 +347,15 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             // la plata. Se cae a «Otros» en vez de rechazar la importación entera: la fila del
             // extracto es un gasto real y perderla sería peor que recategorizarla, y el dueño
             // puede corregirla después desde Movimientos.
-            it[category]             = if (tx.category == TRANSFER_CATEGORY) FALLBACK_CATEGORY else tx.category
+            // TODAS las reservadas, no solo «Traspaso».
+            //
+            // Esta línea miraba una sola: las otras cinco —«Pago de tarjeta», «Saldo inicial»,
+            // «Cuenta eliminada», «Descuento de nómina» y «Pago de un tercero»— se escribían tal
+            // cual sobre un evento nuevo del extracto, y `isCashFlow` lo sacaba del mes sin decir
+            // nada. La que de verdad muerde es «Pago de tarjeta»: es una frase que un extracto
+            // colombiano SÍ trae, y el parser la copia como categoría. Un gasto real importado
+            // así desaparece de «Gastos del mes» en silencio.
+            it[category]             = if (isReservedCategory(tx.category)) FALLBACK_CATEGORY else tx.category
             it[description]          = tx.description
             it[merchant]             = tx.merchant
             it[timestamp]            = ts

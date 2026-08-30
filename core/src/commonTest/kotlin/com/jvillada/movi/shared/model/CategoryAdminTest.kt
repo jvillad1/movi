@@ -20,7 +20,10 @@ class CategoryAdminTest {
     @Test
     fun `las reservadas son exactamente las que isCashFlow reconoce por nombre`() {
         assertEquals(
-            setOf("Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada", "Descuento de nómina"),
+            setOf(
+                "Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada",
+                "Descuento de nómina", "Pago de un tercero",
+            ),
             RESERVED_CATEGORIES,
         )
         assertEquals(TRANSFER_CATEGORY, "Traspaso")
@@ -28,13 +31,21 @@ class CategoryAdminTest {
         assertEquals(CARD_PAYMENT_CATEGORY, "Pago de tarjeta")
         assertEquals(ORPHANED_LEG_CATEGORY, "Cuenta eliminada")
         assertEquals(PAYROLL_DEDUCTION_CATEGORY, "Descuento de nómina")
+        assertEquals(THIRD_PARTY_PAYMENT_CATEGORY, "Pago de un tercero")
     }
 
     @Test
     fun `las reservadas que isCashFlow excluye por nombre estan todas en la lista`() {
         // Si alguna dejara de estar, la pantalla la dejaría renombrar y el mes entero cambiaría.
         //
-        // Ola 17: son CINCO. [PAYROLL_DEDUCTION_CATEGORY] entró porque una libranza se descuenta
+        // Ola 18: son SEIS. [THIRD_PARTY_PAYMENT_CATEGORY] entró porque tres de los nueve
+        // créditos del dueño no los paga él: las dos hipotecas de Davibank las cubre su pensión
+        // voluntaria de Skandia y el crédito de Cotrafa —a su nombre— lo paga su esposa. Sin
+        // esta categoría, cargarlos habría metido ~$13,1 millones mensuales de gasto inventado
+        // en su flujo. Este test se puso rojo al agregarla y ESO es lo que se busca: la lista y
+        // `isCashFlow` no pueden separarse en silencio.
+        //
+        // Ola 17: eran CINCO. [PAYROLL_DEDUCTION_CATEGORY] entró porque una libranza se descuenta
         // del sueldo ANTES de que la plata llegue a la cuenta: contarla como gasto descontaría dos
         // veces, porque el salario que el dueño ve ya viene neto.
         //
