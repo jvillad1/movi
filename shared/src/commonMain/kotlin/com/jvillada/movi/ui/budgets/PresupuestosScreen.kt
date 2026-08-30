@@ -39,6 +39,8 @@ import kotlinx.datetime.Month
 import kotlinx.datetime.toLocalDateTime
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.shared.model.FinancialEvent
+import androidx.compose.runtime.rememberCoroutineScope
 
 private data class BudgetProgress(
     val budget: Budget,
@@ -86,6 +88,8 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var cutoffDay by remember { mutableStateOf(1) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
+    // Se incrementa al asociar un gasto, para volver a leer con el movimiento ya movido.
+    var refreshKeyLocal by remember { mutableStateOf(0) }
     // Gasto del mes por categoría según el server (la misma fuente que el Inicio); null hasta
     // que llegue o si no hay red — ver `progresses`.
     var serverSpent by remember { mutableStateOf<Map<String, Long>?>(null) }
@@ -112,7 +116,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     // `refreshTick` y no `Unit`: con Unit esta pantalla no recargaba NUNCA mientras estuviera
     // compuesta, y desde que Agregar es una modal se puede registrar un gasto parado acá y ver
     // la barra del presupuesto sin moverse. Ver [LocalRefreshTick].
-    LaunchedEffect(refreshTick) {
+    LaunchedEffect(refreshTick, refreshKeyLocal) {
         loading = true
         reload()
         runCatching { Repositories.wallets.getEventsByDay() }.onSuccess {
@@ -138,10 +142,23 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     // El período del usuario, no el mes de calendario. `serverSpent` ya viene calculado con la
     // ventana correcta (el server usa `currentPeriodWindow`); el cálculo local es el respaldo y
     // tiene que usar la MISMA ventana o las dos mitades de la app dirían cifras distintas.
-    val gastoPorCategoria = remember(days, serverSpent, cutoffDay) {
+    val alcance = rememberCoroutineScope()
+    // Mover un movimiento a la categoría del presupuesto. Va acá y no en la hoja porque después
+    // hay que recargar la lista: el gasto recién asociado tiene que aparecer contado.
+    fun asociarGasto(evento: FinancialEvent, categoria: String) {
+        alcance.launch {
+            runCatching { Repositories.wallets.updateEventCategory(evento.id, categoria) }
+                .onSuccess { refreshKeyLocal++ }
+                .onFailure { sheetError = it.toUserMessage() }
+        }
+    }
+
+    val ventanaDelPeriodo = remember(cutoffDay) {
         val settings = PeriodSettings(cutoffDay = cutoffDay)
-        val ventana = ventanaDe(periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings), settings)
-        serverSpent ?: spentByCategoryForPeriod(days, ventana)
+        ventanaDe(periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings), settings)
+    }
+    val gastoPorCategoria = remember(days, serverSpent, ventanaDelPeriodo) {
+        serverSpent ?: spentByCategoryForPeriod(days, ventanaDelPeriodo)
     }
 
     val progresses = remember(budgets, gastoPorCategoria) {
@@ -253,6 +270,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 error = sheetError,
                 title = "Editar presupuesto",
                 gastoPorCategoria = gastoPorCategoria,
+                dias = days,
+                ventana = ventanaDelPeriodo,
+                onAsociar = ::asociarGasto,
                 initialCategory = s.current.category,
                 // F17: la categoría dejó de ser de solo lectura — antes era una limitación
                 // técnica filtrada a la pantalla (la categoría es la PK en el server), ahora
@@ -298,6 +318,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 categoryEditable = true,
                 initialAmount = 0,
                 gastoPorCategoria = gastoPorCategoria,
+                dias = days,
+                ventana = ventanaDelPeriodo,
+                onAsociar = ::asociarGasto,
                 onDismiss = { sheet = null; sheetError = null },
                 onDelete = null,
                 onSave = { cat, amt ->
@@ -418,6 +441,10 @@ private fun BudgetSheet(
     initialAmount: Long,
     /** Gasto del período por categoría, para poder decir la verdad antes de guardar. */
     gastoPorCategoria: Map<String, Long>,
+    /** Los días del período, para poder ofrecer los movimientos que se llaman como la categoría. */
+    dias: List<EventDay>,
+    ventana: LongRange,
+    onAsociar: (FinancialEvent, String) -> Unit,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)?,
     onSave: (String, Long) -> Unit,
@@ -512,6 +539,40 @@ private fun BudgetSheet(
                         color = if (aviso.esAdvertencia) MinWarn else MinTextMute,
                         lineHeight = 15.sp,
                     )
+                    // Los movimientos del período que se LLAMAN como la categoría pero están en
+                    // otra. Es la otra mitad de lo que el dueño pidió: el aviso le dice qué
+                    // categorías tienen gasto, y esto le deja traer el gasto a la categoría que
+                    // eligió vigilar. Ver [gastosQueSuenanA].
+                    val candidatos = gastosQueSuenanA(category, dias, ventana)
+                    if (candidatos.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = if (candidatos.size == 1)
+                                "Tienes un movimiento llamado \"${category.trim()}\" en otra categoría:"
+                            else
+                                "Tienes ${candidatos.size} movimientos llamados \"${category.trim()}\" en otras categorías:",
+                            fontSize = 11.5.sp,
+                            color = MinTextMute,
+                            lineHeight = 16.sp,
+                        )
+                        candidatos.take(3).forEach { ev ->
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onAsociar(ev, category.trim()) }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(ev.description, fontSize = 13.sp, color = MinText, fontWeight = FontWeight.Medium)
+                                    Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", fontSize = 11.sp, color = MinTextMute)
+                                }
+                                Text(formatCOP(ev.amount), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinText)
+                            }
+                        }
+                    }
                     if (aviso.sugerencias.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
