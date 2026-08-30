@@ -51,6 +51,17 @@ data class CreditTerms(
     val notes: String? = null,
     /** Ver [RecurringRule.remindMe]: la cuota de este crédito entra (o no) al barrido de avisos. */
     val remindMe: Boolean = true,
+    /**
+     * **Libranza**: la cuota la retiene el empleador del sueldo antes de depositarlo.
+     *
+     * Cambia lo que Movi tiene que pedirle al dueño. Una cuota normal es un gasto que él paga y
+     * registra; esta **ya se pagó sola** y la plata nunca llegó a su cuenta. Pedirle que la
+     * registre como gasto haría que descuente dos veces —el sueldo que ve ya viene neto— y no
+     * pedirle nada dejaría la deuda congelada.
+     *
+     * Ver [PAYROLL_DEDUCTION_CATEGORY] para cómo se registra sin romper ninguna de las dos cosas.
+     */
+    val payrollDeduction: Boolean = false,
 )
 
 @Serializable

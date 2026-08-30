@@ -137,6 +137,9 @@ fun CreditTermsSheet(
     var notes by remember { mutableStateOf(existingTerms?.notes ?: "") }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existingTerms?.remindMe ?: true) }
+    // Libranza: la cuota la retiene el empleador del sueldo antes de depositarlo. Ver
+    // PAYROLL_DEDUCTION_CATEGORY en :core para por qué cambia el modelo entero.
+    var esLibranza by remember { mutableStateOf(existingTerms?.payrollDeduction ?: false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -239,6 +242,7 @@ fun CreditTermsSheet(
                     startDate = startDate.trim(),
                     notes = notes.trim().ifBlank { null },
                     remindMe = remindMe,
+                    payrollDeduction = esLibranza,
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -522,13 +526,50 @@ fun CreditTermsSheet(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
-                // diga que no. Casilla, no diálogo: no interrumpe el alta.
-                ReminderOptInField(
-                    checked = remindMe,
-                    onCheckedChange = { remindMe = it },
-                    enabled = !saving,
-                )
+                // Libranza. Va ANTES del recordatorio porque lo desactiva: a una cuota que el
+                // empleador ya descontó no tiene sentido recordarla.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !saving) { esLibranza = !esLibranza }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (esLibranza) MinPrimary else MinSurfaceContainerHighest),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (esLibranza) Text("✓", fontSize = 12.sp, color = MinBg, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Se descuenta de mi nómina", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
+                        Text(
+                            text = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
+                                "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
+                                "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
+                            fontSize = 11.5.sp,
+                            color = MinTextMute,
+                            lineHeight = 16.sp,
+                        )
+                    }
+                }
+
+                // El recordatorio no aplica a una libranza: ya se pagó sola.
+                if (!esLibranza) {
+                    Spacer(Modifier.height(16.dp))
+                    // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
+                    // diga que no. Casilla, no diálogo: no interrumpe el alta.
+                    ReminderOptInField(
+                        checked = remindMe,
+                        onCheckedChange = { remindMe = it },
+                        enabled = !saving,
+                    )
+                }
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))

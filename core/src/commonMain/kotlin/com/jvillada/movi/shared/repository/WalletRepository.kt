@@ -52,6 +52,12 @@ interface WalletRepository {
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary
     suspend fun deleteCreditTerms(accountId: String)
     /** Deja la deuda del crédito en [targetBalance] registrando el movimiento de ajuste server-side. */
+    /**
+     * Registra el descuento de nómina del mes de una libranza. Idempotente por período: dos
+     * llamadas en el mismo mes no bajan la deuda dos veces.
+     */
+    suspend fun registerPayrollDeduction(accountId: String): CreditSummary
+
     suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
     // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
     suspend fun getCards(): List<CardSummary>

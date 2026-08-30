@@ -48,6 +48,11 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.vendors.ForUpdateOption
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
+import com.jvillada.movi.server.time.AppClock
 
 /**
  * Medio día en milisegundos. El desembolso se sella al mediodía de la zona de la app y no a la
@@ -314,6 +319,72 @@ fun Route.creditRoutes() {
             }
         }
 
+        /**
+         * Registra el **descuento de nómina** del mes: la cuota de una libranza que el empleador
+         * ya retuvo del sueldo.
+         *
+         * Es un INCOME sobre la cuenta del PRÉSTAMO, no un gasto de una cuenta de dinero. Esa
+         * elección es todo el punto:
+         *
+         * - `signedDelta` sobre un LOAN lee un INCOME como «la deuda baja» — que es lo que pasó.
+         * - `isCashFlow` deja fuera del mes todo lo que ocurre en una cuenta LOAN, así que **no**
+         *   se suma como ingreso ni como gasto. Si se registrara como gasto de la cuenta de
+         *   ahorros, la plata se descontaría dos veces: el salario que el dueño ve ya viene neto.
+         * - Ninguna cuenta de dinero se toca, porque esa plata nunca llegó a ninguna.
+         *
+         * **Idempotente por período**: dos toques en el mismo mes no bajan la deuda dos veces. El
+         * id del evento lleva el período, así que el segundo INSERT choca contra la clave y no
+         * escribe nada.
+         */
+        post("/{accountId}/payroll-deduction") {
+            val uid = call.userId()
+            val accountId = call.parameters["accountId"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing accountId")
+
+            val cuenta = dbQuery {
+                Accounts.selectAll()
+                    .where { (Accounts.id eq accountId) and (Accounts.userId eq uid) }
+                    .firstOrNull()?.toAccount()
+            } ?: return@post call.respond(HttpStatusCode.NotFound)
+            if (cuenta.type != AccountType.LOAN) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Solo un crédito tiene descuento de nómina")
+            }
+
+            val terms = dbQuery {
+                Credits.selectAll()
+                    .where { (Credits.accountId eq accountId) and (Credits.userId eq uid) }
+                    .firstOrNull()?.toCreditTerms()
+            } ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, "Este crédito no tiene términos cargados")
+            if (!terms.payrollDeduction) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Este crédito no está marcado como libranza")
+            }
+
+            val ahora = System.currentTimeMillis()
+            // El período en la zona de la app (Bogotá): un descuento de las 9 pm del 31 no puede
+            // caer en el mes siguiente y volver a bajar la deuda.
+            val periodo = java.time.Instant.ofEpochMilli(ahora)
+                .atZone(AppClock.zone)
+                .toLocalDate()
+                .toString()
+                .take(7)
+            val evento = FinancialEvent(
+                id = "ev_nomina_${accountId}_$periodo",
+                accountId = accountId,
+                type = TransactionType.INCOME,
+                amount = terms.installment,
+                category = PAYROLL_DEDUCTION_CATEGORY,
+                description = "Cuota descontada de la nómina",
+                timestamp = ahora,
+                source = EventSource.MANUAL,
+                reconciliationStatus = ReconciliationStatus.RECONCILED,
+                createdAt = ahora,
+            )
+            dbQuery { insertEventRow(uid, evento) }
+
+            val rate = FxRateService.usdToCop()
+            call.respond(summaryFor(cuenta, terms, loadNonVoidedEvents(uid, accountId), rate, evento))
+        }
+
         delete("/{accountId}") {
             val uid = call.userId()
             val accountId = call.parameters["accountId"]
@@ -343,6 +414,7 @@ private fun fillTerms(
     it[Credits.startDate]   = terms.startDate
     it[Credits.notes]       = terms.notes
     it[Credits.remindMe]    = terms.remindMe
+    it[Credits.payrollDeduction] = terms.payrollDeduction
 }
 
 private fun summaryFor(

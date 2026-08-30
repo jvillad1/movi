@@ -210,6 +210,13 @@ open class NoOpRepository(
      * devolviendo la pata enlazada le pisaría al espejo local el desenlace que el server sí hizo
      * — y el test fallaría por una contradicción del doble, no por un defecto del código.
      */
+    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary =
+        CreditSummary(
+            account = Account(accountId, "Libranza", AccountType.LOAN, 0L),
+            terms = null,
+            paidPct = null,
+        )
+
     override suspend fun renameAccount(id: String, name: String): Account {
         val i = cuentasDelServer.indexOfFirst { it.id == id }
         val renombrada = (if (i >= 0) cuentasDelServer[i] else Account(id, name, AccountType.SAVINGS, 0L)).copy(name = name)

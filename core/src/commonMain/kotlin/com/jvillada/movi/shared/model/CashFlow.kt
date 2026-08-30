@@ -107,7 +107,33 @@ fun isCashFlow(accountType: AccountType, type: TransactionType, category: String
     category == OPENING_CATEGORY -> false
     category == CARD_PAYMENT_CATEGORY -> false
     category == ORPHANED_LEG_CATEGORY -> false
+    // Por nombre y no solo por tipo de cuenta: un descuento de nómina vive en una cuenta LOAN,
+    // que ya está excluida más abajo, pero dejarlo implícito haría que la exclusión dependiera de
+    // dónde quedó guardado. La plata retenida del sueldo NUNCA es gasto ni ingreso del mes.
+    category == PAYROLL_DEDUCTION_CATEGORY -> false
     accountType == AccountType.LOAN        -> false
     accountType == AccountType.CREDIT_CARD -> type == TransactionType.EXPENSE
     else                                    -> true
 }
+
+/**
+ * El descuento de una **libranza**: la cuota que el empleador retiene del sueldo **antes** de
+ * depositarlo.
+ *
+ * El dueño lo explicó así: *«las deducciones del pago de la cuota se aplican en tu cuenta de
+ * nómina antes de recibir el dinero, es como si se pagara la cuota mensual automáticamente y el
+ * dinero no alcanza a llegar a tu cuenta»*.
+ *
+ * Eso rompe el modelo normal de una cuota **en las dos direcciones**:
+ *
+ * - **Registrarla como gasto cuenta doble.** El salario que llega a la cuenta ya viene NETO, así
+ *   que sumar el sueldo como ingreso y la cuota como gasto descuenta dos veces la misma plata.
+ * - **No registrar nada deja la deuda congelada.** El crédito se paga todos los meses aunque el
+ *   dueño no toque la app.
+ *
+ * La forma correcta es un movimiento que **baje la deuda sin tocar ninguna cuenta de dinero**: un
+ * INCOME sobre la cuenta del préstamo. `signedDelta` ya lo lee como «la deuda baja», e [isCashFlow]
+ * ya deja fuera del mes todo lo que pasa en una cuenta LOAN — así que no hace falta ninguna regla
+ * nueva para que las cifras del mes queden bien.
+ */
+const val PAYROLL_DEDUCTION_CATEGORY = "Descuento de nómina"

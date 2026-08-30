@@ -101,6 +101,14 @@ class WalletRepositoryImpl(
     // legibles del server (400 fuera de rango, 404, 422 no-LOAN / no-COP) y son justo los que
     // el usuario necesita leer. Sin esto, `.body()` sobre el 400 fallaba deserializando y el
     // texto del server se perdía.
+    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
+        val response = client.post("$baseUrl/api/credits/$accountId/payroll-deduction")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
         val response = client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
             contentType(ContentType.Application.Json)

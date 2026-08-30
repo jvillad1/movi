@@ -48,6 +48,11 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var showCardSheet by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardSummary?>(null) }
     var adjusting by remember { mutableStateOf<CreditSummary?>(null) }
+    // El crédito cuyo descuento de nómina se está registrando. No abre hoja: es un solo dato
+    // (la cuota, que ya está en los términos) y el server lo hace idempotente por mes, así que
+    // pedir confirmación sería ceremonia sobre algo que no se puede duplicar.
+    var descontando by remember { mutableStateOf<CreditSummary?>(null) }
+    var errorDescuento by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los créditos reales.
@@ -141,6 +146,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                         onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
                                         onEdit = { editingLoan = c; showLoanSheet = true },
                                         onAdjust = { adjusting = c },
+                                        onPayrollDeduction = { descontando = c },
                                     )
                                 }
                             }
@@ -196,6 +202,16 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 onSaved = { adjusting = null; reloadKey++ },
             )
         }
+        // El descuento de nómina se registra sin hoja: no hay nada que preguntar —el monto es la
+        // cuota— y el server lo hace idempotente por mes, así que un doble toque no baja la deuda
+        // dos veces.
+        descontando?.let { credit ->
+            LaunchedEffect(credit.account.id) {
+                runCatching { Repositories.wallets.registerPayrollDeduction(credit.account.id) }
+                    .onSuccess { descontando = null; reloadKey++ }
+                    .onFailure { descontando = null; errorDescuento = it.toUserMessage() }
+            }
+        }
     }
 }
 
@@ -210,6 +226,7 @@ private fun LoanCard(
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onAdjust: () -> Unit,
+    onPayrollDeduction: () -> Unit,
 ) {
     // Ola 14: no siempre es un porcentaje. Un crédito recién creado en $0 —el paso 1 de registrar
     // un desembolso— decía «100% pagado» con la barra llena. Ver [progresoDeCredito].
@@ -305,6 +322,21 @@ private fun LoanCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
         ) {
+            // Una libranza no se «paga»: ya se descontó del sueldo. Lo único que falta es que la
+            // deuda lo refleje, y eso es un toque — no anotar un gasto que no existió.
+            if (credit.terms?.payrollDeduction == true) {
+                Text(
+                    "Registrar descuento",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinPrimary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickableSimple(onPayrollDeduction)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+            }
             Text(
                 "Ajustar saldo",
                 fontSize = 12.sp,

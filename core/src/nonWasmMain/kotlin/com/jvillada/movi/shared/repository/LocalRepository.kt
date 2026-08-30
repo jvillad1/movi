@@ -463,6 +463,16 @@ class LocalRepository(
      * cuenta: sin el espejo, el nombre viejo se seguiría viendo en el teléfono hasta la próxima
      * lectura con red.
      */
+    /** El descuento nace en el server (es idempotente allá) y se espeja como cualquier ajuste. */
+    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
+        val summary = remote.registerPayrollDeduction(accountId)
+        mirrorAccountLocally(summary.account)
+        summary.adjustmentEvent?.let { evento ->
+            db.transaction { mirrorEventLocally(evento, userId()) }
+        }
+        return summary
+    }
+
     override suspend fun renameAccount(id: String, name: String): Account {
         val actualizada = remote.renameAccount(id, name)
         db.transaction { mirrorAccountLocally(actualizada) }

@@ -36,7 +36,16 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
     Credits.join(Accounts, JoinType.INNER, Credits.accountId, Accounts.id)
         .selectAll()
         .where { Credits.userId eq userId }
-        .map { row ->
-            virtualRuleFor(row.toCreditTerms(), row[Accounts.name]) to row[Credits.lastRemindedPeriod]
+        .map { row -> row.toCreditTerms() to row }
+        // Una LIBRANZA no entra al barrido de avisos: su cuota ya se pagó sola, retenida del
+        // sueldo antes de que la plata llegara a la cuenta. Recordarle al dueño que «pague» algo
+        // que el empleador ya descontó es pedirle una acción que no existe — y si la registrara
+        // como gasto, descontaría dos veces, porque el salario que ve ya viene neto.
+        //
+        // La deuda igual tiene que bajar todos los meses: eso se registra desde la tarjeta del
+        // crédito, con `POST /api/credits/{id}/payroll-deduction`.
+        .filterNot { (terms, _) -> terms.payrollDeduction }
+        .map { (terms, row) ->
+            virtualRuleFor(terms, row[Accounts.name]) to row[Credits.lastRemindedPeriod]
         }
 }
