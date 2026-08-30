@@ -3,6 +3,9 @@ package com.jvillada.movi.shared.repository
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -1361,6 +1364,23 @@ class LocalRepository(
         remote.uploadStatement(fileName, bytes, mimeType)
     override suspend fun importStatement(decision: ImportDecision) =
         remote.importStatement(decision)
+
+    // Los documentos NO se espejan localmente, y es una decisión, no un olvido: son archivos de
+    // megas y el espejo de SQLDelight existe para que las CIFRAS estén sin señal, no para tener
+    // una copia offline de cada PDF del banco. Sin red, la pantalla de documentos no lista —que
+    // es honesto— en vez de mostrar una lista de papeles que no se pueden abrir.
+    override suspend fun getDocuments(): List<Documento> = remote.getDocuments()
+    override suspend fun uploadDocument(
+        fileName: String,
+        bytes: ByteArray,
+        mimeType: String,
+        tipo: TipoDeDocumento,
+        accountId: String?,
+        periodo: String?,
+        notas: String?,
+    ): Documento = remote.uploadDocument(fileName, bytes, mimeType, tipo, accountId, periodo, notas)
+    override suspend fun getDocumentLink(id: String): EnlaceDeDescarga = remote.getDocumentLink(id)
+    override suspend fun deleteDocument(id: String) = remote.deleteDocument(id)
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =

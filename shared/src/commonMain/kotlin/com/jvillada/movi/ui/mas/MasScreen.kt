@@ -61,6 +61,9 @@ private val items = listOf(
     // dos pantallas que se cruzan con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño
     // va a acordarse de que quería arreglar un nombre.
     MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
+    // Ola 18: los papeles. Va PEGADO a «Extractos» porque el importador archiva ahí lo que pasa
+    // por él — quien sube un extracto y después se pregunta «¿dónde quedó el PDF?» busca al lado.
+    MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),
     // Ola 14: la guía de arranque, que se apaga sola en el Inicio y hasta acá no tenía forma de
     // volver a abrirse. Va en Más y no en el Inicio a propósito: el dueño pidió *poder volver*,
     // no que la guía le reaparezca (ver PrimerosPasosScreen).

@@ -14,6 +14,11 @@ fun Application.configureRouting() {
         authRoutes()                     // public — no auth required
         pushPublicRoutes()                // public — no auth required
         smsFilterConfigRoutes()           // public — no auth required
+        // El CONTENIDO de un documento va fuera del bloque autenticado a propósito: se abre
+        // desde el navegador, que no puede mandar `Authorization`. Lo protege un token de
+        // descarga aparte —otra audiencia, un solo documento, cinco minutos—. Ver
+        // JwtConfig.makeDownloadToken.
+        documentContentRoutes()
 
         authenticate("jwt") {
             userRoutes()
@@ -33,6 +38,7 @@ fun Application.configureRouting() {
             smsRoutes()
             aiRoutes()
             statementRoutes()
+            documentRoutes()
         }
 
         // Serve wasmJs web app — must be last so API routes take priority

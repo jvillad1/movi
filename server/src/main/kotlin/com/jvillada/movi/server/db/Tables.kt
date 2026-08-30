@@ -82,6 +82,35 @@ object StatementImports : Table("statement_imports") {
     init { index("idx_statement_imports_user_id", false, userId) }
 }
 
+/**
+ * Los archivos que el dueño guarda en Movi: extractos, nóminas, contratos.
+ *
+ * El contenido va en la MISMA tabla y no en un bucket aparte, a propósito. Movi corre en un
+ * contenedor de Railway con disco efímero —lo que se escribe ahí se pierde en cada despliegue—
+ * y agregar un S3 significaría una credencial más que el dueño tendría que crear y rotar, para
+ * un volumen que hoy son unos pocos PDF por mes. Postgres ya está, ya se respalda y ya sabe
+ * borrar las filas de un usuario cuando el usuario se va.
+ *
+ * `content` es `bytea`. El tope de tamaño lo pone la ruta (ver MAX_DOCUMENTO_BYTES), no la
+ * columna: un límite en el esquema fallaría con un error de base de datos en vez de con un
+ * mensaje que el dueño pueda entender.
+ */
+object Documents : Table("documents") {
+    val id         = varchar("id", 50)
+    val userId     = varchar("user_id", 50)
+    val name       = varchar("name", 255)
+    val kind       = varchar("kind", 20)
+    val mimeType   = varchar("mime_type", 120)
+    val sizeBytes  = long("size_bytes")
+    val uploadedAt = long("uploaded_at")
+    val accountId  = varchar("account_id", 50).nullable()
+    val period     = varchar("period", 50).nullable()
+    val notes      = varchar("notes", 500).nullable()
+    val content    = binary("content")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_documents_user_id", false, userId) }
+}
+
 object Events : Table("financial_events") {
     val id                   = varchar("id", 50)
     val userId               = varchar("user_id", 50)

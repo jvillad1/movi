@@ -34,6 +34,12 @@ sealed class Screen {
      * otra pantalla.
      */
     data object Categorias : Screen()
+
+    /**
+     * «Documentos» — los papeles del dueño guardados en Movi (extractos, nóminas, contratos).
+     * Ficha de Más, junto a «Extractos»: el importador archiva ahí lo que pasa por él.
+     */
+    data object Documentos : Screen()
     /**
      * Ola 14 — «Más → Primeros pasos»: la guía de arranque, que hasta acá solo existía como
      * tarjeta del Inicio y se apagaba sola sin ninguna forma de volver a verla. Misma puerta que
@@ -93,7 +99,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // mantenimiento, no un lugar al que se vuelva todos los días.
     // Ola 14: la guía de arranque se abre desde Más y se vuelve a Más — no es un destino de
     // todos los días, es un sitio al que se va a mirar si quedó algo pendiente.
-    Screen.Categorias, Screen.PrimerosPasos -> NavTab.MORE
+    Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos -> NavTab.MORE
     else -> null
 }
 

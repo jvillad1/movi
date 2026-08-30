@@ -58,4 +58,53 @@ object JwtConfig {
         .withIssuer(ISSUER)
         .withAudience(AUDIENCE)
         .build()!!
+
+    // ── Descarga de un documento ───────────────────────────────────────────────────
+
+    /**
+     * Audiencia distinta a propósito: un token de descarga **no** sirve para llamar a la API.
+     * Si compartieran audiencia, el que se filtra por una URL abriría la cuenta entera.
+     */
+    private const val DOWNLOAD_AUDIENCE = "movi-download"
+
+    /**
+     * Cinco minutos. Es una URL que va a quedar en el historial del navegador, en los logs del
+     * proxy y en cualquier `Referer`: tiene que servir para abrir el archivo una vez y dejar de
+     * servir enseguida.
+     */
+    const val DOWNLOAD_VALIDITY_MS = 5L * 60 * 1000
+
+    /**
+     * Un permiso para descargar **un** documento, del **dueño** que lo pidió, por poco tiempo.
+     *
+     * Existe porque abrir un archivo desde el navegador es una navegación del navegador —una
+     * pestaña nueva, el visor de PDF del sistema— y ahí no hay dónde poner `Authorization`. La
+     * alternativa conocida es mandar el token de sesión en la URL, y ese dura **30 días**.
+     */
+    fun makeDownloadToken(userId: String, documentId: String): String = JWT.create()
+        .withIssuer(ISSUER)
+        .withAudience(DOWNLOAD_AUDIENCE)
+        .withClaim("userId", userId)
+        .withClaim("documentId", documentId)
+        .withExpiresAt(Date(System.currentTimeMillis() + DOWNLOAD_VALIDITY_MS))
+        .sign(algorithm)
+
+    /**
+     * Devuelve el `userId` si el token es válido **para este documento**, o `null`.
+     *
+     * Comprueba las dos cosas por separado, y las dos importan: la audiencia (que no sea un token
+     * de sesión reusado como enlace) y que el `documentId` del token sea el que se está pidiendo
+     * (que un enlace a la nómina de julio no abra la escritura del apartamento).
+     */
+    fun verifyDownloadToken(token: String, documentId: String): String? = try {
+        val payload = JWT.require(algorithm)
+            .withIssuer(ISSUER)
+            .withAudience(DOWNLOAD_AUDIENCE)
+            .withClaim("documentId", documentId)
+            .build()
+            .verify(token)
+        payload.getClaim("userId").asString()
+    } catch (e: Exception) {
+        null
+    }
 }

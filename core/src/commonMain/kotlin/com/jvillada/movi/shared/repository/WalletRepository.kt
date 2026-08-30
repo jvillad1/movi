@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -284,6 +287,33 @@ interface WalletRepository {
      */
     suspend fun requestPasswordReset(request: PasswordResetRequest): Int
     suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult
+
+    // ── Documentos ─────────────────────────────────────────────────────────────
+
+    /** Los papeles guardados, lo más reciente primero. **Metadatos, nunca bytes** — ver [Documento]. */
+    suspend fun getDocuments(): List<Documento>
+
+    /** Guarda un archivo. Devuelve sus metadatos ya con id. */
+    suspend fun uploadDocument(
+        fileName: String,
+        bytes: ByteArray,
+        mimeType: String,
+        tipo: TipoDeDocumento,
+        accountId: String? = null,
+        periodo: String? = null,
+        notas: String? = null,
+    ): Documento
+
+    /**
+     * Pide el permiso para abrir un documento: una URL con vida corta.
+     *
+     * Devuelve la URL **absoluta**, lista para dársela al navegador o al sistema. El server
+     * responde una ruta relativa porque no sabe con qué origen lo llamaron; componerla es
+     * trabajo del cliente, que sí conoce su `baseUrl`.
+     */
+    suspend fun getDocumentLink(id: String): EnlaceDeDescarga
+
+    suspend fun deleteDocument(id: String)
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail
