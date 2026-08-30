@@ -41,6 +41,8 @@ import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.ui.LocalNavigate
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.theme.MinBorder
 import com.jvillada.movi.theme.MinPrimary
 import com.jvillada.movi.theme.MinSurfaceContainerHigh
@@ -530,6 +532,8 @@ fun CategoryField(
     val matches = remember(value, type, usedCategories, prefs) {
         categoriasParaElPanel(value, type, usedCategories, prefs)
     }
+    // Ver [com.jvillada.movi.ui.LocalNavigate]: por qué un local y no un callback más en la firma.
+    val navegar = LocalNavigate.current
 
     // Una reservada escrita a mano no se crea ni se "usa": se explica y se corta. Es la única
     // rama del panel que no ofrece nada tocable, y a propósito — elegirla saca el gasto del mes.
@@ -697,7 +701,36 @@ fun CategoryField(
                     )
                     if (i < matches.size - 1) Hairline()
                 }
+
             }
         }
+
+        // El editor completo de categorías, SIEMPRE visible bajo el campo.
+        //
+        // El dueño: «Necesito un editor de categorías en las diferentes secciones». El editor ya
+        // existía y hace todo lo que hace falta —renombrar el error de tipeo, unificar
+        // duplicados, esconder lo que no quiere ver, fijar el tipo— pero vivía en «Más →
+        // Categorías» y solo se llegaba abandonando lo que uno estaba haciendo.
+        //
+        // Va acá, en el componente compartido, y no cuatro veces en cuatro pantallas: este campo
+        // ES donde la pregunta «¿qué categoría?» se hace en las cuatro secciones (Movimientos,
+        // Agregar, Presupuestos, Recurrentes), así que un solo renglón las cubre a todas y no
+        // puede desincronizarse.
+        //
+        // Fuera del panel de sugerencias y no adentro: adentro solo se veía al ENFOCAR el campo,
+        // y en la hoja de cambiar categoría —la sección desde la que el dueño lo pidió— la
+        // categoría se elige tocando la lista, sin pasar nunca por el campo libre. O sea que
+        // justo ahí el acceso no habría existido.
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Administrar categorías",
+            fontSize = 12.5.sp,
+            color = MinPrimary,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { navegar(Screen.Categorias) }
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
     }
 }
