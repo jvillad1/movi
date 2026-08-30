@@ -177,7 +177,7 @@ private fun clickHandler(
  */
 @Composable
 private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
-    val balance = heroBalance(data.accounts)
+    val balance = heroBalance(data.accounts.orEmpty())
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
     val flujo = ingresos - egresos
@@ -192,8 +192,11 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         // mismo calcula, sin ventana de desalineación con la fila del server.
         Text(text = heroBalanceTitle(section), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
         Spacer(Modifier.height(10.dp))
+        // Antes de que las cuentas contesten, un «$0» de 44 sp es la afirmación más fuerte que
+        // hace esta pantalla, y es falsa mientras carga: en la web (sin caché que sobreviva a
+        // recargar) el dueño veía «Tu plata $0» durante segundos. Un guion no miente.
         Text(
-            text = formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
+            text = if (data.accounts == null) "—" else formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
             fontSize = 44.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Normal,

@@ -208,7 +208,12 @@ fun DashboardScreen(
             // así existe siempre, sin depender de tocar `screen_definitions` en producción.
             // Se apaga sola cuando ya hay cuenta y movimiento (los datos son el estado).
             // F7: va como primer ítem del scroll, no pegada arriba — antes tapaba el resto.
-            val showGuide = !(data.hasAccount && data.hasMovement)
+            // `puedeAfirmarVacio`: la guía dice «Crea tu primera cuenta» y «Registra un
+            // movimiento» sin tildar, o sea afirma que el dueño no tiene ni una cosa ni la otra.
+            // Eso solo se puede decir cuando cuentas y resumen YA contestaron. Sin esta guarda,
+            // cada carga en frío de la web —donde la caché en memoria se pierde al recargar—
+            // saludaba con una lista de tareas ya hechas hace meses.
+            val showGuide = data.puedeAfirmarVacio && !(data.hasAccount && data.hasMovement)
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             SduiRenderer(

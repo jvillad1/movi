@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -139,11 +140,19 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                 color = MinTextMute,
                 modifier = Modifier.padding(horizontal = 18.dp).padding(top = 4.dp, bottom = 14.dp),
             )
-            PrimerosPasosCard(
-                data = data,
-                onNavigate = onNavigate,
-                onShowCreateSheet = { showCreateSheet = true },
-            )
+            // Esta pantalla existe para contestar «¿me falta algo?», así que no puede contestar
+            // «te falta todo» mientras todavía está preguntando. La caché suele llegar llena
+            // (se entra desde «Más», o sea después del Inicio), pero un arranque en frío de la
+            // web sí puede caer acá sin nada: ahí se espera, no se inventa.
+            if (!data.puedeAfirmarVacio) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp))
+            } else {
+                PrimerosPasosCard(
+                    data = data,
+                    onNavigate = onNavigate,
+                    onShowCreateSheet = { showCreateSheet = true },
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

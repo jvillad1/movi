@@ -546,16 +546,27 @@ private fun BudgetSheet(
                     val candidatos = gastosQueSuenanA(category, dias, ventana)
                     if (candidatos.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
+                        // El texto dice CÓMO coincidió, no solo que coincidió: «llamado» cuando
+                        // la descripción es el nombre de la categoría, «que mencionan» cuando
+                        // apenas la nombra («Mercado Éxito»). Si el dueño no puede ver por qué se
+                        // lo proponemos, no puede desconfiar de la propuesta.
+                        val soloExactas = candidatos.all { it.coincidencia == Coincidencia.EXACTA }
                         Text(
-                            text = if (candidatos.size == 1)
-                                "Tienes un movimiento llamado \"${category.trim()}\" en otra categoría:"
-                            else
-                                "Tienes ${candidatos.size} movimientos llamados \"${category.trim()}\" en otras categorías:",
+                            text = when {
+                                candidatos.size == 1 && soloExactas ->
+                                    "Tienes un movimiento llamado \"${category.trim()}\" en otra categoría:"
+                                candidatos.size == 1 ->
+                                    "Tienes un movimiento que menciona \"${category.trim()}\" en otra categoría:"
+                                soloExactas ->
+                                    "Tienes ${candidatos.size} movimientos llamados \"${category.trim()}\" en otras categorías:"
+                                else ->
+                                    "Tienes ${candidatos.size} movimientos que mencionan \"${category.trim()}\" en otras categorías:"
+                            },
                             fontSize = 11.5.sp,
                             color = MinTextMute,
                             lineHeight = 16.sp,
                         )
-                        candidatos.take(3).forEach { ev ->
+                        candidatos.take(3).forEach { (ev, _) ->
                             Spacer(Modifier.height(6.dp))
                             Row(
                                 modifier = Modifier

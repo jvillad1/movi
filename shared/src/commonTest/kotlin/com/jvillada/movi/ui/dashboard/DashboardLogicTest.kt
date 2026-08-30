@@ -15,9 +15,11 @@ import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
@@ -27,6 +29,7 @@ import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.credits.totalDebtCop
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -405,7 +408,7 @@ class DashboardLogicTest {
         // ese modelo se retiró — y pasaron a leer cuentas de tipo INVESTMENT, igual que
         // Cuentas. Una cuenta de Dinero (SAVINGS) no debe sumar acá.
         val withInvestments = data.copy(
-            accounts = data.accounts + listOf(
+            accounts = data.accounts.orEmpty() + listOf(
                 Account("i1", "CDT Bancolombia", AccountType.INVESTMENT, 3_000_000),
                 Account("i2", "Fondo Nu", AccountType.INVESTMENT, 700_000),
             ),
@@ -417,9 +420,17 @@ class DashboardLogicTest {
 
     @Test
     fun `sin datos el acceso no inventa una cifra`() {
+        // `DashboardData()` dejó de significar «este usuario no tiene nada» y pasó a significar
+        // «todavía no contestaron»: por eso el «Sin cuentas aún» ya no sale acá y se comprueba
+        // más abajo con `accounts = emptyList()`, que es la respuesta vacía de verdad. El resto
+        // de los accesos no cambia — nunca afirmaron nada, solo se quedaban sin cifra.
         val empty = DashboardData()
         assertNull(quickLinkFigure("accounts", empty).value)
-        assertEquals("Sin cuentas aún", quickLinkFigure("accounts", empty).sub)
+        assertNull(quickLinkFigure("accounts", empty).sub)
+        assertEquals(
+            "Sin cuentas aún",
+            quickLinkFigure("accounts", DashboardData(accounts = emptyList())).sub,
+        )
         assertNull(quickLinkFigure("investments", empty).value)
         assertNull(quickLinkFigure("subscriptions", empty).value)
         assertNull(quickLinkFigure("recurrentes", empty).value)
@@ -575,5 +586,56 @@ class DashboardLogicTest {
             ),
             rows.map { it.text to it.target },
         )
+    }
+}
+
+// ── El Inicio no afirma vacío antes de saber (fix/inicio-no-miente-vacio) ──────────
+//
+// El dueño mandó un pantallazo de la web recién cargada: «Tu plata $0», «Sin cuentas aún» y la
+// guía de Primeros pasos con «Crea tu primera cuenta» sin tildar — mientras abajo, en la misma
+// pantalla, ya se veían sus propias cuotas de crédito. En la web la caché del Inicio vive en
+// memoria, así que recargar la página la borra y cada arranque en frío pasa por ese estado.
+
+private fun summaryConEventos(n: Int) =
+    FinanceSummary(scope = Scope.SELF, balance = 0L, ingresos = 0L, egresos = 0L, eventCount = n)
+
+class InicioNoAfirmaVacioTest {
+
+    @Test
+    fun sin_respuesta_todavia_no_se_puede_afirmar_vacio() {
+        assertFalse(DashboardData().puedeAfirmarVacio)
+    }
+
+    @Test
+    fun con_cuentas_pero_sin_resumen_tampoco() {
+        // Es justo el estado del pantallazo al revés: llegó una de las dos lecturas. La guía
+        // pregunta por cuenta Y movimiento; con media respuesta seguiría mintiendo sobre la otra.
+        assertFalse(DashboardData(accounts = emptyList()).puedeAfirmarVacio)
+    }
+
+    @Test
+    fun cuando_las_dos_contestaron_vacio_si_se_puede_afirmar() {
+        val data = DashboardData(accounts = emptyList(), summary = summaryConEventos(0))
+        assertTrue(data.puedeAfirmarVacio)
+        assertFalse(data.hasAccount)
+    }
+
+    @Test
+    fun una_lectura_fallida_no_habilita_la_afirmacion() {
+        // `runCatching { … }.onSuccess { … }` deja `accounts` en null cuando la llamada falla, y
+        // eso tiene que seguir contando como «no sé» y no como «no tiene». Un error de red no es
+        // evidencia sobre la plata de nadie.
+        val trasFallarCuentas = DashboardData(summary = summaryConEventos(23))
+        assertFalse(trasFallarCuentas.puedeAfirmarVacio)
+    }
+
+    @Test
+    fun la_cifra_de_cuentas_queda_en_blanco_hasta_que_contesten() {
+        val enBlanco = quickLinkFigure("accounts", DashboardData())
+        assertNull(enBlanco.value)
+        assertNull(enBlanco.sub, "«Sin cuentas aún» es una afirmación: no puede salir antes de la respuesta")
+
+        val contestoVacio = quickLinkFigure("accounts", DashboardData(accounts = emptyList()))
+        assertEquals("Sin cuentas aún", contestoVacio.sub)
     }
 }
