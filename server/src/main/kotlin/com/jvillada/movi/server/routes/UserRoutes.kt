@@ -20,6 +20,7 @@ import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import com.jvillada.movi.server.reminders.ReminderConfig
 
 /**
  * F42 · F46 — editar perfil. Hasta la Ola 6 el usuario tenía id, correo, nombre y contraseña, y
@@ -76,7 +77,14 @@ fun Route.userRoutes() {
             if (req.periodCutoffDay != null && req.periodCutoffDay !in 1..31) {
                 return@put call.respond(HttpStatusCode.BadRequest, "El día de corte va de 1 a 31")
             }
-            if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null) {
+            // 0 es válido: «avísame el mismo día». El tope de 30 evita un aviso que llegue antes
+            // de que el mes anterior haya cerrado.
+            if (req.reminderLeadDays != null && req.reminderLeadDays !in 0..30) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Los días de aviso van de 0 a 30")
+            }
+            if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
+                req.reminderLeadDays == null
+            ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
 
@@ -85,6 +93,7 @@ fun Route.userRoutes() {
                     trimmedName?.let { stmt[Users.name] = it }
                     req.avatarColor?.let { stmt[Users.avatarColor] = it }
                     req.periodCutoffDay?.let { stmt[Users.periodCutoffDay] = it }
+                    req.reminderLeadDays?.let { stmt[Users.reminderLeadDays] = it }
                 }
                 Users.selectAll().where { Users.id eq uid }.firstOrNull()
             } ?: return@put call.respond(HttpStatusCode.NotFound)
@@ -139,4 +148,6 @@ private fun ResultRow.toProfile() = UserProfile(
     avatarColor = this[Users.avatarColor] ?: AvatarPalette.DEFAULT,
     // Sin elegir = mes de calendario, que es como se comportó Movi siempre.
     periodCutoffDay = this[Users.periodCutoffDay] ?: 1,
+    // Sin elegir = lo que el server tenga configurado, que a su vez cae al default de :core.
+    reminderLeadDays = this[Users.reminderLeadDays] ?: ReminderConfig.leadDays(),
 )

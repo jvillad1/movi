@@ -2,6 +2,10 @@ package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import java.io.File
+import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.db.dbQuery
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 /**
  * La configuración del barrido de recordatorios, en UN solo lugar.
@@ -59,3 +63,16 @@ object ReminderConfig {
         }
     }
 }
+
+
+/**
+ * Los días de aviso **de este usuario**, con el valor del server como respaldo.
+ *
+ * `ReminderConfig.leadDays()` es global —una variable de entorno— y por eso no servía: dos
+ * personas en la misma instancia querrían números distintos, y ninguna de las dos puede tocar una
+ * variable de entorno. Este es el que usan las lecturas por usuario; el barrido global sigue
+ * usando el suyo para los que no eligieron.
+ */
+suspend fun leadDaysOf(uid: String): Int = dbQuery {
+    Users.selectAll().where { Users.id eq uid }.firstOrNull()?.get(Users.reminderLeadDays)
+} ?: ReminderConfig.leadDays()

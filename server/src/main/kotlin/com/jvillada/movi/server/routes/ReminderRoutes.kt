@@ -51,6 +51,7 @@ import java.time.YearMonth
 import java.util.UUID
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.server.reminders.leadDaysOf
 
 private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     id = this[RecurringRules.id],
@@ -209,7 +210,8 @@ fun Route.reminderRoutes() {
                 emailTo = email,
                 emailSandbox = hayCorreo && ReminderConfig.senderIsSandbox(),
                 push = WebPushSender.isConfigured(),
-                leadDays = ReminderConfig.leadDays(),
+                // El del usuario, no el global: ver [leadDaysOf].
+                leadDays = leadDaysOf(uid),
             ),
         )
     }
@@ -219,7 +221,7 @@ fun Route.reminderRoutes() {
         // Misma lectura que el barrido y que `/api/reminders/channels` — ver [ReminderConfig].
         // Antes era un `System.getenv` suelto, que ignoraba `server/.env` y podía dar un número
         // distinto al que de verdad usa el scheduler.
-        val leadDays = ReminderConfig.leadDays()
+        val leadDays = leadDaysOf(uid)
         val (rules, occurredBy) = dbQuery {
             val r = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
             r to loadOccurredBy(uid)
