@@ -1,47 +1,45 @@
 FROM gradle:8.11-jdk17 AS build
 WORKDIR /app
+
+# ── Capa de dependencias ──────────────────────────────────────────────────────
+#
+# El build de Railway se estaba pasando de su límite de 20 minutos: seis intentos
+# terminaron en «Build image ✗ (20:02)» — un timeout, no un error de compilación.
+# Por eso el log se cortaba a mitad de una tarea sin mensaje y sin «FAILURE», y por
+# eso morían en puntos distintos cada vez.
+#
+# La causa es que `COPY . .` invalida la capa con CUALQUIER cambio de código, así
+# que cada despliegue volvía a resolver y descargar todas las dependencias desde
+# cero. Copiando primero solo los archivos de build, esa capa se reusa mientras no
+# cambien las dependencias — que es casi siempre.
+COPY gradle/ gradle/
+COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY core/build.gradle.kts core/
+COPY shared/build.gradle.kts shared/
+COPY webApp/build.gradle.kts webApp/
+COPY server/build.gradle.kts server/
+COPY androidApp/build.gradle.kts androidApp/
+
+# Baja el grafo de dependencias sin compilar nada. `|| true`: sin las fuentes, la
+# resolución puede quedar incompleta y no importa — lo que se busca es dejar el
+# caché de Gradle caliente en esta capa.
+RUN gradle --no-daemon --console=plain -q dependencies --configuration compileClasspath > /dev/null 2>&1 || true
+
+# ── Fuentes ───────────────────────────────────────────────────────────────────
 COPY . .
 
-# Sin `--quiet` (a diferencia del Dockerfile original): con él, el motivo del fallo
-# no llegaba nunca al log de Railway y hubo que adivinar cuatro veces.
-#
-# Los presupuestos de memoria vuelven a los de gradle.properties, que es la
-# configuración con la que este build venía funcionando. Dos intentos bajándolos
-# fallaron igual y en puntos distintos, así que la memoria no era la causa — y
-# `-Xmx` no reserva nada por adelantado, así que pedir de más nunca fue el problema.
-#
-# Lo que sí falta es evidencia: estos tres comandos la dejan en el log ANTES de que
-# el build muera, para que el próximo fallo no haya que adivinarlo.
-RUN echo "── recursos del contenedor ──" && \
-    (free -m || true) && \
-    df -h /app /tmp && \
-    nproc && \
-    cat gradle.properties
+RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 
-# Build wasmJs production bundle
-# La salida se guarda y solo se imprime la COLA si falla.
-#
-# El log de Railway devuelve una ventana acotada: en cuatro intentos el error nunca
-# entró en ella —el log terminaba a mitad de una tarea y parecía un proceso muerto—
-# y eso mandó a perseguir memoria y disco durante tres despliegues. Los recursos
-# resultaron ser 58 GB de RAM y 672 GB libres: nunca fue eso.
-#
-# Con `tail` sobre el archivo, el motivo real queda en las últimas líneas, que son
-# las que sí se ven.
-RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --stacktrace > /tmp/wasm.log 2>&1 \
-    || (echo "══ FALLÓ EL WASM — últimas 120 líneas ══" && tail -120 /tmp/wasm.log && false)
+# Sin `--quiet`, y guardando la salida para imprimir la cola si algo falla: con
+# `--quiet` el motivo de un fallo nunca llegaba al log de Railway.
+RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain > /tmp/wasm.log 2>&1 \
+    || (echo "══ FALLÓ EL WASM ══" && tail -120 /tmp/wasm.log && false)
 
-RUN echo "── después del wasm ──" && df -h /app /tmp && (free -m || true)
-
-# Copy web app into server resources so it's bundled in the fat JAR
 RUN mkdir -p server/src/main/resources/static && \
     cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
 
-# Build server fat JAR (now includes the web app)
-RUN gradle :server:buildFatJar --no-daemon --console=plain --stacktrace > /tmp/jar.log 2>&1 \
-    || (echo "══ FALLÓ EL JAR — últimas 120 líneas ══" && tail -120 /tmp/jar.log && false)
-
-RUN echo "── después del jar ──" && df -h /app /tmp && ls -la server/build/libs/
+RUN gradle :server:buildFatJar --no-daemon --console=plain > /tmp/jar.log 2>&1 \
+    || (echo "══ FALLÓ EL JAR ══" && tail -120 /tmp/jar.log && false)
 
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
