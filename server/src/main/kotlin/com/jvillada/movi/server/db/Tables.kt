@@ -268,6 +268,13 @@ object SmsMessages : Table("sms_messages") {
 }
 
 object Credits : Table("credit_terms") {
+    /**
+     * Libranza: la cuota se descuenta de la nómina. Nullable y se lee como `false` — las filas
+     * que ya existen no la tienen, y una columna nullable es lo único que
+     * `createMissingTablesAndColumns` puede agregar sin riesgo dentro de la transacción de
+     * arranque.
+     */
+    val payrollDeduction = bool("payroll_deduction").nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

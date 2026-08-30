@@ -41,7 +41,8 @@ val RESERVED_CATEGORIES: Set<String> = setOf(
     TRANSFER_CATEGORY,        // «Traspaso»
     OPENING_CATEGORY,         // «Saldo inicial»
     CARD_PAYMENT_CATEGORY,    // «Pago de tarjeta»
-    ORPHANED_LEG_CATEGORY,    // «Cuenta eliminada»
+    ORPHANED_LEG_CATEGORY,
+    PAYROLL_DEDUCTION_CATEGORY,// «Descuento de nómina»
 )
 
 /**

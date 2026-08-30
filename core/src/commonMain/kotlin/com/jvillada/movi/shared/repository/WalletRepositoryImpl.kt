@@ -53,6 +53,7 @@ import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
+import com.jvillada.movi.shared.model.RenameAccountRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -100,6 +101,14 @@ class WalletRepositoryImpl(
     // legibles del server (400 fuera de rango, 404, 422 no-LOAN / no-COP) y son justo los que
     // el usuario necesita leer. Sin esto, `.body()` sobre el 400 fallaba deserializando y el
     // texto del server se perdía.
+    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
+        val response = client.post("$baseUrl/api/credits/$accountId/payroll-deduction")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
         val response = client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
             contentType(ContentType.Application.Json)
@@ -381,6 +390,17 @@ class WalletRepositoryImpl(
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }
+    }
+
+    override suspend fun renameAccount(id: String, name: String): Account {
+        val response = client.put("$baseUrl/api/accounts/$id/name") {
+            contentType(ContentType.Application.Json)
+            setBody(RenameAccountRequest(name))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
     }
 
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent =

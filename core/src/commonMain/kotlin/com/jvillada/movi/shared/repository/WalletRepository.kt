@@ -52,6 +52,12 @@ interface WalletRepository {
     suspend fun putCreditTerms(terms: CreditTerms): CreditSummary
     suspend fun deleteCreditTerms(accountId: String)
     /** Deja la deuda del crédito en [targetBalance] registrando el movimiento de ajuste server-side. */
+    /**
+     * Registra el descuento de nómina del mes de una libranza. Idempotente por período: dos
+     * llamadas en el mismo mes no bajan la deuda dos veces.
+     */
+    suspend fun registerPayrollDeduction(accountId: String): CreditSummary
+
     suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary
     // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
     suspend fun getCards(): List<CardSummary>
@@ -255,6 +261,9 @@ interface WalletRepository {
     suspend fun login(request: LoginRequest): AuthResponse
 
     /** F42 · F46: perfil editable — `GET /api/users/me`. `avatarColor` nunca llega `null`. */
+    /** Renombra una cuenta. Ver [RenameAccountRequest]. */
+    suspend fun renameAccount(id: String, name: String): Account
+
     suspend fun getUserProfile(): UserProfile
 
     /** `PUT /api/users/me`. Campos opcionales — solo se toca lo que viene en [request]. */

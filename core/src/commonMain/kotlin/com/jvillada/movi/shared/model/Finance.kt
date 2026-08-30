@@ -51,6 +51,17 @@ data class CreditTerms(
     val notes: String? = null,
     /** Ver [RecurringRule.remindMe]: la cuota de este crédito entra (o no) al barrido de avisos. */
     val remindMe: Boolean = true,
+    /**
+     * **Libranza**: la cuota la retiene el empleador del sueldo antes de depositarlo.
+     *
+     * Cambia lo que Movi tiene que pedirle al dueño. Una cuota normal es un gasto que él paga y
+     * registra; esta **ya se pagó sola** y la plata nunca llegó a su cuenta. Pedirle que la
+     * registre como gasto haría que descuente dos veces —el sueldo que ve ya viene neto— y no
+     * pedirle nada dejaría la deuda congelada.
+     *
+     * Ver [PAYROLL_DEDUCTION_CATEGORY] para cómo se registra sin romper ninguna de las dos cosas.
+     */
+    val payrollDeduction: Boolean = false,
 )
 
 @Serializable
@@ -302,6 +313,22 @@ data class RecurringRule(
     val amount: Long,
     val dayOfMonth: Int,
     val type: TransactionType,
+    /**
+     * **Desde cuándo corre esta regla.** ISO `"2026-09-01"`, o `null` = desde siempre.
+     *
+     * Existe por la cuota de un crédito. El dueño registró un préstamo desembolsado el 1 de
+     * septiembre con pago el día 1, y Movi le anunció la primera cuota **para ese mismo día**:
+     * *«no entiendo por qué quedó cargado el desembolso el mismo día que es la cuota; normalmente
+     * un desembolso es un mes aproximadamente antes de la primera cuota»*. Tenía razón — la regla
+     * sintética se armaba solo con el día del mes e ignoraba la fecha de desembolso.
+     *
+     * Con esto, una ocurrencia **anterior o igual** a esta fecha no existe: la primera cuota es
+     * la primera vez que cae el día de pago **después** del desembolso.
+     *
+     * `null` para las reglas que el dueño escribió a mano (un salario, un gimnasio): esas no
+     * tienen «desembolso» y corren desde siempre, como hasta ahora.
+     */
+    val activeFrom: String? = null,
     /**
      * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
      * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el

@@ -26,6 +26,9 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         type       = TransactionType.EXPENSE,
         // La regla es sintética, pero la decisión de avisar es del dueño y vive en credit_terms.
         remindMe   = terms.remindMe,
+        // La primera cuota va DESPUÉS del desembolso, no el mismo día. Sin esto, un crédito
+        // desembolsado el 1 con pago el día 1 anunciaba su primera cuota para ese mismo día.
+        activeFrom = terms.startDate,
     )
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */
@@ -33,7 +36,16 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
     Credits.join(Accounts, JoinType.INNER, Credits.accountId, Accounts.id)
         .selectAll()
         .where { Credits.userId eq userId }
-        .map { row ->
-            virtualRuleFor(row.toCreditTerms(), row[Accounts.name]) to row[Credits.lastRemindedPeriod]
+        .map { row -> row.toCreditTerms() to row }
+        // Una LIBRANZA no entra al barrido de avisos: su cuota ya se pagó sola, retenida del
+        // sueldo antes de que la plata llegara a la cuenta. Recordarle al dueño que «pague» algo
+        // que el empleador ya descontó es pedirle una acción que no existe — y si la registrara
+        // como gasto, descontaría dos veces, porque el salario que ve ya viene neto.
+        //
+        // La deuda igual tiene que bajar todos los meses: eso se registra desde la tarjeta del
+        // crédito, con `POST /api/credits/{id}/payroll-deduction`.
+        .filterNot { (terms, _) -> terms.payrollDeduction }
+        .map { (terms, row) ->
+            virtualRuleFor(terms, row[Accounts.name]) to row[Credits.lastRemindedPeriod]
         }
 }

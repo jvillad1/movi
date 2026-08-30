@@ -25,4 +25,6 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     startDate  = this[Credits.startDate],
     notes      = this[Credits.notes],
     remindMe   = this[Credits.remindMe],
+    // Nullable en la base, `false` en el wire: las filas viejas no la tienen.
+    payrollDeduction = this[Credits.payrollDeduction] ?: false,
 )

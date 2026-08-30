@@ -169,3 +169,20 @@ fun selectDueForReminder(
                 statusFor(due, today, leadDays) != PaymentStatus.UPCOMING
         }
         .map { it.first }
+
+/**
+ * ¿Esta regla ya está corriendo en [date]?
+ *
+ * Una regla con [RecurringRule.activeFrom] no existe **antes ni el mismo día** de esa fecha. Es lo
+ * que hace que la primera cuota de un crédito caiga después del desembolso y no el mismo día: el
+ * dueño registró un préstamo desembolsado el 1 de septiembre con pago el día 1, y Movi le anunciaba
+ * la cuota para ese mismo 1 de septiembre.
+ *
+ * Las reglas escritas a mano (un salario, un gimnasio) tienen `activeFrom = null` y corren desde
+ * siempre — no tienen un «desembolso» que marque un antes.
+ */
+fun ruleIsActiveOn(rule: RecurringRule, date: LocalDate): Boolean {
+    val desde = rule.activeFrom ?: return true
+    val inicio = runCatching { LocalDate.parse(desde) }.getOrNull() ?: return true
+    return date.isAfter(inicio)
+}

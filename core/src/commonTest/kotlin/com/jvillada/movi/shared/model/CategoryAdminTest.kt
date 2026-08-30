@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 /**
  * Las reglas de «Más → Categorías» que **no se pueden romper sin romper la plata del dueño**.
  *
- * La más importante es la primera: `isCashFlow` reconoce las cuatro categorías reservadas **por
+ * La más importante es la primera: `isCashFlow` reconoce las cinco categorías reservadas **por
  * su nombre exacto**, así que si alguien renombra una constante (o deja que la pantalla nueva las
  * toque), las cifras de ingresos y egresos de TODOS los meses cambian de golpe y en silencio.
  * Estos tests fijan esa relación en las dos direcciones.
@@ -18,25 +18,30 @@ class CategoryAdminTest {
     // ── Las reservadas ────────────────────────────────────────────────────────
 
     @Test
-    fun `las cuatro reservadas son exactamente las que isCashFlow reconoce por nombre`() {
+    fun `las reservadas son exactamente las que isCashFlow reconoce por nombre`() {
         assertEquals(
-            setOf("Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada"),
+            setOf("Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada", "Descuento de nómina"),
             RESERVED_CATEGORIES,
         )
         assertEquals(TRANSFER_CATEGORY, "Traspaso")
         assertEquals(OPENING_CATEGORY, "Saldo inicial")
         assertEquals(CARD_PAYMENT_CATEGORY, "Pago de tarjeta")
         assertEquals(ORPHANED_LEG_CATEGORY, "Cuenta eliminada")
+        assertEquals(PAYROLL_DEDUCTION_CATEGORY, "Descuento de nómina")
     }
 
     @Test
-    fun `las cuatro que isCashFlow excluye por nombre estan todas en la lista de reservadas`() {
+    fun `las reservadas que isCashFlow excluye por nombre estan todas en la lista`() {
         // Si alguna dejara de estar, la pantalla la dejaría renombrar y el mes entero cambiaría.
         //
-        // Ola 15: son CUATRO, no tres. [ORPHANED_LEG_CATEGORY] se sumó a la familia — la pata de
+        // Ola 17: son CINCO. [PAYROLL_DEDUCTION_CATEGORY] entró porque una libranza se descuenta
+        // del sueldo ANTES de que la plata llegue a la cuenta: contarla como gasto descontaría dos
+        // veces, porque el salario que el dueño ve ya viene neto.
+        //
+        // Ola 15: eran CUATRO, no tres. [ORPHANED_LEG_CATEGORY] se sumó a la familia — la pata de
         // un traspaso que perdió a su hermana no es plata ganada ni gastada, y mientras contaba,
         // borrar un crédito desembolsado de $257.000.000 subía «Ingresos del mes» de $12,4M a
-        // $269,4M. Que el bucle las recorra a las cuatro es lo que hace que sacar una del
+        // $269,4M. Que el bucle las recorra a las cinco es lo que hace que sacar una del
         // `isCashFlow` rompa este test en vez de romperle el mes al dueño.
         for (categoria in RESERVED_CATEGORIES) {
             assertFalse(

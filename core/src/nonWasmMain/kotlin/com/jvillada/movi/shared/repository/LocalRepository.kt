@@ -458,6 +458,27 @@ class LocalRepository(
      * estaba **sellada** y que el server ya no tiene se dejó de mostrar, porque se borró en otro
      * lado. Una fila sin sellar nunca es fantasma — es algo que falta subir.
      */
+    /**
+     * Renombrar pasa por el server y se espeja local, igual que el resto de las escrituras de
+     * cuenta: sin el espejo, el nombre viejo se seguiría viendo en el teléfono hasta la próxima
+     * lectura con red.
+     */
+    /** El descuento nace en el server (es idempotente allá) y se espeja como cualquier ajuste. */
+    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
+        val summary = remote.registerPayrollDeduction(accountId)
+        mirrorAccountLocally(summary.account)
+        summary.adjustmentEvent?.let { evento ->
+            db.transaction { mirrorEventLocally(evento, userId()) }
+        }
+        return summary
+    }
+
+    override suspend fun renameAccount(id: String, name: String): Account {
+        val actualizada = remote.renameAccount(id, name)
+        db.transaction { mirrorAccountLocally(actualizada) }
+        return actualizada
+    }
+
     override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
         val uid = userId()
         // La foto va ANTES de preguntar, igual que en getAccounts: es lo que hace que la regla
