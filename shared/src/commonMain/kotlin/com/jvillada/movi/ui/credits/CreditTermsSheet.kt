@@ -140,6 +140,9 @@ fun CreditTermsSheet(
     // Libranza: la cuota la retiene el empleador del sueldo antes de depositarlo. Ver
     // PAYROLL_DEDUCTION_CATEGORY en :core para por qué cambia el modelo entero.
     var esLibranza by remember { mutableStateOf(existingTerms?.payrollDeduction ?: false) }
+    // La otra forma de «esta cuota no sale de mi cuenta»: la paga otro. Ver
+    // THIRD_PARTY_PAYMENT_CATEGORY en :core — de los nueve créditos del dueño, TRES son así.
+    var quienPaga by remember { mutableStateOf(existingTerms?.paidBy ?: "") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -243,6 +246,11 @@ fun CreditTermsSheet(
                     notes = notes.trim().ifBlank { null },
                     remindMe = remindMe,
                     payrollDeduction = esLibranza,
+                    // Una libranza no puede además «pagarla otro»: son dos respuestas a la misma
+                    // pregunta y la casilla de arriba esconde este campo. Se limpia al guardar
+                    // para que marcar libranza sobre un crédito que decía «la paga Skandia» no
+                    // deje el rótulo viejo escrito en la base.
+                    paidBy = if (esLibranza) null else quienPaga.trim().takeIf { it.isNotBlank() },
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -559,8 +567,41 @@ fun CreditTermsSheet(
                     }
                 }
 
-                // El recordatorio no aplica a una libranza: ya se pagó sola.
+                // ¿La paga otro? Va justo debajo de la libranza porque contesta la MISMA pregunta
+                // —«¿esta cuota sale de tu cuenta?»— con la otra respuesta posible, y se esconde
+                // cuando la libranza ya la contestó: ofrecer las dos a la vez invitaría a marcar
+                // ambas y a tener que decidir después cuál gana.
+                //
+                // Texto libre y no un menú: quién paga la cuota de alguien es una lista que nadie
+                // puede enumerar de antemano. El dueño tiene tres casos y ninguno se parece —una
+                // pensión voluntaria, su esposa, su papá.
                 if (!esLibranza) {
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "¿QUIÉN PAGA ESTA CUOTA?",
+                        fontSize = 11.sp,
+                        color = MinTextMute,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.4.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    FieldBox("Yo — o escribe quién: Skandia, Caro…", quienPaga, { quienPaga = it })
+                    if (quienPaga.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "La deuda sigue siendo tuya y suma entera en tu deuda total. Lo que " +
+                                "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
+                                "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
+                            fontSize = 11.5.sp,
+                            color = MinTextMute,
+                            lineHeight = 16.sp,
+                        )
+                    }
+                }
+
+                // El recordatorio no aplica a una libranza ni a una cuota que paga otro: en los
+                // dos casos ya se pagó sola.
+                if (!esLibranza && quienPaga.isBlank()) {
                     Spacer(Modifier.height(16.dp))
                     // La cuota de este crédito entra al barrido de recordatorios salvo que el dueño
                     // diga que no. Casilla, no diálogo: no interrumpe el alta.

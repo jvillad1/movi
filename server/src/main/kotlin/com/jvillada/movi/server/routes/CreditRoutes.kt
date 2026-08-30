@@ -52,6 +52,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
+import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
 import com.jvillada.movi.server.time.AppClock
 
 /**
@@ -347,7 +348,7 @@ fun Route.creditRoutes() {
                     .firstOrNull()?.toAccount()
             } ?: return@post call.respond(HttpStatusCode.NotFound)
             if (cuenta.type != AccountType.LOAN) {
-                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Solo un crédito tiene descuento de nómina")
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Solo un crédito tiene cuotas que paga otro")
             }
 
             val terms = dbQuery {
@@ -355,8 +356,17 @@ fun Route.creditRoutes() {
                     .where { (Credits.accountId eq accountId) and (Credits.userId eq uid) }
                     .firstOrNull()?.toCreditTerms()
             } ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, "Este crédito no tiene términos cargados")
-            if (!terms.payrollDeduction) {
-                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Este crédito no está marcado como libranza")
+            // Este endpoint cubre las DOS formas de «esta cuota no sale de mi cuenta»: la
+            // libranza (la retiene el empleador) y el tercero que paga (Skandia, la esposa, un
+            // papá). El movimiento que escribe es idéntico salvo la categoría y el texto — lo
+            // que importa en ambos casos es que la deuda baje sin inventar un gasto. Duplicar la
+            // ruta habría dejado dos idempotencias que mantener en paralelo.
+            val quienPaga = terms.paidBy
+            if (!terms.payrollDeduction && quienPaga == null) {
+                return@post call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "Este crédito lo pagas tú: regístralo como un pago normal",
+                )
             }
 
             val ahora = System.currentTimeMillis()
@@ -367,13 +377,17 @@ fun Route.creditRoutes() {
                 .toLocalDate()
                 .toString()
                 .take(7)
+            // El id lleva el prefijo según el caso, y NO se unifican: un crédito que pasa de
+            // libranza a «lo paga Skandia» (o al revés) no puede quedar con un pago del mes
+            // bloqueado por la idempotencia del otro esquema.
+            val prefijo = if (terms.payrollDeduction) "ev_nomina" else "ev_tercero"
             val evento = FinancialEvent(
-                id = "ev_nomina_${accountId}_$periodo",
+                id = "${prefijo}_${accountId}_$periodo",
                 accountId = accountId,
                 type = TransactionType.INCOME,
                 amount = terms.installment,
-                category = PAYROLL_DEDUCTION_CATEGORY,
-                description = "Cuota descontada de la nómina",
+                category = if (terms.payrollDeduction) PAYROLL_DEDUCTION_CATEGORY else THIRD_PARTY_PAYMENT_CATEGORY,
+                description = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga",
                 timestamp = ahora,
                 source = EventSource.MANUAL,
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
@@ -415,6 +429,7 @@ private fun fillTerms(
     it[Credits.notes]       = terms.notes
     it[Credits.remindMe]    = terms.remindMe
     it[Credits.payrollDeduction] = terms.payrollDeduction
+    it[Credits.paidBy] = terms.paidBy?.trim()?.takeIf { v -> v.isNotBlank() }
 }
 
 private fun summaryFor(

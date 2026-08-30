@@ -111,6 +111,9 @@ fun isCashFlow(accountType: AccountType, type: TransactionType, category: String
     // que ya está excluida más abajo, pero dejarlo implícito haría que la exclusión dependiera de
     // dónde quedó guardado. La plata retenida del sueldo NUNCA es gasto ni ingreso del mes.
     category == PAYROLL_DEDUCTION_CATEGORY -> false
+    // Mismo motivo, otra fuente: la cuota que paga un tercero tampoco sale del bolsillo del
+    // dueño. Ver [THIRD_PARTY_PAYMENT_CATEGORY].
+    category == THIRD_PARTY_PAYMENT_CATEGORY -> false
     accountType == AccountType.LOAN        -> false
     accountType == AccountType.CREDIT_CARD -> type == TransactionType.EXPENSE
     else                                    -> true
@@ -137,3 +140,28 @@ fun isCashFlow(accountType: AccountType, type: TransactionType, category: String
  * nueva para que las cifras del mes queden bien.
  */
 const val PAYROLL_DEDUCTION_CATEGORY = "Descuento de nómina"
+
+/**
+ * La cuota de una deuda **del dueño** que paga **otro**: otra persona, o una bolsa que no es su
+ * cuenta corriente.
+ *
+ * Sale de leer el mapa financiero real del dueño y compararlo con lo que tenía cargado. De sus
+ * nueve créditos, **tres no se pagan con su sueldo**: las dos hipotecas de Davibank las cubre su
+ * pensión voluntaria de Skandia ($11.761.122/mes entre las dos) y el crédito de Cotrafa —que
+ * está a su nombre— lo paga su esposa ($1.371.000/mes). Cargarlos sin decir esto habría metido
+ * **~$13,1 millones mensuales** de gasto inventado en su flujo, y encima le habría reclamado
+ * cuotas vencidas que nadie le debe.
+ *
+ * ### Por qué no alcanzaba con [PAYROLL_DEDUCTION_CATEGORY]
+ *
+ * La libranza responde a la misma pregunta —«esta cuota no sale de tu cuenta»— pero con una
+ * respuesta distinta y ya ocupada: la retiene el empleador del sueldo. Llamar «Descuento de
+ * nómina» a lo que gira Skandia sería mentir en la única palabra que explica el movimiento.
+ *
+ * ### Lo que NO cambia
+ *
+ * La deuda **es del dueño** y sigue contando entera en su deuda total: quién paga la cuota no
+ * cambia de quién es el pasivo. Lo único que cambia es de dónde sale la plata cada mes — y por
+ * eso esto excluye del flujo y de los avisos, no del balance.
+ */
+const val THIRD_PARTY_PAYMENT_CATEGORY = "Pago de un tercero"

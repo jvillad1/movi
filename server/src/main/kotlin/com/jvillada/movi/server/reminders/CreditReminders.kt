@@ -44,8 +44,33 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
         //
         // La deuda igual tiene que bajar todos los meses: eso se registra desde la tarjeta del
         // crédito, con `POST /api/credits/{id}/payroll-deduction`.
-        .filterNot { (terms, _) -> terms.payrollDeduction }
+        .filter { (terms, _) -> entraAlBarridoDeAvisos(terms) }
         .map { (terms, row) ->
             virtualRuleFor(terms, row[Accounts.name]) to row[Credits.lastRemindedPeriod]
         }
 }
+
+/**
+ * ¿Esta cuota le genera un aviso de vencimiento al dueño?
+ *
+ * Función aparte del `filter` para poder testearla sin base de datos — el filtro vivía dentro de
+ * un `dbQuery` y era, en la práctica, código sin prueba.
+ *
+ * Dice que **no** en los dos casos en que la cuota no sale de su cuenta:
+ *
+ * - **Libranza**: la retiene el empleador del sueldo antes de depositarlo. Recordarle que
+ *   «pague» algo que ya le descontaron es pedirle una acción que no existe — y si la registrara
+ *   como gasto, descontaría dos veces, porque el salario que ve ya viene neto.
+ * - **La paga otro**: Skandia gira las dos hipotecas de Davibank, su esposa paga el Cotrafa que
+ *   está a nombre de él. Mismo razonamiento, otra fuente.
+ *
+ * En los dos casos la deuda igual tiene que bajar todos los meses, y eso se registra desde la
+ * tarjeta del crédito con `POST /api/credits/{id}/payroll-deduction`.
+ *
+ * Un nombre **en blanco** cuenta como «lo pago yo», no como un tercero anónimo. El server ya
+ * normaliza a null lo que llegue vacío, pero apagar los avisos de un crédito que el dueño sí
+ * paga —por un espacio de más— es el error caro de esta función, y no puede depender de que la
+ * normalización de otro archivo siga estando.
+ */
+fun entraAlBarridoDeAvisos(terms: CreditTerms): Boolean =
+    !terms.payrollDeduction && terms.paidBy.isNullOrBlank()

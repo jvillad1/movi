@@ -43,6 +43,7 @@ val RESERVED_CATEGORIES: Set<String> = setOf(
     CARD_PAYMENT_CATEGORY,    // «Pago de tarjeta»
     ORPHANED_LEG_CATEGORY,
     PAYROLL_DEDUCTION_CATEGORY,// «Descuento de nómina»
+    THIRD_PARTY_PAYMENT_CATEGORY, // «Pago de un tercero»
 )
 
 /**

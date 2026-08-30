@@ -285,6 +285,9 @@ object Credits : Table("credit_terms") {
      * arranque.
      */
     val payrollDeduction = bool("payroll_deduction").nullable()
+    // Nullable a propósito: `createMissingTablesAndColumns` corre DENTRO de la transacción de
+    // arranque, y una columna nullable es DDL que no puede fallar sobre filas existentes.
+    val paidBy = varchar("paid_by", 60).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)
