@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MinExpense
 import com.jvillada.movi.theme.MinPrimary
+import com.jvillada.movi.theme.MinSurfaceContainerHigh
 import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
 import com.jvillada.movi.theme.MinTextMute
@@ -86,6 +88,11 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     var subiendo by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    // Borrar pide confirmación, y no es ceremonia: el server hace un `delete` duro, no hay
+    // papelera, y los documentos NO se espejan en local — o sea que no queda ninguna copia. El
+    // «Borrar» vive a milímetros de «Abrir» dentro de una fila que además es clickable entera: un
+    // toque gordo en el teléfono se llevaba la escritura del apartamento, sin vuelta atrás.
+    var aBorrar by remember { mutableStateOf<Documento?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -113,8 +120,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     fileName = nombre,
                     bytes = bytes,
                     mimeType = mime,
-                    // El tipo se adivina por el nombre y se puede corregir después. Preguntarlo
-                    // antes de subir agregaría un paso a la acción más frecuente de la pantalla.
+                    // El tipo se adivina por el nombre. **Hoy no se puede corregir después** —no
+                    // hay selector al subir ni ruta para editarlo— así que un archivo mal
+                    // nombrado queda en «Otros». Se deja así a propósito en esta primera versión:
+                    // el tipo solo decide bajo qué encabezado aparece, y agregar un paso a la
+                    // acción más frecuente de la pantalla cuesta más que el error que evita. El
+                    // día que moleste, la salida es un `PATCH`, no preguntar antes de subir.
                     tipo = tipoSugeridoPara(nombre),
                 )
             }
@@ -135,8 +146,8 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     fun borrar(doc: Documento) {
         coroutine.launch {
             runCatching { Repositories.wallets.deleteDocument(doc.id) }
-                .onSuccess { refreshKey++ }
-                .onFailure { error = it.toUserMessage() }
+                .onSuccess { refreshKey++; aBorrar = null }
+                .onFailure { error = it.toUserMessage(); aBorrar = null }
         }
     }
 
@@ -193,7 +204,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                             FilaDeDocumento(
                                 doc = doc,
                                 onAbrir = { abrir(doc) },
-                                onBorrar = { borrar(doc) },
+                                onBorrar = { aBorrar = doc },
                             )
                         }
                         item(key = "espacio-${tipo.name}") { Spacer(Modifier.height(18.dp)) }
@@ -206,6 +217,73 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
         )
+
+        aBorrar?.let { doc ->
+            ConfirmarBorrado(
+                doc = doc,
+                onCancelar = { aBorrar = null },
+                onConfirmar = { borrar(doc) },
+            )
+        }
+    }
+}
+
+/**
+ * La confirmación de borrado. Dice **qué** se borra y que no hay vuelta atrás — las dos cosas que
+ * uno quiere leer antes de tocar el botón rojo.
+ */
+@Composable
+private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(onClick = onCancelar),
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(MinSurfaceContainerHigh)
+                .clickable(enabled = false) {}
+                .padding(horizontal = 20.dp, vertical = 22.dp),
+        ) {
+            Text("¿Borrar este documento?", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MinText)
+            Spacer(Modifier.height(8.dp))
+            Text(doc.nombre, fontSize = 14.sp, color = MinText)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
+                fontSize = 12.5.sp,
+                color = MinTextMute,
+                lineHeight = 17.sp,
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Cancelar",
+                    fontSize = 14.sp,
+                    color = MinTextMute,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onCancelar)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Borrar",
+                    fontSize = 14.sp,
+                    color = MinExpense,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onConfirmar)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            }
+        }
     }
 }
 

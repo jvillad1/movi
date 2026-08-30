@@ -548,8 +548,11 @@ class WalletRepositoryImpl(
             }))
         }.body()
 
+    // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
+    // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401
+    // al subir salía como «Algo salió mal» en vez de «Tu sesión expiró».
     override suspend fun getDocuments(): List<Documento> =
-        client.get("$baseUrl/api/documents").body()
+        client.get("$baseUrl/api/documents").exigirExito().body()
 
     override suspend fun uploadDocument(
         fileName: String,
@@ -574,17 +577,25 @@ class WalletRepositoryImpl(
                     append(HttpHeaders.ContentType, mimeType)
                 })
             }))
-        }.body()
+        }.exigirExito().body()
 
     override suspend fun getDocumentLink(id: String): EnlaceDeDescarga {
-        val relativo: EnlaceDeDescarga = client.post("$baseUrl/api/documents/$id/link").body()
+        val relativo: EnlaceDeDescarga = client.post("$baseUrl/api/documents/$id/link").exigirExito().body()
         // El server no sabe con qué origen lo llamaron; el cliente sí. Componerla acá evita que
         // cada pantalla tenga que acordarse de anteponer el baseUrl —y que una se olvide.
-        return relativo.copy(url = "$baseUrl${'$'}{relativo.url}")
+        return relativo.copy(url = baseUrl + relativo.url)
     }
 
     override suspend fun deleteDocument(id: String) {
-        client.delete("$baseUrl/api/documents/$id")
+        client.delete("$baseUrl/api/documents/$id").exigirExito()
+    }
+
+    /** La comprobación de status del archivo, extraída para no repetirla cuatro veces. */
+    private suspend fun HttpResponse.exigirExito(): HttpResponse {
+        if (!status.isSuccess()) {
+            throw ApiException(status.value, runCatching { bodyAsText() }.getOrNull())
+        }
+        return this
     }
 
     override suspend fun importStatement(decision: ImportDecision) {

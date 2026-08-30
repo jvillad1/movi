@@ -20,6 +20,8 @@ import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
+import io.ktor.utils.io.readRemaining
+import kotlinx.io.readByteArray
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -31,6 +33,36 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+
+/**
+ * Los tipos que Movi se anima a servir **`inline`**, o sea a dejar que el navegador los renderice
+ * en su propio origen.
+ *
+ * Es una lista blanca corta y aburrida a propósito. Todo lo demás se baja como adjunto.
+ *
+ * ### Por qué existe: era una toma de cuenta completa
+ *
+ * Sin esta lista, el `Content-Type` que servía Movi era **el que mandaba quien subió el archivo**.
+ * El registro es público, así que la cadena era: alguien se registra, sube un `extracto.html` (o
+ * un `.svg` con un `<script>` adentro) declarándolo `text/html`, pide su enlace de descarga y se
+ * lo manda al dueño por WhatsApp — «mirá tu extracto». El dueño lo abre y el script corre **en el
+ * origen de Movi**, que es el mismo que sirve la PWA y guarda su JWT de sesión de 30 días en
+ * `localStorage`. De ahí a la cuenta entera hay una línea de JavaScript.
+ *
+ * Lo encontró la revisión, con la sonda corrida contra la ruta: `Content-Type: text/html`,
+ * `Content-Disposition: inline`, y ningún `nosniff`.
+ *
+ * `text/plain` entra porque un `.txt` no ejecuta nada. `text/html` y `image/svg+xml` NO entran, y
+ * son justamente los dos que uno pensaría en agregar.
+ */
+private val MIMES_QUE_SE_MUESTRAN = setOf(
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "text/plain",
+)
 
 private fun ResultRow.toDocumento() = Documento(
     id = this[Documents.id],
@@ -81,6 +113,7 @@ fun Route.documentRoutes() {
         var mime = ""
         var bytes = ByteArray(0)
         var tipo = TipoDeDocumento.OTRO
+        var demasiadoGrande = false
         var accountId: String? = null
         var periodo: String? = null
         var notas: String? = null
@@ -90,7 +123,18 @@ fun Route.documentRoutes() {
                 is PartData.FileItem -> {
                     nombre = part.originalFileName?.takeIf { it.isNotBlank() } ?: "documento"
                     mime = part.contentType?.toString() ?: "application/octet-stream"
-                    bytes = part.streamProvider().readBytes()
+                    // Se lee CON TOPE, no entero y después se mide.
+                    //
+                    // La primera versión hacía `readBytes()` y comprobaba el tamaño después. La
+                    // revisión lo midió subiendo 40 MB: el server contestaba «el máximo es 10 MB»
+                    // *después* de haber materializado los 40 en el heap. Con 2 GB tumba el
+                    // proceso — y `railway.toml` reintenta solo 3 veces, así que tres subidas
+                    // grandes dejan Movi caído hasta que alguien redespliegue a mano. El registro
+                    // es público, o sea que no hace falta ser el dueño para provocarlo.
+                    // `forEachPart` no admite un `return` de la ruta, así que se marca y se
+                    // decide al salir del bucle — pero la lectura ya se cortó, que es el punto.
+                    val leido = part.leerConTope(MAX_DOCUMENTO_BYTES)
+                    if (leido == null) demasiadoGrande = true else bytes = leido
                 }
                 is PartData.FormItem -> when (part.name) {
                     "tipo" -> tipo = runCatching { TipoDeDocumento.valueOf(part.value) }.getOrDefault(TipoDeDocumento.OTRO)
@@ -103,17 +147,14 @@ fun Route.documentRoutes() {
             part.dispose()
         }
 
-        if (bytes.isEmpty()) {
-            return@post call.respond(HttpStatusCode.BadRequest, "No llegó ningún archivo")
-        }
-        // El tope se comprueba acá y no en el esquema: un límite en la columna fallaría con un
-        // error de base de datos, y el dueño vería «error del servidor» en vez de saber que su
-        // archivo pesa de más.
-        if (bytes.size > MAX_DOCUMENTO_BYTES) {
+        if (demasiadoGrande) {
             return@post call.respond(
                 HttpStatusCode.PayloadTooLarge,
-                "El archivo pesa ${bytes.size / (1024 * 1024)} MB y el máximo es ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
+                "El archivo pesa más de ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
             )
+        }
+        if (bytes.isEmpty()) {
+            return@post call.respond(HttpStatusCode.BadRequest, "No llegó ningún archivo")
         }
 
         val doc = Documento(
@@ -199,17 +240,35 @@ fun Route.documentContentRoutes() {
                 .firstOrNull()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
 
-        val mime = runCatching { ContentType.parse(fila[Documents.mimeType]) }
-            .getOrDefault(ContentType.Application.OctetStream)
-        // `Inline` y no `Attachment`: el camino normal es MIRAR el extracto, y el visor de PDF
-        // del navegador lo abre sin bajarlo. El nombre viaja igual, así que «guardar como» sigue
-        // proponiendo el nombre original.
+        // El mime GUARDADO no manda: se compara contra la lista blanca y lo que no está en ella
+        // se sirve como binario opaco. Ver [MIMES_QUE_SE_MUESTRAN] — esto era una toma de cuenta.
+        val declarado = fila[Documents.mimeType].substringBefore(';').trim().lowercase()
+        val seMuestra = declarado in MIMES_QUE_SE_MUESTRAN
+        val mime = if (seMuestra) {
+            runCatching { ContentType.parse(declarado) }.getOrDefault(ContentType.Application.OctetStream)
+        } else {
+            ContentType.Application.OctetStream
+        }
+
+        // Y aunque el tipo esté en la lista, el navegador no puede adivinar OTRO mirando los
+        // bytes: sin `nosniff`, un archivo declarado `text/plain` que empieza con `<html>` se
+        // renderiza como HTML en algunos navegadores, y la lista blanca no habría servido de nada.
+        call.response.header("X-Content-Type-Options", "nosniff")
+
+        // `Inline` solo para lo que se mira (el visor de PDF del navegador abre sin bajar);
+        // `Attachment` para todo lo demás, que es la forma de decir «esto no se renderiza acá».
+        //
+        // El nombre se sanea antes de entrar al header: lo eligió quien subió el archivo y una
+        // comilla rompe el `Content-Disposition`. Netty ya rechaza CR/LF —así que no hay
+        // response splitting— pero no hay motivo para depender de eso.
+        val nombreSeguro = fila[Documents.name]
+            .replace(Regex("[\\r\\n\"\\\\]"), "_")
+            .take(200)
+            .ifBlank { "documento" }
+        val disposicion = if (seMuestra) ContentDisposition.Inline else ContentDisposition.Attachment
         call.response.header(
             HttpHeaders.ContentDisposition,
-            ContentDisposition.Inline.withParameter(
-                ContentDisposition.Parameters.FileName,
-                fila[Documents.name],
-            ).toString(),
+            disposicion.withParameter(ContentDisposition.Parameters.FileName, nombreSeguro).toString(),
         )
         call.respondBytes(fila[Documents.content], mime)
     }
@@ -230,4 +289,20 @@ fun guardarDocumento(uid: String, doc: Documento, bytes: ByteArray) {
         it[notes] = doc.notas
         it[content] = bytes
     }
+}
+
+/**
+ * Lee la parte hasta [tope] bytes. Devuelve `null` apenas se pasa, **sin** terminar de leer.
+ *
+ * La diferencia con `readBytes()` + comprobar después no es de estilo: es cuánta memoria del
+ * server puede reservar un desconocido con una sola petición. Acá el peor caso son [tope] bytes
+ * más un bloque, pase lo que pase del otro lado.
+ *
+ * Se usa `provider()` y no `streamProvider()`, que además está deprecado en Ktor 3.
+ */
+private suspend fun PartData.FileItem.leerConTope(tope: Long): ByteArray? {
+    // Se piden `tope + 1` bytes: si vuelven más de `tope`, el archivo se pasa y no hizo falta
+    // leerlo entero para saberlo. El canal se descarta y el resto del cuerpo nunca se materializa.
+    val leidos = provider().readRemaining(tope + 1).readByteArray()
+    return if (leidos.size > tope) null else leidos
 }

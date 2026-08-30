@@ -9,6 +9,8 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
+import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
@@ -69,6 +71,18 @@ fun Route.statementRoutes() {
 
         if (bytes.isEmpty()) {
             call.respond(HttpStatusCode.BadRequest, "No file received")
+            return@post
+        }
+        // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
+        // que la de documentos: sin esto, un PDF de 200 MB entraba a Postgres por la puerta de
+        // atrás y después aparecía en la pantalla de Documentos, saltándose el límite que esa
+        // pantalla sí respeta. Dos topes distintos para el mismo dato terminan dejando pasar por
+        // una puerta lo que la otra rechaza.
+        if (bytes.size > MAX_DOCUMENTO_BYTES) {
+            call.respond(
+                HttpStatusCode.PayloadTooLarge,
+                "El archivo pesa más de ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
+            )
             return@post
         }
 
@@ -186,22 +200,42 @@ fun Route.statementRoutes() {
         // grande. Falla en silencio en el log, que es donde se mira.
         runCatching {
             dbQuery {
-                guardarDocumento(
-                    uid,
-                    Documento(
-                        id = "doc_${UUID.randomUUID()}",
-                        nombre = fileName,
-                        tipo = TipoDeDocumento.EXTRACTO,
-                        mimeType = mimeType.ifBlank { "application/octet-stream" }.take(120),
-                        bytes = bytes.size.toLong(),
-                        subidoEn = System.currentTimeMillis(),
-                        periodo = period.takeIf { it.isNotBlank() },
-                        notas = "Importado desde $bankName",
-                    ),
-                    bytes,
-                )
+                // **No se archiva dos veces el mismo papel.** Esto corre en la VISTA PREVIA, no
+                // en la importación: subir «Extracto_agosto.pdf», mirarlo, volver atrás y volver
+                // a subirlo dejaba dos filas idénticas —mismo nombre, mismo peso, mismo período,
+                // misma nota— indistinguibles en la pantalla. Se compara por nombre y tamaño, que
+                // es lo que un dueño reconoce como «el mismo archivo»; un hash sería más exacto y
+                // más caro, y acá el falso negativo (dos versiones distintas del mismo mes con el
+                // mismo peso al byte) es tan improbable como inofensivo.
+                val yaEstaba = Documents
+                    .select(listOf(Documents.id))
+                    .where {
+                        (Documents.userId eq uid) and
+                            (Documents.name eq fileName.take(255)) and
+                            (Documents.sizeBytes eq bytes.size.toLong())
+                    }
+                    .any()
+                if (!yaEstaba) {
+                    guardarDocumento(
+                        uid,
+                        Documento(
+                            id = "doc_${UUID.randomUUID()}",
+                            // Recortado como en la ruta de documentos: la columna es varchar(255)
+                            // y un nombre más largo hacía fallar el insert, o sea que el archivado
+                            // se perdía en silencio justo para los archivos peor nombrados.
+                            nombre = fileName.take(255),
+                            tipo = TipoDeDocumento.EXTRACTO,
+                            mimeType = mimeType.ifBlank { "application/octet-stream" }.take(120),
+                            bytes = bytes.size.toLong(),
+                            subidoEn = System.currentTimeMillis(),
+                            periodo = period.takeIf { it.isNotBlank() },
+                            notas = "Importado desde $bankName",
+                        ),
+                        bytes,
+                    )
+                }
             }
-        }.onFailure { println("[documentos] no se pudo archivar $fileName: ${'$'}{it.message}") }
+        }.onFailure { call.application.log.warn("[documentos] no se pudo archivar $fileName", it) }
 
         call.respond(
             StatementParseResult(
