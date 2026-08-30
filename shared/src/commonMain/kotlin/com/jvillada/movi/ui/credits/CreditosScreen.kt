@@ -273,6 +273,29 @@ private fun LoanCard(
                 Text("Cuota · día ${t.dayOfMonth}", fontSize = 12.sp, color = MinTextMute)
                 Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
             }
+            // Plazo y fecha de desembolso: son los dos datos que uno compara contra el extracto,
+            // y estaban solo dentro de la hoja de edición.
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("${t.termMonths} meses · desde ${t.startDate}", fontSize = 11.5.sp, color = MinTextFaint)
+                Text(t.bank, fontSize = 11.5.sp, color = MinTextFaint)
+            }
+            // La NOTA, que es donde vive lo que falta confirmar con el banco («plazo estimado»,
+            // «la deuda subió», «preguntar el capital original»). Estaba escondida detrás del
+            // lápiz: había que entrar a cada crédito para recordar qué tenía pendiente, que es
+            // justo lo contrario de para qué sirve una nota.
+            t.notes?.takeIf { it.isNotBlank() }?.let { nota ->
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = nota,
+                    fontSize = 11.5.sp,
+                    color = MinTextMute,
+                    lineHeight = 16.sp,
+                )
+            }
         }
         // La deuda es estado (se mueve a diario por intereses), no
         // contrato: por eso cuadrarla con el banco vive fuera de la
