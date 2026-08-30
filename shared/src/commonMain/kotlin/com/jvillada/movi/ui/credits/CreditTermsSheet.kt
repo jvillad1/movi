@@ -585,7 +585,17 @@ fun CreditTermsSheet(
                         letterSpacing = 0.4.sp,
                     )
                     Spacer(Modifier.height(8.dp))
-                    FieldBox("Yo — o escribe quién: Skandia, Caro…", quienPaga, { quienPaga = it })
+                    // El tope es el de la columna (`varchar(60)`). Sin él, un nombre más largo
+                    // hacía fallar el INSERT en Postgres y se caía el guardado ENTERO del
+                    // crédito con un 500 sin mensaje —no hay StatusPages—: el dueño perdía la
+                    // edición completa por haber escrito de más en un rótulo. El server recorta
+                    // igual, por si llega de otro cliente; acá se corta antes para que ni
+                    // siquiera se pueda escribir de más.
+                    FieldBox(
+                        "Yo — o escribe quién: Skandia, Caro…",
+                        quienPaga,
+                        { quienPaga = it.take(60) },
+                    )
                     if (quienPaga.isNotBlank()) {
                         Spacer(Modifier.height(6.dp))
                         Text(
