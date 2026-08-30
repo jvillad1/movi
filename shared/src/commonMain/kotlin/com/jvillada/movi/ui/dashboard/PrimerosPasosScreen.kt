@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,11 +20,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.theme.MinBg
+import com.jvillada.movi.theme.MinPrimary
 import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
@@ -79,6 +85,12 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     var data by remember { mutableStateOf(DashboardDataCache.data ?: DashboardData()) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
+    // Con la guarda de `puedeAfirmarVacio`, una lectura que falla ya no deja una tarjeta con
+    // todo sin tildar: deja una barra de progreso. Sin este contador esa barra giraba PARA
+    // SIEMPRE, sin decir qué pasó y sin manera de reintentar — el único `refreshKey++` que había
+    // vivía dentro de la hoja de crear cuenta, o sea justo dentro de lo que la guarda esconde.
+    // La salida era salir de la pantalla y volver a entrar, y nada se lo indicaba al dueño.
+    var fallo by remember { mutableStateOf(false) }
 
     // **Sin esto la pantalla miente sobre lo que el dueño acaba de hacer.** «Agregar» es una
     // MODAL (ver `opensAsOverlay`): se dibuja encima y esta pantalla nunca sale de la
@@ -91,26 +103,32 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     val refreshTick = LocalRefreshTick.current
 
     LaunchedEffect(refreshKey, refreshTick) {
+        fallo = false
         coroutineScope {
             launch {
                 runCatching { Repositories.wallets.getAccounts() }
                     .onSuccess { a -> data = data.copy(accounts = a) }
+                    .onFailure { fallo = true }
             }
             launch {
                 runCatching { Repositories.wallets.getFinanceSummary(Scope.SELF) }
                     .onSuccess { s -> data = data.copy(summary = s) }
+                    .onFailure { fallo = true }
             }
             launch {
                 runCatching { Repositories.wallets.getCredits() }
                     .onSuccess { c -> data = data.copy(credits = c) }
+                    .onFailure { fallo = true }
             }
             launch {
                 runCatching { Repositories.wallets.getCards() }
                     .onSuccess { c -> data = data.copy(cards = c) }
+                    .onFailure { fallo = true }
             }
             launch {
                 runCatching { Repositories.wallets.getUpcomingPayments() }
                     .onSuccess { u -> data = data.copy(upcoming = u) }
+                    .onFailure { fallo = true }
             }
         }
         // Lo recién traído también sirve para el Inicio: es exactamente el mismo modelo.
@@ -139,11 +157,39 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                 color = MinTextMute,
                 modifier = Modifier.padding(horizontal = 18.dp).padding(top = 4.dp, bottom = 14.dp),
             )
-            PrimerosPasosCard(
-                data = data,
-                onNavigate = onNavigate,
-                onShowCreateSheet = { showCreateSheet = true },
-            )
+            // Esta pantalla existe para contestar «¿me falta algo?», así que no puede contestar
+            // «te falta todo» mientras todavía está preguntando. La caché suele llegar llena
+            // (se entra desde «Más», o sea después del Inicio), pero un arranque en frío de la
+            // web sí puede caer acá sin nada: ahí se espera, no se inventa.
+            if (!data.puedeAfirmarVacio && fallo) {
+                // Se dice qué pasó y se ofrece la salida, en vez de girar sin fin.
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+                    Text(
+                        text = "No pudimos revisar qué te falta. Puede ser la conexión.",
+                        fontSize = 13.sp,
+                        color = MinTextMute,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Reintentar",
+                        fontSize = 13.sp,
+                        color = MinPrimary,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { refreshKey++ }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            } else if (!data.puedeAfirmarVacio) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp))
+            } else {
+                PrimerosPasosCard(
+                    data = data,
+                    onNavigate = onNavigate,
+                    onShowCreateSheet = { showCreateSheet = true },
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

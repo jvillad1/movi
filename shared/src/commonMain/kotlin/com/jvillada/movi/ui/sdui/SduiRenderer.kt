@@ -177,7 +177,7 @@ private fun clickHandler(
  */
 @Composable
 private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
-    val balance = heroBalance(data.accounts)
+    val balance = heroBalance(data.accounts.orEmpty())
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
     val flujo = ingresos - egresos
@@ -192,8 +192,11 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         // mismo calcula, sin ventana de desalineación con la fila del server.
         Text(text = heroBalanceTitle(section), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
         Spacer(Modifier.height(10.dp))
+        // Antes de que las cuentas contesten, un «$0» de 44 sp es la afirmación más fuerte que
+        // hace esta pantalla, y es falsa mientras carga: en la web (sin caché que sobreviva a
+        // recargar) el dueño veía «Tu plata $0» durante segundos. Un guion no miente.
         Text(
-            text = formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
+            text = if (data.accounts == null) "—" else formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
             fontSize = 44.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Normal,
@@ -253,12 +256,17 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         }
         Hairline()
         Spacer(Modifier.height(16.dp))
+        // Las tres cifras chicas salen del MISMO resumen que el número grande de arriba, así que
+        // siguen su misma regla: sin respuesta, un guion. Antes decían «$0 / $0 / $0» al lado del
+        // «—» recién puesto arriba, que es la peor combinación posible — parece que la app sabe.
+        val sinResumen = data.summary == null
+        fun cifra(v: Long) = if (sinResumen) "—" else formatMoneyCompact(v)
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf(
-                Triple("Ingresos", formatMoneyCompact(ingresos), MinText),
-                Triple("Gastos", formatMoneyCompact(egresos), MinText),
+                Triple("Ingresos", cifra(ingresos), MinText),
+                Triple("Gastos", cifra(egresos), MinText),
                 // F36: un mes en rojo se ve en rojo.
-                Triple("Flujo del mes", formatMoneyCompact(flujo), if (flujo < 0) MinExpense else MinText),
+                Triple("Flujo del mes", cifra(flujo), if (!sinResumen && flujo < 0) MinExpense else MinText),
             ).forEach { (label, value, color) ->
                 Column(modifier = Modifier.weight(1f)) {
                     Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
