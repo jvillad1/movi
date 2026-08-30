@@ -17,6 +17,7 @@ import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeCommaSeparatedText
 import platform.UniformTypeIdentifiers.UTTypeImage
+import platform.UniformTypeIdentifiers.UTTypeItem
 import platform.UniformTypeIdentifiers.UTTypePDF
 import platform.UniformTypeIdentifiers.UTTypePlainText
 import platform.UniformTypeIdentifiers.UTTypeSpreadsheet
@@ -92,7 +93,8 @@ private fun UIViewController.topMost(): UIViewController {
 
 @Composable
 actual fun rememberFilePicker(
-    onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit
+    aceptar: TiposDeArchivo,
+    onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit,
 ): () -> Unit {
     val host = LocalUIViewController.current
     val currentOnResult by rememberUpdatedState(onResult)
@@ -103,16 +105,21 @@ actual fun rememberFilePicker(
             currentOnResult(name, bytes, mimeTypeFor(url))
         }
     }
-    return remember(host, delegate) {
+    return remember(host, delegate, aceptar) {
         {
             val picker = UIDocumentPickerViewController(
-                forOpeningContentTypes = listOf(
-                    UTTypePDF,
-                    UTTypeCommaSeparatedText,
-                    UTTypePlainText,
-                    UTTypeSpreadsheet,
-                    UTTypeImage,
-                ),
+                // `UTTypeItem` es la raíz de la jerarquía: cualquier archivo desciende de ella.
+                // Sin esto, un contrato en .docx o una escritura en .zip no se podían ni elegir.
+                forOpeningContentTypes = when (aceptar) {
+                    TiposDeArchivo.TODOS -> listOf(UTTypeItem)
+                    TiposDeArchivo.EXTRACTOS -> listOf(
+                        UTTypePDF,
+                        UTTypeCommaSeparatedText,
+                        UTTypePlainText,
+                        UTTypeSpreadsheet,
+                        UTTypeImage,
+                    )
+                },
                 asCopy = true,
             )
             picker.delegate = delegate
