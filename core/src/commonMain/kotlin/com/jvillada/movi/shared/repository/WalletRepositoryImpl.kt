@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -544,6 +547,45 @@ class WalletRepositoryImpl(
                 })
             }))
         }.body()
+
+    override suspend fun getDocuments(): List<Documento> =
+        client.get("$baseUrl/api/documents").body()
+
+    override suspend fun uploadDocument(
+        fileName: String,
+        bytes: ByteArray,
+        mimeType: String,
+        tipo: TipoDeDocumento,
+        accountId: String?,
+        periodo: String?,
+        notas: String?,
+    ): Documento =
+        client.post("$baseUrl/api/documents") {
+            setBody(MultiPartFormDataContent(formData {
+                // Los campos de texto van ANTES del archivo: el server los lee en cualquier
+                // orden, pero un multipart con el binario primero obliga a bufferearlo entero
+                // antes de conocer el tipo, y estos archivos pesan megas.
+                append("tipo", tipo.name)
+                accountId?.let { append("accountId", it) }
+                periodo?.let { append("periodo", it) }
+                notas?.let { append("notas", it) }
+                append("file", bytes, Headers.build {
+                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                    append(HttpHeaders.ContentType, mimeType)
+                })
+            }))
+        }.body()
+
+    override suspend fun getDocumentLink(id: String): EnlaceDeDescarga {
+        val relativo: EnlaceDeDescarga = client.post("$baseUrl/api/documents/$id/link").body()
+        // El server no sabe con qué origen lo llamaron; el cliente sí. Componerla acá evita que
+        // cada pantalla tenga que acordarse de anteponer el baseUrl —y que una se olvide.
+        return relativo.copy(url = "$baseUrl${'$'}{relativo.url}")
+    }
+
+    override suspend fun deleteDocument(id: String) {
+        client.delete("$baseUrl/api/documents/$id")
+    }
 
     override suspend fun importStatement(decision: ImportDecision) {
         client.post("$baseUrl/api/statements/import") {

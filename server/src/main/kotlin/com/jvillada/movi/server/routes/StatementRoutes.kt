@@ -7,6 +7,8 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
@@ -168,6 +170,38 @@ fun Route.statementRoutes() {
             val date = LocalDate.parse(parsed.firstOrNull()?.date ?: "2025-01-01")
             "${monthName(date.monthValue)} ${date.year}"
         }.getOrDefault("")
+
+        // El extracto se ARCHIVA, no se tira.
+        //
+        // Hasta acá esta ruta recibía el PDF, lo parseaba y perdía los bytes: quedaban los
+        // movimientos y desaparecía el papel del que salieron — que es exactamente lo que hace
+        // falta el día que una cifra no cuadra con el banco. El dueño lo pidió así: «me gustaría
+        // que guardemos en Movi extractos y documentos en algún lugar y los podamos listar y
+        // acceder desde el sitio y la app».
+        //
+        // Se archiva al SUBIR y no al confirmar la importación, a propósito: un extracto que se
+        // miró y no se importó igual es un papel del banco que uno quiere tener. Y si el
+        // archivado falla, la importación NO se cae: el dueño vino a importar movimientos, y
+        // perder eso por no poder guardar una copia sería cambiar un problema chico por uno
+        // grande. Falla en silencio en el log, que es donde se mira.
+        runCatching {
+            dbQuery {
+                guardarDocumento(
+                    uid,
+                    Documento(
+                        id = "doc_${UUID.randomUUID()}",
+                        nombre = fileName,
+                        tipo = TipoDeDocumento.EXTRACTO,
+                        mimeType = mimeType.ifBlank { "application/octet-stream" }.take(120),
+                        bytes = bytes.size.toLong(),
+                        subidoEn = System.currentTimeMillis(),
+                        periodo = period.takeIf { it.isNotBlank() },
+                        notas = "Importado desde $bankName",
+                    ),
+                    bytes,
+                )
+            }
+        }.onFailure { println("[documentos] no se pudo archivar $fileName: ${'$'}{it.message}") }
 
         call.respond(
             StatementParseResult(

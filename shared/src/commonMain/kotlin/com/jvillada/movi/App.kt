@@ -23,6 +23,7 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.documentos.DocumentosScreen
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -236,6 +237,7 @@ fun App() {
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 Screen.Recurrentes       -> RecurrentesScreen(navigate)
                 Screen.Categorias        -> CategoriasScreen(navigate)
+                Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                 Screen.OCRConfirm        -> OCRConfirmScreen(navigate)

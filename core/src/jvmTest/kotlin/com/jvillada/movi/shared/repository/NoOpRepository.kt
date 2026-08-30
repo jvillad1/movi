@@ -1,5 +1,8 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.shared.model.ImportDecision
@@ -332,6 +335,28 @@ open class NoOpRepository(
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String) =
         StatementParseResult("", "", "", emptyList(), emptyList())
     override suspend fun importStatement(decision: ImportDecision) {}
+    override suspend fun getDocuments() = emptyList<Documento>()
+    override suspend fun uploadDocument(
+        fileName: String,
+        bytes: ByteArray,
+        mimeType: String,
+        tipo: TipoDeDocumento,
+        accountId: String?,
+        periodo: String?,
+        notas: String?,
+    ) = Documento(
+        id = "doc-stub",
+        nombre = fileName,
+        tipo = tipo,
+        mimeType = mimeType,
+        bytes = bytes.size.toLong(),
+        subidoEn = 0L,
+        accountId = accountId,
+        periodo = periodo,
+        notas = notas,
+    )
+    override suspend fun getDocumentLink(id: String) = EnlaceDeDescarga(url = "", expiraEn = 0L)
+    override suspend fun deleteDocument(id: String) {}
     override suspend fun getStatementImports() = emptyList<StatementImport>()
     override suspend fun getStatementImportDetail(id: String) =
         StatementImportDetail(StatementImport("", "", "", "", 0L, 0, 0), emptyList())
