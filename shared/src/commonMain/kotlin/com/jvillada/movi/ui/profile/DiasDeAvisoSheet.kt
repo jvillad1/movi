@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -68,69 +70,85 @@ fun DiasDeAvisoSheet(
                 .clickable(enabled = false) {},
         ) {
             SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
+            // El contenido de la hoja se desplaza.
+            //
+            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+            // propia hoja. Sin manera de llegar a él.
+            //
+            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
+            ) {
 
-            Text(
-                text = "¿Con cuánta anticipación te avisamos?",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-            )
-            Text(
-                text = reminderLeadHint(dias),
-                fontSize = 13.sp,
-                color = MinTextMute,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(bottom = 18.dp),
-            )
+                Text(
+                    text = "¿Con cuánta anticipación te avisamos?",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                )
+                Text(
+                    text = reminderLeadHint(dias),
+                    fontSize = 13.sp,
+                    color = MinTextMute,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(bottom = 18.dp),
+                )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                listOf(0, 1, 2, 3, 5, 7).forEach { d ->
-                    val elegido = d == dias
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (elegido) MinPrimary else MinSurfaceContainer)
-                            .clickable(enabled = !saving) { dias = d },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = d.toString(),
-                            fontSize = 14.sp,
-                            fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (elegido) MinBg else MinText,
-                        )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf(0, 1, 2, 3, 5, 7).forEach { d ->
+                        val elegido = d == dias
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (elegido) MinPrimary else MinSurfaceContainer)
+                                .clickable(enabled = !saving) { dias = d },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = d.toString(),
+                                fontSize = 14.sp,
+                                fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (elegido) MinBg else MinText,
+                            )
+                        }
                     }
                 }
+
+                if (error != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(text = error, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (saving) MinSurfaceContainerHighest else MinPrimary)
+                        .clickable(enabled = !saving) { onSave(dias) }
+                        .padding(vertical = 15.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (saving) "Guardando…" else "Guardar",
+                        color = if (saving) MinTextMute else MinBg,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+
+                Spacer(Modifier.height(28.dp))
             }
-
-            if (error != null) {
-                Spacer(Modifier.height(12.dp))
-                Text(text = error, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (saving) MinSurfaceContainerHighest else MinPrimary)
-                    .clickable(enabled = !saving) { onSave(dias) }
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Guardando…" else "Guardar",
-                    color = if (saving) MinTextMute else MinBg,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-
-            Spacer(Modifier.height(28.dp))
         }
     }
 }

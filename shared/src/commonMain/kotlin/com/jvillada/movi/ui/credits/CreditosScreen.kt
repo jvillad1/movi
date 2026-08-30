@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Edit
@@ -462,20 +464,36 @@ private fun DebtTypeChooserSheet(
                 .clickable(enabled = false) {},
         ) {
             SheetHandleWithClose(onClose = onDismiss)
-            Text("¿Qué deuda quieres registrar?", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
-            Spacer(Modifier.height(14.dp))
-            DebtTypeOption(
-                title = "Préstamo",
-                subtitle = "Cuota fija, tasa y plazo — libranza, libre inversión, vehículo",
-                onClick = onLoan,
-            )
-            Spacer(Modifier.height(8.dp))
-            DebtTypeOption(
-                title = "Tarjeta de crédito",
-                subtitle = "Cupo, día de corte y día de pago",
-                onClick = onCard,
-            )
-            Spacer(Modifier.height(24.dp))
+            // El contenido de la hoja se desplaza.
+            //
+            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+            // propia hoja. Sin manera de llegar a él.
+            //
+            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
+            ) {
+                Text("¿Qué deuda quieres registrar?", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                Spacer(Modifier.height(14.dp))
+                DebtTypeOption(
+                    title = "Préstamo",
+                    subtitle = "Cuota fija, tasa y plazo — libranza, libre inversión, vehículo",
+                    onClick = onLoan,
+                )
+                Spacer(Modifier.height(8.dp))
+                DebtTypeOption(
+                    title = "Tarjeta de crédito",
+                    subtitle = "Cupo, día de corte y día de pago",
+                    onClick = onCard,
+                )
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 }

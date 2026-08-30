@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -80,119 +82,135 @@ fun PeriodoSheet(
                 .clickable(enabled = false) {},
         ) {
             SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-            Text(
-                text = "¿Qué día empieza tu mes?",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-            )
-            Text(
-                text = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
-                    "Si te pagan el 26, elige 26 y el mes te va a cuadrar con el sueldo.",
-                fontSize = 13.sp,
-                color = MinTextMute,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(bottom = 16.dp),
-            )
-
-            // La consecuencia, en vivo: sin esto «26» es un número sin significado.
+            // El contenido de la hoja se desplaza.
+            //
+            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+            // propia hoja. Sin manera de llegar a él.
+            //
+            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MinSurfaceContainer)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
             ) {
+
                 Text(
-                    text = "Hoy estarías en ${nombreDe(hoy)}",
-                    fontSize = 14.5.sp,
+                    text = "¿Qué día empieza tu mes?",
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MinText,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
                 )
-                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = rangoLegibleDe(hoy, settings) ?: "Del 1 al último día del mes",
-                    fontSize = 12.5.sp,
+                    text = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
+                        "Si te pagan el 26, elige 26 y el mes te va a cuadrar con el sueldo.",
+                    fontSize = 13.sp,
                     color = MinTextMute,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(bottom = 16.dp),
                 )
-                if (settings.esMesDeCalendario) {
-                    Spacer(Modifier.height(6.dp))
+
+                // La consecuencia, en vivo: sin esto «26» es un número sin significado.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MinSurfaceContainer)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                ) {
                     Text(
-                        text = "Es el mes de calendario, como viene por defecto.",
-                        fontSize = 11.5.sp,
-                        color = MinTextFaint,
+                        text = "Hoy estarías en ${nombreDe(hoy)}",
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
                     )
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                modifier = Modifier.fillMaxWidth().height(196.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items((1..31).toList()) { d ->
-                    val elegido = d == dia
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (elegido) MinPrimary else MinSurfaceContainer)
-                            .clickable(enabled = !saving) { dia = d },
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = rangoLegibleDe(hoy, settings) ?: "Del 1 al último día del mes",
+                        fontSize = 12.5.sp,
+                        color = MinTextMute,
+                    )
+                    if (settings.esMesDeCalendario) {
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            text = d.toString(),
-                            fontSize = 13.sp,
-                            fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (elegido) MinBg else MinText,
-                            textAlign = TextAlign.Center,
+                            text = "Es el mes de calendario, como viene por defecto.",
+                            fontSize = 11.5.sp,
+                            color = MinTextFaint,
                         )
                     }
                 }
+
+                Spacer(Modifier.height(18.dp))
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(7),
+                    modifier = Modifier.fillMaxWidth().height(196.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items((1..31).toList()) { d ->
+                        val elegido = d == dia
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (elegido) MinPrimary else MinSurfaceContainer)
+                                .clickable(enabled = !saving) { dia = d },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = d.toString(),
+                                fontSize = 13.sp,
+                                fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (elegido) MinBg else MinText,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+
+                // Un 29, 30 o 31 no existe en todos los meses. Se dice ANTES de guardar, porque es la
+                // duda que aparece justo al tocar ese número.
+                if (dia > 28) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "En los meses que no tienen día $dia, el corte cae el último día del mes.",
+                        fontSize = 12.sp,
+                        color = MinTextMute,
+                        lineHeight = 16.sp,
+                    )
+                }
+
+                if (error != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(text = error, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (saving) MinSurfaceContainerHighest else MinPrimary)
+                        .clickable(enabled = !saving) { onSave(dia) }
+                        .padding(vertical = 15.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (saving) "Guardando…" else "Guardar",
+                        color = if (saving) MinTextMute else MinBg,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+
+                Spacer(Modifier.height(28.dp))
             }
-
-            // Un 29, 30 o 31 no existe en todos los meses. Se dice ANTES de guardar, porque es la
-            // duda que aparece justo al tocar ese número.
-            if (dia > 28) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "En los meses que no tienen día $dia, el corte cae el último día del mes.",
-                    fontSize = 12.sp,
-                    color = MinTextMute,
-                    lineHeight = 16.sp,
-                )
-            }
-
-            if (error != null) {
-                Spacer(Modifier.height(12.dp))
-                Text(text = error, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (saving) MinSurfaceContainerHighest else MinPrimary)
-                    .clickable(enabled = !saving) { onSave(dia) }
-                    .padding(vertical = 15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Guardando…" else "Guardar",
-                    color = if (saving) MinTextMute else MinBg,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-
-            Spacer(Modifier.height(28.dp))
         }
     }
 }

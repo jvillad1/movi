@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.accounts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -120,101 +122,117 @@ fun DeleteAccountSheet(
         ) {
             // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
             SheetHandleWithClose(onClose = onDismiss, enabled = !deleting)
-
-            Text(
-                text = "Eliminar cuenta",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-                letterSpacing = (-0.2).sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
-            )
-
-            // F55: la consecuencia real, con el conteo real — no un genérico "¿estás seguro?".
-            Text(
-                text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
-                    "Esto no se puede deshacer.",
-                fontSize = 14.sp,
-                color = MinTextMute,
-                lineHeight = 19.sp,
-            )
-
-            // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
-            // cuenta sino en otra: la mitad del traspaso que sobrevive. Solo aparece si la hay.
+            // El contenido de la hoja se desplaza.
             //
-            // Se despega del párrafo rutinario a propósito —bloque con fondo propio, mismo cuerpo
-            // de letra, color de texto pleno— porque es lo que justifica la pausa. Con el gris
-            // apagado y un punto más chico, los dos párrafos se leían como uno solo y el aviso se
-            // perdía justo en la hoja donde hay que leerlo.
+            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+            // propia hoja. Sin manera de llegar a él.
             //
-            // Ola 15: son DOS avisos posibles y van en UN solo bloque, separados por un renglón en
-            // blanco. Dos cajas seguidas competirían entre sí justo donde hay que leer despacio, y
-            // el orden importa: primero lo que le pasa al patrimonio (la cifra grande, la que no
-            // se puede deshacer), después lo que le pasa a los movimientos de las otras cuentas.
-            val avisos = listOfNotNull(
-                balanceWarningLabel(accountBalance, accountIsDebt, accountBalanceCurrency),
-                if (transferCount > 0) {
-                    transferWarningLabel(transferCount, transferAmount, transferCurrency)
-                } else {
-                    null
-                },
-            )
-            if (avisos.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = avisos.joinToString("\n\n"),
-                    fontSize = 14.sp,
-                    color = MinText,
-                    lineHeight = 19.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MinSurfaceContainerLow)
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                )
-            }
-
-            if (error != null) {
-                Spacer(Modifier.height(12.dp))
-                Text(text = error!!, fontSize = 12.sp, color = MinExpense)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(MinSurfaceContainerLow)
-                        .clickable(enabled = !deleting, onClick = onDismiss),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1.4f)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (!deleting) MinExpenseContainer else MinSurfaceContainerLow)
-                        .clickable(enabled = !deleting) { doDelete() },
-                    contentAlignment = Alignment.Center,
-                ) {
+
+                Text(
+                    text = "Eliminar cuenta",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.2).sp,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                )
+
+                // F55: la consecuencia real, con el conteo real — no un genérico "¿estás seguro?".
+                Text(
+                    text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
+                        "Esto no se puede deshacer.",
+                    fontSize = 14.sp,
+                    color = MinTextMute,
+                    lineHeight = 19.sp,
+                )
+
+                // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
+                // cuenta sino en otra: la mitad del traspaso que sobrevive. Solo aparece si la hay.
+                //
+                // Se despega del párrafo rutinario a propósito —bloque con fondo propio, mismo cuerpo
+                // de letra, color de texto pleno— porque es lo que justifica la pausa. Con el gris
+                // apagado y un punto más chico, los dos párrafos se leían como uno solo y el aviso se
+                // perdía justo en la hoja donde hay que leerlo.
+                //
+                // Ola 15: son DOS avisos posibles y van en UN solo bloque, separados por un renglón en
+                // blanco. Dos cajas seguidas competirían entre sí justo donde hay que leer despacio, y
+                // el orden importa: primero lo que le pasa al patrimonio (la cifra grande, la que no
+                // se puede deshacer), después lo que le pasa a los movimientos de las otras cuentas.
+                val avisos = listOfNotNull(
+                    balanceWarningLabel(accountBalance, accountIsDebt, accountBalanceCurrency),
+                    if (transferCount > 0) {
+                        transferWarningLabel(transferCount, transferAmount, transferCurrency)
+                    } else {
+                        null
+                    },
+                )
+                if (avisos.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        text = if (deleting) "Eliminando…" else "Eliminar cuenta",
+                        text = avisos.joinToString("\n\n"),
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (!deleting) MinExpense else MinTextFaint,
+                        color = MinText,
+                        lineHeight = 19.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MinSurfaceContainerLow)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                     )
                 }
-            }
 
-            Spacer(Modifier.height(14.dp))
+                if (error != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MinSurfaceContainerLow)
+                            .clickable(enabled = !deleting, onClick = onDismiss),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1.4f)
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (!deleting) MinExpenseContainer else MinSurfaceContainerLow)
+                            .clickable(enabled = !deleting) { doDelete() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (deleting) "Eliminando…" else "Eliminar cuenta",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (!deleting) MinExpense else MinTextFaint,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+            }
         }
     }
 }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -120,104 +122,120 @@ fun GoalSheet(
                 .clickable(enabled = false) {},
         ) {
             SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // El contenido de la hoja se desplaza.
+            //
+            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+            // propia hoja. Sin manera de llegar a él.
+            //
+            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
             ) {
-                Text(
-                    text = if (isEditMode) "Editar meta" else "Nueva meta",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinText,
-                    modifier = Modifier.weight(1f),
-                )
-                if (isEditMode) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = if (saving) "…" else "Eliminar",
-                        fontSize = 13.sp,
-                        color = MinExpense,
-                        modifier = Modifier.clickable(enabled = !saving) { delete() },
+                        text = if (isEditMode) "Editar meta" else "Nueva meta",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                        modifier = Modifier.weight(1f),
                     )
-                }
-            }
-
-            SectionLabel("NOMBRE")
-            Spacer(Modifier.height(8.dp))
-            FieldBox("Ej: Viaje, Colchón de emergencia", name, { name = it })
-
-            Spacer(Modifier.height(18.dp))
-
-            SectionLabel("MONTO OBJETIVO")
-            Spacer(Modifier.height(8.dp))
-            MoneyField(value = target, onValueChange = { target = it })
-
-            Spacer(Modifier.height(18.dp))
-
-            SectionLabel("CUENTA DONDE SE AHORRA")
-            Spacer(Modifier.height(8.dp))
-            if (eligibleAccounts.isEmpty()) {
-                Text(
-                    "No tienes cuentas de Dinero o Inversión — crea una en Cuentas primero",
-                    fontSize = 12.5.sp,
-                    color = MinTextMute,
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    eligibleAccounts.forEach { acc ->
-                        GoalAccountRow(
-                            label = acc.name,
-                            selected = selectedAccountId == acc.id,
-                            onClick = { selectedAccountId = acc.id },
+                    if (isEditMode) {
+                        Text(
+                            text = if (saving) "…" else "Eliminar",
+                            fontSize = 13.sp,
+                            color = MinExpense,
+                            modifier = Modifier.clickable(enabled = !saving) { delete() },
                         )
                     }
                 }
-            }
 
-            Spacer(Modifier.height(18.dp))
-
-            SectionLabel("FECHA OBJETIVO (AAAA-MM-DD, OPCIONAL)")
-            Spacer(Modifier.height(8.dp))
-            FieldBox("Ej: 2027-06-01", targetDate, { targetDate = filterDateInput(it) })
-
-            if (error != null) {
+                SectionLabel("NOMBRE")
                 Spacer(Modifier.height(8.dp))
-                Text(text = error!!, fontSize = 12.sp, color = MinExpense)
-            }
+                FieldBox("Ej: Viaje, Colchón de emergencia", name, { name = it })
 
-            Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(18.dp))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
-                    .clickable(enabled = canSave) { save() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = when {
-                        saving     -> if (isEditMode) "Guardando…" else "Creando…"
-                        isEditMode -> "Guardar cambios"
-                        else       -> "Crear meta"
-                    },
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
-                )
-            }
-            if (!canSave && !saving && missingFieldMessage != null) {
+                SectionLabel("MONTO OBJETIVO")
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = missingFieldMessage,
-                    fontSize = 12.sp,
-                    color = MinTextMute,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-            }
+                MoneyField(value = target, onValueChange = { target = it })
 
-            Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(18.dp))
+
+                SectionLabel("CUENTA DONDE SE AHORRA")
+                Spacer(Modifier.height(8.dp))
+                if (eligibleAccounts.isEmpty()) {
+                    Text(
+                        "No tienes cuentas de Dinero o Inversión — crea una en Cuentas primero",
+                        fontSize = 12.5.sp,
+                        color = MinTextMute,
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        eligibleAccounts.forEach { acc ->
+                            GoalAccountRow(
+                                label = acc.name,
+                                selected = selectedAccountId == acc.id,
+                                onClick = { selectedAccountId = acc.id },
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                SectionLabel("FECHA OBJETIVO (AAAA-MM-DD, OPCIONAL)")
+                Spacer(Modifier.height(8.dp))
+                FieldBox("Ej: 2027-06-01", targetDate, { targetDate = filterDateInput(it) })
+
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .clickable(enabled = canSave) { save() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = when {
+                            saving     -> if (isEditMode) "Guardando…" else "Creando…"
+                            isEditMode -> "Guardar cambios"
+                            else       -> "Crear meta"
+                        },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                    )
+                }
+                if (!canSave && !saving && missingFieldMessage != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = missingFieldMessage,
+                        fontSize = 12.sp,
+                        color = MinTextMute,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+            }
         }
     }
 }
