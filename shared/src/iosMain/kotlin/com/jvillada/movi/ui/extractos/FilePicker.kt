@@ -17,6 +17,7 @@ import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeCommaSeparatedText
 import platform.UniformTypeIdentifiers.UTTypeImage
+import platform.UniformTypeIdentifiers.UTTypeData
 import platform.UniformTypeIdentifiers.UTTypePDF
 import platform.UniformTypeIdentifiers.UTTypePlainText
 import platform.UniformTypeIdentifiers.UTTypeSpreadsheet
@@ -92,7 +93,8 @@ private fun UIViewController.topMost(): UIViewController {
 
 @Composable
 actual fun rememberFilePicker(
-    onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit
+    aceptar: TiposDeArchivo,
+    onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit,
 ): () -> Unit {
     val host = LocalUIViewController.current
     val currentOnResult by rememberUpdatedState(onResult)
@@ -103,16 +105,28 @@ actual fun rememberFilePicker(
             currentOnResult(name, bytes, mimeTypeFor(url))
         }
     }
-    return remember(host, delegate) {
+    return remember(host, delegate, aceptar) {
         {
             val picker = UIDocumentPickerViewController(
-                forOpeningContentTypes = listOf(
-                    UTTypePDF,
-                    UTTypeCommaSeparatedText,
-                    UTTypePlainText,
-                    UTTypeSpreadsheet,
-                    UTTypeImage,
-                ),
+                // `UTTypeData` y NO `UTTypeItem`: la primera versión usaba `UTTypeItem`, que es
+                // la raíz de la jerarquía y **también conforma a las carpetas**. La revisión lo
+                // midió contra el SDK: con `UTTypeItem` el picker acepta una carpeta, y entonces
+                // `NSData(contentsOf:)` devuelve `nil`, el delegate corta y **no pasa nada** — el
+                // selector se cierra en silencio y el dueño no sabe por qué.
+                //
+                // `UTTypeData` cubre `.docx` y `.zip` (verificado) y deja afuera carpetas y
+                // paquetes, que de todos modos no se pueden subir como bytes.
+                forOpeningContentTypes = when (aceptar) {
+                    TiposDeArchivo.TODOS -> listOf(UTTypeData)
+                    TiposDeArchivo.IMAGENES -> listOf(UTTypeImage)
+                    TiposDeArchivo.EXTRACTOS -> listOf(
+                        UTTypePDF,
+                        UTTypeCommaSeparatedText,
+                        UTTypePlainText,
+                        UTTypeSpreadsheet,
+                        UTTypeImage,
+                    )
+                },
                 asCopy = true,
             )
             picker.delegate = delegate

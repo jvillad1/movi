@@ -34,6 +34,7 @@ import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -59,7 +60,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
 
     // F32: el picker de la Ola 1 (extractos) acepta cualquier archivo — acá se filtra por
     // mime de imagen en el cliente, sin tocar el picker en sí.
-    val launchPicker = rememberFilePicker { fileName, bytes, mimeType ->
+    val launchPicker = rememberFilePicker(TiposDeArchivo.IMAGENES) { fileName, bytes, mimeType ->
         if (!mimeType.startsWith("image/")) {
             attachError = "Por ahora solo imágenes"
         } else if (bytes.size > 5 * 1024 * 1024) {

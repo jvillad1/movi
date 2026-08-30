@@ -22,19 +22,38 @@ private fun ensurePickerInput(): HTMLInputElement {
     val input = document.createElement("input") as HTMLInputElement
     input.id = PICKER_INPUT_ID
     input.type = "file"
-    input.accept = ".pdf,.csv,.xls,.xlsx,image/*"
     input.style.display = "none"
     document.body?.appendChild(input)
+    // El `accept` NO se fija acá: se reasigna en cada apertura (ver `rememberFilePicker`). Fijarlo
+    // al crear el input haría que la primera pantalla que abra el selector le imponga su filtro a
+    // la otra para siempre — el input se crea una vez y se reusa entre pantallas.
     return input
+}
+
+/**
+ * El `accept` se reasigna en CADA apertura, no solo al crear el input.
+ *
+ * El input se crea una vez y se reusa entre pantallas: si el `accept` se fijara al crearlo, la
+ * primera pantalla que abriera el selector le impondría su filtro a la otra para siempre. Con
+ * Extractos y Documentos usándolo alternadamente, eso es un bug que aparece en el segundo uso.
+ */
+private fun acceptDe(aceptar: TiposDeArchivo): String = when (aceptar) {
+    TiposDeArchivo.EXTRACTOS -> ".pdf,.csv,.xls,.xlsx,image/*"
+    // Vacío = el navegador no filtra nada. Es lo correcto para «cualquier papel»: un contrato en
+    // .docx o una escritura escaneada en .zip tienen que poder elegirse.
+    TiposDeArchivo.TODOS -> ""
+    TiposDeArchivo.IMAGENES -> "image/*"
 }
 
 @Composable
 actual fun rememberFilePicker(
-    onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit
+    aceptar: TiposDeArchivo,
+    onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit,
 ): () -> Unit {
-    return remember(onResult) {
+    return remember(aceptar, onResult) {
         {
             val input = ensurePickerInput()
+            input.accept = acceptDe(aceptar)
             // Limpia la selección previa: sin esto, volver a elegir el mismo archivo dos
             // veces seguidas no dispara el evento "change" la segunda vez.
             input.value = ""

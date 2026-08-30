@@ -51,6 +51,7 @@ import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NewItemButton
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
@@ -105,7 +106,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
         cargando = false
     }
 
-    val elegirArchivo = rememberFilePicker { nombre, bytes, mime ->
+    val elegirArchivo = rememberFilePicker(TiposDeArchivo.TODOS) { nombre, bytes, mime ->
         // El tope se comprueba ACÁ además de en el server: subir 30 MB por datos móviles para
         // que el server conteste «pesa de más» es cobrarle al dueño el error dos veces.
         if (bytes.size > MAX_DOCUMENTO_BYTES) {
