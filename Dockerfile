@@ -1,47 +1,58 @@
+# syntax=docker/dockerfile:1
 FROM gradle:8.11-jdk17 AS build
 WORKDIR /app
+
+# ── Por qué este Dockerfile es así ────────────────────────────────────────────
+#
+# El build de Railway se moría a los 20:02 con «Build image ✗», sin error y sin
+# «FAILURE» en el log — la firma de un timeout, no de una compilación fallida.
+# El panel lo mostró en una columna que el CLI no devuelve:
+#
+#     RUN gradle :webApp:wasmJsBrowserDistribution …     19m 23s
+#
+# El wasm solo consume casi todo el presupuesto y el jar del servidor nunca llega
+# a terminar. Y el límite no se puede subir: es del plan, no un ajuste.
+#
+# Entonces el build tiene que caber. Tres cosas, en orden de cuánto ahorran:
+#
+# 1. CACHÉ QUE SOBREVIVE ENTRE DESPLIEGUES (`--mount=type=cache`). Vive fuera de
+#    las capas, así que persiste incluso cuando el build falla: las dependencias
+#    descargadas, el caché de Kotlin y el de Gradle quedan listos para el próximo
+#    intento. Es lo que convierte 19 minutos en algo repetible.
+# 2. CAPA DE DEPENDENCIAS APARTE: `COPY . .` invalida todo con cualquier cambio de
+#    código. Copiando primero solo los archivos de build, resolver el grafo deja
+#    de repetirse en cada despliegue.
+# 3. CACHÉ DE BUILD DE GRADLE (`--build-cache`), que no estaba activado: reusa las
+#    salidas de tareas cuyas entradas no cambiaron.
+#
+# Sin `--quiet`, y guardando la salida para imprimir la cola si algo falla de
+# verdad: con `--quiet`, el motivo de un fallo nunca llegaba al log.
+
+COPY gradle/ gradle/
+COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY core/build.gradle.kts core/
+COPY shared/build.gradle.kts shared/
+COPY webApp/build.gradle.kts webApp/
+COPY server/build.gradle.kts server/
+COPY androidApp/build.gradle.kts androidApp/
+
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle --no-daemon --console=plain -q dependencies --configuration compileClasspath > /dev/null 2>&1 || true
+
 COPY . .
 
-# Sin `--quiet` (a diferencia del Dockerfile original): con él, el motivo del fallo
-# no llegaba nunca al log de Railway y hubo que adivinar cuatro veces.
-#
-# Los presupuestos de memoria vuelven a los de gradle.properties, que es la
-# configuración con la que este build venía funcionando. Dos intentos bajándolos
-# fallaron igual y en puntos distintos, así que la memoria no era la causa — y
-# `-Xmx` no reserva nada por adelantado, así que pedir de más nunca fue el problema.
-#
-# Lo que sí falta es evidencia: estos tres comandos la dejan en el log ANTES de que
-# el build muera, para que el próximo fallo no haya que adivinarlo.
-RUN echo "── recursos del contenedor ──" && \
-    (free -m || true) && \
-    df -h /app /tmp && \
-    nproc && \
-    cat gradle.properties
+RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 
-# Build wasmJs production bundle
-# La salida se guarda y solo se imprime la COLA si falla.
-#
-# El log de Railway devuelve una ventana acotada: en cuatro intentos el error nunca
-# entró en ella —el log terminaba a mitad de una tarea y parecía un proceso muerto—
-# y eso mandó a perseguir memoria y disco durante tres despliegues. Los recursos
-# resultaron ser 58 GB de RAM y 672 GB libres: nunca fue eso.
-#
-# Con `tail` sobre el archivo, el motivo real queda en las últimas líneas, que son
-# las que sí se ven.
-RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --stacktrace > /tmp/wasm.log 2>&1 \
-    || (echo "══ FALLÓ EL WASM — últimas 120 líneas ══" && tail -120 /tmp/wasm.log && false)
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --build-cache > /tmp/wasm.log 2>&1 \
+    || (echo "══ FALLÓ EL WASM ══" && tail -120 /tmp/wasm.log && false)
 
-RUN echo "── después del wasm ──" && df -h /app /tmp && (free -m || true)
-
-# Copy web app into server resources so it's bundled in the fat JAR
 RUN mkdir -p server/src/main/resources/static && \
     cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
 
-# Build server fat JAR (now includes the web app)
-RUN gradle :server:buildFatJar --no-daemon --console=plain --stacktrace > /tmp/jar.log 2>&1 \
-    || (echo "══ FALLÓ EL JAR — últimas 120 líneas ══" && tail -120 /tmp/jar.log && false)
-
-RUN echo "── después del jar ──" && df -h /app /tmp && ls -la server/build/libs/
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle :server:buildFatJar --no-daemon --console=plain --build-cache > /tmp/jar.log 2>&1 \
+    || (echo "══ FALLÓ EL JAR ══" && tail -120 /tmp/jar.log && false)
 
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
