@@ -16,7 +16,9 @@ WORKDIR /app
 # Entonces el build tiene que caber. Tres cosas, en orden de cuánto ahorran:
 #
 # 1. CACHÉ QUE SOBREVIVE ENTRE DESPLIEGUES (`--mount=type=cache,id=…`). El `id` es
-#    obligatorio en el builder de Railway: sin él rechaza el Dockerfile. Vive fuera de
+#    obligatorio en el builder de Railway, y además tiene que llevar el prefijo
+#    `s/<id-del-servicio>` — el builder rechaza el Dockerfile sin eso, y lo hace en
+#    segundos, que es la única forma barata de fallar en esta serie. Vive fuera de
 #    las capas, así que persiste incluso cuando el build falla: las dependencias
 #    descargadas, el caché de Kotlin y el de Gradle quedan listos para el próximo
 #    intento. Es lo que convierte 19 minutos en algo repetible.
@@ -37,21 +39,21 @@ COPY webApp/build.gradle.kts webApp/
 COPY server/build.gradle.kts server/
 COPY androidApp/build.gradle.kts androidApp/
 
-RUN --mount=type=cache,id=movi-gradle,target=/root/.gradle \
+RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/root/.gradle \
     gradle --no-daemon --console=plain -q dependencies --configuration compileClasspath > /dev/null 2>&1 || true
 
 COPY . .
 
 RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 
-RUN --mount=type=cache,id=movi-gradle,target=/root/.gradle \
+RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/root/.gradle \
     gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --build-cache > /tmp/wasm.log 2>&1 \
     || (echo "══ FALLÓ EL WASM ══" && tail -120 /tmp/wasm.log && false)
 
 RUN mkdir -p server/src/main/resources/static && \
     cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
 
-RUN --mount=type=cache,id=movi-gradle,target=/root/.gradle \
+RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/root/.gradle \
     gradle :server:buildFatJar --no-daemon --console=plain --build-cache > /tmp/jar.log 2>&1 \
     || (echo "══ FALLÓ EL JAR ══" && tail -120 /tmp/jar.log && false)
 
