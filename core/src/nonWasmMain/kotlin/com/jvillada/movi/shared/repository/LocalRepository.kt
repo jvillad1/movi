@@ -70,6 +70,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import kotlinx.serialization.json.Json
 
 /**
  * Cuánto se le da al server para contestar la lista de cuentas **cuando ya hay algo local que
@@ -1208,14 +1209,65 @@ class LocalRepository(
         return result
     }
 
+
+    /**
+     * Lee del server y guarda la respuesta; si el server no contesta, devuelve la última que sí
+     * contestó.
+     *
+     * Es un caché de **lectura**, no un espejo: no participa de la cola de subida ni resuelve
+     * conflictos. Existe para las pantallas que se piden siempre al server y que sin señal
+     * quedaban en blanco — y de esas, los recurrentes son las más graves, porque son avisos de
+     * vencimiento.
+     *
+     * Tres decisiones que importan:
+     *
+     * - **Una respuesta buena SIEMPRE pisa el caché**, aunque venga vacía: si el dueño borró todos
+     *   sus recurrentes, la lista vacía es la verdad y no puede quedar tapada por la anterior.
+     * - **Sin caché se propaga el error.** Contestar «no tienes nada» sin haber podido preguntar
+     *   es una afirmación sin respaldo — el mismo criterio que [getAccounts].
+     * - **`CancellationException` no se traga.** La pantalla que se fue mientras el request estaba
+     *   en vuelo no es un fallo de red, y tragarla haría que el llamador lo leyera como un éxito.
+     */
+    private suspend inline fun <reified T> leerConCache(
+        clave: String,
+        traer: () -> List<T>,
+    ): List<T> {
+        val serializador = kotlinx.serialization.serializer<List<T>>()
+        val uid = userId()
+        return try {
+            val fresco = traer()
+            db.remoteCacheQueries.put(
+                cacheKey = clave,
+                userId = uid,
+                payload = Json.encodeToString(serializador, fresco),
+                updatedAt = Clock.System.now().toEpochMilliseconds(),
+            )
+            fresco
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val guardado = db.remoteCacheQueries.get(clave, uid).executeAsOneOrNull() ?: throw e
+            runCatching { Json.decodeFromString(serializador, guardado.payload) }.getOrElse { throw e }
+        }
+    }
+
     /** Preferencias puras: no tocan ni un movimiento, así que no hay nada que espejar. */
     override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage =
         remote.setCategoryPrefs(name, hidden, pinnedType)
-    override suspend fun getRecurringRules(): List<RecurringRule> = remote.getRecurringRules()
+    /**
+     * **Con caché de última respuesta buena.** Ver [leerConCache].
+     *
+     * Los recurrentes son avisos de vencimiento: sin señal el dueño veía una pantalla vacía justo
+     * cuando menos sirve. Ahora ve lo último que Movi supo.
+     */
+    override suspend fun getRecurringRules(): List<RecurringRule> =
+        leerConCache("recurring_rules") { remote.getRecurringRules() }
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = remote.createRecurringRule(rule)
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)
     override suspend fun deleteRecurringRule(id: String) = remote.deleteRecurringRule(id)
-    override suspend fun getUpcomingPayments(): List<UpcomingPayment> = remote.getUpcomingPayments()
+    /** Con caché, por el mismo motivo que [getRecurringRules]: es lo que vence. */
+    override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
+        leerConCache("upcoming_payments") { remote.getUpcomingPayments() }
 
     // Los canales de aviso también van derecho al server, por el mismo motivo que los
     // vencimientos: la respuesta depende de la configuración del server (variables de entorno) y

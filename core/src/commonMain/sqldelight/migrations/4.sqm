@@ -1,0 +1,18 @@
+-- Migración 4 → 5: agrega `remote_cache`, la última respuesta buena de las lecturas que no tienen
+-- espejo propio (recurrentes, próximos pagos, créditos, tarjetas, presupuestos, metas).
+--
+-- Sin esto, esas pantallas quedan vacías sin señal. Los recurrentes son avisos de vencimiento: el
+-- momento en que menos sirve una pantalla en blanco es justo cuando no hay datos.
+--
+-- Mismo mecanismo que 1/2/3.sqm: SQLDelight deriva `schemaVersion` del .sqm más alto, y sin este
+-- archivo `onUpgrade` no correría sobre las bases ya instaladas.
+--
+-- Crear una tabla NUEVA es la migración más segura que hay: nada de lo que ya está guardado se
+-- toca, y si el caché quedara vacío el comportamiento es exactamente el de hoy.
+CREATE TABLE remote_cache (
+    cacheKey  TEXT    NOT NULL,
+    userId    TEXT    NOT NULL,
+    payload   TEXT    NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    PRIMARY KEY (cacheKey, userId)
+);

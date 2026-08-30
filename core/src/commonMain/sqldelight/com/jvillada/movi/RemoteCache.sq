@@ -1,0 +1,29 @@
+-- Última respuesta buena del server para una lectura que NO tiene espejo propio.
+--
+-- Créditos, tarjetas, recurrentes, próximos pagos, presupuestos y metas se piden siempre al
+-- server: sin señal el dueño no ve datos viejos, ve una pantalla vacía o un error. Los
+-- RECURRENTES son los más graves de ese grupo — son avisos de vencimiento, y quedarse sin ellos
+-- justo cuando no hay señal es el peor momento posible.
+--
+-- Es un caché de LECTURA, no un espejo: no se escribe desde acá, no participa de la cola de
+-- subida y no intenta resolver conflictos. Guarda el JSON tal cual vino y lo devuelve cuando el
+-- server no contesta, con la fecha de cuándo se guardó para poder decirle al dueño qué tan viejo
+-- es lo que está viendo.
+CREATE TABLE remote_cache (
+    cacheKey  TEXT    NOT NULL,
+    userId    TEXT    NOT NULL,
+    payload   TEXT    NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    PRIMARY KEY (cacheKey, userId)
+);
+
+put:
+INSERT OR REPLACE INTO remote_cache(cacheKey, userId, payload, updatedAt)
+VALUES (?, ?, ?, ?);
+
+get:
+SELECT * FROM remote_cache WHERE cacheKey = :cacheKey AND userId = :userId;
+
+-- Al cerrar sesión: lo cacheado es de ese usuario y no puede quedar visible para otro.
+deleteForUser:
+DELETE FROM remote_cache WHERE userId = :userId;
