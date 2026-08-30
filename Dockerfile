@@ -2,26 +2,26 @@ FROM gradle:8.11-jdk17 AS build
 WORKDIR /app
 COPY . .
 
-# El contenedor de build de Railway no tiene los 12 GB que pide gradle.properties
-# (8 GB para el daemon de Kotlin + 4 para Gradle). Esos números son para una máquina
-# de desarrollo; acá el proceso se queda sin memoria y lo matan — el log se corta de
-# golpe a mitad de una tarea, sin «FAILURE» ni excepción, que es la firma de un kill.
+# Sin `--quiet` (a diferencia del Dockerfile original): con él, el motivo del fallo
+# no llegaba nunca al log de Railway y hubo que adivinar cuatro veces.
 #
-# Se reescriben DENTRO de la imagen, no por variable de entorno: `org.gradle.jvmargs`
-# de gradle.properties **le gana** a GRADLE_OPTS, así que el intento anterior no bajó
-# nada. Esta capa no toca las máquinas locales, que siguen leyendo el archivo original.
-RUN sed -i \
-      -e 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx1800m -Dfile.encoding=UTF-8/' \
-      -e 's/^kotlin.daemon.jvmargs=.*/kotlin.daemon.jvmargs=-Xmx2200m/' \
-      gradle.properties && cat gradle.properties
-
-# El compilador de Kotlin corre DENTRO del proceso de Gradle en vez de levantar su
-# propio daemon: un solo JVM en lugar de dos es la diferencia entre entrar en el
-# contenedor y no entrar.
-ENV GRADLE_OPTS="-Dkotlin.compiler.execution.strategy=in-process"
+# Los presupuestos de memoria vuelven a los de gradle.properties, que es la
+# configuración con la que este build venía funcionando. Dos intentos bajándolos
+# fallaron igual y en puntos distintos, así que la memoria no era la causa — y
+# `-Xmx` no reserva nada por adelantado, así que pedir de más nunca fue el problema.
+#
+# Lo que sí falta es evidencia: estos tres comandos la dejan en el log ANTES de que
+# el build muera, para que el próximo fallo no haya que adivinarlo.
+RUN echo "── recursos del contenedor ──" && \
+    (free -m || true) && \
+    df -h /app /tmp && \
+    nproc && \
+    cat gradle.properties
 
 # Build wasmJs production bundle
 RUN gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain
+
+RUN echo "── después del wasm ──" && df -h /app /tmp && (free -m || true)
 
 # Copy web app into server resources so it's bundled in the fat JAR
 RUN mkdir -p server/src/main/resources/static && \
@@ -29,6 +29,8 @@ RUN mkdir -p server/src/main/resources/static && \
 
 # Build server fat JAR (now includes the web app)
 RUN gradle :server:buildFatJar --no-daemon --console=plain
+
+RUN echo "── después del jar ──" && df -h /app /tmp && ls -la server/build/libs/
 
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
