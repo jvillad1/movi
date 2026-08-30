@@ -464,10 +464,17 @@ fun CategoryField(
      *   la hoja o la lista, y de ahí sale el «desaparecen».
      *
      * Por eso el sub-picker de pantalla completa pasa `null`: una sola área desplazable —la de
-     * la hoja— y la lista entera a la vista. Las otras **tres** pantallas que usan este campo
-     * (`CreateRecurringRuleSheet`, `CategorySheets` y `PresupuestosScreen`) lo siguen llamando sin
-     * tocar nada y conservan su tope: ahí el panel se abre **encima** de un formulario y sin tope
-     * lo empujaría hacia abajo.
+     * la hoja— y la lista entera a la vista.
+     *
+     * **La regla es «¿la hoja que lo contiene se desplaza?», no qué pantalla es.** `BudgetSheet`
+     * conservaba el tope con el argumento de que ahí el panel se abre encima de un formulario
+     * que no se desplaza — y eso dejó de ser cierto cuando esa hoja recibió su propio
+     * `verticalScroll` (hacía falta: con la lista de movimientos del presupuesto, el teclado y
+     * «Guardar» se salían de la pantalla). Con la hoja desplazándose, el tope reproducía exacto
+     * el scroll-adentro-de-scroll de arriba, así que ahora también pasa `null`.
+     *
+     * Las otras dos (`CreateRecurringRuleSheet` y `CategorySheets`) sí conservan su tope: sus
+     * hojas siguen sin desplazarse.
      */
     maxSuggestionsHeight: Dp? = 220.dp,
 ) {

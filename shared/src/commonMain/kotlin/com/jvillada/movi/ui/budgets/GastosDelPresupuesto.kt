@@ -56,6 +56,15 @@ fun gastosDelPresupuesto(
  *
  * Negativo también es posible —la lista local con algo que el server no cuenta— y por eso el
  * resultado es un `Long` con signo y no un booleano.
+ *
+ * **[gastadoDeLaBarra] no es nullable, y eso importa.** La primera versión lo era y devolvía `0`
+ * ante un `null`, «porque sin cifra de barra no hay nada que comparar». Es falso: el mapa que la
+ * alimenta nunca es nulo, solo puede faltarle la clave, y una clave ausente significa **$0** —
+ * así la leen las barras de progreso (`gastoPorCategoria[b.category] ?: 0L`) y el aviso de la
+ * hoja. Con la versión vieja, una categoría que el server todavía no conoce y este teléfono sí
+ * dejaba la hoja diciendo dos cosas opuestas una debajo de la otra: «No tienes gastos en
+ * "Mercado" este mes» en rojo, y justo abajo «3 movimientos · \$300.000». Sin la línea que lo
+ * explica, que es exactamente el caso para el que existe.
  */
-fun faltanMovimientosPorVer(gastadoDeLaBarra: Long?, sumaDeLaLista: Long): Long =
-    if (gastadoDeLaBarra == null) 0L else gastadoDeLaBarra - sumaDeLaLista
+fun faltanMovimientosPorVer(gastadoDeLaBarra: Long, sumaDeLaLista: Long): Long =
+    gastadoDeLaBarra - sumaDeLaLista

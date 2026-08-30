@@ -522,6 +522,11 @@ private fun BudgetSheet(
                     prefs = UsedCategoriesCache.prefs,
                     label = "Categoría",
                     placeholder = "Mercado, Salud, Restaurantes…",
+                    // Desde que esta hoja se desplaza, el tope de 220 dp del panel sería un
+                    // scroll adentro de otro scroll — el defecto que el dueño reportó con
+                    // «cuando quiero ver las categorías, al hacer scroll desaparecen». Ver el
+                    // KDoc de `maxSuggestionsHeight`.
+                    maxSuggestionsHeight = null,
                 )
                 // F17: onDelete solo viene no-nulo al editar un presupuesto EXISTENTE (Sheet.Add
                 // lo manda null) — ahí es donde "cambiar el nombre" significa renombrar una
@@ -644,6 +649,25 @@ private fun BudgetSheet(
             // Sirve igual al crear: escribir «Mercado» y ver ahí mismo lo que ya se gastó es
             // justo lo que hace falta para elegir el monto.
             val movimientos = gastosDelPresupuesto(category, dias, ventana)
+            // Se calcula FUERA del `if`: el caso en que este mensaje más falta hace es
+            // justamente cuando no hay nada que listar —la barra dice \$2.000.000 y este
+            // dispositivo no bajó ni un movimiento— y ahí un bloque vacío sin explicación es
+            // peor que el problema que la lista vino a resolver.
+            val faltante = faltanMovimientosPorVer(
+                gastoPorCategoria[category.trim()] ?: 0L,
+                movimientos.sumOf { it.amount },
+            )
+            if (faltante != 0L && movimientos.isEmpty() && category.isNotBlank()) {
+                Spacer(Modifier.height(18.dp))
+                Hairline()
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "Hay ${formatCOP(faltante)} contados en esta categoría que este dispositivo todavía no bajó.",
+                    fontSize = 11.5.sp,
+                    color = MinTextMute,
+                    lineHeight = 15.sp,
+                )
+            }
             if (movimientos.isNotEmpty()) {
                 Spacer(Modifier.height(18.dp))
                 Hairline()
@@ -666,7 +690,6 @@ private fun BudgetSheet(
                 }
                 // Si el server contó plata que este aparato todavía no bajó, se dice — no se
                 // deja que el dueño reste dos números y desconfíe de los dos.
-                val faltante = faltanMovimientosPorVer(gastoPorCategoria[category.trim()], movimientos.sumOf { it.amount })
                 if (faltante != 0L) {
                     Spacer(Modifier.height(6.dp))
                     Text(

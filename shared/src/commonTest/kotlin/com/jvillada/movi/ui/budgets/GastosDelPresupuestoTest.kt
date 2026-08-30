@@ -83,8 +83,11 @@ class GastosDelPresupuestoTest {
         assertEquals(400_000L, faltanMovimientosPorVer(1_400_000L, 1_000_000L))
         // También al revés: local con algo que el server todavía no cuenta.
         assertEquals(-200_000L, faltanMovimientosPorVer(800_000L, 1_000_000L))
-        // Sin cifra de barra no hay diferencia que reportar.
-        assertEquals(0L, faltanMovimientosPorVer(null, 1_000_000L))
+        // Y una categoría que la barra todavía no conoce vale CERO, no «no sé»: es como lee ese
+        // mismo mapa el resto de la pantalla (`gastoPorCategoria[cat] ?: 0L`). Con la semántica
+        // vieja, la hoja decía «No tienes gastos en "Mercado" este mes» en rojo y justo debajo
+        // listaba tres, sin la línea que lo explica.
+        assertEquals(-1_000_000L, faltanMovimientosPorVer(0L, 1_000_000L))
     }
 
     @Test
