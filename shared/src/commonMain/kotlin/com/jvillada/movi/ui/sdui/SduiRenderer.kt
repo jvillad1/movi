@@ -256,12 +256,17 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         }
         Hairline()
         Spacer(Modifier.height(16.dp))
+        // Las tres cifras chicas salen del MISMO resumen que el número grande de arriba, así que
+        // siguen su misma regla: sin respuesta, un guion. Antes decían «$0 / $0 / $0» al lado del
+        // «—» recién puesto arriba, que es la peor combinación posible — parece que la app sabe.
+        val sinResumen = data.summary == null
+        fun cifra(v: Long) = if (sinResumen) "—" else formatMoneyCompact(v)
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf(
-                Triple("Ingresos", formatMoneyCompact(ingresos), MinText),
-                Triple("Gastos", formatMoneyCompact(egresos), MinText),
+                Triple("Ingresos", cifra(ingresos), MinText),
+                Triple("Gastos", cifra(egresos), MinText),
                 // F36: un mes en rojo se ve en rojo.
-                Triple("Flujo del mes", formatMoneyCompact(flujo), if (flujo < 0) MinExpense else MinText),
+                Triple("Flujo del mes", cifra(flujo), if (!sinResumen && flujo < 0) MinExpense else MinText),
             ).forEach { (label, value, color) ->
                 Column(modifier = Modifier.weight(1f)) {
                     Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)

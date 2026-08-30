@@ -51,9 +51,13 @@ data class DashboardData(
      * regla que la pantalla de Cuentas ya seguía (`cuentasLeidas`); el Inicio no.
      */
     val accounts: List<Account>? = null,
-    val credits: List<CreditSummary> = emptyList(),
-    /** F20: las tarjetas también son deuda — el acceso «Créditos» las suma junto a los préstamos. */
-    val cards: List<CardSummary> = emptyList(),
+    /** `null` = todavía no contestó. Ver [accounts]: la guía tilda un paso con esto. */
+    val credits: List<CreditSummary>? = null,
+    /**
+     * F20: las tarjetas también son deuda — el acceso «Créditos» las suma junto a los préstamos.
+     * `null` = todavía no contestó, por el mismo motivo que [credits].
+     */
+    val cards: List<CardSummary>? = null,
     /**
      * `null` = todavía no llegó (o su carga falló); lista vacía = llegó y no hay nada.
      *
@@ -81,9 +85,10 @@ data class DashboardData(
      * FALLÓ tampoco habilita: `accounts` sigue en `null`, y eso es correcto — un error de red no
      * es evidencia de que el dueño no tenga cuentas.
      */
-    val puedeAfirmarVacio: Boolean get() = accounts != null && summary != null
+    val puedeAfirmarVacio: Boolean get() =
+        accounts != null && summary != null && upcoming != null && credits != null && cards != null
     /** F20: una tarjeta registrada también tilda el paso de Créditos — es una deuda como cualquier préstamo. */
-    val hasCredit: Boolean get() = credits.isNotEmpty() || cards.isNotEmpty()
+    val hasCredit: Boolean get() = !credits.isNullOrEmpty() || !cards.isNullOrEmpty()
     /**
      * La apertura de cuenta no cuenta (F54) y un traspaso cuenta una sola vez aunque sean dos
      * eventos — ver `FinanceSummary.eventCount` y `movementCount` en `:core`.
@@ -326,9 +331,13 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // F20: préstamos + tarjetas, con la MISMA función que usa la pantalla de Créditos para
         // su «Deuda total» — hallazgo de la Ola 4: la pantalla y el Inicio daban números
         // distintos (acá se sumaba solo LOAN).
-        val count = data.credits.size + data.cards.size
-        if (count == 0) LinkFigure(sub = "Sin créditos")
-        else LinkFigure(formatCOP(totalDebtCop(data.credits, data.cards)), plural(count, "crédito", "créditos"))
+        // Basta con que UNA de las dos no haya contestado para no poder decir «Sin créditos»:
+        // el conteo suma las dos, así que con media respuesta el cero no significa nada.
+        val sinRespuesta = data.credits == null || data.cards == null
+        val count = data.credits.orEmpty().size + data.cards.orEmpty().size
+        if (sinRespuesta) LinkFigure()
+        else if (count == 0) LinkFigure(sub = "Sin créditos")
+        else LinkFigure(formatCOP(totalDebtCop(data.credits.orEmpty(), data.cards.orEmpty())), plural(count, "crédito", "créditos"))
     }
     "budgets" -> {
         if (data.budgets.isEmpty()) LinkFigure(sub = "Sin presupuestos")
@@ -345,8 +354,13 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
     "investments" -> {
         // F50: cuentas tipo INVESTMENT, no el modelo de "posiciones" (holdings) que el server
         // siempre devolvía vacío. F61: el target abre Cuentas (grupo Inversión).
-        val investmentAccounts = data.accounts.orEmpty().filter { it.type == AccountType.INVESTMENT }
-        if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
+        // Mismo criterio que la rama «accounts» de acá arriba: sin respuesta no se afirma
+        // «Sin inversiones». Se veía menos porque este acceso no está en el layout por defecto
+        // —hay que agregarlo desde el Editor de pantallas— pero la afirmación era igual de falsa.
+        val cuentasInv = data.accounts
+        val investmentAccounts = cuentasInv.orEmpty().filter { it.type == AccountType.INVESTMENT }
+        if (cuentasInv == null) LinkFigure()
+        else if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
         else LinkFigure(formatCOP(investmentAccounts.sumOf { it.balance }), plural(investmentAccounts.size, "cuenta", "cuentas"))
     }
     "recurrentes" -> {

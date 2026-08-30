@@ -278,6 +278,9 @@ class DashboardLogicTest {
             Account("a2", "Visa", AccountType.CREDIT_CARD, 500_000),
         ),
         credits = listOf(CreditSummary(Account("l1", "Carro", AccountType.LOAN, 10_000_000), terms = null, paidPct = null)),
+        // Explícito desde que `cards` distingue «no contestó» de «no tiene»: este dueño de
+        // prueba NO tiene tarjetas, que es distinto de que la lectura no haya vuelto.
+        cards = emptyList(),
         budgets = listOf(Budget("Mercado", 400_000)),
         spentByCategory = mapOf("Mercado" to 250_000L),
         goals = listOf(Goal(id = "g1", name = "Viaje", target = 5_000_000, accountId = "a1", targetDate = "2027-01-01", saved = 1_200_000)),
@@ -328,6 +331,7 @@ class DashboardLogicTest {
             accounts = cuentasDelDueño.filter { it.type == AccountType.LOAN },
             credits = cuentasDelDueño.filter { it.type == AccountType.LOAN }
                 .map { CreditSummary(it, terms = null, paidPct = null) },
+            cards = emptyList(),
         )
         val fig = quickLinkFigure("accounts", soloDeudas)
         assertNull(fig.value, "sin activos no hay cifra que mostrar — nunca un $0 grande")
@@ -378,7 +382,7 @@ class DashboardLogicTest {
         val fig = quickLinkFigure("credits", withCards)
         assertEquals("$14.500.000", fig.value)  // 10M préstamo + 500K Visa + 4M estimado USD
         assertEquals("3 créditos", fig.sub)
-        assertEquals(14_500_000L, totalDebtCop(withCards.credits, withCards.cards))
+        assertEquals(14_500_000L, totalDebtCop(withCards.credits.orEmpty(), withCards.cards.orEmpty()))
     }
 
     @Test
@@ -614,10 +618,54 @@ class InicioNoAfirmaVacioTest {
     }
 
     @Test
-    fun cuando_las_dos_contestaron_vacio_si_se_puede_afirmar() {
-        val data = DashboardData(accounts = emptyList(), summary = summaryConEventos(0))
+    fun cuando_todas_contestaron_vacio_si_se_puede_afirmar() {
+        // Las CINCO, no dos: la tarjeta pinta cuatro pasos y cada uno sale de una lectura
+        // distinta. Con solo cuentas y resumen, la tarjeta aparecía diciendo «2 de 4» a alguien
+        // con 5 recurrentes y 1 crédito, hasta que llegaban las otras respuestas — la misma
+        // queja que originó el arreglo, apenas más angosta.
+        val data = DashboardData(
+            accounts = emptyList(),
+            summary = summaryConEventos(0),
+            upcoming = emptyList(),
+            credits = emptyList(),
+            cards = emptyList(),
+        )
         assertTrue(data.puedeAfirmarVacio)
         assertFalse(data.hasAccount)
+    }
+
+    @Test
+    fun con_cuentas_y_resumen_pero_sin_recurrentes_todavia_no() {
+        // El paso «Anota tus gastos recurrentes» sale de `upcoming`, que ya distinguía null de
+        // vacío por su cuenta. Sin él, el contador miente sobre ese casillero.
+        assertFalse(
+            DashboardData(
+                accounts = emptyList(),
+                summary = summaryConEventos(0),
+                credits = emptyList(),
+                cards = emptyList(),
+            ).puedeAfirmarVacio,
+        )
+    }
+
+    @Test
+    fun el_acceso_creditos_no_dice_sin_creditos_a_medias() {
+        // El conteo suma préstamos + tarjetas: con una sola de las dos respuestas, un cero no
+        // significa nada.
+        assertNull(quickLinkFigure("credits", DashboardData(credits = emptyList())).sub)
+        assertEquals(
+            "Sin créditos",
+            quickLinkFigure("credits", DashboardData(credits = emptyList(), cards = emptyList())).sub,
+        )
+    }
+
+    @Test
+    fun el_acceso_inversiones_tampoco_afirma_antes_de_saber() {
+        assertNull(quickLinkFigure("investments", DashboardData()).sub)
+        assertEquals(
+            "Sin inversiones",
+            quickLinkFigure("investments", DashboardData(accounts = emptyList())).sub,
+        )
     }
 
     @Test
