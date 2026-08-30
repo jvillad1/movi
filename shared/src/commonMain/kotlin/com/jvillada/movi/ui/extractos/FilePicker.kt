@@ -20,6 +20,13 @@ enum class TiposDeArchivo {
 
     /** Cualquier cosa. Un papel es un papel. */
     TODOS,
+
+    /**
+     * Solo imágenes. Lo usa el chat de Movi AI, que contesta «Por ahora solo imágenes» a
+     * cualquier otra cosa — así que ofrecer un PDF en su selector es mandar al dueño derecho a
+     * ese error, que es justo lo que este enum vino a evitar.
+     */
+    IMAGENES,
 }
 
 @Composable

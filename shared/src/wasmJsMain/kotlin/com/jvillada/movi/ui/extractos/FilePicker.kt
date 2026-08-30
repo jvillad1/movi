@@ -16,7 +16,7 @@ private const val PICKER_INPUT_ID = "movi-file-picker-input"
 // El input HTML nativo por fuera del canvas es la única forma de abrir el diálogo del
 // sistema desde wasm — Compose no tiene acceso al filesystem del navegador. Se crea una
 // sola vez y se reusa (mismo patrón que el overlay de login en index.html).
-private fun ensurePickerInput(aceptar: TiposDeArchivo): HTMLInputElement {
+private fun ensurePickerInput(): HTMLInputElement {
     val existing = document.getElementById(PICKER_INPUT_ID) as? HTMLInputElement
     if (existing != null) return existing
     val input = document.createElement("input") as HTMLInputElement
@@ -24,7 +24,9 @@ private fun ensurePickerInput(aceptar: TiposDeArchivo): HTMLInputElement {
     input.type = "file"
     input.style.display = "none"
     document.body?.appendChild(input)
-    input.accept = acceptDe(aceptar)
+    // El `accept` NO se fija acá: se reasigna en cada apertura (ver `rememberFilePicker`). Fijarlo
+    // al crear el input haría que la primera pantalla que abra el selector le imponga su filtro a
+    // la otra para siempre — el input se crea una vez y se reusa entre pantallas.
     return input
 }
 
@@ -40,6 +42,7 @@ private fun acceptDe(aceptar: TiposDeArchivo): String = when (aceptar) {
     // Vacío = el navegador no filtra nada. Es lo correcto para «cualquier papel»: un contrato en
     // .docx o una escritura escaneada en .zip tienen que poder elegirse.
     TiposDeArchivo.TODOS -> ""
+    TiposDeArchivo.IMAGENES -> "image/*"
 }
 
 @Composable
@@ -49,7 +52,7 @@ actual fun rememberFilePicker(
 ): () -> Unit {
     return remember(aceptar, onResult) {
         {
-            val input = ensurePickerInput(aceptar)
+            val input = ensurePickerInput()
             input.accept = acceptDe(aceptar)
             // Limpia la selección previa: sin esto, volver a elegir el mismo archivo dos
             // veces seguidas no dispara el evento "change" la segunda vez.

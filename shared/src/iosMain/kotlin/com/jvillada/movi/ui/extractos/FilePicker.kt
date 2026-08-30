@@ -17,7 +17,7 @@ import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeCommaSeparatedText
 import platform.UniformTypeIdentifiers.UTTypeImage
-import platform.UniformTypeIdentifiers.UTTypeItem
+import platform.UniformTypeIdentifiers.UTTypeData
 import platform.UniformTypeIdentifiers.UTTypePDF
 import platform.UniformTypeIdentifiers.UTTypePlainText
 import platform.UniformTypeIdentifiers.UTTypeSpreadsheet
@@ -108,10 +108,17 @@ actual fun rememberFilePicker(
     return remember(host, delegate, aceptar) {
         {
             val picker = UIDocumentPickerViewController(
-                // `UTTypeItem` es la raíz de la jerarquía: cualquier archivo desciende de ella.
-                // Sin esto, un contrato en .docx o una escritura en .zip no se podían ni elegir.
+                // `UTTypeData` y NO `UTTypeItem`: la primera versión usaba `UTTypeItem`, que es
+                // la raíz de la jerarquía y **también conforma a las carpetas**. La revisión lo
+                // midió contra el SDK: con `UTTypeItem` el picker acepta una carpeta, y entonces
+                // `NSData(contentsOf:)` devuelve `nil`, el delegate corta y **no pasa nada** — el
+                // selector se cierra en silencio y el dueño no sabe por qué.
+                //
+                // `UTTypeData` cubre `.docx` y `.zip` (verificado) y deja afuera carpetas y
+                // paquetes, que de todos modos no se pueden subir como bytes.
                 forOpeningContentTypes = when (aceptar) {
-                    TiposDeArchivo.TODOS -> listOf(UTTypeItem)
+                    TiposDeArchivo.TODOS -> listOf(UTTypeData)
+                    TiposDeArchivo.IMAGENES -> listOf(UTTypeImage)
                     TiposDeArchivo.EXTRACTOS -> listOf(
                         UTTypePDF,
                         UTTypeCommaSeparatedText,

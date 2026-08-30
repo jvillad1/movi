@@ -7,30 +7,42 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 /**
- * Los tipos que el importador sabe leer. Mismo catálogo que la web y iOS — si divergen, el mismo
- * archivo se puede elegir en un teléfono y no en otro.
+ * En Android el selector **no filtra**, ni siquiera para extractos. Es deliberado, y la primera
+ * versión de este archivo se equivocó en las dos direcciones.
+ *
+ * Esa versión pasó a `ActivityResultContracts.OpenDocument` con una lista de mimes, diciendo en
+ * un comentario que era «el mismo catálogo que la web y iOS». Era falso, y la revisión lo midió
+ * en un emulador API 35 con archivos reales:
+ *
+ * - **La web filtra por EXTENSIÓN** (`.pdf,.csv,.xls,.xlsx`) y **iOS por UTI derivada de la
+ *   extensión**. En los dos, un `Extracto.pdf` se puede elegir sin importar qué mime le ponga
+ *   quien lo guardó.
+ * - **Android es la única que filtra por el mime que REPORTA EL PROVEEDOR**, y ese mime no lo
+ *   controla el dueño. Medido: un extracto en `.txt` (`text/plain`) y un PDF real que el
+ *   proveedor reporta como `application/octet-stream` —lo que hace DownloadProvider cuando el
+ *   portal del banco fuerza la descarga— **quedaban grises, sin manera de elegirlos**. El server
+ *   sí sabe leer los dos.
+ *
+ * O sea: el filtro bloqueaba archivos válidos, sin mensaje y sin «mostrar todos». Antes el
+ * archivo se podía elegir y, si no servía, el error llegaba del server con una explicación.
+ *
+ * Y hay un segundo motivo para volver a `GetContent`: `OpenDocument` lanza `ACTION_OPEN_DOCUMENT`,
+ * que solo muestra proveedores de SAF, mientras `GetContent` lanza `ACTION_GET_CONTENT`, que
+ * muestra **cualquier app** que sepa entregar contenido. Cambiarlo sacaba del selector a las apps
+ * que solo declaran `GET_CONTENT` (típicamente fotos que ya viven solo en la nube). Eso afectaba
+ * a Extractos, que ya le funcionaba al dueño en su teléfono, para arreglar algo que no estaba
+ * roto.
+ *
+ * El filtro sigue existiendo donde SÍ se puede hacer bien: web e iOS, por extensión.
  */
-private val MIMES_DE_EXTRACTO = arrayOf(
-    "application/pdf",
-    "text/csv",
-    "text/comma-separated-values",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "image/*",
-)
-
 @Composable
 actual fun rememberFilePicker(
     aceptar: TiposDeArchivo,
     onResult: (fileName: String, bytes: ByteArray, mimeType: String) -> Unit,
 ): () -> Unit {
     val ctx = LocalContext.current
-    // `OpenDocument` y no `GetContent`: el primero acepta una LISTA de tipos, el segundo uno
-    // solo. Con `GetContent` la única forma de ofrecer PDF + CSV + hojas + imágenes era `*/*`,
-    // que es lo que hacía antes — o sea que Extractos ofrecía archivos que el importador no sabe
-    // leer, y el error aparecía recién después de subirlos.
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        ActivityResultContracts.GetContent()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         // El nombre REAL del archivo, no el último segmento del `content://`.
@@ -58,12 +70,6 @@ actual fun rememberFilePicker(
             ?: return@rememberLauncherForActivityResult
         onResult(name, bytes, mime)
     }
-    return {
-        launcher.launch(
-            when (aceptar) {
-                TiposDeArchivo.EXTRACTOS -> MIMES_DE_EXTRACTO
-                TiposDeArchivo.TODOS -> arrayOf("*/*")
-            },
-        )
-    }
+    // `aceptar` no se usa acá y eso es la decisión, no un olvido: ver el KDoc de arriba.
+    return { launcher.launch(if (aceptar == TiposDeArchivo.IMAGENES) "image/*" else "*/*") }
 }
