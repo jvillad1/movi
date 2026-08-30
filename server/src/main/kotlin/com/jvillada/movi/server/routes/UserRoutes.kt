@@ -70,7 +70,13 @@ fun Route.userRoutes() {
             if (req.avatarColor != null && !AvatarPalette.isValid(req.avatarColor)) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Ese color no está en la paleta disponible")
             }
-            if (req.name == null && req.avatarColor == null) {
+            // El corte del período: 1..31. El recorte a los meses cortos lo hace :core al
+            // calcular la ventana (un 31 vale en febrero y se usa el 28), así que acá solo se
+            // valida el rango — rechazar el 31 sería impedirle al dueño el corte que sí tiene.
+            if (req.periodCutoffDay != null && req.periodCutoffDay !in 1..31) {
+                return@put call.respond(HttpStatusCode.BadRequest, "El día de corte va de 1 a 31")
+            }
+            if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
 
@@ -78,6 +84,7 @@ fun Route.userRoutes() {
                 Users.update({ Users.id eq uid }) { stmt ->
                     trimmedName?.let { stmt[Users.name] = it }
                     req.avatarColor?.let { stmt[Users.avatarColor] = it }
+                    req.periodCutoffDay?.let { stmt[Users.periodCutoffDay] = it }
                 }
                 Users.selectAll().where { Users.id eq uid }.firstOrNull()
             } ?: return@put call.respond(HttpStatusCode.NotFound)
@@ -130,4 +137,6 @@ private fun ResultRow.toProfile() = UserProfile(
     email = this[Users.email],
     name = this[Users.name],
     avatarColor = this[Users.avatarColor] ?: AvatarPalette.DEFAULT,
+    // Sin elegir = mes de calendario, que es como se comportó Movi siempre.
+    periodCutoffDay = this[Users.periodCutoffDay] ?: 1,
 )

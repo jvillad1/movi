@@ -422,3 +422,23 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             else -> true
         }
     }
+
+
+/**
+ * Gasto por categoría del **período** [ventana], en vez del mes de calendario.
+ *
+ * Es la misma regla que [spentByCategoryForMonth] —solo egresos en COP que cuentan como flujo—
+ * cambiando el criterio de pertenencia: el prefijo de fecha («2026-08») no sirve cuando el
+ * período cruza dos meses de calendario, que es justo lo que pasa con cualquier corte que no sea
+ * el día 1.
+ *
+ * El filtro va por `timestamp` contra la ventana, que es exactamente lo que hace el server
+ * (`currentPeriodWindow`). Las dos mitades tienen que coincidir o Inicio y Presupuestos vuelven a
+ * decir cifras distintas del mismo presupuesto.
+ */
+fun spentByCategoryForPeriod(days: List<EventDay>, ventana: LongRange): Map<String, Long> =
+    days.flatMap { it.items }
+        .filter { it.timestamp in ventana }
+        .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow && it.currency == "COP" }
+        .groupBy { it.category }
+        .mapValues { (_, txs) -> txs.sumOf { it.amount } }

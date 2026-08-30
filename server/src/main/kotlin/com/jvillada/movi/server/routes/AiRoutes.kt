@@ -38,7 +38,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
-import com.jvillada.movi.server.time.currentMonthWindow
+import com.jvillada.movi.server.time.currentPeriodWindow
+import com.jvillada.movi.server.time.cutoffDayOf
 
 private fun resolveApiKey(): String? {
     System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() && it != "x" }?.let { return it }
@@ -234,8 +235,9 @@ private suspend fun buildUserContext(uid: String): String {
     }
     val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
 
-    // Ventana del mes en la zona de la app (Bogotá), la misma que usa finance-summary.
-    val (monthStart, monthEnd) = currentMonthWindow()
+    // Ventana del PERÍODO del usuario (ver PeriodSettings en :core), la misma que usa
+    // finance-summary. Con corte 1 —el default— es el mes de calendario de siempre.
+    val (monthStart, monthEnd) = currentPeriodWindow(cutoffDayOf(uid))
 
     // Income and expense sums — filter ResultRows directly, same as finance-summary
     val (ingresos, egresos) = dbQuery {

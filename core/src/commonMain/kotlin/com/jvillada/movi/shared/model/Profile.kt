@@ -17,6 +17,14 @@ data class UserProfile(
     val email: String,
     val name: String,
     val avatarColor: String,
+    /**
+     * Día en que arranca el período financiero del usuario (ver `PeriodSettings`).
+     *
+     * Nunca es `null` en la respuesta: una cuenta que no lo eligió cae a **1** —el mes de
+     * calendario— del lado del servidor, así que el cliente no necesita saber que la columna es
+     * nullable, igual que con `avatarColor`.
+     */
+    val periodCutoffDay: Int = 1,
 )
 
 /**
@@ -28,6 +36,8 @@ data class UserProfile(
 data class UpdateProfileRequest(
     val name: String? = null,
     val avatarColor: String? = null,
+    /** Día de corte del período, 1..31. `null` = no tocar. */
+    val periodCutoffDay: Int? = null,
 )
 
 /**

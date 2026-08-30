@@ -29,7 +29,8 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import com.jvillada.movi.server.time.currentMonthWindow
+import com.jvillada.movi.server.time.currentPeriodWindow
+import com.jvillada.movi.server.time.cutoffDayOf
 
 fun Route.financeRoutes() {
     // F50: ya no tiene consumidor — Inversiones (:shared) pasó a mostrar cuentas tipo
@@ -148,7 +149,9 @@ fun Route.financeRoutes() {
 
         // "Este mes" es el mes civil de Bogotá (AppClock), no el de UTC: un movimiento a las
         // 9 pm del 31 sigue siendo de este mes.
-        val (monthStart, monthEnd) = currentMonthWindow()
+        // La ventana del PERÍODO del usuario (ver PeriodSettings en :core), no el mes de
+        // calendario. Con corte 1 —el default— da exactamente lo mismo que antes.
+        val (monthStart, monthEnd) = currentPeriodWindow(cutoffDayOf(uid))
 
         val rate = FxRateService.usdToCop()
         val accountRows = dbQuery {
