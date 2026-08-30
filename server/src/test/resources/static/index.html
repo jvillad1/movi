@@ -1,0 +1,9 @@
+<!doctype html>
+<!-- Fixture de test: hace las veces del bundle wasm que el Dockerfile copia a
+     server/src/main/resources/static/ (esa carpeta está en .gitignore). Sin este archivo,
+     `staticResources("/", "static") { default("index.html") }` no tendría nada que servir y
+     el test de la SPA no podría distinguir «cae en el index» de «404 de verdad». -->
+<html lang="es">
+  <head><meta charset="utf-8"><title>Movi</title></head>
+  <body><div id="movi-spa-fixture"></div></body>
+</html>
