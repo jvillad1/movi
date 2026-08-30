@@ -14,16 +14,17 @@ import com.jvillada.movi.shared.model.TransactionType
  * presupuesto excedido es una acusación sin pruebas: no se puede saber si sobra un gasto mal
  * archivado, si hay un duplicado, o si de verdad se gastó.
  *
- * ### Los mismos gastos que suma la barra, no unos parecidos
+ * ### Por qué la suma puede no dar igual que la barra — y por qué se dice
  *
  * Esta función replica **exactamente** el filtro de
- * [com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod]: gasto, COP, dentro de la ventana,
- * categoría exacta y ninguna reservada. Si divergiera, la lista y el número de arriba dirían
- * cosas distintas sobre la misma plata — el modo de falla más caro que tiene esta pantalla, y
- * el que ya se pagó una vez cuando el Inicio y Créditos sumaban la deuda con dos criterios.
+ * [com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod], `countsAsCashFlow` incluido, y hay
+ * un test que la ata a esa función en vez de a un número escrito a mano.
  *
- * La suma de lo que devuelve esta función tiene que dar el gastado de la categoría. Hay un test
- * que lo comprueba contra la función del Inicio, no contra un número escrito a mano.
+ * Eso **no alcanza** para prometer que la suma de la lista sea el número de la barra, y la
+ * primera versión de este KDoc lo prometía. La barra usa `serverSpent ?: local`: online el
+ * número lo calcula el server con todo lo que sabe —todos los dispositivos, SMS, importaciones—
+ * mientras esta lista sale de `getEventsByDay`. Cuando las dos cosas no coinciden, la respuesta
+ * correcta no es esconder la diferencia sino **nombrarla**: ver [faltanMovimientosPorVer].
  */
 fun gastosDelPresupuesto(
     categoria: String,
@@ -44,3 +45,17 @@ fun gastosDelPresupuesto(
         // Lo más reciente primero: es el orden en que uno reconoce sus propios gastos.
         .sortedByDescending { it.timestamp }
 }
+
+/**
+ * Cuánto del gastado de la categoría **no** está en la lista de arriba.
+ *
+ * `0` cuando coinciden, que es el caso normal. Distinto de cero significa que el server contó
+ * plata que este dispositivo todavía no bajó (otro teléfono, un SMS, una importación). Se dice
+ * en una línea en vez de dejar que el dueño reste dos números y desconfíe de los dos: una lista
+ * que no suma lo que dice el título de arriba, sin explicación, es peor que no tener lista.
+ *
+ * Negativo también es posible —la lista local con algo que el server no cuenta— y por eso el
+ * resultado es un `Long` con signo y no un booleano.
+ */
+fun faltanMovimientosPorVer(gastadoDeLaBarra: Long?, sumaDeLaLista: Long): Long =
+    if (gastadoDeLaBarra == null) 0L else gastadoDeLaBarra - sumaDeLaLista

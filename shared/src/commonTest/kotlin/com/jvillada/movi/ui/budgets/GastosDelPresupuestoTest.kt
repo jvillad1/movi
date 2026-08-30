@@ -67,10 +67,24 @@ class GastosDelPresupuestoTest {
     }
 
     @Test
-    fun deja_afuera_lo_que_la_barra_deja_afuera() {
-        val ids = gastosDelPresupuesto("Mercado", dias, ventana).map { it.id }
+    fun lo_mas_reciente_primero() {
+        // Se llamaba `deja_afuera_lo_que_la_barra_deja_afuera` y no tocaba la barra: afirmaba dos
+        // ids a mano. El nombre prometía un vínculo que el test no hacía. Lo que sí comprueba —y
+        // vale— es el orden.
+        assertEquals(listOf("b", "a"), gastosDelPresupuesto("Mercado", dias, ventana).map { it.id })
+    }
 
-        assertEquals(listOf("b", "a"), ids)  // y en ese orden: lo más reciente primero
+    @Test
+    fun la_diferencia_con_la_barra_se_nombra_en_vez_de_esconderse() {
+        // La barra usa `serverSpent ?: local`: online el número lo calcula el server con todo lo
+        // que sabe, y esta lista sale de lo que este dispositivo bajó. Que coincidan es lo
+        // normal, no una garantía — y la primera versión del KDoc la prometía.
+        assertEquals(0L, faltanMovimientosPorVer(1_000_000L, 1_000_000L))
+        assertEquals(400_000L, faltanMovimientosPorVer(1_400_000L, 1_000_000L))
+        // También al revés: local con algo que el server todavía no cuenta.
+        assertEquals(-200_000L, faltanMovimientosPorVer(800_000L, 1_000_000L))
+        // Sin cifra de barra no hay diferencia que reportar.
+        assertEquals(0L, faltanMovimientosPorVer(null, 1_000_000L))
     }
 
     @Test

@@ -256,15 +256,16 @@ fun CreateRecurringRuleSheet(
     // sin depender de que el usuario descubra que hay que rodar.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val altoMaximoDeLaHoja = maxHeight * 0.92f
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.6f))
                 .clickable(enabled = !saving, onClick = onDismiss),
         ) {
+            Box(modifier = Modifier.weight(1f))
+
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .heightIn(max = altoMaximoDeLaHoja)
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))

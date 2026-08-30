@@ -411,15 +411,16 @@ fun QuickAddScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.6f))
                 .clickable(enabled = !saving, onClick = onDismiss),
         ) {
+            Box(modifier = Modifier.weight(1f))
+
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                     .background(MinSurfaceContainerHigh)
