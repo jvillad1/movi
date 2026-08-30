@@ -25,6 +25,11 @@ data class UserProfile(
      * nullable, igual que con `avatarColor`.
      */
     val periodCutoffDay: Int = 1,
+    /**
+     * Días de anticipación del aviso de vencimiento. Nunca `null` en la respuesta: cae al default
+     * del lado del server, igual que [avatarColor] y [periodCutoffDay].
+     */
+    val reminderLeadDays: Int = DEFAULT_REMINDER_LEAD_DAYS,
 )
 
 /**
@@ -38,6 +43,8 @@ data class UpdateProfileRequest(
     val avatarColor: String? = null,
     /** Día de corte del período, 1..31. `null` = no tocar. */
     val periodCutoffDay: Int? = null,
+    /** Días de aviso, 0..30. `null` = no tocar. */
+    val reminderLeadDays: Int? = null,
 )
 
 /**

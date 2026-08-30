@@ -32,6 +32,8 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
+import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
+import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 
 @Composable
 fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
@@ -45,6 +47,9 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var showEditProfile by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showPeriodo by remember { mutableStateOf(false) }
+    var showAviso by remember { mutableStateOf(false) }
+    var guardandoAviso by remember { mutableStateOf(false) }
+    var errorAviso by remember { mutableStateOf<String?>(null) }
     var guardandoPeriodo by remember { mutableStateOf(false) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
@@ -167,6 +172,37 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             showChevron = true,
                             isLast = true,
                             onClick = { errorPeriodo = null; showPeriodo = true },
+                        )
+                    }
+                }
+            }
+
+            // Aviso de vencimientos
+            item {
+                Spacer(Modifier.height(14.dp))
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    MinSectionHeader(title = "Avisos")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        // Cuántos días antes avisar. Vivía SOLO como variable de entorno del
+                        // server: global para todos y fuera del alcance de cualquier usuario.
+                        CardRow(
+                            left = {
+                                Column {
+                                    Text("Avisarme antes de un vencimiento", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
+                                    Text(
+                                        text = reminderLeadHint(profile?.reminderLeadDays ?: DEFAULT_REMINDER_LEAD_DAYS),
+                                        fontSize = 12.sp,
+                                        color = MinTextMute,
+                                    )
+                                }
+                            },
+                            showChevron = true,
+                            isLast = true,
+                            onClick = { errorAviso = null; showAviso = true },
                         )
                     }
                 }
@@ -322,6 +358,26 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         )
     }
     val alcancePeriodo = rememberCoroutineScope()
+    if (showAviso) {
+        DiasDeAvisoSheet(
+            diasActuales = profile?.reminderLeadDays ?: DEFAULT_REMINDER_LEAD_DAYS,
+            saving = guardandoAviso,
+            error = errorAviso,
+            onDismiss = { showAviso = false; errorAviso = null },
+            onSave = { dias ->
+                guardandoAviso = true
+                errorAviso = null
+                alcancePeriodo.launch {
+                    runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(reminderLeadDays = dias)) }
+                        .onSuccess { guardandoAviso = false; showAviso = false; profileReloadKey++ }
+                        .onFailure {
+                            guardandoAviso = false
+                            errorAviso = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                        }
+                }
+            },
+        )
+    }
     if (showPeriodo) {
         PeriodoSheet(
             cutoffActual = profile?.periodCutoffDay ?: 1,

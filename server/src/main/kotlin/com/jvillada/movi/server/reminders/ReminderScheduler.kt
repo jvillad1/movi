@@ -81,14 +81,17 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     val today = AppClock.today()
 
     // Load all users (id + email)
+    // Se lee también el aviso PROPIO de cada uno: el `leadDays` que llega por parámetro es el
+    // global del server y solo vale para quien no eligió. Dos personas en la misma instancia
+    // quieren números distintos, y ninguna puede tocar una variable de entorno.
     val users = dbQuery {
         Users.selectAll().map { row ->
-            Pair(row[Users.id], row[Users.email])
+            Triple(row[Users.id], row[Users.email], row[Users.reminderLeadDays])
         }
     }
 
-    for ((userId, userEmail) in users) {
-        runCatching { processUser(userId, userEmail, today, leadDays, apiKey, from) }
+    for ((userId, userEmail, leadPropio) in users) {
+        runCatching { processUser(userId, userEmail, today, leadPropio ?: leadDays, apiKey, from) }
             .onFailure {
                 // One user's failure must not stop the sweep for others
                 org.slf4j.LoggerFactory.getLogger("ReminderScheduler")

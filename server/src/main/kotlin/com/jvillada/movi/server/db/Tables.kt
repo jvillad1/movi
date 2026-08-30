@@ -22,6 +22,16 @@ object Users : Table("users") {
      * una tabla con filas es justo el DDL que deja el server sin arrancar.
      */
     val periodCutoffDay = integer("period_cutoff_day").nullable()
+    /**
+     * Con cuántos días de anticipación avisar un vencimiento.
+     *
+     * Antes solo existía como variable de entorno del server (`REMINDER_LEAD_DAYS`): global para
+     * todos y fuera del alcance del usuario. Es la deuda que el dueño nombró como regla — «otros
+     * usuarios no van a poder gestionar desde Claude cambios en la app».
+     *
+     * Nullable y se lee como el default: las cuentas que ya existen no la tienen.
+     */
+    val reminderLeadDays = integer("reminder_lead_days").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
