@@ -484,18 +484,31 @@ class LocalRepository(
         val uid = userId()
         // La foto va ANTES de preguntar, igual que en getAccounts: es lo que hace que la regla
         // de los fantasmas solo pueda ocultar filas por las que el server ya fue consultado.
-        val filasAntesDePreguntar = leerFilasLocales(uid, accountId)
+        // La foto va sobre TODAS las filas, no solo las de la cuenta pedida: la respuesta remota
+        // ahora es la lista completa, así que comparar contra un subconjunto marcaría como
+        // fantasma a cualquier fila de otra cuenta.
+        val filasAntesDePreguntar = leerFilasLocales(uid, null)
         val selladasAntesDePreguntar = filasAntesDePreguntar
             .filter { it.syncedAt != null }
             .mapTo(mutableSetOf()) { it.id }
         val habiaAlgoLocal = filasAntesDePreguntar.isNotEmpty()
 
+        // **Siempre se pide la lista COMPLETA**, incluso cuando el llamador quiere una sola
+        // cuenta. Antes se pedía filtrada y eso obligaba a apagar la regla anti-fantasma en ese
+        // caso —«no vino» podía significar «está en otra cuenta»—, con la consecuencia de que un
+        // movimiento borrado en la web desaparecía de Movimientos y **seguía viéndose para
+        // siempre en el detalle de la cuenta**. Dos pantallas de la misma app contando cosas
+        // distintas.
+        //
+        // Pidiendo todo y filtrando acá, la regla vale igual en las dos y no hay caso especial
+        // que recordar. No cuesta un viaje extra: el server devuelve el conjunto entero de todos
+        // modos (ver loadNonVoidedEvents), así que la respuesta filtrada nunca fue más barata.
         val remotos = try {
             if (habiaAlgoLocal) {
-                withTimeoutOrNull(PRESUPUESTO_DE_RED_MS) { remote.getEvents(accountId) }
+                withTimeoutOrNull(PRESUPUESTO_DE_RED_MS) { remote.getEvents(null) }
                     ?: return leerEventosLocales(uid, accountId)
             } else {
-                remote.getEvents(accountId)
+                remote.getEvents(null)
             }
         } catch (e: CancellationException) {
             // La pantalla se fue mientras el request estaba en vuelo (mismo caso que getAccounts):
@@ -509,27 +522,16 @@ class LocalRepository(
 
         db.transaction { remotos.forEach { mirrorEventLocally(it, uid) } }
         val porId = remotos.associateBy { it.id }
-        // La regla de los fantasmas solo corre sobre la lista COMPLETA, y esa condición no es un
-        // detalle: para poder leer «no vino» como «se anuló o se borró», la respuesta del server
-        // tiene que ser el conjunto entero del mismo alcance. `GET /api/events` lo es —devuelve
-        // todo lo no anulado del usuario, sin límite ni paginado (ver loadNonVoidedEvents)—, pero
-        // una respuesta **filtrada por cuenta** no: ahí «no vino» también puede significar «el
-        // server lo tiene en otra cuenta», y esconderlo sería inventar una desaparición.
+        // La regla de los fantasmas ya corre igual pidan una cuenta o todas, porque arriba
+        // siempre se pide el conjunto entero: «no vino» solo puede significar «se anuló o se
+        // borró en otro lado».
         //
-        // El caso que originó todo esto es el de la lista completa (Movimientos), así que el
-        // arreglo llega igual. En el detalle de una cuenta se prefiere mostrar de más: el dueño
-        // acaba de pasar el susto de creer que había perdido su mes.
-        //
-        // Y nunca sobre una respuesta VACÍA: si el server contesta 200 sin nada mientras el
-        // teléfono tiene filas selladas, la explicación más probable no es que el dueño haya
-        // borrado su historia entera, sino un filtro nuevo, un `uid` mal resuelto o un cambio de
-        // alcance del endpoint. Ante la duda se muestra de más — una lista vacía no es evidencia
-        // suficiente para hacer desaparecerle el mes a alguien.
-        val fantasmas = when {
-            accountId != null -> emptySet()
-            remotos.isEmpty() -> emptySet()
-            else -> selladasAntesDePreguntar - porId.keys
-        }
+        // Lo que sigue sin aplicarse es sobre una respuesta VACÍA: si el server contesta 200 sin
+        // nada mientras el teléfono tiene filas selladas, la explicación más probable no es que el
+        // dueño haya borrado su historia entera, sino un filtro nuevo, un `uid` mal resuelto o un
+        // cambio de alcance del endpoint. Ante la duda se muestra de más — una lista vacía no es
+        // evidencia suficiente para hacer desaparecerle el mes a alguien.
+        val fantasmas = if (remotos.isEmpty()) emptySet() else selladasAntesDePreguntar - porId.keys
         // El contenido de lo que el server conoce sale del server; lo que solo existe acá (todavía
         // sin subir) sale del espejo; y lo que el server ya no tiene se deja de mostrar.
         return leerEventosLocales(uid, accountId)
