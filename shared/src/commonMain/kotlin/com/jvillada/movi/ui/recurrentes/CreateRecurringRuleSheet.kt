@@ -222,6 +222,16 @@ fun CreateRecurringRuleSheet(
                         // acá no se habló de cuentas. Ver [cuentaParaElWire] — antes esto era
                         // `accountId ?: ""` y una lectura fallida bastaba para borrar la cuenta.
                         accountId = cuentaParaElWire(accountId, elDuenoEligioSinCuenta),
+                        // **Desde cuándo corre la regla**, y es lo que evita que Movi le proponga
+                        // otra vez el pago que la originó. Una regla que nace de un movimiento ya
+                        // ocurrido trae la fecha de ESE movimiento, así que su primer vencimiento
+                        // cae en el período siguiente (ver `dueDateFor`). Una regla escrita a mano
+                        // desde Recurrentes no trae ninguna y corre desde siempre, como hasta hoy.
+                        //
+                        // Al EDITAR se manda `null`, que el server lee como «no la toques» y
+                        // conserva la que ya tenía: la hoja no ofrece cambiar esta fecha, así que
+                        // mandar cualquier otra cosa sería inventar una decisión que nadie tomó.
+                        activeFrom = if (isEditMode) null else prefill?.activeFrom,
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }

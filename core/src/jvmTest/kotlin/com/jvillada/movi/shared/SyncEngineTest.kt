@@ -238,6 +238,45 @@ class SyncEngineTest {
         )
     }
 
+    /**
+     * **Corregir el monto mientras el POST está en vuelo no puede dejar la fila sellada con la
+     * cifra vieja.**
+     *
+     * Es la misma carrera que `markSyncedIfUnchanged` ya cerraba para la categoría y la fecha,
+     * abierta de nuevo por el monto, la cuenta y el concepto desde que se pueden corregir (ver
+     * `LocalRepository.updateEvent`). El daño era **silencioso y permanente**: la fila quedaba
+     * sellada, `selectUnsynced` dejaba de traerla, y el server se quedaba con $50.000 mientras el
+     * teléfono mostraba $20.000 para siempre.
+     *
+     * El stub corrige la fila **desde adentro de `postEvent`**, que es exactamente el instante en
+     * que la petición está en vuelo y nadie tiene la fila lockeada.
+     */
+    @Test
+    fun syncEvents_no_sella_una_fila_cuyo_monto_cambio_mientras_el_push_estaba_en_vuelo() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-carrera", "Efectivo", AccountType.CASH, 100_000L))
+        local.postEvent(event("ev-carrera", "acc-carrera", TransactionType.EXPENSE, 50_000L))
+
+        val remote = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+                // El dueño corrige el monto justo mientras esto viaja.
+                db.financialEventQueries.updateMovimiento(
+                    20_000L, event.accountId, event.description, event.id, testUserId,
+                )
+                return event
+            }
+        }
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        val fila = db.financialEventQueries.selectById("ev-carrera", testUserId).executeAsOne()
+        assertEquals(20_000L, fila.amount, "la corrección local no se pierde")
+        assertNull(
+            fila.syncedAt,
+            "sin sellar: el próximo ciclo la vuelve a empujar con el monto corregido",
+        )
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

@@ -237,4 +237,70 @@ class RecurringOfferTest {
         assertNull(categoriaSugeridaPorNombre("Netflix", TransactionType.EXPENSE))
         assertNull(categoriaSugeridaPorNombre("", TransactionType.EXPENSE))
     }
+
+    // ── «Esto se repite», ofrecido desde la hoja del movimiento ──────────────────────
+
+    /**
+     * La fecha del movimiento viaja en el prellenado, y es lo único que evita que la regla
+     * proponga otra vez el pago que la originó (ver [RecurringPrefill.activeFrom] y `dueDateFor`
+     * en el server). Sin esta línea, la función compilaba igual y el dueño recibía el
+     * recordatorio del arriendo que acababa de anotar.
+     */
+    @Test
+    fun `el prellenado lleva la fecha del movimiento como fecha de arranque`() {
+        // El fixture cae el 5 de agosto de 2025 en la zona de la app.
+        val prefill = prefillFrom(evento())
+        assertEquals("2025-08-05", prefill.activeFrom)
+        assertEquals(5, prefill.dayOfMonth, "el día y la fecha salen del mismo instante")
+    }
+
+    @Test
+    fun `un gasto comun se puede volver recurrente desde su detalle`() {
+        assertTrue(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento()))
+    }
+
+    /**
+     * A diferencia de [shouldOfferRecurring], acá **no** hay anti-nag: el dueño abrió la hoja de
+     * ese movimiento a propósito. Preguntar dos veces por el mismo movimiento no es molestar, es
+     * responder a lo que pidió. Este test fija esa diferencia — si alguien le agregara el throttle
+     * de sesión, la acción desaparecería justo cuando la vuelve a buscar.
+     */
+    @Test
+    fun `la hoja lo ofrece siempre, sin el limite por sesion de la barra`() {
+        val gasto = evento()
+        repeat(10) { assertTrue(puedeOfrecerseComoRecurrenteDesdeElDetalle(gasto)) }
+        // Y la barra, con la misma cosa ya ofrecida, sí lo apaga: son dos preguntas distintas.
+        assertFalse(
+            shouldOfferRecurring(gasto, emptyList(), alreadyOffered = setOf(throttleKeyFor(gasto))),
+        )
+    }
+
+    @Test
+    fun `ninguna pata de un par se ofrece desde el detalle`() {
+        // Un traspaso, un pago de cuota y el pago de una tarjeta son dos movimientos enlazados y
+        // `RecurringRule` no modela ninguno: el recurrente mentiría sobre lo que pasa cada mes.
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(transferId = "tr_1")))
+        assertFalse(
+            puedeOfrecerseComoRecurrenteDesdeElDetalle(
+                evento(category = "Cuota de crédito", description = "Cuota de Vehículo", transferId = "tr_2"),
+            ),
+            "la cuota de un crédito ya tiene su propio recordatorio",
+        )
+    }
+
+    @Test
+    fun `ninguna categoria reservada se ofrece desde el detalle`() {
+        RESERVED_CATEGORIES.forEach { reservada ->
+            assertFalse(
+                puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(category = reservada)),
+                "«$reservada» es un asiento interno de Movi, no un compromiso mensual",
+            )
+        }
+    }
+
+    @Test
+    fun `un movimiento sin monto ni nombre no se ofrece desde el detalle`() {
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(amount = 0L)))
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(description = "  ", category = "  ")))
+    }
 }

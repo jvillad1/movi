@@ -49,6 +49,8 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.accounts.VoidEventSheet
+import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
+import com.jvillada.movi.ui.recurrentes.RecurringPrefill
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -382,6 +384,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     val pendingCandidates = candidates.filterNot { it.id in resolvedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     var eventoAAnular by remember { mutableStateOf<FinancialEvent?>(null) }
+    // El formulario de recurrente pedido desde la hoja del movimiento («esto se repite»), ya
+    // lleno. Vive acá y no dentro de esa hoja: ver el comentario de `onMarcarComoRecurrente`.
+    var prefillRecurrente by remember { mutableStateOf<RecurringPrefill?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshKey, refreshTick) {
@@ -675,6 +680,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         ChangeCategorySheet(
             event = event,
             onDismiss = { selectedEvent = null },
+            // Para poder mover el movimiento de cuenta. Es la MISMA lista que ya alimenta
+            // `accountNames`/`accountTypes` de esta pantalla — no una lectura nueva.
+            cuentas = accounts,
             onEventChanged = { selectedEvent = null; refreshKey++ },
             // Ola 16: el saldo inicial ya no se lista acá, pero la búsqueda lo sigue
             // encontrando — y quien lo busca es justamente el que se pregunta «¿de dónde
@@ -687,6 +695,26 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                 { onNavigate(Screen.AccountDetail(event.accountId, tipo.group)) }
             },
             onAnular = { eventoAAnular = event },
+            // «Esto se repite todos los meses». La hoja del recurrente se abre ACÁ y no adentro
+            // de la de categoría: una hoja no puede abrir otra encima de sí misma —cerrar la de
+            // abajo se llevaría la de arriba— así que el estado sube y las dos se dibujan como
+            // hermanas, igual que ya se hace con la de anular.
+            onMarcarComoRecurrente = { prefill -> prefillRecurrente = prefill },
+        )
+    }
+
+    // Se dibuja DESPUÉS de la hoja de categoría para quedar encima, mismo criterio que
+    // `VoidEventSheet`. Guardar cierra las dos y recarga: el movimiento no cambió, pero
+    // Recurrentes sí, y el Inicio lo lee.
+    prefillRecurrente?.let { prefill ->
+        CreateRecurringRuleSheet(
+            onDismiss = { prefillRecurrente = null },
+            onSaved = {
+                prefillRecurrente = null
+                selectedEvent = null
+                refreshKey++
+            },
+            prefill = prefill,
         )
     }
 

@@ -80,6 +80,22 @@ data class RecurringPrefill(
     val dayOfMonth: Int,
     /** Ola 9 · D: de qué cuenta salió (o a cuál entró). Puede ser null si el movimiento no la traía. */
     val accountId: String?,
+    /**
+     * **La fecha del movimiento que originó la regla**, ISO `"2026-08-15"` — y con eso, la fecha
+     * desde la que la regla corre (ver [RecurringRule.activeFrom]).
+     *
+     * Es la pieza que evita **contar el pago dos veces**, y hace falta en los dos caminos que
+     * llegan acá (la barra de después de guardar y «Esto se repite» desde el detalle del
+     * movimiento). El movimiento que origina la regla YA ocurrió y ya está en «Gastos del mes»;
+     * sin esta fecha, la regla nace con su vencimiento en el período de ese mismo movimiento y
+     * Movi lo propone otra vez —«¿ya pagaste el arriendo de agosto?»— sobre un arriendo que acaba
+     * de anotar. Con ella, `dueDateFor` adelanta el primer vencimiento al período siguiente
+     * (rueda mientras `due <= activeFrom`), que es justo lo que el dueño espera.
+     *
+     * `null` = «desde siempre», que es como se comportaban todas las reglas hasta esta ola y como
+     * siguen naciendo las que se escriben a mano en Recurrentes.
+     */
+    val activeFrom: String?,
 )
 
 /**
@@ -168,14 +184,62 @@ fun prefillNameFor(event: FinancialEvent): String =
  *
  * Todo esto es editable en la hoja: es un formulario prellenado, no una confirmación.
  */
-fun prefillFrom(event: FinancialEvent): RecurringPrefill = RecurringPrefill(
-    name = prefillNameFor(event),
-    amount = event.amount,
-    category = event.category.trim(),
-    type = event.type,
-    dayOfMonth = epochMillisToAppDate(event.timestamp).dayOfMonth,
-    accountId = event.accountId.takeIf { it.isNotBlank() },
-)
+fun prefillFrom(event: FinancialEvent): RecurringPrefill {
+    val fecha = epochMillisToAppDate(event.timestamp)
+    return RecurringPrefill(
+        name = prefillNameFor(event),
+        amount = event.amount,
+        category = event.category.trim(),
+        type = event.type,
+        dayOfMonth = fecha.dayOfMonth,
+        accountId = event.accountId.takeIf { it.isNotBlank() },
+        // La MISMA fecha del movimiento, y por eso la regla no vuelve a proponerlo — ver
+        // [RecurringPrefill.activeFrom]. Se saca del mismo `fecha` que el día del mes: son dos
+        // caras del mismo dato y calcularlas dos veces era la forma de que se separaran.
+        activeFrom = fecha.toString(),
+    )
+}
+
+/**
+ * ¿Se puede ofrecer «esto se repite» sobre este movimiento **desde su hoja de detalle**?
+ *
+ * Es el hermano de [shouldOfferRecurring] y comparte con él las guardas **estructurales** —lo que
+ * no puede ser un recurrente por lo que es— pero **no las de molestia**, y esa diferencia es toda
+ * la función:
+ *
+ * - [shouldOfferRecurring] decide si Movi **interrumpe** al dueño con una barra que él no pidió,
+ *   así que lleva encima tres capas de anti-nag (una vez por cosa y por sesión, techo por
+ *   categoría, se va sola a los 12 segundos).
+ * - Esta decide si se **dibuja una fila** en una hoja que el dueño abrió a propósito, mirando un
+ *   movimiento que eligió. Ahí no hay a quién molestar: si la fila no aplica, no se dibuja; si
+ *   aplica, se dibuja siempre, todas las veces que la abra. Aplicarle el throttle acá sería
+ *   esconderle una acción que vino a buscar.
+ *
+ * El dueño lo pidió así: *«si no marqué algo recurrente pero lo es, poder hacerlo desde el
+ * movimiento luego»*. «Luego» es justamente cuando la barra ya se fue.
+ *
+ * Las guardas, y por qué cada una:
+ *
+ * 1. **Ninguna pata de un par** (`transferId`): un traspaso, un pago de cuota o el pago de una
+ *    tarjeta son dos movimientos enlazados y `RecurringRule` no modela ninguno de los tres —no
+ *    hay dónde poner la otra cuenta—, así que el recurrente mentiría sobre lo que pasa cada mes.
+ *    Y la cuota de un crédito **ya tiene** su recordatorio, el que arma el crédito solo.
+ * 2. **Ninguna categoría reservada**: «Traspaso», «Saldo inicial», «Pago de tarjeta», «Cuenta
+ *    eliminada», «Descuento de nómina» y «Pago de un tercero» son asientos internos de Movi, no
+ *    compromisos mensuales. Un saldo inicial no se repite; un descuento de nómina ya lo lleva la
+ *    libranza.
+ * 3. **Monto > 0**: un recurrente de $0 no es un compromiso.
+ *
+ * Lo que **no** se decide acá porque necesita red —si ya existe una regla con ese nombre, o si
+ * este movimiento ya está sellado como la ocurrencia de alguna— se pregunta al **tocar** la fila,
+ * y ahí se explica en vez de crear un duplicado. Ver `SeccionEstoSeRepite`.
+ */
+fun puedeOfrecerseComoRecurrenteDesdeElDetalle(event: FinancialEvent): Boolean {
+    if (event.transferId != null) return false
+    if (isReservedCategory(event.category)) return false
+    if (event.amount <= 0L) return false
+    return claveDeNombre(prefillNameFor(event)).isNotEmpty()
+}
 
 /**
  * Ola 9 · D (segundo hallazgo): **si el nombre ya dice qué es, no dejes la categoría en un

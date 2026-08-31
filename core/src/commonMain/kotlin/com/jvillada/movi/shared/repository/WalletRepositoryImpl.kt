@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
+import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -475,6 +476,21 @@ class WalletRepositoryImpl(
         val response = client.put("$baseUrl/api/events/$id/timestamp") {
             contentType(ContentType.Application.Json)
             setBody(UpdateEventTimestampRequest(timestamp))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // Mismo idioma que updateEventTimestamp: el server rechaza con 400 (monto o concepto mal
+    // formados), 404 (movimiento inexistente/de otro/anulado, o cuenta destino ajena) y 422 (una
+    // pata de un par cambiando de cuenta, o una cuenta de otra moneda). Ese texto es lo único que
+    // le explica al dueño por qué no se guardó — se pierde si se deserializa a ciegas.
+    override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(cambios)
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

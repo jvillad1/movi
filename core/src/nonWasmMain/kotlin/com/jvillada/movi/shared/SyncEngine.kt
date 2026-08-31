@@ -102,6 +102,13 @@ class SyncEngine(
      * y no solo la categoría — con una sola de las dos condiciones, el agujero seguía abierto
      * para la otra.
      *
+     * **Y lo mismo, otra vez, para el MONTO, la CUENTA y el CONCEPTO** desde que
+     * [com.jvillada.movi.shared.repository.LocalRepository.updateEvent] los hace editables: los
+     * tres se corrigen solo en local mientras el evento está pendiente, en esta misma ventana.
+     * La condición del UPDATE los incluye a los seis. Es el mismo error una vez por campo nuevo,
+     * así que la regla es: **todo campo que `updateEvent` (o cualquier corrección local) pueda
+     * tocar mientras `syncedAt` sigue en null tiene que entrar en este WHERE.**
+     *
      * Con la condición `AND category = :category`, si la categoría cambió el UPDATE no toca
      * ninguna fila: `syncedAt` se queda en null y el próximo ciclo (30s) la vuelve a levantar de
      * `selectUnsynced`, esta vez con la categoría ya corregida. Nota: eso reintenta un
@@ -147,6 +154,10 @@ class SyncEngine(
                 )
                 db.financialEventQueries.markSyncedIfUnchanged(
                     Clock.System.now().toEpochMilliseconds(), row.id, row.category, row.timestamp,
+                    // Y el monto, la cuenta y el concepto desde que se pueden corregir (ver
+                    // `LocalRepository.updateEvent`): el mismo agujero que la categoría y la
+                    // fecha ya tenían tapado, abierto por tres campos más.
+                    row.amount, row.accountId, row.description,
                 )
             } catch (e: Exception) {
                 logSyncFailure("syncEvents", e, id = row.id)
