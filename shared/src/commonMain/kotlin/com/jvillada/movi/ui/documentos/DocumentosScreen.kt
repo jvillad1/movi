@@ -235,7 +235,6 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 doc = doc,
                 onDismiss = { aEditar = null },
                 onGuardado = { aEditar = null; refreshKey++ },
-                onError = { error = it },
             )
         }
 
@@ -391,7 +390,6 @@ private fun EditarDocumentoSheet(
     doc: Documento,
     onDismiss: () -> Unit,
     onGuardado: () -> Unit,
-    onError: (String) -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     var nombre by remember { mutableStateOf(doc.nombre) }
@@ -399,10 +397,22 @@ private fun EditarDocumentoSheet(
     var periodo by remember { mutableStateOf(doc.periodo ?: "") }
     var notas by remember { mutableStateOf(doc.notas ?: "") }
     var guardando by remember { mutableStateOf(false) }
+    // El error se pinta ADENTRO de la hoja, no en el snackbar de la pantalla.
+    //
+    // La primera versión lo mandaba al padre, y la hoja lo tapaba: el `SnackbarHost` se dibuja
+    // antes que la hoja dentro del mismo `Box`, y la hoja trae un scrim negro a pantalla completa
+    // más un panel opaco. El snackbar vive a 16 dp del borde inferior, o sea justo debajo. Se caía
+    // la red, el botón volvía de «Guardando…» a «Guardar», y **no pasaba nada visible** — el dueño
+    // no sabía si había guardado. Y `LaunchedEffect(error)` lo limpiaba a los pocos segundos, así
+    // que cerrar la hoja después tampoco lo mostraba.
+    //
+    // Es la convención del resto de las hojas de la app (ver `EditProfileSheet`), no una excepción.
+    var error by remember { mutableStateOf<String?>(null) }
 
     fun guardar() {
         if (guardando || nombre.isBlank()) return
         guardando = true
+        error = null
         coroutine.launch {
             runCatching {
                 Repositories.wallets.updateDocument(
@@ -419,7 +429,7 @@ private fun EditarDocumentoSheet(
                 )
             }
                 .onSuccess { onGuardado() }
-                .onFailure { guardando = false; onError(it.toUserMessage()) }
+                .onFailure { guardando = false; error = it.toUserMessage() }
         }
     }
 
@@ -492,6 +502,10 @@ private fun EditarDocumentoSheet(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
+                }
+                error?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(it, fontSize = 12.sp, color = MinExpense)
                 }
                 Spacer(Modifier.height(20.dp))
             }

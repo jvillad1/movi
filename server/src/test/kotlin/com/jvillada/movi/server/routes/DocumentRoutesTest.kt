@@ -363,10 +363,19 @@ class DocumentRoutesTest {
         // no se podría sacar nunca.
         wireApp()
         val id = subir(duenoId)
-        editar(duenoId, id, """{"notas":"me equivoqué"}""")
 
-        val cuerpo = editar(duenoId, id, """{"notas":""}""").bodyAsText()
+        // La siembra se COMPRUEBA. La primera versión solo afirmaba en negativo —«la nota ya no
+        // está»— así que una ruta que contestara 404 a todo, con cuerpo vacío, la habría pasado
+        // igual. Un test que pasa cuando nada funciona no prueba nada.
+        val sembrado = editar(duenoId, id, """{"notas":"me equivoqué"}""")
+        val cuerpoSembrado = sembrado.bodyAsText()
+        assertEquals(HttpStatusCode.OK, sembrado.status, cuerpoSembrado)
+        assertTrue("me equivoqué" in cuerpoSembrado, "la nota tiene que estar antes de borrarla")
 
+        val res = editar(duenoId, id, """{"notas":""}""")
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, res.status, cuerpo)
         assertFalse("me equivoqué" in cuerpo)
     }
 
