@@ -343,6 +343,28 @@ data class RecurringRule(
      * tienen «desembolso» y corren desde siempre, como hasta ahora.
      */
     val activeFrom: String? = null,
+
+    /**
+     * **El monto de esta regla es un SALDO, no lo que se va a pagar.**
+     *
+     * Solo es `true` en las reglas sintéticas de una tarjeta de crédito. La «cuota» de una
+     * tarjeta no existe: uno paga el mínimo, el total, o algo en el medio, y eso lo decide el
+     * extracto de cada mes.
+     *
+     * El dueño lo vio en el Inicio: *«Próximos pagos muestra como si fuese a pagar absolutamente
+     * toda la tarjeta y no el pago mínimo»*. Movi anunciaba **$27.501.150** como su próximo pago
+     * cuando el mínimo de esa tarjeta ronda el 5 %. La cifra era su deuda, no su pago.
+     *
+     * Se eligió NO estimar el mínimo. Cada banco lo calcula distinto —y cambia con los diferidos
+     * y los avances—, así que un porcentaje inventado sería un número sobre su plata que él no
+     * puede verificar. Su propia sugerencia: *«si no lo quieres estimar, entonces simplemente no
+     * mencionar el monto del pago»*.
+     *
+     * El campo se conserva porque `OccurrenceMatching` lo usa para reconocer qué movimiento
+     * corresponde a qué recurrente: ahí el saldo sigue siendo la mejor pista que hay. Lo que
+     * cambia es que **nadie lo muestra como si fuera la cuota**.
+     */
+    val montoEsSaldo: Boolean = false,
     /**
      * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
      * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el

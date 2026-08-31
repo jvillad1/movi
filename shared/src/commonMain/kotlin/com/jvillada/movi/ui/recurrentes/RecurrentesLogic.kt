@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.components.formatCOP
 import kotlin.math.roundToLong
 
 /**
@@ -223,4 +224,29 @@ fun cuentaParaElWire(cuentaEnLaHoja: String?, elDuenoEligioSinCuenta: Boolean): 
     cuentaEnLaHoja != null -> cuentaEnLaHoja
     elDuenoEligioSinCuenta -> ""
     else -> null
+}
+
+/**
+ * **El texto del monto de un recurrente, en cualquiera de las tres pantallas que lo pintan.**
+ *
+ * Existe como función —y no como un `if` copiado en cada renderer— porque el defecto que arregla
+ * es exactamente el de un `if` que faltó en uno de ellos. El monto de la regla sintética de una
+ * tarjeta es su SALDO, no su cuota (ver [RecurringRule.montoEsSaldo]): el Inicio, Recurrentes y
+ * el correo lo dicen bien, y el **push** —el canal que suena— lo seguía anunciando como el pago
+ * del mes: «Pago tarjeta AMEX 9208 — $27.501.150 (vence hoy)».
+ *
+ * Con un solo lugar que lo decide, el `if` no puede faltar en el cuarto renderer que aparezca. Lo
+ * que cada pantalla sigue eligiendo por su cuenta es el ESTILO —el saldo va en gris y más chico,
+ * porque no es una cifra que vaya a salir de la cuenta—: eso es Compose y no cabe acá.
+ *
+ * (El push vive en `:server`, que no puede importar `:shared`; ahí la misma decisión se toma en
+ * `buildPushPayload` con su propio formato de miles, y su test la fija.)
+ *
+ * @param conSigno ¿la fila pone `+`/`−` delante? El inventario de Recurrentes sí, la lista de
+ *   «Próximos pagos» del Inicio no. Un saldo nunca lleva signo: no es un movimiento.
+ */
+fun textoDelMonto(rule: RecurringRule, conSigno: Boolean = false): String = when {
+    rule.montoEsSaldo -> "saldo ${formatCOP(rule.amount)}"
+    conSigno -> "${if (rule.type == TransactionType.INCOME) "+" else "−"}${formatCOP(rule.amount)}"
+    else -> formatCOP(rule.amount)
 }

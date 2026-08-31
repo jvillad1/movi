@@ -19,7 +19,11 @@ import org.jetbrains.exposed.sql.selectAll
  * Regla recurrente sintética para el pago de una tarjeta — el equivalente de [virtualRuleFor]
  * para card_terms. La diferencia de fondo: la «cuota» de una tarjeta no es fija como la de un
  * préstamo, así que el monto es [currentDebt] — la deuda actual derivada de los eventos de la
- * cuenta, que es lo que habría que pagar para quedar al día.
+ * cuenta.
+ *
+ * **Y por eso viaja marcado con `montoEsSaldo`.** «Lo que habría que pagar para quedar al día» es
+ * cierto y aun así engaña cuando se pinta bajo el rótulo «Próximos pagos»: el dueño vio
+ * $27.501.150 anunciados como su próximo pago, cuando el mínimo de esa tarjeta ronda el 5 %.
  */
 fun virtualRuleForCard(terms: CardTerms, accountName: String, currentDebt: Long): RecurringRule =
     RecurringRule(
@@ -27,6 +31,8 @@ fun virtualRuleForCard(terms: CardTerms, accountName: String, currentDebt: Long)
         name       = "Pago tarjeta $accountName",
         category   = "Créditos",
         amount     = currentDebt,
+        // Es el SALDO, no la cuota: quien lo muestre tiene que saberlo. Ver `montoEsSaldo`.
+        montoEsSaldo = true,
         dayOfMonth = terms.paymentDay,
         type       = TransactionType.EXPENSE,
         // Igual que en créditos: la decisión de avisar vive en card_terms, no en la regla.

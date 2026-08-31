@@ -1,0 +1,17 @@
+-- Migración 5 → 6: agrega `account.conditionedTo`, el espejo local de `accounts.conditioned_to`.
+--
+-- **Sin esto la cifra grande del Inicio oscila.** `heroBalance` saca de «Tu plata» las cuentas
+-- condicionadas (la pensión voluntaria del dueño: $106.000.000 que solo puede retirar para
+-- vivienda). Pero la fila local no sabía guardar la condición, así que cada vez que `getAccounts`
+-- contestaba con lo local —modo avión, y también cuando el server tarda más que
+-- PRESUPUESTO_DE_RED_MS— esa plata volvía a sumar y el hero saltaba de $31,6M a $137,6M. En el
+-- teléfono la misma cifra cambiaba según la red.
+--
+-- Mismo mecanismo que 1/2/3/4.sqm: SQLDelight deriva `schemaVersion` del .sqm más alto, y sin
+-- este archivo `onUpgrade` no correría sobre las bases ya instaladas.
+--
+-- `ADD COLUMN` de una columna NULLABLE y sin default es la migración más barata que hay en
+-- SQLite: no reescribe la tabla, y toda fila existente queda en NULL, que es la verdad — nacieron
+-- sin condición porque el campo no existía. Es la misma forma del ALTER que
+-- `createMissingTablesAndColumns` emite del lado del server para `accounts.conditioned_to`.
+ALTER TABLE account ADD COLUMN conditionedTo TEXT;
