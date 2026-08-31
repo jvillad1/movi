@@ -353,7 +353,23 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else {
             val limit = data.budgets.sumOf { it.monthlyLimit }
             val spent = data.budgets.sumOf { data.spentByCategory[it.category] ?: 0L }
-            LinkFigure(formatCOP(spent), "de ${formatCOP(limit)} este mes", isAlert = limit > 0 && spent >= limit)
+            // **La tercera regla, y estaba 70 líneas debajo de la segunda.** Esta línea comparaba
+            // `spent >= limit` sobre los TOTALES, así que fallaba de dos maneras a la vez:
+            //
+            // - Con un solo presupuesto justo en el límite ($2.000.000 de $2.000.000) pintaba el
+            //   acceso en alerta, mientras Presupuestos lo mostraba verde. La misma contradicción
+            //   que este PR vino a matar, movida del panel de alertas a la tarjeta de al lado.
+            // - Y al revés: sumar todo esconde el caso real. Con Mercado en $3.000.000 de
+            //   $2.000.000 y Salidas en $100.000 de $2.000.000, el total da por debajo y el acceso
+            //   se veía tranquilo mientras la alerta decía «Presupuesto de Mercado superado».
+            //
+            // La alerta se decide POR CATEGORÍA, que es como se vive: un presupuesto excedido no
+            // se compensa con otro que sobró.
+            LinkFigure(
+                formatCOP(spent),
+                "de ${formatCOP(limit)} este mes",
+                isAlert = overBudgetCategories(data.budgets, data.spentByCategory).isNotEmpty(),
+            )
         }
     }
     "goals" -> {

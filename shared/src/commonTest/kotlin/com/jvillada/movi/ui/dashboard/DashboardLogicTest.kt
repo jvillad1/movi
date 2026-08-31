@@ -536,9 +536,32 @@ class DashboardLogicTest {
     }
 
     @Test
-    fun `presupuesto superado se marca como alerta en el acceso`() {
-        val over = data.copy(spentByCategory = mapOf("Mercado" to 400_000L))
-        assertEquals(true, quickLinkFigure("budgets", over).isAlert)
+    fun `el acceso a Presupuestos usa la misma regla que el resto de la app`() {
+        // Este test fijaba la regla vieja —«400.000 de 400.000 es alerta»— y por eso se puso rojo.
+        // Era la TERCERA copia de esa comparación, a 70 líneas de la segunda, y producía la misma
+        // contradicción que el dueño reportó: el acceso en alerta, y adentro todo verde.
+        val justo = data.copy(spentByCategory = mapOf("Mercado" to 400_000L))
+        assertEquals(false, quickLinkFigure("budgets", justo).isAlert, "gastar el límite exacto no es superarlo")
+
+        val pasado = data.copy(spentByCategory = mapOf("Mercado" to 400_001L))
+        assertEquals(true, quickLinkFigure("budgets", pasado).isAlert)
+    }
+
+    @Test
+    fun `un presupuesto excedido no se compensa con otro que sobro`() {
+        // El otro defecto de la misma línea, y el que sumar totales escondía: comparaba la SUMA de
+        // los límites contra la SUMA de los gastos. Con un presupuesto muy excedido y otro casi
+        // sin usar, el total daba por debajo y el acceso se veía tranquilo mientras el panel de
+        // alertas decía «Presupuesto de Mercado superado».
+        //
+        // Un presupuesto excedido no se compensa con otro que sobró: así no se vive la plata.
+        val dos = data.copy(
+            budgets = listOf(Budget("Mercado", 2_000_000), Budget("Salidas", 2_000_000)),
+            spentByCategory = mapOf("Mercado" to 3_000_000L, "Salidas" to 100_000L),
+        )
+
+        assertEquals(true, quickLinkFigure("budgets", dos).isAlert)
+        assertEquals(listOf("Mercado"), overBudgetCategories(dos.budgets.orEmpty(), dos.spentByCategory))
     }
 
     // ── Secciones visibles ─────────────────────────────────────────────────────
