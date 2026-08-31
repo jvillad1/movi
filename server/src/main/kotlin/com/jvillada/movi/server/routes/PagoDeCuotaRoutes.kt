@@ -1,0 +1,170 @@
+package com.jvillada.movi.server.routes
+
+import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.db.insertEventRow
+import com.jvillada.movi.server.db.toFinancialEvent
+import com.jvillada.movi.server.balance.toAccount
+import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.pagoDeCuotaLegs
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.signedDelta
+import com.jvillada.movi.shared.model.validarPagoDeCuota
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.call
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.post
+import io.ktor.server.routing.route
+import org.jetbrains.exposed.exceptions.ExposedSQLException
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.selectAll
+
+private const val MAX_ID = 50
+
+/**
+ * Pagar la cuota de un crédito, o el extracto de una tarjeta, en una sola operación.
+ *
+ * Escribe **dos patas enlazadas** por `transferId`, igual que un traspaso: el EXPENSE que saca la
+ * plata de la cuenta y el INCOME que baja la deuda. La diferencia con un traspaso está en las
+ * categorías, y el porqué vive en `:core` (ver [CreatePagoDeCuotaRequest]) porque es una regla
+ * sobre la plata del dueño, no sobre esta ruta.
+ *
+ * Sigue el mismo orden de guardas que `POST /api/transfers`, y por los mismos motivos medidos
+ * allá: ids antes de tocar la base, 404 por aislamiento, validación de dominio compartida con la
+ * app, piso de año, y colisión de `transferId` preguntada ANTES en vez de deducida de una
+ * excepción de SQL.
+ */
+fun Route.pagoDeCuotaRoutes() {
+    route("/api/payments/installment") {
+        post {
+            val uid = call.userId()
+            val body = call.receive<CreatePagoDeCuotaRequest>()
+
+            // Los ids se validan antes del INSERT: la columna es varchar(50) y uno vacío o
+            // larguísimo explota adentro con una excepción que el catch de abajo confundiría con
+            // un reintento.
+            listOf(
+                "pago" to body.transferId,
+                "movimiento de origen" to body.fromEventId,
+                "movimiento de la deuda" to body.toEventId,
+            ).forEach { (nombre, id) ->
+                if (id.isBlank()) return@post call.respond(HttpStatusCode.UnprocessableEntity, "Falta el identificador del $nombre")
+                if (id.length > MAX_ID) return@post call.respond(HttpStatusCode.UnprocessableEntity, "El identificador del $nombre es demasiado largo")
+            }
+            if (body.fromEventId == body.toEventId) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, "Las dos patas no pueden compartir el mismo identificador")
+            }
+
+            val cuentas = dbQuery {
+                val origen = Accounts.selectAll()
+                    .where { (Accounts.userId eq uid) and (Accounts.id eq body.fromAccountId) }
+                    .firstOrNull()?.toAccount()
+                val deuda = Accounts.selectAll()
+                    .where { (Accounts.userId eq uid) and (Accounts.id eq body.debtAccountId) }
+                    .firstOrNull()?.toAccount()
+                origen to deuda
+            }
+            val from = cuentas.first
+            val debt = cuentas.second
+            // 404 y no 403 si la cuenta es de otro: mismo criterio de aislamiento que el resto.
+            if (from == null || debt == null) {
+                return@post call.respond(HttpStatusCode.NotFound, "Cuenta no encontrada")
+            }
+
+            // Última línea de defensa: la hoja de Agregar ya apagó el botón con ESTA MISMA
+            // función y este mismo texto —vive en `:core` justamente para eso— pero un cliente
+            // viejo o un POST a mano no pasan por ahí.
+            validarPagoDeCuota(body, from, debt)?.let {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
+            }
+
+            // Piso de año, igual que en eventos y traspasos: un epoch roto esconde las dos patas
+            // en 1970 y nadie las vuelve a ver.
+            if (epochMillisToAppDate(body.timestamp).year !in 2000..2100) {
+                return@post call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
+            }
+
+            // ¿Ese id ya tiene dueño? Se pregunta antes en vez de deducirlo de una excepción: un
+            // deadlock cae en el mismo `catch` que un reintento, y contestar «ya está registrado»
+            // a un deadlock sería un «guardado» sobre la nada.
+            val patasExistentes = dbQuery {
+                Events.select(Events.id)
+                    .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
+                    .map { it[Events.id] }.toSet()
+            }
+            if (patasExistentes.isNotEmpty() && patasExistentes != setOf(body.fromEventId, body.toEventId)) {
+                return@post call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "Ese identificador de pago ya lo usa otro movimiento.",
+                )
+            }
+
+            val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt)
+
+            // Las dos inserciones en UN solo dbQuery = una sola transacción: si la segunda choca,
+            // la primera se va con ella. Media operación acá sería plata que salió de la cuenta
+            // sin bajar ninguna deuda.
+            val ok = try {
+                dbQuery {
+                    insertEventRow(uid, pataDelDinero)
+                    insertEventRow(uid, pataDeLaDeuda)
+                }
+                true
+            } catch (e: ExposedSQLException) {
+                call.application.environment.log.warn("[pago-cuota] INSERT falló para ${body.transferId}", e)
+                false
+            }
+
+            if (!ok) {
+                // El reintento de verdad —el dedo que volvió a tocar Guardar— manda los mismos
+                // tres ids. Si las dos patas ya están, el pago YA ocurrió: se contesta 200 con lo
+                // que de verdad quedó guardado, no un conflicto seco.
+                val ahora = dbQuery {
+                    Events.select(Events.id)
+                        .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
+                        .map { it[Events.id] }.toSet()
+                }
+                // Si las patas NO están, el INSERT falló de verdad. **500 y no 422**: un 422 la
+                // app lo lee como «tu pago está mal», y no lo está — falló el server.
+                if (ahora != setOf(body.fromEventId, body.toEventId)) {
+                    return@post call.respond(HttpStatusCode.InternalServerError, "No se pudo registrar el pago. Inténtalo de nuevo.")
+                }
+            }
+
+            // **Se releen las patas GUARDADAS, no se devuelven las construidas.**
+            //
+            // Escenario que encontró la revisión: el dueño escribe 4.215.223, toca Guardar, el
+            // server commitea y la respuesta se pierde. Ve el error, se da cuenta de que el monto
+            // estaba mal, lo corrige a 4.500.000 y vuelve a tocar Guardar — `save()` no renueva
+            // los ids ante un fallo. El server rechaza por clave repetida, relee, los ids
+            // coinciden, y responde 200. Devolviendo las patas construidas, la respuesta afirmaba
+            // 4.500.000 sobre un pago de 4.215.223.
+            val guardadas = dbQuery {
+                Events.selectAll()
+                    .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
+                    .map { it.toFinancialEvent() }
+            }
+
+            // Se devuelve la deuda como quedó: es el número que el dueño vino a ver bajar.
+            // `loadNonVoidedEvents` ya abre su propia transacción: envolverla en otra la anida.
+            val eventos = loadNonVoidedEvents(uid, debt.id)
+            call.respond(
+                if (ok) HttpStatusCode.Created else HttpStatusCode.OK,
+                PagoDeCuotaResult(
+                    deudaRestante = eventos.sumOf {
+                        signedDelta(debt.type, it.type, it.amount)
+                    },
+                    patas = guardadas,
+                ),
+            )
+        }
+    }
+}

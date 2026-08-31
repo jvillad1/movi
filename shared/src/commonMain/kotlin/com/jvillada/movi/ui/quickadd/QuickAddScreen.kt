@@ -603,7 +603,10 @@ fun QuickAddScreen(
                     TypeSegments(
                         // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
                         // habla igual — Inicio y Movimientos también dicen «Gastos».
-                        labels = listOf("Gasto", "Ingreso", "Traspaso"),
+                        // «Cuota» y no «Pago de cuota»: son cuatro segmentos en una fila que en
+                        // un teléfono de 375 px reparte ~90 px a cada uno. La palabra completa no
+                        // entra; la corta se entiende en contexto y el formulario lo dice entero.
+                        labels = listOf("Gasto", "Ingreso", "Traspaso", "Cuota"),
                         selected = pickers.typeIndex,
                         // Cambiar de pestaña saca de composición al formulario de la pestaña
                         // vieja: si era Traspaso, su sub-picker se fue con él y el estado tiene
@@ -707,7 +710,7 @@ fun QuickAddScreen(
                                 // correcto si mañana el cuerpo gana o pierde una fila.
                                 .onSizeChanged { if (cuerpoCompuesto) bodyHeightPx = it.height },
                         ) {
-                            if (pickers.typeIndex == TIPO_TRASPASO) {
+                            if (pickers.typeIndex >= TIPO_TRASPASO) {
                                 TransferBody(
                                     accounts = accounts,
                                     accountsLoaded = accountsLoaded,
@@ -722,6 +725,14 @@ fun QuickAddScreen(
                                     // contexto vale también para el ORIGEN del traspaso — es la
                                     // cuenta que el dueño estaba mirando cuando tocó «Agregar».
                                     presetAccountId = presetAccountId,
+                                    // La misma hoja sirve las dos pestañas: un pago de cuota es un
+                                    // traspaso con otras categorías y otro endpoint. Ver
+                                    // [ModoDeTraspaso].
+                                    modo = if (pickers.typeIndex == TIPO_PAGO_CUOTA) {
+                                        ModoDeTraspaso.PAGO_DE_CUOTA
+                                    } else {
+                                        ModoDeTraspaso.TRASPASO
+                                    },
                                     onSaved = onSaved,
                                 )
                             } else {
@@ -816,6 +827,13 @@ internal fun TypeSegments(
                     fontWeight = FontWeight.Medium,
                     color = if (isActive) MinText else MinTextDim,
                     letterSpacing = 0.1.sp,
+                    // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp
+                    // en un teléfono de 375 px: «Traspaso» a 13 sp mide ~55, pero con la escala de
+                    // fuente del sistema al 2× se pasa y envuelve, lo que crece la fila del
+                    // selector y corre el formulario entero hacia abajo. Con tres segmentos el
+                    // umbral estaba más lejos; con cuatro, no.
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         }

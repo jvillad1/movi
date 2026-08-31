@@ -95,7 +95,17 @@ fun detectSubscriptions(events: List<FinancialEvent>, today: LocalDate): List<De
         // entraba al total mensual como un gasto fijo que no existe. Mover plata entre cuentas
         // propias no es un gasto, así que no puede ser una suscripción. Mismo criterio (y mismo
         // lugar en la cadena) que el filtro de los agregados de Famirios en `SubscriptionSync`.
-        .filterNot { it.category == TRANSFER_CATEGORY }
+        // **Por `transferId`, no por el nombre de la categoría.** El filtro miraba
+        // `category == TRANSFER_CATEGORY`, y eso dejó de alcanzar cuando nació el pago de cuota:
+        // sus dos patas van enlazadas igual que un traspaso, pero con OTRA categoría («Cuota de
+        // crédito» o «Pago de tarjeta»). La pata de salida cumple la heurística entera —mismo
+        // texto «Cuota de Vehículo 4083», monto idéntico, cadencia mensual clavada— así que a los
+        // dos meses aparecía como suscripción candidata, y confirmada habría contado la cuota DOS
+        // veces: en «Gastos del mes» y en el total de recurrentes.
+        //
+        // `transferId != null` es lo que de verdad significa «esta fila es la mitad de una
+        // operación de dos patas», y cubre las tres formas que existen hoy y las que vengan.
+        .filterNot { it.transferId != null || it.category == TRANSFER_CATEGORY }
         .filter { it.type == TransactionType.EXPENSE && !dateOf(it.timestamp).isAfter(today) }
         .mapNotNull { ev -> normalizeMerchant(ev.merchant ?: ev.description)?.let { it to ev } }
         .toList()

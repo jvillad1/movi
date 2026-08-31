@@ -43,6 +43,7 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.TransferKind
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.transferKindFor
+import com.jvillada.movi.shared.model.validarPagoDeCuota
 import com.jvillada.movi.shared.model.validateTransfer
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.time.AppTimeZone
@@ -264,6 +265,30 @@ private fun destinoSugerido(origenElegido: String?): String? =
  * entrada a otra), y en cambio necesita dos cuentas en vez de una. Compartir el formulario habría
  * significado media docena de `if (esTraspaso)` adentro de cada fila.
  */
+/**
+ * Las dos cosas que este formulario sabe hacer. Son la MISMA operación —dos patas enlazadas, una
+ * cuenta que da y otra que recibe— y por eso comparten toda la maquinaria de selectores, alturas y
+ * reintentos, que ya se llevó nueve rondas de arreglos.
+ *
+ * Lo que cambia es: qué cuentas se ofrecen de cada lado, cómo se llaman los dos lados, y qué
+ * endpoint recibe el resultado. Nada más.
+ */
+internal enum class ModoDeTraspaso {
+    /** Mover plata entre cuentas propias, o el desembolso/abono de un crédito. */
+    TRASPASO,
+
+    /**
+     * Pagar la cuota de un crédito o el extracto de una tarjeta.
+     *
+     * Nace de un pedido del dueño: *«necesito poder agregar un tipo de movimiento que sea pago de
+     * cuota, que pueda asociar a un crédito o tarjeta, y que vos sepas cómo manejarlo por
+     * debajo»*. Antes la misma acción tenía dos mecánicas incompletas: un crédito se pagaba con un
+     * traspaso (la deuda bajaba pero la cuota no aparecía en los gastos del mes) y una tarjeta ni
+     * siquiera admitía traspaso — se anotaba como gasto y la deuda quedaba igual.
+     */
+    PAGO_DE_CUOTA,
+}
+
 @Composable
 internal fun TransferBody(
     accounts: List<Account>,
@@ -287,10 +312,23 @@ internal fun TransferBody(
      * que nadie lo cierre.
      */
     onPickerAbierto: (Boolean) -> Unit = {},
+    modo: ModoDeTraspaso = ModoDeTraspaso.TRASPASO,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
-    val elegibles = remember(accounts) { transferableAccounts(accounts) }
+    val esPago = modo == ModoDeTraspaso.PAGO_DE_CUOTA
+    // En un pago, los dos lados ofrecen cosas distintas: de dónde sale la plata son cuentas de
+    // dinero, y lo que se paga son deudas. En un traspaso, la misma lista para los dos.
+    val elegibles = remember(accounts, esPago) {
+        if (esPago) accounts.filter { it.type.group != AccountGroup.DEUDA }
+        else transferableAccounts(accounts)
+    }
+    /** Lo que se puede pagar: préstamos y tarjetas. Vacío si el dueño no tiene ninguno. */
+    val deudas = remember(accounts) {
+        accounts.filter { it.type == AccountType.LOAN || it.type == AccountType.CREDIT_CARD }
+    }
+    /** El lado «hacia» ofrece deudas en un pago, y las cuentas normales en un traspaso. */
+    val elegiblesDestino = if (esPago) deudas else elegibles
     // Ola 14: de acá salen los valores POR DEFECTO, y a propósito no incluye los créditos — ver
     // [defaultTransferAccounts]. `elegibles` (que sí los trae) es lo que se ofrece en el selector
     // y lo que valida el botón.
@@ -319,7 +357,9 @@ internal fun TransferBody(
      * Corre cuando cambia la lista de cuentas (que llega después de que esta pestaña se compuso)
      * y respeta lo que el dueño haya elegido a mano, salvo que esa cuenta ya no exista.
      */
-    LaunchedEffect(elegibles) {
+    // Se reejecuta también cuando cambia el DESTINO elegible: al pasar de Traspaso a Cuota la
+    // lista del lado «hacia» cambia entera, y lo que había quedado seleccionado ya no sirve.
+    LaunchedEffect(elegibles, elegiblesDestino) {
         val origenFirme = origenFrom == OrigenCuenta.ELEGIDA && elegibles.any { it.id == fromId }
         if (!origenFirme) {
             val elegida = resolverCuenta(
@@ -330,12 +370,24 @@ internal fun TransferBody(
             fromId = elegida.id
             origenFrom = elegida.origen
         }
+        // **El destino se valida contra SU lista, no contra la del origen.**
+        //
+        // Decía `elegibles.any { it.id == toId }`, y en un pago el destino es una deuda — que por
+        // definición NUNCA está en `elegibles`. O sea que `destinoFirme` era siempre false, con
+        // dos consecuencias que la revisión midió: al entrar, `toId` quedaba seteado en una cuenta
+        // de dinero que no está en la lista del destino, así que la fila decía «Elegir cuenta»
+        // **con el aviso «Por defecto» al lado** —contradiciéndose sola—; y cualquier
+        // reejecución del efecto borraba la deuda que el dueño ya había elegido.
         val destinoFirme = origenTo == OrigenCuenta.ELEGIDA &&
-            elegibles.any { it.id == toId } && toId != fromId
+            elegiblesDestino.any { it.id == toId } && toId != fromId
         if (!destinoFirme) {
             val elegida = resolverCuenta(
-                cuentas = paraDefecto,
-                ultima = destinoSugerido(fromId),
+                // En un pago no hay «par recordado» que proponer: la deuda que se paga la elige el
+                // dueño con el dedo. `defaultTransferAccounts` excluye las deudas justamente para
+                // que un crédito no quede preseleccionado por accidente, y esa disciplina vale
+                // igual acá — un pago de $9.147.408 que nadie pidió sería peor que un toque más.
+                cuentas = if (esPago) emptyList() else paraDefecto,
+                ultima = if (esPago) null else destinoSugerido(fromId),
                 excluir = fromId,
             )
             toId = elegida.id
@@ -415,8 +467,16 @@ internal fun TransferBody(
     var ids by remember { mutableStateOf(TransferDraftIds.new()) }
 
     val from = elegibles.firstOrNull { it.id == fromId }
-    val to = elegibles.firstOrNull { it.id == toId }
-    val missing = validateTransfer(from, to, amount ?: 0L)
+    val to = elegiblesDestino.firstOrNull { it.id == toId }
+    val missing = if (esPago) {
+        validarPagoDeCuota(
+            pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note),
+            from,
+            to,
+        )
+    } else {
+        validateTransfer(from, to, amount ?: 0L)
+    }
     val canSave = missing == null && !saving
 
     fun save() {
@@ -429,9 +489,15 @@ internal fun TransferBody(
         error = null
         coroutine.launch {
             val result = runCatching {
-                Repositories.wallets.createTransfer(
-                    transferRequestFor(ids, origen, destino, amount ?: 0L, timestamp, note),
-                )
+                if (esPago) {
+                    Repositories.wallets.payInstallment(
+                        pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note),
+                    )
+                } else {
+                    Repositories.wallets.createTransfer(
+                        transferRequestFor(ids, origen, destino, amount ?: 0L, timestamp, note),
+                    )
+                }
             }
             saving = false
             result
@@ -441,7 +507,13 @@ internal fun TransferBody(
                     ids = TransferDraftIds.new()
                     // Ola 11: el próximo traspaso arranca con este mismo par. Igual que en el
                     // editor de un movimiento, solo después de que el server lo confirmó.
-                    LastAccountStore.recordTransfer(origen.id, destino.id)
+                    //
+                    // Un PAGO no lo recuerda, y no es un olvido: pisaría el par del traspaso con
+                    // una deuda. Medido por la revisión — si siempre traspasás Bancolombia→Nequi y
+                    // pagás la cuota del carro, el destino recordado pasa a ser la Libranza, que
+                    // `defaultTransferAccounts` excluye, así que la sugerencia se pierde y el
+                    // traspaso vuelve a proponer la primera cuenta de la lista.
+                    if (!esPago) LastAccountStore.recordTransfer(origen.id, destino.id)
                     onSaved()
                 }
                 .onFailure { fallo ->
@@ -452,8 +524,8 @@ internal fun TransferBody(
                     if (isAlreadyRegistered(fallo)) {
                         ids = TransferDraftIds.new()
                         // El traspaso SÍ quedó registrado, así que este par cuenta como usado
-                        // igual que en el camino feliz.
-                        LastAccountStore.recordTransfer(origen.id, destino.id)
+                        // igual que en el camino feliz. Un pago, por lo mismo de arriba, no.
+                        if (!esPago) LastAccountStore.recordTransfer(origen.id, destino.id)
                         onSaved()
                     } else {
                         error = fallo.toUserMessage()
@@ -504,8 +576,13 @@ internal fun TransferBody(
             }
         } else if (picking != null) {
             TransferAccountPicker(
-                title = if (picking == TransferSide.FROM) "Desde" else "Hacia",
-                accounts = elegibles,
+                title = when {
+                    picking == TransferSide.FROM && esPago -> "¿De dónde sale la plata?"
+                    picking == TransferSide.FROM -> "Desde"
+                    esPago -> "¿Qué estás pagando?"
+                    else -> "Hacia"
+                },
+                accounts = if (picking == TransferSide.FROM) elegibles else elegiblesDestino,
                 selectedId = if (picking == TransferSide.FROM) fromId else toId,
                 onPick = { id ->
                     if (picking == TransferSide.FROM) {
@@ -551,12 +628,27 @@ internal fun TransferBody(
         // hay dos elegibles, pero [validateTransfer] rechaza crédito↔crédito, así que el
         // formulario se abría con las dos puntas vacías y sin salida. El mensaje de abajo dice
         // exactamente lo que falta.
-        if (accountsLoaded && (elegibles.size < 2 || paraDefecto.isEmpty())) {
+        // En modo pago la condición es OTRA: hace falta UNA cuenta de dinero y UNA deuda, no dos
+        // cuentas propias. Con la condición del traspaso, alguien con Bancolombia + AMEX +
+        // Libranza tenía `elegibles.size == 1` y la pestaña no se dibujaba — mostrando además el
+        // mensaje que dice «el pago de la tarjeta se anota como gasto», o sea lo contrario de lo
+        // que esta pestaña vino a hacer.
+        val faltanCuentas = if (esPago) elegibles.isEmpty() || deudas.isEmpty()
+        else elegibles.size < 2 || paraDefecto.isEmpty()
+        if (accountsLoaded && faltanCuentas) {
             Spacer(Modifier.height(18.dp))
             Text(
-                text = "Un traspaso necesita dos cuentas tuyas. Un crédito sirve de punta " +
-                    "—para el desembolso o para un abono extraordinario— pero la tarjeta no: el pago " +
-                    "de la tarjeta se anota como gasto.",
+                text = when {
+                    esPago && deudas.isEmpty() ->
+                        "Para pagar una cuota necesitas tener cargado el crédito o la tarjeta. " +
+                            "Se cargan en Créditos."
+                    esPago ->
+                        "Para pagar una cuota necesitas una cuenta de dinero de donde salga la plata."
+                    else ->
+                        "Un traspaso necesita dos cuentas tuyas. Un crédito sirve de punta " +
+                            "—para el desembolso o para un abono extraordinario— pero la tarjeta no: el pago " +
+                            "de la tarjeta se anota como gasto."
+                },
                 fontSize = 13.sp,
                 color = MinTextMute,
                 textAlign = TextAlign.Center,
@@ -647,7 +739,10 @@ internal fun TransferBody(
         // motivo que ya se muestra debajo del botón.
         val unSoloCredito = from != null && to != null &&
             (from.type == AccountType.LOAN) != (to.type == AccountType.LOAN)
-        val claseDeTraspaso = if (unSoloCredito) transferKindFor(from!!, to!!) else null
+        // Los avisos de desembolso/abono son del TRASPASO. En la pestaña Cuota, el de abono
+        // decía literalmente «la cuota mensual no va aquí — esa se anota como gasto en Agregar»:
+        // la pantalla contradecía a la pestaña en la que estaba.
+        val claseDeTraspaso = if (unSoloCredito && !esPago) transferKindFor(from!!, to!!) else null
         if (claseDeTraspaso == TransferKind.DESEMBOLSO || claseDeTraspaso == TransferKind.ABONO_EXTRAORDINARIO) {
             Spacer(Modifier.height(12.dp))
             Text(
@@ -694,7 +789,7 @@ internal fun TransferBody(
         Spacer(Modifier.height(14.dp))
         Text("NOTA (OPCIONAL)", fontSize = 11.sp, color = MinTextMute, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
-        FieldBox("Concepto del traspaso", note, onValueChange = { note = it })
+        FieldBox(if (esPago) "Concepto del pago" else "Concepto del traspaso", note, onValueChange = { note = it })
 
         // Ola 8 · V2 (N4): igual que el error del editor de un movimiento — alto reservado,
         // dos renglones, para que un fallo de red no corra el botón de guardar bajo el dedo.
@@ -716,7 +811,11 @@ internal fun TransferBody(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = if (saving) "Guardando…" else "Guardar traspaso",
+                text = when {
+                    saving -> "Guardando…"
+                    esPago -> "Registrar pago"
+                    else -> "Guardar traspaso"
+                },
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
@@ -744,7 +843,12 @@ internal fun TransferBody(
         // que dejar que falle y mostrar "revisa tu conexión" como si fuera un imprevisto.
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "El traspaso se guarda en línea: las dos puntas se registran juntas o no se registra ninguna.",
+            text = if (esPago) {
+                "El pago se guarda en línea: la salida de tu cuenta y la baja de la deuda se " +
+                    "registran juntas o no se registra ninguna."
+            } else {
+                "El traspaso se guarda en línea: las dos puntas se registran juntas o no se registra ninguna."
+            },
             fontSize = 11.sp,
             color = MinTextFaint,
             textAlign = TextAlign.Center,
@@ -836,3 +940,26 @@ private fun GrupoDeCuentas(
         }
     }
 }
+
+
+/**
+ * Arma la petición de un pago de cuota a partir del borrador. Espeja a `transferRequestFor` y
+ * comparte sus tres ids: son lo que hace idempotente el reintento del dedo.
+ */
+private fun pagoRequestFor(
+    ids: TransferDraftIds,
+    fromAccountId: String,
+    debtAccountId: String,
+    amount: Long,
+    timestamp: Long,
+    note: String,
+) = com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest(
+    fromAccountId = fromAccountId,
+    debtAccountId = debtAccountId,
+    amount = amount,
+    timestamp = timestamp,
+    note = note.trim().ifBlank { null },
+    transferId = ids.transferId,
+    fromEventId = ids.fromEventId,
+    toEventId = ids.toEventId,
+)

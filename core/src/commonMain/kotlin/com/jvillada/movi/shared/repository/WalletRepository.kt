@@ -2,6 +2,8 @@ package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.Account
@@ -208,6 +210,13 @@ interface WalletRepository {
      * se propaga para que la UI lo diga con todas las letras, igual que [deleteAccount].
      */
     suspend fun createTransfer(request: CreateTransferRequest): TransferResult
+
+    /**
+     * Pagar la cuota de un crédito o el extracto de una tarjeta: **una acción, dos patas**. La
+     * plata sale de una cuenta y la deuda baja. Ver [CreatePagoDeCuotaRequest] para por qué la
+     * cuota de un crédito cuenta en los gastos del mes y el pago de una tarjeta no.
+     */
+    suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult
 
     /**
      * Cambia la categoría de un movimiento ya registrado. Devuelve el [FinancialEvent]
