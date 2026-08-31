@@ -6,6 +6,15 @@ package com.jvillada.movi.ui.quickadd
  */
 internal const val TIPO_TRASPASO = 2
 
+/**
+ * La cuarta pestaña: pagar la cuota de un crédito o el extracto de una tarjeta.
+ *
+ * Comparte formulario con [TIPO_TRASPASO] —es la misma operación de dos patas— así que todo lo
+ * que dice este archivo sobre el sub-picker de traspaso vale igual acá. Por eso las dos comparan
+ * con `>= TIPO_TRASPASO` y no con `== TIPO_TRASPASO`.
+ */
+internal const val TIPO_PAGO_CUOTA = 3
+
 /** Cuál de los sub-pickers de la hoja de «Agregar» está tapando el cuerpo del editor. */
 internal sealed class Picker {
     data object None : Picker()
@@ -80,7 +89,7 @@ internal data class PickersDeLaHoja(
      * cuando la pestaña ya cambió— no pueda volver a encender el espejo.
      */
     fun conPickerDeTraspaso(abierto: Boolean): PickersDeLaHoja =
-        copy(deTraspaso = abierto && typeIndex == TIPO_TRASPASO)
+        copy(deTraspaso = abierto && typeIndex >= TIPO_TRASPASO)
 
     /**
      * Se eligió otra pestaña en [TypeSegments].

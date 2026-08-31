@@ -5,6 +5,8 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.Account
@@ -1370,6 +1372,12 @@ class LocalRepository(
     // megas y el espejo de SQLDelight existe para que las CIFRAS estén sin señal, no para tener
     // una copia offline de cada PDF del banco. Sin red, la pantalla de documentos no lista —que
     // es honesto— en vez de mostrar una lista de papeles que no se pueden abrir.
+    // Va directo al server, como el traspaso: son DOS eventos enlazados y una deuda que baja,
+    // así que fabricarlos localmente y sincronizarlos después abriría la ventana en que la app
+    // muestra un pago que el server todavía no aceptó.
+    override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult =
+        remote.payInstallment(request)
+
     override suspend fun getDocuments(): List<Documento> = remote.getDocuments()
     override suspend fun uploadDocument(
         fileName: String,

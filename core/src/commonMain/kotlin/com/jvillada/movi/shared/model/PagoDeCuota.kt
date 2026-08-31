@@ -136,3 +136,11 @@ fun pagoDeCuotaLegs(
         describir("Pago desde ${from.name}"),
     )
 }
+
+/** Lo que la app necesita para pintar el resultado sin volver a preguntar. */
+@Serializable
+data class PagoDeCuotaResult(
+    /** Cuánto queda debiendo después del pago — el número que el dueño vino a ver bajar. */
+    val deudaRestante: Long,
+    val patas: List<FinancialEvent>,
+)

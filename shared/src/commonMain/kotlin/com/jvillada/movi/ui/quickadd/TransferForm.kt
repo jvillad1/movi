@@ -43,6 +43,7 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.TransferKind
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.transferKindFor
+import com.jvillada.movi.shared.model.validarPagoDeCuota
 import com.jvillada.movi.shared.model.validateTransfer
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.time.AppTimeZone
@@ -264,6 +265,30 @@ private fun destinoSugerido(origenElegido: String?): String? =
  * entrada a otra), y en cambio necesita dos cuentas en vez de una. Compartir el formulario habría
  * significado media docena de `if (esTraspaso)` adentro de cada fila.
  */
+/**
+ * Las dos cosas que este formulario sabe hacer. Son la MISMA operación —dos patas enlazadas, una
+ * cuenta que da y otra que recibe— y por eso comparten toda la maquinaria de selectores, alturas y
+ * reintentos, que ya se llevó nueve rondas de arreglos.
+ *
+ * Lo que cambia es: qué cuentas se ofrecen de cada lado, cómo se llaman los dos lados, y qué
+ * endpoint recibe el resultado. Nada más.
+ */
+internal enum class ModoDeTraspaso {
+    /** Mover plata entre cuentas propias, o el desembolso/abono de un crédito. */
+    TRASPASO,
+
+    /**
+     * Pagar la cuota de un crédito o el extracto de una tarjeta.
+     *
+     * Nace de un pedido del dueño: *«necesito poder agregar un tipo de movimiento que sea pago de
+     * cuota, que pueda asociar a un crédito o tarjeta, y que vos sepas cómo manejarlo por
+     * debajo»*. Antes la misma acción tenía dos mecánicas incompletas: un crédito se pagaba con un
+     * traspaso (la deuda bajaba pero la cuota no aparecía en los gastos del mes) y una tarjeta ni
+     * siquiera admitía traspaso — se anotaba como gasto y la deuda quedaba igual.
+     */
+    PAGO_DE_CUOTA,
+}
+
 @Composable
 internal fun TransferBody(
     accounts: List<Account>,
@@ -287,10 +312,23 @@ internal fun TransferBody(
      * que nadie lo cierre.
      */
     onPickerAbierto: (Boolean) -> Unit = {},
+    modo: ModoDeTraspaso = ModoDeTraspaso.TRASPASO,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
-    val elegibles = remember(accounts) { transferableAccounts(accounts) }
+    val esPago = modo == ModoDeTraspaso.PAGO_DE_CUOTA
+    // En un pago, los dos lados ofrecen cosas distintas: de dónde sale la plata son cuentas de
+    // dinero, y lo que se paga son deudas. En un traspaso, la misma lista para los dos.
+    val elegibles = remember(accounts, esPago) {
+        if (esPago) accounts.filter { it.type.group != AccountGroup.DEUDA }
+        else transferableAccounts(accounts)
+    }
+    /** Lo que se puede pagar: préstamos y tarjetas. Vacío si el dueño no tiene ninguno. */
+    val deudas = remember(accounts) {
+        accounts.filter { it.type == AccountType.LOAN || it.type == AccountType.CREDIT_CARD }
+    }
+    /** El lado «hacia» ofrece deudas en un pago, y las cuentas normales en un traspaso. */
+    val elegiblesDestino = if (esPago) deudas else elegibles
     // Ola 14: de acá salen los valores POR DEFECTO, y a propósito no incluye los créditos — ver
     // [defaultTransferAccounts]. `elegibles` (que sí los trae) es lo que se ofrece en el selector
     // y lo que valida el botón.
@@ -415,8 +453,16 @@ internal fun TransferBody(
     var ids by remember { mutableStateOf(TransferDraftIds.new()) }
 
     val from = elegibles.firstOrNull { it.id == fromId }
-    val to = elegibles.firstOrNull { it.id == toId }
-    val missing = validateTransfer(from, to, amount ?: 0L)
+    val to = elegiblesDestino.firstOrNull { it.id == toId }
+    val missing = if (esPago) {
+        validarPagoDeCuota(
+            pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note),
+            from,
+            to,
+        )
+    } else {
+        validateTransfer(from, to, amount ?: 0L)
+    }
     val canSave = missing == null && !saving
 
     fun save() {
@@ -429,9 +475,15 @@ internal fun TransferBody(
         error = null
         coroutine.launch {
             val result = runCatching {
-                Repositories.wallets.createTransfer(
-                    transferRequestFor(ids, origen, destino, amount ?: 0L, timestamp, note),
-                )
+                if (esPago) {
+                    Repositories.wallets.payInstallment(
+                        pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note),
+                    )
+                } else {
+                    Repositories.wallets.createTransfer(
+                        transferRequestFor(ids, origen, destino, amount ?: 0L, timestamp, note),
+                    )
+                }
             }
             saving = false
             result
@@ -504,8 +556,13 @@ internal fun TransferBody(
             }
         } else if (picking != null) {
             TransferAccountPicker(
-                title = if (picking == TransferSide.FROM) "Desde" else "Hacia",
-                accounts = elegibles,
+                title = when {
+                    picking == TransferSide.FROM && esPago -> "¿De dónde sale la plata?"
+                    picking == TransferSide.FROM -> "Desde"
+                    esPago -> "¿Qué estás pagando?"
+                    else -> "Hacia"
+                },
+                accounts = if (picking == TransferSide.FROM) elegibles else elegiblesDestino,
                 selectedId = if (picking == TransferSide.FROM) fromId else toId,
                 onPick = { id ->
                     if (picking == TransferSide.FROM) {
@@ -836,3 +893,26 @@ private fun GrupoDeCuentas(
         }
     }
 }
+
+
+/**
+ * Arma la petición de un pago de cuota a partir del borrador. Espeja a `transferRequestFor` y
+ * comparte sus tres ids: son lo que hace idempotente el reintento del dedo.
+ */
+private fun pagoRequestFor(
+    ids: TransferDraftIds,
+    fromAccountId: String,
+    debtAccountId: String,
+    amount: Long,
+    timestamp: Long,
+    note: String,
+) = com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest(
+    fromAccountId = fromAccountId,
+    debtAccountId = debtAccountId,
+    amount = amount,
+    timestamp = timestamp,
+    note = note.trim().ifBlank { null },
+    transferId = ids.transferId,
+    fromEventId = ids.fromEventId,
+    toEventId = ids.toEventId,
+)

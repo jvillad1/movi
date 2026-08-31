@@ -2,6 +2,8 @@ package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.Account
@@ -553,6 +555,12 @@ class WalletRepositoryImpl(
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
     // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401
     // al subir salía como «Algo salió mal» en vez de «Tu sesión expiró».
+    override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult =
+        client.post("$baseUrl/api/payments/installment") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.exigirExito().body()
+
     override suspend fun getDocuments(): List<Documento> =
         client.get("$baseUrl/api/documents").exigirExito().body()
 
