@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -31,7 +32,27 @@ class TtlDelInicioTest {
         // recargar la página borra la caché en memoria.
         assertTrue(recarga(hayDatos = false))
         // Y ni el reloj ni el tick lo cambian: no hay nada que mostrar mientras tanto.
-        assertTrue(recarga(hayDatos = false, ahora = 1_000_000L))
+        //
+        // La primera versión de esta segunda aserción pasaba `ahora` con su valor POR DEFECTO,
+        // así que era idéntica byte a byte a la de arriba y no probaba lo que su comentario
+        // prometía. La revisión lo marcó. Ahora sí varía las dos cosas.
+        assertTrue(recarga(hayDatos = false, ahora = 1_000_000L + 5L, tickActual = 3))
+        assertTrue(recarga(hayDatos = false, ahora = 1_000_000L + 5L, tickActual = 99))
+    }
+
+    @Test
+    fun con_datos_pero_sin_sello_recarga() {
+        // El invariante que impide servir una lectura PARCIAL como completa.
+        //
+        // «Primeros pasos» deja su lectura en la misma caché —es el mismo modelo— pero solo hace
+        // 5 de las 10 llamadas del Inicio, así que NO escribe el sello. Si el Inicio confiara solo
+        // en `hayDatos`, mostraría esa media lectura como si fuera una carga completa y se
+        // saltearía la de verdad.
+        //
+        // `cargadoEn = 0` queda astronómicamente fuera de la ventana, así que recarga. Este test
+        // fija esa consecuencia: sin él, alguien podría «arreglar» el cero con un `coerceAtLeast`
+        // y romper la garantía sin que nada se ponga rojo.
+        assertTrue(recarga(hayDatos = true, cargadoEn = 0L, ahora = 1_700_000_000_000L))
     }
 
     @Test
@@ -83,6 +104,64 @@ class TtlDelInicioTest {
     fun el_ttl_es_medio_minuto() {
         // Si alguien lo sube, que sea a propósito: es cuánto puede llegar a ver el dueño de una
         // cifra vieja cuando la plata cambió desde otro dispositivo.
-        kotlin.test.assertEquals(30_000L, TTL_DEL_INICIO_MS)
+        assertEquals(30_000L, TTL_DEL_INICIO_MS)
+    }
+}
+
+/**
+ * Que **cualquier escritura** invalide la caché del Inicio.
+ *
+ * La primera versión del TTL confiaba en `LocalRefreshTick`, y la revisión lo midió: el tick es
+ * un `Int` sin función para subirlo, así que solo lo mueven dos sitios de `App.kt`. Anular un
+ * movimiento, ajustar el saldo de un crédito, registrar un descuento de nómina o importar un
+ * extracto **no lo movían**, y todos mueven plata.
+ *
+ * Estas pruebas no montan el envoltorio real (necesitaría implementar 79 métodos): fijan la regla
+ * que el envoltorio implementa, que es la parte que importa y la que alguien podría relajar.
+ */
+class CualquierEscrituraInvalidaTest {
+
+    @Test
+    fun invalidar_deja_el_sello_fuera_de_cualquier_ventana() {
+        DashboardDataCache.cargadoEn = 1_700_000_000_000L
+        DashboardDataCache.invalidar()
+
+        assertEquals(0L, DashboardDataCache.cargadoEn)
+        assertTrue(
+            debeRecargarElInicio(
+                hayDatos = true,
+                cargadoEn = DashboardDataCache.cargadoEn,
+                tickDeLaCarga = 1,
+                tickActual = 1,
+                reintento = false,
+                ahora = 1_700_000_000_000L,
+            ),
+            "tras invalidar, la próxima entrada al Inicio recarga sí o sí",
+        )
+    }
+
+    @Test
+    fun invalidar_no_borra_los_datos_ya_pintados() {
+        // Se invalida el SELLO, no la caché: el Inicio tiene que seguir pintando lo último que
+        // sabía mientras llegan las diez respuestas, en vez de arrancar en blanco. Borrar `data`
+        // acá traería de vuelta el «Tu plata $0» que la ola pasada costó arreglar.
+        DashboardDataCache.data = DashboardData(accounts = emptyList())
+        DashboardDataCache.invalidar()
+
+        assertTrue(DashboardDataCache.data != null)
+    }
+
+    @Test
+    fun cerrar_sesion_si_borra_todo() {
+        // Lo cacheado es del usuario que se va.
+        DashboardDataCache.data = DashboardData(accounts = emptyList())
+        DashboardDataCache.cargadoEn = 123L
+        DashboardDataCache.tickDeLaCarga = 7
+
+        DashboardDataCache.clear()
+
+        assertEquals(null, DashboardDataCache.data)
+        assertEquals(0L, DashboardDataCache.cargadoEn)
+        assertEquals(0, DashboardDataCache.tickDeLaCarga)
     }
 }

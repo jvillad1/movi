@@ -64,6 +64,31 @@ object DashboardDataCache {
      */
     var tickDeLaCarga: Int = 0
 
+    /**
+     * «La plata cambió»: la próxima entrada al Inicio recarga sí o sí.
+     *
+     * Existe porque **`LocalRefreshTick` no alcanza**, y la primera versión de este archivo
+     * afirmaba lo contrario. El tick es un `Int` sin función para subirlo, así que ninguna
+     * pantalla puede moverlo: sus dos únicos productores viven en `App.kt` (la hoja de «Agregar»
+     * y la de recurrentes de la barra de ofrecimiento). Lo midió la revisión, contando los
+     * caminos.
+     *
+     * Todo lo demás que mueve plata —anular un movimiento, cambiar su categoría o su fecha,
+     * ajustar el saldo de un crédito, registrar un descuento de nómina, importar un extracto,
+     * crear o borrar una cuenta, dar de alta un crédito o una tarjeta— pasa por acá.
+     *
+     * Importa más de lo que parece: **no hay «deslizar para recargar» en ninguna pantalla**, así
+     * que salir y volver era el único gesto manual de refresco que tenía el dueño. Un TTL sin
+     * esto se lo quitaba.
+     *
+     * Lo que queda afuera, y con 30 s de retraso máximo: un SMS que llega en segundo plano, algo
+     * hecho desde otro dispositivo o desde la web, y el barrido de recordatorios del server.
+     * Ninguno es una acción del dueño en este aparato, que es la que no puede quedar sin verse.
+     */
+    fun invalidar() {
+        cargadoEn = 0L
+    }
+
     /** Al cerrar sesión: lo cacheado es del usuario que se va (ver SessionManager.clear). */
     fun clear() {
         data = null
@@ -176,9 +201,11 @@ fun DashboardScreen(
         // ¿Hace falta pedir las diez otra vez? Ver [debeRecargarElInicio] — el TODO de la Ola 8
         // que documentaba este derroche queda cerrado acá.
         //
-        // `refreshKey > 0` es el reintento explícito: nace en 0 y solo lo sube el botón
-        // «Reintentar». Nótese que se REINICIA a 0 cuando la pantalla se remonta, que es
-        // justamente el caso que este arreglo quiere saltear.
+        // `refreshKey > 0` cubre el reintento explícito. **También** queda en 1 después de crear
+        // una cuenta desde el Inicio (`onAccountCreated`), y eso es inofensivo: el efecto solo se
+        // reejecuta cuando `refreshKey` o `refreshTick` CAMBIAN, y los dos cambios ya fuerzan la
+        // recarga por su cuenta. Un `reintento = true` viejo nunca provoca una llamada de más.
+        // Se reinicia a 0 al remontar, que es justamente el caso que este arreglo quiere saltear.
         if (!debeRecargarElInicio(
                 hayDatos = DashboardDataCache.data != null,
                 cargadoEn = DashboardDataCache.cargadoEn,
@@ -258,11 +285,22 @@ fun DashboardScreen(
             launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
         }
         DashboardDataCache.data = data
-        // El sello va DESPUÉS de que las diez terminaron: sellar antes haría que una carga a
-        // medias —por ejemplo si el proceso se corta— contara como completa y el Inicio se
-        // saltara la siguiente con datos incompletos.
-        DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
-        DashboardDataCache.tickDeLaCarga = refreshTick
+        // **Solo se sella una carga que SALIÓ BIEN.**
+        //
+        // La primera versión sellaba siempre, y «las diez terminaron» no es lo mismo que «las
+        // diez salieron bien». Escenario que encontró la revisión: arranque en frío sin señal →
+        // las diez fallan → `data` queda vacío pero NO nulo → se sellaba igual. El dueño iba a
+        // Movimientos, volvía dentro de los 30 s, el Inicio se salteaba la carga y quedaba con
+        // «Tu plata —» y las tres cifras en guion: **sin snackbar de error, sin «Reintentar» y
+        // sin barra de progreso**. Antes de este PR, volver reintentaba.
+        //
+        // Se mira `puedeAfirmarVacio` y no `error == null` porque es la misma condición que ya
+        // gobierna si el Inicio puede opinar sobre la plata del dueño (ver DashboardLogic): si no
+        // alcanza para afirmar, tampoco alcanza para saltearse la próxima carga.
+        if (data.puedeAfirmarVacio) {
+            DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
+            DashboardDataCache.tickDeLaCarga = refreshTick
+        }
         loading = false
     }
 
