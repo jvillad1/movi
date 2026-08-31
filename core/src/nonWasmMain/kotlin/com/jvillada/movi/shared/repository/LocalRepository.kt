@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -1380,6 +1381,8 @@ class LocalRepository(
         notas: String?,
     ): Documento = remote.uploadDocument(fileName, bytes, mimeType, tipo, accountId, periodo, notas)
     override suspend fun getDocumentLink(id: String): EnlaceDeDescarga = remote.getDocumentLink(id)
+    override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento =
+        remote.updateDocument(id, cambios)
     override suspend fun deleteDocument(id: String) = remote.deleteDocument(id)
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()

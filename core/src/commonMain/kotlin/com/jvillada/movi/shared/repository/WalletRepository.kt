@@ -3,6 +3,7 @@ package com.jvillada.movi.shared.repository
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -312,6 +313,12 @@ interface WalletRepository {
      * trabajo del cliente, que sí conoce su `baseUrl`.
      */
     suspend fun getDocumentLink(id: String): EnlaceDeDescarga
+
+    /**
+     * Corrige nombre, tipo, período o notas de un documento ya subido. Lo que vaya en `null` **no
+     * se toca**; la cadena vacía sí borra. Ver [EdicionDeDocumento].
+     */
+    suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento
 
     suspend fun deleteDocument(id: String)
     suspend fun importStatement(decision: ImportDecision)

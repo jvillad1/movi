@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
+import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import io.ktor.http.ContentDisposition
@@ -16,6 +17,7 @@ import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
 import io.ktor.http.content.streamProvider
 import io.ktor.server.application.call
+import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -25,6 +27,7 @@ import kotlinx.io.readByteArray
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
@@ -32,6 +35,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.selectAll
 
 /**
@@ -205,6 +209,47 @@ fun Route.documentRoutes() {
                 expiraEn = System.currentTimeMillis() + JwtConfig.DOWNLOAD_VALIDITY_MS,
             ),
         )
+    }
+
+    /**
+     * Corrige nombre, tipo, período o notas. Lo que no venga en el cuerpo **no se toca**.
+     *
+     * La cadena vacía sí borra: es la única forma de sacar una nota escrita por error, y es
+     * distinguible de «no lo mandes» sin tener que mirar las claves del JSON.
+     */
+    patch("/api/documents/{id}") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@patch call.respond(HttpStatusCode.BadRequest, "Falta el id")
+        val cambios = call.receive<EdicionDeDocumento>()
+
+        // ¿Hay algo que escribir? Exposed lanza `Can't prepare UPDATE statement without fields to
+        // update` si el bloque no asigna ninguna columna, y eso salía como un 500 sin mensaje. Pasa
+        // con un cuerpo vacío (`{}`) y también con un nombre en blanco, que no borra —un documento
+        // sin nombre sería una fila que no se puede reconocer— así que no asigna nada.
+        //
+        // Un PATCH que no cambia nada no es un error: se contesta el documento tal como está.
+        val nombreNuevo = cambios.nombre?.trim()?.takeIf { it.isNotBlank() }?.take(255)
+        val hayCambios = nombreNuevo != null || cambios.tipo != null ||
+            cambios.periodo != null || cambios.notas != null
+
+        if (hayCambios) {
+            val actualizados = dbQuery {
+                Documents.update({ (Documents.id eq id) and (Documents.userId eq uid) }) {
+                    nombreNuevo?.let { n -> it[Documents.name] = n }
+                    cambios.tipo?.let { t -> it[Documents.kind] = t.name }
+                    cambios.periodo?.let { pe -> it[Documents.period] = pe.trim().take(50).takeIf { v -> v.isNotBlank() } }
+                    cambios.notas?.let { no -> it[Documents.notes] = no.trim().take(500).takeIf { v -> v.isNotBlank() } }
+                }
+            }
+            if (actualizados == 0) return@patch call.respond(HttpStatusCode.NotFound)
+        }
+
+        val fila = dbQuery {
+            Documents.select(COLUMNAS_SIN_CONTENIDO)
+                .where { (Documents.id eq id) and (Documents.userId eq uid) }
+                .firstOrNull()
+        } ?: return@patch call.respond(HttpStatusCode.NotFound)
+        call.respond(fila.toDocumento())
     }
 
     delete("/api/documents/{id}") {

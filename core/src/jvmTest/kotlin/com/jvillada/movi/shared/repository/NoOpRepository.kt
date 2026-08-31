@@ -3,6 +3,7 @@ package com.jvillada.movi.shared.repository
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.shared.model.ImportDecision
@@ -356,6 +357,16 @@ open class NoOpRepository(
         notas = notas,
     )
     override suspend fun getDocumentLink(id: String) = EnlaceDeDescarga(url = "", expiraEn = 0L)
+    override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento) = Documento(
+        id = id,
+        nombre = cambios.nombre ?: "doc",
+        tipo = cambios.tipo ?: TipoDeDocumento.OTRO,
+        mimeType = "application/pdf",
+        bytes = 0,
+        subidoEn = 0L,
+        periodo = cambios.periodo,
+        notas = cambios.notas,
+    )
     override suspend fun deleteDocument(id: String) {}
     override suspend fun getStatementImports() = emptyList<StatementImport>()
     override suspend fun getStatementImportDetail(id: String) =

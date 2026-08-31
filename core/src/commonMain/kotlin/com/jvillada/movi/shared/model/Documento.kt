@@ -70,5 +70,30 @@ data class EnlaceDeDescarga(
     val expiraEn: Long,
 )
 
+/**
+ * Lo que se puede corregir de un documento ya subido: **cómo se llama, qué es, y qué anotaste**.
+ * Nunca los bytes — para cambiar el archivo se sube otro y se borra este.
+ *
+ * Sale de un hueco que la revisión encontró en la primera versión: el tipo se adivinaba por el
+ * nombre del archivo y el comentario decía «se puede corregir después», pero **no existía forma
+ * de hacerlo**. Un `IMG_4821.jpg` que es la escritura del apartamento quedaba en «Otros» para
+ * siempre, y `periodo` y `notas` no tenían manera de llenarse desde la app.
+ *
+ * Cada campo es opcional y `null` significa **«no lo toques»**, no «bórralo». Es la misma
+ * distinción que ya costó un defecto en `PUT /api/credits/{id}`, donde un cliente viejo borraba
+ * `paidBy` sin querer: acá se resuelve desde el diseño en vez de mirando las claves del JSON,
+ * porque esta ruta nace hoy y puede darse el lujo.
+ *
+ * Para BORRAR un texto se manda la cadena vacía, que es distinguible de `null` y se guarda como
+ * `null`.
+ */
+@Serializable
+data class EdicionDeDocumento(
+    val nombre: String? = null,
+    val tipo: TipoDeDocumento? = null,
+    val periodo: String? = null,
+    val notas: String? = null,
+)
+
 /** Tope de tamaño, en bytes. Un extracto bancario típico pesa menos de 2 MB. */
 const val MAX_DOCUMENTO_BYTES = 10L * 1024 * 1024
