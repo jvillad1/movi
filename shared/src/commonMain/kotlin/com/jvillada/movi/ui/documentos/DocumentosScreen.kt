@@ -57,6 +57,17 @@ import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.components.toUserMessage
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import com.jvillada.movi.shared.model.EdicionDeDocumento
+import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.theme.MinBorder
+import com.jvillada.movi.theme.MinSurfaceContainerLow
+import com.jvillada.movi.ui.components.SheetHandleWithClose
 import kotlinx.coroutines.launch
 
 /**
@@ -94,6 +105,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     // «Borrar» vive a milímetros de «Abrir» dentro de una fila que además es clickable entera: un
     // toque gordo en el teléfono se llevaba la escritura del apartamento, sin vuelta atrás.
     var aBorrar by remember { mutableStateOf<Documento?>(null) }
+    var aEditar by remember { mutableStateOf<Documento?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -121,12 +133,10 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     fileName = nombre,
                     bytes = bytes,
                     mimeType = mime,
-                    // El tipo se adivina por el nombre. **Hoy no se puede corregir después** —no
-                    // hay selector al subir ni ruta para editarlo— así que un archivo mal
-                    // nombrado queda en «Otros». Se deja así a propósito en esta primera versión:
-                    // el tipo solo decide bajo qué encabezado aparece, y agregar un paso a la
-                    // acción más frecuente de la pantalla cuesta más que el error que evita. El
-                    // día que moleste, la salida es un `PATCH`, no preguntar antes de subir.
+                    // El tipo se adivina por el nombre y **se corrige después** tocando «Editar»
+                    // en la fila. No se pregunta antes de subir a propósito: agregar un paso a la
+                    // acción más frecuente de la pantalla cuesta más que el error que evita, y el
+                    // error solo cambia bajo qué encabezado aparece el archivo.
                     tipo = tipoSugeridoPara(nombre),
                 )
             }
@@ -206,6 +216,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                                 doc = doc,
                                 onAbrir = { abrir(doc) },
                                 onBorrar = { aBorrar = doc },
+                                onEditar = { aEditar = doc },
                             )
                         }
                         item(key = "espacio-${tipo.name}") { Spacer(Modifier.height(18.dp)) }
@@ -218,6 +229,15 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
         )
+
+        aEditar?.let { doc ->
+            EditarDocumentoSheet(
+                doc = doc,
+                onDismiss = { aEditar = null },
+                onGuardado = { aEditar = null; refreshKey++ },
+                onError = { error = it },
+            )
+        }
 
         aBorrar?.let { doc ->
             ConfirmarBorrado(
@@ -289,7 +309,12 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
 }
 
 @Composable
-private fun FilaDeDocumento(doc: Documento, onAbrir: () -> Unit, onBorrar: () -> Unit) {
+private fun FilaDeDocumento(
+    doc: Documento,
+    onAbrir: () -> Unit,
+    onBorrar: () -> Unit,
+    onEditar: () -> Unit,
+) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         Row(
             modifier = Modifier
@@ -327,6 +352,16 @@ private fun FilaDeDocumento(doc: Documento, onAbrir: () -> Unit, onBorrar: () ->
             )
             Spacer(Modifier.width(4.dp))
             Text(
+                "Editar",
+                fontSize = 12.sp,
+                color = MinTextMute,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onEditar)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
                 "Borrar",
                 fontSize = 12.sp,
                 color = MinExpense,
@@ -337,5 +372,159 @@ private fun FilaDeDocumento(doc: Documento, onAbrir: () -> Unit, onBorrar: () ->
             )
         }
         Hairline()
+    }
+}
+
+/**
+ * Corregir un documento ya subido: cómo se llama, qué es, de qué período y qué anotaste.
+ *
+ * Nace de un hueco que la revisión encontró: el tipo se adivinaba por el nombre del archivo y un
+ * comentario prometía que «se puede corregir después», pero no existía forma de hacerlo. Un
+ * `IMG_4821.jpg` que es la escritura del apartamento quedaba en «Otros» para siempre.
+ *
+ * **No cambia los bytes.** Para reemplazar el archivo se sube otro y se borra este — dejar que un
+ * documento cambie de contenido conservando su id es justamente lo que uno no quiere de un
+ * archivo que existe para ser prueba de algo.
+ */
+@Composable
+private fun EditarDocumentoSheet(
+    doc: Documento,
+    onDismiss: () -> Unit,
+    onGuardado: () -> Unit,
+    onError: (String) -> Unit,
+) {
+    val coroutine = rememberCoroutineScope()
+    var nombre by remember { mutableStateOf(doc.nombre) }
+    var tipo by remember { mutableStateOf(doc.tipo) }
+    var periodo by remember { mutableStateOf(doc.periodo ?: "") }
+    var notas by remember { mutableStateOf(doc.notas ?: "") }
+    var guardando by remember { mutableStateOf(false) }
+
+    fun guardar() {
+        if (guardando || nombre.isBlank()) return
+        guardando = true
+        coroutine.launch {
+            runCatching {
+                Repositories.wallets.updateDocument(
+                    doc.id,
+                    EdicionDeDocumento(
+                        nombre = nombre.trim(),
+                        tipo = tipo,
+                        // La cadena vacía BORRA, y es a propósito: es la única forma de sacar una
+                        // nota escrita por error. `null` querría decir «no lo toques», que acá
+                        // nunca es lo que el dueño quiso al vaciar el campo a mano.
+                        periodo = periodo.trim(),
+                        notas = notas.trim(),
+                    ),
+                )
+            }
+                .onSuccess { onGuardado() }
+                .onFailure { guardando = false; onError(it.toUserMessage()) }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(enabled = !guardando, onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(MinSurfaceContainerHigh)
+                .clickable(enabled = false) {}
+                .padding(horizontal = 20.dp),
+        ) {
+            SheetHandleWithClose(onClose = onDismiss, enabled = !guardando)
+            // Con el teclado abierto esta hoja no cabe en un teléfono chico: es la misma lección
+            // de las siete hojas que nacieron sin scroll.
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
+            ) {
+                CampoDeTexto("NOMBRE", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
+                Spacer(Modifier.height(14.dp))
+
+                Text("TIPO", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                Spacer(Modifier.height(8.dp))
+                TipoDeDocumento.entries.forEach { t ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = !guardando) { tipo = t }
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            nombreDeTipo(t),
+                            fontSize = 14.sp,
+                            color = if (t == tipo) MinText else MinTextMute,
+                            fontWeight = if (t == tipo) FontWeight.Medium else FontWeight.Normal,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (t == tipo) Text("✓", fontSize = 13.sp, color = MinPrimary)
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+                CampoDeTexto("PERÍODO", periodo, { periodo = it.take(50) }, "agosto 2026")
+                Spacer(Modifier.height(14.dp))
+                CampoDeTexto("NOTAS", notas, { notas = it.take(500) }, "Para qué lo guardaste")
+
+                Spacer(Modifier.height(20.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (nombre.isNotBlank()) MinText else MinTextFaint)
+                        .clickable(enabled = !guardando && nombre.isNotBlank()) { guardar() }
+                        .padding(vertical = 15.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (guardando) "Guardando…" else "Guardar",
+                        color = MinBg,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CampoDeTexto(
+    etiqueta: String,
+    valor: String,
+    onCambio: (String) -> Unit,
+    marcador: String,
+) {
+    Text(etiqueta, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+    Spacer(Modifier.height(8.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MinSurfaceContainerLow)
+            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+    ) {
+        if (valor.isEmpty()) {
+            Text(marcador, fontSize = 14.sp, color = MinTextFaint, maxLines = 1)
+        }
+        BasicTextField(
+            value = valor,
+            onValueChange = onCambio,
+            textStyle = TextStyle(fontSize = 14.sp, color = MinText),
+            cursorBrush = SolidColor(MinPrimary),
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }

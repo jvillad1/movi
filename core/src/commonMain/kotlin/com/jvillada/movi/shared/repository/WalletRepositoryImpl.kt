@@ -3,6 +3,7 @@ package com.jvillada.movi.shared.repository
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -61,6 +62,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -585,6 +587,12 @@ class WalletRepositoryImpl(
         // cada pantalla tenga que acordarse de anteponer el baseUrl —y que una se olvide.
         return relativo.copy(url = baseUrl + relativo.url)
     }
+
+    override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento =
+        client.patch("$baseUrl/api/documents/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(cambios)
+        }.exigirExito().body()
 
     override suspend fun deleteDocument(id: String) {
         client.delete("$baseUrl/api/documents/$id").exigirExito()

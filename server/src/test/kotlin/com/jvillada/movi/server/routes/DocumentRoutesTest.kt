@@ -20,6 +20,7 @@ import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -327,6 +328,83 @@ class DocumentRoutesTest {
         assertFalse("gigante" in client.get("/api/documents") {
             header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
         }.bodyAsText())
+    }
+
+    // ── Corregir un documento ya subido ────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.editar(uid: String, id: String, cuerpo: String) =
+        client.patch("/api/documents/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(uid)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpo)
+        }
+
+    @Test
+    fun `lo que no viene en el cuerpo no se toca`() = testApplication {
+        // La regla central de esta ruta. Si `null` borrara, corregir el NOMBRE de un documento le
+        // borraría las notas de paso — el mismo defecto que costó un arreglo en
+        // `PUT /api/credits/{id}`, donde un cliente viejo dejaba `paidBy` en NULL sin querer.
+        wireApp()
+        val id = subir(duenoId, nombre = "viejo.pdf")
+        editar(duenoId, id, """{"periodo":"agosto 2026","notas":"del Bancolombia"}""")
+
+        val res = editar(duenoId, id, """{"nombre":"nuevo.pdf"}""")
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, res.status, cuerpo)
+        assertTrue("nuevo.pdf" in cuerpo)
+        assertTrue("agosto 2026" in cuerpo, "el período no se manda y por lo tanto no se toca")
+        assertTrue("del Bancolombia" in cuerpo, "las notas tampoco")
+    }
+
+    @Test
+    fun `la cadena vacia SI borra`() = testApplication {
+        // La otra mitad, y es la que hace útil a la primera: sin esto, una nota escrita por error
+        // no se podría sacar nunca.
+        wireApp()
+        val id = subir(duenoId)
+        editar(duenoId, id, """{"notas":"me equivoqué"}""")
+
+        val cuerpo = editar(duenoId, id, """{"notas":""}""").bodyAsText()
+
+        assertFalse("me equivoqué" in cuerpo)
+    }
+
+    @Test
+    fun `corregir el tipo lo mueve de grupo`() = testApplication {
+        // El caso que originó la ruta: un IMG_4821.jpg que es la escritura quedaba en «Otros»
+        // para siempre porque el tipo se adivina por el nombre del archivo.
+        wireApp()
+        val id = subir(duenoId, nombre = "IMG_4821.jpg", mime = "image/jpeg")
+
+        val cuerpo = editar(duenoId, id, """{"tipo":"CONTRATO"}""").bodyAsText()
+
+        assertTrue("CONTRATO" in cuerpo)
+    }
+
+    @Test
+    fun `otro usuario no puede corregir mi documento`() = testApplication {
+        wireApp()
+        val mio = subir(duenoId, nombre = "escritura.pdf")
+
+        assertEquals(HttpStatusCode.NotFound, editar(otroId, mio, """{"nombre":"robado.pdf"}""").status)
+        // Y sigue llamándose como se llamaba: el 404 no puede ser un cambio que además mintió.
+        assertTrue("escritura.pdf" in client.get("/api/documents") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+        }.bodyAsText())
+    }
+
+    @Test
+    fun `un nombre en blanco no borra el nombre`() = testApplication {
+        // Un documento sin nombre sería una fila que no se puede reconocer. Acá el vacío NO borra,
+        // a diferencia de período y notas — y la diferencia es que un archivo siempre se llama de
+        // alguna manera.
+        wireApp()
+        val id = subir(duenoId, nombre = "extracto.pdf")
+
+        val cuerpo = editar(duenoId, id, """{"nombre":"   "}""").bodyAsText()
+
+        assertTrue("extracto.pdf" in cuerpo)
     }
 
     @Test
