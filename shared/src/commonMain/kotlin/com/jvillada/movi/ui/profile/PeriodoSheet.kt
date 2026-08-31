@@ -13,9 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -146,31 +143,49 @@ fun PeriodoSheet(
 
                 Spacer(Modifier.height(18.dp))
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(7),
-                    modifier = Modifier.fillMaxWidth().height(196.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items((1..31).toList()) { d ->
-                        val elegido = d == dia
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(if (elegido) MinPrimary else MinSurfaceContainer)
-                                .clickable(enabled = !saving) { dia = d },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = d.toString(),
-                                fontSize = 13.sp,
-                                fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (elegido) MinBg else MinText,
-                                textAlign = TextAlign.Center,
-                            )
+                // Cinco filas de siete, no un `LazyVerticalGrid`.
+                //
+                // El grid tenía `.height(196.dp)` fija y su contenido mide **224**: cinco filas de
+                // 40 dp con 6 de separación. La revisión lo midió a 411×731, o sea con espacio de
+                // sobra en la pantalla: el «31» se dibujaba solo 4 de sus 24 dp — **los días 29,
+                // 30 y 31 quedaban cortados**, justo los que esta hoja se toma el trabajo de
+                // explicar en el aviso de abajo.
+                //
+                // Y el scroll nuevo de la hoja no podía revelarlos, porque el alto del grid es
+                // fijo: había que arrastrar dentro de una ventanita de 196 dp en el medio. Es el
+                // mismo anti-patrón que `HojaAgregarGeometriaTest` ya documenta — dos áreas
+                // desplazables anidadas peleándose el gesto del dedo.
+                //
+                // 31 celdas de tamaño conocido no ganan nada con ser lazy. Con filas normales el
+                // calendario entero se ve, la hoja tiene un solo desplazamiento, y desaparece el
+                // alto mágico que había que mantener a mano cada vez que cambiara el tamaño de una
+                // celda.
+                (1..31).chunked(7).forEach { fila ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        fila.forEach { d ->
+                            val elegido = d == dia
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(if (elegido) MinPrimary else MinSurfaceContainer)
+                                    .clickable(enabled = !saving) { dia = d },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = d.toString(),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (elegido) MinBg else MinText,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                         }
                     }
+                    Spacer(Modifier.height(6.dp))
                 }
 
                 // Un 29, 30 o 31 no existe en todos los meses. Se dice ANTES de guardar, porque es la
