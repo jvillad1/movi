@@ -213,7 +213,7 @@ class SyncEngineTest {
         val db = createDatabase("sync-test.db")
         val remote = OrderSensitiveRemote()
         remote.createAccount(Account("acc-tr", "Ahorros", AccountType.SAVINGS, 0L))
-        db.accountQueries.insert("acc-tr", "Ahorros", "SAVINGS", 0L, "COP", testUserId, 1L)
+        db.accountQueries.insert("acc-tr", "Ahorros", "SAVINGS", 0L, "COP", testUserId, 1L, null)
 
         // Una pata suelta, pendiente de sync (el escenario que no debería existir).
         db.financialEventQueries.insert(

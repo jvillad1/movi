@@ -53,7 +53,9 @@ object DatabaseFactory {
             // una tabla con datos y las reglas que ya existen quedan en NULL, que es la verdad:
             // nacieron sin cuenta porque el campo no existía. Idempotente por construcción —
             // la segunda vez la columna ya está y no se emite nada.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards)
+            // Accounts: `conditioned_to` (Ola 18) — para qué se puede usar esa plata. NULLABLE, así que el
+            // ALTER no puede fallar sobre las cuentas que ya existen y todas quedan en NULL = libre.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

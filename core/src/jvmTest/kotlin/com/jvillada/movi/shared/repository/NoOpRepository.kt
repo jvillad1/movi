@@ -230,6 +230,16 @@ open class NoOpRepository(
         return renombrada
     }
 
+    override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
+        val i = cuentasDelServer.indexOfFirst { it.id == id }
+        // Se normaliza como lo hace el server (mismo helper de :core), para que el test que mira
+        // la fila local vea exactamente lo que vería contra el server de verdad.
+        val marcada = (if (i >= 0) cuentasDelServer[i] else Account(id, "Cuenta", AccountType.SAVINGS, 0L))
+            .copy(condicionadaA = com.jvillada.movi.shared.model.normalizarCondicion(condicionadaA))
+        if (i >= 0) cuentasDelServer[i] = marcada else cuentasDelServer += marcada
+        return marcada
+    }
+
     override suspend fun deleteAccount(id: String) {
         val huerfanas = eventosDelServer
             .filter { it.accountId == id && it.transferId != null }

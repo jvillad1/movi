@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.validarEdicionDeMovimiento
 import com.jvillada.movi.shared.model.soloLoQueCambia
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
@@ -103,6 +104,10 @@ private fun com.jvillada.movi.Account.toAccountModel() = Account(
     id = id, name = name,
     type = AccountType.valueOf(type),
     balance = balance, currency = currency,
+    // Se normaliza también acá —y no solo al escribir— porque la fila local puede venir de una
+    // base vieja migrada (columna NULL) o de una escritura de otra versión del cliente. Ver
+    // [normalizarCondicion]: es la MISMA función que usan el server y la UI.
+    condicionadaA = normalizarCondicion(conditionedTo),
 )
 
 class LocalRepository(
@@ -301,6 +306,7 @@ class LocalRepository(
                 created.id, created.name, created.type.name,
                 created.balance, created.currency, uid,
                 Clock.System.now().toEpochMilliseconds(),
+                created.condicionadaA,
             )
             created
         } catch (e: Exception) {
@@ -308,6 +314,7 @@ class LocalRepository(
                 resolved.id, resolved.name, resolved.type.name,
                 resolved.balance, resolved.currency, uid,
                 null,
+                resolved.condicionadaA,
             )
             resolved
         }
@@ -487,6 +494,22 @@ class LocalRepository(
 
     override suspend fun renameAccount(id: String, name: String): Account {
         val actualizada = remote.renameAccount(id, name)
+        db.transaction { mirrorAccountLocally(actualizada) }
+        return actualizada
+    }
+
+    /**
+     * Igual que [renameAccount]: el server manda y la fila local se pisa con lo que contestó.
+     *
+     * **El espejo no es cosmético acá**, es la mitad del arreglo. Sin él —y sin la columna
+     * `account.conditionedTo`— el Inicio volvía a sumar la plata condicionada apenas `getAccounts`
+     * contestaba con lo local, que pasa en modo avión y también cuando la red tarda más que
+     * `PRESUPUESTO_DE_RED_MS`. Sin red no hay fallback local: marcar una condición solo en el
+     * teléfono sería un dato que el `SyncEngine` nunca empujaría (no es una creación, así que no
+     * entra en `selectUnsynced`) y que la próxima lectura con red borraría en silencio.
+     */
+    override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
+        val actualizada = remote.updateAccountCondition(id, condicionadaA)
         db.transaction { mirrorAccountLocally(actualizada) }
         return actualizada
     }
@@ -1265,6 +1288,7 @@ class LocalRepository(
             account.id, account.name, account.type.name,
             account.balance, account.currency, userId(),
             Clock.System.now().toEpochMilliseconds(),
+            account.condicionadaA,
         )
     }
 
@@ -1351,6 +1375,7 @@ class LocalRepository(
                 summary.account.id, summary.account.name, summary.account.type.name,
                 summary.account.balance, summary.account.currency, uid,
                 Clock.System.now().toEpochMilliseconds(),
+                summary.account.condicionadaA,
             )
         }
         return summary

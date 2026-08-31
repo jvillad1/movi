@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 
@@ -161,3 +162,21 @@ fun descripcionPropuesta(event: FinancialEvent): String {
  * es la información que hace que el «sí, fue este» sea una decisión y no un reflejo.
  */
 fun difiereDelEsperado(esperado: Long, real: Long): Boolean = esperado != real
+
+/**
+ * ¿Vale la pena avisar que el monto no coincide? **Con una tarjeta, nunca.**
+ *
+ * [difiereDelEsperado] compara contra `rule.amount`, y en una regla sintética de tarjeta ese
+ * número no es un pago esperado: es el SALDO de la deuda (ver [RecurringRule.montoEsSaldo]). El
+ * pago real de una tarjeta —el mínimo, el total, o algo en el medio— casi nunca es igual al
+ * saldo, así que la comparación daba `true` todos los meses y el dueño leía «No es el monto que
+ * anotaste ($27.501.150). Puede ser: revísalo antes de confirmar.» sobre un pago perfectamente
+ * normal. Peor: la advertencia le repetía como «lo esperado» justamente la cifra que esta rama
+ * dejó de mostrar como su pago.
+ *
+ * No hay un monto esperado contra el cual comparar, así que no se afirma nada. Es la misma regla
+ * que el resto de esta pantalla desde que el «Flujo libre» mintió dos veces: sin el dato, no se
+ * dice.
+ */
+fun avisaMontoDistinto(rule: RecurringRule, real: Long): Boolean =
+    !rule.montoEsSaldo && difiereDelEsperado(rule.amount, real)

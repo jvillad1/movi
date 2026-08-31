@@ -90,6 +90,9 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun register(request: RegisterRequest): AuthResponse = trasEscribir { delegado.register(request) }
     override suspend fun login(request: LoginRequest): AuthResponse = trasEscribir { delegado.login(request) }
     override suspend fun renameAccount(id: String, name: String): Account = trasEscribir { delegado.renameAccount(id, name) }
+    // Marcar la condición de una cuenta cambia «Tu plata» del Inicio: sin invalidar el caché, el
+    // dueño marcaba Skandia y volvía al Inicio con la cifra vieja.
+    override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = trasEscribir { delegado.updateAccountCondition(id, condicionadaA) }
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = trasEscribir { delegado.updateUserProfile(request) }
     override suspend fun changePassword(request: ChangePasswordRequest): Unit = trasEscribir { delegado.changePassword(request) }
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = trasEscribir { delegado.requestPasswordReset(request) }

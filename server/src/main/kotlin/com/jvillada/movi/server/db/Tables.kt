@@ -66,6 +66,14 @@ object Accounts : Table("accounts") {
     val type     = varchar("type", 30)
     val balance  = long("balance").default(0)
     val currency = varchar("currency", 10).default("COP")
+    /**
+     * Para qué —y solo para qué— se puede usar esta plata sin castigo. NULL = libre.
+     *
+     * NULLABLE a propósito: el ALTER que emite `createMissingTablesAndColumns` no puede fallar
+     * sobre una tabla con datos, y toda cuenta existente queda en NULL, que es la verdad — nacieron
+     * sin condición porque el campo no existía. Ver `Account.condicionadaA` en :core.
+     */
+    val conditionedTo = varchar("conditioned_to", 60).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
