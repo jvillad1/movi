@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
@@ -74,105 +76,121 @@ fun VoidEventSheet(
         ) {
             // F37: manija + X para cerrar, mismo componente en las 8 hojas de la app.
             SheetHandleWithClose(onClose = onDismiss, enabled = !voiding)
-
-            // Event summary card
-            MinCard(
-                modifier = Modifier.fillMaxWidth(),
-                variant = MinCardVariant.Elevated,
-                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            // El contenido de la hoja se desplaza.
+            //
+            // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
+            // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
+            // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
+            // propia hoja. Sin manera de llegar a él.
+            //
+            // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
+            // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
+            // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
             ) {
-                Row(
+
+                // Event summary card
+                MinCard(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
+                    variant = MinCardVariant.Elevated,
+                    padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = event.description,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MinText,
-                        )
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = "${event.category} · ${event.source.name}",
-                            fontSize = 11.sp,
-                            color = MinTextMute,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = event.description,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MinText,
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = "${event.category} · ${event.source.name}",
+                                fontSize = 11.sp,
+                                color = MinTextMute,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        MonoText(
+                            text = signedAmount,
+                            fontSize = 14f,
+                            color = if (isIncome) MinIncome else MinText,
                         )
                     }
-                    Spacer(Modifier.width(12.dp))
-                    MonoText(
-                        text = signedAmount,
-                        fontSize = 14f,
-                        color = if (isIncome) MinIncome else MinText,
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                // Reason label
+                Text(
+                    text = "MOTIVO (OPCIONAL)",
+                    fontSize = 11.sp,
+                    color = MinTextMute,
+                    letterSpacing = 0.4.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(Modifier.height(8.dp))
+
+                // Reason input
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MinSurfaceContainerLow)
+                        .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                ) {
+                    BasicTextField(
+                        value = reason,
+                        onValueChange = { reason = it },
+                        cursorBrush = SolidColor(MinText),
+                        textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { inner ->
+                            if (reason.isEmpty()) {
+                                Text("Ej: Movimiento duplicado", fontSize = 14.sp, color = MinTextMute)
+                            }
+                            inner()
+                        },
                     )
                 }
+
+                // Inline error
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // CTA
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (!voiding) MinExpenseContainer else MinSurfaceContainerLow)
+                        .clickable(enabled = !voiding) { doVoid() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (voiding) "Anulando…" else "Anular movimiento",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (!voiding) MinExpense else MinTextFaint,
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
             }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Reason label
-            Text(
-                text = "MOTIVO (OPCIONAL)",
-                fontSize = 11.sp,
-                color = MinTextMute,
-                letterSpacing = 0.4.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            // Reason input
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MinSurfaceContainerLow)
-                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-            ) {
-                BasicTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (reason.isEmpty()) {
-                            Text("Ej: Movimiento duplicado", fontSize = 14.sp, color = MinTextMute)
-                        }
-                        inner()
-                    },
-                )
-            }
-
-            // Inline error
-            if (error != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(text = error!!, fontSize = 12.sp, color = MinExpense)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // CTA
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (!voiding) MinExpenseContainer else MinSurfaceContainerLow)
-                    .clickable(enabled = !voiding) { doVoid() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (voiding) "Anulando…" else "Anular movimiento",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (!voiding) MinExpense else MinTextFaint,
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
         }
     }
 }
