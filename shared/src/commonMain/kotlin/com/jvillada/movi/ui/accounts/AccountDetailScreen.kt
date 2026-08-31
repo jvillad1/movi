@@ -58,6 +58,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     var refreshKey by remember { mutableStateOf(0) }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
+    var showCondicion by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
@@ -238,6 +239,41 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             }
                         }
                         Spacer(Modifier.height(20.dp))
+                    }
+
+                    // **El camino de escritura de `Account.condicionadaA`.** Sin esta fila el
+                    // campo nacía muerto: solo se podía guardar al crear la cuenta, y la que lo
+                    // motivó —la pensión voluntaria del dueño— ya existía en producción. Ver
+                    // [CondicionDeCuentaSheet].
+                    //
+                    // No aparece en una deuda: una tarjeta o un préstamo no son plata que se
+                    // pueda usar para algo, así que la pregunta no significa nada ahí.
+                    if (!isDebtAccount(acc.type)) {
+                        item(key = "condicion") {
+                            MinCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = MinCardVariant.Elevated,
+                                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                            ) {
+                                CardRow(
+                                    left = {
+                                        Text(
+                                            "¿Solo sirve para algo?",
+                                            fontSize = 14.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MinText,
+                                        )
+                                    },
+                                    sub = acc.condicionadaA
+                                        ?.let { "Solo para $it · no suma en «Tu plata»" }
+                                        ?: "Puedes usar esta plata para lo que quieras",
+                                    isLast = true,
+                                    showChevron = true,
+                                    onClick = { showCondicion = true },
+                                )
+                            }
+                            Spacer(Modifier.height(20.dp))
+                        }
                     }
                 }
 
@@ -425,6 +461,23 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     refreshKey++
                 },
             )
+        }
+
+        if (showCondicion) {
+            account?.let { acc ->
+                CondicionDeCuentaSheet(
+                    account = acc,
+                    onDismiss = { showCondicion = false },
+                    onGuardada = { actualizada ->
+                        // Se pinta lo que contestó el server, sin recargar: la cuenta ya viene
+                        // completa en la respuesta. El Inicio se entera por su cuenta — el
+                        // repositorio invalida su caché en cada escritura (ver
+                        // `InvalidaElInicioAlEscribir`).
+                        account = actualizada
+                        showCondicion = false
+                    },
+                )
+            }
         }
 
         if (showDeleteAccount) {

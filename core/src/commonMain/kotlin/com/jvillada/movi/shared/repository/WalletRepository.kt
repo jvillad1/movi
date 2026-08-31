@@ -277,6 +277,17 @@ interface WalletRepository {
     /** Renombra una cuenta. Ver [RenameAccountRequest]. */
     suspend fun renameAccount(id: String, name: String): Account
 
+    /**
+     * Marca (o desmarca) para qué se puede usar la plata de una cuenta que **ya existe**.
+     *
+     * Sin esto, `Account.condicionadaA` solo se podía escribir al crear la cuenta, y la cuenta
+     * que motivó el campo —la pensión voluntaria del dueño— ya estaba creada. Ver
+     * [com.jvillada.movi.shared.model.UpdateAccountConditionRequest].
+     *
+     * `null` o vacío = sin condición: esa plata vuelve a «Tu plata».
+     */
+    suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account
+
     suspend fun getUserProfile(): UserProfile
 
     /** `PUT /api/users/me`. Campos opcionales — solo se toca lo que viene en [request]. */

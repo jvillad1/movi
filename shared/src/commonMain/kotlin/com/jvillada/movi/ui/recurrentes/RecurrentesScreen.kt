@@ -831,7 +831,10 @@ private fun RecurrenteRow(
             // marcó algo por error, el único lugar donde puede darse cuenta es acá.
             contexto = if (ocurrencia != null) "$base · ${textoYaOcurrio(ocurrencia)}" else base
             esIngreso = item.rule.type == TransactionType.INCOME
-            monto = "${if (esIngreso) "+" else "−"}${formatCOP(item.rule.amount)}"
+            // Ver `RecurringRule.montoEsSaldo`: el de una tarjeta es su deuda, no su cuota. La
+            // decisión vive en `textoDelMonto` y no acá, porque este mismo `if` faltaba en uno de
+            // los cuatro renderers (el push) y así no puede volver a faltar.
+            monto = textoDelMonto(item.rule, conSigno = true)
             onClick = { onEditRule(item.rule) }
         }
         is Recurrente.Suscripcion -> {
@@ -988,7 +991,12 @@ private fun PropuestaOcurrencia(
                     lineHeight = 16.sp,
                 )
             }
-            if (difiereDelEsperado(rule.amount, propuesta.amount)) {
+            // `avisaMontoDistinto` y no `difiereDelEsperado` a secas: en una tarjeta el monto de
+            // la regla es el SALDO, no un pago esperado, así que la comparación daba `true` todos
+            // los meses y esta advertencia salía siempre — repitiéndole al dueño como «lo que
+            // anotaste» justamente la cifra que el resto de la pantalla dejó de mostrar como su
+            // pago. Ver `RecurringRule.montoEsSaldo`.
+            if (avisaMontoDistinto(rule, propuesta.amount)) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +
@@ -1137,7 +1145,7 @@ private fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
 
         // Amount
         Text(
-            text = "${if (isIncome) "+" else "−"}${formatCOP(rule.amount)}",
+            text = textoDelMonto(rule, conSigno = true),
             fontSize = 14.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,

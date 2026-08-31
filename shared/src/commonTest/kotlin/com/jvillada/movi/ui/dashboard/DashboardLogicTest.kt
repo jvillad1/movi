@@ -162,7 +162,7 @@ class DashboardLogicTest {
         assertEquals(1_505_093_905L, b.deudas)
         assertEquals(12_383_363L - 1_505_093_905L, b.patrimonio)
         assertEquals(-1_492_710_542L, b.patrimonio)
-        assertTrue(b.hasDebt, "con deudas el Inicio pinta la línea del patrimonio")
+        assertTrue(b.muestraPatrimonio, "con deudas el Inicio pinta la línea del patrimonio")
         assertEquals(false, b.hasInvestments)
     }
 
@@ -182,7 +182,7 @@ class DashboardLogicTest {
         assertEquals(0L, b.tuPlata)
         assertEquals(0L, b.deudas)
         assertEquals(0L, b.patrimonio)
-        assertEquals(false, b.hasDebt, "sin deudas el patrimonio repetiría el número grande")
+        assertEquals(false, b.muestraPatrimonio, "sin deudas el patrimonio repetiría el número grande")
         assertEquals(false, b.hasInvestments)
     }
 
@@ -192,7 +192,7 @@ class DashboardLogicTest {
         assertEquals(0L, b.tuPlata)
         assertEquals(768_000_000L, b.deudas)
         assertEquals(-768_000_000L, b.patrimonio)
-        assertTrue(b.hasDebt)
+        assertTrue(b.muestraPatrimonio)
     }
 
     @Test
@@ -201,7 +201,7 @@ class DashboardLogicTest {
         assertEquals(350_000L, b.tuPlata)
         assertEquals(0L, b.deudas)
         assertEquals(b.tuPlata, b.patrimonio)
-        assertEquals(false, b.hasDebt)
+        assertEquals(false, b.muestraPatrimonio)
     }
 
     @Test
@@ -268,22 +268,26 @@ class DashboardLogicTest {
         )
         assertEquals(-500_000L, b.deudas)
         assertEquals(2_500_000L, b.patrimonio)
-        assertTrue(b.hasDebt, "el patrimonio ya no es el mismo número que «tu plata»: hay que mostrarlo")
+        assertTrue(b.muestraPatrimonio, "el patrimonio ya no es el mismo número que «tu plata»: hay que mostrarlo")
         assertEquals("Tu plata más $500.000 a favor en créditos", patrimonioExplicacion(b))
     }
 
     @Test
     fun `las dos cifras del hero no pueden desalinearse de la fila Cuentas ni de Cuentas`() {
         // El hero, el acceso «Cuentas» del Inicio y el «Patrimonio neto» de la pantalla de
-        // Cuentas salen todos de assetsDebtsNet — el desacuerdo entre pantallas que la Ola 4
+        // Cuentas salen todos de heroBalance — el desacuerdo entre pantallas que la Ola 4
         // tuvo que arreglar entre Créditos y el Inicio no puede repetirse acá.
+        //
+        // Este dueño de prueba no tiene ninguna cuenta condicionada, así que acá «tu plata»
+        // todavía coincide con los activos crudos. El caso en que dejan de coincidir —y en el
+        // que este mismo invariante se rompía— vive en `PlataCondicionadaTest`.
         val (activos, deudas, neto) = assetsDebtsNet(cuentasDelDueño)
         val b = heroBalance(cuentasDelDueño)
-        assertEquals(activos, b.tuPlata)
+        assertEquals(activos, b.tuPlata + b.condicionado)
         assertEquals(deudas, b.deudas)
         assertEquals(neto, b.patrimonio)
         assertEquals(b.tuPlata, b.disponible + b.invertido)
-        assertEquals(b.patrimonio, b.tuPlata - b.deudas)
+        assertEquals(b.patrimonio, b.tuPlata + b.condicionado - b.deudas)
         // Y lo mismo que muestra la fila «Cuentas» de EXPLORA.
         assertEquals("$12.383.363", quickLinkFigure("accounts", DashboardData(accounts = cuentasDelDueño)).value)
     }

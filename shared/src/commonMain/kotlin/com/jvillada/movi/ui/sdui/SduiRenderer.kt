@@ -41,6 +41,7 @@ import com.jvillada.movi.ui.dashboard.heroBalanceTitle
 import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
 import com.jvillada.movi.ui.dashboard.overBudgetCategories
 import com.jvillada.movi.ui.dashboard.quickLinkFigure
+import com.jvillada.movi.ui.recurrentes.textoDelMonto
 import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
 import com.jvillada.movi.ui.dashboard.visibleSections
 
@@ -162,8 +163,9 @@ private fun clickHandler(
  *
  * El patrimonio **no se esconde**: con los cinco créditos del dueño (~$1.505M) es la foto
  * honesta de su situación. Se muestra con tres cuidados para que se entienda en vez de asustar:
- * - solo cuando el grupo Deuda no está en cero (en cero repetiría el número de arriba, y esta
- *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA);
+ * - solo cuando de verdad difiere de «tu plata» — o sea con deudas **o** con plata condicionada
+ *   (ver [HeroBalance.muestraPatrimonio]); si coincide repetiría el número de arriba, y esta
+ *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA;
  * - **en gris, no en rojo** — el rojo de esta tarjeta está reservado al «Flujo del mes», que es
  *   el resultado del mes y algo sobre lo que se puede actuar hoy; un patrimonio negativo por
  *   hipotecas es una estructura de largo plazo, no una pérdida de este mes. La pantalla de
@@ -205,6 +207,25 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
             letterSpacing = (-1.6).sp,
             lineHeight = 44.sp,
         )
+        // La plata condicionada, dicha con su condición.
+        //
+        // El dueño: «esa plata no la tengo disponible; la de Skandia es dinero que deberías
+        // referenciar en patrimonio pero no mostrarle como disponible en mi balance, sino como un
+        // dinero disponible CONDICIONADO a uso en Vivienda». Tenía razón: «Tu plata» decía
+        // $137.625.167 cuando podía disponer de $31.625.167.
+        //
+        // Va debajo de la cifra grande y antes del patrimonio, porque es lo que explica la resta
+        // entre las dos: sale de «Tu plata» pero sigue contando en lo que vale.
+        if (balance.condicionado > 0L) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = balance.condicionadoA
+                    ?.let { "Además ${formatMoneyCompact(balance.condicionado)} solo para $it" }
+                    ?: "Además ${formatMoneyCompact(balance.condicionado)} de uso condicionado",
+                fontSize = 11.5.sp,
+                color = MinTextMute,
+            )
+        }
         if (balance.hasInvestments) {
             // Las cuentas de Inversión entran en «tu plata», así que la línea dice cuánto de ese
             // total está guardado. Usa el vocabulario de la pantalla de Cuentas ("Dinero" e
@@ -216,7 +237,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                 color = MinTextMute,
             )
         }
-        if (balance.hasDebt) {
+        if (balance.muestraPatrimonio) {
             Spacer(Modifier.height(16.dp))
             Hairline()
             // La explicación va DEBAJO de la fila, a ancho completo, y no como sub-línea de la
@@ -301,7 +322,20 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                 CardRow(
                     left = { Text(p.rule.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                     sub = dueLabel(p.daysUntil),
-                    right = { MonoText(formatCOP(p.rule.amount), 14.5f, color = if (urgent) MinExpense else MinText) },
+                    // Una tarjeta no tiene cuota: su monto es el SALDO. Mostrarlo bajo «Próximos
+                    // pagos» anunciaba $27.501.150 como el próximo pago del dueño cuando el mínimo
+                    // ronda el 5 %. Se muestra el saldo, dicho con su nombre y en gris — no como
+                    // la cifra que va a salir de su cuenta. Ver `RecurringRule.montoEsSaldo`.
+                    right = {
+                        // El TEXTO lo decide `textoDelMonto` (una sola función para los cuatro
+                        // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
+                        // chico porque no es una cifra que vaya a salir de la cuenta.
+                        if (p.rule.montoEsSaldo) {
+                            MonoText(textoDelMonto(p.rule), 12.5f, color = MinTextMute)
+                        } else {
+                            MonoText(textoDelMonto(p.rule), 14.5f, color = if (urgent) MinExpense else MinText)
+                        }
+                    },
                     isLast = i == rows.lastIndex,
                     // Una cuota de crédito se gestiona en Créditos; una regla, en Recurrentes.
                     onClick = { onNavigate(if (isCredit) Screen.Credits else Screen.Recurrentes) },

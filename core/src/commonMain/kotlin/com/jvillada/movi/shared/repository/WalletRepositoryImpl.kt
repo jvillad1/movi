@@ -60,6 +60,7 @@ import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.RenameAccountRequest
+import com.jvillada.movi.shared.model.UpdateAccountConditionRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -403,6 +404,17 @@ class WalletRepositoryImpl(
         val response = client.put("$baseUrl/api/accounts/$id/name") {
             contentType(ContentType.Application.Json)
             setBody(RenameAccountRequest(name))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
+        val response = client.put("$baseUrl/api/accounts/$id/conditioned-to") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateAccountConditionRequest(condicionadaA))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

@@ -10,7 +10,17 @@ CREATE TABLE account (
     -- existía y nunca la empujaba, así que los eventos que se le anotaran (con su accountId)
     -- rebotaban con 404 "Account not found" cuando el SyncEngine intentaba subirlos (ver
     -- EventRoutes.kt POST). Mismo patrón que financial_event.syncedAt.
-    syncedAt   INTEGER
+    syncedAt   INTEGER,
+    -- Para qué —y solo para qué— se puede usar esta plata. NULL = libre. Espejo de
+    -- `accounts.conditioned_to` del server; ver `Account.condicionadaA` en :core.
+    --
+    -- **Sin esta columna la cifra grande del Inicio oscilaba.** `heroBalance` saca de «Tu plata»
+    -- las cuentas condicionadas, pero la fila local no sabía guardar la condición: cada vez que
+    -- `getAccounts` contestaba con lo local —modo avión, y también cuando la red tarda más que
+    -- PRESUPUESTO_DE_RED_MS— la pensión voluntaria volvía a sumar y el hero saltaba de $31,6M a
+    -- $137,6M. No es un caso raro: el segundo camino se alcanza con red mala, que es el modo
+    -- normal en el bus.
+    conditionedTo TEXT
 );
 
 -- Mismo criterio que `GET /api/accounts` (ver AccountRoutes.kt, donde está escrito por qué se
@@ -43,8 +53,8 @@ selectUnsynced:
 SELECT * FROM account WHERE syncedAt IS NULL AND userId = :userId;
 
 insert:
-INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt, conditionedTo)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 updateBalance:
 UPDATE account SET balance = :balance WHERE id = :id;
