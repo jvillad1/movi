@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CardSummary
@@ -270,9 +271,17 @@ fun currentMonthPrefixApp(): String = currentMonthPrefix()
 
 data class DashboardAlert(val text: String, val target: Screen)
 
-/** Misma regla que Presupuestos: OVER = gastado ≥ límite; un límite 0 no puede "superarse". */
+/**
+ * Los presupuestos de verdad superados.
+ *
+ * Llamaba a su propia comparación (`gastado >= límite`) con un comentario que decía «misma regla
+ * que Presupuestos». Cuando esa pantalla dejó de contar el empate como exceso, el comentario pasó
+ * a ser mentira y las dos se contradijeron: el dueño veía «Presupuesto de Mercado superado» en el
+ * Inicio y «Sin margen · gastaste justo el límite» al entrar. Ahora las dos llaman a
+ * [estadoDePresupuesto], en `:core`, que es donde vive una regla sobre su plata.
+ */
 fun overBudgetCategories(budgets: List<Budget>, spentByCategory: Map<String, Long>): List<String> =
-    budgets.filter { it.monthlyLimit > 0 && (spentByCategory[it.category] ?: 0L) >= it.monthlyLimit }
+    budgets.filter { estadoDePresupuesto(spentByCategory[it.category] ?: 0L, it.monthlyLimit).estaSuperado }
         .map { it.category }
 
 /**

@@ -111,10 +111,28 @@ class DashboardLogicTest {
     }
 
     @Test
-    fun `presupuesto superado = gastado al menos el limite, y un limite 0 nunca alerta`() {
-        val budgets = listOf(Budget("Mercado", 100_000), Budget("Salidas", 200_000), Budget("Raro", 0))
-        val spent = mapOf("Mercado" to 100_000L, "Salidas" to 150_000L, "Raro" to 5L)
-        assertEquals(listOf("Mercado"), overBudgetCategories(budgets, spent))
+    fun `la alerta del Inicio usa la MISMA regla que Presupuestos`() {
+        // Este test fijaba la regla vieja —«superado = gastado AL MENOS el límite»— y por eso se
+        // puso rojo cuando Presupuestos dejó de contar el empate como exceso. Esa divergencia es
+        // justo lo que el dueño vio: «Presupuesto de Mercado superado» en el Inicio y «Sin margen ·
+        // gastaste justo el límite» al entrar.
+        //
+        // Ahora las dos llaman a `estadoDePresupuesto` en `:core`. Este test comprueba que el
+        // Inicio no vuelva a tener criterio propio.
+        val budgets = listOf(
+            Budget("Justo", 100_000),      // exactamente el límite: NO es superado
+            Budget("Pasado", 100_000),     // un peso más: sí
+            Budget("Cerca", 200_000),      // 75 %: no
+            Budget("Raro", 0),             // sin configurar: nunca alerta
+        )
+        val spent = mapOf(
+            "Justo" to 100_000L,
+            "Pasado" to 100_001L,
+            "Cerca" to 150_000L,
+            "Raro" to 5L,
+        )
+
+        assertEquals(listOf("Pasado"), overBudgetCategories(budgets, spent))
     }
 
     // ── Las dos cifras del Inicio: lo que tienes vs. lo que vales ──────────────
