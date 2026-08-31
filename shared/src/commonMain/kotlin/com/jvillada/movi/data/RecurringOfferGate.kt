@@ -2,9 +2,9 @@ package com.jvillada.movi.data
 
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
-import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
+import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.categoryThrottleKeyFor
 import com.jvillada.movi.ui.recurrentes.prefillFrom
 import com.jvillada.movi.ui.recurrentes.shouldOfferRecurring
@@ -108,11 +108,10 @@ object RecurringOfferGate {
             .onSuccess { suscripciones = it }
             .getOrNull()
             ?: return null
-        // Solo las que de verdad suman en «Gastos recurrentes» — mismo filtro que
-        // `resumenRecurrentes`: una candidata que el dueño descartó no bloquea nada.
-        val activas = cobrosAlDia
-            .filter { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED }
-            .map { it.displayName }
+        // Solo las que de verdad suman en «Gastos recurrentes». El filtro vive en
+        // `nombresDeSuscripcionesQueYaSuman`, compartido con «Esto se repite» del detalle del
+        // movimiento: los dos caminos que crean un recurrente tienen que medir lo mismo.
+        val activas = nombresDeSuscripcionesQueYaSuman(cobrosAlDia)
         if (!shouldOfferRecurring(event, reglasAlDia, yaOfrecidas, activas, sinTomarPorCategoria)) return null
         yaOfrecidas += throttleKeyFor(event)
         val categoria = categoryThrottleKeyFor(event)

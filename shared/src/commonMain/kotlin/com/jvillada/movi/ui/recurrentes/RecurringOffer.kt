@@ -6,6 +6,8 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.ui.components.categoriaSirveParaTipo
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.SubStatus
+import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 
@@ -230,15 +232,68 @@ fun prefillFrom(event: FinancialEvent): RecurringPrefill {
  *    libranza.
  * 3. **Monto > 0**: un recurrente de $0 no es un compromiso.
  *
- * Lo que **no** se decide acá porque necesita red —si ya existe una regla con ese nombre, o si
- * este movimiento ya está sellado como la ocurrencia de alguna— se pregunta al **tocar** la fila,
- * y ahí se explica en vez de crear un duplicado. Ver `SeccionEstoSeRepite`.
+ * Lo que **no** se decide acá porque necesita red —si ya existe una regla o una suscripción con
+ * ese nombre, o si este movimiento ya está sellado como la ocurrencia de alguna— se pregunta al
+ * **tocar** la fila, y ahí se explica en vez de crear un duplicado. Ver [equivalenteYaAnotado] y
+ * `SeccionEstoSeRepite`.
  */
 fun puedeOfrecerseComoRecurrenteDesdeElDetalle(event: FinancialEvent): Boolean {
     if (event.transferId != null) return false
     if (isReservedCategory(event.category)) return false
     if (event.amount <= 0L) return false
     return claveDeNombre(prefillNameFor(event)).isNotEmpty()
+}
+
+/**
+ * Los nombres de las suscripciones que **de verdad suman** en «Gastos recurrentes» — las que
+ * hacen que anotar una regla con ese nombre cuente el cobro dos veces.
+ *
+ * Mismo filtro que `resumenRecurrentes`: una candidata que el dueño **descartó** no bloquea nada,
+ * porque no está sumando. Vive acá y no dentro de `RecurringOfferGate` para que los dos caminos
+ * que ofrecen crear un recurrente —la barra de después de guardar y «Esto se repite» desde el
+ * detalle del movimiento— midan lo mismo.
+ */
+fun nombresDeSuscripcionesQueYaSuman(suscripciones: List<Subscription>): List<String> =
+    suscripciones
+        .filter { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED }
+        .map { it.displayName }
+
+/**
+ * **¿Con qué nombre ya está anotado este cobro?** — o `null` si no lo está y se puede crear.
+ *
+ * Es la guarda anti-duplicado de «Esto se repite», y mira **las tres** puertas por las que un
+ * mismo cobro puede estar ya contado:
+ *
+ * 1. **El sello de ocurrencia** ([selloDeOcurrencia], de `GET /api/events/{id}/occurrence`): este
+ *    movimiento ya ES el pago de este mes de una regla que existe. Crear otra sería tener el
+ *    arriendo dos veces en «Próximos pagos».
+ * 2. **Una regla con el mismo nombre** ([reglas]).
+ * 3. **Una suscripción con el mismo nombre** ([suscripcionesQueYaSuman]). Esta faltaba, y era la
+ *    puerta más fácil de cruzar: las suscripciones se **auto-descubren**, así que el dueño puede
+ *    tener «Netflix» sin haberlo escrito nunca. Recurrentes muestra reglas y suscripciones en UNA
+ *    lista y las suma juntas, así que una regla «Netflix» encima de la suscripción «Netflix»
+ *    duplica la fila **y** el gasto. La barra de después de guardar ya lo miraba
+ *    ([shouldOfferRecurring] con `existingSubscriptionNames`) y el server ya cierra la simétrica
+ *    del otro lado (no se auto-descubre una suscripción para la que ya hay regla): faltaba
+ *    justamente esta.
+ *
+ * La comparación es [claveDeNombre] en las tres, que es la misma que usa la pantalla de
+ * Recurrentes para decidir que dos filas son la misma cosa.
+ *
+ * Función pura y afuera del `@Composable` a propósito: decide si se crea o no una fila que suma
+ * plata todos los meses, y eso se prueba.
+ */
+fun equivalenteYaAnotado(
+    selloDeOcurrencia: String?,
+    reglas: List<RecurringRule>,
+    suscripcionesQueYaSuman: List<String>,
+    nombre: String,
+): String? {
+    selloDeOcurrencia?.takeIf { it.isNotBlank() }?.let { return it }
+    val clave = claveDeNombre(nombre)
+    if (clave.isEmpty()) return null
+    reglas.firstOrNull { claveDeNombre(it.name) == clave }?.let { return it.name }
+    return suscripcionesQueYaSuman.firstOrNull { claveDeNombre(it) == clave }
 }
 
 /**

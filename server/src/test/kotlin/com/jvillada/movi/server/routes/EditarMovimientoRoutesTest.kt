@@ -275,14 +275,30 @@ class EditarMovimientoRoutesTest {
 
     // ── Las dos mitades de un par ──────────────────────────────────────────────
 
+    /**
+     * **Un traspaso, y no un pago de cuota, a propósito.**
+     *
+     * En un traspaso «las dos patas valen igual» es una verdad permanente: la plata que sale de
+     * una cuenta es, por definición, la misma que entra en la otra. En un pago de cuota **no**:
+     * está decidido —y todavía sin implementar, en su propio PR— que la pata de la deuda de un
+     * crédito que amortiza baje solo por el **capital** y no por la cuota completa (de las cuotas
+     * mensuales del dueño, buena parte es interés puro). Un test que fijara hoy «la deuda bajó
+     * exactamente lo que salió» sobre un pago de cuota estaría consagrando como verdad permanente
+     * algo que está por dejar de serlo, y se caería contra el cambio correcto.
+     *
+     * La cascada en sí sigue siendo la que se prueba acá, y sigue siendo coherente con cómo nace
+     * el par hoy (`pagoDeCuotaLegs` crea las dos patas con el mismo monto). Cuando la pata de
+     * deuda pase a bajar solo por capital, la cascada tendrá que **recalcular** en vez de copiar —
+     * está anotado en el código que copia (`EventRoutes` y `LocalRepository.aplicarEdicionLocal`).
+     */
     @Test
     fun `corregir el monto de una pata lo corrige en LAS DOS`() = testApplication {
-        // Un pago de cuota: la plata sale de Bancolombia y baja la deuda del carro. Si solo se
-        // corrigiera la pata tocada, saldrían $1.500.000 de la cuenta y bajarían $2.000.000 de
-        // deuda — medio millón de la nada.
+        // Un traspaso: la plata sale de Bancolombia y entra en Nu. Si solo se corrigiera la pata
+        // tocada, saldrían $1.500.000 de una cuenta y entrarían $2.000.000 en la otra — medio
+        // millón de la nada.
         transaction {
-            evento("ev-pata-dinero", duenoId, banco, "EXPENSE", 2_000_000L, "Cuota de crédito", "Cuota", "tr-1")
-            evento("ev-pata-deuda", duenoId, carro, "INCOME", 2_000_000L, "Cuota de crédito", "Pago", "tr-1")
+            evento("ev-pata-dinero", duenoId, banco, "EXPENSE", 2_000_000L, "Traspaso", "Traspaso a Nu", "tr-1")
+            evento("ev-pata-destino", duenoId, nu, "INCOME", 2_000_000L, "Traspaso", "Traspaso desde Bancolombia", "tr-1")
         }
         wireApp()
 
@@ -290,9 +306,11 @@ class EditarMovimientoRoutesTest {
         assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
 
         assertEquals(1_500_000L, filaDe("ev-pata-dinero").first)
-        assertEquals(1_500_000L, filaDe("ev-pata-deuda").first, "la hermana se mueve con ella")
-        // Y el par sigue cuadrado: lo que sale de la cuenta es lo que baja de la deuda.
-        assertEquals(-1_500_000L, saldoDe(carro), "la deuda bajó exactamente lo que salió")
+        assertEquals(1_500_000L, filaDe("ev-pata-destino").first, "la hermana se mueve con ella")
+        // Y el par sigue cuadrado: lo que sale de una cuenta es lo que entra en la otra. En
+        // Bancolombia también está «Hija» ($4.000.000) del fixture, así que su saldo es −5,5M.
+        assertEquals(-5_500_000L, saldoDe(banco), "de Bancolombia salen los 1,5M del traspaso")
+        assertEquals(1_500_000L, saldoDe(nu), "y en Nu entran exactamente esos 1,5M")
     }
 
     @Test

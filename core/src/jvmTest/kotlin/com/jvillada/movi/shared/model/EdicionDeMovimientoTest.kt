@@ -16,7 +16,6 @@ class EdicionDeMovimientoTest {
     private val ahorros = Account("acc-ahorros", "Bancolombia", AccountType.SAVINGS, 0L, "COP")
     private val nu = Account("acc-nu", "Nu", AccountType.SAVINGS, 0L, "COP")
     private val enDolares = Account("acc-usd", "Ahorros USD", AccountType.SAVINGS, 0L, "USD")
-    private val tarjeta = Account("acc-amex", "AMEX", AccountType.CREDIT_CARD, 0L, "COP")
     private val credito = Account("acc-carro", "Vehículo", AccountType.LOAN, 0L, "COP")
 
     private fun evento(
@@ -201,12 +200,5 @@ class EdicionDeMovimientoTest {
         // anunciado un cambio que no ocurre.
         val pago = evento(category = CARD_PAYMENT_CATEGORY)
         assertNull(avisoDeCambioDeCuenta(pago, AccountType.SAVINGS, AccountType.LOAN))
-    }
-
-    @Test
-    fun `la tarjeta no aparece en este test por casualidad`() {
-        // Guarda de cordura del fixture: si `tarjeta` dejara de ser CREDIT_CARD, el test de
-        // arriba pasaría por el motivo equivocado.
-        assertEquals(AccountType.CREDIT_CARD, tarjeta.type)
     }
 }

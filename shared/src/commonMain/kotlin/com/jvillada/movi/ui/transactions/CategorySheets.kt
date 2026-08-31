@@ -55,7 +55,8 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
-import com.jvillada.movi.ui.recurrentes.claveDeNombre
+import com.jvillada.movi.ui.recurrentes.equivalenteYaAnotado
+import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.prefillFrom
 import com.jvillada.movi.ui.recurrentes.prefillNameFor
 import com.jvillada.movi.ui.recurrentes.puedeOfrecerseComoRecurrenteDesdeElDetalle
@@ -933,21 +934,24 @@ private fun SeccionDelMovimiento(
  * exactamente cuando la barra ya se fue, y hasta hoy la única salida era ir a Recurrentes y
  * volver a escribir el nombre, el monto, la categoría, la cuenta y el día.
  *
- * ## Las dos preguntas que necesitan red, y por qué se hacen AL TOCAR
+ * ## Las TRES preguntas que necesitan red, y por qué se hacen AL TOCAR
  *
- * Dos cosas convertirían esto en un duplicado y ninguna se puede saber sin preguntar:
+ * Tres cosas convertirían esto en un duplicado y ninguna se puede saber sin preguntar (la lista
+ * la resuelve [equivalenteYaAnotado], que es donde está el porqué de cada una):
  *
  * 1. **Este movimiento ya es la ocurrencia de un recurrente** (`GET /api/events/{id}/occurrence`).
- *    O sea: la regla ya existe y este pago es el de este mes. Crear otra sería tener el arriendo
- *    dos veces en «Próximos pagos» y contarlo dos veces en el flujo.
- * 2. **Ya hay una regla con este nombre** (`GET /api/recurring-rules`), con la MISMA comparación
- *    que usa el resto de Recurrentes ([claveDeNombre]).
+ * 2. **Ya hay una regla con este nombre** (`GET /api/recurring-rules`).
+ * 3. **Ya hay una SUSCRIPCIÓN con este nombre** (`GET /api/subscriptions`). Es la que más fácil se
+ *    cruza, porque las suscripciones se auto-descubren: el dueño puede tener «Netflix» sin
+ *    haberlo escrito nunca, y Recurrentes suma reglas y suscripciones **juntas**. La barra de
+ *    después de guardar ya la miraba; esta hoja no, y era la otra puerta al mismo doble conteo
+ *    que este cambio vino a cerrar.
  *
  * Se preguntan **al tocar la fila** y no al abrir la hoja, por lo mismo que [SeccionDeFecha] pide
  * el sello recién cuando se abre el selector: la enorme mayoría de las veces esta hoja se abre
- * para otra cosa, y no hay por qué gastarle dos viajes de red a cada movimiento que el dueño
+ * para otra cosa, y no hay por qué gastarle tres viajes de red a cada movimiento que el dueño
  * toque. El precio es que la respuesta llega después del toque; a cambio, la fila aparece siempre
- * y no depende de que dos lecturas hayan salido bien.
+ * y no depende de que tres lecturas hayan salido bien.
  *
  * ## Qué pasa si la red falla
  *
@@ -977,9 +981,19 @@ private fun SeccionEstoSeRepite(
             // falla» en el KDoc.
             val sello = runCatching { Repositories.wallets.getEventOccurrenceMark(event.id) }.getOrNull()
             val reglas = runCatching { Repositories.wallets.getRecurringRules() }.getOrNull().orEmpty()
+            // Las suscripciones, con el MISMO filtro que la barra de después de guardar
+            // (`RecurringOfferGate`): solo las que de verdad suman. Sin esta lectura, quien ya
+            // tenía la suscripción auto-descubierta «Netflix» podía crearle encima la regla
+            // «Netflix» y ver el cobro dos veces en «Próximos pagos» y dos veces en el total.
+            val cobros = runCatching { Repositories.wallets.getSubscriptions().subscriptions }
+                .getOrNull().orEmpty()
             consultando = false
-            val clave = claveDeNombre(prefillNameFor(event))
-            val equivalente = sello?.ruleName ?: reglas.firstOrNull { claveDeNombre(it.name) == clave }?.name
+            val equivalente = equivalenteYaAnotado(
+                selloDeOcurrencia = sello?.ruleName,
+                reglas = reglas,
+                suscripcionesQueYaSuman = nombresDeSuscripcionesQueYaSuman(cobros),
+                nombre = prefillNameFor(event),
+            )
             if (equivalente != null) yaExiste = equivalente else onAbrirFormulario(prefillFrom(event))
         }
     }

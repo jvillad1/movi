@@ -475,6 +475,16 @@ fun Route.eventRoutes() {
                 // sola dejaría plata saliendo de una cuenta y entrando otra cifra en la otra —
                 // el descuadre silencioso que esta ruta no puede permitir. Ver
                 // `PATA_NO_CAMBIA_DE_CUENTA` para por qué la CUENTA, en cambio, se rechaza.
+                //
+                // **COPIA el monto, y eso vale mientras las dos patas nazcan iguales.** Hoy sí:
+                // `transferLegsFor` y `pagoDeCuotaLegs` crean las dos mitades con la misma cifra.
+                // Pero está decidido —y pendiente, en su propio PR— que en un crédito que
+                // amortiza la pata de la DEUDA baje solo por el **capital** de la cuota, no por
+                // la cuota completa (el resto es interés). El día que eso entre, esta cascada
+                // deja de poder copiar: tiene que **recalcular** la pata hermana de un pago de
+                // cuota (capital nuevo) en vez de escribirle el mismo `nuevoMonto`, o corregir
+                // una cuota de $4.215.223 le bajaría a la deuda los intereses también. La pata
+                // de un traspaso sí se sigue copiando: ahí las dos mitades son la misma plata.
                 val transferId = fila.transferId
                 if (nuevoMonto != null && transferId != null) {
                     Events.update({

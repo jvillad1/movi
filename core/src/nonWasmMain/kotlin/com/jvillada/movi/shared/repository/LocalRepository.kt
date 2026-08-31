@@ -978,6 +978,15 @@ class LocalRepository(
         val hoy = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds())
         if (fecha.year !in 2000..2100) throw ApiException(400, "Esa fecha no es de este siglo.")
         if (fecha > hoy) throw ApiException(422, EVENT_DATE_IN_FUTURE)
+        // Y la guarda de anulados, igual que en [updateEvent] (ver ahí el porqué largo). Acá el
+        // daño era menor —la fecha no toca ningún saldo— pero el hueco era el mismo y cerrarlo
+        // cuesta una línea: sin esto, un movimiento anulado en este teléfono se dejaba refechar y
+        // el server contestaba 404 al siguiente intento con red. Mismo 404 sin texto que allá.
+        if (db.financialEventQueries.selectById(id, uid).executeAsOneOrNull() != null &&
+            db.voidEventQueries.countFor(id).executeAsOne() > 0L
+        ) {
+            throw ApiException(404)
+        }
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
@@ -1040,12 +1049,18 @@ class LocalRepository(
      * movimiento recién anotado se podría corregir a un monto negativo y el `SyncEngine` lo subiría
      * después por `POST /api/events`, que no valida nada de esto. La lista vive en `:core`
      * ([validarEdicionDeMovimiento]) para que las dos caras rechacen con el mismo código y las
-     * mismas palabras.
+     * mismas palabras. La guarda de **anulado** no está en esa lista —necesita mirar una tabla—
+     * y se repite acá a mano, contra `void_event`.
      *
-     * La única diferencia declarada: la tabla local **no guarda la moneda del movimiento**, así que
-     * la comparación de monedas usa la de su **cuenta actual**. Coinciden para todo lo que la app
-     * escribe (un movimiento nace en la moneda de su cuenta) y este camino local solo corre para
-     * movimientos que la app escribió y todavía no subió.
+     * Las dos diferencias declaradas, y ninguna es un rechazo distinto:
+     *
+     * 1. La tabla local **no guarda la moneda del movimiento**, así que la comparación de monedas
+     *    usa la de su **cuenta actual**. Coinciden para todo lo que la app escribe (un movimiento
+     *    nace en la moneda de su cuenta) y el camino sin red solo corre para movimientos que la
+     *    app escribió y todavía no subió.
+     * 2. Cuando la edición **va a salir al server** y la cuenta destino no está espejada en este
+     *    dispositivo, la existencia de esa cuenta la decide el server y no esta pre-validación:
+     *    ver el comentario junto a `cambiosAValidar`.
      */
     override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
         val uid = userId()
@@ -1055,13 +1070,44 @@ class LocalRepository(
         val cuentaActual = filaActual?.let { db.accountQueries.selectById(it.accountId).executeAsOneOrNull() }
         val cuentaPedida = cambios.accountId?.let { db.accountQueries.selectById(it).executeAsOneOrNull() }
             ?.takeIf { it.userId == uid }
+        // **Un movimiento ANULADO no se edita**, ni acá ni en el server (`PUT /api/events/{id}`
+        // trata como inexistente todo lo que tenga fila en `void_events`, igual que `/category` y
+        // `/timestamp`). Esta guarda faltaba y era la única del server que este espejo no
+        // repetía: medido, una cuenta en $1.000.000 con un gasto de $100.000 ya anulado —o sea
+        // de vuelta en $1.000.000— aceptaba «corregir» ese gasto a $900.000 y quedaba en
+        // $200.000, con el teléfono mintiendo hasta la próxima lectura con red. El alcance era
+        // chico (un anulado todavía sin sincronizar, sin red, dentro de la ventana de 30s del
+        // SyncEngine) pero el daño era un saldo falso, que es lo único que esta app no puede
+        // permitirse.
+        //
+        // Se lanza `ApiException(404)` **sin texto**, que es exactamente lo que produce el
+        // camino con red: el server responde 404 con el cuerpo vacío y `toUserMessage` lo
+        // traduce a «Recurso no encontrado.». Mismas palabras y mismo código en las dos caras.
+        if (filaActual != null && db.voidEventQueries.countFor(id).executeAsOne() > 0L) {
+            throw ApiException(404)
+        }
         // Sin la fila local no hay nada que validar sin red: se deja pasar al server, que es el
         // que sabe. Pasa de verdad — un movimiento que llegó por SMS o por extracto y que este
         // dispositivo todavía no espejó.
         if (filaActual != null) {
             val comoModelo = filaActual.toModel(types)
+            // **La cuenta destino la valida el server cuando la edición va al server.** La
+            // pre-validación corre siempre que la fila esté local, pero el catálogo de cuentas de
+            // ESTE dispositivo puede estar incompleto (el espejo de cuentas y el de eventos se
+            // llenan por caminos distintos), y entonces `cuentaNueva = null` devolvía
+            // CUENTA_NO_ENCONTRADA sobre una cuenta que sí existe — un «Esa cuenta no existe.»
+            // falso, con red disponible y con el server a un viaje de distancia. Así que cuando
+            // la edición va a salir al server y la cuenta pedida no está espejada acá, el campo
+            // se saca de la validación local y decide el que tiene la lista completa (el pedido
+            // que viaja sigue llevando el `accountId` entero). Cuando la edición se resuelve sin
+            // red, en cambio, no hay a quién preguntarle: ahí el 404 local es la respuesta
+            // correcta.
+            val resolveraSinRed = filaActual.syncedAt == null
+            val cambiosAValidar = soloLoQueCambia(comoModelo, cambios).let { pedido ->
+                if (resolveraSinRed || cuentaPedida != null) pedido else pedido.copy(accountId = null)
+            }
             val rechazo = validarEdicionDeMovimiento(
-                cambios = soloLoQueCambia(comoModelo, cambios),
+                cambios = cambiosAValidar,
                 esPataDeUnPar = filaActual.transferId != null,
                 cuentaActualId = filaActual.accountId,
                 monedaDelMovimiento = cuentaActual?.currency ?: "COP",
@@ -1127,6 +1173,13 @@ class LocalRepository(
 
         // El monto de un par se mueve en las DOS mitades (la cuenta no se puede cambiar: la
         // validación de arriba ya rechazó ese caso, así que la hermana se queda donde está).
+        //
+        // **COPIA el monto, y eso vale mientras las dos patas nazcan iguales** — misma nota que
+        // en el server (`EventRoutes`, `PUT /api/events/{id}`). Cuando entre el cambio ya
+        // decidido de que la pata de la DEUDA de un crédito que amortiza baje solo por el
+        // **capital** de la cuota, esta cascada tiene que **recalcular** esa hermana en vez de
+        // escribirle el mismo `montoNuevo`. La pata de un traspaso se sigue copiando: ahí las
+        // dos mitades son la misma plata.
         //
         // **Las hermanas se leen ANTES de escribirles**, y no es un detalle de estilo: el saldo se
         // deshace con el monto VIEJO de cada una, y leerlas después de la cascada devolvería ya el
