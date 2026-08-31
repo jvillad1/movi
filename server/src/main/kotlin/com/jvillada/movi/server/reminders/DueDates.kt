@@ -93,6 +93,26 @@ fun dueDateFor(
     } else {
         natural
     }
+    // **Una regla que todavía no arrancó no vence.**
+    //
+    // La primera cuota de un crédito no cae el mismo día del desembolso. El dueño lo dijo con su
+    // crédito del techo: «el desembolso es ese día pero en realidad la cuota es 1 mes después».
+    //
+    // Esto ya se había arreglado una vez… **en un solo endpoint de tres**. `ruleIsActiveOn` vivía
+    // suelto en `/api/payments/occurrences`, así que «Próximos pagos» del Inicio y el barrido de
+    // avisos seguían mostrando la cuota el día del desembolso — que es justo donde el dueño la
+    // vio. Un filtro que cada consumidor tiene que acordarse de llamar es un filtro que alguno se
+    // va a olvidar; el vencimiento mismo tiene que saberlo.
+    //
+    // Rueda mes a mes con el mismo tope que el bucle de abajo: sin él, una fecha de inicio
+    // absurda (un año 2400 mal tecleado) daría un bucle infinito en vez de un dato raro.
+    val inicio = rule.activeFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    var sinArrancar = 0
+    while (inicio != null && !due.isAfter(inicio) && sinArrancar < MAX_OCCURRENCE_ROLLS) {
+        due = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
+        sinArrancar++
+    }
+
     var rodadas = 0
     while (periodOf(due) in occurredPeriods && rodadas < MAX_OCCURRENCE_ROLLS) {
         due = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
