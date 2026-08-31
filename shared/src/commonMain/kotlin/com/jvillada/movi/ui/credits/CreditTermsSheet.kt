@@ -596,7 +596,7 @@ fun CreditTermsSheet(
                 if (!esLibranza) {
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "¿QUIÉN PAGA ESTA CUOTA?",
+                        "¿LA PAGA ALGUIEN MÁS?",
                         fontSize = 11.sp,
                         color = MinTextMute,
                         fontWeight = FontWeight.Medium,
@@ -609,13 +609,34 @@ fun CreditTermsSheet(
                     // edición completa por haber escrito de más en un rótulo. El server recorta
                     // igual, por si llega de otro cliente; acá se corta antes para que ni
                     // siquiera se pueda escribir de más.
+                    // El texto de ayuda NO puede empezar con «Yo».
+                    //
+                    // Decía «Yo — o escribe quién: Skandia, Caro…», y el dueño escribió
+                    // literalmente «Yo» en el campo de su crédito del carro. Es la respuesta
+                    // correcta a la pregunta y la incorrecta para este campo: un nombre acá
+                    // significa que la cuota la paga UN TERCERO, así que Movi dejó de contar sus
+                    // $4.215.223 mensuales como gasto suyo y de recordarle el pago.
+                    //
+                    // El campo tiene dos estados —vacío o un nombre— y el vacío es el normal. Un
+                    // marcador que empieza nombrando el caso normal invita a escribirlo.
                     FieldBox(
-                        "Yo — o escribe quién: Skandia, Caro…",
+                        "Skandia, Caro, mi papá…",
                         quienPaga,
                         { quienPaga = it.take(60) },
                     )
-                    if (quienPaga.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
+                    // El texto de abajo cambia según el estado, en vez de aparecer solo cuando ya
+                    // se escribió algo: la duda («¿esto qué hace?») llega ANTES de escribir.
+                    Spacer(Modifier.height(6.dp))
+                    if (quienPaga.isBlank()) {
+                        Text(
+                            text = "Déjalo vacío si la pagas tú. Escribe un nombre solo si la cuota la " +
+                                "paga otra persona o sale de otra bolsa — una pensión voluntaria, tu " +
+                                "pareja, un familiar.",
+                            fontSize = 11.5.sp,
+                            color = MinTextMute,
+                            lineHeight = 16.sp,
+                        )
+                    } else {
                         Text(
                             text = "La deuda sigue siendo tuya y suma entera en tu deuda total. Lo que " +
                                 "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
