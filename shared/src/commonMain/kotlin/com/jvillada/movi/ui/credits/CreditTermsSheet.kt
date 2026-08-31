@@ -9,6 +9,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -551,7 +554,22 @@ fun CreditTermsSheet(
                             .background(if (esLibranza) MinPrimary else MinSurfaceContainerHighest),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (esLibranza) Text("✓", fontSize = 12.sp, color = MinBg, fontWeight = FontWeight.Bold)
+                        // Ícono, no el carácter «✓».
+                        //
+                        // La fuente que usa Compose en el navegador no trae U+2713, así que la
+                        // casilla marcada salía como un rectángulo vacío — el dueño mandó la foto.
+                        // Es el mismo problema que ya está documentado en `CategoryRow` con los
+                        // emojis del catálogo («en la web sale como ▯»), y la misma solución: un
+                        // ícono de Material, que viaja en el binario y se ve igual en las tres
+                        // plataformas.
+                        if (esLibranza) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MinBg,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
@@ -622,10 +640,27 @@ fun CreditTermsSheet(
                     )
                 }
 
-                error?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.sp, color = MinExpense)
-                }
+            }
+
+            // **El error del guardado vive junto al botón, no adentro del scroll.**
+            //
+            // El dueño: «le doy guardar y no pasa nada». Pasaba: el guardado fallaba y el mensaje
+            // se pintaba al final del bloque que se DESPLAZA, o sea debajo de lo que se ve. El
+            // botón —que está afuera del scroll, fijo abajo— no cambiaba, así que desde donde él
+            // miraba el toque no había hecho nada.
+            //
+            // El aviso de «falta tal campo» de acá abajo ya vivía afuera y por eso sí se veía.
+            // Que el error del server, que es MÁS importante, estuviera adentro era la asimetría.
+            // Mismo defecto que la hoja de editar documentos, y la misma cura.
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = it,
+                    fontSize = 12.sp,
+                    color = MinExpense,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             Spacer(Modifier.height(16.dp))
