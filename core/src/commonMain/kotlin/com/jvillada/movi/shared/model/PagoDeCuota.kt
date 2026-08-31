@@ -123,6 +123,15 @@ fun pagoDeCuotaLegs(
             // Lo anotó el dueño con sus propios dedos. «Por confirmar» es para lo que entra solo.
             reconciliationStatus = ReconciliationStatus.RECONCILED,
             transferId = request.transferId,
+            // Redundante con `isCashFlow` —el server la vuelve a derivar en cada lectura— pero
+            // deja el objeto coherente consigo mismo desde el primer instante, igual que
+            // `transferLegsFor`. Sin esto las dos patas salían con el default `true`, y la
+            // respuesta del server afirmaba que el pago de una tarjeta cuenta en el mes.
+            countsAsCashFlow = isCashFlow(
+                accountType = if (accountId == debt.id) debt.type else from.type,
+                type = tipo,
+                category = categoria,
+            ),
         )
 
     return pata(

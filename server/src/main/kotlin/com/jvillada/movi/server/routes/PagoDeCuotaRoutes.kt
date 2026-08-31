@@ -5,10 +5,12 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.pagoDeCuotaLegs
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.signedDelta
@@ -130,9 +132,25 @@ fun Route.pagoDeCuotaRoutes() {
                         .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
                         .map { it[Events.id] }.toSet()
                 }
+                // Si las patas NO están, el INSERT falló de verdad. **500 y no 422**: un 422 la
+                // app lo lee como «tu pago está mal», y no lo está — falló el server.
                 if (ahora != setOf(body.fromEventId, body.toEventId)) {
-                    return@post call.respond(HttpStatusCode.UnprocessableEntity, "No se pudo registrar el pago. Inténtalo de nuevo.")
+                    return@post call.respond(HttpStatusCode.InternalServerError, "No se pudo registrar el pago. Inténtalo de nuevo.")
                 }
+            }
+
+            // **Se releen las patas GUARDADAS, no se devuelven las construidas.**
+            //
+            // Escenario que encontró la revisión: el dueño escribe 4.215.223, toca Guardar, el
+            // server commitea y la respuesta se pierde. Ve el error, se da cuenta de que el monto
+            // estaba mal, lo corrige a 4.500.000 y vuelve a tocar Guardar — `save()` no renueva
+            // los ids ante un fallo. El server rechaza por clave repetida, relee, los ids
+            // coinciden, y responde 200. Devolviendo las patas construidas, la respuesta afirmaba
+            // 4.500.000 sobre un pago de 4.215.223.
+            val guardadas = dbQuery {
+                Events.selectAll()
+                    .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
+                    .map { it.toFinancialEvent() }
             }
 
             // Se devuelve la deuda como quedó: es el número que el dueño vino a ver bajar.
@@ -144,16 +162,9 @@ fun Route.pagoDeCuotaRoutes() {
                     deudaRestante = eventos.sumOf {
                         signedDelta(debt.type, it.type, it.amount)
                     },
-                    patas = listOf(pataDelDinero, pataDeLaDeuda),
+                    patas = guardadas,
                 ),
             )
         }
     }
 }
-
-/** Lo que la app necesita para pintar el resultado sin volver a preguntar. */
-@kotlinx.serialization.Serializable
-data class PagoDeCuotaResult(
-    val deudaRestante: Long,
-    val patas: List<FinancialEvent>,
-)

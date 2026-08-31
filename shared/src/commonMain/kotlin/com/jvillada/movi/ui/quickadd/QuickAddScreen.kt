@@ -827,6 +827,13 @@ internal fun TypeSegments(
                     fontWeight = FontWeight.Medium,
                     color = if (isActive) MinText else MinTextDim,
                     letterSpacing = 0.1.sp,
+                    // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp
+                    // en un teléfono de 375 px: «Traspaso» a 13 sp mide ~55, pero con la escala de
+                    // fuente del sistema al 2× se pasa y envuelve, lo que crece la fila del
+                    // selector y corre el formulario entero hacia abajo. Con tres segmentos el
+                    // umbral estaba más lejos; con cuatro, no.
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         }

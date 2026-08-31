@@ -127,11 +127,44 @@ class PagoDeCuotaTest {
 
     @Test
     fun la_moneda_de_las_patas_es_la_de_la_deuda() {
-        // Las dos patas comparten moneda; se toma la de la deuda porque es la que no se puede
-        // convertir. (Con monedas distintas la validación ya cortó antes.)
-        val (dinero, deuda) = pagoDeCuotaLegs(peticion("a1", "c1", 1_008_902), ahorros, amex)
+        // La primera versión comparaba contra una tarjeta en COP y una cuenta en COP: pasaba
+        // igual si la implementación tomara la moneda del ORIGEN. Con la tarjeta en dólares el
+        // test distingue de verdad cuál de las dos se usa.
+        val ahorrosUsd = Account("a3", "Ahorros USD", AccountType.SAVINGS, 500, currency = "USD")
+        val amexUsd = Account("c2", "Master Black USD", AccountType.CREDIT_CARD, 1_257, currency = "USD")
 
-        assertEquals(amex.currency, dinero.currency)
-        assertEquals(amex.currency, deuda.currency)
+        val (dinero, deuda) = pagoDeCuotaLegs(peticion("a3", "c2", 100), ahorrosUsd, amexUsd)
+
+        assertEquals("USD", dinero.currency)
+        assertEquals("USD", deuda.currency)
+    }
+
+    @Test
+    fun cada_pata_va_a_SU_cuenta() {
+        // El borde más caro, y no estaba cubierto: si las patas salieran invertidas —el EXPENSE en
+        // la deuda y el INCOME en la cuenta— los demás tests seguirían verdes, porque miran
+        // `type`, `signedDelta` y `isCashFlow` pasándoles a mano el tipo de cuenta correcto, nunca
+        // el `accountId` que la pata trae. Invertidas, un pago SUBIRÍA la deuda y metería plata
+        // que no existe en la cuenta de ahorros.
+        val (dinero, deuda) = pagoDeCuotaLegs(peticion("a1", "l1", 4_215_223), ahorros, carro)
+
+        assertEquals(ahorros.id, dinero.accountId)
+        assertEquals(TransactionType.EXPENSE, dinero.type)
+        assertEquals(carro.id, deuda.accountId)
+        assertEquals(TransactionType.INCOME, deuda.type)
+    }
+
+    @Test
+    fun las_patas_declaran_bien_si_cuentan_en_el_mes() {
+        // `countsAsCashFlow` viaja en la respuesta del server y el cliente la lee sin recalcular.
+        // Salían las dos con el default `true`, así que la respuesta afirmaba que el pago de una
+        // tarjeta cuenta en el mes — lo contrario de la decisión del dueño.
+        val (dineroCredito, deudaCredito) = pagoDeCuotaLegs(peticion("a1", "l1", 4_215_223), ahorros, carro)
+        assertTrue(dineroCredito.countsAsCashFlow, "la cuota de un crédito SÍ cuenta")
+        assertFalse(deudaCredito.countsAsCashFlow, "la pata de la deuda nunca")
+
+        val (dineroTarjeta, deudaTarjeta) = pagoDeCuotaLegs(peticion("a1", "c1", 1_008_902), ahorros, amex)
+        assertFalse(dineroTarjeta.countsAsCashFlow, "el pago de una tarjeta NO cuenta")
+        assertFalse(deudaTarjeta.countsAsCashFlow)
     }
 }
