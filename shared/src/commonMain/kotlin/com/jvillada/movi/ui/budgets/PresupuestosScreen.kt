@@ -44,6 +44,9 @@ import kotlinx.datetime.Month
 import kotlinx.datetime.toLocalDateTime
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.shared.model.EstadoDePresupuesto
+import com.jvillada.movi.shared.model.estadoDePresupuesto
+import com.jvillada.movi.theme.MinIncome
 import com.jvillada.movi.shared.model.FinancialEvent
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -53,6 +56,11 @@ internal data class BudgetProgress(
     val spent: Long,
 ) {
     val remaining: Long get() = budget.monthlyLimit - spent
+    /**
+     * Solo para el ANCHO de la barra, que es lo único que necesita un `Float` (`fillMaxWidth`
+     * recibe una fracción). Ni el estado ni el porcentaje ni el orden de la lista salen de acá:
+     * con montos de cientos de millones esta división pierde precisión — ver [pct].
+     */
     val pctRaw: Float get() = if (budget.monthlyLimit == 0L) 0f else spent.toFloat() / budget.monthlyLimit.toFloat()
     /**
      * El porcentaje se calcula con enteros, no con el [pctRaw] de arriba.
@@ -63,45 +71,9 @@ internal data class BudgetProgress(
      * colombianos eso no es una hipótesis de laboratorio: es el orden de magnitud normal.
      */
     val pct: Int get() = if (budget.monthlyLimit == 0L) 0 else (spent * 100 / budget.monthlyLimit).toInt()
-    val state: AlertState get() = estadoDelPresupuesto(spent, budget.monthlyLimit)
+    val state: EstadoDePresupuesto get() = estadoDePresupuesto(spent, budget.monthlyLimit)
 }
 
-internal enum class AlertState { OK, WARN, AL_LIMITE, OVER }
-
-/**
- * En qué estado está un presupuesto.
- *
- * ### «Sobrepasado · $0»
- *
- * El dueño, mirando su presupuesto de Mercado en $2.000.000 de $2.000.000: *«marca sobrepasado
- * Mercado pero está al 100%, eso es un error, ¿no?»*. Lo era, y el propio rótulo lo delataba —
- * si el exceso es cero, no hay exceso.
- *
- * La condición era `pctRaw >= 1f`, que mete el empate del lado equivocado. Gastar exactamente el
- * límite no es pasarse: es quedarse sin margen, que es otra cosa y merece decirse distinto. Por
- * eso [AL_LIMITE] existe en vez de mandar el 100 % a [WARN]: «cerca del límite» sería igual de
- * falso, al revés — no estás cerca, estás justo ahí.
- *
- * ### Por qué con enteros
- *
- * La comparación vieja iba contra un `Float`, y `Float` tiene 24 bits de mantisa: a partir de
- * 16.777.216 deja de representar todos los enteros. Con los montos de este dueño (hipotecas de
- * cientos de millones) `gastado.toFloat() / limite.toFloat()` puede dar exactamente `1.0` cuando
- * el gasto supera al límite por unos pesos, y también al revés. Comparar los `Long` es exacto y
- * cuesta lo mismo.
- *
- * Un límite en cero no es «sobrepasado» aunque haya gasto: es un presupuesto sin configurar, y
- * dividir por él tampoco tiene sentido.
- */
-internal fun estadoDelPresupuesto(gastado: Long, limite: Long): AlertState = when {
-    limite <= 0L -> AlertState.OK
-    gastado > limite -> AlertState.OVER
-    gastado == limite -> AlertState.AL_LIMITE
-    // 80 % con enteros: `gastado * 100 >= limite * 80` es lo mismo que `gastado / limite >= 0.8`
-    // sin pasar por punto flotante.
-    gastado * 100 >= limite * 80 -> AlertState.WARN
-    else -> AlertState.OK
-}
 
 /**
  * F16: el encabezado y cada tarjeta necesitan decir "de qué mes" es el gasto — kotlinx-datetime
@@ -215,7 +187,13 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
         budgets.map { b -> BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L) }
-            .sortedByDescending { it.pctRaw }
+            // Se ordena por el porcentaje ENTERO, no por el `Float`.
+            //
+            // Era `pctRaw`, o sea exactamente el cálculo que este archivo argumenta que no es de
+            // fiar con montos grandes: dos presupuestos de cientos de millones podían quedar
+            // ordenados al revés porque su división en `Float` da el mismo valor. Se ordena por lo
+            // mismo que se muestra.
+            .sortedByDescending { it.pct }
     }
 
     // F16: "Gastado del mes" no decía CUÁL mes — el nombre del mes en curso lo hace explícito.
@@ -228,8 +206,8 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     val totalSpent = progresses.sumOf { it.spent }
     // «Al límite» cuenta como aviso, no como sobrepasado: el encabezado decía «2 Sobrepasados»
     // con uno de los dos exactamente en el límite.
-    val warnCount = progresses.count { it.state == AlertState.WARN || it.state == AlertState.AL_LIMITE }
-    val overCount = progresses.count { it.state == AlertState.OVER }
+    val warnCount = progresses.count { it.state == EstadoDePresupuesto.CERCA || it.state == EstadoDePresupuesto.AL_LIMITE }
+    val overCount = progresses.count { it.state.estaSuperado }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -285,12 +263,19 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                             Spacer(Modifier.height(14.dp))
                             Hairline()
                             Spacer(Modifier.height(14.dp))
+                            // Las insignias dicen lo MISMO que las tarjetas de abajo.
+                            //
+                            // Antes el encabezado rotulaba «Cerca del límite» en amarillo a los
+                            // presupuestos que las tarjetas pintan verdes — y uno de ellos es el
+                            // que está justo en el límite, del que el comentario de la tarjeta
+                            // dice literalmente «no está cerca, está justo ahí». La misma pantalla
+                            // se contradecía a sí misma en color y en palabra.
                             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                                 if (overCount > 0) {
                                     AlertBadge("Sobrepasados", overCount, MinExpense)
                                 }
                                 if (warnCount > 0) {
-                                    AlertBadge("Cerca del límite", warnCount, MinWarn)
+                                    AlertBadge("Sin margen o cerca", warnCount, MinIncome)
                                 }
                             }
                         }
@@ -402,16 +387,36 @@ private fun AlertBadge(label: String, count: Int, color: Color) {
 @Composable
 private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
     val barColor = when (p.state) {
-        AlertState.OVER -> MinExpense
-        AlertState.AL_LIMITE -> MinWarn
-        AlertState.WARN -> MinWarn
-        AlertState.OK -> MinText.copy(alpha = 0.85f)
+        // El semáforo, tal como lo pidió el dueño: «verde si estoy igual o por debajo, amarillo
+        // si superé un poco y rojo si superé mucho».
+        //
+        // Los TRES estados de «por debajo o igual» son verdes, DENTRO incluido. La primera
+        // versión lo dejaba caer en un `else` gris, y quedaba al revés de lo pedido: 40 % gris,
+        // 85 % verde, 100 % verde. El presupuesto menos gastado se veía menos verde que el que
+        // estaba justo en el límite.
+        //
+        // Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
+        EstadoDePresupuesto.EXCEDIDO_MUCHO -> MinExpense
+        EstadoDePresupuesto.EXCEDIDO_POCO -> MinWarn
+        EstadoDePresupuesto.AL_LIMITE -> MinIncome
+        EstadoDePresupuesto.CERCA -> MinIncome
+        EstadoDePresupuesto.DENTRO -> MinIncome
     }
     val pctColor = when (p.state) {
-        AlertState.OVER -> MinExpense
-        AlertState.AL_LIMITE -> MinWarn
-        AlertState.WARN -> MinWarn
-        AlertState.OK -> MinTextMute
+        // El semáforo, tal como lo pidió el dueño: «verde si estoy igual o por debajo, amarillo
+        // si superé un poco y rojo si superé mucho».
+        //
+        // Los TRES estados de «por debajo o igual» son verdes, DENTRO incluido. La primera
+        // versión lo dejaba caer en un `else` gris, y quedaba al revés de lo pedido: 40 % gris,
+        // 85 % verde, 100 % verde. El presupuesto menos gastado se veía menos verde que el que
+        // estaba justo en el límite.
+        //
+        // Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
+        EstadoDePresupuesto.EXCEDIDO_MUCHO -> MinExpense
+        EstadoDePresupuesto.EXCEDIDO_POCO -> MinWarn
+        EstadoDePresupuesto.AL_LIMITE -> MinIncome
+        EstadoDePresupuesto.CERCA -> MinIncome
+        EstadoDePresupuesto.DENTRO -> MinIncome
     }
     MinCard(
         modifier = Modifier.fillMaxWidth(),
@@ -457,11 +462,12 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                 Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinTextMute, letterSpacing = (-0.3).sp)
             }
             val tail = when (p.state) {
-                AlertState.OVER -> "Sobrepasado · ${formatCOP(-p.remaining)}"
+                EstadoDePresupuesto.EXCEDIDO_MUCHO,
+                EstadoDePresupuesto.EXCEDIDO_POCO -> "Sobrepasado · ${formatCOP(-p.remaining)}"
                 // Ni «sobrepasado» (no se pasó) ni «cerca» (no está cerca, está justo ahí).
-                AlertState.AL_LIMITE -> "Sin margen · gastaste justo el límite"
-                AlertState.WARN -> "Cerca del límite"
-                AlertState.OK -> "${formatCOP(p.remaining)} disponibles"
+                EstadoDePresupuesto.AL_LIMITE -> "Sin margen · gastaste justo el límite"
+                EstadoDePresupuesto.CERCA -> "Cerca del límite"
+                else -> "${formatCOP(p.remaining)} disponibles"
             }
             Text(tail, fontSize = 11.sp, color = pctColor)
         }

@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CardSummary
@@ -270,9 +271,17 @@ fun currentMonthPrefixApp(): String = currentMonthPrefix()
 
 data class DashboardAlert(val text: String, val target: Screen)
 
-/** Misma regla que Presupuestos: OVER = gastado ≥ límite; un límite 0 no puede "superarse". */
+/**
+ * Los presupuestos de verdad superados.
+ *
+ * Llamaba a su propia comparación (`gastado >= límite`) con un comentario que decía «misma regla
+ * que Presupuestos». Cuando esa pantalla dejó de contar el empate como exceso, el comentario pasó
+ * a ser mentira y las dos se contradijeron: el dueño veía «Presupuesto de Mercado superado» en el
+ * Inicio y «Sin margen · gastaste justo el límite» al entrar. Ahora las dos llaman a
+ * [estadoDePresupuesto], en `:core`, que es donde vive una regla sobre su plata.
+ */
 fun overBudgetCategories(budgets: List<Budget>, spentByCategory: Map<String, Long>): List<String> =
-    budgets.filter { it.monthlyLimit > 0 && (spentByCategory[it.category] ?: 0L) >= it.monthlyLimit }
+    budgets.filter { estadoDePresupuesto(spentByCategory[it.category] ?: 0L, it.monthlyLimit).estaSuperado }
         .map { it.category }
 
 /**
@@ -344,7 +353,23 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else {
             val limit = data.budgets.sumOf { it.monthlyLimit }
             val spent = data.budgets.sumOf { data.spentByCategory[it.category] ?: 0L }
-            LinkFigure(formatCOP(spent), "de ${formatCOP(limit)} este mes", isAlert = limit > 0 && spent >= limit)
+            // **La tercera regla, y estaba 70 líneas debajo de la segunda.** Esta línea comparaba
+            // `spent >= limit` sobre los TOTALES, así que fallaba de dos maneras a la vez:
+            //
+            // - Con un solo presupuesto justo en el límite ($2.000.000 de $2.000.000) pintaba el
+            //   acceso en alerta, mientras Presupuestos lo mostraba verde. La misma contradicción
+            //   que este PR vino a matar, movida del panel de alertas a la tarjeta de al lado.
+            // - Y al revés: sumar todo esconde el caso real. Con Mercado en $3.000.000 de
+            //   $2.000.000 y Salidas en $100.000 de $2.000.000, el total da por debajo y el acceso
+            //   se veía tranquilo mientras la alerta decía «Presupuesto de Mercado superado».
+            //
+            // La alerta se decide POR CATEGORÍA, que es como se vive: un presupuesto excedido no
+            // se compensa con otro que sobró.
+            LinkFigure(
+                formatCOP(spent),
+                "de ${formatCOP(limit)} este mes",
+                isAlert = overBudgetCategories(data.budgets, data.spentByCategory).isNotEmpty(),
+            )
         }
     }
     "goals" -> {

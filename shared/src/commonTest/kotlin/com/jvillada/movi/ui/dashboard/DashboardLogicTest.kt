@@ -111,10 +111,28 @@ class DashboardLogicTest {
     }
 
     @Test
-    fun `presupuesto superado = gastado al menos el limite, y un limite 0 nunca alerta`() {
-        val budgets = listOf(Budget("Mercado", 100_000), Budget("Salidas", 200_000), Budget("Raro", 0))
-        val spent = mapOf("Mercado" to 100_000L, "Salidas" to 150_000L, "Raro" to 5L)
-        assertEquals(listOf("Mercado"), overBudgetCategories(budgets, spent))
+    fun `la alerta del Inicio usa la MISMA regla que Presupuestos`() {
+        // Este test fijaba la regla vieja —«superado = gastado AL MENOS el límite»— y por eso se
+        // puso rojo cuando Presupuestos dejó de contar el empate como exceso. Esa divergencia es
+        // justo lo que el dueño vio: «Presupuesto de Mercado superado» en el Inicio y «Sin margen ·
+        // gastaste justo el límite» al entrar.
+        //
+        // Ahora las dos llaman a `estadoDePresupuesto` en `:core`. Este test comprueba que el
+        // Inicio no vuelva a tener criterio propio.
+        val budgets = listOf(
+            Budget("Justo", 100_000),      // exactamente el límite: NO es superado
+            Budget("Pasado", 100_000),     // un peso más: sí
+            Budget("Cerca", 200_000),      // 75 %: no
+            Budget("Raro", 0),             // sin configurar: nunca alerta
+        )
+        val spent = mapOf(
+            "Justo" to 100_000L,
+            "Pasado" to 100_001L,
+            "Cerca" to 150_000L,
+            "Raro" to 5L,
+        )
+
+        assertEquals(listOf("Pasado"), overBudgetCategories(budgets, spent))
     }
 
     // ── Las dos cifras del Inicio: lo que tienes vs. lo que vales ──────────────
@@ -518,9 +536,32 @@ class DashboardLogicTest {
     }
 
     @Test
-    fun `presupuesto superado se marca como alerta en el acceso`() {
-        val over = data.copy(spentByCategory = mapOf("Mercado" to 400_000L))
-        assertEquals(true, quickLinkFigure("budgets", over).isAlert)
+    fun `el acceso a Presupuestos usa la misma regla que el resto de la app`() {
+        // Este test fijaba la regla vieja —«400.000 de 400.000 es alerta»— y por eso se puso rojo.
+        // Era la TERCERA copia de esa comparación, a 70 líneas de la segunda, y producía la misma
+        // contradicción que el dueño reportó: el acceso en alerta, y adentro todo verde.
+        val justo = data.copy(spentByCategory = mapOf("Mercado" to 400_000L))
+        assertEquals(false, quickLinkFigure("budgets", justo).isAlert, "gastar el límite exacto no es superarlo")
+
+        val pasado = data.copy(spentByCategory = mapOf("Mercado" to 400_001L))
+        assertEquals(true, quickLinkFigure("budgets", pasado).isAlert)
+    }
+
+    @Test
+    fun `un presupuesto excedido no se compensa con otro que sobro`() {
+        // El otro defecto de la misma línea, y el que sumar totales escondía: comparaba la SUMA de
+        // los límites contra la SUMA de los gastos. Con un presupuesto muy excedido y otro casi
+        // sin usar, el total daba por debajo y el acceso se veía tranquilo mientras el panel de
+        // alertas decía «Presupuesto de Mercado superado».
+        //
+        // Un presupuesto excedido no se compensa con otro que sobró: así no se vive la plata.
+        val dos = data.copy(
+            budgets = listOf(Budget("Mercado", 2_000_000), Budget("Salidas", 2_000_000)),
+            spentByCategory = mapOf("Mercado" to 3_000_000L, "Salidas" to 100_000L),
+        )
+
+        assertEquals(true, quickLinkFigure("budgets", dos).isAlert)
+        assertEquals(listOf("Mercado"), overBudgetCategories(dos.budgets.orEmpty(), dos.spentByCategory))
     }
 
     // ── Secciones visibles ─────────────────────────────────────────────────────
