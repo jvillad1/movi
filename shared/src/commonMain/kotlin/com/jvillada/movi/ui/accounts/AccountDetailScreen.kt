@@ -208,13 +208,16 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             Spacer(Modifier.height(8.dp))
                             if (isCard) {
                                 val (debt, isEstimate) = cardDebt(acc)
+                                // El signo invertido —negativo es saldo a FAVOR— vive en
+                                // [saldoDeDeuda] desde la Ola 15: acá nació, y el selector de
+                                // «¿de dónde sale la plata?» lo necesitaba igual. Dos copias de
+                                // qué significa el menos era exactamente cómo se llegaba a un
+                                // «Debes −$50.000» en la otra pantalla.
+                                val saldo = saldoDeDeuda(debt)
                                 MonoText(
-                                    // debt < 0 es saldo a favor: signo invertido a propósito, así que se
-                                    // le pasa el valor absoluto — si no, formatCOP (F36) le pondría su
-                                    // propio "−" encima del "+" de acá.
-                                    text = "${if (isEstimate) "≈" else ""}${if (debt < 0) "+" else ""}${formatCOP(kotlin.math.abs(debt))}",
+                                    text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
                                     fontSize = 28f,
-                                    color = if (debt < 0) MinIncome else MinExpense,
+                                    color = if (saldo.aFavor) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
                                 )
                             } else {

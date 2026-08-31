@@ -18,12 +18,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.Goal
-import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.VerTodasLasCuentas
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.credits.FieldBox
 import com.jvillada.movi.ui.credits.SectionLabel
@@ -49,7 +50,22 @@ fun GoalSheet(
 ) {
     val coroutine = rememberCoroutineScope()
     // F26: solo cuentas de Dinero o Inversión — una meta no se ahorra en una deuda.
-    val eligibleAccounts = remember(accounts) { accounts.filter { it.type.group != AccountGroup.DEUDA } }
+    //
+    // **Ola 15 — esto era `accounts.filter { it.type.group != AccountGroup.DEUDA }`**, letra por
+    // letra lo mismo que `UsoDeCuenta.DINERO_PROPIO`, en un repo que ya perdió tres veces por
+    // copiar una regla en vez de compartirla. Compartida, además, esta pantalla hereda gratis lo
+    // que la regla aprendió después: la plata condicionada (la pensión voluntaria de Skandia) no
+    // se propone sola para una meta de «Viaje» — pero sigue a un toque, detrás del «Ver todas»,
+    // porque una meta de Vivienda ahorrada justo ahí es un caso perfectamente real.
+    //
+    // `conservar` es la cuenta de la meta que se está editando: una meta vieja apuntada a una
+    // cuenta que hoy quedaría abajo tiene que seguir viéndose marcada.
+    val cuentas = remember(accounts, existing?.accountId) {
+        cuentasPara(accounts, UsoDeCuenta.DINERO_PROPIO, conservar = existing?.accountId)
+    }
+    var verTodasLasCuentas by remember(cuentas.principales.isEmpty()) {
+        mutableStateOf(cuentas.principales.isEmpty())
+    }
 
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var target by remember { mutableStateOf(existing?.target) }
@@ -173,7 +189,7 @@ fun GoalSheet(
 
                 SectionLabel("CUENTA DONDE SE AHORRA")
                 Spacer(Modifier.height(8.dp))
-                if (eligibleAccounts.isEmpty()) {
+                if (cuentas.vacio) {
                     Text(
                         "No tienes cuentas de Dinero o Inversión — crea una en Cuentas primero",
                         fontSize = 12.5.sp,
@@ -181,11 +197,20 @@ fun GoalSheet(
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        eligibleAccounts.forEach { acc ->
+                        val visibles = if (verTodasLasCuentas) cuentas.todas else cuentas.principales
+                        visibles.forEach { acc ->
                             GoalAccountRow(
                                 label = acc.name,
                                 selected = selectedAccountId == acc.id,
                                 onClick = { selectedAccountId = acc.id },
+                            )
+                        }
+                        if (cuentas.hayOtras) {
+                            VerTodasLasCuentas(
+                                expandido = verTodasLasCuentas,
+                                cuantas = cuentas.otras.size,
+                                uso = UsoDeCuenta.DINERO_PROPIO,
+                                onToggle = { verTodasLasCuentas = !verTodasLasCuentas },
                             )
                         }
                     }
