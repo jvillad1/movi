@@ -25,6 +25,8 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.CategoryField
 import com.jvillada.movi.ui.components.categoriaPorDefectoPara
@@ -455,6 +457,15 @@ fun CreateRecurringRuleSheet(
                         // --- CUENTA (opcional) ---
                         AccountPickerField(
                             accounts = accounts,
+                            // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
+                            // banco, tarjeta) y una de ingreso entra donde entra plata (efectivo,
+                            // banco, inversión). Mismo criterio que la hoja de «Agregar», y por
+                            // eso sale de la misma función de `:core` en vez de repetirse acá.
+                            uso = if (selectedType == TransactionType.EXPENSE) {
+                                UsoDeCuenta.ORIGEN_DE_GASTO
+                            } else {
+                                UsoDeCuenta.DESTINO_DE_INGRESO
+                            },
                             cuentasLeidas = cuentasLeidas,
                             fallaronLasCuentas = fallaronLasCuentas,
                             selectedId = accountId,
@@ -565,6 +576,8 @@ fun CreateRecurringRuleSheet(
 @Composable
 private fun AccountPickerField(
     accounts: List<Account>,
+    /** Para qué se elige la cuenta: de una regla de gasto sale plata, a una de ingreso entra. */
+    uso: UsoDeCuenta,
     /** ¿La lista de cuentas llegó? Con `false`, `accounts` vacía significa «no se sabe». */
     cuentasLeidas: Boolean,
     /** ¿La lectura falló? Distingue «todavía no llegó» de «no va a llegar». */
@@ -583,6 +596,9 @@ private fun AccountPickerField(
     // desde donde el dueño puede pedir «Sin cuenta», y esa elección no puede depender de que una
     // lectura de red haya salido bien.
     val sePuedeElegir = accounts.isNotEmpty() || selectedId != null
+    // Se pliega cada vez que el selector se abre o se cierra: la lista corta es la respuesta
+    // normal, y la larga es una excepción que se pide, no un estado en el que uno se queda.
+    var verTodas by remember(open) { mutableStateOf(false) }
     SheetSectionLabel("CUENTA (OPCIONAL)")
     Spacer(Modifier.height(8.dp))
     Box(
@@ -626,9 +642,30 @@ private fun AccountPickerField(
                 .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),
         ) {
             AccountPickerRow(label = "Sin cuenta", selected = selectedId == null) { onPick(null) }
-            accounts.forEach { account ->
+            // Ola 15 — las que sirven arriba, el resto detrás de «Ver todas». `conservar` es lo
+            // que hace que una regla vieja apuntada a una cuenta que hoy no se ofrecería siga
+            // mostrando SU cuenta, marcada: esta hoja ya perdió datos una vez por dejar de
+            // reconocer una cuenta puesta (ver el comentario de la carga, más arriba), y
+            // esconderla del selector sería el mismo error con otra cara.
+            val cuentas = cuentasPara(accounts, uso, conservar = selectedId)
+            cuentas.principales.forEach { account ->
                 AccountPickerRow(label = account.name, selected = account.id == selectedId) {
                     onPick(account.id)
+                }
+            }
+            if (cuentas.hayOtras) {
+                if (verTodas) {
+                    cuentas.otras.forEach { account ->
+                        AccountPickerRow(label = account.name, selected = account.id == selectedId) {
+                            onPick(account.id)
+                        }
+                    }
+                } else {
+                    AccountPickerRow(
+                        label = "Ver todas las cuentas (${cuentas.otras.size} más)",
+                        selected = false,
+                        onClick = { verTodas = true },
+                    )
                 }
             }
         }
