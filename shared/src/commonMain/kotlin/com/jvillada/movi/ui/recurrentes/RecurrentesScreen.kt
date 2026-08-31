@@ -831,7 +831,9 @@ private fun RecurrenteRow(
             // marcó algo por error, el único lugar donde puede darse cuenta es acá.
             contexto = if (ocurrencia != null) "$base · ${textoYaOcurrio(ocurrencia)}" else base
             esIngreso = item.rule.type == TransactionType.INCOME
-            monto = "${if (esIngreso) "+" else "−"}${formatCOP(item.rule.amount)}"
+            // Ver `RecurringRule.montoEsSaldo`: el de una tarjeta es su deuda, no su cuota.
+            monto = if (item.rule.montoEsSaldo) "saldo ${formatCOP(item.rule.amount)}"
+            else "${if (esIngreso) "+" else "−"}${formatCOP(item.rule.amount)}"
             onClick = { onEditRule(item.rule) }
         }
         is Recurrente.Suscripcion -> {
@@ -1137,7 +1139,8 @@ private fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
 
         // Amount
         Text(
-            text = "${if (isIncome) "+" else "−"}${formatCOP(rule.amount)}",
+            text = if (rule.montoEsSaldo) "saldo ${formatCOP(rule.amount)}"
+            else "${if (isIncome) "+" else "−"}${formatCOP(rule.amount)}",
             fontSize = 14.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,

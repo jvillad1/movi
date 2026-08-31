@@ -211,11 +211,16 @@ private fun buildHtmlEmail(
         }
 
         val amountFormatted = String.format(java.util.Locale.US, "%,d", rule.amount)
+        // Una tarjeta no tiene cuota fija: su monto es el saldo. Anunciarlo como el pago sería
+        // decirle al dueño que este mes le salen $27.501.150 de la cuenta. Ver `montoEsSaldo`.
+        val segundaLinea =
+            if (rule.montoEsSaldo) "saldo $${amountFormatted} COP · revisa tu extracto"
+            else "$${amountFormatted} COP"
 
         """<tr>
           <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0">
             <strong>${rule.name}</strong><br>
-            <span style="color:#4b5563">$${amountFormatted} COP</span>
+            <span style="color:#4b5563">${segundaLinea}</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right">
             <span>vence el $dayStr</span><br>

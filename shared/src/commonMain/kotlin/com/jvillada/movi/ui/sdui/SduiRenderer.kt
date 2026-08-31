@@ -301,7 +301,17 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                 CardRow(
                     left = { Text(p.rule.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
                     sub = dueLabel(p.daysUntil),
-                    right = { MonoText(formatCOP(p.rule.amount), 14.5f, color = if (urgent) MinExpense else MinText) },
+                    // Una tarjeta no tiene cuota: su monto es el SALDO. Mostrarlo bajo «Próximos
+                    // pagos» anunciaba $27.501.150 como el próximo pago del dueño cuando el mínimo
+                    // ronda el 5 %. Se muestra el saldo, dicho con su nombre y en gris — no como
+                    // la cifra que va a salir de su cuenta. Ver `RecurringRule.montoEsSaldo`.
+                    right = {
+                        if (p.rule.montoEsSaldo) {
+                            MonoText("saldo ${formatCOP(p.rule.amount)}", 12.5f, color = MinTextMute)
+                        } else {
+                            MonoText(formatCOP(p.rule.amount), 14.5f, color = if (urgent) MinExpense else MinText)
+                        }
+                    },
                     isLast = i == rows.lastIndex,
                     // Una cuota de crédito se gestiona en Créditos; una regla, en Recurrentes.
                     onClick = { onNavigate(if (isCredit) Screen.Credits else Screen.Recurrentes) },
