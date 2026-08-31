@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.datetime.Clock
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
@@ -46,8 +47,111 @@ import kotlinx.coroutines.launch
  */
 object DashboardDataCache {
     var data: DashboardData? = null
+
+    /**
+     * Cuándo terminó la última carga completa, en epoch ms. `0` = nunca.
+     *
+     * Lo escribe SOLO el Inicio, y a propósito: «Primeros pasos» también deja su lectura en
+     * `data` —es el mismo modelo— pero no trae las diez llamadas, así que dejar su marca de
+     * tiempo haría que el Inicio se saltara una carga que nunca hizo. Sin sello, el Inicio
+     * recarga, que es el lado seguro de equivocarse.
+     */
+    var cargadoEn: Long = 0L
+
+    /**
+     * El valor de `LocalRefreshTick` en esa carga. Si cambió, algo se guardó desde entonces y las
+     * cifras están viejas pase lo que pase con el reloj.
+     */
+    var tickDeLaCarga: Int = 0
+
+    /**
+     * «La plata cambió»: la próxima entrada al Inicio recarga sí o sí.
+     *
+     * Existe porque **`LocalRefreshTick` no alcanza**, y la primera versión de este archivo
+     * afirmaba lo contrario. El tick es un `Int` sin función para subirlo, así que ninguna
+     * pantalla puede moverlo: sus dos únicos productores viven en `App.kt` (la hoja de «Agregar»
+     * y la de recurrentes de la barra de ofrecimiento). Lo midió la revisión, contando los
+     * caminos.
+     *
+     * Todo lo demás que mueve plata —anular un movimiento, cambiar su categoría o su fecha,
+     * ajustar el saldo de un crédito, registrar un descuento de nómina, importar un extracto,
+     * crear o borrar una cuenta, dar de alta un crédito o una tarjeta— pasa por acá.
+     *
+     * Importa más de lo que parece: **no hay «deslizar para recargar» en ninguna pantalla**, así
+     * que salir y volver era el único gesto manual de refresco que tenía el dueño. Un TTL sin
+     * esto se lo quitaba.
+     *
+     * Lo que queda afuera, y con 30 s de retraso máximo: un SMS que llega en segundo plano, algo
+     * hecho desde otro dispositivo o desde la web, y el barrido de recordatorios del server.
+     * Ninguno es una acción del dueño en este aparato, que es la que no puede quedar sin verse.
+     */
+    fun invalidar() {
+        cargadoEn = 0L
+    }
+
     /** Al cerrar sesión: lo cacheado es del usuario que se va (ver SessionManager.clear). */
-    fun clear() { data = null }
+    fun clear() {
+        data = null
+        cargadoEn = 0L
+        tickDeLaCarga = 0
+    }
+}
+
+/**
+ * Cuánto vale una carga del Inicio antes de volver a pedirla. Treinta segundos.
+ *
+ * No es un número mágico: es el tiempo en que se puede ir a Movimientos, mirar algo y volver. Ese
+ * viaje de ida y vuelta es el que hoy cuesta diez llamadas de red por cada vuelta.
+ *
+ * Elegido corto a propósito. Lo más viejo que el dueño puede llegar a ver es medio minuto, y solo
+ * si en ese medio minuto la plata cambió **desde otro lado** —otro dispositivo, un SMS, el
+ * barrido de recordatorios—, porque cualquier cosa que haga él mismo mueve `LocalRefreshTick` y
+ * fuerza la recarga igual.
+ */
+const val TTL_DEL_INICIO_MS = 30_000L
+
+/**
+ * ¿Hay que volver a pedir las diez llamadas del Inicio?
+ *
+ * Función pura y aparte del `@Composable` para poder probarla: es una decisión sobre **cuándo se
+ * refrescan las cifras del dinero del dueño**, que es exactamente la clase de cosa que no
+ * conviene tener enterrada adentro de un `LaunchedEffect`.
+ *
+ * ### De dónde sale
+ *
+ * `App.kt` envuelve cada pantalla en un `SaveableStateProvider` con la pantalla actual como
+ * clave, así que al navegar a otra el Inicio **sale de la composición**, y al volver entra de
+ * nuevo y su `LaunchedEffect` se reejecuta entero. Se contaron cuatro rondas completas de diez
+ * llamadas en pocos minutos de uso normal. En el teléfono con datos móviles, eso es plata del
+ * dueño.
+ *
+ * ### Las tres puertas que SIEMPRE recargan
+ *
+ * - **No hay nada cacheado** ([hayDatos] en false): un arranque en frío, o la primera vez después
+ *   de entrar. La web además pierde la caché en cada recarga de página, así que ahí es lo normal.
+ * - **El tick cambió**: alguien guardó algo desde que se cargó. Es la señal que emite la hoja de
+ *   «Agregar», y llega aunque el Inicio nunca haya salido de la composición.
+ * - **Un reintento explícito** ([reintento]): el dueño tocó «Reintentar» en el snackbar de error.
+ *   Pedir de nuevo es literalmente lo que pidió.
+ *
+ * Recién si ninguna aplica se mira el reloj. Nótese el orden: **el tiempo es la última palabra,
+ * no la primera**.
+ */
+fun debeRecargarElInicio(
+    hayDatos: Boolean,
+    cargadoEn: Long,
+    tickDeLaCarga: Int,
+    tickActual: Int,
+    reintento: Boolean,
+    ahora: Long,
+): Boolean = when {
+    !hayDatos -> true
+    tickActual != tickDeLaCarga -> true
+    reintento -> true
+    // Un reloj que va para atrás (cambio de zona, ajuste del sistema) da una diferencia negativa.
+    // Recargar es el lado seguro: mostrar cifras viejas por un reloj mal puesto sería peor que
+    // gastar diez llamadas.
+    else -> (ahora - cargadoEn) !in 0..TTL_DEL_INICIO_MS
 }
 
 @Composable
@@ -94,6 +198,27 @@ fun DashboardScreen(
     //
     //  Ya existe una rama para esto: `origin/perf/inicio-endpoints-livianos`.
     LaunchedEffect(refreshKey, refreshTick) {
+        // ¿Hace falta pedir las diez otra vez? Ver [debeRecargarElInicio] — el TODO de la Ola 8
+        // que documentaba este derroche queda cerrado acá.
+        //
+        // `refreshKey > 0` cubre el reintento explícito. **También** queda en 1 después de crear
+        // una cuenta desde el Inicio (`onAccountCreated`), y eso es inofensivo: el efecto solo se
+        // reejecuta cuando `refreshKey` o `refreshTick` CAMBIAN, y los dos cambios ya fuerzan la
+        // recarga por su cuenta. Un `reintento = true` viejo nunca provoca una llamada de más.
+        // Se reinicia a 0 al remontar, que es justamente el caso que este arreglo quiere saltear.
+        if (!debeRecargarElInicio(
+                hayDatos = DashboardDataCache.data != null,
+                cargadoEn = DashboardDataCache.cargadoEn,
+                tickDeLaCarga = DashboardDataCache.tickDeLaCarga,
+                tickActual = refreshTick,
+                reintento = refreshKey > 0,
+                ahora = Clock.System.now().toEpochMilliseconds(),
+            )
+        ) {
+            // Ya se pintó lo cacheado en el `remember` de arriba; no hay nada más que hacer.
+            loading = false
+            return@LaunchedEffect
+        }
         loading = true
         error = null
         // SDUI: la definición del server se pide PRIMERO, así el Inicio ya está en su lugar
@@ -160,6 +285,22 @@ fun DashboardScreen(
             launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
         }
         DashboardDataCache.data = data
+        // **Solo se sella una carga que SALIÓ BIEN.**
+        //
+        // La primera versión sellaba siempre, y «las diez terminaron» no es lo mismo que «las
+        // diez salieron bien». Escenario que encontró la revisión: arranque en frío sin señal →
+        // las diez fallan → `data` queda vacío pero NO nulo → se sellaba igual. El dueño iba a
+        // Movimientos, volvía dentro de los 30 s, el Inicio se salteaba la carga y quedaba con
+        // «Tu plata —» y las tres cifras en guion: **sin snackbar de error, sin «Reintentar» y
+        // sin barra de progreso**. Antes de este PR, volver reintentaba.
+        //
+        // Se mira `puedeAfirmarVacio` y no `error == null` porque es la misma condición que ya
+        // gobierna si el Inicio puede opinar sobre la plata del dueño (ver DashboardLogic): si no
+        // alcanza para afirmar, tampoco alcanza para saltearse la próxima carga.
+        if (data.puedeAfirmarVacio) {
+            DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
+            DashboardDataCache.tickDeLaCarga = refreshTick
+        }
         loading = false
     }
 
