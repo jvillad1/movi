@@ -205,6 +205,25 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
             letterSpacing = (-1.6).sp,
             lineHeight = 44.sp,
         )
+        // La plata condicionada, dicha con su condición.
+        //
+        // El dueño: «esa plata no la tengo disponible; la de Skandia es dinero que deberías
+        // referenciar en patrimonio pero no mostrarle como disponible en mi balance, sino como un
+        // dinero disponible CONDICIONADO a uso en Vivienda». Tenía razón: «Tu plata» decía
+        // $137.625.167 cuando podía disponer de $31.625.167.
+        //
+        // Va debajo de la cifra grande y antes del patrimonio, porque es lo que explica la resta
+        // entre las dos: sale de «Tu plata» pero sigue contando en lo que vale.
+        if (balance.condicionado > 0L) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = balance.condicionadoA
+                    ?.let { "Además ${formatMoneyCompact(balance.condicionado)} solo para $it" }
+                    ?: "Además ${formatMoneyCompact(balance.condicionado)} de uso condicionado",
+                fontSize = 11.5.sp,
+                color = MinTextMute,
+            )
+        }
         if (balance.hasInvestments) {
             // Las cuentas de Inversión entran en «tu plata», así que la línea dice cuánto de ese
             // total está guardado. Usa el vocabulario de la pantalla de Cuentas ("Dinero" e

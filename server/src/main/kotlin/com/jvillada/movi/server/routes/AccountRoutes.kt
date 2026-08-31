@@ -165,6 +165,7 @@ fun Route.accountRoutes() {
                     it[type]     = account.type.name
                     it[balance]  = account.balance
                     it[currency] = account.currency
+                    it[conditionedTo] = account.condicionadaA?.trim()?.take(60)?.takeIf { c -> c.isNotEmpty() }
                 }
             }
             call.respond(HttpStatusCode.Created, account)

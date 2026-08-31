@@ -13,6 +13,7 @@ fun ResultRow.toAccount() = Account(
     type     = AccountType.valueOf(this[Accounts.type]),
     balance  = this[Accounts.balance],
     currency = this[Accounts.currency],
+    condicionadaA = this[Accounts.conditionedTo]?.takeIf { it.isNotBlank() },
 )
 
 /** Reemplaza el balance almacenado por los derivados de eventos (por moneda + estimado COP). */

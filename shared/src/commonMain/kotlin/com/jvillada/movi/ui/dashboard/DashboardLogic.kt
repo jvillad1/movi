@@ -136,7 +136,13 @@ data class DashboardData(
  * ([disponible] y [invertido]) en una línea secundaria.
  */
 data class HeroBalance(
-    /** Lo que tienes: saldo COP de toda cuenta que no sea deuda (Dinero + Inversión). */
+    /**
+     * **Lo que puedes usar**: toda cuenta que no sea deuda y que no esté condicionada.
+     *
+     * Antes era «toda cuenta que no sea deuda», sin más, y sumaba la pensión voluntaria del dueño:
+     * decía $137.625.167 cuando él solo podía disponer de $31.625.167. Ver
+     * [Account.condicionadaA] y [condicionado].
+     */
     val tuPlata: Long,
     /** La parte de [tuPlata] en el grupo Dinero — efectivo, corriente, ahorros. */
     val disponible: Long,
@@ -144,7 +150,25 @@ data class HeroBalance(
     val invertido: Long,
     /** Lo que debes: tarjetas y préstamos, en COP (estimado cuando hay saldo en otra moneda). */
     val deudas: Long,
-    /** [tuPlata] − [deudas]. Puede ser negativo, y con cinco créditos hipotecarios lo será. */
+    /**
+     * Plata suya que **solo se puede usar para algo**: la pensión voluntaria, una AFC, cesantías.
+     * Fuera de [tuPlata], dentro de [patrimonio].
+     */
+    val condicionado: Long,
+    /**
+     * Para qué. Con una sola cuenta condicionada es su condición («Vivienda»); con varias
+     * distintas, `null` y el renglón lo dice en genérico — inventar una condición común sería
+     * decir algo que ninguna cuenta dice.
+     */
+    val condicionadoA: String?,
+    /**
+     * Activos **completos** (incluida la plata condicionada) − [deudas]. Puede ser negativo, y con
+     * cinco créditos hipotecarios lo será.
+     *
+     * La plata condicionada cuenta acá y no en [tuPlata] a propósito: es suya —por eso suma al
+     * patrimonio— pero no la puede gastar, así que anunciarla como disponible sería el error más
+     * caro que puede cometer esta pantalla.
+     */
     val patrimonio: Long,
 ) {
     /**
@@ -213,12 +237,25 @@ fun patrimonioExplicacion(balance: HeroBalance): String =
  * de la pantalla de Cuentas no puedan dar tres números distintos.
  */
 fun heroBalance(accounts: List<Account>): HeroBalance {
+    // `assetsDebtsNet` sigue sumando TODO: el patrimonio no cambia porque una cuenta esté
+    // condicionada. Lo que cambia es qué parte de eso el dueño puede usar.
     val (activos, deudas, neto) = assetsDebtsNet(accounts)
-    val invertido = accounts.filter { it.type.group == AccountGroup.INVERSION }.sumOf { it.balance }
+
+    val libres = accounts.filter { !isDebtAccount(it.type) && it.condicionadaA.isNullOrBlank() }
+    val condicionadas = accounts.filter { !isDebtAccount(it.type) && !it.condicionadaA.isNullOrBlank() }
+    val condicionado = condicionadas.sumOf { it.balance }
+    val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }.sumOf { it.balance }
+    val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }.sumOf { it.balance }
+
     return HeroBalance(
-        tuPlata = activos,
-        disponible = activos - invertido,
+        tuPlata = disponible + invertido,
+        disponible = disponible,
         invertido = invertido,
+        condicionado = condicionado,
+        // Una sola condición se nombra; varias distintas no se resumen en una inventada.
+        condicionadoA = condicionadas.mapNotNull { it.condicionadaA?.trim()?.takeIf { c -> c.isNotEmpty() } }
+            .distinct()
+            .singleOrNull(),
         deudas = deudas,
         patrimonio = neto,
     )
