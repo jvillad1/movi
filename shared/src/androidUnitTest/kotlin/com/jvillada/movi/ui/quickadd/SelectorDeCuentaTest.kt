@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.quickadd
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
@@ -152,5 +153,86 @@ class SelectorDeCuentaTest {
         montar(uso = UsoDeCuenta.DESTINO_DE_INGRESO)
         composeRule.onNodeWithText("Bancolombia Ahorros").assertIsDisplayed()
         composeRule.onNodeWithText("Nu").assertDoesNotExist()
+    }
+
+    /**
+     * **Deber de menos es tener.** Si el dueño sobrepagó la Nu, su balance queda en negativo y eso
+     * es plata **a favor**: «Debes −$50.000» dice dos cosas opuestas en cuatro palabras. La
+     * inversión del signo sale de `saldoDeDeuda`, la misma que usa la tarjeta grande del detalle de
+     * la cuenta desde F36.
+     */
+    @Test
+    fun una_tarjeta_sobrepagada_no_dice_que_debes_menos_cero() {
+        montar(cuentas = listOf(ahorros, nu.copy(balance = -50_000)))
+
+        composeRule.onNodeWithText("A favor $50.000").assertIsDisplayed()
+        composeRule.onNodeWithText("Debes −$50.000").assertDoesNotExist()
+    }
+
+    /**
+     * **Sin red, una cifra en pesos no se rotula con el símbolo del dólar.**
+     *
+     * `LocalRepository.toAccountModel` arma el `Account` desde la fila de SQLDelight, que guarda
+     * `balance` y `currency` pero **no** `balancesByCurrency`. El respaldo `?: account.balance`
+     * tomaba entonces el componente en PESOS y lo escribía con la moneda de la cuenta: «Debes
+     * US$1.500.000» sobre una cifra en COP. Antes de la rama decía «$0» — menos informativo, y
+     * verdadero. Ver `saldoEnSuMoneda`, que devuelve el monto **y** con qué moneda escribirlo.
+     */
+    @Test
+    fun sin_saldo_por_moneda_la_cifra_se_dice_en_pesos() {
+        val sinRed = Account("c3", "Master Black 3684", AccountType.CREDIT_CARD, 1_500_000, currency = "USD")
+        montar(cuentas = listOf(ahorros, sinRed))
+
+        composeRule.onNodeWithText("Debes $1.500.000").assertIsDisplayed()
+        composeRule.onNodeWithText("Debes US$1.500.000").assertDoesNotExist()
+    }
+
+    /**
+     * **El «Ver todas» no se queda desplegado para siempre.**
+     *
+     * Con `remember` sin llave, el valor inicial (`principales.isEmpty()`) se congelaba en la
+     * primera composición: el selector abierto con la lista todavía vacía quedaba desplegado, y al
+     * llegar las cuentas se dibujaban TODAS —con el crédito del vehículo en el medio— sin que nadie
+     * lo hubiera pedido. Acá se recompone el mismo selector con las cuentas puestas y se afirma que
+     * volvió a plegarse solo.
+     */
+    @Test
+    fun el_ver_todas_se_vuelve_a_plegar_cuando_las_cuentas_llegan() {
+        val cuentas = mutableStateOf(emptyList<Account>())
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    WalletPicker(
+                        cuentas = cuentasPara(cuentas.value, UsoDeCuenta.ORIGEN_DE_GASTO),
+                        uso = UsoDeCuenta.ORIGEN_DE_GASTO,
+                        selectedId = null,
+                        onPick = {},
+                        onClose = {},
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("No tienes cuentas todavía.").assertIsDisplayed()
+
+        cuentas.value = todas
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Bancolombia Ahorros").assertIsDisplayed()
+        composeRule.onNodeWithText("Vehículo 4083").assertDoesNotExist()
+        composeRule.onNodeWithText("Ver todas las cuentas (1 más)").assertIsDisplayed()
+    }
+
+    /**
+     * **Y sin embargo, cuando arriba no queda ninguna, se abre desplegado.** Quien solo tiene
+     * créditos abriría el selector y no vería nada, con la única salida escondida detrás de un
+     * renglón que parece un pie de página: un callejón sin salida disfrazado de lista.
+     */
+    @Test
+    fun con_principales_vacia_se_abre_desplegado() {
+        montar(cuentas = listOf(carro), elegida = null)
+
+        composeRule.onNodeWithText("Vehículo 4083").assertIsDisplayed()
+        composeRule.onNodeWithText("Ver solo las de siempre").assertIsDisplayed()
     }
 }

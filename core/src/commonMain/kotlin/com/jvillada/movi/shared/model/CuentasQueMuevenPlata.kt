@@ -64,12 +64,32 @@ enum class UsoDeCuenta {
      * 2. **Lo único que la app puede proponer sola en un traspaso.** Si un crédito pudiera quedar
      *    elegido solo, dos toques distraídos anotarían un desembolso de $257.000.000 que nadie
      *    pidió: un crédito en un traspaso se elige **siempre** con el dedo.
+     *
+     * Propia no alcanza: tiene que estar **disponible**. Ver [estaCondicionada].
      */
     DINERO_PROPIO,
 
     /** Lo que se paga con una cuota: préstamos y tarjetas. */
     DEUDA_QUE_SE_PAGA,
 }
+
+/**
+ * **Esta plata es suya, pero no está disponible: solo sirve para una cosa.**
+ *
+ * Es [Account.condicionadaA], el campo que llegó con la pensión voluntaria de Skandia: son
+ * $106.000.000 del dueño —cuentan en su patrimonio— que solo puede retirar **para vivienda** sin
+ * perder el beneficio tributario. Cualquier otro retiro le cobra la retención que se ahorró al
+ * aportar.
+ *
+ * Este archivo se presenta como «el criterio, en un solo lugar». Un criterio en un solo lugar que
+ * no conoce el campo más nuevo de la misma pregunta no es un criterio: es una copia con suerte.
+ * Sin esto, la pestaña «Cuota» ofrecía Skandia como fuente para pagar la tarjeta — justo la plata
+ * que la app acababa de declarar no disponible, y encima elegida por ella y no por él.
+ *
+ * `isNullOrBlank` y no `!= null`, por el mismo motivo por el que el server normaliza al escribir:
+ * una cadena vacía es «sin condición», no una condición que se llama «».
+ */
+private fun estaCondicionada(account: Account): Boolean = !account.condicionadaA.isNullOrBlank()
 
 /**
  * ¿Esta cuenta sirve para [uso]? **La regla, y el único sitio donde está escrita.**
@@ -79,9 +99,20 @@ enum class UsoDeCuenta {
  * decida si de ahí sale plata o no. Un `else -> false` habría contestado esa pregunta en
  * silencio, y contestarla mal es justamente cómo un préstamo terminó ofrecido como origen de un
  * gasto.
+ *
+ * ## Dónde pesa [estaCondicionada], y dónde no
+ *
+ * Solo en los dos usos donde la plata **se va**: [UsoDeCuenta.ORIGEN_DE_GASTO] y
+ * [UsoDeCuenta.DINERO_PROPIO] (la cuota). Ahí, una cuenta condicionada baja al «Ver todas»: sacar
+ * de Skandia para pagar la AMEX **es posible**, cuesta la retención, y eso es una decisión del
+ * dueño — no algo que la app pueda proponerle sola, ni algo que tenga derecho a prohibirle.
+ *
+ * En los otros tres no cambia nada, y eso también es la regla y no un olvido: a la pensión
+ * voluntaria le **entran** rendimientos ([UsoDeCuenta.DESTINO_DE_INGRESO]) y le entran aportes
+ * ([UsoDeCuenta.PUNTA_DE_TRASPASO]). La condición es sobre el retiro, no sobre la cuenta.
  */
 fun sirvePara(account: Account, uso: UsoDeCuenta): Boolean = when (uso) {
-    UsoDeCuenta.ORIGEN_DE_GASTO -> when (account.type) {
+    UsoDeCuenta.ORIGEN_DE_GASTO -> !estaCondicionada(account) && when (account.type) {
         AccountType.CASH, AccountType.CHECKING, AccountType.SAVINGS, AccountType.CREDIT_CARD -> true
         AccountType.LOAN, AccountType.INVESTMENT -> false
     }
@@ -90,7 +121,7 @@ fun sirvePara(account: Account, uso: UsoDeCuenta): Boolean = when (uso) {
         AccountType.CREDIT_CARD, AccountType.LOAN -> false
     }
     UsoDeCuenta.PUNTA_DE_TRASPASO -> account.type != AccountType.CREDIT_CARD
-    UsoDeCuenta.DINERO_PROPIO -> account.type.group != AccountGroup.DEUDA
+    UsoDeCuenta.DINERO_PROPIO -> !estaCondicionada(account) && account.type.group != AccountGroup.DEUDA
     UsoDeCuenta.DEUDA_QUE_SE_PAGA -> account.type.group == AccountGroup.DEUDA
 }
 

@@ -23,7 +23,19 @@ class CuentasQueMuevenPlataTest {
     private val amex = Account("c2", "AMEX 9208", AccountType.CREDIT_CARD, 19_818_701)
     private val carro = Account("l1", "Vehículo 4083", AccountType.LOAN, 177_200_000)
     private val hipotecario = Account("l2", "Hipotecario 7712", AccountType.LOAN, 257_000_000)
-    private val skandia = Account("i1", "Pensión voluntaria Skandia", AccountType.INVESTMENT, 42_000_000)
+    /**
+     * **Con su condición puesta, como está en producción desde el PR #124.** Son $106.000.000 del
+     * dueño —cuentan en su patrimonio— que solo puede retirar para vivienda sin perder el
+     * beneficio tributario. La cuenta es real y el campo también: la prueba no tiene por qué
+     * inventar una versión más cómoda de la cuenta que motivó la regla.
+     */
+    private val skandia = Account(
+        "i1", "Pensión voluntaria Skandia", AccountType.INVESTMENT, 106_000_000,
+        condicionadaA = "Vivienda",
+    )
+
+    /** La misma cuenta el día que el dueño le quite la condición desde «¿Solo sirve para algo?». */
+    private val skandiaSinCondicion = skandia.copy(condicionadaA = null)
 
     private val todas = listOf(efectivo, ahorros, nu, amex, carro, hipotecario, skandia)
 
@@ -94,13 +106,68 @@ class CuentasQueMuevenPlataTest {
     @Test
     fun una_cuota_sale_de_plata_propia_y_paga_una_deuda() {
         assertEquals(
-            listOf("Efectivo", "Bancolombia Ahorros", "Pensión voluntaria Skandia"),
+            listOf("Efectivo", "Bancolombia Ahorros"),
             nombres(cuentasPara(todas, UsoDeCuenta.DINERO_PROPIO).principales),
         )
         assertEquals(
             listOf("Nu", "AMEX 9208", "Vehículo 4083", "Hipotecario 7712"),
             nombres(cuentasPara(todas, UsoDeCuenta.DEUDA_QUE_SE_PAGA).principales),
         )
+    }
+
+    // ── La plata que es suya y aun así no está disponible ────────────────────────────────
+
+    /**
+     * **El choque con el PR #124, resuelto.** Ese PR declaró que los $106.000.000 de la pensión
+     * voluntaria no son plata disponible: cuentan en el patrimonio, pero solo se pueden retirar
+     * para vivienda sin perder el beneficio tributario. Con `DINERO_PROPIO` definido como «no es
+     * una deuda» y nada más, la pestaña «Cuota» ofrecía justo esa plata para pagar la tarjeta — y
+     * peor: la app podía **elegirla sola**, porque lo que elige sola sale de `principales`.
+     */
+    @Test
+    fun una_cuota_no_se_paga_con_la_plata_condicionada() {
+        assertFalse(sirvePara(skandia, UsoDeCuenta.DINERO_PROPIO))
+        assertTrue(sirvePara(skandiaSinCondicion, UsoDeCuenta.DINERO_PROPIO))
+    }
+
+    @Test
+    fun de_la_plata_condicionada_no_sale_un_gasto() {
+        // Ya no salía por ser inversión; esto fija que tampoco saldría si fuera una cuenta de
+        // ahorros — que es el caso de una AFC o de unas cesantías, el mismo problema con otro
+        // tipo de cuenta.
+        val afc = Account("s9", "AFC", AccountType.SAVINGS, 3_000_000, condicionadaA = "Vivienda")
+
+        assertFalse(sirvePara(afc, UsoDeCuenta.ORIGEN_DE_GASTO))
+        assertTrue(sirvePara(afc.copy(condicionadaA = null), UsoDeCuenta.ORIGEN_DE_GASTO))
+    }
+
+    @Test
+    fun la_plata_condicionada_sigue_recibiendo_ingresos_y_traspasos() {
+        // La condición es sobre el RETIRO, no sobre la cuenta: a la pensión voluntaria le entran
+        // rendimientos y le entran aportes. Excluirla de estos dos usos sería confundir «no la
+        // puedes usar para cualquier cosa» con «no la puedes usar».
+        assertTrue(sirvePara(skandia, UsoDeCuenta.DESTINO_DE_INGRESO))
+        assertTrue(sirvePara(skandia, UsoDeCuenta.PUNTA_DE_TRASPASO))
+    }
+
+    @Test
+    fun la_condicion_en_blanco_no_es_una_condicion() {
+        // El server normaliza al escribir, pero una fila vieja o un cliente de otra versión pueden
+        // traer «». Una cadena vacía es «sin condición», no una condición que se llama «».
+        val vacia = Account("s8", "Ahorros", AccountType.SAVINGS, 1_000, condicionadaA = "   ")
+
+        assertTrue(sirvePara(vacia, UsoDeCuenta.DINERO_PROPIO))
+        assertTrue(sirvePara(vacia, UsoDeCuenta.ORIGEN_DE_GASTO))
+    }
+
+    @Test
+    fun la_plata_condicionada_no_desaparece_del_selector() {
+        // Retirar de Skandia para pagar la AMEX **es posible**: cuesta la retención. La app no
+        // tiene derecho a prohibirlo, solo a no proponerlo.
+        val partido = cuentasPara(todas, UsoDeCuenta.DINERO_PROPIO)
+
+        assertTrue("Pensión voluntaria Skandia" in nombres(partido.otras))
+        assertTrue("Pensión voluntaria Skandia" in nombres(partido.todas))
     }
 
     // ── No es un filtro duro ────────────────────────────────────────────────────

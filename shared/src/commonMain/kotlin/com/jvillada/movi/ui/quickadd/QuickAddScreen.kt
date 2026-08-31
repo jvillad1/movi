@@ -17,8 +17,6 @@ import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -1324,7 +1322,18 @@ internal fun WalletPicker(
     // **Salvo que la corta esté vacía.** Quien solo tiene créditos e inversión abriría el
     // selector y vería nada, con la salida escondida detrás de un renglón que parece un pie de
     // página: un callejón sin salida disfrazado de lista. Ahí se abre ya desplegado.
-    var verTodas by remember { mutableStateOf(cuentas.principales.isEmpty()) }
+    //
+    // **La llave del `remember` no es decorativa.** Sin ella, ese valor inicial se congela en la
+    // PRIMERA composición y no vuelve a mirarse: la fila «Cuenta» es alcanzable antes de que la
+    // lista llegue (`hasNoAccounts` solo es cierto con `accountsLoaded`), así que con la red lenta
+    // el selector abría vacío → `verTodas = true` → llegaban las cuentas y se dibujaban TODAS,
+    // desplegadas, con «Vehículo 4083 · $177.200.000» en el medio. Exactamente la pantalla que
+    // esta rama vino a arreglar, servida por el arreglo. Con la llave puesta, el día que
+    // `principales` deja de estar vacía el pie se vuelve a plegar solo — y un toque del dueño en
+    // «Ver todas» sigue sobreviviendo, porque tocar no cambia la llave.
+    var verTodas by remember(cuentas.principales.isEmpty()) {
+        mutableStateOf(cuentas.principales.isEmpty())
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         PickerHeader("Cuenta", onClose)
         if (cuentas.vacio) {
@@ -1379,78 +1388,27 @@ internal fun WalletPicker(
 /**
  * El saldo que va debajo del nombre de la cuenta.
  *
- * Dos arreglos de la Ola 15, los dos del mismo renglón:
+ * Tres arreglos de la Ola 15, los tres del mismo renglón:
  *
  * 1. **La moneda.** Iba `formatCOP(account.balance)` a secas, y `balance` es el componente COP de
  *    la cuenta (lo deriva `enrichWith`): la «Master Black 3684 USD» del dueño se mostraba como
- *    «$0». Ahora sale en SU moneda, con el mismo patrón que ya usa `deudaDespuesDelTraspaso`
- *    —`balancesByCurrency[moneda]`, con `balance` de respaldo para cuando el saldo derivado no
- *    llegó— así que para una cuenta en pesos el texto es carácter por carácter el de antes
+ *    «$0». Ahora sale en SU moneda — y con SU rótulo, que es lo que arregla [saldoEnSuMoneda]:
+ *    sin red no hay `balancesByCurrency`, y el respaldo viejo escribía el componente en PESOS con
+ *    el símbolo del dólar. Para una cuenta en pesos el texto es carácter por carácter el de antes
  *    (`signedMoney(x, "COP")` y `formatCOP(x)` producen lo mismo).
  * 2. **Deber no es tener.** Bajo una tarjeta, «$1.240.000» se lee como plata disponible cuando es
  *    exactamente lo contrario. Desde que las tarjetas se ofrecen para gastar (que es el pedido),
  *    ese renglón tiene que decir qué es: «Debes $1.240.000».
+ * 3. **Y deber de menos es tener.** En una tarjeta un saldo NEGATIVO es plata a favor: si el dueño
+ *    sobrepagó la Nu, «Debes −$50.000» dice dos cosas opuestas en cuatro palabras. La inversión
+ *    del signo no se reescribe acá: sale de [saldoDeDeuda], donde también la lee la tarjeta grande
+ *    del detalle de la cuenta.
  */
 private fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): String {
-    val moneda = account.currency
-    val saldo = account.balancesByCurrency[moneda] ?: account.balance
-    val texto = signedMoney(saldo, moneda)
-    return if (isDebtAccount(account.type)) "Debes $texto" else texto
-}
-
-/**
- * El pie del selector: «Ver todas las cuentas».
- *
- * Explica por qué las otras no estaban arriba, y lo explica **en función de lo que se está
- * haciendo** — de un gasto la plata sale, a un ingreso entra— porque «no aplica» no le dice nada
- * a nadie. No bloquea: se abre y se elige.
- */
-@Composable
-private fun VerTodasLasCuentas(
-    expandido: Boolean,
-    cuantas: Int,
-    uso: UsoDeCuenta,
-    onToggle: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggle)
-                .padding(vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = if (expandido) "Ver solo las de siempre" else "Ver todas las cuentas ($cuantas más)",
-                fontSize = 14.sp,
-                color = MinTextMute,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = if (expandido) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
-                contentDescription = null,
-                tint = MinTextMute,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (expandido) {
-            Text(
-                text = when (uso) {
-                    UsoDeCuenta.DESTINO_DE_INGRESO ->
-                        "Estas no suelen recibir un ingreso: lo que entra a una tarjeta o a un " +
-                            "crédito es un pago o un desembolso. Puedes elegirlas igual."
-                    else ->
-                        "De estas no suele salir un gasto: un crédito ya desembolsado se mueve " +
-                            "con su cuota, y de la inversión se saca con un traspaso. Puedes " +
-                            "elegirlas igual."
-                },
-                fontSize = 11.5.sp,
-                lineHeight = 15.sp,
-                color = MinTextFaint,
-                modifier = Modifier.padding(bottom = 10.dp),
-            )
-        }
-    }
+    val (monto, moneda) = saldoEnSuMoneda(account)
+    if (!isDebtAccount(account.type)) return signedMoney(monto, moneda)
+    val saldo = saldoDeDeuda(monto, moneda)
+    return if (saldo.aFavor) "A favor ${saldo.magnitud}" else "Debes ${saldo.magnitud}"
 }
 
 @Composable

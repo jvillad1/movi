@@ -28,12 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreditDisbursement
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
-import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.validateCreditDisbursement
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
@@ -840,7 +840,13 @@ const val NO_PUDIMOS_CARGAR_TUS_CUENTAS =
  * ofrecerla.
  */
 fun cuentasParaDesembolso(accounts: List<Account>): List<Account> =
-    accounts.filter { it.type.group != AccountGroup.DEUDA && it.currency == "COP" }
+    // **Ola 15 — la mitad de la izquierda era `it.type.group != AccountGroup.DEUDA`**, o sea
+    // `UsoDeCuenta.DINERO_PROPIO` escrito a mano en el proyecto donde una regla duplicada ya se
+    // arregló-en-una-y-no-en-la-otra tres veces. La condición de moneda sí justifica que esta
+    // función exista (la cuenta del crédito nace en COP y todavía no hay traspaso entre monedas),
+    // pero **el predicado base se compone, no se copia**: acá se pregunta por el criterio, y lo
+    // que esta pantalla agrega es solo el `&&`.
+    cuentasPara(accounts, UsoDeCuenta.DINERO_PROPIO).principales.filter { it.currency == "COP" }
 
 /**
  * Cuánto entró a la cuenta: lo que el dueño escribió, o el capital del crédito si no escribió
