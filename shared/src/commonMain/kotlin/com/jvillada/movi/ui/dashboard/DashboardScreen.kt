@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.datetime.Clock
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
@@ -46,8 +47,86 @@ import kotlinx.coroutines.launch
  */
 object DashboardDataCache {
     var data: DashboardData? = null
+
+    /**
+     * Cuándo terminó la última carga completa, en epoch ms. `0` = nunca.
+     *
+     * Lo escribe SOLO el Inicio, y a propósito: «Primeros pasos» también deja su lectura en
+     * `data` —es el mismo modelo— pero no trae las diez llamadas, así que dejar su marca de
+     * tiempo haría que el Inicio se saltara una carga que nunca hizo. Sin sello, el Inicio
+     * recarga, que es el lado seguro de equivocarse.
+     */
+    var cargadoEn: Long = 0L
+
+    /**
+     * El valor de `LocalRefreshTick` en esa carga. Si cambió, algo se guardó desde entonces y las
+     * cifras están viejas pase lo que pase con el reloj.
+     */
+    var tickDeLaCarga: Int = 0
+
     /** Al cerrar sesión: lo cacheado es del usuario que se va (ver SessionManager.clear). */
-    fun clear() { data = null }
+    fun clear() {
+        data = null
+        cargadoEn = 0L
+        tickDeLaCarga = 0
+    }
+}
+
+/**
+ * Cuánto vale una carga del Inicio antes de volver a pedirla. Treinta segundos.
+ *
+ * No es un número mágico: es el tiempo en que se puede ir a Movimientos, mirar algo y volver. Ese
+ * viaje de ida y vuelta es el que hoy cuesta diez llamadas de red por cada vuelta.
+ *
+ * Elegido corto a propósito. Lo más viejo que el dueño puede llegar a ver es medio minuto, y solo
+ * si en ese medio minuto la plata cambió **desde otro lado** —otro dispositivo, un SMS, el
+ * barrido de recordatorios—, porque cualquier cosa que haga él mismo mueve `LocalRefreshTick` y
+ * fuerza la recarga igual.
+ */
+const val TTL_DEL_INICIO_MS = 30_000L
+
+/**
+ * ¿Hay que volver a pedir las diez llamadas del Inicio?
+ *
+ * Función pura y aparte del `@Composable` para poder probarla: es una decisión sobre **cuándo se
+ * refrescan las cifras del dinero del dueño**, que es exactamente la clase de cosa que no
+ * conviene tener enterrada adentro de un `LaunchedEffect`.
+ *
+ * ### De dónde sale
+ *
+ * `App.kt` envuelve cada pantalla en un `SaveableStateProvider` con la pantalla actual como
+ * clave, así que al navegar a otra el Inicio **sale de la composición**, y al volver entra de
+ * nuevo y su `LaunchedEffect` se reejecuta entero. Se contaron cuatro rondas completas de diez
+ * llamadas en pocos minutos de uso normal. En el teléfono con datos móviles, eso es plata del
+ * dueño.
+ *
+ * ### Las tres puertas que SIEMPRE recargan
+ *
+ * - **No hay nada cacheado** ([hayDatos] en false): un arranque en frío, o la primera vez después
+ *   de entrar. La web además pierde la caché en cada recarga de página, así que ahí es lo normal.
+ * - **El tick cambió**: alguien guardó algo desde que se cargó. Es la señal que emite la hoja de
+ *   «Agregar», y llega aunque el Inicio nunca haya salido de la composición.
+ * - **Un reintento explícito** ([reintento]): el dueño tocó «Reintentar» en el snackbar de error.
+ *   Pedir de nuevo es literalmente lo que pidió.
+ *
+ * Recién si ninguna aplica se mira el reloj. Nótese el orden: **el tiempo es la última palabra,
+ * no la primera**.
+ */
+fun debeRecargarElInicio(
+    hayDatos: Boolean,
+    cargadoEn: Long,
+    tickDeLaCarga: Int,
+    tickActual: Int,
+    reintento: Boolean,
+    ahora: Long,
+): Boolean = when {
+    !hayDatos -> true
+    tickActual != tickDeLaCarga -> true
+    reintento -> true
+    // Un reloj que va para atrás (cambio de zona, ajuste del sistema) da una diferencia negativa.
+    // Recargar es el lado seguro: mostrar cifras viejas por un reloj mal puesto sería peor que
+    // gastar diez llamadas.
+    else -> (ahora - cargadoEn) !in 0..TTL_DEL_INICIO_MS
 }
 
 @Composable
@@ -94,6 +173,25 @@ fun DashboardScreen(
     //
     //  Ya existe una rama para esto: `origin/perf/inicio-endpoints-livianos`.
     LaunchedEffect(refreshKey, refreshTick) {
+        // ¿Hace falta pedir las diez otra vez? Ver [debeRecargarElInicio] — el TODO de la Ola 8
+        // que documentaba este derroche queda cerrado acá.
+        //
+        // `refreshKey > 0` es el reintento explícito: nace en 0 y solo lo sube el botón
+        // «Reintentar». Nótese que se REINICIA a 0 cuando la pantalla se remonta, que es
+        // justamente el caso que este arreglo quiere saltear.
+        if (!debeRecargarElInicio(
+                hayDatos = DashboardDataCache.data != null,
+                cargadoEn = DashboardDataCache.cargadoEn,
+                tickDeLaCarga = DashboardDataCache.tickDeLaCarga,
+                tickActual = refreshTick,
+                reintento = refreshKey > 0,
+                ahora = Clock.System.now().toEpochMilliseconds(),
+            )
+        ) {
+            // Ya se pintó lo cacheado en el `remember` de arriba; no hay nada más que hacer.
+            loading = false
+            return@LaunchedEffect
+        }
         loading = true
         error = null
         // SDUI: la definición del server se pide PRIMERO, así el Inicio ya está en su lugar
@@ -160,6 +258,11 @@ fun DashboardScreen(
             launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
         }
         DashboardDataCache.data = data
+        // El sello va DESPUÉS de que las diez terminaron: sellar antes haría que una carga a
+        // medias —por ejemplo si el proceso se corta— contara como completa y el Inicio se
+        // saltara la siguiente con datos incompletos.
+        DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
+        DashboardDataCache.tickDeLaCarga = refreshTick
         loading = false
     }
 
