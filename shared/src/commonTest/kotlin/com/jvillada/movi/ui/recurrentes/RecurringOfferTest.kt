@@ -3,6 +3,9 @@ package com.jvillada.movi.ui.recurrentes
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.RESERVED_CATEGORIES
+import com.jvillada.movi.shared.model.SubConfidence
+import com.jvillada.movi.shared.model.SubStatus
+import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -236,5 +239,154 @@ class RecurringOfferTest {
     fun `un nombre que no es una categoria del catalogo no propone nada`() {
         assertNull(categoriaSugeridaPorNombre("Netflix", TransactionType.EXPENSE))
         assertNull(categoriaSugeridaPorNombre("", TransactionType.EXPENSE))
+    }
+
+    // ── «Esto se repite», ofrecido desde la hoja del movimiento ──────────────────────
+
+    /**
+     * La fecha del movimiento viaja en el prellenado, y es lo único que evita que la regla
+     * proponga otra vez el pago que la originó (ver [RecurringPrefill.activeFrom] y `dueDateFor`
+     * en el server). Sin esta línea, la función compilaba igual y el dueño recibía el
+     * recordatorio del arriendo que acababa de anotar.
+     */
+    @Test
+    fun `el prellenado lleva la fecha del movimiento como fecha de arranque`() {
+        // El fixture cae el 5 de agosto de 2025 en la zona de la app.
+        val prefill = prefillFrom(evento())
+        assertEquals("2025-08-05", prefill.activeFrom)
+        assertEquals(5, prefill.dayOfMonth, "el día y la fecha salen del mismo instante")
+    }
+
+    @Test
+    fun `un gasto comun se puede volver recurrente desde su detalle`() {
+        assertTrue(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento()))
+    }
+
+    /**
+     * A diferencia de [shouldOfferRecurring], acá **no** hay anti-nag: el dueño abrió la hoja de
+     * ese movimiento a propósito. Preguntar dos veces por el mismo movimiento no es molestar, es
+     * responder a lo que pidió. Este test fija esa diferencia — si alguien le agregara el throttle
+     * de sesión, la acción desaparecería justo cuando la vuelve a buscar.
+     */
+    @Test
+    fun `la hoja lo ofrece siempre, sin el limite por sesion de la barra`() {
+        val gasto = evento()
+        repeat(10) { assertTrue(puedeOfrecerseComoRecurrenteDesdeElDetalle(gasto)) }
+        // Y la barra, con la misma cosa ya ofrecida, sí lo apaga: son dos preguntas distintas.
+        assertFalse(
+            shouldOfferRecurring(gasto, emptyList(), alreadyOffered = setOf(throttleKeyFor(gasto))),
+        )
+    }
+
+    @Test
+    fun `ninguna pata de un par se ofrece desde el detalle`() {
+        // Un traspaso, un pago de cuota y el pago de una tarjeta son dos movimientos enlazados y
+        // `RecurringRule` no modela ninguno: el recurrente mentiría sobre lo que pasa cada mes.
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(transferId = "tr_1")))
+        assertFalse(
+            puedeOfrecerseComoRecurrenteDesdeElDetalle(
+                evento(category = "Cuota de crédito", description = "Cuota de Vehículo", transferId = "tr_2"),
+            ),
+            "la cuota de un crédito ya tiene su propio recordatorio",
+        )
+    }
+
+    @Test
+    fun `ninguna categoria reservada se ofrece desde el detalle`() {
+        RESERVED_CATEGORIES.forEach { reservada ->
+            assertFalse(
+                puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(category = reservada)),
+                "«$reservada» es un asiento interno de Movi, no un compromiso mensual",
+            )
+        }
+    }
+
+    @Test
+    fun `un movimiento sin monto ni nombre no se ofrece desde el detalle`() {
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(amount = 0L)))
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(evento(description = "  ", category = "  ")))
+    }
+
+    // ── La guarda anti-duplicado de «Esto se repite»: las TRES puertas ────────────────
+
+    private fun cobro(
+        nombre: String,
+        status: SubStatus = SubStatus.AUTO,
+    ) = Subscription(
+        id = "sub_$nombre",
+        merchantKey = nombre.lowercase(),
+        displayName = nombre,
+        amount = 44_900L,
+        currency = "COP",
+        dayOfMonth = 12,
+        status = status,
+        confidence = SubConfidence.HIGH,
+        firstSeen = 0L,
+        lastSeen = 0L,
+        occurrences = 3,
+    )
+
+    @Test
+    fun `sin nada anotado, se puede crear`() {
+        assertNull(equivalenteYaAnotado(null, emptyList(), emptyList(), "Netflix"))
+    }
+
+    /**
+     * **El defecto que este caso cierra.** Las suscripciones se auto-descubren, así que el dueño
+     * puede tener «Netflix» sin haberlo escrito nunca: no hay ninguna REGLA con ese nombre, y
+     * hasta acá la hoja del movimiento solo miraba reglas. Creaba la regla «Netflix» encima, y
+     * Recurrentes —que muestra y SUMA las dos listas juntas— pasaba a contar $44.900 dos veces y
+     * a mostrar dos filas en «Próximos pagos». La guarda del server no lo frena: solo bloquea las
+     * altas de suscripción, no las de regla.
+     */
+    @Test
+    fun `una suscripcion auto-descubierta con el mismo nombre ya cuenta como anotado`() {
+        val yaEsta = equivalenteYaAnotado(
+            selloDeOcurrencia = null,
+            reglas = emptyList(),
+            suscripcionesQueYaSuman = nombresDeSuscripcionesQueYaSuman(listOf(cobro("Netflix"))),
+            nombre = "netflix",
+        )
+        assertEquals("Netflix", yaEsta, "se devuelve el nombre con el que YA está, para poder decirlo")
+    }
+
+    @Test
+    fun `una suscripcion CONFIRMADA tambien bloquea, y una DESCARTADA no`() {
+        val confirmada = nombresDeSuscripcionesQueYaSuman(listOf(cobro("Spotify", SubStatus.CONFIRMED)))
+        assertEquals("Spotify", equivalenteYaAnotado(null, emptyList(), confirmada, "Spotify"))
+        // Una candidata que el dueño descartó no suma en «Gastos recurrentes», así que no bloquea
+        // nada: el mismo filtro que usa la barra de después de guardar.
+        val descartada = nombresDeSuscripcionesQueYaSuman(listOf(cobro("Spotify", SubStatus.DISMISSED)))
+        assertNull(equivalenteYaAnotado(null, emptyList(), descartada, "Spotify"))
+        val candidata = nombresDeSuscripcionesQueYaSuman(listOf(cobro("Spotify", SubStatus.CANDIDATE)))
+        assertNull(equivalenteYaAnotado(null, emptyList(), candidata, "Spotify"))
+    }
+
+    @Test
+    fun `la comparacion de suscripciones es la misma de Recurrentes, sin tildes ni mayusculas`() {
+        val activas = nombresDeSuscripcionesQueYaSuman(listOf(cobro("Educación Hija")))
+        assertEquals("Educación Hija", equivalenteYaAnotado(null, emptyList(), activas, "  EDUCACION HIJA  "))
+    }
+
+    @Test
+    fun `una regla con el mismo nombre sigue bloqueando`() {
+        assertEquals(
+            "Arriendo",
+            equivalenteYaAnotado(null, listOf(regla("Arriendo")), listOf("Netflix"), "arriendo"),
+        )
+    }
+
+    /** El sello gana sobre todo lo demás: este movimiento YA es el pago de este mes de esa regla. */
+    @Test
+    fun `el sello de ocurrencia manda`() {
+        assertEquals(
+            "Arriendo del apartamento",
+            equivalenteYaAnotado("Arriendo del apartamento", emptyList(), emptyList(), "Otra cosa"),
+        )
+    }
+
+    @Test
+    fun `un nombre vacio no matchea con nada, ni siquiera con otro vacio`() {
+        assertNull(equivalenteYaAnotado(null, listOf(regla("  ")), listOf("  "), "   "))
     }
 }

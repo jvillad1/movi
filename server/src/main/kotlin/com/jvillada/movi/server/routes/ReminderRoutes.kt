@@ -62,6 +62,10 @@ private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     type = TransactionType.valueOf(this[RecurringRules.type]),
     remindMe = this[RecurringRules.remindMe],
     accountId = this[RecurringRules.accountId],
+    // Desde que «esto se repite» nace de un movimiento ya ocurrido, esta fecha decide que el
+    // primer vencimiento sea el del período SIGUIENTE (ver `dueDateFor`). Sin leerla acá, la
+    // regla la guardaría y ninguna pantalla la respetaría.
+    activeFrom = this[RecurringRules.activeFrom],
 )
 
 /**
@@ -76,6 +80,19 @@ private fun org.jetbrains.exposed.sql.Transaction.accountIdIfOwned(uid: String, 
         .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
         .firstOrNull() != null
     return if (exists) id else null
+}
+
+/**
+ * La fecha ISO de [crudo] si de verdad es una fecha, o `null`.
+ *
+ * Se valida y no se guarda a ciegas porque esta columna la lee `dueDateFor` para decidir cuándo
+ * vence la regla: una cadena que `LocalDate.parse` no entienda quedaría guardada y se ignoraría
+ * en silencio, y la regla creada desde un movimiento volvería a proponer el pago que ya ocurrió.
+ * Mejor `null` explícito («desde siempre») que un dato que miente sobre lo que hace.
+ */
+private fun fechaIsoValida(crudo: String?): String? {
+    val texto = crudo?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching { java.time.LocalDate.parse(texto).toString() }.getOrNull()
 }
 
 fun Route.reminderRoutes() {
@@ -107,13 +124,22 @@ fun Route.reminderRoutes() {
                 // Ola 9 · D: la cuenta es opcional y, si viene, tiene que ser de este usuario
                 // (ver [accountIdIfOwned]).
                 it[accountId] = safeAccountId
+                // **Desde cuándo corre.** Lo manda quien crea la regla a partir de un movimiento
+                // que ya ocurrió: con la fecha de ese movimiento acá, `dueDateFor` arranca en el
+                // período SIGUIENTE y ese pago no se vuelve a proponer. Vacío o mal formado se
+                // guarda como NULL —«desde siempre»—, que es como nacen las reglas escritas a
+                // mano y como se comportaban todas hasta esta ola.
+                it[activeFrom] = fechaIsoValida(body.activeFrom)
             }
             safeAccountId
         }
         // La respuesta dice lo que QUEDÓ guardado, no lo que se pidió: si la cuenta no era suya
         // se guardó null, y devolver el id igual haría que el cliente pinte una cuenta que la
-        // regla no tiene.
-        call.respond(HttpStatusCode.Created, body.copy(id = newId, accountId = storedAccountId))
+        // regla no tiene. Lo mismo con la fecha de arranque.
+        call.respond(
+            HttpStatusCode.Created,
+            body.copy(id = newId, accountId = storedAccountId, activeFrom = fechaIsoValida(body.activeFrom)),
+        )
     }
 
     put("/api/recurring-rules/{id}") {
@@ -121,6 +147,7 @@ fun Route.reminderRoutes() {
         val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
         val body = call.receive<RecurringRule>()
         var storedAccountId: String? = null
+        var storedActiveFrom: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
             //
@@ -134,9 +161,10 @@ fun Route.reminderRoutes() {
             //   · `null`            → no lo toques (cliente viejo, o un PUT que no habla de cuentas)
             //   · cadena vacía      → quitá la cuenta (el dueño eligió «Sin cuenta»)
             //   · un id             → esa cuenta, si es suya
-            val cuentaActual = RecurringRules.selectAll()
+            val filaActual = RecurringRules.selectAll()
                 .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
-                .firstOrNull()?.get(RecurringRules.accountId)
+                .firstOrNull()
+            val cuentaActual = filaActual?.get(RecurringRules.accountId)
             val pedida = body.accountId
             val safeAccountId = when {
                 pedida == null -> cuentaActual
@@ -144,6 +172,16 @@ fun Route.reminderRoutes() {
                 else -> accountIdIfOwned(uid, pedida)
             }
             storedAccountId = safeAccountId
+            // **`activeFrom` se PRESERVA en un PUT**, y por el mismo agujero que el de la cuenta,
+            // solo que sin la variante «quítala»: ningún cliente de hoy edita esta fecha —la pone
+            // el alta desde un movimiento y nada más— así que un `null` en el body es siempre «no
+            // lo toques», nunca «desde siempre». Sin esto, corregirle el monto a una regla creada
+            // desde un movimiento le borraba la fecha de arranque y su vencimiento volvía al
+            // período que ya estaba pagado: el pago duplicado que esta ola vino a evitar,
+            // reintroducido por una edición cualquiera.
+            val arranqueActual = filaActual?.get(RecurringRules.activeFrom)
+            val arranqueGuardado = fechaIsoValida(body.activeFrom) ?: arranqueActual
+            storedActiveFrom = arranqueGuardado
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name
                 it[category] = body.category
@@ -152,10 +190,11 @@ fun Route.reminderRoutes() {
                 it[type] = body.type.name
                 it[remindMe] = body.remindMe
                 it[accountId] = safeAccountId
+                it[activeFrom] = arranqueGuardado
             }
         }
         if (updated == 0) call.respond(HttpStatusCode.NotFound)
-        else call.respond(body.copy(id = id, accountId = storedAccountId))
+        else call.respond(body.copy(id = id, accountId = storedAccountId, activeFrom = storedActiveFrom))
     }
 
     delete("/api/recurring-rules/{id}") {

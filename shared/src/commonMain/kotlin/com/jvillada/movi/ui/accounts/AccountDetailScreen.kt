@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -57,6 +58,19 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
+    /**
+     * Las cuentas del dueño, **para poder mover un movimiento de cuenta desde esta pantalla**.
+     *
+     * Se piden **al tocar una fila** y no al entrar, por lo mismo que «Esto se repite» pide las
+     * suyas al tocar el botón: entrar acá ya cuesta dos lecturas (la cuenta y sus movimientos), y
+     * la enorme mayoría de las veces el dueño entra a mirar, no a corregir. Y se piden una sola
+     * vez por visita.
+     *
+     * Si la lectura falla, la lista queda vacía y la hoja lo dice: el selector de cuenta no se
+     * abre, y el monto y el concepto se siguen pudiendo corregir. Una lista de cuentas que no
+     * llegó no puede impedir arreglar una cifra.
+     */
+    var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var showCondicion by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -108,6 +122,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             error = e.toUserMessage()
         }
         loading = false
+    }
+
+    // La lista de cuentas, recién cuando el dueño toca una fila (ver [cuentas]). Un fallo acá no
+    // se cuenta como error de la pantalla: no rompe nada de lo que está mirando.
+    LaunchedEffect(selectedEvent != null) {
+        if (selectedEvent != null && cuentas.isEmpty()) {
+            cuentas = runCatching { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
+        }
     }
 
     LaunchedEffect(error) {
@@ -456,10 +478,21 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
         )
 
         selectedEvent?.let { event ->
-            VoidEventSheet(
+            // **La misma hoja que Movimientos**, y no `VoidEventSheet` a secas como hasta acá.
+            //
+            // Esta es la pantalla donde el dueño NOTA que un saldo está mal —es la que le muestra
+            // el saldo y los renglones que lo forman— y lo único que se le ofrecía sobre la fila
+            // era **anular**: justo el rodeo destructivo que la edición vino a reemplazar. Anular
+            // sigue estando, al final de la hoja y separado; arriba están el monto, la cuenta, el
+            // concepto, la fecha y la categoría. Ver [HojaDelMovimiento].
+            //
+            // `onVerCuenta = null` (el default) a propósito: la rama del saldo inicial ofrece
+            // «Ver la cuenta» y acá ya estamos en ella.
+            HojaDelMovimiento(
                 event = event,
+                cuentas = cuentas,
                 onDismiss = { selectedEvent = null },
-                onVoided = {
+                onCambiado = {
                     selectedEvent = null
                     refreshKey++
                 },

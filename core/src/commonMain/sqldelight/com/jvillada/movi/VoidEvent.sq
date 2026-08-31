@@ -23,6 +23,21 @@ DELETE FROM void_event WHERE originalEventId IN (
     SELECT id FROM financial_event WHERE accountId = :accountId AND userId = :userId
 );
 
+-- ¿ESTE movimiento está anulado en este dispositivo?
+--
+-- El equivalente local del `VoidEvents.count() > 0` que el server hace en `PUT /api/events/{id}`,
+-- `/category` y `/timestamp` para tratar un anulado como inexistente. Sin esta pregunta el espejo
+-- aceptaba editar un movimiento ya anulado y le movía el saldo acumulado por segunda vez: una
+-- cuenta en $1.000.000 con un gasto de $100.000 anulado (o sea de vuelta en $1.000.000) quedaba en
+-- $200.000 al «corregir» ese gasto a $900.000. Es un COUNT y no un SELECT porque lo único que se
+-- decide con él es sí/no.
+--
+-- Sin `userId` porque la tabla no lo tiene: `void_event` nunca lo guardó (ver el CREATE de
+-- arriba). El aislamiento lo pone quien llama, que ya leyó la fila de `financial_event` con su
+-- `userId` antes de preguntar por su anulación.
+countFor:
+SELECT COUNT(*) FROM void_event WHERE originalEventId = :originalEventId;
+
 -- Los ids de todo lo anulado en este dispositivo, para que la lista no los muestre.
 --
 -- Hace falta porque `voidEvent` NO borra la fila de `financial_event`: ajusta el saldo y deja el

@@ -335,6 +335,33 @@ open class NoOpRepository(
         ).also { recordarEnElServer(it) }
     }
 
+    /**
+     * Mismo criterio que [updateEventCategory] y [updateEventTimestamp]: 404 para un evento que no
+     * está en [knownEventIds] —así el test del camino «todavía sin sincronizar» falla si
+     * [LocalRepository] llama al server cuando no debe— y, para el que sí conoce, el evento que ya
+     * tenía con los campos pedidos aplicados encima.
+     */
+    override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
+        if (id !in knownEventIds) throw ApiException(404)
+        val previo = eventosDelServer.firstOrNull { it.id == id }
+        val base = previo ?: FinancialEvent(
+            id = id,
+            accountId = "acc-stub",
+            type = TransactionType.EXPENSE,
+            amount = 50_000L,
+            category = "Comida",
+            description = "stub",
+            timestamp = 1_700_000_000_000L,
+            source = EventSource.MANUAL,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        )
+        return base.copy(
+            amount = cambios.amount ?: base.amount,
+            accountId = cambios.accountId ?: base.accountId,
+            description = cambios.description ?: base.description,
+        ).also { recordarEnElServer(it) }
+    }
+
     /** Sin sello: el stub no modela recurrentes, y el aviso opcional simplemente no aparece. */
     override suspend fun getEventOccurrenceMark(id: String): com.jvillada.movi.shared.model.EventOccurrenceMark? = null
 

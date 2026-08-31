@@ -273,6 +273,12 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         dayOfMonth = this[RecurringRules.dayOfMonth],
         type       = TransactionType.valueOf(this[RecurringRules.type]),
         remindMe   = this[RecurringRules.remindMe],
+        // **Sin esto el barrido de avisos ignoraría la fecha de arranque.** `dueDateFor` la lee
+        // para no vencer una regla antes de que empiece, y este es el segundo mapeador de filas a
+        // `RecurringRule` del server (el otro es `toRule` en `ReminderRoutes`). Un campo leído en
+        // uno y no en el otro es exactamente cómo «Próximos pagos» y el correo terminan diciendo
+        // cosas distintas del mismo pago.
+        activeFrom = this[RecurringRules.activeFrom],
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded

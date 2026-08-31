@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
@@ -26,6 +27,7 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.deleteWhere
 import com.jvillada.movi.server.reminders.occurrenceInMonth
@@ -36,6 +38,20 @@ import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
 import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
+
+/**
+ * Lo que la transacción de `PUT /api/events/{id}` decidió, para que el `call.respond` viva
+ * **afuera** de ella.
+ *
+ * Existe porque esa ruta tiene tres finales distintos —no existe, se rechaza con un código y un
+ * texto propios, o se guardó— y responder desde adentro de `dbQuery` obligaría a mezclar la
+ * transacción con el ciclo de vida del request. Con esto, la transacción solo decide y escribe.
+ */
+private sealed interface ResultadoDeEdicion {
+    object NoExiste : ResultadoDeEdicion
+    class Rechazado(val rechazo: RechazoDeEdicion) : ResultadoDeEdicion
+    class Ok(val evento: FinancialEvent) : ResultadoDeEdicion
+}
 
 fun Route.eventRoutes() {
     route("/api/events") {
@@ -373,6 +389,133 @@ fun Route.eventRoutes() {
                 )
             }
             if (marca == null) call.respond(HttpStatusCode.NoContent) else call.respond(marca)
+        }
+
+        // ── Corregir el MONTO, la CUENTA y el CONCEPTO de un movimiento ya anotado ───────
+        //
+        // La tercera puerta de edición de un movimiento, después de la categoría y la fecha. El
+        // dueño la pidió con un caso concreto: «Necesito editar el valor del movimiento de Hija
+        // porque voy a pagar 3 millones desde NU y 1 millón desde Bancolombia» — el monto y la
+        // cuenta, los dos únicos datos que hasta hoy solo se podían cambiar anulando el
+        // movimiento y volviéndolo a crear, o sea perdiendo su id (y con él su sello de
+        // recurrente y su descarte de «no es pago de tarjeta»).
+        //
+        // **Lo que NO hay que recalcular, y por qué se puede afirmar.** Ningún total de Movi es
+        // un acumulado guardado del lado del server: el saldo de una cuenta lo deriva
+        // `enrichWith`/`computeBalances` de sus eventos en cada lectura (la columna
+        // `accounts.balance` no la lee nadie para derivar nada), «Gastos del mes» los suma
+        // `/api/finance-summary` sobre los eventos del período, los presupuestos salen del mismo
+        // lado y el Inicio también. Así que corregir la fila ES el recálculo: las dos cuentas
+        // involucradas en un cambio de cuenta se mueven solas en la próxima lectura. (El espejo
+        // local SÍ tiene un saldo acumulado y ahí sí hay que ajustarlo a mano — ver
+        // `LocalRepository.updateEvent`.)
+        //
+        // **`countsAsCashFlow` se vuelve a derivar acá** (`withCashFlowFlag`), como en todas las
+        // rutas que devuelven un evento: mover un gasto a una cuenta LOAN lo saca del mes por
+        // regla de `isCashFlow`, y la respuesta tiene que decirlo o la pantalla se queda pintando
+        // lo contrario hasta el próximo refetch. La hoja además lo **avisa antes** de guardar
+        // (ver `avisoDeCambioDeCuenta`).
+        //
+        // Las guardas viven en `:core` (`validarEdicionDeMovimiento`) y no acá, por el mismo
+        // motivo por el que viven allá las de la fecha: el espejo local tiene que rechazar
+        // exactamente lo mismo, con las mismas palabras y el mismo código, cuando resuelve sin
+        // red un movimiento que todavía no subió.
+        put("/{id}") {
+            val id = call.parameters["id"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val pedido = call.receive<EdicionDeMovimiento>()
+
+            // Leer, validar y escribir en UNA transacción. Si la lectura del evento y la de la
+            // cuenta destino vivieran afuera, entre la validación y el UPDATE la cuenta podría
+            // borrarse (`DELETE /api/accounts/{id}` existe) y el movimiento terminaría apuntando
+            // a una cuenta que ya no está — invisible en Cuentas y fuera de todo saldo.
+            val salida: ResultadoDeEdicion = dbQuery {
+                val fila = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                // Un evento anulado se trata como inexistente, igual que en PUT /{id}/category y
+                // en PUT /{id}/timestamp: ningún GET lo vuelve a mostrar, así que lo que
+                // devolviéramos acá no se vería en ninguna pantalla.
+                val anulado = fila != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (fila == null || anulado) return@dbQuery ResultadoDeEdicion.NoExiste
+
+                // Solo lo que de verdad cambia: la hoja manda los tres campos siempre, y sin esto
+                // corregir el concepto de una pata cascadearía el monto a la hermana por nada —
+                // y peor, mandar la misma cuenta rebotaría con PATA_NO_CAMBIA_DE_CUENTA.
+                val cambios = soloLoQueCambia(fila, pedido)
+                val cuentaNueva = cambios.accountId?.let { pedida ->
+                    Accounts.selectAll()
+                        .where { (Accounts.id eq pedida) and (Accounts.userId eq uid) }
+                        .firstOrNull()?.toAccount()
+                }
+                val rechazo = validarEdicionDeMovimiento(
+                    cambios = cambios,
+                    esPataDeUnPar = fila.transferId != null,
+                    cuentaActualId = fila.accountId,
+                    monedaDelMovimiento = fila.currency,
+                    cuentaNueva = cuentaNueva,
+                )
+                if (rechazo != null) return@dbQuery ResultadoDeEdicion.Rechazado(rechazo)
+
+                val nuevoMonto = cambios.amount
+                val nuevaCuenta = cambios.accountId
+                val nuevoConcepto = cambios.description
+                if (nuevoMonto == null && nuevaCuenta == null && nuevoConcepto == null) {
+                    // Guardar sin haber cambiado nada no es un error: es un 200 con el evento tal
+                    // como está. Escribir igual sería una fila tocada sin motivo.
+                    return@dbQuery ResultadoDeEdicion.Ok(fila.withCashFlowFlag(accountTypesFor(uid)))
+                }
+
+                // **El monto de un par se mueve en las DOS mitades**, en la misma transacción y
+                // por el mismo camino explícito que ya usan la anulación y el cambio de fecha:
+                // por `transferId`, no por «el otro evento con el mismo monto». Cambiarlo en una
+                // sola dejaría plata saliendo de una cuenta y entrando otra cifra en la otra —
+                // el descuadre silencioso que esta ruta no puede permitir. Ver
+                // `PATA_NO_CAMBIA_DE_CUENTA` para por qué la CUENTA, en cambio, se rechaza.
+                //
+                // **COPIA el monto, y eso vale mientras las dos patas nazcan iguales.** Hoy sí:
+                // `transferLegsFor` y `pagoDeCuotaLegs` crean las dos mitades con la misma cifra.
+                // Pero está decidido —y pendiente, en su propio PR— que en un crédito que
+                // amortiza la pata de la DEUDA baje solo por el **capital** de la cuota, no por
+                // la cuota completa (el resto es interés). El día que eso entre, esta cascada
+                // deja de poder copiar: tiene que **recalcular** la pata hermana de un pago de
+                // cuota (capital nuevo) en vez de escribirle el mismo `nuevoMonto`, o corregir
+                // una cuota de $4.215.223 le bajaría a la deuda los intereses también. La pata
+                // de un traspaso sí se sigue copiando: ahí las dos mitades son la misma plata.
+                val transferId = fila.transferId
+                if (nuevoMonto != null && transferId != null) {
+                    Events.update({
+                        (Events.userId eq uid) and (Events.transferId eq transferId) and (Events.id neq id)
+                    }) {
+                        it[amount] = nuevoMonto
+                    }
+                }
+                Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
+                    if (nuevoMonto != null) it[amount] = nuevoMonto
+                    if (nuevaCuenta != null) it[accountId] = nuevaCuenta
+                    if (nuevoConcepto != null) it[description] = nuevoConcepto
+                }
+
+                ResultadoDeEdicion.Ok(
+                    fila.copy(
+                        amount = nuevoMonto ?: fila.amount,
+                        accountId = nuevaCuenta ?: fila.accountId,
+                        description = nuevoConcepto ?: fila.description,
+                    ).withCashFlowFlag(accountTypesFor(uid)),
+                )
+            }
+
+            when (salida) {
+                is ResultadoDeEdicion.NoExiste -> call.respond(HttpStatusCode.NotFound)
+                is ResultadoDeEdicion.Rechazado -> call.respond(
+                    HttpStatusCode.fromValue(salida.rechazo.status),
+                    salida.rechazo.mensaje,
+                )
+                is ResultadoDeEdicion.Ok -> call.respond(salida.evento)
+            }
         }
 
         // ── Corregir la FECHA de un movimiento ya anotado ────────────────────────────────

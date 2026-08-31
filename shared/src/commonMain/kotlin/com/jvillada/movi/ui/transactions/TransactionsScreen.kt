@@ -48,7 +48,6 @@ import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.ui.accounts.VoidEventSheet
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -381,7 +380,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     var resolvedIds by remember { mutableStateOf(emptySet<String>()) }
     val pendingCandidates = candidates.filterNot { it.id in resolvedIds }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
-    var eventoAAnular by remember { mutableStateOf<FinancialEvent?>(null) }
     var showCandidatesSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshKey, refreshTick) {
@@ -672,10 +670,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     )
 
     selectedEvent?.let { event ->
-        ChangeCategorySheet(
+        // El mismo juego de hojas que abre el detalle de la cuenta — categoría, fecha, monto,
+        // cuenta, concepto, «esto se repite» y anular — porque es el mismo movimiento tocado.
+        // Ver [HojaDelMovimiento] para por qué está afuera de esta pantalla.
+        HojaDelMovimiento(
             event = event,
+            // Para poder mover el movimiento de cuenta. Es la MISMA lista que ya alimenta
+            // `accountNames`/`accountTypes` de esta pantalla — no una lectura nueva.
+            cuentas = accounts,
             onDismiss = { selectedEvent = null },
-            onEventChanged = { selectedEvent = null; refreshKey++ },
+            onCambiado = { selectedEvent = null; refreshKey++ },
             // Ola 16: el saldo inicial ya no se lista acá, pero la búsqueda lo sigue
             // encontrando — y quien lo busca es justamente el que se pregunta «¿de dónde
             // salieron estos $41 millones?». La hoja lo explica y esto lo lleva a donde de
@@ -685,21 +689,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             // que ningún botón.
             onVerCuenta = accountTypes[event.accountId]?.let { tipo ->
                 { onNavigate(Screen.AccountDetail(event.accountId, tipo.group)) }
-            },
-            onAnular = { eventoAAnular = event },
-        )
-    }
-
-    // Anular se pide desde la hoja de categoría y se confirma en su propia hoja — la misma que
-    // usa el detalle de la cuenta, no una copia. Se dibuja DESPUÉS para quedar encima.
-    eventoAAnular?.let { event ->
-        VoidEventSheet(
-            event = event,
-            onDismiss = { eventoAAnular = null },
-            onVoided = {
-                eventoAAnular = null
-                selectedEvent = null
-                refreshKey++
             },
         )
     }

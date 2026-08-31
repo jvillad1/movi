@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
+import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -239,6 +240,26 @@ interface WalletRepository {
      * server mueve **las dos**: la fecha de un traspaso es un solo hecho.
      */
     suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent
+
+    /**
+     * **Corrige el monto, la cuenta y el concepto de un movimiento ya registrado**
+     * (`PUT /api/events/{id}`).
+     *
+     * Cada campo de [cambios] es nullable y `null` significa «no toques este» — ver
+     * [EdicionDeMovimiento]. Devuelve el evento actualizado con `countsAsCashFlow` ya derivado:
+     * mover un gasto a una cuenta de deuda lo saca de las cifras del mes, y quien llama tiene que
+     * poder repintarlo sin volver a preguntar.
+     *
+     * Lanza [ApiException] con 400 (monto o concepto mal formados), 404 (el movimiento no existe,
+     * es de otro usuario, está anulado, o la cuenta destino no es suya) y 422 (una pata de un par
+     * intentando cambiar de cuenta, o una cuenta de otra moneda). El texto del error es el que se
+     * le muestra al dueño tal cual.
+     *
+     * **Si el movimiento es una pata de un par** (traspaso, pago de cuota, pago de tarjeta), el
+     * **monto se cambia en las dos mitades** — es un solo hecho con dos anotaciones — y la
+     * **cuenta no se puede cambiar** (ver [PATA_NO_CAMBIA_DE_CUENTA]).
+     */
+    suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent
 
     /**
      * La marca de «esto ya ocurrió» que algún recurrente puso sobre este movimiento, o `null` si

@@ -4,7 +4,12 @@ import com.jvillada.movi.shared.db.createDatabase
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUENTA_NO_ENCONTRADA
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
+import com.jvillada.movi.shared.model.EdicionDeMovimiento
+import com.jvillada.movi.shared.model.MONTO_INVALIDO
+import com.jvillada.movi.shared.model.PATA_NO_CAMBIA_DE_CUENTA
+import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -1394,6 +1399,230 @@ class LocalRepositoryTest {
 
         assertEquals(listOf("acc-web"), cuentas.map { it.id })
         assertTrue(tardo < 20_000L, "no puede quedarse esperando al server: tardó ${tardo}ms")
+    }
+
+    // ── Corregir el monto, la cuenta y el concepto (espejo de PUT /api/events/{id}) ──
+    //
+    // Lo que estas pruebas fijan y ninguna otra puede: del lado del server el saldo es DERIVADO
+    // (se suma de los eventos en cada lectura), pero acá `account.balance` es un **acumulado
+    // guardado**. Si `updateEvent` solo reescribiera el movimiento, el teléfono seguiría mostrando
+    // el saldo viejo — y sin red no habría lectura que lo pisara nunca.
+
+    @Test
+    fun updateEvent_pendiente_corrige_monto_y_ajusta_el_saldo_sin_llamar_al_server() = runBlocking {
+        repo.createAccount(Account("acc-monto", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-monto", "acc-monto", TransactionType.EXPENSE, 1_000_000L))
+        assertEquals(0L, repo.getAccount("acc-monto").balance)
+
+        val result = repo.updateEvent("evt-monto", EdicionDeMovimiento(amount = 300_000L))
+
+        assertEquals(300_000L, result.amount)
+        // Si hubiera ido al server, el stub (que no conoce "evt-monto") habría tirado 404.
+        assertEquals("acc-monto", result.accountId)
+        assertEquals(300_000L, repo.getEvents("acc-monto").single { it.id == "evt-monto" }.amount)
+        // El saldo se rehace con la diferencia: 1.000.000 − 300.000.
+        assertEquals(700_000L, repo.getAccount("acc-monto").balance)
+    }
+
+    /**
+     * **El caso del dueño, entero**: el movimiento «Hija» pasa de $4.000.000 en Bancolombia a
+     * $3.000.000 en Nu. Las DOS cuentas se mueven — la vieja recupera lo que había salido, la
+     * nueva paga lo que ahora sale de ella.
+     */
+    @Test
+    fun updateEvent_mover_de_cuenta_ajusta_las_DOS_cuentas() = runBlocking {
+        repo.createAccount(Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 10_000_000L))
+        repo.createAccount(Account("acc-nu", "Nu", AccountType.SAVINGS, 5_000_000L))
+        repo.postEvent(event("evt-hija", "acc-banco", TransactionType.EXPENSE, 4_000_000L))
+        assertEquals(6_000_000L, repo.getAccount("acc-banco").balance)
+
+        val result = repo.updateEvent(
+            "evt-hija",
+            EdicionDeMovimiento(amount = 3_000_000L, accountId = "acc-nu", description = "Hija"),
+        )
+
+        assertEquals("acc-nu", result.accountId)
+        assertEquals(3_000_000L, result.amount)
+        assertEquals(10_000_000L, repo.getAccount("acc-banco").balance, "la cuenta vieja recupera los 4M")
+        assertEquals(2_000_000L, repo.getAccount("acc-nu").balance, "la nueva paga los 3M")
+    }
+
+    /**
+     * El signo lo pone la cuenta de DESTINO, no la de origen: en una tarjeta un EXPENSE **sube la
+     * deuda**. Sin `signedDelta` mirando el tipo de cada cuenta, mudar un gasto a la tarjeta le
+     * habría BAJADO la deuda — el mismo hallazgo que ya se corrigió en `postEvent` y `voidEvent`.
+     */
+    @Test
+    fun updateEvent_mover_un_gasto_a_una_tarjeta_sube_la_deuda() = runBlocking {
+        repo.createAccount(Account("acc-ah", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.createAccount(Account("acc-tc", "AMEX", AccountType.CREDIT_CARD, 200_000L))
+        repo.postEvent(event("evt-compra", "acc-ah", TransactionType.EXPENSE, 150_000L))
+        assertEquals(850_000L, repo.getAccount("acc-ah").balance)
+
+        repo.updateEvent("evt-compra", EdicionDeMovimiento(accountId = "acc-tc"))
+
+        assertEquals(1_000_000L, repo.getAccount("acc-ah").balance, "el ahorro vuelve entero")
+        assertEquals(350_000L, repo.getAccount("acc-tc").balance, "en una tarjeta el gasto SUBE la deuda")
+    }
+
+    /** Las guardas de `:core` corren también en el camino local — igual que con la fecha. */
+    @Test
+    fun updateEvent_rechaza_un_monto_de_cero_sin_llamar_al_server() = runBlocking {
+        repo.createAccount(Account("acc-cero", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-cero", "acc-cero", TransactionType.EXPENSE, 20_000L))
+
+        val fallo = runCatching { repo.updateEvent("evt-cero", EdicionDeMovimiento(amount = 0L)) }
+            .exceptionOrNull()
+        assertTrue(fallo is ApiException && fallo.status == 400, "esperaba 400, fue $fallo")
+        assertEquals(MONTO_INVALIDO, (fallo as ApiException).serverMessage)
+        // Y no dejó la fila ni el saldo a medio cambiar.
+        assertEquals(20_000L, repo.getEvents("acc-cero").single { it.id == "evt-cero" }.amount)
+        assertEquals(980_000L, repo.getAccount("acc-cero").balance)
+    }
+
+    @Test
+    fun updateEvent_no_deja_mudar_de_cuenta_una_pata_de_un_par() = runBlocking {
+        repo.createAccount(Account("acc-o", "Ahorros", AccountType.SAVINGS, 5_000_000L))
+        repo.createAccount(Account("acc-d", "CDT", AccountType.SAVINGS, 0L))
+        repo.createAccount(Account("acc-tercera", "Nequi", AccountType.SAVINGS, 0L))
+        val traspaso = repo.createTransfer(
+            CreateTransferRequest(
+                transferId = "tr-local-1",
+                fromEventId = "ev-out-1",
+                toEventId = "ev-in-1",
+                fromAccountId = "acc-o",
+                toAccountId = "acc-d",
+                amount = 1_000_000L,
+                timestamp = 1_788_000_000_000L,
+            ),
+        )
+
+        val fallo = runCatching {
+            repo.updateEvent(traspaso.from.id, EdicionDeMovimiento(accountId = "acc-tercera"))
+        }.exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(PATA_NO_CAMBIA_DE_CUENTA, (fallo as ApiException).serverMessage)
+    }
+
+    /**
+     * Camino A: el evento ya está en el server, así que la corrección pasa por él y **después** se
+     * espeja — incluido el saldo local, que es lo que el teléfono muestra.
+     */
+    @Test
+    fun updateEvent_evento_sincronizado_pasa_por_el_server_y_espeja_saldo() = runBlocking {
+        val remoto = NoOpRepository(knownEventIds = setOf("evt-sync-edit"))
+        remoto.cuentasDelServer += Account("acc-sync-edit", "Ahorros", AccountType.SAVINGS, 1_000_000L)
+        remoto.eventosDelServer += event("evt-sync-edit", "acc-sync-edit", TransactionType.EXPENSE, 100_000L)
+            .copy(syncedAt = 1_700_000_000_000L)
+        val repoSincronizado = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+        repoSincronizado.createAccount(Account("acc-sync-edit", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repoSincronizado.postEvent(event("evt-sync-edit", "acc-sync-edit", TransactionType.EXPENSE, 100_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "evt-sync-edit")
+        assertEquals(900_000L, repoSincronizado.getAccount("acc-sync-edit").balance)
+
+        val result = repoSincronizado.updateEvent("evt-sync-edit", EdicionDeMovimiento(amount = 400_000L))
+
+        assertEquals(400_000L, result.amount)
+        assertEquals(600_000L, repoSincronizado.getAccount("acc-sync-edit").balance)
+        assertEquals(
+            400_000L,
+            repoSincronizado.getEvents("acc-sync-edit").single { it.id == "evt-sync-edit" }.amount,
+        )
+    }
+
+    /**
+     * **Un movimiento ANULADO no se edita, y el saldo del teléfono no se mueve dos veces.**
+     *
+     * El caso medido antes del arreglo: cuenta en $1.000.000 → gasto de $100.000 (queda en
+     * $900.000) → anular (vuelve a $1.000.000) → `updateEvent(amount = 900.000)` devolvía **éxito**
+     * y dejaba el saldo local en **$200.000**, porque `aplicarEdicionLocal` deshacía el efecto
+     * viejo y aplicaba el nuevo sobre un movimiento cuyo efecto ya estaba deshecho. El server
+     * nunca lo aceptó (trata un anulado como inexistente); era la única guarda suya que este
+     * espejo no repetía.
+     */
+    @Test
+    fun updateEvent_no_edita_un_movimiento_anulado_ni_le_mueve_el_saldo() = runBlocking {
+        repo.createAccount(Account("acc-anul", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-anul", "acc-anul", TransactionType.EXPENSE, 100_000L))
+        assertEquals(900_000L, repo.getAccount("acc-anul").balance)
+        repo.voidEvent("evt-anul")
+        assertEquals(1_000_000L, repo.getAccount("acc-anul").balance, "anular ya devolvió la plata")
+
+        val fallo = runCatching { repo.updateEvent("evt-anul", EdicionDeMovimiento(amount = 900_000L)) }
+            .exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 404, "esperaba 404, fue $fallo")
+        // Sin texto: es el mismo 404 vacío que devuelve el server, que la UI lee como «Recurso no
+        // encontrado.». Si acá inventáramos un mensaje, el mismo error se leería distinto con red
+        // y sin ella.
+        assertNull((fallo as ApiException).serverMessage)
+        assertEquals(1_000_000L, repo.getAccount("acc-anul").balance, "y el saldo no se movió")
+    }
+
+    /** El mismo hueco en el camino de la FECHA. No toca saldos, pero se cierra igual. */
+    @Test
+    fun updateEventTimestamp_tampoco_refecha_un_movimiento_anulado() = runBlocking {
+        repo.createAccount(Account("acc-anul-f", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-anul-f", "acc-anul-f", TransactionType.EXPENSE, 100_000L))
+        repo.voidEvent("evt-anul-f")
+
+        val fallo = runCatching { repo.updateEventTimestamp("evt-anul-f", 1_700_000_000_000L) }
+            .exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 404, "esperaba 404, fue $fallo")
+    }
+
+    /**
+     * **«Esa cuenta no existe» no se dice sobre una cuenta que sí existe.**
+     *
+     * La pre-validación corre siempre que la fila del movimiento esté local, y busca la cuenta
+     * destino en la tabla local. Pero el espejo de cuentas de un dispositivo puede estar
+     * incompleto, y entonces una edición que iba camino al server rebotaba con un
+     * `CUENTA_NO_ENCONTRADA` falso — sin haberle preguntado al único que tiene la lista completa.
+     * Acá el movimiento ya está sincronizado y la cuenta destino existe **solo del lado del
+     * server**: la edición tiene que pasar por él y salir bien.
+     */
+    @Test
+    fun updateEvent_una_cuenta_que_este_telefono_no_espejo_la_decide_el_server() = runBlocking {
+        val remoto = NoOpRepository(knownEventIds = setOf("evt-cuenta-remota"))
+        remoto.cuentasDelServer += Account("acc-local-1", "Ahorros", AccountType.SAVINGS, 1_000_000L)
+        // La cuenta destino: existe arriba y NO en la base de este teléfono.
+        remoto.cuentasDelServer += Account("acc-solo-server", "Nu", AccountType.SAVINGS, 0L)
+        remoto.eventosDelServer += event("evt-cuenta-remota", "acc-local-1", TransactionType.EXPENSE, 100_000L)
+            .copy(syncedAt = 1_700_000_000_000L)
+        val repoSincronizado = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+        repoSincronizado.createAccount(Account("acc-local-1", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repoSincronizado.postEvent(event("evt-cuenta-remota", "acc-local-1", TransactionType.EXPENSE, 100_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "evt-cuenta-remota")
+
+        val result = repoSincronizado.updateEvent(
+            "evt-cuenta-remota",
+            EdicionDeMovimiento(accountId = "acc-solo-server"),
+        )
+
+        assertEquals("acc-solo-server", result.accountId)
+        // Y la cuenta local que se quedó sin el movimiento recupera su plata.
+        assertEquals(1_000_000L, repoSincronizado.getAccount("acc-local-1").balance)
+    }
+
+    /**
+     * La contracara: **sin red no hay a quién preguntarle**. Un movimiento que todavía no subió se
+     * resuelve entero acá, así que una cuenta destino que este dispositivo no conoce sí es, para
+     * este camino, una cuenta que no existe — y el 404 local es la respuesta correcta.
+     */
+    @Test
+    fun updateEvent_sin_red_una_cuenta_desconocida_si_se_rechaza() = runBlocking {
+        repo.createAccount(Account("acc-pend", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(event("evt-pend", "acc-pend", TransactionType.EXPENSE, 100_000L))
+
+        val fallo = runCatching {
+            repo.updateEvent("evt-pend", EdicionDeMovimiento(accountId = "acc-que-no-esta"))
+        }.exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 404, "esperaba 404, fue $fallo")
+        assertEquals(CUENTA_NO_ENCONTRADA, (fallo as ApiException).serverMessage)
+        assertEquals(900_000L, repo.getAccount("acc-pend").balance, "y no tocó ningún saldo")
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

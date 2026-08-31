@@ -1,8 +1,10 @@
 package com.jvillada.movi.server.subscriptions
 
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import org.jetbrains.exposed.exceptions.ExposedSQLException
@@ -29,8 +31,31 @@ suspend fun runSubscriptionDetection(uid: String) {
         val existing = Subscriptions.selectAll()
             .where { Subscriptions.userId eq uid }
             .associateBy { it[Subscriptions.merchantKey] to it[Subscriptions.currency] }
+        // **Lo que el dueño ya anotó a mano como recurrente no se vuelve a descubrir.**
+        //
+        // Recurrentes muestra reglas y suscripciones en UNA sola lista y las suma juntas en
+        // «Gastos recurrentes». Desde que se puede decir «esto se repite» sobre un movimiento ya
+        // guardado, el camino a la duplicación quedó corto y realista: el dueño anota la regla
+        // «Netflix» desde el movimiento de este mes, dos meses después el detector ve los tres
+        // cargos y propone la suscripción «Netflix», él la confirma sin sospechar que es la misma
+        // — y a partir de ahí Movi le cuenta $44.900 dos veces y le muestra dos filas en
+        // «Próximos pagos».
+        //
+        // La guarda es simétrica de la que ya existía del otro lado (`shouldOfferRecurring` no
+        // ofrece una regla cuando ya hay una suscripción con ese nombre) y usa la MISMA
+        // comparación de nombres, [claveComparableDeNombre], para que las dos coincidan siempre.
+        //
+        // **Solo frena las ALTAS.** Una suscripción que ya existe se sigue refrescando (monto,
+        // último cobro, ocurrencias) aunque hoy haya una regla con ese nombre: puede ser un par
+        // que el dueño ya convivía antes de esta ola, y dejar de actualizarla sería empeorar
+        // datos que él ya está mirando en vez de evitar una fila nueva.
+        val nombresDeReglas = RecurringRules.selectAll()
+            .where { RecurringRules.userId eq uid }
+            .mapTo(mutableSetOf()) { claveComparableDeNombre(it[RecurringRules.name]) }
+            .filterNotTo(mutableSetOf()) { it.isEmpty() }
         for (d in detected) {
-            upsertDetected(uid, d, existing[d.merchantKey to d.currency])
+            val yaEsUnaRegla = claveComparableDeNombre(d.displayName) in nombresDeReglas
+            upsertDetected(uid, d, existing[d.merchantKey to d.currency], yaEsUnaRegla)
         }
     }
 }
@@ -71,11 +96,20 @@ private fun statusForNew(@Suppress("UNUSED_PARAMETER") d: DetectedSub): SubStatu
 // deja "abortada" (cualquier statement posterior falla) salvo que se haga rollback a un
 // savepoint — por eso no basta con un try/catch simple si se quiere seguir usando la misma
 // transacción externa (dbQuery) para el re-read + update.
-private fun Transaction.upsertDetected(uid: String, d: DetectedSub, row: ResultRow?) {
+private fun Transaction.upsertDetected(
+    uid: String,
+    d: DetectedSub,
+    row: ResultRow?,
+    /** ¿El dueño ya tiene una regla recurrente con este nombre? Ver [runSubscriptionDetection]. */
+    yaEsUnaRegla: Boolean = false,
+) {
     if (row != null) {
         applyExisting(row, d)
         return
     }
+    // Alta frenada: ya está anotado como regla, y dos filas para el mismo cobro le duplican el
+    // gasto en «Gastos recurrentes» y en «Próximos pagos».
+    if (yaEsUnaRegla) return
     val savepoint = connection.setSavepoint("sub_detect_${d.merchantKey}_${d.currency}")
     try {
         insertNew(uid, d)

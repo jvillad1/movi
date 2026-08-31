@@ -9,6 +9,9 @@ import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
+import com.jvillada.movi.shared.model.EdicionDeMovimiento
+import com.jvillada.movi.shared.model.validarEdicionDeMovimiento
+import com.jvillada.movi.shared.model.soloLoQueCambia
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.normalizarCondicion
@@ -975,6 +978,15 @@ class LocalRepository(
         val hoy = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds())
         if (fecha.year !in 2000..2100) throw ApiException(400, "Esa fecha no es de este siglo.")
         if (fecha > hoy) throw ApiException(422, EVENT_DATE_IN_FUTURE)
+        // Y la guarda de anulados, igual que en [updateEvent] (ver ahí el porqué largo). Acá el
+        // daño era menor —la fecha no toca ningún saldo— pero el hueco era el mismo y cerrarlo
+        // cuesta una línea: sin esto, un movimiento anulado en este teléfono se dejaba refechar y
+        // el server contestaba 404 al siguiente intento con red. Mismo 404 sin texto que allá.
+        if (db.financialEventQueries.selectById(id, uid).executeAsOneOrNull() != null &&
+            db.voidEventQueries.countFor(id).executeAsOne() > 0L
+        ) {
+            throw ApiException(404)
+        }
 
         val resolvedLocally = db.transactionWithResult {
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
@@ -1005,6 +1017,220 @@ class LocalRepository(
             db.financialEventQueries.updateTimestamp(updated.timestamp, updated.id, uid)
         }
         return updated
+    }
+
+    /**
+     * Corrige el **monto, la cuenta y el concepto** de un movimiento. Mismo esquema de dos caminos
+     * que [updateEventCategory] y [updateEventTimestamp], así que acá solo se anota lo que cambia.
+     *
+     * ### Lo que este espejo tiene que hacer y el server no: mover el SALDO
+     *
+     * Del lado del server el saldo de una cuenta es **derivado** —se suma de los eventos en cada
+     * lectura— así que corregir la fila alcanza. Acá no: `account.balance` es un **acumulado
+     * guardado** que [postEvent] y [voidEvent] mantienen a mano con [signedDelta]. Si esta función
+     * solo reescribiera el movimiento, el teléfono seguiría mostrando el saldo viejo hasta que una
+     * lectura con red lo pisara — y **sin red no lo pisaría nunca**.
+     *
+     * Entonces se hace la cuenta completa, con la misma convención de signo que el resto:
+     *
+     * - se **deshace** el efecto viejo (`- signedDelta(tipoViejo, tipo, montoViejo)`) sobre la
+     *   cuenta vieja,
+     * - se **aplica** el nuevo (`+ signedDelta(tipoNuevo, tipo, montoNuevo)`) sobre la nueva.
+     *
+     * Cuando la cuenta no cambia las dos operaciones caen sobre la misma fila y el neto es la
+     * diferencia de montos; cuando cambia, **se tocan las dos cuentas**. Y `signedDelta` mira el
+     * tipo de cada una, así que mover un gasto de una cuenta de ahorros a una tarjeta baja el
+     * ahorro y sube la deuda, que es exactamente lo que pasó.
+     *
+     * ### Las guardas
+     *
+     * Las mismas que el server y **antes** de elegir camino, por el mismo motivo que en
+     * [updateEventTimestamp]: el camino local nunca llama a `remote`, así que sin repetirlas un
+     * movimiento recién anotado se podría corregir a un monto negativo y el `SyncEngine` lo subiría
+     * después por `POST /api/events`, que no valida nada de esto. La lista vive en `:core`
+     * ([validarEdicionDeMovimiento]) para que las dos caras rechacen con el mismo código y las
+     * mismas palabras. La guarda de **anulado** no está en esa lista —necesita mirar una tabla—
+     * y se repite acá a mano, contra `void_event`.
+     *
+     * Las dos diferencias declaradas, y ninguna es un rechazo distinto:
+     *
+     * 1. La tabla local **no guarda la moneda del movimiento**, así que la comparación de monedas
+     *    usa la de su **cuenta actual**. Coinciden para todo lo que la app escribe (un movimiento
+     *    nace en la moneda de su cuenta) y el camino sin red solo corre para movimientos que la
+     *    app escribió y todavía no subió.
+     * 2. Cuando la edición **va a salir al server** y la cuenta destino no está espejada en este
+     *    dispositivo, la existencia de esa cuenta la decide el server y no esta pre-validación:
+     *    ver el comentario junto a `cambiosAValidar`.
+     */
+    override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
+        val uid = userId()
+        val types = accountTypes(uid)
+
+        val filaActual = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+        val cuentaActual = filaActual?.let { db.accountQueries.selectById(it.accountId).executeAsOneOrNull() }
+        val cuentaPedida = cambios.accountId?.let { db.accountQueries.selectById(it).executeAsOneOrNull() }
+            ?.takeIf { it.userId == uid }
+        // **Un movimiento ANULADO no se edita**, ni acá ni en el server (`PUT /api/events/{id}`
+        // trata como inexistente todo lo que tenga fila en `void_events`, igual que `/category` y
+        // `/timestamp`). Esta guarda faltaba y era la única del server que este espejo no
+        // repetía: medido, una cuenta en $1.000.000 con un gasto de $100.000 ya anulado —o sea
+        // de vuelta en $1.000.000— aceptaba «corregir» ese gasto a $900.000 y quedaba en
+        // $200.000, con el teléfono mintiendo hasta la próxima lectura con red. El alcance era
+        // chico (un anulado todavía sin sincronizar, sin red, dentro de la ventana de 30s del
+        // SyncEngine) pero el daño era un saldo falso, que es lo único que esta app no puede
+        // permitirse.
+        //
+        // Se lanza `ApiException(404)` **sin texto**, que es exactamente lo que produce el
+        // camino con red: el server responde 404 con el cuerpo vacío y `toUserMessage` lo
+        // traduce a «Recurso no encontrado.». Mismas palabras y mismo código en las dos caras.
+        if (filaActual != null && db.voidEventQueries.countFor(id).executeAsOne() > 0L) {
+            throw ApiException(404)
+        }
+        // Sin la fila local no hay nada que validar sin red: se deja pasar al server, que es el
+        // que sabe. Pasa de verdad — un movimiento que llegó por SMS o por extracto y que este
+        // dispositivo todavía no espejó.
+        if (filaActual != null) {
+            val comoModelo = filaActual.toModel(types)
+            // **La cuenta destino la valida el server cuando la edición va al server.** La
+            // pre-validación corre siempre que la fila esté local, pero el catálogo de cuentas de
+            // ESTE dispositivo puede estar incompleto (el espejo de cuentas y el de eventos se
+            // llenan por caminos distintos), y entonces `cuentaNueva = null` devolvía
+            // CUENTA_NO_ENCONTRADA sobre una cuenta que sí existe — un «Esa cuenta no existe.»
+            // falso, con red disponible y con el server a un viaje de distancia. Así que cuando
+            // la edición va a salir al server y la cuenta pedida no está espejada acá, el campo
+            // se saca de la validación local y decide el que tiene la lista completa (el pedido
+            // que viaja sigue llevando el `accountId` entero). Cuando la edición se resuelve sin
+            // red, en cambio, no hay a quién preguntarle: ahí el 404 local es la respuesta
+            // correcta.
+            val resolveraSinRed = filaActual.syncedAt == null
+            val cambiosAValidar = soloLoQueCambia(comoModelo, cambios).let { pedido ->
+                if (resolveraSinRed || cuentaPedida != null) pedido else pedido.copy(accountId = null)
+            }
+            val rechazo = validarEdicionDeMovimiento(
+                cambios = cambiosAValidar,
+                esPataDeUnPar = filaActual.transferId != null,
+                cuentaActualId = filaActual.accountId,
+                monedaDelMovimiento = cuentaActual?.currency ?: "COP",
+                cuentaNueva = cuentaPedida?.let {
+                    Account(
+                        id = it.id, name = it.name,
+                        type = AccountType.valueOf(it.type),
+                        balance = it.balance, currency = it.currency,
+                    )
+                },
+            )
+            if (rechazo != null) throw ApiException(rechazo.status, rechazo.mensaje)
+        }
+
+        val resolvedLocally = db.transactionWithResult {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            if (local != null && local.syncedAt == null) {
+                aplicarEdicionLocal(uid, local, cambios)
+            } else {
+                null
+            }
+        }
+        if (resolvedLocally != null) return resolvedLocally
+
+        val updated = remote.updateEvent(id, cambios)
+        db.transaction {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            // Se espeja **lo que devolvió el server**, no lo que se pidió: mismo criterio que
+            // `adjustCreditBalance`. Si el evento no está en este dispositivo no hay nada que
+            // espejar — la próxima lectura de `getEvents` lo trae ya corregido.
+            if (local != null) {
+                aplicarEdicionLocal(
+                    uid = uid,
+                    local = local,
+                    cambios = EdicionDeMovimiento(
+                        amount = updated.amount,
+                        accountId = updated.accountId,
+                        description = updated.description,
+                    ),
+                )
+            }
+        }
+        return updated
+    }
+
+    /**
+     * Escribe la edición en la fila local y **mueve los saldos acumulados** de la cuenta vieja y la
+     * nueva. Corre siempre dentro de una transacción abierta por quien llama.
+     *
+     * Devuelve el movimiento ya corregido, con `countsAsCashFlow` derivado **contra la cuenta
+     * nueva** — al revés diría que un gasto que acaba de mudarse a un crédito sigue contando en el
+     * mes, que es justo lo que deja de ser cierto.
+     */
+    private fun aplicarEdicionLocal(
+        uid: String,
+        local: com.jvillada.movi.Financial_event,
+        cambios: EdicionDeMovimiento,
+    ): FinancialEvent {
+        val montoNuevo = cambios.amount ?: local.amount
+        val cuentaNuevaId = cambios.accountId ?: local.accountId
+        val conceptoNuevo = cambios.description?.trim()?.takeIf { it.isNotEmpty() } ?: local.description
+        val tipo = TransactionType.valueOf(local.type)
+
+        // El monto de un par se mueve en las DOS mitades (la cuenta no se puede cambiar: la
+        // validación de arriba ya rechazó ese caso, así que la hermana se queda donde está).
+        //
+        // **COPIA el monto, y eso vale mientras las dos patas nazcan iguales** — misma nota que
+        // en el server (`EventRoutes`, `PUT /api/events/{id}`). Cuando entre el cambio ya
+        // decidido de que la pata de la DEUDA de un crédito que amortiza baje solo por el
+        // **capital** de la cuota, esta cascada tiene que **recalcular** esa hermana en vez de
+        // escribirle el mismo `montoNuevo`. La pata de un traspaso se sigue copiando: ahí las
+        // dos mitades son la misma plata.
+        //
+        // **Las hermanas se leen ANTES de escribirles**, y no es un detalle de estilo: el saldo se
+        // deshace con el monto VIEJO de cada una, y leerlas después de la cascada devolvería ya el
+        // nuevo — se restaría dos veces la cifra nueva y el saldo de esa cuenta quedaría mal por
+        // la diferencia, en silencio.
+        val transferId = local.transferId
+        val hermanas = if (transferId != null && montoNuevo != local.amount) {
+            db.financialEventQueries.selectByTransferId(transferId, uid).executeAsList()
+                .filter { it.id != local.id }
+        } else {
+            emptyList()
+        }
+
+        db.financialEventQueries.updateMovimiento(montoNuevo, cuentaNuevaId, conceptoNuevo, local.id, uid)
+        if (hermanas.isNotEmpty()) {
+            db.financialEventQueries.updateAmountByTransferId(montoNuevo, transferId!!, uid)
+        }
+
+        // El saldo acumulado: se deshace el efecto viejo donde estaba y se aplica el nuevo donde
+        // queda. Con la cuenta sin cambiar las dos caen sobre la misma fila y el neto es la
+        // diferencia; con la cuenta cambiada se mueven las dos.
+        moverSaldo(local.accountId, tipo, -local.amount)
+        moverSaldo(cuentaNuevaId, tipo, montoNuevo)
+        hermanas.forEach { hermana ->
+            val tipoHermana = TransactionType.valueOf(hermana.type)
+            moverSaldo(hermana.accountId, tipoHermana, -hermana.amount)
+            moverSaldo(hermana.accountId, tipoHermana, montoNuevo)
+        }
+
+        val types = accountTypes(uid)
+        return local.toModel(types).copy(
+            amount = montoNuevo,
+            accountId = cuentaNuevaId,
+            description = conceptoNuevo,
+        ).let { modelo ->
+            val tipoDeCuenta = types[cuentaNuevaId]
+            if (tipoDeCuenta == null) modelo
+            else modelo.copy(countsAsCashFlow = isCashFlow(tipoDeCuenta, modelo.type, modelo.category))
+        }
+    }
+
+    /**
+     * Suma a `account.balance` el efecto de [monto] con la convención de **esa** cuenta — un monto
+     * negativo deshace. Es [signedDelta] y no un `if INCOME suma`: en una LOAN/CREDIT_CARD un
+     * EXPENSE sube la deuda y un INGRESO la baja (mismo hallazgo que [postEvent] y [voidEvent]).
+     * Si la cuenta no está en este dispositivo no hay saldo que mover.
+     */
+    private fun moverSaldo(accountId: String, tipo: TransactionType, monto: Long) {
+        val acct = db.accountQueries.selectById(accountId).executeAsOneOrNull() ?: return
+        val delta = signedDelta(AccountType.valueOf(acct.type), tipo, monto)
+        db.accountQueries.updateBalance(acct.balance + delta, acct.id)
     }
 
     /**
