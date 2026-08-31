@@ -36,10 +36,10 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreateTransferRequest
-import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.TransferKind
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.transferKindFor
@@ -160,9 +160,16 @@ fun isAlreadyRegistered(error: Throwable): Boolean =
  * depositaba en la cuenta corriente no existía para Movi. Ahora los créditos aparecen en el
  * selector, en su propio grupo y al final (ver [TransferAccountPicker]), para las dos direcciones
  * reales — desembolso y abono extraordinario.
+ *
+ * **Ola 15 — la regla ya no vive acá.** Decía `it.type != AccountType.CREDIT_CARD` escrito a mano,
+ * y era una de cuatro copias del mismo criterio repartidas entre este archivo y la hoja de
+ * «Agregar». Hoy pregunta por [UsoDeCuenta.PUNTA_DE_TRASPASO] en `:core`, donde está el criterio
+ * entero y donde se prueba. Lo que se ofrece no cambió ni un renglón: acá se toma `principales`,
+ * o sea el filtro duro de siempre — un traspaso a una tarjeta no existe, y el «Ver todas» del
+ * selector de un gasto es otra pantalla y otra pregunta.
  */
 fun transferableAccounts(accounts: List<Account>): List<Account> =
-    accounts.filter { it.type != AccountType.CREDIT_CARD }
+    cuentasPara(accounts, UsoDeCuenta.PUNTA_DE_TRASPASO).principales
 
 /**
  * De dónde puede salir la cuenta **preseleccionada** de cada lado: solo cuentas de dinero o
@@ -178,7 +185,7 @@ fun transferableAccounts(accounts: List<Account>): List<Account> =
  * veía el formulario.
  */
 fun defaultTransferAccounts(accounts: List<Account>): List<Account> =
-    accounts.filter { it.type.group != AccountGroup.DEUDA }
+    cuentasPara(accounts, UsoDeCuenta.DINERO_PROPIO).principales
 
 /**
  * El renglón que dice **en qué queda la deuda del crédito** si se guarda este traspaso, o `null`
@@ -320,12 +327,12 @@ internal fun TransferBody(
     // En un pago, los dos lados ofrecen cosas distintas: de dónde sale la plata son cuentas de
     // dinero, y lo que se paga son deudas. En un traspaso, la misma lista para los dos.
     val elegibles = remember(accounts, esPago) {
-        if (esPago) accounts.filter { it.type.group != AccountGroup.DEUDA }
+        if (esPago) cuentasPara(accounts, UsoDeCuenta.DINERO_PROPIO).principales
         else transferableAccounts(accounts)
     }
     /** Lo que se puede pagar: préstamos y tarjetas. Vacío si el dueño no tiene ninguno. */
     val deudas = remember(accounts) {
-        accounts.filter { it.type == AccountType.LOAN || it.type == AccountType.CREDIT_CARD }
+        cuentasPara(accounts, UsoDeCuenta.DEUDA_QUE_SE_PAGA).principales
     }
     /** El lado «hacia» ofrece deudas en un pago, y las cuentas normales en un traspaso. */
     val elegiblesDestino = if (esPago) deudas else elegibles

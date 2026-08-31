@@ -101,7 +101,24 @@ internal data class PickersDeLaHoja(
      * El sub-picker propio NO se cierra a propósito: sigue siendo estado de esta pantalla,
      * sobrevive al cambio de pestaña y se puede cerrar normalmente (verificado ejecutando —
      * abrir «Cuenta» en Gasto y tocar «Traspaso» restaura bien).
+     *
+     * **Menos [Picker.Wallet], desde la Ola 15.** Ese sub-picker dejó de mostrar la misma lista en
+     * todas las pestañas: ahora la lista depende del uso (`cuentasPara`), así que con «Cuenta»
+     * abierto tocar «Ingreso» hace desaparecer la Nu y la AMEX, aparecer a Skandia y saltar la
+     * marca de selección — filas que se mueven bajo un dedo que ya está apoyado. No se pierde
+     * plata; es un salto visual, y el arreglo más chico que lo cierra es que la lista no se
+     * reescriba a espaldas de nadie: al cambiar de pestaña el selector se cierra y se vuelve a
+     * abrir mostrando lo de la pestaña nueva desde arriba. Los otros tres no dependen de la
+     * pestaña de esta manera y se quedan como estaban.
      */
     fun conTipo(nuevo: Int): PickersDeLaHoja =
-        if (nuevo == typeIndex) this else copy(typeIndex = nuevo, deTraspaso = false)
+        if (nuevo == typeIndex) {
+            this
+        } else {
+            copy(
+                typeIndex = nuevo,
+                propio = if (propio == Picker.Wallet) Picker.None else propio,
+                deTraspaso = false,
+            )
+        }
 }

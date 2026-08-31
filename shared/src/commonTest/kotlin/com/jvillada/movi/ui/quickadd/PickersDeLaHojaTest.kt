@@ -42,13 +42,40 @@ class PickersDeLaHojaTest {
 
     @Test
     fun `el sub-picker propio sobrevive al cambio de pestaña y se puede cerrar despues`() {
-        // Verificado ejecutando: abrir «Cuenta» en Gasto y tocar «Traspaso» restaura bien, porque
+        // Verificado ejecutando: abrir «Nota» en Gasto y tocar «Traspaso» restaura bien, porque
         // el picker propio es estado de la pantalla y nadie lo saca de composición.
-        val enTraspaso = PickersDeLaHoja().abrir(Picker.Wallet).conTipo(TIPO_TRASPASO)
+        val enTraspaso = PickersDeLaHoja().abrir(Picker.Note).conTipo(TIPO_TRASPASO)
 
-        assertEquals(Picker.Wallet, enTraspaso.propio)
+        assertEquals(Picker.Note, enTraspaso.propio)
         assertTrue(enTraspaso.hayPicker)
         assertFalse(enTraspaso.cerrar().hayPicker)
+    }
+
+    /**
+     * **La excepción de la Ola 15: el selector de CUENTA sí se cierra al cambiar de pestaña.**
+     *
+     * Dejó de mostrar la misma lista en todas las pestañas — ahora depende del uso
+     * (`cuentasPara`)—, así que con «Cuenta» abierto tocar «Ingreso» hacía desaparecer la Nu y la
+     * AMEX, aparecer a Skandia y saltar la marca de selección: filas moviéndose bajo un dedo que ya
+     * estaba apoyado. Cerrarlo es el arreglo más chico que lo evita, y deja la lista nueva
+     * empezando desde arriba en vez de reescribiéndose en el lugar.
+     */
+    @Test
+    fun `el sub-picker de Cuenta si se cierra al cambiar de pestaña`() {
+        val enIngreso = PickersDeLaHoja().abrir(Picker.Wallet).conTipo(1)
+
+        assertEquals(Picker.None, enIngreso.propio)
+        assertFalse(enIngreso.hayPicker)
+        assertTrue(enIngreso.cuerpoCompuesto)
+    }
+
+    @Test
+    fun `volver a tocar la pestaña en la que ya se esta no cierra el de Cuenta`() {
+        // No cambió ninguna lista, así que no hay ninguna fila que se mueva: cerrarlo acá sería
+        // castigar un toque que no hizo nada.
+        val abierto = PickersDeLaHoja(typeIndex = 1).abrir(Picker.Wallet)
+
+        assertEquals(abierto, abierto.conTipo(1))
     }
 
     // ── El sub-picker de Traspaso, que es estado de otro @Composable ───────────────────
@@ -85,7 +112,7 @@ class PickersDeLaHojaTest {
     }
 
     @Test
-    fun `y despues de eso abrir y cerrar Cuenta vuelve a mover hayPicker`() {
+    fun `y despues de eso abrir y cerrar un sub-picker vuelve a mover hayPicker`() {
         // El síntoma real no era el cambio de pestaña en sí: era que TODO viaje posterior a un
         // sub-picker dejaba de restaurar el desplazamiento. Esto afirma que el ciclo revive.
         val despues = PickersDeLaHoja(typeIndex = TIPO_TRASPASO).conPickerDeTraspaso(true).conTipo(0)

@@ -47,7 +47,10 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.CATEGORY_RESERVED_SHORT
+import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
@@ -256,35 +259,77 @@ fun QuickAddScreen(
     // tardó es la clase de mentira que esta ola vino a sacar.
     var accountsLoaded by remember { mutableStateOf(false) }
 
+    /**
+     * **Para qué se está eligiendo la cuenta en esta pestaña**, que es lo que decide qué se
+     * ofrece: de un gasto la plata SALE (efectivo, banco, tarjeta) y a un ingreso ENTRA
+     * (efectivo, banco, inversión). Ver [UsoDeCuenta], donde está el criterio entero.
+     *
+     * Las pestañas de traspaso y cuota no usan este valor —[TransferBody] tiene sus dos listas
+     * propias, que salen del mismo archivo de `:core`—, así que ahí da igual cuál de los dos
+     * quede; lo que importa es que al VOLVER a Gasto o Ingreso el valor sea el de la pestaña.
+     */
+    val usoDeCuenta = if (pickers.typeIndex == 1) {
+        UsoDeCuenta.DESTINO_DE_INGRESO
+    } else {
+        UsoDeCuenta.ORIGEN_DE_GASTO
+    }
+
+    /**
+     * **Qué cuenta queda elegida.** Se dispara por dos motivos —llegó la lista de cuentas, o
+     * cambió la pestaña— y es a propósito **una sola función con un solo efecto que la llama**:
+     * el momento en que esto se convierte en dos copias es el momento en que una se arregla y la
+     * otra no, que es el defecto que este repo ya se comió dos veces.
+     *
+     * La lista que se le pasa a [resolverCuenta] son SOLO las principales y **sin `conservar`**:
+     * lo que la app elige sola nunca puede ser una cuenta que quedó detrás del «Ver todas», o la
+     * hoja se abriría con una cuenta ya elegida que no está a la vista. Eso vale también para
+     * [presetAccountId]: si la hoja se abrió desde el detalle del crédito del vehículo, ese
+     * contexto no alcanza para poner el crédito como origen de un gasto — cae en la última usada,
+     * y de ahí en la primera de la lista.
+     */
+    fun reconciliarCuenta(lista: List<com.jvillada.movi.shared.model.Account>, uso: UsoDeCuenta) {
+        // Ola 11: la que el dueño acaba de elegir con el dedo no se toca —salvo que ya no
+        // exista—, y eso incluye una que él haya sacado del «Ver todas»: fue una decisión suya,
+        // y esta hoja no revoca decisiones suyas.
+        val eleccionFirme = origenCuenta == OrigenCuenta.ELEGIDA && lista.any { it.id == selectedAccountId }
+        if (eleccionFirme) return
+        val elegida = resolverCuenta(
+            cuentas = cuentasPara(lista, uso).principales,
+            contexto = presetAccountId,
+            ultima = LastAccountStore.lastAccountId,
+        )
+        selectedAccountId = elegida.id
+        origenCuenta = elegida.origen
+    }
+
+    // **El único llamador de [reconciliarCuenta].**
+    //
+    // Corre cuando llega (o cambia) la lista de cuentas —el camino de siempre: antes esto vivía
+    // adentro del `onSuccess` de la carga— y **también cuando cambia la pestaña**. Lo segundo no
+    // es cosmético: si la última cuenta usada fue la pensión voluntaria, en «Ingreso» queda
+    // elegida (un rendimiento entra ahí) y al pasar a «Gasto» ya no sirve. Sin esta segunda
+    // llave, la hoja se quedaría con una cuenta que su propio selector no ofrece — que es
+    // exactamente el defecto que esta rama vino a cerrar, por otra puerta.
+    //
+    // Se espera a que la lista haya llegado: con `accounts` vacía esto pondría la cuenta en null
+    // y se llevaría puesto el `presetAccountId` con el que se abrió la hoja (ver B3 más abajo,
+    // que depende de que el preset sobreviva a un `getAccounts()` fallido).
+    //
+    // **Anotado, no arreglado (B2 de la revisión de la Ola 11):** esto también corre después de
+    // crear una cuenta desde esta misma hoja (`accountsRefreshKey++` cambia la lista), y ahí
+    // puede MOVER la preselección — master conservaba la que estuviera. Pasa solo si el dueño no
+    // había elegido a mano, y el cambio se ve (la fila dice el nombre nuevo con su «Por
+    // defecto»), así que probablemente sea mejor así: quien acaba de crear una cuenta suele
+    // querer estrenarla.
+    LaunchedEffect(accounts, accountsLoaded, usoDeCuenta) {
+        if (accountsLoaded) reconciliarCuenta(accounts, usoDeCuenta)
+    }
+
     LaunchedEffect(accountsRefreshKey) {
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { list ->
                 accountsLoaded = true
                 accounts = list
-                // Ola 11: la que el dueño acaba de elegir con el dedo no se toca —salvo que ya
-                // no exista—, y para todo lo demás decide [resolverCuenta]: contexto, después la
-                // última usada, y recién después la primera de la lista. Antes acá había un
-                // `list.firstOrNull()` a secas, y «la primera» no estaba definida en ninguna
-                // parte (ni el server ni SQLDelight ordenaban): la cuenta preseleccionada podía
-                // cambiar sola entre sesiones, sin que nada cambiara a la vista.
-                // **Anotado, no arreglado (B2 de la revisión):** este efecto también corre
-                // después de crear una cuenta desde esta misma hoja (`accountsRefreshKey++`), y
-                // ahí puede MOVER la preselección — master conservaba la que estuviera. Pasa
-                // solo si el dueño no había elegido a mano, y el cambio se ve (la fila dice el
-                // nombre nuevo con su «Por defecto»), así que probablemente sea mejor así: quien
-                // acaba de crear una cuenta suele querer estrenarla. Queda escrito porque es un
-                // cambio de comportamiento que ningún otro comentario nombra.
-                val eleccionFirme = origenCuenta == OrigenCuenta.ELEGIDA &&
-                    list.any { it.id == selectedAccountId }
-                if (!eleccionFirme) {
-                    val elegida = resolverCuenta(
-                        cuentas = list,
-                        contexto = presetAccountId,
-                        ultima = LastAccountStore.lastAccountId,
-                    )
-                    selectedAccountId = elegida.id
-                    origenCuenta = elegida.origen
-                }
             }
     }
 
@@ -353,6 +398,18 @@ fun QuickAddScreen(
         else -> null
     }
     val selectedAccount = accounts.firstOrNull { it.id == selectedAccountId }
+
+    /**
+     * Lo que el selector de cuenta muestra: las que sirven para esta pestaña arriba, el resto
+     * detrás del «Ver todas».
+     *
+     * `conservar = selectedAccountId` es lo que impide que la cuenta elegida se esconda: si el
+     * dueño sacó una del «Ver todas» —o si un día esta hoja se abre sobre un movimiento viejo
+     * anotado en una cuenta que hoy no se ofrecería—, la fila tiene que seguir a la vista y
+     * marcada. Ojo: **acá sí va `conservar`, y en [reconciliarCuenta] no** — «mostrarla» y
+     * «elegirla por su cuenta» son dos permisos distintos, y la app solo tiene el primero.
+     */
+    val cuentasDelPicker = cuentasPara(accounts, usoDeCuenta, conservar = selectedAccountId)
 
     fun save() {
         if (!canSave) return
@@ -672,7 +729,8 @@ fun QuickAddScreen(
                             Spacer(Modifier.height(4.dp))
                         }
                         Picker.Wallet -> WalletPicker(
-                            accounts = accounts,
+                            cuentas = cuentasDelPicker,
+                            uso = usoDeCuenta,
                             selectedId = selectedAccountId,
                             onPick = {
                                 selectedAccountId = it
@@ -1236,22 +1294,56 @@ internal fun PickerHeader(title: String, onClose: () -> Unit) {
     }
 }
 
+/**
+ * El sub-picker de «Cuenta» de las pestañas Gasto e Ingreso.
+ *
+ * **Ola 15 — acá había `items(accounts)` sobre la lista entera, o sea ningún criterio.** El dueño
+ * abría «¿de qué cuenta sale este gasto?» y veía «Vehículo 4083 · $177.200.000», que no es plata
+ * suya: es lo que debe por un crédito ya desembolsado. Ahora la lista viene partida por
+ * [cuentasPara] según [uso] — de un gasto la plata sale del efectivo, del banco o de una tarjeta;
+ * a un ingreso entra al efectivo, al banco o a la inversión.
+ *
+ * **Lo excluido no desaparece**: queda detrás de «Ver todas», plegado. Es una regla del proyecto —
+ * nada que solo se pueda destrabar tocando código, porque el resto de la gente no tiene a nadie al
+ * lado para editarle un `filter`— y además es lo honesto: la app no sabe todo. Lo que sí no hace
+ * nunca es *proponer* una de esas cuentas sola (ver `reconciliarCuenta`).
+ */
 @Composable
-private fun WalletPicker(
-    accounts: List<com.jvillada.movi.shared.model.Account>,
+internal fun WalletPicker(
+    cuentas: CuentasDelPicker,
+    uso: UsoDeCuenta,
     selectedId: String?,
     onPick: (String) -> Unit,
     onClose: () -> Unit,
 ) {
+    // Se pliega de nuevo cada vez que se abre el sub-picker: la lista corta es la respuesta
+    // normal, y quien necesitó la larga una vez no tiene por qué verla siempre.
+    //
+    // **Salvo que la corta esté vacía.** Quien solo tiene créditos e inversión abriría el
+    // selector y vería nada, con la salida escondida detrás de un renglón que parece un pie de
+    // página: un callejón sin salida disfrazado de lista. Ahí se abre ya desplegado.
+    //
+    // **La llave del `remember` no es decorativa.** Sin ella, ese valor inicial se congela en la
+    // PRIMERA composición y no vuelve a mirarse: la fila «Cuenta» es alcanzable antes de que la
+    // lista llegue (`hasNoAccounts` solo es cierto con `accountsLoaded`), así que con la red lenta
+    // el selector abría vacío → `verTodas = true` → llegaban las cuentas y se dibujaban TODAS,
+    // desplegadas, con «Vehículo 4083 · $177.200.000» en el medio. Exactamente la pantalla que
+    // esta rama vino a arreglar, servida por el arreglo. Con la llave puesta, el día que
+    // `principales` deja de estar vacía el pie se vuelve a plegar solo — y un toque del dueño en
+    // «Ver todas» sigue sobreviviendo, porque tocar no cambia la llave.
+    var verTodas by remember(cuentas.principales.isEmpty()) {
+        mutableStateOf(cuentas.principales.isEmpty())
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         PickerHeader("Cuenta", onClose)
-        if (accounts.isEmpty()) {
+        if (cuentas.vacio) {
             // F10: este picker ya no debería ser alcanzable sin cuentas (ver el onClick de la
             // fila "Cuenta" en EditorBody), pero el texto no miente si de todos modos se llega.
             Text("No tienes cuentas todavía.", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
         } else {
+            val visibles = if (verTodas) cuentas.todas else cuentas.principales
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                items(accounts) { account ->
+                items(visibles) { account ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1267,10 +1359,7 @@ private fun WalletPicker(
                                 fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                             )
                             Text(
-                                // Ola 8: iba crudo — «$3500000» en vez de «$3.500.000». Es la
-                                // pantalla donde el dueño elige de qué cuenta sale la plata, así
-                                // que el saldo tiene que leerse de un vistazo.
-                                formatCOP(account.balance),
+                                saldoDeLaCuenta(account),
                                 fontSize = 12.sp,
                                 color = MinTextMute,
                             )
@@ -1278,9 +1367,48 @@ private fun WalletPicker(
                         if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinText, modifier = Modifier.size(16.dp))
                     }
                 }
+                // Va DENTRO del LazyColumn y no debajo: con muchas cuentas la lista llega a su
+                // tope de 360 dp y todo lo que quedara afuera del scroll sería inalcanzable —
+                // que es justamente el modo de falla que esta rama vino a arreglar, al revés.
+                if (cuentas.hayOtras) {
+                    item {
+                        VerTodasLasCuentas(
+                            expandido = verTodas,
+                            cuantas = cuentas.otras.size,
+                            uso = uso,
+                            onToggle = { verTodas = !verTodas },
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+/**
+ * El saldo que va debajo del nombre de la cuenta.
+ *
+ * Tres arreglos de la Ola 15, los tres del mismo renglón:
+ *
+ * 1. **La moneda.** Iba `formatCOP(account.balance)` a secas, y `balance` es el componente COP de
+ *    la cuenta (lo deriva `enrichWith`): la «Master Black 3684 USD» del dueño se mostraba como
+ *    «$0». Ahora sale en SU moneda — y con SU rótulo, que es lo que arregla [saldoEnSuMoneda]:
+ *    sin red no hay `balancesByCurrency`, y el respaldo viejo escribía el componente en PESOS con
+ *    el símbolo del dólar. Para una cuenta en pesos el texto es carácter por carácter el de antes
+ *    (`signedMoney(x, "COP")` y `formatCOP(x)` producen lo mismo).
+ * 2. **Deber no es tener.** Bajo una tarjeta, «$1.240.000» se lee como plata disponible cuando es
+ *    exactamente lo contrario. Desde que las tarjetas se ofrecen para gastar (que es el pedido),
+ *    ese renglón tiene que decir qué es: «Debes $1.240.000».
+ * 3. **Y deber de menos es tener.** En una tarjeta un saldo NEGATIVO es plata a favor: si el dueño
+ *    sobrepagó la Nu, «Debes −$50.000» dice dos cosas opuestas en cuatro palabras. La inversión
+ *    del signo no se reescribe acá: sale de [saldoDeDeuda], donde también la lee la tarjeta grande
+ *    del detalle de la cuenta.
+ */
+private fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): String {
+    val (monto, moneda) = saldoEnSuMoneda(account)
+    if (!isDebtAccount(account.type)) return signedMoney(monto, moneda)
+    val saldo = saldoDeDeuda(monto, moneda)
+    return if (saldo.aFavor) "A favor ${saldo.magnitud}" else "Debes ${saldo.magnitud}"
 }
 
 @Composable

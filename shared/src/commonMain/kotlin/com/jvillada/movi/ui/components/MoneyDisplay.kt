@@ -46,9 +46,74 @@ fun assetsDebtsNet(accounts: List<Account>): Triple<Long, Long, Long> {
     return Triple(activos, deudas, activos - deudas)
 }
 
-/** The display value for a card's debt and whether it is a TRM estimate. */
+/**
+ * **El total de la deuda, en pesos, estimado cuando hace falta.** La convención de la tarjeta
+ * grande del detalle de una cuenta: un solo número, siempre en COP, con «≈» cuando lo de adentro
+ * pasó por la TRM.
+ *
+ * Ver [saldoEnSuMoneda], que es la OTRA convención de la app y está a propósito acá al lado.
+ */
 fun cardDebt(account: Account): Pair<Long, Boolean> =
     (account.estimatedTotalCop ?: account.balance) to (account.estimatedTotalCop != null)
+
+/**
+ * **El saldo de una cuenta en la moneda de la cuenta**, con la moneda con que hay que rotularlo.
+ *
+ * ## Por qué esto NO es [cardDebt], y por qué las dos conviven
+ *
+ * La «Master Black 3684 USD» del dueño sale acá como `181 a "USD"` y en [cardDebt] como
+ * `≈1.5xx.xxx COP`. Son dos cifras distintas para la misma tarjeta, y las dos son ciertas —
+ * contestan preguntas distintas:
+ *
+ * - **[cardDebt] contesta «¿cuánto pesa esto en mi patrimonio?»**, que solo se puede contestar en
+ *   una sola moneda y por lo tanto es siempre una estimación cuando hay dólares adentro. Es lo que
+ *   necesita la tarjeta grande del detalle, que es la pantalla del patrimonio de esa cuenta, y por
+ *   eso ahí abajo va además el desglose por moneda (`CurrencyBreakdown`) y la TRM aplicada.
+ * - **Esto contesta «¿cuánto hay/debo acá?»**, exacto y sin TRM. Es lo que necesita un renglón de
+ *   una LISTA de cuentas —el selector de «¿de dónde sale la plata?»—, donde no hay lugar para un
+ *   desglose ni para explicar una estimación, y donde poner un número aproximado sin poder decir
+ *   que lo es sería peor que decir la cifra exacta con su símbolo.
+ *
+ * O sea: **una cifra por pantalla, elegida por lo que la pantalla pregunta**, y las dos con la
+ * moneda a la vista para que nadie las lea como si fueran la misma.
+ *
+ * ## El respaldo, que antes mentía
+ *
+ * Sin red, [com.jvillada.movi.shared.repository.LocalRepository] arma el `Account` desde la fila
+ * de SQLDelight, que guarda `balance` y `currency` pero **no** `balancesByCurrency`. Con un
+ * respaldo `?: account.balance` a secas, el componente en PESOS salía rotulado con la moneda de la
+ * cuenta: «Debes US$15.534.069» sobre una cifra en COP. Por eso el respaldo devuelve también su
+ * propia moneda: si lo único que se sabe es el componente en pesos, se dice en pesos. Menos
+ * informativo que el número en dólares, y verdadero, que es el orden correcto.
+ *
+ * @return el monto y la moneda con la que hay que escribirlo.
+ */
+fun saldoEnSuMoneda(account: Account): Pair<Long, String> =
+    account.balancesByCurrency[account.currency]?.let { it to account.currency }
+        ?: (account.balance to "COP")
+
+/**
+ * **En una cuenta de deuda el signo va al revés**, y este es el único lugar donde eso está escrito.
+ *
+ * En una tarjeta o un préstamo, `balance` positivo es lo que se DEBE; un balance **negativo** es
+ * saldo a favor — el dueño sobrepagó la Nu. Escribirlo con el signo crudo produce «Debes
+ * −$50.000», que dice dos cosas opuestas en cuatro palabras.
+ *
+ * Devuelve las dos mitades y no el texto entero porque los dos lugares que lo dicen lo dicen
+ * distinto, y está bien que así sea: la tarjeta grande del detalle de la cuenta tiene el espacio y
+ * el color para un «+$50.000» en verde; el renglón del selector de cuentas, que es una línea de
+ * 12 sp bajo un nombre, necesita la palabra («A favor $50.000»), porque ahí un «+» suelto no se
+ * lee. Lo que **no** puede volver a pasar es que cada uno decida por su cuenta qué significa el
+ * menos.
+ *
+ * @property aFavor la cifra está a favor del dueño, no en su contra.
+ * @property magnitud el monto sin signo, ya escrito en su moneda.
+ */
+data class SaldoDeDeuda(val aFavor: Boolean, val magnitud: String)
+
+/** Ver [SaldoDeDeuda]. */
+fun saldoDeDeuda(monto: Long, currency: String = "COP"): SaldoDeDeuda =
+    SaldoDeDeuda(aFavor = monto < 0, magnitud = formatMoney(kotlin.math.abs(monto), currency))
 
 /** USD→COP rate the server applied, derived from the estimate. Null when not applicable. */
 fun impliedTrm(account: Account): Long? {
