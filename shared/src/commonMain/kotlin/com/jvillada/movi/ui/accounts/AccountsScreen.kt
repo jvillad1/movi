@@ -36,6 +36,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.dashboard.heroBalance
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
@@ -181,7 +182,14 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 } else if (accounts.isNotEmpty()) {
                     // Total assets card
                     item {
-                        val (activos, deudas, neto) = assetsDebtsNet(accounts)
+                        // **La MISMA función que el hero del Inicio**, no `assetsDebtsNet` por su
+                        // cuenta. Con «Activos» sumando todo, esta tarjeta decía $137.625.167 al
+                        // lado de un Inicio que ya decía «Tu plata $31.625.167» — dos pantallas
+                        // calculando la misma regla distinto, que es el error que este proyecto
+                        // ya cometió dos veces (Créditos vs. Inicio en la Ola 4, los presupuestos
+                        // en la Ola 16). El desglose de abajo ahora escribe la cuenta completa:
+                        // tu plata + lo condicionado − las deudas = el patrimonio de arriba.
+                        val balance = heroBalance(accounts)
                         MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
@@ -196,7 +204,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             )
                             Spacer(Modifier.height(8.dp))
                             MonoText(
-                                text = formatCOP(neto), // formatCOP ya trae el signo (F36) — no duplicarlo acá
+                                text = formatCOP(balance.patrimonio), // formatCOP ya trae el signo (F36) — no duplicarlo acá
                                 fontSize = 28f,
                                 // Ola 9: **neutro en los dos signos**, como el patrimonio del Inicio.
                                 // Antes era verde/rojo según el signo, y la línea nueva del Inicio
@@ -216,17 +224,36 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Text("Activos", fontSize = 12.sp, color = MinTextMute)
-                                MonoText(formatCOP(activos), 12f, color = MinIncome)
+                                // «Tu plata» y no «Activos»: es el mismo número y el mismo rótulo
+                                // que la cifra grande del Inicio, y compartir la palabra es lo
+                                // que hace obvio que son la misma cosa vista dos veces.
+                                Text("Tu plata", fontSize = 12.sp, color = MinTextMute)
+                                MonoText(formatCOP(balance.tuPlata), 12f, color = MinIncome)
                             }
-                            if (deudas > 0) {
+                            // El renglón que faltaba: sin él, tu plata − deudas no daba el
+                            // patrimonio de arriba y el lector no tenía forma de cerrar la resta.
+                            if (balance.condicionado > 0L) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = balance.condicionadoA?.let { "Solo para $it" } ?: "De uso condicionado",
+                                        fontSize = 12.sp,
+                                        color = MinTextMute,
+                                    )
+                                    MonoText(formatCOP(balance.condicionado), 12f, color = MinTextDim)
+                                }
+                            }
+                            if (balance.deudas > 0) {
                                 Spacer(Modifier.height(4.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text("Deudas", fontSize = 12.sp, color = MinTextMute)
-                                    MonoText("−${formatCOP(deudas)}", 12f, color = MinExpense)
+                                    MonoText("−${formatCOP(balance.deudas)}", 12f, color = MinExpense)
                                 }
                             }
                         }

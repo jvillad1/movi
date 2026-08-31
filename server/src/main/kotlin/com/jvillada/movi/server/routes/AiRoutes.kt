@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.normalizarCondicion
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -225,13 +226,37 @@ internal fun toMessageParam(m: ChatMessage): MessageParam {
     return builder.contentOfBlockParams(blocks).build()
 }
 
-private suspend fun buildUserContext(uid: String): String {
+/**
+ * Lo que el asistente necesita saber de una cuenta. Era un `Triple`, y no cabía un cuarto dato
+ * sin volverlo ilegible — que es justo lo que hizo falta cuando apareció [condicionadaA].
+ */
+private data class AccountForContext(
+    val id: String,
+    val name: String,
+    val type: AccountType,
+    val condicionadaA: String?,
+)
+
+/**
+ * `internal` y no `private`: hay un test que fija que una cuenta condicionada llegue MARCADA al
+ * asistente. Sin la marca, «Skandia (INVESTMENT): saldo 106.000.000» es plata que el modelo suma
+ * al contestar «¿cuánta plata disponible tengo?» — el mismo error que el Inicio dejó de cometer,
+ * ahora en la boca del asistente.
+ */
+internal suspend fun buildUserContext(uid: String): String {
     val rate = FxRateService.usdToCop()
 
     // Accounts with their computed COP value
     val accountRows = dbQuery {
         Accounts.selectAll().where { Accounts.userId eq uid }
-            .map { Triple(it[Accounts.id], it[Accounts.name], AccountType.valueOf(it[Accounts.type])) }
+            .map {
+                AccountForContext(
+                    id = it[Accounts.id],
+                    name = it[Accounts.name],
+                    type = AccountType.valueOf(it[Accounts.type]),
+                    condicionadaA = normalizarCondicion(it[Accounts.conditionedTo]),
+                )
+            }
     }
     val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
 
@@ -289,10 +314,18 @@ private suspend fun buildUserContext(uid: String): String {
         if (accountRows.isEmpty()) {
             appendLine("- (sin cuentas registradas)")
         } else {
-            accountRows.forEach { (id, name, type) ->
-                val value = accountCopValue(type, eventsByAccount[id] ?: emptyList(), rate)
-                val kind = if (type == AccountType.CREDIT_CARD || type == AccountType.LOAN) "deuda" else "saldo"
-                appendLine("- $name ($type): $kind \$$value")
+            accountRows.forEach { cuenta ->
+                val value = accountCopValue(cuenta.type, eventsByAccount[cuenta.id] ?: emptyList(), rate)
+                val kind = if (cuenta.type == AccountType.CREDIT_CARD || cuenta.type == AccountType.LOAN) "deuda" else "saldo"
+                // **La condición viaja en el contexto o el asistente contesta mal.** «Skandia
+                // (INVESTMENT): saldo $106.000.000» sin marca es plata que el modelo suma al
+                // contestar «¿cuánta plata disponible tengo?» — el mismo error que el Inicio
+                // acaba de dejar de cometer, ahora en la boca del asistente. Ver
+                // `Account.condicionadaA`.
+                val condicion = cuenta.condicionadaA
+                    ?.let { " — NO disponible: solo se puede usar para $it (cuenta en el patrimonio, no en la plata disponible)" }
+                    .orEmpty()
+                appendLine("- ${cuenta.name} (${cuenta.type}): $kind \$$value$condicion")
             }
         }
         appendLine()

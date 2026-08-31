@@ -180,7 +180,12 @@ private suspend fun processUser(
 
 // ── HTML builder ─────────────────────────────────────────────────────────────
 
-private fun buildHtmlEmail(
+/**
+ * `internal` y no `private`: es un renderer del monto de una regla y hay un test que fija que
+ * respete `montoEsSaldo`. La bandera nació con un renderer que no la miraba (el push) y sin
+ * ningún test que lo notara — ver `TarjetaNoInventaElPagoTest`.
+ */
+internal fun buildHtmlEmail(
     rules: List<RecurringRule>,
     today: LocalDate,
     leadDays: Int,

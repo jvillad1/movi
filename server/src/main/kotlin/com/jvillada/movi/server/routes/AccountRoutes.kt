@@ -41,6 +41,9 @@ import org.slf4j.LoggerFactory
 import io.ktor.server.routing.put
 import com.jvillada.movi.shared.model.RenameAccountRequest
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_NAME_LENGTH
+import com.jvillada.movi.shared.model.MAX_ACCOUNT_CONDITION_LENGTH
+import com.jvillada.movi.shared.model.UpdateAccountConditionRequest
+import com.jvillada.movi.shared.model.normalizarCondicion
 
 private val accountsLog = LoggerFactory.getLogger("AccountRoutes")
 
@@ -151,6 +154,47 @@ fun Route.accountRoutes() {
             call.respond(actualizada)
         }
 
+        /**
+         * Marcar (o desmarcar) para qué se puede usar la plata de una cuenta.
+         *
+         * **Esta ruta existe porque el campo nacía muerto.** `accounts.conditioned_to` solo se
+         * podía escribir en el `POST` de creación, y la cuenta que motivó el campo —la pensión
+         * voluntaria del dueño en Skandia, $106.000.000 que solo puede retirar para vivienda—
+         * ya existía en producción desde antes. Ni desplegando el cálculo el dueño podía marcarla:
+         * el único camino era tocar la base a mano. Es el mismo defecto que tuvo `PUT /{id}/name`
+         * antes de existir, y la misma regla del proyecto: nada de ajustes que solo se cambien
+         * tocando código.
+         *
+         * Vacío (`""` o `null`) = sin condición, y esa plata vuelve a «Tu plata». Se recorta a
+         * [MAX_ACCOUNT_CONDITION_LENGTH] con [normalizarCondicion] —la misma función que usa el
+         * `POST` de arriba y la UI— en vez de rechazar con un 400: el largo es una limitación de
+         * la columna, no una regla que el dueño tenga que aprender.
+         *
+         * Solo toca esa columna: el saldo se deriva de los eventos y los movimientos apuntan por
+         * `accountId`, así que marcar una condición no mueve ni un peso — cambia dónde se cuenta.
+         */
+        put("/{id}/conditioned-to") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val condicion = normalizarCondicion(call.receive<UpdateAccountConditionRequest>().condicionadaA)
+            val filas = dbQuery {
+                Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) {
+                    it[conditionedTo] = condicion
+                }
+            }
+            if (filas == 0) return@put call.respond(HttpStatusCode.NotFound)
+            val base = dbQuery {
+                Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.first().toAccount()
+            }
+            // **Enriquecida**, como `GET /{id}` y a diferencia de `PUT /{id}/name`: la respuesta
+            // se espeja tal cual en la fila local del cliente (`mirrorAccountLocally`), y
+            // `toAccount()` a secas trae el `accounts.balance` CRUDO — una columna que ya no se
+            // lee para nada porque el saldo se deriva de los eventos. Devolverla sin enriquecer
+            // le escribiría al teléfono un saldo falso que se vería hasta la próxima lectura con
+            // red, justo en el arreglo que existe para que lo local no mienta.
+            call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
+        }
+
         post {
             val body = call.receive<Account>()
             val uid = call.userId()
@@ -165,7 +209,7 @@ fun Route.accountRoutes() {
                     it[type]     = account.type.name
                     it[balance]  = account.balance
                     it[currency] = account.currency
-                    it[conditionedTo] = account.condicionadaA?.trim()?.take(60)?.takeIf { c -> c.isNotEmpty() }
+                    it[conditionedTo] = normalizarCondicion(account.condicionadaA)
                 }
             }
             call.respond(HttpStatusCode.Created, account)

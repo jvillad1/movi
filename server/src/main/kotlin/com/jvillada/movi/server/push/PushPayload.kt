@@ -25,7 +25,14 @@ fun buildPushPayload(selected: List<RecurringRule>, today: LocalDate, leadDays: 
             PaymentStatus.DUE_SOON  -> "vence en $daysUntil ${if (daysUntil == 1) "día" else "días"}"
             PaymentStatus.UPCOMING  -> "próximamente"
         }
-        "${rule.name} — $${formatMiles(rule.amount)} ($estado)"
+        // Una tarjeta no tiene cuota: su monto es el SALDO. **Este es el canal que suena**, así
+        // que anunciar «Pago tarjeta AMEX 9208 — $27.501.150 (vence hoy)» es la versión más
+        // ruidosa del número que esta rama vino a corregir. Mismo copy que el email y que el
+        // Inicio: el saldo, dicho con su nombre. Ver `RecurringRule.montoEsSaldo`.
+        val monto =
+            if (rule.montoEsSaldo) "saldo $${formatMiles(rule.amount)}"
+            else "$${formatMiles(rule.amount)}"
+        "${rule.name} — $monto ($estado)"
     }
     val extra = selected.size - MAX_LINES
     val body = (lines + if (extra > 0) listOf("…y $extra más") else emptyList()).joinToString("\n")

@@ -41,6 +41,7 @@ import com.jvillada.movi.ui.dashboard.heroBalanceTitle
 import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
 import com.jvillada.movi.ui.dashboard.overBudgetCategories
 import com.jvillada.movi.ui.dashboard.quickLinkFigure
+import com.jvillada.movi.ui.recurrentes.textoDelMonto
 import com.jvillada.movi.ui.dashboard.upcomingPaymentsWithin
 import com.jvillada.movi.ui.dashboard.visibleSections
 
@@ -162,8 +163,9 @@ private fun clickHandler(
  *
  * El patrimonio **no se esconde**: con los cinco créditos del dueño (~$1.505M) es la foto
  * honesta de su situación. Se muestra con tres cuidados para que se entienda en vez de asustar:
- * - solo cuando el grupo Deuda no está en cero (en cero repetiría el número de arriba, y esta
- *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA);
+ * - solo cuando de verdad difiere de «tu plata» — o sea con deudas **o** con plata condicionada
+ *   (ver [HeroBalance.muestraPatrimonio]); si coincide repetiría el número de arriba, y esta
+ *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA;
  * - **en gris, no en rojo** — el rojo de esta tarjeta está reservado al «Flujo del mes», que es
  *   el resultado del mes y algo sobre lo que se puede actuar hoy; un patrimonio negativo por
  *   hipotecas es una estructura de largo plazo, no una pérdida de este mes. La pantalla de
@@ -235,7 +237,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                 color = MinTextMute,
             )
         }
-        if (balance.hasDebt) {
+        if (balance.muestraPatrimonio) {
             Spacer(Modifier.height(16.dp))
             Hairline()
             // La explicación va DEBAJO de la fila, a ancho completo, y no como sub-línea de la
@@ -325,10 +327,13 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                     // ronda el 5 %. Se muestra el saldo, dicho con su nombre y en gris — no como
                     // la cifra que va a salir de su cuenta. Ver `RecurringRule.montoEsSaldo`.
                     right = {
+                        // El TEXTO lo decide `textoDelMonto` (una sola función para los cuatro
+                        // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
+                        // chico porque no es una cifra que vaya a salir de la cuenta.
                         if (p.rule.montoEsSaldo) {
-                            MonoText("saldo ${formatCOP(p.rule.amount)}", 12.5f, color = MinTextMute)
+                            MonoText(textoDelMonto(p.rule), 12.5f, color = MinTextMute)
                         } else {
-                            MonoText(formatCOP(p.rule.amount), 14.5f, color = if (urgent) MinExpense else MinText)
+                            MonoText(textoDelMonto(p.rule), 14.5f, color = if (urgent) MinExpense else MinText)
                         }
                     },
                     isLast = i == rows.lastIndex,

@@ -125,10 +125,13 @@ data class DashboardData(
  * Tres razones, en orden de peso:
  * 1. Es plata suya. Un CDT o un fondo es plata guardada, no plata ajena; esconderla del número
  *    grande obligaría a sumar dos cifras de dos pantallas para saber cuánto tiene.
- * 2. Es exactamente lo que ya muestra la fila «Cuentas» de EXPLORA y el renglón «Activos» de
- *    la pantalla de Cuentas (ambos, `assetsDebtsNet(...).first`). Dejar el hero en solo-Dinero
- *    crearía un tercer número que no coincide con ninguno de los dos — el desacuerdo que la
- *    Ola 4 tuvo que arreglar entre Créditos y el Inicio.
+ * 2. Es exactamente lo que muestran la fila «Cuentas» de EXPLORA y el renglón «Tu plata» de la
+ *    pantalla de Cuentas — y no por casualidad: los tres salen de ESTA función. Dejar el hero en
+ *    solo-Dinero crearía un tercer número que no coincide con ninguno de los dos — el desacuerdo
+ *    que la Ola 4 tuvo que arreglar entre Créditos y el Inicio. (Durante una ola las otras dos
+ *    superficies llamaban a `assetsDebtsNet` por su cuenta, y en cuanto apareció
+ *    [Account.condicionadaA] volvieron a divergir: el hero decía $31,6M y la fila de al lado
+ *    $137,6M. Por eso el cálculo vive en un solo lugar y las tres lo consumen.)
  * 3. La distinción que de verdad hizo daño acá no es líquido vs. invertido, es **tuyo vs.
  *    debido**. Esa es la que separan estas dos cifras.
  *
@@ -172,15 +175,22 @@ data class HeroBalance(
     val patrimonio: Long,
 ) {
     /**
-     * ¿Hay algo que decir sobre el patrimonio? Con el grupo Deuda en cero, [patrimonio] y
-     * [tuPlata] son el MISMO número y el hero no repite la cifra.
+     * ¿Hay algo que decir sobre el patrimonio? Solo se esconde cuando [patrimonio] y [tuPlata]
+     * son el MISMO número: ahí la línea repetiría la cifra grande.
      *
-     * Es `!= 0`, no `> 0`: una tarjeta **sobrepagada** deja [deudas] en negativo, y ahí el
-     * patrimonio es MAYOR que «tu plata» — un dato que vale la pena mostrar y que un `> 0`
+     * **Y desde que existe [condicionado] eso ya no es «sin deudas».** La condición era
+     * `deudas != 0L`, escrita cuando el patrimonio solo podía separarse de «tu plata» por una
+     * deuda. Alguien cuyo único producto es una pensión voluntaria —$0 en cuentas, $106M
+     * condicionados, sin créditos— veía «Tu plata $0», «Además $106,0M solo para Vivienda», y
+     * **el patrimonio no aparecía en ningún lado**: la plata que sí tiene no se decía en ninguna
+     * cifra de la pantalla.
+     *
+     * El `!= 0` de las deudas se queda: una tarjeta **sobrepagada** las deja en negativo, y ahí
+     * el patrimonio es MAYOR que «tu plata» — un dato que vale la pena mostrar y que un `> 0`
      * escondía justo cuando la línea dejaba de ser redundante. (Ver [patrimonioExplicacion],
      * que cambia «menos … en deudas» por «más … a favor en créditos» en ese caso.)
      */
-    val hasDebt: Boolean get() = deudas != 0L
+    val muestraPatrimonio: Boolean get() = deudas != 0L || condicionado > 0L
     /** Sin nada invertido no hay nada que desglosar: el hero no pinta la línea del desglose. */
     val hasInvestments: Boolean get() = invertido != 0L
 }
@@ -224,12 +234,36 @@ fun heroBalanceTitle(@Suppress("UNUSED_PARAMETER") section: ScreenSection): Stri
  * La línea que explica de dónde sale el patrimonio — la resta escrita, que es lo que faltaba el
  * día del reporte del dueño.
  *
- * Dos redacciones porque [HeroBalance.deudas] puede ser negativo (una tarjeta sobrepagada):
- * «menos … en deudas» mentiría con un signo menos delante del monto.
+ * **Tiene que nombrar los tres términos, no dos.** Desde que existe [HeroBalance.condicionado] la
+ * cuenta es `tuPlata + condicionado − deudas`, y la línea decía «Tu plata menos $1.505,1M en
+ * deudas» pegada a la cifra: con los números del dueño faltaban $106.000.000 para que la resta
+ * cerrara. Una explicación que no da el número que explica es peor que ninguna — es la única
+ * línea de la pantalla cuyo trabajo es que el lector pueda verificar la cifra de arriba.
+ *
+ * Dos redacciones para las deudas porque [HeroBalance.deudas] puede ser negativo (una tarjeta
+ * sobrepagada): «menos … en deudas» mentiría con un signo menos delante del monto. Y la parte
+ * condicionada se nombra con su condición cuando hay una sola, igual que el renglón del hero.
  */
-fun patrimonioExplicacion(balance: HeroBalance): String =
-    if (balance.deudas >= 0L) "Tu plata menos ${formatMoneyCompact(balance.deudas)} en deudas"
-    else "Tu plata más ${formatMoneyCompact(-balance.deudas)} a favor en créditos"
+fun patrimonioExplicacion(balance: HeroBalance): String {
+    val condicionado = when {
+        balance.condicionado <= 0L -> ""
+        balance.condicionadoA != null ->
+            " más ${formatMoneyCompact(balance.condicionado)} solo para ${balance.condicionadoA}"
+        else -> " más ${formatMoneyCompact(balance.condicionado)} de uso condicionado"
+    }
+    // Con una parte condicionada ya dicha, la coma separa los dos sumandos: sin ella
+    // («…solo para Vivienda menos $1.505,1M en deudas») las dos frases se leen como una sola.
+    val separador = if (condicionado.isEmpty()) " " else ", "
+    val deudas = when {
+        balance.deudas > 0L -> "${separador}menos ${formatMoneyCompact(balance.deudas)} en deudas"
+        balance.deudas < 0L -> "${separador}más ${formatMoneyCompact(-balance.deudas)} a favor en créditos"
+        // Sin deudas no se escribe «menos $0»: con algo condicionado la línea ya dice todo lo que
+        // separa el patrimonio de «tu plata», y sin nada condicionado no se pinta (ver
+        // [HeroBalance.muestraPatrimonio]).
+        else -> ""
+    }
+    return "Tu plata$condicionado$deudas"
+}
 
 /**
  * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no
@@ -362,8 +396,16 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // 6 cuentas» y al tocarla aparecía «DINERO · 1 / INVERSIÓN · 0». Las deudas no se
         // pierden de vista: la fila «Créditos», justo debajo, las cuenta y las suma.
         // Sin respuesta todavía no se afirma nada: ni la cifra ni el «Sin cuentas aún».
+        //
+        // **La cifra sale de [heroBalance], no de [assetsDebtsNet].** Esta línea sumaba TODO lo
+        // que no fuera deuda, así que en la misma pantalla —y a dos dedos de distancia— el hero
+        // decía «Tu plata $31.625.167» y esta fila decía «$137.625.167»: los $106M de la pensión
+        // voluntaria que el hero acababa de sacar. Es la tercera vez en este proyecto que dos
+        // superficies calculan la misma regla por su cuenta y terminan diciendo cosas distintas
+        // (Créditos vs. Inicio en la Ola 4, los presupuestos en la Ola 16), así que no se copia
+        // el filtro: las dos consumen la MISMA función.
         val cuentas = data.accounts
-        val (activos, _, _) = assetsDebtsNet(cuentas.orEmpty())
+        val hero = heroBalance(cuentas.orEmpty())
         val propias = cuentas.orEmpty().count { !isDebtAccount(it.type) }
         // Solo deudas cargadas (el estado de quien arranca por sus créditos) es «sin cuentas»,
         // no «0 cuentas» al lado de un $0: es lo que dicen los dos grupos vacíos de la pantalla
@@ -371,7 +413,17 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // regla de toda esta función: sin nada que contar, no se pinta cifra.
         if (cuentas == null) LinkFigure()
         else if (propias == 0) LinkFigure(sub = "Sin cuentas aún")
-        else LinkFigure(formatCOP(activos), plural(propias, "cuenta", "cuentas"))
+        else LinkFigure(
+            formatCOP(hero.tuPlata),
+            // El conteo dice cuántas cuentas lista la pantalla de destino; cuando alguna está
+            // condicionada, la cifra ya no es la suma de todas ellas, y la línea lo dice en vez
+            // de dejar la diferencia sin explicar.
+            if (hero.condicionado > 0L) {
+                "${plural(propias, "cuenta", "cuentas")} · ${formatMoneyCompact(hero.condicionado)} condicionados"
+            } else {
+                plural(propias, "cuenta", "cuentas")
+            },
+        )
     }
     "credits" -> {
         // F20: préstamos + tarjetas, con la MISMA función que usa la pantalla de Créditos para
