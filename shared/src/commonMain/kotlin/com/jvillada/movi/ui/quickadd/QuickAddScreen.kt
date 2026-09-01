@@ -413,6 +413,24 @@ fun QuickAddScreen(
 
     fun save() {
         if (!canSave) return
+        /*
+         * **La misma guarda, dicha donde de verdad decide.**
+         *
+         * En el renglón del `accountId` vivía `?: accounts.firstOrNull()?.id ?: "acc_1"`: el mismo
+         * respaldo que en el SMS y en el extracto terminaba anotando plata contra la primera
+         * cuenta del abecedario —que en las cuentas del dueño puede ser el «Vehículo 4083»— y,
+         * peor, un `"acc_1"` que no es ninguna cuenta suya: un id inventado que el server rechaza
+         * y que en el teléfono (`LocalRepository`, offline-first) se guardaría igual, colgado de
+         * nada.
+         *
+         * Hoy no se alcanza, porque `canSave` ya exige `selectedAccountId != null`. Ese es
+         * justamente el motivo para sacarlo y no para dejarlo: el único renglón que decide contra
+         * qué cuenta se guarda afirmaba que hay un plan B cuando no lo hay, y el día que alguien
+         * afloje `canSave` —agregar un tipo de movimiento, mover la validación— el plan B vuelve
+         * a la vida sin que nadie lo haya elegido. Con el `?: return` el compilador ya no deja
+         * escribir un `accountId` que no salga de la elección del dueño.
+         */
+        val cuenta = selectedAccountId ?: return
         saving = true
         error = null
         // Ola 2 #2: recortada — canSave ya exige no-vacío, pero "  Comida  " pasaba esa guarda
@@ -425,7 +443,7 @@ fun QuickAddScreen(
                 // Con id = "" cada evento nuevo reemplazaba al anterior en el teléfono en vez de
                 // agregarse (Hallazgo Crítico de la revisión de la Ola 1). Ver newId().
                 id = newId("ev"),
-                accountId = selectedAccountId ?: accounts.firstOrNull()?.id ?: "acc_1",
+                accountId = cuenta,
                 type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                 amount = amount.toLongOrNull() ?: 0L,
                 category = trimmedCategory,
