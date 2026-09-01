@@ -175,6 +175,18 @@ fun tasaMensualDeUnaEA(rateEa: Double): Double = (1.0 + rateEa / 100.0).pow(1.0 
  *
  * @param saldoDeLaDeuda capital vigente **antes** de este pago, en la moneda de la deuda.
  *   Un saldo negativo (deuda pagada de más) se trata como cero: no causa intereses.
+ *
+ *   **Es el saldo de HOY, no el del mes de la cuota, y eso no se puede arreglar acá.** La deuda de
+ *   una cuenta en Movi es la suma de todos sus eventos no anulados, sin mirar fechas: no existe
+ *   «el saldo al 15 de julio». Así que anotar las cuotas en orden cronológico da una amortización
+ *   que se parece a la real, y anotar una cuota vieja **después** de una nueva la calcula sobre un
+ *   saldo ya reducido — medido: ~$24.278 de capital de más por mes desfasado en el vehículo,
+ *   ~$21.353 en la hipoteca, del orden de $100.000 con los seis créditos por cada mes anotado al
+ *   revés, y siempre en la misma dirección (deuda subestimada).
+ *
+ *   Por eso la limitación no vive solo en este KDoc: la frase que el dueño lee antes de guardar lo
+ *   dice con todas las letras («calculado sobre tu deuda de hoy», ver `textoDelDesglose`). Una
+ *   limitación que solo conoce quien lee el código no está anotada, está escondida.
  */
 fun desglosarCuota(
     cuota: Long,
@@ -198,8 +210,17 @@ fun desglosarCuota(
     val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
     // Clampado a 0 y no negativo: una cuota que no alcanza a cubrir interés + seguro no *sube* la
     // deuda por esta puerta. Sube sola, cuando el banco capitaliza, y eso se anota con «Ajustar
-    // saldo» — que es un hecho del banco, no una deducción nuestra. El caso existe de verdad: la
-    // libranza ·4818 del dueño tiene cuotas que son 100 % interés.
+    // saldo» — que es un hecho del banco, no una deducción nuestra.
+    //
+    // El caso existe de verdad, pero no es el que decía acá antes: la cuota **completa** de la
+    // libranza ·4818 ($6.040.259 sobre un saldo de $283.000.000 al 15,50 % E.A.) abona $2.394.248
+    // a capital. Lo que sí es 100 % interés es un **pago parcial** —un abono de $3.000.000 contra
+    // un interés de $3.646.011—, que es exactamente lo que el dueño hace cuando la cuota no le
+    // alcanza en un mes.
+    //
+    // Y clampar acá ya no pierde información: lo que no amortizó queda guardado en la pata de la
+    // deuda (ver [FinancialEvent.noAmortiza]), así que corregir el monto después no tiene que
+    // deducirlo de una resta que en este caso miente.
     val capital = (cuota - interes - seguro).coerceAtLeast(0L)
     return DesgloseDeCuota(cuota, interes = interes, seguro = seguro, capital = capital, motivo = MotivoDelDesglose.AMORTIZA)
 }
@@ -255,7 +276,15 @@ fun pagoDeCuotaLegs(
     val nota = request.note?.trim().orEmpty()
     fun describir(base: String) = if (nota.isEmpty()) base else "$base · $nota"
 
-    fun pata(id: String, accountId: String, tipo: TransactionType, categoria: String, texto: String, monto: Long) =
+    fun pata(
+        id: String,
+        accountId: String,
+        tipo: TransactionType,
+        categoria: String,
+        texto: String,
+        monto: Long,
+        noAmortiza: Long? = null,
+    ) =
         FinancialEvent(
             id = id,
             accountId = accountId,
@@ -278,6 +307,7 @@ fun pagoDeCuotaLegs(
                 type = tipo,
                 category = categoria,
             ),
+            noAmortiza = noAmortiza,
         )
 
     return pata(
@@ -297,6 +327,18 @@ fun pagoDeCuotaLegs(
         // **Y acá está el cambio entero de esta rama**: la deuda baja por el capital, no por la
         // cuota. Ver [DesgloseDeCuota].
         monto = desglose.capital,
+        // Lo que esta cuota NO amortizó, guardado en la fila y no deducido de la resta de las dos
+        // patas. La resta miente justo cuando el capital se clampa a cero, y ahí es donde la
+        // corrección del monto borraba deuda en silencio. Ver [FinancialEvent.noAmortiza].
+        //
+        // Solo en un crédito que amortiza: una tarjeta y un crédito sin tasa arman un par
+        // simétrico, y para esos `null` dice la verdad —no hay nada que no amortice— mientras que
+        // un 0 explícito diría lo mismo con pinta de calculado.
+        noAmortiza = if (desglose.motivo == MotivoDelDesglose.AMORTIZA) {
+            desglose.interes + desglose.seguro
+        } else {
+            null
+        },
     )
 }
 

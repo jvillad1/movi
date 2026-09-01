@@ -144,6 +144,43 @@ class PagoDeCuotaTest {
         assertTrue(sinTasa.description.startsWith("Pago desde"), sinTasa.description)
     }
 
+    @Test
+    fun la_pata_de_la_deuda_GUARDA_lo_que_no_amortizo() {
+        // Sin esto, corregir el monto después tenía que deducir el interés restando las dos patas
+        // — y la resta miente en cuanto el capital se clampa a cero. Ver
+        // [FinancialEvent.noAmortiza] y [montoDeLaHermanaAlCorregir].
+        val (dinero, deuda) = patas(ahorros, carro, 4_215_223, rateEa = 18.16, seguro = 108_800L)
+
+        assertEquals(2_481_318L + 108_800L, deuda.noAmortiza, "interés + seguro, en un solo número")
+        assertEquals(dinero.amount, deuda.amount + deuda.noAmortiza!!, "las dos patas cuadran con esto")
+        assertNull(dinero.noAmortiza, "la pata del dinero no guarda nada: la plata salió entera")
+    }
+
+    @Test
+    fun un_par_simetrico_no_guarda_nada_y_ese_null_ES_la_respuesta() {
+        // Una tarjeta y un crédito sin tasa arman pares simétricos de verdad. Un 0 explícito diría
+        // lo mismo pero con pinta de calculado, y la corrección del monto lo trataría distinto.
+        val (_, tarjeta) = patas(ahorros, amex, 1_008_902, rateEa = 32.0)
+        val (_, sinTasa) = patas(ahorros, carro, 4_215_223)
+
+        assertNull(tarjeta.noAmortiza)
+        assertNull(sinTasa.noAmortiza)
+    }
+
+    @Test
+    fun una_cuota_que_no_cubre_el_interes_deja_la_pata_en_cero_PERO_guarda_el_interes() {
+        // El caso que rompía la corrección: la resta de las dos patas da $3.000.000 y el interés
+        // real es $3.646.011. Guardado, corregir el monto después vuelve al capital exacto.
+        val libranza = Account("l2", "Libranza 4818", AccountType.LOAN, 283_000_000L)
+        val (dinero, deuda) = patas(ahorros, libranza, 3_000_000, rateEa = 15.50)
+
+        assertEquals(0L, deuda.amount, "nada de este pago abona a capital")
+        assertTrue(
+            deuda.noAmortiza!! > dinero.amount,
+            "el interés del mes es MAYOR que lo pagado, y la resta de las patas no lo sabría",
+        )
+    }
+
     // ── Lo que no se puede hacer ───────────────────────────────────────────────
 
     @Test

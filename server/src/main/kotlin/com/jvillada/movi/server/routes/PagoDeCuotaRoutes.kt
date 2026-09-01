@@ -122,8 +122,14 @@ fun Route.pagoDeCuotaRoutes() {
             //
             // **Se excluyen las patas de ESTE pago**: un reintento con los mismos ids tiene que
             // calcular el mismo interés que el primer intento, no uno sobre la deuda ya bajada.
+            //
+            // **Y se filtra por moneda**, igual que `computeBalances`, que agrupa por ella: sumar
+            // los deltas de todas las monedas daría una cifra que no es de ninguna, y esa cifra
+            // entra derecho al cálculo del interés. Hoy no muerde —los créditos del dueño son COP
+            // y `validarPagoDeCuota` ya exige que la cuenta y la deuda compartan moneda— pero la
+            // guarda cuesta una línea y el error costaría una deuda mal calculada en silencio.
             val saldoAntesDelPago = loadNonVoidedEvents(uid, debt.id)
-                .filter { it.transferId != body.transferId }
+                .filter { it.transferId != body.transferId && it.currency == debt.currency }
                 .sumOf { signedDelta(debt.type, it.type, it.amount) }
             val terms = if (debt.type == AccountType.LOAN) {
                 dbQuery {
@@ -194,9 +200,11 @@ fun Route.pagoDeCuotaRoutes() {
             call.respond(
                 if (ok) HttpStatusCode.Created else HttpStatusCode.OK,
                 PagoDeCuotaResult(
-                    deudaRestante = eventos.sumOf {
-                        signedDelta(debt.type, it.type, it.amount)
-                    },
+                    // Por moneda, igual que `saldoAntesDelPago` y que `computeBalances`: la deuda
+                    // que se le muestra al dueño es la de ESTA moneda, no una suma de varias.
+                    deudaRestante = eventos
+                        .filter { it.currency == debt.currency }
+                        .sumOf { signedDelta(debt.type, it.type, it.amount) },
                     patas = guardadas,
                     // **El desglose de las patas GUARDADAS, no el que se acaba de calcular**, por
                     // el mismo motivo por el que las patas se releen: en el camino del reintento

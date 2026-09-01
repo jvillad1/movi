@@ -422,6 +422,9 @@ class LocalRepository(
                 // como evento suelto (el server rechaza un POST /api/events con transferId).
                 resolved.transferId,
                 resolved.createdAt,
+                // Siempre null por esta puerta, igual que `transferId`: lo que no amortiza solo lo
+                // escribe la pata de la deuda de un pago de cuota, que entra por [payInstallment].
+                resolved.noAmortiza,
             )
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
@@ -626,7 +629,8 @@ class LocalRepository(
             remoto.rawPayload != local.rawPayload ||
             remoto.reconciliationStatus.name != local.reconciliationStatus ||
             remoto.transferId != local.transferId ||
-            remoto.createdAt != local.createdAt
+            remoto.createdAt != local.createdAt ||
+            remoto.noAmortiza != local.noAmortiza
     }
 
     /** Las filas crudas del espejo, sin mapear — para la foto previa a preguntar. */
@@ -802,6 +806,7 @@ class LocalRepository(
                     // respuesta y se copia tal cual; `now` es solo el respaldo por si un server
                     // viejo no lo mandara.
                     leg.createdAt ?: now,
+                    leg.noAmortiza,
                 )
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
@@ -1175,18 +1180,18 @@ class LocalRepository(
         // El monto de un par se mueve en las DOS mitades (la cuenta no se puede cambiar: la
         // validación de arriba ya rechazó ese caso, así que la hermana se queda donde está).
         //
-        // **YA NO COPIA: cada hermana se mueve por la DIFERENCIA** — misma regla que en el server
-        // (`EventRoutes`, `PUT /api/events/{id}`) y literalmente la misma función de `:core`,
+        // **YA NO COPIA: cada hermana se recalcula** — misma regla que en el server (`EventRoutes`,
+        // `PUT /api/events/{id}`) y literalmente la misma función de `:core`,
         // [montoDeLaHermanaAlCorregir]. Desde que la pata de la deuda de una cuota vale solo el
         // capital, copiarle `montoNuevo` a la hermana le bajaría al crédito los intereses también.
-        // Para un traspaso el resultado es idéntico al de antes (`hermana == montoViejo`), así que
-        // esto no cambia nada de lo que ya funcionaba.
+        // Para un traspaso el resultado es idéntico al de antes (par simétrico), así que esto no
+        // cambia nada de lo que ya funcionaba.
         //
         // **Por qué esta cuenta se puede hacer acá, sin la tasa ni el saldo:** el interés y el
-        // seguro de ese mes ya están guardados dentro del par (son `montoViejo − hermana`), así que
-        // el espejo local —que no tiene `credit_terms` ni ninguna forma de conseguirlos sin red—
-        // llega al mismo número que el server. Sin eso, corregir una cuota sin señal habría dejado
-        // un saldo distinto del que la web muestra.
+        // seguro de ese mes vienen GUARDADOS en la pata de la deuda (`noAmortiza`, que baja del
+        // server con el evento), así que el espejo local —que no tiene `credit_terms` ni ninguna
+        // forma de conseguirlos sin red— llega al mismo número que el server. Sin eso, corregir una
+        // cuota sin señal habría dejado un saldo distinto del que la web muestra.
         //
         // **Las hermanas se leen ANTES de escribirles**, y no es un detalle de estilo: el saldo se
         // deshace con el monto VIEJO de cada una, y leerlas después de la cascada devolvería ya el
@@ -1204,6 +1209,8 @@ class LocalRepository(
                 montoViejo = local.amount,
                 montoNuevo = montoNuevo,
                 montoDeLaHermana = hermana.amount,
+                noAmortizaDeLaHermana = hermana.noAmortiza,
+                noAmortizaDeLaPataQueSeCorrige = local.noAmortiza,
             )
         }
 
@@ -1329,6 +1336,8 @@ class LocalRepository(
                     leg.reconciliationStatus.name, leg.syncedAt ?: now, uid,
                     leg.transferId,
                     leg.createdAt ?: now,
+                    // La pata de la deuda de una cuota trae lo que NO amortizó; la del dinero, null.
+                    leg.noAmortiza,
                 )
                 if (leg.accountId == loanAccountId) return@forEach
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
@@ -1401,7 +1410,7 @@ class LocalRepository(
             event.category, event.description, event.merchant,
             event.timestamp, event.source.name, event.rawPayload,
             event.reconciliationStatus.name, event.syncedAt ?: ahora, uid,
-            event.transferId, event.createdAt,
+            event.transferId, event.createdAt, event.noAmortiza,
         )
     }
     /**
@@ -1441,6 +1450,7 @@ class LocalRepository(
                     event.transferId,
                     // El ajuste lo creó el server; se copia su sello, no uno nuevo de acá.
                     event.createdAt ?: Clock.System.now().toEpochMilliseconds(),
+                    event.noAmortiza,
                 )
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
@@ -1712,6 +1722,7 @@ class LocalRepository(
         syncedAt = syncedAt,
         transferId = transferId,
         createdAt = createdAt,
+        noAmortiza = noAmortiza,
         countsAsCashFlow = typeByAccount[accountId]
             ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,

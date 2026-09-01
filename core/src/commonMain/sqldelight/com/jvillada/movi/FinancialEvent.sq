@@ -28,7 +28,20 @@ CREATE TABLE financial_event (
     --
     -- No lleva índice ni entra en ningún ORDER BY: el orden se decide en Kotlin, con un solo
     -- comparador compartido con el server (ver MAS_RECIENTE_PRIMERO).
-    createdAt               INTEGER
+    createdAt               INTEGER,
+    -- **Cuánto de esa cuota NO bajaba la deuda**: interés del período + seguro de vida deudor.
+    -- Solo la pata de la deuda de un pago de cuota sobre un crédito que amortiza; NULL en todo lo
+    -- demás, y ese NULL significa «par simétrico». Ver FinancialEvent.noAmortiza en :core.
+    --
+    -- Está acá y no solo en el server por lo mismo que transferId: la corrección del monto
+    -- también corre sin señal (LocalRepository.updateEvent), con la MISMA función de :core, y sin
+    -- este dato el teléfono llegaría a un capital distinto del que llega la web. Columna nueva →
+    -- migración 6.sqm.
+    --
+    -- Nullable: las filas que ya están en el teléfono no la tienen y no hay de dónde sacarla — los
+    -- pagos de cuota anteriores a esta ola tienen las dos patas iguales, así que son simétricos de
+    -- verdad. Sin índice: nunca se filtra ni se ordena por ella.
+    noAmortiza              INTEGER
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -65,8 +78,8 @@ insert:
 INSERT OR REPLACE INTO financial_event(
     id, accountId, type, amount, category, description, merchant,
     timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId,
-    createdAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    createdAt, noAmortiza
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;

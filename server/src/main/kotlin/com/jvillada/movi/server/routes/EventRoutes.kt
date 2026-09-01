@@ -480,27 +480,31 @@ fun Route.eventRoutes() {
                 // misma cifra y copiar era correcto. Desde que la pata de la DEUDA de una cuota
                 // vale solo el **capital** (ver `DesgloseDeCuota`), copiar le bajaría a la deuda
                 // los intereses también: corregir una cuota de $4.215.223 a $4.500.000 le habría
-                // restado $4.500.000 a un crédito al que solo le tocaba el capital. La regla
-                // —mover la hermana por la DIFERENCIA, que es lo mismo que copiar cuando el par es
-                // simétrico— vive en `:core` y la comparte con el espejo local del teléfono:
-                // [montoDeLaHermanaAlCorregir].
+                // restado $4.500.000 a un crédito al que solo le tocaba el capital. La regla vive
+                // en `:core` y la comparte con el espejo local del teléfono:
+                // [montoDeLaHermanaAlCorregir], que recalcula el capital sobre el interés y el
+                // seguro GUARDADOS en la pata de la deuda (`no_amortiza`) — deducirlos de la resta
+                // de las dos patas mentía justo cuando el capital se había clampado a cero.
                 //
                 // Se escribe hermana por hermana y no con un UPDATE masivo por `transferId`,
-                // porque ahora cada una tiene su propia cifra nueva.
+                // porque ahora cada una tiene su propia cifra nueva. Y se lee la fila entera y no
+                // solo `(id, amount)`: hace falta su `noAmortiza`.
                 val transferId = fila.transferId
                 if (nuevoMonto != null && transferId != null) {
                     val hermanas = Events.selectAll()
                         .where {
                             (Events.userId eq uid) and (Events.transferId eq transferId) and (Events.id neq id)
                         }
-                        .map { it[Events.id] to it[Events.amount] }
-                    hermanas.forEach { (hermanaId, montoDeLaHermana) ->
+                        .map { it.toFinancialEvent() }
+                    hermanas.forEach { hermana ->
                         val montoNuevoDeLaHermana = montoDeLaHermanaAlCorregir(
                             montoViejo = fila.amount,
                             montoNuevo = nuevoMonto,
-                            montoDeLaHermana = montoDeLaHermana,
+                            montoDeLaHermana = hermana.amount,
+                            noAmortizaDeLaHermana = hermana.noAmortiza,
+                            noAmortizaDeLaPataQueSeCorrige = fila.noAmortiza,
                         )
-                        Events.update({ (Events.userId eq uid) and (Events.id eq hermanaId) }) {
+                        Events.update({ (Events.userId eq uid) and (Events.id eq hermana.id) }) {
                             it[amount] = montoNuevoDeLaHermana
                         }
                     }

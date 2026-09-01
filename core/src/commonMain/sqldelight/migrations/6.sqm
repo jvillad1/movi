@@ -1,0 +1,22 @@
+-- Migración 6 → 7: agrega financial_event.noAmortiza — **cuánto de esa cuota NO bajaba la deuda**
+-- (interés del período + seguro de vida deudor). Ver FinancialEvent.noAmortiza en :core.
+--
+-- **Por qué el teléfono también la necesita.** Corregir el monto de un movimiento funciona sin
+-- señal (LocalRepository.updateEvent) y usa la MISMA función de :core que el server para recalcular
+-- la pata hermana. Esa función dejó de deducir el interés restando las dos patas —la resta miente
+-- cuando el capital se clampó a cero— y pasó a leerlo de esta columna. Sin ella acá, corregir una
+-- cuota con señal y sin señal darían capitales distintos, que es exactamente la divergencia que el
+-- espejo local existe para no tener.
+--
+-- Mismo mecanismo que 1..5.sqm: SQLDelight deriva `schemaVersion` del .sqm más alto, y sin este
+-- archivo `onUpgrade` no correría sobre las bases ya instaladas — el primer `insert` (que ahora la
+-- nombra) fallaría con "no such column" en TODO movimiento nuevo, no solo en los pagos de cuota.
+--
+-- **No hay nada que migrar, y a propósito.** Las filas que ya están en el teléfono quedan en NULL,
+-- que es la verdad: los pagos de cuota anteriores a esta ola tienen las dos patas iguales, o sea
+-- son pares simétricos, y NULL es precisamente cómo se escribe «simétrico» en esta columna.
+--
+-- `ADD COLUMN` de una columna NULLABLE y sin default es la migración más barata que hay en SQLite:
+-- no reescribe la tabla. Sin índice: esta columna nunca se filtra ni se ordena en SQL, se lee junto
+-- con su propia fila.
+ALTER TABLE financial_event ADD COLUMN noAmortiza INTEGER;

@@ -405,6 +405,78 @@ class PagoDeCuotaRoutesTest {
         assertEquals(177_200_000L - 1_733_905L, campoNum(texto, "deudaRestante"), texto)
     }
 
+    private fun noAmortizaDeLaPataEn(accountId: String, transferId: String): Long? = transaction {
+        Events.selectAll()
+            .where { (Events.transferId eq transferId) and (Events.accountId eq accountId) }
+            .single()[Events.noAmortiza]
+    }
+
+    @Test
+    fun `la pata de la deuda GUARDA el interes y el seguro de ese mes`() = testApplication {
+        // Sin esto, corregir el monto después tenía que deducir el interés restando las dos patas,
+        // y esa resta miente en cuanto el capital se clampa a cero — ahí desaparecía deuda en
+        // silencio. Ver `FinancialEvent.noAmortiza`.
+        condicionesDelCarro(rateEa = 18.16, seguro = 108_800L)
+        wireApp()
+        pagar(duenoId, cuerpo(ahorros, carro, 4_215_223))
+
+        assertEquals(2_481_318L + 108_800L, noAmortizaDeLaPataEn(carro, "tr-1"))
+        assertEquals(null, noAmortizaDeLaPataEn(ahorros, "tr-1"), "la pata del dinero no guarda nada")
+    }
+
+    @Test
+    fun `una cuota que no cubre el interes deja la pata en cero y guarda el interes igual`() = testApplication {
+        // El caso real: un pago PARCIAL, más chico que el interés del mes. La fila queda en $0 —lo
+        // correcto, nada abonó a capital— pero la cifra que hace falta para corregirla después no
+        // se pierde, que es de lo que dependía el arreglo de la edición.
+        condicionesDelCarro(rateEa = 18.16)
+        wireApp()
+        pagar(duenoId, cuerpo(ahorros, carro, 1_000_000))
+
+        assertEquals(0L, montoDeLaPataEn(carro, "tr-1"))
+        assertEquals(2_481_318L, noAmortizaDeLaPataEn(carro, "tr-1"), "la resta de las patas diría 1.000.000")
+    }
+
+    @Test
+    fun `un movimiento en otra moneda no entra al saldo que calcula el interes`() = testApplication {
+        // `computeBalances` agrupa por moneda; este cálculo sumaba todos los deltas sin mirarla, y
+        // esa cifra entra derecho al interés. Hoy no muerde —`validarPagoDeCuota` exige que la
+        // cuenta y la deuda compartan moneda— pero una fila en otra moneda dentro de la misma
+        // cuenta alcanzaba para torcer el reparto. Lo mismo vale para `deudaRestante`.
+        condicionesDelCarro(rateEa = 18.16)
+        transaction {
+            Events.insert {
+                it[id] = "ev-usd-en-el-carro"
+                it[userId] = duenoId
+                it[accountId] = carro
+                it[type] = "EXPENSE"
+                it[amount] = 50_000_000L
+                it[currency] = "USD"
+                it[category] = "Saldo inicial"
+                it[description] = "Una fila en otra moneda"
+                it[timestamp] = 1_788_000_000_000L
+                it[eventSource] = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+        wireApp()
+        val texto = pagar(duenoId, cuerpo(ahorros, carro, 4_215_223)).bodyAsText()
+
+        assertEquals(2_481_318L, campoNum(texto, "interes"), "el interés sale del saldo en COP: $texto")
+        assertEquals(1_733_905L, montoDeLaPataEn(carro, "tr-1"))
+        assertEquals(177_200_000L - 1_733_905L, campoNum(texto, "deudaRestante"), texto)
+    }
+
+    @Test
+    fun `un par simetrico no guarda nada, y ese NULL es la respuesta`() = testApplication {
+        // Una tarjeta arma un par simétrico de verdad. Un 0 explícito diría lo mismo pero con pinta
+        // de calculado, y la corrección del monto lo trataría distinto.
+        wireApp()
+        pagar(duenoId, cuerpo(ahorros, amex, 1_008_902))
+
+        assertEquals(null, noAmortizaDeLaPataEn(amex, "tr-1"))
+    }
+
     @Test
     fun `pagar una tarjeta sigue bajando la deuda por todo lo pagado`() = testApplication {
         // Una tarjeta no amortiza: sus intereses se causan como un movimiento aparte. Este test

@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -38,7 +40,33 @@ data class Holding(
     val change: Double,
 )
 
+/**
+ * ### Los tres campos que SIEMPRE viajan, aunque valgan su default
+ *
+ * `PUT /api/credits/{id}` distingue **«el cliente no conoce este campo»** de **«el cliente lo
+ * borró»** mirando las claves del JSON recibido, porque `fillTerms` sobrescribe todas las columnas
+ * y un APK anterior manda cuerpos incompletos (ver la ruta). Esa guarda protege bien la primera
+ * mitad, pero rompía la segunda: kotlinx-serialization **omite** una propiedad que vale igual que
+ * su default, así que el cliente de verdad —el que sí conoce el campo— mandaba
+ * `{"dayOfMonth":15,...}` sin la clave al borrar el seguro, indistinguible de un APK viejo, y el
+ * server le reponía el valor anterior.
+ *
+ * Medido: el dueño podía escribir $108.800 de seguro en el crédito equivocado, cambiarlo a otro
+ * número positivo, pero **no quitarlo** — y cada cuota de ese crédito abonaba $108.800 menos a
+ * capital, ~$1,3M/año de deuda de más, sin forma de arreglarlo desde la app. Lo mismo desmarcando
+ * «la paga otro» y desmarcando «es una libranza».
+ *
+ * [EncodeDefault] con `ALWAYS` hace que la clave viaje **siempre**, así que un `null` explícito y
+ * un `false` explícito llegan como tales. Es el arreglo más chico que existe para esto: no toca
+ * la ruta, no inventa un valor centinela (que sería un valor legítimo el día que alguien lo
+ * escriba) y no obliga a un DTO paralelo de «parches».
+ *
+ * **Y no rompe a nadie leyendo la respuesta**: los tres son nullable o tienen default, así que un
+ * `"paidBy":null` explícito deserializa igual que la ausencia; un cliente anterior al seguro
+ * ignora `insuranceMonthly` porque los tres `Platform` configuran `ignoreUnknownKeys = true`.
+ */
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 data class CreditTerms(
     val accountId: String,
     val bank: String,
@@ -60,7 +88,11 @@ data class CreditTerms(
      * pedirle nada dejaría la deuda congelada.
      *
      * Ver [PAYROLL_DEDUCTION_CATEGORY] para cómo se registra sin romper ninguna de las dos cosas.
+     *
+     * Viaja siempre, aunque valga `false`: sin eso, **desmarcar la casilla no la apagaba** — el
+     * `false` no se serializaba y la ruta reponía el `true` guardado. Ver el KDoc de la clase.
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val payrollDeduction: Boolean = false,
     /**
      * Quién paga esta cuota, cuando **no** es el dueño: «Skandia», «Caro», «Mi papá».
@@ -74,7 +106,11 @@ data class CreditTerms(
      * nadie puede enumerar de antemano (una pensión voluntaria, la esposa, un papá, una empresa),
      * y obligar a elegir de un menú cerrado dejaría afuera justo el caso raro que hace falta
      * anotar.
+     *
+     * Viaja siempre, aunque valga `null`: sin eso, **borrar el rótulo desde la hoja no lo borraba
+     * en la base**. Ver el KDoc de la clase.
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val paidBy: String? = null,
     /**
      * **Seguro de vida deudor (u otro cargo mensual fijo) incluido en la cuota.** `null` o 0 = no
@@ -87,8 +123,10 @@ data class CreditTerms(
      * cada mes — el mismo error que esta ola vino a matar, en chiquito.
      *
      * En la moneda de la cuenta, igual que [installment]. Editable desde la hoja de condiciones del
-     * crédito: en este proyecto nada se configura tocando código.
+     * crédito: en este proyecto nada se configura tocando código — y **borrarlo también es
+     * configurarlo**, que es justo lo que no funcionaba. Ver el KDoc de la clase.
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val insuranceMonthly: Long? = null,
 )
 

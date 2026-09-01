@@ -62,7 +62,15 @@ class DesgloseDeCuotaTest {
         val conSeguro = deUnCredito(cuota = 1_286_548, saldo = 41_093_905, rateEa = 11.27, seguro = 108_800)
         val sinDeclararlo = deUnCredito(cuota = 1_286_548, saldo = 41_093_905, rateEa = 11.27)
 
+        // **El capital, fijado al peso, y no solo la diferencia entre los dos.** Que la diferencia
+        // sea $108.800 se sigue de la resta y sería cierto aunque el interés estuviera mal: es una
+        // identidad algebraica, no una medición. Lo que hay que clavar es la cifra que se le va a
+        // escribir a la deuda.
         assertEquals(108_800L, conSeguro.seguro)
+        assertEquals(367_332L, conSeguro.interes, "interés del mes sobre \$41.093.905 al 11,27 % E.A.")
+        assertEquals(810_416L, conSeguro.capital, "1.286.548 − 367.332 − 108.800")
+        assertEquals(conSeguro.cuota, conSeguro.interes + conSeguro.seguro + conSeguro.capital)
+        assertEquals(919_216L, sinDeclararlo.capital, "sin declararlo, el seguro se cuenta como capital")
         assertEquals(
             108_800L,
             sinDeclararlo.capital - conSeguro.capital,

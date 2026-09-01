@@ -159,6 +159,25 @@ object Events : Table("financial_events") {
      * crearon, y el comparador las hace caer a su `timestamp` en vez de inventarles una fecha.
      */
     val createdAt            = long("created_at").nullable()
+    /**
+     * **Cuánto de esa cuota NO bajaba la deuda** — interés del período + seguro de vida deudor.
+     * Solo la pata de la deuda de un pago de cuota sobre un crédito que amortiza; NULL en todo lo
+     * demás, y ese NULL significa «par simétrico». Ver
+     * [com.jvillada.movi.shared.model.FinancialEvent.noAmortiza] para el porqué completo: sin esta
+     * columna, corregir el monto de una cuota cuyo capital se había clampado a cero borraba deuda
+     * en silencio.
+     *
+     * Nullable, y por el mismo motivo que [transferId] y [createdAt]: la agrega sola
+     * `createMissingTablesAndColumns(Events)` al arrancar sobre la base ya desplegada, y una
+     * columna nullable por esa vía es segura sobre una tabla con datos. **Sin índice**: nunca se
+     * filtra ni se ordena por ella — solo se lee junto con su propia fila. Un `CREATE INDEX` que
+     * falle es lo que puede dejar el server sin levantar, porque estas migraciones corren dentro
+     * de la transacción de arranque (ver `NoAmortizaColumnTest`).
+     *
+     * Las filas que ya existen quedan en NULL a propósito: los pagos de cuota anteriores a esta
+     * ola tienen las dos patas iguales, así que son simétricos de verdad y NULL los describe bien.
+     */
+    val noAmortiza           = long("no_amortiza").nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)

@@ -1791,9 +1791,11 @@ class LocalRepositoryTest {
         monto: Long,
         transferId: String,
         categoria: String = CUOTA_CATEGORY,
+        /** Lo que esa cuota NO amortizó, tal como baja del server en la pata de la deuda. */
+        noAmortiza: Long? = null,
     ) = db.financialEventQueries.insert(
         id, accountId, tipo.name, monto, categoria, "Pata", null,
-        1_788_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, transferId, null,
+        1_788_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, transferId, null, noAmortiza,
     )
 
     /**
@@ -1815,7 +1817,10 @@ class LocalRepositoryTest {
         repo.createAccount(Account("acc-ahorros-c", "Bancolombia", AccountType.SAVINGS, 15_784_777L))
         repo.createAccount(Account("acc-carro-c", "Vehículo 4083", AccountType.LOAN, 175_466_095L))
         pataLocal("ev-cuota-dinero", "acc-ahorros-c", TransactionType.EXPENSE, 4_215_223L, "tr-cuota")
-        pataLocal("ev-cuota-capital", "acc-carro-c", TransactionType.INCOME, 1_733_905L, "tr-cuota")
+        pataLocal(
+            "ev-cuota-capital", "acc-carro-c", TransactionType.INCOME, 1_733_905L, "tr-cuota",
+            noAmortiza = 2_481_318L,
+        )
 
         repo.updateEvent("ev-cuota-dinero", EdicionDeMovimiento(amount = 4_500_000L))
 
@@ -1852,5 +1857,47 @@ class LocalRepositoryTest {
         assertEquals(1_500_000L, patas.getValue("ev-tr-in").amount, "las dos mitades son la misma plata")
         assertEquals(5_000_000L - 1_500_000L, repo.getAccount("acc-tr-o").balance)
         assertEquals(1_500_000L, repo.getAccount("acc-tr-d").balance)
+    }
+
+    /**
+     * **Ida y vuelta a través del piso en cero, sin señal.**
+     *
+     * El defecto que el interés guardado cerró: bajar la cuota por debajo del interés clampa el
+     * capital a 0 (bien), pero con la regla de la diferencia la vuelta atrás no recuperaba el
+     * capital original — quedaba $72.705 más alto, o sea $72.705 de deuda desaparecidos, en el
+     * teléfono y para siempre (acá el saldo es un acumulado, nadie lo vuelve a derivar).
+     *
+     * Y de paso confirma el otro defecto: la pata de la deuda nace en $0 y NO se puede corregir
+     * directamente (`validarEdicionDeMovimiento` rechaza montos <= 0), así que el único camino es
+     * esta cascada desde la pata del dinero. Con el arreglo, ese camino la devuelve exacta.
+     */
+    @Test
+    fun corregir_hacia_abajo_y_arrepentirse_devuelve_el_capital_exacto() = runBlocking {
+        // Cuota del ·9695: $1.286.548, capital $813.843, $472.705 que no amortizan.
+        repo.createAccount(Account("acc-ah-rt", "Bancolombia", AccountType.SAVINGS, 8_713_452L))
+        repo.createAccount(Account("acc-9695-rt", "Libre inversión", AccountType.LOAN, 40_280_062L))
+        pataLocal("ev-rt-dinero", "acc-ah-rt", TransactionType.EXPENSE, 1_286_548L, "tr-rt")
+        pataLocal(
+            "ev-rt-capital", "acc-9695-rt", TransactionType.INCOME, 813_843L, "tr-rt",
+            noAmortiza = 472_705L,
+        )
+
+        repo.updateEvent("ev-rt-dinero", EdicionDeMovimiento(amount = 400_000L))
+        val enElPiso = repo.getEvents().first { it.id == "ev-rt-capital" }
+        assertEquals(0L, enElPiso.amount, "400.000 no cubren los 472.705 que no amortizan")
+
+        // Se arrepiente y vuelve al monto real.
+        repo.updateEvent("ev-rt-dinero", EdicionDeMovimiento(amount = 1_286_548L))
+
+        val patas = repo.getEvents().filter { it.transferId == "tr-rt" }.associateBy { it.id }
+        assertEquals(1_286_548L, patas.getValue("ev-rt-dinero").amount)
+        assertEquals(
+            813_843L,
+            patas.getValue("ev-rt-capital").amount,
+            "la regla de la diferencia devolvía 886.548 y borraba \$72.705 de deuda",
+        )
+        // Y el acumulado local vuelve exactamente a donde estaba.
+        assertEquals(10_000_000L - 1_286_548L, repo.getAccount("acc-ah-rt").balance)
+        assertEquals(41_093_905L - 813_843L, repo.getAccount("acc-9695-rt").balance)
     }
 }
