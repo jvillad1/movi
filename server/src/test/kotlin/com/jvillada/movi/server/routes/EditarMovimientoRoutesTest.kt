@@ -19,6 +19,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CONCEPTO_VACIO
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CUENTA_NO_ENCONTRADA
 import com.jvillada.movi.shared.model.MONTO_INVALIDO
 import com.jvillada.movi.shared.model.PATA_NO_CAMBIA_DE_CUENTA
@@ -279,17 +280,11 @@ class EditarMovimientoRoutesTest {
      * **Un traspaso, y no un pago de cuota, a propósito.**
      *
      * En un traspaso «las dos patas valen igual» es una verdad permanente: la plata que sale de
-     * una cuenta es, por definición, la misma que entra en la otra. En un pago de cuota **no**:
-     * está decidido —y todavía sin implementar, en su propio PR— que la pata de la deuda de un
-     * crédito que amortiza baje solo por el **capital** y no por la cuota completa (de las cuotas
-     * mensuales del dueño, buena parte es interés puro). Un test que fijara hoy «la deuda bajó
-     * exactamente lo que salió» sobre un pago de cuota estaría consagrando como verdad permanente
-     * algo que está por dejar de serlo, y se caería contra el cambio correcto.
-     *
-     * La cascada en sí sigue siendo la que se prueba acá, y sigue siendo coherente con cómo nace
-     * el par hoy (`pagoDeCuotaLegs` crea las dos patas con el mismo monto). Cuando la pata de
-     * deuda pase a bajar solo por capital, la cascada tendrá que **recalcular** en vez de copiar —
-     * está anotado en el código que copia (`EventRoutes` y `LocalRepository.aplicarEdicionLocal`).
+     * una cuenta es, por definición, la misma que entra en la otra. En un pago de cuota **no**, y
+     * desde que la pata de la deuda baja solo por el capital (`DesgloseDeCuota`) la cascada ya no
+     * copia: mueve la hermana por la **diferencia** (`montoDeLaHermanaAlCorregir`). Este test fija
+     * la mitad que nunca cambia; el caso asimétrico está justo abajo, en
+     * `corregir la cuota de un credito NO le copia el monto a la deuda`.
      */
     @Test
     fun `corregir el monto de una pata lo corrige en LAS DOS`() = testApplication {
@@ -311,6 +306,48 @@ class EditarMovimientoRoutesTest {
         // Bancolombia también está «Hija» ($4.000.000) del fixture, así que su saldo es −5,5M.
         assertEquals(-5_500_000L, saldoDe(banco), "de Bancolombia salen los 1,5M del traspaso")
         assertEquals(1_500_000L, saldoDe(nu), "y en Nu entran exactamente esos 1,5M")
+    }
+
+    @Test
+    fun `corregir la cuota de un credito NO le copia el monto a la deuda`() = testApplication {
+        // **El caso asimétrico, que antes de esta ola no existía.** Una cuota de $4.215.223 de la
+        // que solo $1.733.905 abonaron a capital (los otros $2.481.318 son interés del mes).
+        // Corregirla a $4.500.000 tiene que subir el capital en los mismos $284.777 —el interés
+        // del mes ya ocurrió y no cambia— y NO escribirle $4.500.000 a la deuda, que le habría
+        // borrado al crédito $2,7 millones que sigue debiendo.
+        transaction {
+            evento("ev-cuota-dinero", duenoId, banco, "EXPENSE", 4_215_223L, CUOTA_CATEGORY, "Cuota de Vehículo", "tr-cuota")
+            evento("ev-cuota-deuda", duenoId, carro, "INCOME", 1_733_905L, CUOTA_CATEGORY, "Abono a capital desde Bancolombia", "tr-cuota")
+        }
+        wireApp()
+
+        val res = editar(duenoId, "ev-cuota-dinero", """{"amount":4500000}""")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        assertEquals(4_500_000L, filaDe("ev-cuota-dinero").first)
+        assertEquals(
+            1_733_905L + (4_500_000L - 4_215_223L),
+            filaDe("ev-cuota-deuda").first,
+            "la deuda se mueve por la DIFERENCIA, no por el monto entero",
+        )
+    }
+
+    @Test
+    fun `corregir la pata del capital arrastra la cuota por la misma diferencia`() = testApplication {
+        // La dirección de vuelta: el dueño corrige lo que abonó a capital porque el extracto decía
+        // otra cosa. El interés del mes sigue siendo el mismo hecho, así que la cuota se mueve
+        // igual. Sin este test, la cascada podía ser correcta en un sentido y absurda en el otro.
+        transaction {
+            evento("ev-cuota2-dinero", duenoId, banco, "EXPENSE", 4_215_223L, CUOTA_CATEGORY, "Cuota de Vehículo", "tr-cuota2")
+            evento("ev-cuota2-deuda", duenoId, carro, "INCOME", 1_733_905L, CUOTA_CATEGORY, "Abono a capital desde Bancolombia", "tr-cuota2")
+        }
+        wireApp()
+
+        val res = editar(duenoId, "ev-cuota2-deuda", """{"amount":1800000}""")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        assertEquals(1_800_000L, filaDe("ev-cuota2-deuda").first)
+        assertEquals(4_215_223L + (1_800_000L - 1_733_905L), filaDe("ev-cuota2-dinero").first)
     }
 
     @Test

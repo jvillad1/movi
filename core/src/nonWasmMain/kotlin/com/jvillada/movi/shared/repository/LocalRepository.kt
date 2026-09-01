@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.validarEdicionDeMovimiento
 import com.jvillada.movi.shared.model.soloLoQueCambia
+import com.jvillada.movi.shared.model.montoDeLaHermanaAlCorregir
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.normalizarCondicion
@@ -1174,12 +1175,18 @@ class LocalRepository(
         // El monto de un par se mueve en las DOS mitades (la cuenta no se puede cambiar: la
         // validación de arriba ya rechazó ese caso, así que la hermana se queda donde está).
         //
-        // **COPIA el monto, y eso vale mientras las dos patas nazcan iguales** — misma nota que
-        // en el server (`EventRoutes`, `PUT /api/events/{id}`). Cuando entre el cambio ya
-        // decidido de que la pata de la DEUDA de un crédito que amortiza baje solo por el
-        // **capital** de la cuota, esta cascada tiene que **recalcular** esa hermana en vez de
-        // escribirle el mismo `montoNuevo`. La pata de un traspaso se sigue copiando: ahí las
-        // dos mitades son la misma plata.
+        // **YA NO COPIA: cada hermana se mueve por la DIFERENCIA** — misma regla que en el server
+        // (`EventRoutes`, `PUT /api/events/{id}`) y literalmente la misma función de `:core`,
+        // [montoDeLaHermanaAlCorregir]. Desde que la pata de la deuda de una cuota vale solo el
+        // capital, copiarle `montoNuevo` a la hermana le bajaría al crédito los intereses también.
+        // Para un traspaso el resultado es idéntico al de antes (`hermana == montoViejo`), así que
+        // esto no cambia nada de lo que ya funcionaba.
+        //
+        // **Por qué esta cuenta se puede hacer acá, sin la tasa ni el saldo:** el interés y el
+        // seguro de ese mes ya están guardados dentro del par (son `montoViejo − hermana`), así que
+        // el espejo local —que no tiene `credit_terms` ni ninguna forma de conseguirlos sin red—
+        // llega al mismo número que el server. Sin eso, corregir una cuota sin señal habría dejado
+        // un saldo distinto del que la web muestra.
         //
         // **Las hermanas se leen ANTES de escribirles**, y no es un detalle de estilo: el saldo se
         // deshace con el monto VIEJO de cada una, y leerlas después de la cascada devolvería ya el
@@ -1192,10 +1199,25 @@ class LocalRepository(
         } else {
             emptyList()
         }
+        val montoNuevoDeCadaHermana = hermanas.associate { hermana ->
+            hermana.id to montoDeLaHermanaAlCorregir(
+                montoViejo = local.amount,
+                montoNuevo = montoNuevo,
+                montoDeLaHermana = hermana.amount,
+            )
+        }
 
         db.financialEventQueries.updateMovimiento(montoNuevo, cuentaNuevaId, conceptoNuevo, local.id, uid)
-        if (hermanas.isNotEmpty()) {
-            db.financialEventQueries.updateAmountByTransferId(montoNuevo, transferId!!, uid)
+        // Una por una, con su propia cifra: el UPDATE masivo por `transferId` que había acá les
+        // escribía la misma a todas y por eso se fue con la copia.
+        hermanas.forEach { hermana ->
+            db.financialEventQueries.updateMovimiento(
+                montoNuevoDeCadaHermana.getValue(hermana.id),
+                hermana.accountId,
+                hermana.description,
+                hermana.id,
+                uid,
+            )
         }
 
         // El saldo acumulado: se deshace el efecto viejo donde estaba y se aplica el nuevo donde
@@ -1206,7 +1228,7 @@ class LocalRepository(
         hermanas.forEach { hermana ->
             val tipoHermana = TransactionType.valueOf(hermana.type)
             moverSaldo(hermana.accountId, tipoHermana, -hermana.amount)
-            moverSaldo(hermana.accountId, tipoHermana, montoNuevo)
+            moverSaldo(hermana.accountId, tipoHermana, montoNuevoDeCadaHermana.getValue(hermana.id))
         }
 
         val types = accountTypes(uid)

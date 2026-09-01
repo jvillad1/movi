@@ -201,4 +201,45 @@ class EdicionDeMovimientoTest {
         val pago = evento(category = CARD_PAYMENT_CATEGORY)
         assertNull(avisoDeCambioDeCuenta(pago, AccountType.SAVINGS, AccountType.LOAN))
     }
+
+    // ── Cuánto vale la hermana cuando se corrige una pata ──────────────────────
+
+    @Test
+    fun `en un par simetrico corregir una pata le da a la hermana el mismo monto`() {
+        // Un traspaso, un pago de tarjeta: las dos mitades son la misma plata. La regla nueva tiene
+        // que dar exactamente lo que daba la copia de antes — si no, rompe lo que ya funcionaba.
+        assertEquals(
+            1_500_000L,
+            montoDeLaHermanaAlCorregir(montoViejo = 2_000_000L, montoNuevo = 1_500_000L, montoDeLaHermana = 2_000_000L),
+        )
+    }
+
+    @Test
+    fun `en la cuota de un credito la hermana se mueve por la DIFERENCIA`() {
+        // Cuota de $4.215.223 de la que $1.733.905 abonaron a capital: los otros $2.481.318 son
+        // interés del mes, un hecho ya ocurrido que no cambia porque él corrija lo que pagó.
+        // Copiar el monto le habría borrado al crédito $2,7 millones que sigue debiendo.
+        assertEquals(
+            2_018_682L,
+            montoDeLaHermanaAlCorregir(montoViejo = 4_215_223L, montoNuevo = 4_500_000L, montoDeLaHermana = 1_733_905L),
+        )
+    }
+
+    @Test
+    fun `bajar la cuota por debajo del interes no le SUBE la deuda`() {
+        // El piso en cero. La libranza ·4818 del dueño tiene cuotas 100 % interés: sin el piso, un
+        // monto negativo habría entrado como INCOME negativo a la cuenta LOAN.
+        assertEquals(
+            0L,
+            montoDeLaHermanaAlCorregir(montoViejo = 4_215_223L, montoNuevo = 1_000_000L, montoDeLaHermana = 1_733_905L),
+        )
+    }
+
+    @Test
+    fun `el aviso de la hoja dice la verdad segun que clase de par sea`() {
+        // «Para que la plata que sale sea la misma que entra» dejó de ser cierto en una cuota.
+        assertEquals(MONTO_DE_UN_PAR_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(TRANSFER_CATEGORY))
+        assertEquals(MONTO_DE_UN_PAR_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(CARD_PAYMENT_CATEGORY))
+        assertEquals(MONTO_DE_UNA_CUOTA_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(CUOTA_CATEGORY))
+    }
 }

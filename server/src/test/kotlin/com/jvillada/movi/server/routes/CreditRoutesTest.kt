@@ -40,6 +40,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
@@ -677,6 +678,71 @@ class CreditRoutesTest {
             Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
         )
         assertTrue(terms.remindMe)
+    }
+
+    // ── El seguro de vida deudor ───────────────────────────────────────────────
+
+    @Test
+    fun `el seguro mensual se guarda y se relee`() = testApplication {
+        // Es plata que va DENTRO de la cuota y no baja la deuda (ver `desglosarCuota`). Se
+        // configura desde la app, no tocando código: en este proyecto nada se ajusta de otra forma.
+        wireApp()
+        val conSeguro = validTermsJson.dropLast(1) + ""","insuranceMonthly":108800}"""
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(conSeguro)
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+
+        assertEquals(108_800L, terms["insuranceMonthly"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `un APK viejo que edita el credito no borra el seguro`() = testApplication {
+        // **El agujero exacto que ya se cobró `paidBy` una vez.** `fillTerms` sobrescribe todas las
+        // columnas, y un cliente anterior a esta ola manda un cuerpo SIN `insuranceMonthly` al
+        // corregir la nota o el día de pago. Sin la guarda por claves del JSON, el seguro quedaría
+        // en null y la cuota volvería a abonar $108.800 de más a capital todos los meses — en
+        // silencio y con el número plausible. `validTermsJson` es literalmente un cuerpo viejo.
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","insuranceMonthly":108800}""")
+        }
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.replace("\"dayOfMonth\":5", "\"dayOfMonth\":7"))
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+
+        assertEquals(7, terms["dayOfMonth"]!!.jsonPrimitive.int, "el cambio del cliente viejo sí se aplicó")
+        assertEquals(108_800L, terms["insuranceMonthly"]!!.jsonPrimitive.long, "y el seguro sobrevivió")
+    }
+
+    @Test
+    fun `un cliente nuevo SI puede borrar el seguro mandandolo en null`() = testApplication {
+        // La otra mitad, y es la que hace útil a la de arriba: si «ausente» y «null» se trataran
+        // igual, un seguro escrito por error sería para siempre.
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","insuranceMonthly":108800}""")
+        }
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","insuranceMonthly":null}""")
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+
+        assertTrue(terms["insuranceMonthly"] == null || terms["insuranceMonthly"] is JsonNull)
     }
 
     /** Editar los términos con la casilla desmarcada no la vuelve a prender. */

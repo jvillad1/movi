@@ -476,21 +476,33 @@ fun Route.eventRoutes() {
                 // el descuadre silencioso que esta ruta no puede permitir. Ver
                 // `PATA_NO_CAMBIA_DE_CUENTA` para por qué la CUENTA, en cambio, se rechaza.
                 //
-                // **COPIA el monto, y eso vale mientras las dos patas nazcan iguales.** Hoy sí:
-                // `transferLegsFor` y `pagoDeCuotaLegs` crean las dos mitades con la misma cifra.
-                // Pero está decidido —y pendiente, en su propio PR— que en un crédito que
-                // amortiza la pata de la DEUDA baje solo por el **capital** de la cuota, no por
-                // la cuota completa (el resto es interés). El día que eso entre, esta cascada
-                // deja de poder copiar: tiene que **recalcular** la pata hermana de un pago de
-                // cuota (capital nuevo) en vez de escribirle el mismo `nuevoMonto`, o corregir
-                // una cuota de $4.215.223 le bajaría a la deuda los intereses también. La pata
-                // de un traspaso sí se sigue copiando: ahí las dos mitades son la misma plata.
+                // **YA NO COPIA: recalcula.** Hasta la ola pasada las dos patas nacían con la
+                // misma cifra y copiar era correcto. Desde que la pata de la DEUDA de una cuota
+                // vale solo el **capital** (ver `DesgloseDeCuota`), copiar le bajaría a la deuda
+                // los intereses también: corregir una cuota de $4.215.223 a $4.500.000 le habría
+                // restado $4.500.000 a un crédito al que solo le tocaba el capital. La regla
+                // —mover la hermana por la DIFERENCIA, que es lo mismo que copiar cuando el par es
+                // simétrico— vive en `:core` y la comparte con el espejo local del teléfono:
+                // [montoDeLaHermanaAlCorregir].
+                //
+                // Se escribe hermana por hermana y no con un UPDATE masivo por `transferId`,
+                // porque ahora cada una tiene su propia cifra nueva.
                 val transferId = fila.transferId
                 if (nuevoMonto != null && transferId != null) {
-                    Events.update({
-                        (Events.userId eq uid) and (Events.transferId eq transferId) and (Events.id neq id)
-                    }) {
-                        it[amount] = nuevoMonto
+                    val hermanas = Events.selectAll()
+                        .where {
+                            (Events.userId eq uid) and (Events.transferId eq transferId) and (Events.id neq id)
+                        }
+                        .map { it[Events.id] to it[Events.amount] }
+                    hermanas.forEach { (hermanaId, montoDeLaHermana) ->
+                        val montoNuevoDeLaHermana = montoDeLaHermanaAlCorregir(
+                            montoViejo = fila.amount,
+                            montoNuevo = nuevoMonto,
+                            montoDeLaHermana = montoDeLaHermana,
+                        )
+                        Events.update({ (Events.userId eq uid) and (Events.id eq hermanaId) }) {
+                            it[amount] = montoNuevoDeLaHermana
+                        }
                     }
                 }
                 Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {

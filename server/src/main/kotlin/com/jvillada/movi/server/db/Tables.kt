@@ -343,6 +343,14 @@ object Credits : Table("credit_terms") {
     // Nullable a propósito: `createMissingTablesAndColumns` corre DENTRO de la transacción de
     // arranque, y una columna nullable es DDL que no puede fallar sobre filas existentes.
     val paidBy = varchar("paid_by", 60).nullable()
+    /**
+     * Seguro de vida deudor incluido en la cuota; ver `CreditTerms.insuranceMonthly`. Nullable por
+     * lo mismo que las dos de arriba: `createMissingTablesAndColumns` corre DENTRO de la
+     * transacción de arranque, y `ALTER TABLE … ADD COLUMN … NULL` es el único DDL que no puede
+     * fallar sobre filas que ya existen. Un DDL caído acá deja el server sin arrancar y al dueño
+     * sin app.
+     */
+    val insuranceMonthly = long("insurance_monthly").nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

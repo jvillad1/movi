@@ -76,6 +76,20 @@ data class CreditTerms(
      * anotar.
      */
     val paidBy: String? = null,
+    /**
+     * **Seguro de vida deudor (u otro cargo mensual fijo) incluido en la cuota.** `null` o 0 = no
+     * hay, que es el caso normal.
+     *
+     * Existe por la misma razón que [rateEa]: hay plata dentro de la cuota que **no baja la
+     * deuda**. En el libre inversión ·9695 del dueño la cuota son $1.177.748 de capital + interés
+     * **más $108.800 de Seguro Vida Deudor**, y esos $108.800 no amortizan nada. Sin este campo,
+     * [desglosarCuota] se los habría contado como capital y la deuda habría bajado $108.800 de más
+     * cada mes — el mismo error que esta ola vino a matar, en chiquito.
+     *
+     * En la moneda de la cuenta, igual que [installment]. Editable desde la hoja de condiciones del
+     * crédito: en este proyecto nada se configura tocando código.
+     */
+    val insuranceMonthly: Long? = null,
 )
 
 @Serializable

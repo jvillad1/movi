@@ -29,9 +29,10 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
-import com.jvillada.movi.shared.model.MONTO_DE_UN_PAR_SE_MUEVE_JUNTO
+import com.jvillada.movi.shared.model.avisoDeMontoDeUnPar
 import com.jvillada.movi.shared.model.PATA_NO_CAMBIA_DE_CUENTA
 import com.jvillada.movi.shared.model.avisoDeCambioDeCuenta
 import com.jvillada.movi.shared.model.OPENING_BALANCE_EXPLAINER
@@ -297,7 +298,16 @@ fun ChangeCategorySheet(
     if (isTransferLeg(event)) {
         BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                SheetLabel("TRASPASO")
+                // El rótulo dice QUÉ es, y no «TRASPASO» para todo: la mitad de una cuota se abre
+                // por esta misma rama —es una pata de un par— y llamarla traspaso contradice al
+                // renglón de Movimientos, que desde esta ola dice «Cuota de crédito».
+                SheetLabel(
+                    when (event.category) {
+                        CUOTA_CATEGORY -> "CUOTA DE CRÉDITO"
+                        CARD_PAYMENT_CATEGORY -> "PAGO DE TARJETA"
+                        else -> "TRASPASO"
+                    },
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
                 Spacer(Modifier.height(16.dp))
@@ -730,7 +740,7 @@ fun CardPaymentCandidatesSheet(
  *    parezca un bug.
  * 2. **Una pata de un par no muestra selector de cuenta**, muestra la explicación
  *    ([PATA_NO_CAMBIA_DE_CUENTA]). El monto sí se edita y el aviso dice que se mueve en las dos
- *    mitades ([MONTO_DE_UN_PAR_SE_MUEVE_JUNTO]).
+ *    mitades ([avisoDeMontoDeUnPar]).
  * 3. **Cambiar de cuenta puede sacar el movimiento del mes** —`isCashFlow` decide por tipo de
  *    cuenta— y eso se **avisa antes de guardar** ([avisoDeCambioDeCuenta]), nunca después. Es la
  *    misma regla que el aviso de cambio de mes al corregir la fecha: lo que mueve plata en otra
@@ -891,7 +901,9 @@ private fun SeccionDelMovimiento(
             tipoActual = cuentaActual?.type,
             tipoNuevo = cuentaElegida?.type?.takeIf { cuentaId != event.accountId },
         ),
-        MONTO_DE_UN_PAR_SE_MUEVE_JUNTO.takeIf { esPataDeUnPar && monto != event.amount },
+        // El texto depende de QUE CLASE de par es: en un traspaso las dos mitades valen lo mismo,
+        // en la cuota de un credito la de la deuda vale solo el capital. Ver [avisoDeMontoDeUnPar].
+        avisoDeMontoDeUnPar(event.category).takeIf { esPataDeUnPar && monto != event.amount },
     )
     avisos.forEach { aviso ->
         Spacer(Modifier.height(12.dp))

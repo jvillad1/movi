@@ -107,11 +107,6 @@ updateMovimiento:
 UPDATE financial_event SET amount = :amount, accountId = :accountId, description = :description
 WHERE id = :id AND userId = :userId;
 
--- El MONTO de un par se mueve en las dos mitades, igual que la fecha y que la anulación: es un
--- solo hecho con dos anotaciones (ver PATA_NO_CAMBIA_DE_CUENTA para por qué la CUENTA no).
-updateAmountByTransferId:
-UPDATE financial_event SET amount = :amount WHERE transferId = :transferId AND userId = :userId;
-
 -- Las dos patas de un traspaso se mueven de fecha juntas, igual que se anulan juntas: la fecha
 -- de un traspaso es UN hecho. Espejo local de la cascada por transferId del server.
 updateTimestampByTransferId:
