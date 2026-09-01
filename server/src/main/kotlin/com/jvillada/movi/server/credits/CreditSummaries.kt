@@ -28,4 +28,7 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     // Nullable en la base, `false` en el wire: las filas viejas no la tienen.
     payrollDeduction = this[Credits.payrollDeduction] ?: false,
     paidBy = this[Credits.paidBy]?.takeIf { it.isNotBlank() },
+    // 0 se lee como «no hay seguro», igual que null: las dos cosas significan lo mismo para
+    // `desglosarCuota` y dejar pasar el 0 obligaría a cada llamador a acordarse del caso.
+    insuranceMonthly = this[Credits.insuranceMonthly]?.takeIf { it > 0L },
 )

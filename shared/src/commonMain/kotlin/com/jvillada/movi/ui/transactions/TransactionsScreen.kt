@@ -47,6 +47,8 @@ import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import kotlinx.datetime.DatePeriod
@@ -284,7 +286,16 @@ fun collapseTransfers(items: List<FinancialEvent>): List<MovementRow> {
 fun transferRowSubtitle(row: MovementRow.Transfer, accountNames: Map<String, String>): String {
     val origen = accountNames[row.out.accountId] ?: "Origen"
     val destino = accountNames[row.into.accountId] ?: "Destino"
-    return "De $origen a $destino"
+    val base = "De $origen a $destino"
+    // **Cuando las dos patas NO valen lo mismo, el renglón lo dice.**
+    //
+    // El monto grande de la derecha es el de la pata del dinero: la cuota entera, que es la plata
+    // que de verdad salió. Pero desde que la deuda baja solo por el capital (ver
+    // `DesgloseDeCuota`), un renglón que muestre $1.286.548 y nada más estaría afirmando que la
+    // deuda bajó $1.286.548 — el mismo número plausible y falso que esta ola vino a matar, ahora
+    // en la lista. La diferencia son los intereses y el seguro del mes.
+    if (row.out.amount == row.into.amount) return base
+    return "$base · abona ${formatMoney(row.into.amount, row.into.currency)} a capital"
 }
 
 /**
@@ -303,6 +314,13 @@ fun transferRowSubtitle(row: MovementRow.Transfer, accountNames: Map<String, Str
  * dice «Traspaso», que es lo que ya se decía — nunca un nombre inventado.
  */
 fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): String = when {
+    // **La categoría manda sobre el tipo de cuenta, y va primero.** Un pago de cuota también es un
+    // par con la pata de entrada en una cuenta LOAN, así que caía en «Abono extraordinario»: la
+    // cuota mensual rotulada justo como lo contrario de lo que es, que es la confusión que este
+    // nombre existe para evitar. La categoría la escribe `pagoDeCuotaLegs` y no hay otra forma de
+    // llegar a ella, así que distingue exacto.
+    row.out.category == CUOTA_CATEGORY -> "Cuota de crédito"
+    row.out.category == CARD_PAYMENT_CATEGORY -> "Pago de tarjeta"
     accountTypes[row.out.accountId] == AccountType.LOAN -> "Desembolso"
     accountTypes[row.into.accountId] == AccountType.LOAN -> "Abono extraordinario"
     else -> "Traspaso"

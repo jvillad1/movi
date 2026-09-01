@@ -88,6 +88,43 @@ data class FinancialEvent(
      * cuando se captura o se importa, así que ahí la creación es ese momento.
      */
     val createdAt: Long? = null,
+    /**
+     * **Cuánto de esta cuota NO bajaba la deuda**: interés del período + seguro de vida deudor.
+     *
+     * Lo escribe [pagoDeCuotaLegs] **solo en la pata de la deuda** de un pago de cuota sobre un
+     * crédito que amortiza. `null` en absolutamente todo lo demás —un gasto suelto, un traspaso,
+     * un pago de tarjeta, un pago sobre un crédito sin tasa— y ese `null` significa exactamente
+     * «este par es simétrico», que es lo que esos pares son.
+     *
+     * ### Por qué se almacena, si es derivable
+     *
+     * Casi siempre lo es: en un par sano vale `cuota − capital`, o sea la resta de las dos patas.
+     * **Deja de serlo cuando el capital se clampa a cero**, y ese caso es real — una cuota que no
+     * alcanza a cubrir el interés del mes (ver [desglosarCuota]). Ahí el par guarda `(400.000, 0)`
+     * sobre un interés de $472.705, y la resta miente por $72.705.
+     *
+     * Eso rompía la corrección del monto ([montoDeLaHermanaAlCorregir]), que hasta acá deducía el
+     * interés restando las dos patas. Medido: corregir una cuota del ·9695 hacia abajo y
+     * arrepentirse devolvía la deuda **$72.705 más baja** de lo que estaba; corregir hacia arriba
+     * un pago parcial de $3.000.000 a la libranza ·4818 (100 % interés) borraba **$646.011** de
+     * deuda de un tirón. Es el mismo error que la ola de la cuota vino a matar —la deuda que baja
+     * de más, con el número plausible— entrando por la puerta de la edición.
+     *
+     * Guardarlo lo cierra de raíz: el interés y el seguro de ese mes son **un hecho ya ocurrido**,
+     * no una función de lo que el dueño terminó pagando, así que corregir la cuota es
+     * `capital = cuotaNueva − noAmortiza` y el piso en cero deja de destruir nada.
+     *
+     * ### Un solo número y no dos
+     *
+     * Interés y seguro se guardan sumados porque para esta cuenta son **la misma cosa**: plata
+     * dentro de la cuota que no amortiza. Separarlos costaría una segunda columna en las dos
+     * bases (server y espejo local) sin cambiar ni un peso de ningún resultado.
+     *
+     * Nullable y con default, igual que [transferId] y [createdAt]: las filas que ya existen no lo
+     * tienen y no hay de dónde sacarlo. Un `null` las trata como el par simétrico que efectivamente
+     * son (ver «Qué pasa con los pagos de cuota YA registrados» en [DesgloseDeCuota]).
+     */
+    val noAmortiza: Long? = null,
 )
 
 /**

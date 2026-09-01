@@ -2,14 +2,19 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.balance.toAccount
+import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.DesgloseDeCuota
+import com.jvillada.movi.shared.model.desglosarCuota
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.pagoDeCuotaLegs
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -107,7 +112,43 @@ fun Route.pagoDeCuotaRoutes() {
                 )
             }
 
-            val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt)
+            // ── Cuánto de esta cuota baja de verdad la deuda ─────────────────────────────────
+            //
+            // **El server recalcula, no le cree al cliente.** La hoja de «Cuota» muestra el mismo
+            // desglose antes de guardar (con la MISMA función de `:core`), pero lo hace con el
+            // saldo que tenía cargado en pantalla: si el dueño dejó la hoja abierta y en el medio
+            // entró un SMS o se ajustó el saldo, ese número llegó viejo. Acá se deriva contra los
+            // eventos vivos, que es de donde sale la deuda de verdad.
+            //
+            // **Se excluyen las patas de ESTE pago**: un reintento con los mismos ids tiene que
+            // calcular el mismo interés que el primer intento, no uno sobre la deuda ya bajada.
+            //
+            // **Y se filtra por moneda**, igual que `computeBalances`, que agrupa por ella: sumar
+            // los deltas de todas las monedas daría una cifra que no es de ninguna, y esa cifra
+            // entra derecho al cálculo del interés. Hoy no muerde —los créditos del dueño son COP
+            // y `validarPagoDeCuota` ya exige que la cuenta y la deuda compartan moneda— pero la
+            // guarda cuesta una línea y el error costaría una deuda mal calculada en silencio.
+            val saldoAntesDelPago = loadNonVoidedEvents(uid, debt.id)
+                .filter { it.transferId != body.transferId && it.currency == debt.currency }
+                .sumOf { signedDelta(debt.type, it.type, it.amount) }
+            val terms = if (debt.type == AccountType.LOAN) {
+                dbQuery {
+                    Credits.selectAll()
+                        .where { (Credits.userId eq uid) and (Credits.accountId eq debt.id) }
+                        .firstOrNull()?.toCreditTerms()
+                }
+            } else {
+                null
+            }
+            val desglose = desglosarCuota(
+                cuota = body.amount,
+                tipoDeLaDeuda = debt.type,
+                saldoDeLaDeuda = saldoAntesDelPago,
+                rateEa = terms?.rateEa,
+                seguroMensual = terms?.insuranceMonthly,
+            )
+
+            val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt, desglose)
 
             // Las dos inserciones en UN solo dbQuery = una sola transacción: si la segunda choca,
             // la primera se va con ella. Media operación acá sería plata que salió de la cuenta
@@ -159,12 +200,51 @@ fun Route.pagoDeCuotaRoutes() {
             call.respond(
                 if (ok) HttpStatusCode.Created else HttpStatusCode.OK,
                 PagoDeCuotaResult(
-                    deudaRestante = eventos.sumOf {
-                        signedDelta(debt.type, it.type, it.amount)
-                    },
+                    // Por moneda, igual que `saldoAntesDelPago` y que `computeBalances`: la deuda
+                    // que se le muestra al dueño es la de ESTA moneda, no una suma de varias.
+                    deudaRestante = eventos
+                        .filter { it.currency == debt.currency }
+                        .sumOf { signedDelta(debt.type, it.type, it.amount) },
                     patas = guardadas,
+                    // **El desglose de las patas GUARDADAS, no el que se acaba de calcular**, por
+                    // el mismo motivo por el que las patas se releen: en el camino del reintento
+                    // las guardadas pueden ser de un pago anterior con otro monto, y devolver el
+                    // desglose recién calculado afirmaría un reparto que no es el que quedó
+                    // escrito. Se reconstruye de lo que hay en la base — el capital ES la pata de
+                    // la deuda, y la cuota ES la del dinero.
+                    desglose = desgloseDeLoGuardado(guardadas, debt.id, desglose),
                 ),
             )
         }
     }
+}
+
+/**
+ * El desglose que corresponde a **las patas que de verdad quedaron en la base**.
+ *
+ * En el camino feliz es exactamente [calculado]. Existe para el otro camino: el reintento cuyo
+ * INSERT chocó porque las patas ya estaban de un intento anterior (posiblemente con otro monto, ver
+ * el comentario de la relectura). Ahí, devolver [calculado] afirmaría un reparto que no es el que
+ * quedó escrito — el mismo error que la relectura de las patas vino a cerrar, por la otra puerta.
+ *
+ * `interes` y `seguro` no se pueden separar mirando las filas —el par guarda su suma, no cada uno—
+ * así que se devuelven como un solo bloque en `interes` y `seguro` en 0. Es honesto: la cifra que
+ * el dueño va a comparar es cuánto bajó la deuda, y esa sale exacta.
+ */
+private fun desgloseDeLoGuardado(
+    guardadas: List<FinancialEvent>,
+    debtAccountId: String,
+    calculado: DesgloseDeCuota,
+): DesgloseDeCuota {
+    val pataDeLaDeuda = guardadas.firstOrNull { it.accountId == debtAccountId }
+    val pataDelDinero = guardadas.firstOrNull { it.accountId != debtAccountId }
+    if (pataDeLaDeuda == null || pataDelDinero == null) return calculado
+    if (pataDelDinero.amount == calculado.cuota && pataDeLaDeuda.amount == calculado.capital) return calculado
+    return DesgloseDeCuota(
+        cuota = pataDelDinero.amount,
+        interes = pataDelDinero.amount - pataDeLaDeuda.amount,
+        seguro = 0L,
+        capital = pataDeLaDeuda.amount,
+        motivo = calculado.motivo,
+    )
 }

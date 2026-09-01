@@ -201,4 +201,127 @@ class EdicionDeMovimientoTest {
         val pago = evento(category = CARD_PAYMENT_CATEGORY)
         assertNull(avisoDeCambioDeCuenta(pago, AccountType.SAVINGS, AccountType.LOAN))
     }
+
+    // ── Cuánto vale la hermana cuando se corrige una pata ──────────────────────
+
+    /**
+     * Corregir la pata del DINERO de una cuota: la hermana es la de la deuda y es la que guarda lo
+     * que no amortiza.
+     */
+    private fun alCorregirLaCuota(montoViejo: Long, montoNuevo: Long, capital: Long, noAmortiza: Long?) =
+        montoDeLaHermanaAlCorregir(
+            montoViejo = montoViejo,
+            montoNuevo = montoNuevo,
+            montoDeLaHermana = capital,
+            noAmortizaDeLaHermana = noAmortiza,
+            noAmortizaDeLaPataQueSeCorrige = null,
+        )
+
+    @Test
+    fun `en un par simetrico corregir una pata le da a la hermana el mismo monto`() {
+        // Un traspaso, un pago de tarjeta, un pago de cuota anterior a que esto se guardara: las
+        // dos mitades son la misma plata. La regla nueva tiene que dar exactamente lo que daba la
+        // copia de antes — si no, rompe lo que ya funcionaba.
+        assertEquals(
+            1_500_000L,
+            alCorregirLaCuota(montoViejo = 2_000_000L, montoNuevo = 1_500_000L, capital = 2_000_000L, noAmortiza = null),
+        )
+    }
+
+    @Test
+    fun `en la cuota de un credito la hermana se recalcula sobre el interes guardado`() {
+        // Cuota de $4.215.223 de la que $1.733.905 abonaron a capital: los otros $2.481.318 son
+        // interés del mes, un hecho ya ocurrido que no cambia porque él corrija lo que pagó.
+        // Copiar el monto le habría borrado al crédito $2,7 millones que sigue debiendo.
+        assertEquals(
+            2_018_682L,
+            alCorregirLaCuota(
+                montoViejo = 4_215_223L,
+                montoNuevo = 4_500_000L,
+                capital = 1_733_905L,
+                noAmortiza = 2_481_318L,
+            ),
+        )
+    }
+
+    @Test
+    fun `bajar la cuota por debajo del interes no le SUBE la deuda`() {
+        // El piso en cero: sin él, un monto negativo habría entrado como INCOME negativo a la
+        // cuenta LOAN.
+        assertEquals(
+            0L,
+            alCorregirLaCuota(
+                montoViejo = 4_215_223L,
+                montoNuevo = 1_000_000L,
+                capital = 1_733_905L,
+                noAmortiza = 2_481_318L,
+            ),
+        )
+    }
+
+    @Test
+    fun `corregir hacia abajo y arrepentirse devuelve el capital EXACTO`() {
+        // **El defecto que el interés guardado vino a cerrar.** La versión anterior deducía el
+        // interés restando las dos patas, así que después de un clampeo a cero la resta mentía y
+        // la vuelta atrás dejaba la deuda más baja de lo que estaba.
+        //
+        // Cuota del ·9695: $1.286.548, de los que $813.843 abonan a capital ($363.905 de interés +
+        // $108.800 de seguro = $472.705 que no amortizan).
+        val noAmortiza = 472_705L
+        val bajada = alCorregirLaCuota(
+            montoViejo = 1_286_548L, montoNuevo = 400_000L, capital = 813_843L, noAmortiza = noAmortiza,
+        )
+        assertEquals(0L, bajada, "400.000 no cubren 472.705 de interés y seguro: nada abona a capital")
+
+        val devuelta = alCorregirLaCuota(
+            montoViejo = 400_000L, montoNuevo = 1_286_548L, capital = bajada, noAmortiza = noAmortiza,
+        )
+        assertEquals(
+            813_843L,
+            devuelta,
+            "tiene que volver al capital original; la regla de la diferencia daba 886.548 y " +
+                "borraba \$72.705 de deuda en silencio",
+        )
+    }
+
+    @Test
+    fun `corregir hacia arriba un pago que era 100 por ciento interes no borra deuda`() {
+        // El caso real que el KDoc del piso invocaba y que no tenía prueba: un pago PARCIAL de
+        // $3.000.000 a la libranza ·4818, cuyo interés del mes es $3.646.011 — o sea capital 0.
+        // Corregido después al valor real de la cuota, $6.040.259.
+        val noAmortiza = 3_646_011L
+        val corregido = alCorregirLaCuota(
+            montoViejo = 3_000_000L, montoNuevo = 6_040_259L, capital = 0L, noAmortiza = noAmortiza,
+        )
+
+        assertEquals(
+            2_394_248L,
+            corregido,
+            "6.040.259 − 3.646.011; la regla de la diferencia daba 3.040.259 y borraba \$646.011",
+        )
+    }
+
+    @Test
+    fun `corregir la pata de la DEUDA le suma a la hermana lo que no amortiza`() {
+        // La otra dirección: acá `montoNuevo` es un capital y la hermana es la plata que salió de
+        // la cuenta, que tiene que ser ese capital más el interés y el seguro de ese mes.
+        assertEquals(
+            4_500_000L,
+            montoDeLaHermanaAlCorregir(
+                montoViejo = 1_733_905L,
+                montoNuevo = 2_018_682L,
+                montoDeLaHermana = 4_215_223L,
+                noAmortizaDeLaHermana = null,
+                noAmortizaDeLaPataQueSeCorrige = 2_481_318L,
+            ),
+        )
+    }
+
+    @Test
+    fun `el aviso de la hoja dice la verdad segun que clase de par sea`() {
+        // «Para que la plata que sale sea la misma que entra» dejó de ser cierto en una cuota.
+        assertEquals(MONTO_DE_UN_PAR_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(TRANSFER_CATEGORY))
+        assertEquals(MONTO_DE_UN_PAR_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(CARD_PAYMENT_CATEGORY))
+        assertEquals(MONTO_DE_UNA_CUOTA_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(CUOTA_CATEGORY))
+    }
 }

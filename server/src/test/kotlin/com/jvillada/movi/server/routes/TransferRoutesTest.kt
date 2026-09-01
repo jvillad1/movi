@@ -18,6 +18,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
@@ -1277,13 +1278,18 @@ class TransferRoutesTest {
      */
     @Test
     fun `un evento importado no puede nacer en la categoria reservada`() = testApplication {
+        // **La fecha sale del reloj, no del calendario de quien escribió el test.** Estaba fija en
+        // «2026-08-20» y la última aserción compara contra `monthSpent`, que es el mes EN CURSO: el
+        // 1 de septiembre el gasto quedó fuera del mes y el test se puso rojo en master sin que
+        // nadie tocara nada. Con el día de hoy (en Bogotá, la zona de la app) no vuelve a pasar.
+        val hoyEnBogota = epochMillisToAppDate(System.currentTimeMillis())
         wireApp()
         val response = client.post("/api/statements/import") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             contentType(ContentType.Application.Json)
             setBody(
-                """{"statementId":"st-cat","accountId":"$ahorrosId","bankName":"Bancolombia","period":"2026-08",""" +
-                    """"reconciliations":[],"skipped":[],"imports":[{"id":"p-cat","date":"2026-08-20",""" +
+                """{"statementId":"st-cat","accountId":"$ahorrosId","bankName":"Bancolombia","period":"${hoyEnBogota.year}-${hoyEnBogota.monthValue.toString().padStart(2, '0')}",""" +
+                    """"reconciliations":[],"skipped":[],"imports":[{"id":"p-cat","date":"$hoyEnBogota",""" +
                     """"merchant":"Éxito","amount":90000,"currency":"COP","type":"EXPENSE",""" +
                     """"category":"$TRANSFER_CATEGORY","description":"COMPRA","rawText":""}]}""",
             )

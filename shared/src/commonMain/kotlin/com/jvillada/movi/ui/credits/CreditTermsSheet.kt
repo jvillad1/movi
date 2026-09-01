@@ -132,6 +132,11 @@ fun CreditTermsSheet(
     var rateEa by remember { mutableStateOf(existingTerms?.rateEa?.toString() ?: "") }
     var termMonths by remember { mutableStateOf(existingTerms?.termMonths?.toString() ?: "") }
     var installment by remember { mutableStateOf(existingTerms?.installment) }
+    // El seguro de vida deudor va DENTRO de la cuota y **no baja la deuda**. Sin este campo, la
+    // cuota del libre inversión ·9695 abonaba $108.800 de más a capital todos los meses. Opcional:
+    // la mayoría de los créditos no lo tienen, y exigirlo trabaría un alta por un dato que no
+    // existe. Ver `CreditTerms.insuranceMonthly` y `desglosarCuota` en :core.
+    var seguroMensual by remember { mutableStateOf(existingTerms?.insuranceMonthly) }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
     // F23: aceptaba cualquier cosa como fecha — el filtro de abajo (solo dígitos y guiones) más
     // isValidCreditDate son la validación real hasta que exista un selector de calendario
@@ -254,6 +259,9 @@ fun CreditTermsSheet(
                     // para que marcar libranza sobre un crédito que decía «la paga Skandia» no
                     // deje el rótulo viejo escrito en la base.
                     paidBy = if (esLibranza) null else quienPaga.trim().takeIf { it.isNotBlank() },
+                    // 0 y «no hay» son lo mismo acá: `MoneyField` deja el campo en null cuando se
+                    // borra, y un 0 escrito a mano significa exactamente lo mismo que vacío.
+                    insuranceMonthly = seguroMensual?.takeIf { it > 0L },
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -448,6 +456,18 @@ fun CreditTermsSheet(
                     Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, placeholder = "Cuota mensual (COP)") }
                     Box(Modifier.weight(1f)) { FieldBox("Día de pago", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
                 }
+                Spacer(Modifier.height(8.dp))
+                // El seguro va PEGADO a la cuota, no al final con las notas: es plata que está
+                // adentro de la cifra de arriba, y leerlas juntas es lo que hace evidente qué se
+                // está declarando. Ver `desglosarCuota` en :core para qué hace con él.
+                MoneyField(seguroMensual, { seguroMensual = it }, placeholder = "Seguro mensual (COP, opcional)")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
+                        "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
+                    fontSize = 11.5.sp,
+                    color = MinTextMute,
+                )
                 Spacer(Modifier.height(8.dp))
                 // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
                 // (pendiente, ver KDoc de isValidCreditDate más abajo).

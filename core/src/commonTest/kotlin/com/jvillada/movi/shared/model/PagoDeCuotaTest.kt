@@ -33,6 +33,22 @@ class PagoDeCuotaTest {
         toEventId = "ev2",
     )
 
+    /**
+     * Las dos patas de un pago, con el desglose calculado igual que en el server.
+     *
+     * `rateEa` en null por defecto = [MotivoDelDesglose.SIN_TASA], o sea el comportamiento de
+     * siempre (la deuda baja por el monto completo). Los tests de esta clase miran categorías,
+     * cuentas y enlace, que no dependen del reparto; los que sí lo miran pasan la tasa. Cuánto se
+     * reparte se prueba en `DesgloseDeCuotaTest`, con sus créditos reales.
+     */
+    private fun patas(from: Account, debt: Account, monto: Long, rateEa: Double? = null, seguro: Long? = null) =
+        pagoDeCuotaLegs(
+            peticion(from.id, debt.id, monto),
+            from,
+            debt,
+            desglosarCuota(monto, debt.type, debt.balance, rateEa, seguro),
+        )
+
     // ── La decisión del dueño ──────────────────────────────────────────────────
 
     @Test
@@ -40,7 +56,7 @@ class PagoDeCuotaTest {
         // «Sí, es plata que salió». Antes, registrar la cuota del carro como traspaso la sacaba
         // del mes —los dos lados excluidos— y sus gastos quedaban $4.215.223 por debajo de lo
         // real, con el «Flujo del mes» viéndose mejor de lo que era.
-        val (dinero, _) = pagoDeCuotaLegs(peticion("a1", "l1", 4_215_223), ahorros, carro)
+        val (dinero, _) = patas(ahorros, carro, 4_215_223)
 
         assertEquals(CUOTA_CATEGORY, dinero.category)
         assertFalse(isReservedCategory(CUOTA_CATEGORY), "si fuera reservada, no contaría")
@@ -51,7 +67,7 @@ class PagoDeCuotaTest {
     fun el_pago_de_una_tarjeta_NO_cuenta() {
         // Las compras ya contaron cuando se hicieron. Contar también el pago sería contar la
         // misma plata dos veces.
-        val (dinero, _) = pagoDeCuotaLegs(peticion("a1", "c1", 1_008_902), ahorros, amex)
+        val (dinero, _) = patas(ahorros, amex, 1_008_902)
 
         assertEquals(CARD_PAYMENT_CATEGORY, dinero.category)
         assertFalse(isCashFlow(ahorros.type, dinero.type, dinero.category))
@@ -62,10 +78,10 @@ class PagoDeCuotaTest {
         // Es lo que el dueño vino a ver: que la deuda baje. `signedDelta` sobre una cuenta de
         // deuda resta un INCOME.
         listOf(carro to 4_215_223L, amex to 1_008_902L).forEach { (deuda, monto) ->
-            val (_, pata) = pagoDeCuotaLegs(peticion("a1", deuda.id, monto), ahorros, deuda)
+            val (_, pata) = patas(ahorros, deuda, monto)
 
             assertEquals(TransactionType.INCOME, pata.type)
-            assertEquals(-monto, signedDelta(deuda.type, pata.type, pata.amount))
+            assertTrue(signedDelta(deuda.type, pata.type, pata.amount) < 0L)
             // Y nunca cuenta como ingreso del mes: vive en una cuenta de deuda.
             assertFalse(isCashFlow(deuda.type, pata.type, pata.category))
         }
@@ -75,11 +91,94 @@ class PagoDeCuotaTest {
     fun las_dos_patas_quedan_enlazadas() {
         // Sin el enlace serían dos movimientos sueltos que nadie puede volver a juntar — ni para
         // mostrarlos como una sola fila, ni para anular el pago entero.
-        val (dinero, deuda) = pagoDeCuotaLegs(peticion("a1", "l1", 4_215_223), ahorros, carro)
+        val (dinero, deuda) = patas(ahorros, carro, 4_215_223)
 
         assertEquals("tr1", dinero.transferId)
         assertEquals("tr1", deuda.transferId)
+    }
+
+    // ── La asimetría del par: lo que cambió en esta ola ────────────────────────
+
+    @Test
+    fun en_un_credito_que_amortiza_las_dos_patas_NO_valen_lo_mismo() {
+        // **Acá estaba el error.** Antes las dos patas salían por $4.215.223 y la deuda del carro
+        // bajaba esa cifra entera, interés incluido. Con las seis cuotas de un mes, Movi le
+        // mostraba $18,7 millones menos de deuda de la que tiene, y el error se acumulaba.
+        val (dinero, deuda) = patas(ahorros, carro, 4_215_223, rateEa = 18.16)
+
+        assertEquals(4_215_223L, dinero.amount, "de la cuenta SÍ salió la cuota entera")
+        assertEquals(1_733_905L, deuda.amount, "a la deuda solo le entra el capital")
+        assertEquals(-1_733_905L, signedDelta(carro.type, deuda.type, deuda.amount))
+    }
+
+    @Test
+    fun la_cuota_entera_sigue_contando_en_los_gastos_del_mes() {
+        // La mitad de la decisión que NO cambió: esa plata salió de su bolsillo, toda. Si alguien
+        // "arreglara" la asimetría bajando también la pata del dinero al capital, sus gastos del
+        // mes caerían $18,7 millones — el mismo error, del otro lado.
+        val (dinero, _) = patas(ahorros, carro, 4_215_223, rateEa = 18.16)
+
+        assertTrue(dinero.countsAsCashFlow)
+        assertEquals(4_215_223L, dinero.amount)
+    }
+
+    @Test
+    fun el_pago_de_una_tarjeta_sigue_siendo_simetrico() {
+        // Una tarjeta no amortiza: pagar $1.008.902 baja la deuda $1.008.902. Este test blinda lo
+        // que NO tenía que cambiar.
+        val (dinero, deuda) = patas(ahorros, amex, 1_008_902, rateEa = 32.0)
+
         assertEquals(dinero.amount, deuda.amount)
+        assertEquals(1_008_902L, deuda.amount)
+    }
+
+    @Test
+    fun la_pata_de_la_deuda_DICE_que_es_un_abono_a_capital() {
+        // Si el renglón del crédito dijera «Pago desde Bancolombia Ahorros · $1.733.905» sobre una
+        // cuota de $4.215.223, no habría en toda la app dónde enterarse de a dónde se fue la
+        // diferencia. Cuando las dos patas valen lo mismo, en cambio, no hay nada que aclarar.
+        val (_, conTasa) = patas(ahorros, carro, 4_215_223, rateEa = 18.16)
+        val (_, sinTasa) = patas(ahorros, carro, 4_215_223)
+
+        assertTrue(conTasa.description.startsWith("Abono a capital desde"), conTasa.description)
+        assertTrue(sinTasa.description.startsWith("Pago desde"), sinTasa.description)
+    }
+
+    @Test
+    fun la_pata_de_la_deuda_GUARDA_lo_que_no_amortizo() {
+        // Sin esto, corregir el monto después tenía que deducir el interés restando las dos patas
+        // — y la resta miente en cuanto el capital se clampa a cero. Ver
+        // [FinancialEvent.noAmortiza] y [montoDeLaHermanaAlCorregir].
+        val (dinero, deuda) = patas(ahorros, carro, 4_215_223, rateEa = 18.16, seguro = 108_800L)
+
+        assertEquals(2_481_318L + 108_800L, deuda.noAmortiza, "interés + seguro, en un solo número")
+        assertEquals(dinero.amount, deuda.amount + deuda.noAmortiza!!, "las dos patas cuadran con esto")
+        assertNull(dinero.noAmortiza, "la pata del dinero no guarda nada: la plata salió entera")
+    }
+
+    @Test
+    fun un_par_simetrico_no_guarda_nada_y_ese_null_ES_la_respuesta() {
+        // Una tarjeta y un crédito sin tasa arman pares simétricos de verdad. Un 0 explícito diría
+        // lo mismo pero con pinta de calculado, y la corrección del monto lo trataría distinto.
+        val (_, tarjeta) = patas(ahorros, amex, 1_008_902, rateEa = 32.0)
+        val (_, sinTasa) = patas(ahorros, carro, 4_215_223)
+
+        assertNull(tarjeta.noAmortiza)
+        assertNull(sinTasa.noAmortiza)
+    }
+
+    @Test
+    fun una_cuota_que_no_cubre_el_interes_deja_la_pata_en_cero_PERO_guarda_el_interes() {
+        // El caso que rompía la corrección: la resta de las dos patas da $3.000.000 y el interés
+        // real es $3.646.011. Guardado, corregir el monto después vuelve al capital exacto.
+        val libranza = Account("l2", "Libranza 4818", AccountType.LOAN, 283_000_000L)
+        val (dinero, deuda) = patas(ahorros, libranza, 3_000_000, rateEa = 15.50)
+
+        assertEquals(0L, deuda.amount, "nada de este pago abona a capital")
+        assertTrue(
+            deuda.noAmortiza!! > dinero.amount,
+            "el interés del mes es MAYOR que lo pagado, y la resta de las patas no lo sabría",
+        )
     }
 
     // ── Lo que no se puede hacer ───────────────────────────────────────────────
@@ -133,7 +232,7 @@ class PagoDeCuotaTest {
         val ahorrosUsd = Account("a3", "Ahorros USD", AccountType.SAVINGS, 500, currency = "USD")
         val amexUsd = Account("c2", "Master Black USD", AccountType.CREDIT_CARD, 1_257, currency = "USD")
 
-        val (dinero, deuda) = pagoDeCuotaLegs(peticion("a3", "c2", 100), ahorrosUsd, amexUsd)
+        val (dinero, deuda) = patas(ahorrosUsd, amexUsd, 100)
 
         assertEquals("USD", dinero.currency)
         assertEquals("USD", deuda.currency)
@@ -146,7 +245,7 @@ class PagoDeCuotaTest {
         // `type`, `signedDelta` y `isCashFlow` pasándoles a mano el tipo de cuenta correcto, nunca
         // el `accountId` que la pata trae. Invertidas, un pago SUBIRÍA la deuda y metería plata
         // que no existe en la cuenta de ahorros.
-        val (dinero, deuda) = pagoDeCuotaLegs(peticion("a1", "l1", 4_215_223), ahorros, carro)
+        val (dinero, deuda) = patas(ahorros, carro, 4_215_223)
 
         assertEquals(ahorros.id, dinero.accountId)
         assertEquals(TransactionType.EXPENSE, dinero.type)
@@ -159,11 +258,11 @@ class PagoDeCuotaTest {
         // `countsAsCashFlow` viaja en la respuesta del server y el cliente la lee sin recalcular.
         // Salían las dos con el default `true`, así que la respuesta afirmaba que el pago de una
         // tarjeta cuenta en el mes — lo contrario de la decisión del dueño.
-        val (dineroCredito, deudaCredito) = pagoDeCuotaLegs(peticion("a1", "l1", 4_215_223), ahorros, carro)
+        val (dineroCredito, deudaCredito) = patas(ahorros, carro, 4_215_223)
         assertTrue(dineroCredito.countsAsCashFlow, "la cuota de un crédito SÍ cuenta")
         assertFalse(deudaCredito.countsAsCashFlow, "la pata de la deuda nunca")
 
-        val (dineroTarjeta, deudaTarjeta) = pagoDeCuotaLegs(peticion("a1", "c1", 1_008_902), ahorros, amex)
+        val (dineroTarjeta, deudaTarjeta) = patas(ahorros, amex, 1_008_902)
         assertFalse(dineroTarjeta.countsAsCashFlow, "el pago de una tarjeta NO cuenta")
         assertFalse(deudaTarjeta.countsAsCashFlow)
     }

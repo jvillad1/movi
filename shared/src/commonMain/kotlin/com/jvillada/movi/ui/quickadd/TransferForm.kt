@@ -38,6 +38,11 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.DesgloseDeCuota
+import com.jvillada.movi.shared.model.MotivoDelDesglose
+import com.jvillada.movi.shared.model.PagoDeCuotaResult
+import com.jvillada.movi.shared.model.desglosarCuota
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.TransferKind
@@ -56,6 +61,7 @@ import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
 import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.components.CardRow
+import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -238,6 +244,134 @@ fun deudaDespuesDelTraspaso(from: Account?, to: Account?, amount: Long?): String
 }
 
 /**
+ * El saldo de una cuenta **en su propia moneda**.
+ *
+ * `account.balance` es el componente COP (ver `enrichWith`), así que sobre una deuda en dólares
+ * devuelve una cifra de otra moneda. Mismo hallazgo y misma solución que en
+ * [deudaDespuesDelTraspaso], extraído acá porque ahora lo necesitan dos cosas.
+ */
+private fun saldoEnSuMoneda(cuenta: Account): Long =
+    cuenta.balancesByCurrency[cuenta.currency] ?: cuenta.balance
+
+/**
+ * **Cuánto de esta cuota baja de verdad la deuda**, o `null` si todavía no hay con qué decirlo.
+ *
+ * Es la MISMA función de `:core` que usa el server para escribir las patas ([desglosarCuota]) — no
+ * una segunda copia de la regla en la pantalla. La diferencia es de dónde sale el saldo: acá, del
+ * que llegó con la cuenta; allá, derivado de los eventos vivos en el instante de guardar. Si algo
+ * se movió en el medio, la respuesta del server trae el desglose que de verdad quedó escrito.
+ */
+fun desgloseDelPago(deuda: Account?, terms: CreditTerms?, monto: Long?): DesgloseDeCuota? {
+    if (deuda == null || monto == null || monto <= 0L) return null
+    if (deuda.type != AccountType.LOAN && deuda.type != AccountType.CREDIT_CARD) return null
+    return desglosarCuota(
+        cuota = monto,
+        tipoDeLaDeuda = deuda.type,
+        saldoDeLaDeuda = saldoEnSuMoneda(deuda),
+        rateEa = terms?.rateEa,
+        seguroMensual = terms?.insuranceMonthly,
+    )
+}
+
+/**
+ * **La frase que le muestra al dueño en qué se le va la cuota, antes de guardar.**
+ *
+ * «De tus $1.286.548, $363.905 son intereses, $108.800 el seguro, y $813.843 bajan la deuda.»
+ *
+ * Es plata suya y tiene que poder **verificar** el número, no confiar en él: sin esta frase, Movi
+ * le restaría a la deuda una cifra distinta de la que él escribió y no habría en toda la app dónde
+ * enterarse de por qué. Mismo recurso que [deudaDespuesDelTraspaso] y por el mismo motivo — un
+ * aviso genérico se lee y se olvida; la aritmética con sus propias cifras se discute sola.
+ *
+ * Devuelve `null` cuando no hay nada que explicar: una tarjeta baja exactamente por lo que se
+ * pagó, y decirlo sería ruido.
+ */
+fun textoDelDesglose(desglose: DesgloseDeCuota, moneda: String): String? {
+    fun plata(v: Long) = formatMoney(v, moneda)
+    return when (desglose.motivo) {
+        MotivoDelDesglose.TARJETA -> null
+        // El caso sin tasa **se dice, no se calla**: la deuda va a bajar por todo, que es lo que
+        // pasaba antes de esta ola, y el dueño tiene que poder ver por qué y cómo arreglarlo.
+        MotivoDelDesglose.SIN_TASA ->
+            "Este crédito no tiene tasa registrada, así que no podemos separar el interés: la " +
+                "deuda va a bajar los ${plata(desglose.cuota)} completos. Agrega la tasa % EA en " +
+                "las condiciones del crédito para verlo separado."
+        MotivoDelDesglose.AMORTIZA -> {
+            val seguro = if (desglose.seguro > 0L) ", ${plata(desglose.seguro)} el seguro" else ""
+            // **La limitación, dicha donde el dueño la ve.** El interés se calcula sobre la deuda
+            // de HOY, no sobre la que había el mes de la cuota: en Movi la deuda es la suma de
+            // todos los eventos sin mirar fechas, así que «el saldo al 15 de julio» no existe.
+            // Anotando en orden cronológico el resultado se parece a una amortización real;
+            // anotando una cuota vieja después de una nueva, el interés sale bajo y el capital
+            // alto —del orden de $100.000 por mes desfasado con los seis créditos, siempre
+            // subestimando la deuda. Estaba anotado solo en el KDoc de `DesgloseDeCuota`, o sea en
+            // ningún lado que él pueda leer.
+            val sobreHoy = " Calculado sobre tu deuda de hoy."
+            if (desglose.capital <= 0L) {
+                // Existe de verdad: un pago parcial a la libranza ·4818 del dueño —$3.000.000
+                // contra un interés de $3.646.011— es 100 % interés.
+                "Tus ${plata(desglose.cuota)} no alcanzan a cubrir los ${plata(desglose.interes)} " +
+                    "de intereses$seguro de este mes: nada de este pago baja la deuda.$sobreHoy"
+            } else {
+                "De tus ${plata(desglose.cuota)}, ${plata(desglose.interes)} son intereses" +
+                    "$seguro, y ${plata(desglose.capital)} bajan la deuda.$sobreHoy"
+            }
+        }
+    }
+}
+
+/**
+ * **Lo que hay que decirle al dueño cuando el server repartió la cuota distinto de lo que la hoja
+ * le había prometido**, o `null` cuando coinciden — que es el camino de todos los días.
+ *
+ * ### Por qué existe
+ *
+ * La hoja calcula el desglose con el saldo que llegó cargado en pantalla; el server lo recalcula
+ * contra los eventos vivos en el instante de guardar. Si entre abrir la hoja y tocar Guardar entró
+ * un SMS del banco o se ajustó el saldo, **el reparto que se escribió no es el que se leyó**. El
+ * server ya devolvía el que de verdad quedó ([PagoDeCuotaResult.desglose]), pero la pantalla
+ * descartaba la respuesta entera: era una respuesta que nadie leía, o sea una promesa a medias.
+ *
+ * ### Qué se compara, y qué no
+ *
+ * La **cuota** y el **capital**, que son las dos cifras que el dueño vio escritas. El interés y el
+ * seguro no se comparan por separado a propósito: en el camino del reintento el server no puede
+ * separarlos de lo guardado (ver `desgloseDeLoGuardado`) y avisar por una diferencia entre dos
+ * cifras que él nunca vio sería ruido.
+ *
+ * Un `guardado` en `null` es un server que todavía no manda el campo: no se afirma nada.
+ */
+fun avisoDeDesgloseDistinto(
+    mostrado: DesgloseDeCuota?,
+    guardado: DesgloseDeCuota?,
+    moneda: String,
+): String? {
+    if (guardado == null) return null
+    if (mostrado != null && mostrado.cuota == guardado.cuota && mostrado.capital == guardado.capital) return null
+    fun plata(v: Long) = formatMoney(v, moneda)
+    val queda = "De tus ${plata(guardado.cuota)}, ${plata(guardado.capital)} bajaron la deuda."
+    if (mostrado == null) return "Pago registrado. $queda"
+    return "Pago registrado, pero el reparto quedó distinto del que te mostramos: tu deuda cambió " +
+        "entre que abriste esta pantalla y guardaste. $queda " +
+        "Te habíamos dicho ${plata(mostrado.capital)}."
+}
+
+/** «Deuda de Vehículo: $177.200.000 pasa a $175.466.095» — el número que el dueño vino a ver bajar. */
+fun deudaDespuesDelPago(deuda: Account?, desglose: DesgloseDeCuota?): String? {
+    if (deuda == null || desglose == null) return null
+    val moneda = deuda.currency
+    val actual = saldoEnSuMoneda(deuda)
+    // «pasa a» y no «→»: la flecha sale como ▯ en wasm (ver [deudaDespuesDelTraspaso]).
+    return "Deuda de ${deuda.name}: ${signedMoney(actual, moneda)} " +
+        "pasa a ${signedMoney(actual - desglose.capital, moneda)}"
+}
+
+/** Lo que se dice cuando no se pudieron cargar las condiciones del crédito para armar el desglose. */
+const val SIN_CONDICIONES_PARA_EL_DESGLOSE: String =
+    "No pudimos cargar las condiciones de este crédito, así que no podemos mostrarte cuánto de " +
+        "la cuota baja la deuda. El pago se registra bien igual: Movi separa el interés al guardarlo."
+
+/**
  * Igual que `FRACCION_VALOR_FILA` en la hoja de un movimiento, y por el mismo motivo. Un poco más
  * generoso porque acá las etiquetas son más cortas («Desde», «Hacia») y no llevan más que su
  * aviso debajo.
@@ -402,6 +536,29 @@ internal fun TransferBody(
         }
     }
 
+    // ── Las condiciones de los créditos, para poder mostrar el desglose de la cuota ───────────
+    //
+    // Solo se piden en la pestaña Cuota, y una sola vez: `getCredits()` pasa por la caché del
+    // repositorio local, así que en el teléfono no cuesta un viaje por cada vez que se abre.
+    //
+    // **«No pudimos cargar» y «este crédito no tiene tasa» no son lo mismo**, y confundirlos acá
+    // sería mentirle sobre sus condiciones — el mismo error que `CreditTermsSheet` ya tuvo que
+    // separar con `falloCargarCuentas`. Sin este estado aparte, un corte de red le habría dicho
+    // «este crédito no tiene tasa registrada» sobre un crédito que sí la tiene.
+    var terminosPorCuenta by remember { mutableStateOf<Map<String, CreditTerms>>(emptyMap()) }
+    var terminosCargados by remember { mutableStateOf(false) }
+    var falloCargarTerminos by remember { mutableStateOf(false) }
+    LaunchedEffect(esPago) {
+        if (!esPago) return@LaunchedEffect
+        falloCargarTerminos = false
+        runCatching { Repositories.wallets.getCredits() }
+            .onSuccess { creditos ->
+                terminosPorCuenta = creditos.mapNotNull { it.terms }.associateBy { it.accountId }
+            }
+            .onFailure { falloCargarTerminos = true }
+        terminosCargados = true
+    }
+
     var amount by remember { mutableStateOf<Long?>(null) }
     // Ola 13 — LA FECHA DEL TRASPASO SE ELIGE, NO SE ESCRIBE.
     //
@@ -486,9 +643,19 @@ internal fun TransferBody(
     }
     val canSave = missing == null && !saving
 
+    /**
+     * El aviso de que el server repartió la cuota distinto de lo que esta hoja mostró, cuando lo
+     * hubo. Mientras vale algo, este cuerpo dibuja **la confirmación en vez del formulario**: el
+     * pago ya se guardó, así que dejar el formulario a mano invitaría a guardarlo dos veces.
+     */
+    var avisoDelDesglose by remember { mutableStateOf<String?>(null) }
+
     fun save() {
         val origen = from ?: return
         val destino = to ?: return
+        // Lo que la hoja le PROMETIÓ, capturado antes de salir: si el server escribe otro reparto
+        // hay que poder decir cuál era el que él leyó. Se calcula igual que el renglón de abajo.
+        val desgloseMostrado = if (esPago) desgloseDelPago(destino, terminosPorCuenta[destino.id], amount) else null
         // Con «Hoy» (el default) queda la hora real, como siempre; cualquier otro día va al
         // mediodía de Bogotá — ver [timestampParaFecha] y [epochAlMediodia].
         val timestamp = timestampParaFecha(fecha, hoy)
@@ -508,7 +675,7 @@ internal fun TransferBody(
             }
             saving = false
             result
-                .onSuccess {
+                .onSuccess { respuesta ->
                     // Ids nuevos recién ACÁ: el traspaso siguiente es otro traspaso. Mientras el
                     // anterior no haya llegado, cada reintento tiene que ser el mismo pedido.
                     ids = TransferDraftIds.new()
@@ -521,7 +688,17 @@ internal fun TransferBody(
                     // `defaultTransferAccounts` excluye, así que la sugerencia se pierde y el
                     // traspaso vuelve a proponer la primera cuenta de la lista.
                     if (!esPago) LastAccountStore.recordTransfer(origen.id, destino.id)
-                    onSaved()
+                    // **El desglose que de verdad quedó escrito.** El server lo recalcula contra
+                    // los eventos vivos, así que puede no ser el que esta hoja mostró — y hasta
+                    // acá nadie leía esa respuesta: la promesa de «trae el que de verdad quedó»
+                    // no llegaba a ninguna pantalla. Ver [avisoDeDesgloseDistinto].
+                    val aviso = (respuesta as? PagoDeCuotaResult)?.let {
+                        avisoDeDesgloseDistinto(desgloseMostrado, it.desglose, destino.currency)
+                    }
+                    // Sin diferencia, el camino de siempre: se cierra la hoja y listo. Con
+                    // diferencia, se muestra y él la cierra con el dedo — un cartel que se va solo
+                    // no es un aviso sobre plata.
+                    if (aviso != null) avisoDelDesglose = aviso else onSaved()
                 }
                 .onFailure { fallo ->
                     // Un 409 no es un fallo: quiere decir que el traspaso YA quedó registrado
@@ -568,7 +745,29 @@ internal fun TransferBody(
                 else Modifier.heightIn(min = altoFijado),
             ),
     ) {
-        if (pickingDate) {
+        val avisoGuardado = avisoDelDesglose
+        if (avisoGuardado != null) {
+            // El pago YA se guardó y el reparto no fue el que esta hoja mostró. Se dibuja la
+            // confirmación **en vez del formulario** para que no exista la posibilidad de tocar
+            // «Registrar pago» otra vez sobre un pago que ya está hecho.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(18.dp))
+                Text(avisoGuardado, fontSize = 14.sp, color = MinText, lineHeight = 20.sp)
+                Spacer(Modifier.height(20.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(MinPrimaryContainer)
+                        .clickable { avisoDelDesglose = null; onSaved() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Entendido", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinOnPrimaryContainer)
+                }
+                Spacer(Modifier.height(18.dp))
+            }
+        } else if (pickingDate) {
             // Mismo sub-picker que la pestaña Gasto/Ingreso, adentro del mismo Box de alto
             // fijado: abrirlo no cambia el alto de la hoja.
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -766,6 +965,68 @@ internal fun TransferBody(
             deudaDespuesDelTraspaso(from, to, amount)?.let { renglon ->
                 Spacer(Modifier.height(6.dp))
                 Text(renglon, fontSize = 12.sp, color = MinText, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        // ── En qué se va esta cuota, antes de guardar ────────────────────────────────────────
+        //
+        // Va en el mismo lugar que el bloque de arriba —arriba de la fecha, en medio del
+        // formulario— pero **este sí reserva su alto**, y la diferencia con el vecino no es un
+        // descuido: son dos casos distintos.
+        //
+        // El de arriba aparece solo cuando una punta del TRASPASO es un crédito, o sea en una
+        // minoría de los traspasos; reservarle 60 dp a todo el mundo dejaría un hueco permanente
+        // por un caso que la mayoría no usa. Este, en cambio, aparece **siempre que estás en la
+        // pestaña Cuota con una deuda elegida** — es el punto entero de la pestaña. El hueco no le
+        // sobra a nadie porque todos lo van a llenar.
+        //
+        // Y lo que hacía sin la reserva es exactamente lo que «Ola 8 · V2 (N4)» ya arregló dos
+        // veces en este archivo: aparecer al escribir el primer dígito del monto y empujar
+        // FECHA / NOTA / Guardar ~40-60 dp hacia abajo, con el dedo justo en el teclado. Con la
+        // deuda elegida el bloque ya está, y escribir el monto solo le cambia el texto.
+        //
+        // `heightIn(min=)` y no `height(...)`: el caso sin tasa son tres renglones y recortarlo
+        // sería peor que moverlo.
+        //
+        // Es plata suya: tiene que poder VERIFICAR el número, no confiar en él. Ver
+        // [textoDelDesglose].
+        if (esPago && to != null) {
+            val desglose = desgloseDelPago(to, terminosPorCuenta[to.id], amount)
+            Spacer(Modifier.height(12.dp))
+            Box(modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    when {
+                        // Sin monto todavía no hay aritmética que mostrar, pero el bloque ya ocupa
+                        // su lugar: así el renglón de arriba no empuja el botón de Guardar al
+                        // escribir el primer dígito.
+                        (amount ?: 0L) <= 0L ->
+                            Text(
+                                "Escribe el monto para ver cuánto de la cuota baja la deuda.",
+                                fontSize = 12.sp,
+                                color = MinTextMute,
+                                lineHeight = 17.sp,
+                            )
+                        // Mientras no se sepa, no se afirma nada. Un «este crédito no tiene tasa»
+                        // sobre una carga a medias sería exactamente el número plausible y falso
+                        // que esta ola vino a matar.
+                        to.type == AccountType.LOAN && !terminosCargados ->
+                            Text("Calculando cuánto baja la deuda…", fontSize = 12.sp, color = MinTextMute)
+                        to.type == AccountType.LOAN && falloCargarTerminos ->
+                            Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+                        // Nada de `return@Column` acá: un early return se llevaría por delante la
+                        // fecha, la nota y el botón de Guardar. Los dos renglones son opcionales
+                        // por separado.
+                        else -> {
+                            desglose?.let { d -> textoDelDesglose(d, to.currency) }?.let { renglon ->
+                                Text(renglon, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            deudaDespuesDelPago(to, desglose)?.let { renglon ->
+                                Text(renglon, fontSize = 12.sp, color = MinText, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
             }
         }
 

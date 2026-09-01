@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.transactions
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
@@ -233,6 +234,63 @@ class TransferRowTest {
 
         assertTrue(matchesChip(ingreso, CHIP_INGRESOS))
         assertFalse(matchesChip(ingreso, CHIP_GASTOS))
+    }
+
+    // ── El par de una CUOTA, cuyas dos patas no valen lo mismo ─────────────────
+
+    /** La cuota del carro: $4.215.223 salen de la cuenta, $1.733.905 abonan a capital. */
+    private fun patasDeUnaCuota() = listOf(
+        evento("ev_cuota_dinero", "acc_ahorros", TransactionType.EXPENSE, 4_215_223L, CUOTA_CATEGORY, "tr_cuota"),
+        evento("ev_cuota_capital", "acc_carro", TransactionType.INCOME, 1_733_905L, CUOTA_CATEGORY, "tr_cuota"),
+    )
+
+    @Test
+    fun `una cuota no se rotula como abono extraordinario`() {
+        // Estaba mal desde antes de esta ola y empeoraba con ella: la pata de entrada de una cuota
+        // vive en una cuenta LOAN, así que caía en «Abono extraordinario» — la cuota mensual
+        // rotulada justo como lo contrario de lo que es.
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patasDeUnaCuota()).single())
+        val tipos = mapOf("acc_ahorros" to AccountType.SAVINGS, "acc_carro" to AccountType.LOAN)
+
+        assertEquals("Cuota de crédito", transferRowTitle(fila, tipos))
+    }
+
+    @Test
+    fun `un abono extraordinario de verdad sigue llamandose asi`() {
+        // La contraparte, sin la cual el test de arriba podría pasar rompiendo el rótulo correcto.
+        val fila = assertIs<MovementRow.Transfer>(
+            collapseTransfers(
+                listOf(
+                    evento("ev_abono_out", "acc_ahorros", TransactionType.EXPENSE, category = TRANSFER_CATEGORY, transferId = "tr_ab"),
+                    evento("ev_abono_in", "acc_carro", TransactionType.INCOME, category = TRANSFER_CATEGORY, transferId = "tr_ab"),
+                ),
+            ).single(),
+        )
+        val tipos = mapOf("acc_ahorros" to AccountType.SAVINGS, "acc_carro" to AccountType.LOAN)
+
+        assertEquals("Abono extraordinario", transferRowTitle(fila, tipos))
+    }
+
+    @Test
+    fun `el renglon dice cuanto abono a capital cuando las patas difieren`() {
+        // El monto grande de la derecha es la cuota entera (la plata que salió). Sin esta aclaración
+        // el renglón estaría afirmando que la deuda bajó $4.215.223, que es el número plausible y
+        // falso que esta ola vino a matar.
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patasDeUnaCuota()).single())
+        val nombres = mapOf("acc_ahorros" to "Bancolombia", "acc_carro" to "Vehículo")
+
+        assertEquals(4_215_223L, fila.amount, "el renglón muestra la plata que salió")
+        assertTrue(transferRowSubtitle(fila, nombres).contains("capital"), transferRowSubtitle(fila, nombres))
+        assertTrue(transferRowSubtitle(fila, nombres).contains("1.733.905"), transferRowSubtitle(fila, nombres))
+    }
+
+    @Test
+    fun `un traspaso simetrico no agrega ninguna aclaracion`() {
+        // Un aviso de más sobre algo que no cambia enseña a ignorarlos.
+        val fila = assertIs<MovementRow.Transfer>(collapseTransfers(patas()).single())
+        val nombres = mapOf("acc_ahorros" to "Ahorros", "acc_cdt" to "CDT")
+
+        assertEquals("De Ahorros a CDT", transferRowSubtitle(fila, nombres))
     }
 
     /** «Por confirmar» es para lo que entró solo; una pata la anotó el dueño, nunca está ahí. */

@@ -271,6 +271,11 @@ fun Route.creditRoutes() {
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
                 .let { if ("paidBy" in crudo) it else it.copy(paidBy = previo?.paidBy) }
                 .let { if ("payrollDeduction" in crudo) it else it.copy(payrollDeduction = previo?.payrollDeduction ?: false) }
+                // El seguro entra al mismo club, y por el mismo agujero exacto: un APK anterior a
+                // esta ola que edite la nota o el día de pago manda un cuerpo SIN `insuranceMonthly`
+                // y lo dejaría en null. Consecuencia: la cuota del ·9695 volvería a abonar $108.800
+                // de más a capital cada mes, en silencio y con el número plausible.
+                .let { if ("insuranceMonthly" in crudo) it else it.copy(insuranceMonthly = previo?.insuranceMonthly) }
                 // El tope de la columna es varchar(60): un nombre más largo hacía fallar el
                 // INSERT en Postgres y se caía el guardado ENTERO del crédito con un 500 sin
                 // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
@@ -479,6 +484,7 @@ private fun fillTerms(
     it[Credits.remindMe]    = terms.remindMe
     it[Credits.payrollDeduction] = terms.payrollDeduction
     it[Credits.paidBy] = terms.paidBy?.trim()?.takeIf { v -> v.isNotBlank() }
+    it[Credits.insuranceMonthly] = terms.insuranceMonthly?.takeIf { v -> v > 0L }
 }
 
 private fun summaryFor(

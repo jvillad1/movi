@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.db.createDatabase
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CUENTA_NO_ENCONTRADA
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
@@ -1772,5 +1773,131 @@ class LocalRepositoryTest {
         assertTrue(enLaLista.none { it == "borrado-en-la-web" }, "no está en Movimientos")
         assertTrue(enElDetalle.none { it == "borrado-en-la-web" }, "y tampoco en el detalle de la cuenta")
         assertTrue(enElDetalle.any { it == "sigue-vivo" }, "lo vivo sigue estando")
+    }
+
+    // ── La cascada del monto sobre un par ASIMÉTRICO ───────────────────────────
+
+    /**
+     * Escribe una pata a mano, con `transferId` y monto propio.
+     *
+     * A mano y no con `payInstallment` porque esa delega en el server y no espeja nada: para
+     * ejercitar la cascada local hace falta el par ya presente en la base del teléfono, que es
+     * como queda después de la primera lectura con red.
+     */
+    private fun pataLocal(
+        id: String,
+        accountId: String,
+        tipo: TransactionType,
+        monto: Long,
+        transferId: String,
+        categoria: String = CUOTA_CATEGORY,
+        /** Lo que esa cuota NO amortizó, tal como baja del server en la pata de la deuda. */
+        noAmortiza: Long? = null,
+    ) = db.financialEventQueries.insert(
+        id, accountId, tipo.name, monto, categoria, "Pata", null,
+        1_788_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, transferId, null, noAmortiza,
+    )
+
+    /**
+     * **La mitad más cara de la asimetría: el saldo local es un acumulado mantenido a mano.**
+     *
+     * En el teléfono, `account.balance` no se deriva de los eventos como en el server — se suma y
+     * se resta a mano en cada escritura. Así que si la cascada le copiara `montoNuevo` a la pata de
+     * la deuda, no solo la fila quedaría mal: el saldo del crédito que el dueño ve arriba de la
+     * pantalla quedaría mal por los intereses, y sin red no habría quién lo corrigiera.
+     *
+     * El interés del mes ($2.481.318) es un hecho ya ocurrido y no cambia porque él corrija lo que
+     * pagó: la pata de la deuda se mueve por la **diferencia**, no por el monto entero.
+     */
+    @Test
+    fun corregir_una_cuota_mueve_la_pata_de_la_deuda_por_la_DIFERENCIA() = runBlocking {
+        // Los saldos arrancan **con la cuota ya aplicada**, que es el estado en el que el teléfono
+        // encuentra el par: $20.000.000 − $4.215.223 en la cuenta, $177.200.000 − $1.733.905 en la
+        // deuda. Las patas se escriben después, sin volver a mover el acumulado.
+        repo.createAccount(Account("acc-ahorros-c", "Bancolombia", AccountType.SAVINGS, 15_784_777L))
+        repo.createAccount(Account("acc-carro-c", "Vehículo 4083", AccountType.LOAN, 175_466_095L))
+        pataLocal("ev-cuota-dinero", "acc-ahorros-c", TransactionType.EXPENSE, 4_215_223L, "tr-cuota")
+        pataLocal(
+            "ev-cuota-capital", "acc-carro-c", TransactionType.INCOME, 1_733_905L, "tr-cuota",
+            noAmortiza = 2_481_318L,
+        )
+
+        repo.updateEvent("ev-cuota-dinero", EdicionDeMovimiento(amount = 4_500_000L))
+
+        val patas = repo.getEvents().filter { it.transferId == "tr-cuota" }.associateBy { it.id }
+        assertEquals(4_500_000L, patas.getValue("ev-cuota-dinero").amount)
+        assertEquals(
+            1_733_905L + (4_500_000L - 4_215_223L),
+            patas.getValue("ev-cuota-capital").amount,
+            "el interés del mes no cambia: solo se mueve lo que abona a capital",
+        )
+        // Y el acumulado local acompaña: de la cuenta salen los $4.500.000 corregidos, y a la deuda
+        // le entran solo los $2.018.682 de capital. Copiar habría dejado el crédito en
+        // $172.700.000 — $2,4 millones que sigue debiendo, evaporados en el teléfono.
+        assertEquals(20_000_000L - 4_500_000L, repo.getAccount("acc-ahorros-c").balance)
+        assertEquals(177_200_000L - 2_018_682L, repo.getAccount("acc-carro-c").balance)
+    }
+
+    /**
+     * La otra mitad: un traspaso **sigue siendo simétrico**, y por el mismo camino de código. Sin
+     * este test, «mover por la diferencia» podría haber roto en silencio lo que ya funcionaba.
+     */
+    @Test
+    fun corregir_una_pata_de_traspaso_sigue_copiando_el_monto() = runBlocking {
+        // Mismo montaje que arriba: saldos con el traspaso de $2.000.000 ya aplicado.
+        repo.createAccount(Account("acc-tr-o", "Bancolombia", AccountType.SAVINGS, 3_000_000L))
+        repo.createAccount(Account("acc-tr-d", "Nu", AccountType.SAVINGS, 2_000_000L))
+        pataLocal("ev-tr-out", "acc-tr-o", TransactionType.EXPENSE, 2_000_000L, "tr-simetrico", TRANSFER_CATEGORY)
+        pataLocal("ev-tr-in", "acc-tr-d", TransactionType.INCOME, 2_000_000L, "tr-simetrico", TRANSFER_CATEGORY)
+
+        repo.updateEvent("ev-tr-out", EdicionDeMovimiento(amount = 1_500_000L))
+
+        val patas = repo.getEvents().filter { it.transferId == "tr-simetrico" }.associateBy { it.id }
+        assertEquals(1_500_000L, patas.getValue("ev-tr-out").amount)
+        assertEquals(1_500_000L, patas.getValue("ev-tr-in").amount, "las dos mitades son la misma plata")
+        assertEquals(5_000_000L - 1_500_000L, repo.getAccount("acc-tr-o").balance)
+        assertEquals(1_500_000L, repo.getAccount("acc-tr-d").balance)
+    }
+
+    /**
+     * **Ida y vuelta a través del piso en cero, sin señal.**
+     *
+     * El defecto que el interés guardado cerró: bajar la cuota por debajo del interés clampa el
+     * capital a 0 (bien), pero con la regla de la diferencia la vuelta atrás no recuperaba el
+     * capital original — quedaba $72.705 más alto, o sea $72.705 de deuda desaparecidos, en el
+     * teléfono y para siempre (acá el saldo es un acumulado, nadie lo vuelve a derivar).
+     *
+     * Y de paso confirma el otro defecto: la pata de la deuda nace en $0 y NO se puede corregir
+     * directamente (`validarEdicionDeMovimiento` rechaza montos <= 0), así que el único camino es
+     * esta cascada desde la pata del dinero. Con el arreglo, ese camino la devuelve exacta.
+     */
+    @Test
+    fun corregir_hacia_abajo_y_arrepentirse_devuelve_el_capital_exacto() = runBlocking {
+        // Cuota del ·9695: $1.286.548, capital $813.843, $472.705 que no amortizan.
+        repo.createAccount(Account("acc-ah-rt", "Bancolombia", AccountType.SAVINGS, 8_713_452L))
+        repo.createAccount(Account("acc-9695-rt", "Libre inversión", AccountType.LOAN, 40_280_062L))
+        pataLocal("ev-rt-dinero", "acc-ah-rt", TransactionType.EXPENSE, 1_286_548L, "tr-rt")
+        pataLocal(
+            "ev-rt-capital", "acc-9695-rt", TransactionType.INCOME, 813_843L, "tr-rt",
+            noAmortiza = 472_705L,
+        )
+
+        repo.updateEvent("ev-rt-dinero", EdicionDeMovimiento(amount = 400_000L))
+        val enElPiso = repo.getEvents().first { it.id == "ev-rt-capital" }
+        assertEquals(0L, enElPiso.amount, "400.000 no cubren los 472.705 que no amortizan")
+
+        // Se arrepiente y vuelve al monto real.
+        repo.updateEvent("ev-rt-dinero", EdicionDeMovimiento(amount = 1_286_548L))
+
+        val patas = repo.getEvents().filter { it.transferId == "tr-rt" }.associateBy { it.id }
+        assertEquals(1_286_548L, patas.getValue("ev-rt-dinero").amount)
+        assertEquals(
+            813_843L,
+            patas.getValue("ev-rt-capital").amount,
+            "la regla de la diferencia devolvía 886.548 y borraba \$72.705 de deuda",
+        )
+        // Y el acumulado local vuelve exactamente a donde estaba.
+        assertEquals(10_000_000L - 1_286_548L, repo.getAccount("acc-ah-rt").balance)
+        assertEquals(41_093_905L - 813_843L, repo.getAccount("acc-9695-rt").balance)
     }
 }

@@ -78,11 +78,10 @@ const val CONCEPTO_DEMASIADO_LARGO: String =
  * Un par (traspaso, pago de cuota, pago de tarjeta) son **dos** movimientos enlazados por
  * [FinancialEvent.transferId]. Editar uno solo tiene dos formas muy distintas de salir mal:
  *
- * - **El monto** es *un solo hecho con dos anotaciones*: las dos patas nacen con la misma cifra
- *   (ver [transferLegsFor] y [pagoDeCuotaLegs]). Cambiarlo en una sola descuadra el par —la plata
- *   sale de una cuenta y entra otra distinta en la otra—, así que se cambia **en las dos a la
- *   vez**. Eso deja el par tan cuadrado como nació y es la corrección que el dueño de verdad
- *   quiere: la cuota fue de $4.215.223, no de $4.125.223.
+ * - **El monto** es *un solo hecho con dos anotaciones*: cambiarlo en una sola descuadra el par, así
+ *   que se cambia **en las dos a la vez** — cada una por lo suyo, ver [montoDeLaHermanaAlCorregir].
+ *   Eso deja el par tan cuadrado como nació y es la corrección que el dueño de verdad quiere: la
+ *   cuota fue de $4.215.223, no de $4.125.223.
  * - **La cuenta**, en cambio, no es un solo hecho: cada pata vive en la suya, y *cuál* pata puede
  *   vivir en *qué tipo de cuenta* es lo que validan [validarPagoDeCuota] y `validateTransfer` al
  *   crear el par. Mover una pata suelta se salta esas reglas enteras: la pata del dinero de un
@@ -100,10 +99,107 @@ const val PATA_NO_CAMBIA_DE_CUENTA: String =
         "mitad vive en su propia cuenta. Para cambiarle la cuenta, anúlalo y vuelve a " +
         "registrarlo desde Agregar. El monto y el concepto sí se pueden corregir aquí."
 
-/** Lo que la hoja le avisa al dueño antes de tocar el monto de una pata. */
+/** Lo que la hoja le avisa al dueño antes de tocar el monto de una pata de un **traspaso**. */
 const val MONTO_DE_UN_PAR_SE_MUEVE_JUNTO: String =
     "Es la mitad de un par: el monto se corrige en las dos mitades a la vez, para que la plata " +
         "que sale sea la misma que entra."
+
+/**
+ * Lo mismo, para la mitad del pago de la **cuota de un crédito**, donde «la misma plata» dejó de
+ * ser cierto: la deuda baja solo por el capital (ver [DesgloseDeCuota]).
+ */
+const val MONTO_DE_UNA_CUOTA_SE_MUEVE_JUNTO: String =
+    "Es la mitad del pago de una cuota. Al corregir el monto, la parte que baja la deuda se " +
+        "vuelve a calcular sobre los intereses y el seguro de ese mes, que no cambian."
+
+/**
+ * **Qué aviso mostrar antes de tocar el monto de una pata**, según qué clase de par es.
+ *
+ * La categoría alcanza para distinguirlos y no hace falta ir a buscar el tipo de la cuenta
+ * hermana: [CUOTA_CATEGORY] la escribe [pagoDeCuotaLegs] únicamente sobre un crédito que amortiza
+ * (una tarjeta lleva [CARD_PAYMENT_CATEGORY], y ahí sí baja por todo lo pagado).
+ */
+fun avisoDeMontoDeUnPar(categoriaDeLaPata: String): String =
+    if (categoriaDeLaPata == CUOTA_CATEGORY) MONTO_DE_UNA_CUOTA_SE_MUEVE_JUNTO
+    else MONTO_DE_UN_PAR_SE_MUEVE_JUNTO
+
+/**
+ * **Cuánto pasa a valer la pata hermana cuando se corrige el monto de una pata.**
+ *
+ * ### Por qué esto ya no puede ser una copia
+ *
+ * Hasta la ola pasada las dos patas de un `transferId` valían siempre lo mismo, así que corregir
+ * una era copiarle la cifra a la otra. Desde que la pata de la deuda de una cuota vale solo el
+ * **capital** ([DesgloseDeCuota]), copiar le bajaría a la deuda los intereses también: corregir una
+ * cuota de $4.215.223 a $4.500.000 le restaría $4.500.000 a un crédito al que solo le tocaba
+ * $1.733.905 + la diferencia.
+ *
+ * ### La regla, y por qué no necesita ni la tasa ni el saldo
+ *
+ * El interés y el seguro de ese mes **son un hecho ya ocurrido**: dependen del saldo que había y de
+ * la tasa del crédito, no de lo que el dueño terminó pagando. Corregir la cuota mueve solo la parte
+ * que amortiza:
+ *
+ * ```
+ * capitalNuevo = cuotaNueva − (interés + seguro de ese mes)
+ * ```
+ *
+ * Esa cifra viene **guardada en la pata de la deuda** ([FinancialEvent.noAmortiza]), así que no hay
+ * que volver a leer `credit_terms` ni volver a derivar el saldo —cosas que el espejo local del
+ * teléfono ni siquiera tiene—, y por eso la MISMA función corre en el server y en el espejo, que es
+ * lo que hace que corregir con señal y sin señal den el mismo número.
+ *
+ * ### La versión que había, y por qué se cambió
+ *
+ * La primera versión no leía nada guardado: deducía el interés restando las dos patas
+ * (`montoViejo − hermana`) y movía la hermana por la **diferencia**. Da el mismo número en el caso
+ * general —la revisión verificó los seis casos: subir, bajar, traspaso, tarjeta y editar desde cada
+ * pata— pero se rompe **exactamente donde el capital se clampó a cero**, porque ahí la resta ya no
+ * vale el interés. Medido:
+ *
+ * - *Ida y vuelta*: cuota del ·9695 de $1.286.548 (capital $813.843) corregida a $400.000 —la
+ *   hermana daría −72.705 y se clampa a 0, bien— y de vuelta a $1.286.548: la hermana quedaba en
+ *   **$886.548** en vez de $813.843. **$72.705 de deuda desaparecían en silencio.**
+ * - *Cuota que era 100 % interés, corregida hacia arriba*: un pago parcial de $3.000.000 a la
+ *   libranza ·4818 (interés $3.646.011, capital 0) corregido al valor real $6.040.259 daba
+ *   $3.040.259 en vez de $2.394.248. **$646.011 de un tirón.**
+ *
+ * Es el mismo error que la ola de la cuota vino a matar, en chiquito y por la puerta de la edición.
+ * Con el interés guardado, el piso en cero deja de destruir nada: se puede clampar la escritura y
+ * recuperar el número exacto la próxima vez, porque el dato ya no sale de la resta.
+ *
+ * **Y sigue valiendo para un traspaso**, sin caso especial: ahí no hay nada guardado, la hermana es
+ * la misma plata y el resultado es exactamente `montoNuevo`. Un pago de tarjeta y un pago de cuota
+ * viejo (los dos, pares simétricos), ídem.
+ *
+ * @param noAmortizaDeLaHermana lo guardado en la pata **hermana**. No nulo cuando la hermana es la
+ *   que baja la deuda: entonces la hermana pasa a valer `montoNuevo − eso`, con piso en cero.
+ * @param noAmortizaDeLaPataQueSeCorrige lo guardado en la pata **que se está corrigiendo**. No nulo
+ *   cuando la que se corrige es la de la deuda (o sea `montoNuevo` es un capital) y la hermana es
+ *   la del dinero: entonces la hermana pasa a valer `montoNuevo + eso`.
+ *
+ * Los dos son parámetros obligatorios y sin default a propósito, por el mismo motivo que el
+ * `desglose` de [pagoDeCuotaLegs]: un default los habría dejado pasar en silencio en cualquier call
+ * site que alguien agregue mañana, y esta función decide cuánta deuda queda.
+ */
+fun montoDeLaHermanaAlCorregir(
+    montoViejo: Long,
+    montoNuevo: Long,
+    montoDeLaHermana: Long,
+    noAmortizaDeLaHermana: Long?,
+    noAmortizaDeLaPataQueSeCorrige: Long?,
+): Long = when {
+    // La hermana es la pata de la deuda: su monto ES el capital, y el capital es lo que queda de la
+    // cuota nueva después del interés y el seguro de ese mes, que no se movieron.
+    noAmortizaDeLaHermana != null -> (montoNuevo - noAmortizaDeLaHermana).coerceAtLeast(0L)
+    // Al revés: se está corrigiendo la pata de la deuda, así que `montoNuevo` es un capital y la
+    // hermana —la plata que salió de la cuenta— es ese capital más lo que no amortiza. Sin piso:
+    // las dos cifras son no negativas, la suma también.
+    noAmortizaDeLaPataQueSeCorrige != null -> montoNuevo + noAmortizaDeLaPataQueSeCorrige
+    // Par simétrico (traspaso, pago de tarjeta, pago de cuota anterior a que esto se guardara): las
+    // dos mitades son la misma plata y mover por la diferencia es copiar.
+    else -> (montoDeLaHermana + (montoNuevo - montoViejo)).coerceAtLeast(0L)
+}
 
 /** Lo que se le dice a quien manda una cuenta que no existe o no es suya. */
 const val CUENTA_NO_ENCONTRADA: String = "Esa cuenta no existe."

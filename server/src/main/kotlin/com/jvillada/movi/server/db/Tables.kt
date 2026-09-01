@@ -159,6 +159,25 @@ object Events : Table("financial_events") {
      * crearon, y el comparador las hace caer a su `timestamp` en vez de inventarles una fecha.
      */
     val createdAt            = long("created_at").nullable()
+    /**
+     * **Cuánto de esa cuota NO bajaba la deuda** — interés del período + seguro de vida deudor.
+     * Solo la pata de la deuda de un pago de cuota sobre un crédito que amortiza; NULL en todo lo
+     * demás, y ese NULL significa «par simétrico». Ver
+     * [com.jvillada.movi.shared.model.FinancialEvent.noAmortiza] para el porqué completo: sin esta
+     * columna, corregir el monto de una cuota cuyo capital se había clampado a cero borraba deuda
+     * en silencio.
+     *
+     * Nullable, y por el mismo motivo que [transferId] y [createdAt]: la agrega sola
+     * `createMissingTablesAndColumns(Events)` al arrancar sobre la base ya desplegada, y una
+     * columna nullable por esa vía es segura sobre una tabla con datos. **Sin índice**: nunca se
+     * filtra ni se ordena por ella — solo se lee junto con su propia fila. Un `CREATE INDEX` que
+     * falle es lo que puede dejar el server sin levantar, porque estas migraciones corren dentro
+     * de la transacción de arranque (ver `NoAmortizaColumnTest`).
+     *
+     * Las filas que ya existen quedan en NULL a propósito: los pagos de cuota anteriores a esta
+     * ola tienen las dos patas iguales, así que son simétricos de verdad y NULL los describe bien.
+     */
+    val noAmortiza           = long("no_amortiza").nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)
@@ -343,6 +362,14 @@ object Credits : Table("credit_terms") {
     // Nullable a propósito: `createMissingTablesAndColumns` corre DENTRO de la transacción de
     // arranque, y una columna nullable es DDL que no puede fallar sobre filas existentes.
     val paidBy = varchar("paid_by", 60).nullable()
+    /**
+     * Seguro de vida deudor incluido en la cuota; ver `CreditTerms.insuranceMonthly`. Nullable por
+     * lo mismo que las dos de arriba: `createMissingTablesAndColumns` corre DENTRO de la
+     * transacción de arranque, y `ALTER TABLE … ADD COLUMN … NULL` es el único DDL que no puede
+     * fallar sobre filas que ya existen. Un DDL caído acá deja el server sin arrancar y al dueño
+     * sin app.
+     */
+    val insuranceMonthly = long("insurance_monthly").nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)
