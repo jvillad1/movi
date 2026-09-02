@@ -334,6 +334,25 @@ fun ChangeCategorySheet(
                 // cascadea por `transferId`— y sin esto un traspaso mal fechado seguiría sin
                 // arreglo posible que no fuera anularlo entero y rehacerlo.
                 SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
+                // **Y anular, que en esta rama se había perdido.**
+                //
+                // Hasta acá este `return` temprano se llevaba puesta la única salida que tiene una
+                // pata. Cuando el detalle de la cuenta abría [com.jvillada.movi.ui.accounts.VoidEventSheet]
+                // directo sobre la fila, anular una mitad se podía; al mandar las dos pantallas por
+                // [HojaDelMovimiento] —que es lo correcto y no se deshace— esta rama quedó
+                // devolviendo explicador, monto y fecha, sin pasar nunca por el bloque de abajo. O
+                // sea que una cuota mal registrada, un traspaso o un pago de tarjeta **dejaron de
+                // poder anularse desde ningún lado**.
+                //
+                // Y es la fila que MÁS necesita la salida: a una pata no se le puede cambiar ni la
+                // cuenta ni la categoría, y [PATA_NO_CAMBIA_DE_CUENTA] remata con «anúlalo y vuelve
+                // a registrarlo desde Agregar» — un consejo que apuntaba a un botón inexistente.
+                //
+                // Anular una pata es seguro y ya lo era: el server cascadea a las dos por
+                // `transferId` dentro de la misma transacción, así que no hay forma de dejar medio
+                // par anulado. Lo que se anula, y por cuánto en cada cuenta, lo dice la hoja de
+                // anular ([loQuePasaAlAnular]).
+                SeccionDeAnular(onAnular, habilitado = true)
                 Spacer(Modifier.height(24.dp))
             }
             BarraDeError(errorDeEdicion)
@@ -520,35 +539,48 @@ fun ChangeCategorySheet(
                 Text(it, fontSize = 12.sp, color = MinExpense)
             }
 
-            // Va al FINAL y separado por una línea: es la única acción de esta hoja que quita
-            // plata de las cifras, y no comparte lugar con las que solo la reclasifican.
-            if (onAnular != null) {
-                Spacer(Modifier.height(20.dp))
-                Hairline()
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Anular este movimiento",
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MinExpense,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(enabled = !saving) { onAnular() }
-                        .padding(vertical = 12.dp),
-                )
-                // «Anular», no «borrar»: el movimiento no se pierde, deja de contar. Decirlo acá
-                // evita que alguien no lo toque por miedo a perder el registro.
-                Text(
-                    text = "Deja de contar en tus cifras. El registro no se pierde.",
-                    fontSize = 11.5.sp,
-                    color = MinTextMute,
-                )
-            }
+            SeccionDeAnular(onAnular, habilitado = !saving)
             Spacer(Modifier.height(20.dp))
         }
         BarraDeError(errorDeEdicion)
     }
+}
+
+/**
+ * **Anular, al final de la hoja y separado por una línea.**
+ *
+ * Es la única acción de esta hoja que quita plata de las cifras, y no comparte lugar con las que
+ * solo la reclasifican. `null` en [onAnular] = quien abrió la hoja no ofrece anular.
+ *
+ * Un componente y no dos copias porque son **dos** las ramas que lo pintan —el movimiento común y
+ * la mitad de un par— y la segunda llegó a existir justamente porque este bloque vivía suelto
+ * dentro de una sola de ellas. Con la acción acá, agregar una rama nueva mañana y olvidarse de la
+ * salida cuesta una línea visible en vez de un `return` temprano que no se ve.
+ */
+@Composable
+private fun SeccionDeAnular(onAnular: (() -> Unit)?, habilitado: Boolean) {
+    if (onAnular == null) return
+    Spacer(Modifier.height(20.dp))
+    Hairline()
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = "Anular este movimiento",
+        fontSize = 13.5.sp,
+        fontWeight = FontWeight.Medium,
+        color = MinExpense,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = habilitado) { onAnular() }
+            .padding(vertical = 12.dp),
+    )
+    // «Anular», no «borrar»: el movimiento no se pierde, deja de contar. Decirlo acá evita que
+    // alguien no lo toque por miedo a perder el registro.
+    Text(
+        text = "Deja de contar en tus cifras. El registro no se pierde.",
+        fontSize = 11.5.sp,
+        color = MinTextMute,
+    )
 }
 
 // `BarraDeError` se mudó a `ui/components/ErrorMessages.kt` (llega por el import con `*` de
