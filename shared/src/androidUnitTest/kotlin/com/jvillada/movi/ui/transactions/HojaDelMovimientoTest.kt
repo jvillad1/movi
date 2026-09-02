@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
@@ -120,6 +121,41 @@ class HojaDelMovimientoTest {
         composeRule.onNodeWithText("MONTO Y CUENTA", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
+
+    /**
+     * **Y la mitad de un par también se puede anular.**
+     *
+     * Esta es la rama que se había quedado sin la acción. Hasta el PR que unificó las dos puertas,
+     * el detalle de la cuenta abría `VoidEventSheet` directo sobre *cualquier* fila, incluida la
+     * pata de un traspaso o de una cuota. Al mandar las dos pantallas por [HojaDelMovimiento], la
+     * rama de «esto es una pata de un par» de [ChangeCategorySheet] quedó devolviendo temprano —
+     * explicador, monto, fecha— **sin pasar nunca por el bloque que ofrece anular**. O sea que una
+     * cuota mal registrada, un traspaso o un pago de tarjeta dejaron de poder anularse desde
+     * ningún lado, y nadie lo notó porque ninguna prueba montaba la hoja sobre una pata.
+     *
+     * Es justo el movimiento que MÁS necesita la salida: a una pata no se le puede cambiar la
+     * cuenta ni la categoría (`PATA_NO_CAMBIA_DE_CUENTA` lo dice con todas las letras y remata
+     * «anúlalo y vuelve a registrarlo desde Agregar») — un consejo que apuntaba a un botón que no
+     * existía.
+     */
+    @Test
+    fun laMitadDeUnParTambienSePuedeAnular() {
+        montar(event = pataDeUnaCuota)
+        composeRule.onNodeWithText("CUOTA DE CRÉDITO", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+    }
+
+    /** La pata del dinero de la cuota real del vehículo. */
+    private val pataDeUnaCuota = FinancialEvent(
+        id = "ev-cuota",
+        accountId = bancolombia.id,
+        type = TransactionType.EXPENSE,
+        amount = 4_215_223L,
+        category = CUOTA_CATEGORY,
+        description = "Cuota de Vehículo 4083",
+        timestamp = 1_754_406_000_000L,
+        transferId = "tr-cuota",
+    )
 }
 
 /** El AVD `Movi_Sensor`: 411×731 dp. Mismo tamaño que usa `HojaAgregarGeometriaTest`. */
