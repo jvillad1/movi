@@ -22,8 +22,8 @@ android {
         // 1.3: la app deja de ser solo el sensor — MainActivity monta la app completa.
         // 1.15: el APK 1.14 crasheaba al abrir con NoClassDefFoundError sobre
         // SmsFilterConfigStore — el paquete salió SIN el dex de androidMain de :shared.
-        // Ver la tarea `verificaQueElDexEsteCompleto` de abajo: el bug no estaba en el
-        // código sino en el empaquetado, y el build decía BUILD SUCCESSFUL igual.
+        // Ver `verificaElDexDe{Debug,Release}` abajo: el bug no estaba en el código sino
+        // en el empaquetado, y el build decía BUILD SUCCESSFUL igual.
         versionCode = 16
         versionName = "1.15"
     }
@@ -78,52 +78,72 @@ dependencies {
  *
  * Al paquete le faltaba el dex con el `androidMain` de `:shared`. `MainActivity` arranca la captura
  * de SMS en su primera línea, la clase no estaba, y Android mataba el proceso antes de dibujar nada.
+ * **Y el build decía `BUILD SUCCESSFUL`.** El APK se arma pocas veces y se entrega a mano, así que
+ * un defecto de empaquetado se descubre cuando el dueño no puede abrir la app.
  *
- * **Y el build decía `BUILD SUCCESSFUL`.** Se reprodujo dos veces armando desde un worktree de git
- * con la caché de Gradle compartida: `dexBuilderDebug` y `mergeProjectDexDebug` resuelven
- * `FROM-CACHE` contra entradas del checkout principal y devuelven un juego de dex incompleto.
- * Con `--no-build-cache`, o armando desde el checkout principal, sale bien.
+ * ## Por qué `dexdump` y no buscar el nombre como texto
  *
- * La regla del proyecto es que el APK se arma pocas veces y se entrega a mano, así que un defecto
- * de empaquetado se descubre cuando el dueño no puede abrir la app. Esta tarea lo mueve al build:
- * si la clase canaria no está en ningún dex, el build falla y ese APK no sale de acá.
+ * La primera versión de esta tarea buscaba `com/jvillada/movi/sms/SmsFilterConfigStore` como
+ * substring en los dex. **No sirve, y se comprobó:** un dex guarda ese nombre tanto donde la clase
+ * está *definida* como donde alguien la *llama*, y `MainActivity` la llama. O sea que el nombre
+ * sigue apareciendo aunque la definición se haya perdido — exactamente el caso que hay que atrapar.
+ * Medido sobre un APK bueno: la definición está en `classes3.dex`, y `classes5/16/17` la nombran sin
+ * definirla.
+ *
+ * `dexdump` sí distingue: imprime una línea `Class descriptor` por cada *class_def*. Tarda ~4 s en
+ * encontrarla, una vez por `assemble`.
  *
  * La canaria es `SmsFilterConfigStore` a propósito: vive en el `androidMain` de `:shared` —el source
- * set que se perdió— y es la primera que toca `MainActivity`, así que si falta, la app no abre.
- */
-/**
- * Cada variante verifica **su propio** APK, no todo lo que haya quedado en `outputs/apk`. La
- * primera versión de esta tarea escaneaba el árbol entero y falló contra un `release` viejo de otro
- * build mientras se armaba el `debug` — un guardián que grita por un artefacto que nadie va a
- * instalar se termina desactivando, y entonces no guarda nada.
+ * set que se perdió— y es la primera clase que toca `MainActivity`, así que si falta, la app no abre.
  */
 listOf("Debug", "Release").forEach { variante ->
+    // Todo local, nada de propiedades del script: la caché de configuración no serializa
+    // referencias a objetos del build script, y `doLast` captura lo que nombra. Y `android` no se
+    // puede tocar dentro de `doLast`, así que su ruta se resuelve acá.
+    val canaria = "Lcom/jvillada/movi/sms/SmsFilterConfigStore;"
+    val dexdump = File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}/dexdump")
+    val salidaDeLaVariante = layout.buildDirectory.dir("outputs/apk/${variante.lowercase()}")
+    val temporal = layout.buildDirectory.dir("tmp/dexDe$variante")
+
     val verifica = tasks.register("verificaElDexDe$variante") {
         description = "Falla si al APK de $variante le falta el dex del androidMain de :shared."
-        val dir = layout.buildDirectory.dir("outputs/apk/${variante.lowercase()}")
         doLast {
-            val canaria = "com/jvillada/movi/sms/SmsFilterConfigStore"
-            val apks = dir.get().asFile.listFiles { f -> f.name.endsWith(".apk") }.orEmpty()
-            check(apks.isNotEmpty()) { "No se armó ningún APK en ${dir.get().asFile}" }
+            check(dexdump.canExecute()) {
+                "No encontré dexdump ejecutable en $dexdump. Sin él no puedo verificar el APK, y " +
+                    "un APK sin verificar no se entrega: instalá las build-tools o corregí la versión."
+            }
+            val dir = salidaDeLaVariante.get().asFile
+            val apks = dir.listFiles { f -> f.name.endsWith(".apk") }.orEmpty()
+            check(apks.isNotEmpty()) { "No se armó ningún APK en $dir" }
+
             apks.forEach { apk ->
-                val presente = ZipFile(apk).use { zip ->
-                    zip.entries().asSequence()
-                        .filter { it.name.matches(Regex("""classes\d*\.dex""")) }
-                        .any { entrada ->
-                            // El nombre de la clase viaja como texto plano en el pool de strings
-                            // del dex: alcanza con buscarlo, sin traer una librería que lo parsee.
-                            zip.getInputStream(entrada).readBytes()
-                                .toString(Charsets.ISO_8859_1).contains(canaria)
+                val donde = temporal.get().asFile.also { it.deleteRecursively(); it.mkdirs() }
+                var definida = false
+                ZipFile(apk).use { zip ->
+                    for (entrada in zip.entries().asSequence()) {
+                        if (definida) break
+                        if (!entrada.name.matches(Regex("""classes\d*\.dex"""))) continue
+                        val suelto = File(donde, entrada.name)
+                        zip.getInputStream(entrada).use { e -> suelto.outputStream().use { s -> e.copyTo(s) } }
+                        val proceso = ProcessBuilder(dexdump.absolutePath, suelto.absolutePath)
+                            .redirectErrorStream(true).start()
+                        definida = proceso.inputStream.bufferedReader().useLines { lineas ->
+                            lineas.any { it.contains("Class descriptor") && it.contains(canaria) }
                         }
+                        // `destroy` y no `waitFor`: `any` corta apenas encuentra, y esperar a un
+                        // proceso con salida sin leer se cuelga.
+                        proceso.destroy()
+                        suelto.delete()
+                    }
                 }
-                check(presente) {
-                    "${apk.name} no contiene $canaria: le falta el dex del androidMain de :shared " +
-                        "y la app va a crashear al abrir. Volvé a armarlo con --no-build-cache, o " +
-                        "desde el checkout principal en vez de un worktree."
+                donde.deleteRecursively()
+                check(definida) {
+                    "${apk.name} no DEFINE $canaria en ningún dex: le falta el androidMain " +
+                        "de :shared y la app va a crashear al abrir. Volvé a armarlo con " +
+                        "--no-build-cache, o desde el checkout principal en vez de un worktree."
                 }
             }
         }
     }
     tasks.matching { it.name == "assemble$variante" }.configureEach { finalizedBy(verifica) }
 }
-
