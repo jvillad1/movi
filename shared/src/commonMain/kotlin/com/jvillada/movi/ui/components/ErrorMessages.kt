@@ -1,6 +1,14 @@
 package com.jvillada.movi.ui.components
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.theme.MinExpense
 
 fun Throwable.toUserMessage(): String {
     // Cuando el server explicó el rechazo en el cuerpo, eso gana: es más específico que
@@ -73,4 +81,30 @@ fun Throwable.toUserMessage(): String {
 
         else -> "Algo salió mal. Intenta de nuevo."
     }
+}
+
+/**
+ * El error de guardar, **pegado al borde de abajo de la hoja y fuera del scroll**.
+ *
+ * No es un detalle de maquetado. El contenido de las hojas de la app vive dentro de un
+ * `verticalScroll` que puede medir veinte renglones: un mensaje pintado ahí adentro aparece donde
+ * el dueño no está mirando, así que —desde su lado— el guardado falló **en silencio**. Este
+ * proyecto ya pisó exactamente esa piedra. La `Column` que scrollea lleva `weight(1f, fill =
+ * false)`, así que lo que se dibuje después de ella queda siempre visible en el panel.
+ *
+ * Vive acá y no adentro de una pantalla porque ya son dos las hojas que lo necesitan —la que
+ * corrige un movimiento y la que lo anula— y la segunda llegó a producción con su error adentro
+ * del scroll, que es el defecto que este componente existe para no volver a tener.
+ */
+@Composable
+fun BarraDeError(mensaje: String?) {
+    if (mensaje == null) return
+    Hairline()
+    Text(
+        text = mensaje,
+        fontSize = 12.5.sp,
+        color = MinExpense,
+        lineHeight = 17.sp,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+    )
 }

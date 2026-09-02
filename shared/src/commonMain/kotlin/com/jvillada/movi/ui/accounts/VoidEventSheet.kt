@@ -8,6 +8,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,16 +23,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.ANULAR_DESHACE_LAS_DOS_MITADES
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.loQuePasaAlAnular
+import com.jvillada.movi.shared.model.textoDeLoQuePasa
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+/**
+ * Confirmar la anulación de un movimiento — la única acción de la app que no tiene deshacer.
+ *
+ * ## Por qué la hoja va a buscar la otra mitad
+ *
+ * Anular una pata cascadea a la otra por `transferId`, y desde que la deuda baja solo por lo que
+ * abona a capital ([com.jvillada.movi.shared.model.DesgloseDeCuota]) **las dos mitades dejaron de
+ * valer lo mismo**. Los saldos quedaban bien —cada pata se revierte por su propio monto— pero la
+ * hoja mostraba el monto de la pata que el dueño tocó y nada más: anular la cuota del vehículo
+ * desde la cuenta de ahorros decía «$4.215.223» mientras desaparecían $4.215.223 de la cuenta **y**
+ * $1.733.905 de la deuda, sin que la pantalla nombrara nunca el segundo número.
+ *
+ * Qué se dice lo decide [loQuePasaAlAnular], en `:core`, por el mismo motivo que el resto de las
+ * reglas de plata de esta ola: ya son dos las pantallas que cuentan esta historia (el renglón de
+ * Movimientos y esta hoja) y una regla sobre plata duplicada en dos pantallas ya sobrevivió tres
+ * rondas de arreglos en este proyecto. Acá solo se le pone el nombre de la cuenta y el monto
+ * formateado.
+ *
+ * La hermana se busca en el repositorio y **no se pide como parámetro**: de las dos pantallas que
+ * abren esta hoja, el detalle de la cuenta solo tiene los movimientos de *su* cuenta, y la hermana
+ * de una cuota vive justo en la otra. Si esa lectura falla o no llegó, no se dice nada — mostrar
+ * una cifra deducida de la nada sería peor que no mostrarla ([loQuePasaAlAnular] devuelve vacío).
+ */
 @Composable
 fun VoidEventSheet(
     event: FinancialEvent,
+    /**
+     * Las cuentas del dueño, solo para poder nombrarlas. Vacía = «todavía no llegaron»: se dicen
+     * los roles («Tu cuenta», «La deuda») en vez de inventar un nombre, mismo criterio que el
+     * subtítulo del renglón de Movimientos.
+     */
+    cuentas: List<Account>,
     onDismiss: () -> Unit,
     onVoided: () -> Unit,
 ) {
@@ -37,6 +73,16 @@ fun VoidEventSheet(
     var reason by remember { mutableStateOf("") }
     var voiding by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // La otra mitad del par, cuando la hay. Un movimiento suelto —la enorme mayoría— ni siquiera
+    // pregunta: `transferId` en null corta antes de tocar el repositorio.
+    var hermana by remember(event.id) { mutableStateOf<FinancialEvent?>(null) }
+    LaunchedEffect(event.id) {
+        val transferId = event.transferId ?: return@LaunchedEffect
+        hermana = runCatching { Repositories.wallets.getEvents() }
+            .getOrNull()
+            ?.firstOrNull { it.transferId == transferId && it.id != event.id }
+    }
 
     fun doVoid() {
         if (voiding) return
@@ -57,6 +103,8 @@ fun VoidEventSheet(
 
     val isIncome = event.type == TransactionType.INCOME
     val signedAmount = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}"
+    val nombres = remember(cuentas) { cuentas.associate { it.id to it.name } }
+    val loQuePasa = loQuePasaAlAnular(event, hermana)
 
     Column(
         modifier = Modifier
@@ -126,6 +174,59 @@ fun VoidEventSheet(
                     }
                 }
 
+                // **Las dos cifras, cuando son dos.**
+                //
+                // La de arriba es la de la pata que el dueño tocó, y hasta acá era todo lo que la
+                // hoja decía. En un par simétrico eso alcanza y esta sección no aparece: un aviso
+                // de más sobre algo que no cambia enseña a ignorarlos.
+                if (loQuePasa.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        text = "AL ANULAR",
+                        fontSize = 11.sp,
+                        color = MinTextMute,
+                        letterSpacing = 0.4.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    loQuePasa.forEach { efecto ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            // Ícono y no un «✓» de texto: en wasm la fuente del canvas no trae ese
+                            // glifo y sale como ▯ — el mismo problema que ya obligó a reemplazar el
+                            // «›» y la flecha del subtítulo de un traspaso.
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MinTextMute,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = textoDeLoQuePasa(
+                                    efecto,
+                                    nombres[efecto.accountId],
+                                    formatMoney(efecto.monto, efecto.currency),
+                                ),
+                                fontSize = 13.5.sp,
+                                color = MinText,
+                                lineHeight = 18.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    // Sin esta frase, dos números distintos sobre un solo pago se leen como un
+                    // error de la app.
+                    Text(
+                        text = ANULAR_DESHACE_LAS_DOS_MITADES,
+                        fontSize = 12.5.sp,
+                        color = MinTextMute,
+                        lineHeight = 17.sp,
+                    )
+                }
+
                 Spacer(Modifier.height(18.dp))
 
                 // Reason label
@@ -163,12 +264,6 @@ fun VoidEventSheet(
                     )
                 }
 
-                // Inline error
-                if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
-                }
-
                 Spacer(Modifier.height(20.dp))
 
                 // CTA
@@ -191,6 +286,11 @@ fun VoidEventSheet(
 
                 Spacer(Modifier.height(14.dp))
             }
+            // El error de anular, **fuera del área que se desplaza**. Estaba pintado adentro, entre
+            // el motivo y el botón: con la sección de «al anular» y el teclado abierto en un
+            // teléfono chico, aparecía donde el dueño no está mirando — o sea que, desde su lado,
+            // la anulación fallaba en silencio. Ver [BarraDeError].
+            BarraDeError(error)
         }
     }
 }
