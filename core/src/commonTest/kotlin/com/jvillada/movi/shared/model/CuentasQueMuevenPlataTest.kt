@@ -170,12 +170,59 @@ class CuentasQueMuevenPlataTest {
         assertTrue("Pensión voluntaria Skandia" in nombres(partido.todas))
     }
 
+    // ── El extracto: ni origen ni destino, sino de quién es ──────────────────────
+
+    /**
+     * **El defecto que abrió esto.** `StatementReviewScreen` resolvía el destino con una cadena
+     * que terminaba en `accounts.firstOrNull()`: la primera del abecedario. Con las cuentas
+     * reales del dueño, un extracto que no coincidiera por nombre podía quedar importado entero
+     * contra un crédito ya desembolsado.
+     */
+    @Test
+    fun un_extracto_no_es_de_un_credito_ya_desembolsado() {
+        assertFalse(sirvePara(carro, UsoDeCuenta.CUENTA_DEL_EXTRACTO))
+        assertFalse(sirvePara(hipotecario, UsoDeCuenta.CUENTA_DEL_EXTRACTO))
+    }
+
+    @Test
+    fun un_extracto_puede_ser_de_una_tarjeta_o_de_la_inversion() {
+        // Las dos cosas que ninguno de los dos usos viejos habría contestado bien a la vez: el
+        // extracto de la AMEX es el caso más común de todos, y a Skandia también le llega el suyo.
+        assertTrue(sirvePara(amex, UsoDeCuenta.CUENTA_DEL_EXTRACTO))
+        assertTrue(sirvePara(skandia, UsoDeCuenta.CUENTA_DEL_EXTRACTO))
+    }
+
+    @Test
+    fun del_efectivo_no_hay_extracto() {
+        // Nadie recibe un PDF de lo que tiene en el bolsillo. Es la única diferencia con el uso
+        // del gasto que se ve en la lista corta.
+        assertFalse(sirvePara(efectivo, UsoDeCuenta.CUENTA_DEL_EXTRACTO))
+    }
+
+    @Test
+    fun la_condicion_no_esconde_la_cuenta_del_extracto() {
+        // Guardar los movimientos de Skandia no le saca un peso a nadie: la condición es sobre el
+        // retiro. Si esto se copiara del uso del gasto —donde sí pesa—, la cuenta caería detrás
+        // del «Ver todas» sin ningún motivo.
+        assertTrue(sirvePara(skandia, UsoDeCuenta.CUENTA_DEL_EXTRACTO))
+    }
+
+    @Test
+    fun el_selector_de_un_extracto_ofrece_bancos_tarjetas_e_inversion() {
+        val partido = cuentasPara(todas, UsoDeCuenta.CUENTA_DEL_EXTRACTO)
+        assertEquals(
+            listOf("Bancolombia Ahorros", "Nu", "AMEX 9208", "Pensión voluntaria Skandia"),
+            nombres(partido.principales),
+        )
+        assertEquals(listOf("Efectivo", "Vehículo 4083", "Hipotecario 7712"), nombres(partido.otras))
+    }
+
     // ── No es un filtro duro ────────────────────────────────────────────────────
 
     @Test
     fun nada_se_pierde_al_partir_la_lista() {
-        // La afirmación que sostiene el «Ver todas»: partir no borra. Se vale para los cinco usos,
-        // porque el día que alguien agregue el sexto esto tiene que seguir siendo cierto.
+        // La afirmación que sostiene el «Ver todas»: partir no borra. Se vale para los seis usos,
+        // porque el día que alguien agregue el séptimo esto tiene que seguir siendo cierto.
         UsoDeCuenta.entries.forEach { uso ->
             assertEquals(nombres(todas).toSet(), nombres(cuentasPara(todas, uso).todas).toSet(), "uso $uso")
         }

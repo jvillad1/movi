@@ -205,6 +205,40 @@ class HojaAgregarEligeLaCuentaTest {
         composeRule.onNodeWithText("Vehículo 4083").assertDoesNotExist()
     }
 
+    /**
+     * **Lo único que separa a la hoja de guardar contra un crédito.**
+     *
+     * Con solo el crédito del vehículo, `reconciliarCuenta` no encuentra ninguna candidata y deja
+     * la cuenta en `null` — eso es a propósito, y es lo que fija
+     * [el_preset_de_un_credito_no_queda_elegido] por el lado de la elección. Lo que fija esta
+     * prueba es el lado del guardado: que el botón **no guarde**.
+     *
+     * No es una precaución teórica. En el renglón del `accountId` vivía
+     * `?: accounts.firstOrNull()?.id ?: "acc_1"`: si `canSave` dejara pasar este estado, el
+     * movimiento se anotaba contra la primera cuenta de la lista, que acá es el crédito. Ese
+     * respaldo ya no está, y el `?: return` que lo reemplazó **depende** de esta guarda; por eso
+     * la guarda ahora tiene una prueba y no una nota al pie.
+     *
+     * El doble de prueba es el detector: `RepositorioDePrueba.postEvent` explota con su nombre. Si
+     * mañana alguien afloja `canSave`, esto no se pone rojo por una afirmación sutil — se pone
+     * rojo con «esta prueba no esperaba que la pantalla llamara a postEvent()».
+     */
+    @Test
+    fun con_una_sola_cuenta_que_no_sirve_el_boton_no_guarda_nada() {
+        montarHoja(listOf(carro))
+
+        tocar("5")
+        tocar("000")
+        tocar("0")
+
+        composeRule.onNodeWithText("Falta la cuenta").assertIsDisplayed()
+
+        tocar("Guardar movimiento")
+
+        // Sigue diciendo lo que falta: no guardó, no se cerró, no inventó una cuenta.
+        composeRule.onNodeWithText("Falta la cuenta").assertIsDisplayed()
+    }
+
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
 
     /**

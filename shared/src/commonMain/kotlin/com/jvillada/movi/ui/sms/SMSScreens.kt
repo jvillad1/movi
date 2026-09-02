@@ -24,10 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
-import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventSource
-import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
@@ -35,6 +32,8 @@ import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
@@ -192,6 +191,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     var parsed by remember { mutableStateOf<ParsedSms?>(null) }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    // La cuenta que el dueño eligió con el dedo, si la eligió. Manda sobre lo que resuelva Movi
+    // —ver [resolverCuentaDelBanco]— y por eso vive acá y no adentro del cálculo.
+    var cuentaElegida by remember { mutableStateOf<String?>(null) }
+    var eligiendoCuenta by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -205,13 +208,33 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     }
 
     val currentSms = sms
-    val resolvedAccount = accounts.firstOrNull { currentSms != null && it.name.contains(currentSms.bank, ignoreCase = true) }
-        // F56: antes era "cualquier cuenta que no sea Efectivo" — con Inversión y Deuda ahora
-        // nombradas aparte, ese fallback también podía caer en un CDT o en una tarjeta, que no
-        // tiene sentido como destino por defecto de un SMS bancario. Se acota a Dinero (sin
-        // contar Efectivo, que ya se probó arriba y descartó).
-        ?: accounts.firstOrNull { it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH }
-        ?: accounts.firstOrNull()
+
+    /**
+     * **Para qué se elige la cuenta acá**: este SMS termina siendo un `FinancialEvent` con el tipo
+     * que salió del parseo, o sea exactamente lo mismo que anotar un gasto o un ingreso a mano. El
+     * criterio, entonces, es el mismo de la hoja de «Agregar» — de un gasto la plata sale (banco,
+     * efectivo, tarjeta), a un ingreso entra (banco, efectivo, inversión).
+     *
+     * Mientras el parseo no llegue vale el del gasto, que es el caso común; cuando llega, todo
+     * esto se recalcula solo y con él la cuenta resuelta. Confirmar sigue exigiendo `parsed`, así
+     * que ese rato no se puede guardar nada.
+     */
+    val usoDeCuenta = if (parsed?.type == TransactionType.INCOME) {
+        UsoDeCuenta.DESTINO_DE_INGRESO
+    } else {
+        UsoDeCuenta.ORIGEN_DE_GASTO
+    }
+    // Ola 15: acá había una cadena que terminaba en `accounts.firstOrNull()` — la primera del
+    // abecedario, que en las cuentas del dueño puede ser el «Vehículo 4083». Ahora las candidatas
+    // salen del criterio de `:core`, y si no hay ninguna no se resuelve nada: el botón queda
+    // apagado (ya lo estaba) y la fila «Cuenta» pide que la elija.
+    val cuentaDelSms = resolverCuentaDelBanco(
+        accounts = accounts,
+        uso = usoDeCuenta,
+        banco = currentSms?.bank.orEmpty(),
+        elegidaAMano = cuentaElegida,
+    )
+    val resolvedAccount = cuentaDelSms.cuenta
 
     val categoryOptions: List<String> = run {
         val base = parsed?.category
@@ -335,7 +358,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(p.merchant, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.2).sp)
                                 Text(
-                                    "${selectedCategory ?: p.category} · ${resolvedAccount?.name ?: "Sin cuenta"}",
+                                    "${selectedCategory ?: p.category} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
                                     fontSize = 12.sp,
                                     color = MinTextMute,
                                     modifier = Modifier.padding(top = 3.dp),
@@ -371,7 +394,13 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     Detail(
                         ok = resolvedAccount != null,
                         label = "Cuenta",
-                        value = resolvedAccount?.name ?: "Sin cuenta",
+                        value = resolvedAccount?.name ?: "Sin cuenta elegida",
+                        // Lo que Movi haya adivinado se dice acá, antes de guardar. Un SMS no
+                        // trae la cuenta escrita: la pone la app, y eso hay que confesarlo en la
+                        // pantalla y no descubrirlo después en Movimientos.
+                        hint = avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
+                        action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
+                        onClick = { eligiendoCuenta = !eligiendoCuenta },
                     )
                     Hairline()
                     Detail(
@@ -380,6 +409,31 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         value = selectedCategory ?: "—",
                         isLast = true,
                     )
+                }
+
+                // El selector, en el mismo lugar donde antes había un dato de solo lectura. Es lo
+                // que hace que el criterio nuevo no sea un callejón: cuando ninguna cuenta califica
+                // —o cuando Movi eligió mal— este es el camino hacia adelante.
+                if (eligiendoCuenta) {
+                    Spacer(Modifier.height(8.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Default,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
+                    ) {
+                        ListaDeCuentasElegibles(
+                            // `conservar` es lo que sostiene una elección hecha desde el «Ver
+                            // todas»: sin él, la cuenta que el dueño acaba de sacar de ahí se
+                            // escondería sola al reabrir el selector.
+                            cuentas = cuentasPara(accounts, usoDeCuenta, conservar = resolvedAccount?.id),
+                            uso = usoDeCuenta,
+                            selectedId = resolvedAccount?.id,
+                            onPick = { id ->
+                                cuentaElegida = id
+                                eligiendoCuenta = false
+                            },
+                        )
+                    }
                 }
 
                 if (categoryOptions.isNotEmpty()) {
@@ -452,10 +506,28 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     }
 }
 
+/**
+ * Una fila del resumen «Confirma o ajusta».
+ *
+ * @param hint el renglón chiquito de abajo: por qué ese valor está puesto, cuando lo puso Movi.
+ * @param action el texto de la derecha que invita a tocar («Cambiar» / «Cerrar»). Va junto con
+ *   [onClick]: una fila que se puede tocar y no lo dice es una fila que nadie toca.
+ */
 @Composable
-private fun Detail(ok: Boolean, label: String, value: String, isLast: Boolean = false) {
+private fun Detail(
+    ok: Boolean,
+    label: String,
+    value: String,
+    isLast: Boolean = false,
+    hint: String? = null,
+    action: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -475,6 +547,12 @@ private fun Detail(ok: Boolean, label: String, value: String, isLast: Boolean = 
         Column(modifier = Modifier.weight(1f)) {
             Text(label.uppercase(), fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
             Text(value, fontSize = 13.5.sp, color = MinText, letterSpacing = (-0.1).sp, modifier = Modifier.padding(top = 2.dp))
+            if (hint != null) {
+                Text(hint, fontSize = 11.sp, color = MinTextFaint, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+        if (action != null) {
+            Text(action, fontSize = 12.sp, color = MinTextMute)
         }
     }
 }
