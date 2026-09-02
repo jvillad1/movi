@@ -96,12 +96,34 @@ dependencies {
  * La canaria es `SmsFilterConfigStore` a propósito: vive en el `androidMain` de `:shared` —el source
  * set que se perdió— y es la primera clase que toca `MainActivity`, así que si falta, la app no abre.
  */
-listOf("Debug", "Release").forEach { variante ->
+/**
+ * **Dónde está el SDK, o `null` si esta máquina no tiene.**
+ *
+ * `android.sdkDirectory` se resuelve en **configuración**, y Gradle configura TODOS los módulos
+ * aunque solo se le pida `:webApp:wasmJsBrowserDistribution`. La imagen de Railway no tiene Android
+ * SDK —ni lo necesita: ahí solo se arman el wasm y el fat JAR—, así que esa línea tiraba «SDK
+ * location not found» y **se caía el despliegue entero**.
+ *
+ * No fue un susto teórico: producción quedó tres merges atrás (corriendo #130 mientras master iba
+ * por #133) sin que nadie se enterara, porque el build falla y Railway deja sirviendo la versión
+ * vieja. Un `BUILD SUCCESSFUL` que no despliega es la misma clase de mentira que esta verificación
+ * vino a matar, una capa más arriba.
+ *
+ * Saltar el registro no afloja la garantía. Esto existe para que no salga un APK incompleto, y una
+ * máquina sin SDK **no puede armar un APK**: no hay nada que dejar pasar. Donde sí se arma —esta
+ * máquina, y cualquiera con las build-tools— se registra igual y el build sigue fallando si al
+ * paquete le falta el dex.
+ */
+val sdkDeEstaMaquina: File? = runCatching { android.sdkDirectory }.getOrNull()
+
+if (sdkDeEstaMaquina == null) {
+    logger.info("Sin Android SDK: no se registra la verificación del dex (acá no se arman APKs).")
+} else listOf("Debug", "Release").forEach { variante ->
     // Todo local, nada de propiedades del script: la caché de configuración no serializa
     // referencias a objetos del build script, y `doLast` captura lo que nombra. Y `android` no se
     // puede tocar dentro de `doLast`, así que su ruta se resuelve acá.
     val canaria = "Lcom/jvillada/movi/sms/SmsFilterConfigStore;"
-    val dexdump = File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}/dexdump")
+    val dexdump = File(sdkDeEstaMaquina, "build-tools/${android.buildToolsVersion}/dexdump")
     val salidaDeLaVariante = layout.buildDirectory.dir("outputs/apk/${variante.lowercase()}")
     val temporal = layout.buildDirectory.dir("tmp/dexDe$variante")
 
