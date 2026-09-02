@@ -95,6 +95,9 @@ fun HojaDelMovimiento(
     if (pidioAnular) {
         VoidEventSheet(
             event = event,
+            // Las mismas cuentas que el selector de arriba, y acá solo para **nombrarlas**: cuando
+            // las dos mitades de un par no valen lo mismo, la hoja dice qué le pasa a cada una.
+            cuentas = cuentas,
             onDismiss = { pidioAnular = false },
             onVoided = {
                 pidioAnular = false

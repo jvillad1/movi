@@ -551,27 +551,9 @@ fun ChangeCategorySheet(
     }
 }
 
-/**
- * El error de guardar, **pegado al borde de abajo de la hoja y fuera del scroll**.
- *
- * No es un detalle de maquetado. El contenido de estas hojas vive dentro de un `verticalScroll`
- * que mide veinte renglones de categorías: un mensaje pintado ahí adentro aparece donde el dueño
- * no está mirando, así que —desde su lado— el guardado falló **en silencio**. Este proyecto ya
- * pisó exactamente esa piedra. La `Column` que scrollea lleva `weight(1f, fill = false)`, así que
- * lo que se dibuje después de ella queda siempre visible en el panel.
- */
-@Composable
-private fun BarraDeError(mensaje: String?) {
-    if (mensaje == null) return
-    Hairline()
-    Text(
-        text = mensaje,
-        fontSize = 12.5.sp,
-        color = MinExpense,
-        lineHeight = 17.sp,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-    )
-}
+// `BarraDeError` se mudó a `ui/components/ErrorMessages.kt` (llega por el import con `*` de
+// arriba): la hoja de anular necesitaba la misma barra, y hasta esta rama tenía su error pintado
+// *adentro* del scroll — o sea el defecto exacto que este componente existe para no volver a tener.
 
 /**
  * Candidatos que el server propone como pago de extracto de tarjeta (`looksLikeCardPayment`
