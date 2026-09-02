@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.sms
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -438,7 +440,23 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
 
                 if (categoryOptions.isNotEmpty()) {
                     Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // **Se desbordaban por el borde derecho.** `categoryOptions` trae hasta cuatro
+                    // (`take(4)`), y a 375 dp —el ancho con el que se usa la PWA desde el teléfono—
+                    // «Restaurantes · Mercado · Transporte · Salud» no entra: la cuarta quedaba
+                    // cortada contra el margen, con las letras apiladas en vertical, ilegible y sin
+                    // forma de tocarla. Y estas pastillas no son un atajo: la fila «Categoría» de
+                    // arriba es de solo lectura, así que son el único modo de cambiarla acá.
+                    //
+                    // `horizontalScroll` y no un `FlowRow` porque es el patrón que este repo ya
+                    // tiene para una fila de pastillas —Movimientos y Categorías hacen exactamente
+                    // esto— y una tercera forma de resolver el mismo problema es justo lo que esta
+                    // ola vino a sacar del código.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         categoryOptions.forEach { opt ->
                             val on = opt == selectedCategory
                             Box(
