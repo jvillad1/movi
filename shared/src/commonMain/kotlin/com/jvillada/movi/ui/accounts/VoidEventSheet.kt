@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.ANULAR_DESHACE_LAS_DOS_MITADES
+import com.jvillada.movi.shared.model.BUSCANDO_LA_OTRA_MITAD
+import com.jvillada.movi.shared.model.NO_SE_PUDO_LEER_LA_OTRA_MITAD
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
@@ -54,8 +56,19 @@ import kotlinx.coroutines.launch
  *
  * La hermana se busca en el repositorio y **no se pide como parámetro**: de las dos pantallas que
  * abren esta hoja, el detalle de la cuenta solo tiene los movimientos de *su* cuenta, y la hermana
- * de una cuota vive justo en la otra. Si esa lectura falla o no llegó, no se dice nada — mostrar
- * una cifra deducida de la nada sería peor que no mostrarla ([loQuePasaAlAnular] devuelve vacío).
+ * de una cuota vive justo en la otra. Nunca se inventa una cifra: mientras la lectura no vuelva, o
+ * si falla, [loQuePasaAlAnular] devuelve vacío.
+ *
+ * ## Mientras esa lectura tarda, la hoja lo dice
+ *
+ * Callar durante la espera era defendible mientras se creyera que duraba un parpadeo. Mirado a ojo
+ * en la web, tarda del orden de segundos — y en esa ventana la hoja se ve **entera** mostrando una
+ * sola cifra, que es el defecto de arriba otra vez, ahora por tiempo en vez de por contenido. Por
+ * eso hay [LaOtraMitad] con cuatro estados y no un `FinancialEvent?`: sin distinguir «todavía no
+ * volvió» de «falló», sin red la hoja se quedaba diciendo «buscando» para siempre.
+ *
+ * El botón de anular **sigue habilitado** en los dos casos. No saber cuánto no cambia qué va a
+ * pasar: el server cascadea a las dos patas por `transferId` dentro de la misma transacción.
  */
 @Composable
 fun VoidEventSheet(
@@ -74,14 +87,25 @@ fun VoidEventSheet(
     var voiding by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    // La otra mitad del par, cuando la hay. Un movimiento suelto —la enorme mayoría— ni siquiera
-    // pregunta: `transferId` en null corta antes de tocar el repositorio.
-    var hermana by remember(event.id) { mutableStateOf<FinancialEvent?>(null) }
+    // La otra mitad del par. Un movimiento suelto —la enorme mayoría— ni siquiera pregunta:
+    // `transferId` en null arranca en [LaOtraMitad.NoLaTiene] y corta antes de tocar el repositorio.
+    var otraMitad by remember(event.id) {
+        mutableStateOf<LaOtraMitad>(
+            if (event.transferId == null) LaOtraMitad.NoLaTiene else LaOtraMitad.Buscando,
+        )
+    }
     LaunchedEffect(event.id) {
         val transferId = event.transferId ?: return@LaunchedEffect
-        hermana = runCatching { Repositories.wallets.getEvents() }
-            .getOrNull()
-            ?.firstOrNull { it.transferId == transferId && it.id != event.id }
+        otraMitad = try {
+            val patas = Repositories.wallets.getEvents()
+            LaOtraMitad.Llego(patas.firstOrNull { it.transferId == transferId && it.id != event.id })
+        } catch (e: CancellationException) {
+            // La hoja se cerró en el medio. Se propaga en vez de tragarse —un `runCatching` acá
+            // convertiría un cierre normal en «no se pudo leer», que es un error inventado.
+            throw e
+        } catch (e: Exception) {
+            LaOtraMitad.NoSePudo
+        }
     }
 
     fun doVoid() {
@@ -104,7 +128,7 @@ fun VoidEventSheet(
     val isIncome = event.type == TransactionType.INCOME
     val signedAmount = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}"
     val nombres = remember(cuentas) { cuentas.associate { it.id to it.name } }
-    val loQuePasa = loQuePasaAlAnular(event, hermana)
+    val loQuePasa = (otraMitad as? LaOtraMitad.Llego)?.let { loQuePasaAlAnular(event, it.hermana) }.orEmpty()
 
     Column(
         modifier = Modifier
@@ -227,6 +251,26 @@ fun VoidEventSheet(
                     )
                 }
 
+                // **Y mientras la otra mitad no esté, se dice.** La lectura tarda del orden de
+                // segundos (medido a ojo en la web), y callar durante esa ventana dejaba la hoja
+                // viéndose entera con una sola cifra — el mismo defecto de siempre, ahora por
+                // tiempo en vez de por contenido. El botón sigue habilitado en los dos casos: el
+                // server cascadea a las dos patas pase lo que pase acá.
+                val avisoDeLaEspera = when (otraMitad) {
+                    LaOtraMitad.Buscando -> BUSCANDO_LA_OTRA_MITAD
+                    LaOtraMitad.NoSePudo -> NO_SE_PUDO_LEER_LA_OTRA_MITAD
+                    else -> null
+                }
+                if (avisoDeLaEspera != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = avisoDeLaEspera,
+                        fontSize = 12.5.sp,
+                        color = MinTextMute,
+                        lineHeight = 17.sp,
+                    )
+                }
+
                 Spacer(Modifier.height(18.dp))
 
                 // Reason label
@@ -293,4 +337,28 @@ fun VoidEventSheet(
             BarraDeError(error)
         }
     }
+}
+
+/**
+ * **En qué punto está la búsqueda de la otra mitad del par.**
+ *
+ * Cuatro estados y no un `FinancialEvent?`, porque con un nullable dos situaciones muy distintas se
+ * escribían igual: «todavía no volvió la lectura» y «la lectura falló» eran las dos `null`. La hoja
+ * no podía distinguirlas, así que sin red se quedaba diciendo «buscando» para siempre.
+ *
+ * [Llego] con `hermana` nula es un quinto caso real y distinto de los otros: la lectura volvió y
+ * este `transferId` no tiene otra pata en la base. No hay nada que aclarar y no se aclara nada.
+ */
+private sealed interface LaOtraMitad {
+    /** Un movimiento suelto: no hay par, no se pregunta nada. La enorme mayoría. */
+    data object NoLaTiene : LaOtraMitad
+
+    /** La lectura está en camino. */
+    data object Buscando : LaOtraMitad
+
+    /** Volvió. `hermana` nula = este par no tiene otra pata guardada. */
+    data class Llego(val hermana: FinancialEvent?) : LaOtraMitad
+
+    /** La lectura falló — sin red, o el server dijo que no. */
+    data object NoSePudo : LaOtraMitad
 }

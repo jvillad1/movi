@@ -57,6 +57,29 @@ const val ANULAR_DESHACE_LAS_DOS_MITADES: String =
         "deuda bajó solo por lo que abonaste a capital. Al anular vuelven atrás las dos."
 
 /**
+ * **Mientras la otra mitad no llegue, la hoja no finge estar completa.**
+ *
+ * La hermana se lee del repositorio y esa lectura tarda. Medido a ojo en la web, del orden de
+ * segundos — no un parpadeo. Callar durante esa ventana dejaba la hoja **viéndose entera** y
+ * diciendo una sola cifra, que es exactamente el defecto que [loQuePasaAlAnular] vino a matar,
+ * convertido en un problema de tiempo en vez de uno de contenido.
+ */
+const val BUSCANDO_LA_OTRA_MITAD: String = "Buscando la otra mitad de este par…"
+
+/**
+ * Y cuando esa lectura **falla**, se dice que falló.
+ *
+ * Es un estado distinto de «todavía no llegó» y por eso tiene su propia frase: tratarlos igual
+ * dejaba la hoja diciendo «buscando» para siempre cada vez que no hay red, que es una mentira más
+ * cara que el silencio.
+ *
+ * La segunda oración no es consuelo, es el hecho: anular cascadea a las dos patas por `transferId`
+ * dentro de la transacción del server, así que **no saber cuánto** no cambia **qué va a pasar**.
+ */
+const val NO_SE_PUDO_LEER_LA_OTRA_MITAD: String =
+    "No se pudo leer la otra mitad de este par. Anular revierte las dos de todos modos."
+
+/**
  * Las dos consecuencias de anular esta pata, **la del dinero primero**.
  *
  * Devuelve la lista vacía cuando no hay una segunda cifra que nombrar: sin hermana (la lectura
