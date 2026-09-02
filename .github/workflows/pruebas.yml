@@ -1,0 +1,74 @@
+# Las cuatro suites del repo, en cada PR — y la guarda del despliegue.
+#
+# **Por qué existe.** Hasta hoy este repo no tenía ninguna verificación automática: los cuatro
+# comandos se corrían a mano, y lo que no se corría no se notaba. El 2026-09-02 eso costó caro —
+# #131 dejó el build de Railway roto (`android.sdkDirectory` se resuelve en configuración y la
+# imagen no tiene SDK), producción se quedó cuatro merges atrás, y nadie se enteró: el build falla,
+# Railway deja sirviendo la versión vieja y la app sigue contestando 200. Un merge acá NO es un
+# despliegue, y el modo de falla es silencioso.
+#
+# Lo que se corre es exactamente lo que dice CLAUDE.md, ni más ni menos. **Nunca `./gradlew build`**:
+# arrastra el APK y tareas de Android que no hacen falta para saber si algo se rompió.
+name: Pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Un PR que recibe tres pushes seguidos no necesita tres corridas: la última manda.
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Las cuatro suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # JetBrains Runtime 21, no un OpenJDK cualquiera: `gradle/gradle-daemon-jvm.properties`
+      # pinta `toolchainVendor=jetbrains`, y con otro vendor el daemon no arranca.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: jetbrains
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # `--rerun-tasks` a propósito, aunque la caché lo haga parecer redundante. Este repo ya tuvo
+      # una prueba en verde que no se estaba ejecutando; un CI que saltea los tests porque el caché
+      # dice «up-to-date» es peor que no tener CI, porque además da confianza.
+      - name: Las cuatro suites
+        run: >
+          ./gradlew --rerun-tasks
+          :core:jvmTest
+          :server:test
+          :shared:testDebugUnitTest
+          :shared:compileKotlinWasmJs
+
+      # **La guarda del despliegue, y el motivo por el que este archivo existe.**
+      #
+      # Railway construye el wasm SIN Android SDK. Gradle configura TODOS los módulos aunque solo se
+      # le pida esta tarea, así que cualquier cosa que toque el SDK en configuración tumba el
+      # despliegue entero — que es literalmente lo que pasó con #131 y nadie vio.
+      #
+      # `--dry-run` porque lo que rompe es la **configuración**, no la compilación: tarda segundos
+      # en vez de los ~19 minutos del build real, y falla exactamente donde falló Railway.
+      # `ANDROID_SDK_ROOT` también se limpia: el runner define las dos.
+      - name: El despliegue no necesita el Android SDK
+        run: env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew :webApp:wasmJsBrowserDistribution --dry-run
+
+      - name: Reportes de prueba
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes
+          path: |
+            core/build/reports/tests/
+            server/build/reports/tests/
+            shared/build/reports/tests/
+          retention-days: 7
