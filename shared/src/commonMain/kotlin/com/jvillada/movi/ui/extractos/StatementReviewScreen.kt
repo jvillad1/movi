@@ -44,6 +44,9 @@ fun StatementReviewScreen(
     val reconciliations = remember { mutableStateMapOf<String, ReconciliationDecision>() }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // La cuenta que el dueño eligió con el dedo, si la eligió. Manda sobre lo que resuelva Movi.
+    var cuentaElegida by remember { mutableStateOf<String?>(null) }
+    var eligiendoCuenta by remember { mutableStateOf(false) }
     // Ola 2 #1: red de seguridad — si la pila de navegación vuelve a esta pantalla ya
     // importada (mismo defecto que el de SMS), no se puede reimportar el mismo extracto.
     var imported by remember { mutableStateOf(false) }
@@ -55,13 +58,24 @@ fun StatementReviewScreen(
             .onFailure { error = it.toUserMessage() }
     }
 
-    val destinationAccount = remember(accounts, result.bankName) {
-        accounts.firstOrNull { it.name.contains(result.bankName, ignoreCase = true) }
-            // F56: mismo criterio que SMSScreens — Dinero sin Efectivo, no "cualquier cosa que
-            // no sea Efectivo" (que antes también podía caer en Inversión o en una deuda).
-            ?: accounts.firstOrNull { it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH }
-            ?: accounts.firstOrNull()
+    // Ola 15: acá había la misma cadena que en SMSScreens, respaldo peligroso incluido —
+    // `accounts.firstOrNull()`, o sea la primera del abecedario, que en las cuentas del dueño
+    // puede ser el «Vehículo 4083». Un extracto entero podía quedar importado contra un crédito
+    // ya desembolsado. Ahora las candidatas salen del criterio de `:core`, y si no hay ninguna no
+    // se resuelve nada: el botón queda apagado (ya lo estaba) y el chip pide que la elija.
+    //
+    // [UsoDeCuenta.CUENTA_DEL_EXTRACTO] y no el del gasto: un extracto trae las compras del mes y
+    // también la nómina que entró, así que la pregunta no es de qué lado se mueve la plata sino
+    // quién manda extractos.
+    val destino = remember(accounts, result.bankName, cuentaElegida) {
+        resolverCuentaDelBanco(
+            accounts = accounts,
+            uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
+            banco = result.bankName,
+            elegidaAMano = cuentaElegida,
+        )
     }
+    val destinationAccount = destino.cuenta
 
     val confirmedCount = reconciliations.values.count { it.confirm }
     val importCount = selectedIds.size + confirmedCount
@@ -104,21 +118,71 @@ fun StatementReviewScreen(
         )
         Spacer(Modifier.height(12.dp))
 
-        // Account destination chip
-        destinationAccount?.let { acct ->
+        // **El destino, ahora elegible con el dedo.** Antes era un chip de solo lectura que además
+        // solo se dibujaba si Movi había resuelto algo — y resolvía siempre, porque el último
+        // respaldo agarraba la primera cuenta de la lista. Ahora se dibuja siempre: cuando no hay
+        // candidata lo dice, en vez de dejar el botón apagado sin explicar por qué.
+        val sinCuenta = destinationAccount == null
+        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { eligiendoCuenta = !eligiendoCuenta }
+                    .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Destino:", fontSize = 11.sp, color = MinTextMute)
                 Text(
-                    acct.name,
-                    fontSize = 11.sp, color = MinPrimary, fontWeight = FontWeight.Medium,
+                    destinationAccount?.name ?: "Elige la cuenta",
+                    fontSize = 11.sp,
+                    color = if (sinCuenta) MinAmber else MinPrimary,
+                    fontWeight = FontWeight.Medium,
+                    // `fill = false` y no un `Spacer` con peso: un segundo hijo pesado le
+                    // recortaría el ancho al chip a la mitad de la fila, y «Bancolombia Ahorros»
+                    // se partiría en dos renglones por dejar «Cambiar» pegado al borde.
                     modifier = Modifier
+                        .weight(1f, fill = false)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(MinPrimary.copy(alpha = 0.12f))
+                        .background((if (sinCuenta) MinAmber else MinPrimary).copy(alpha = 0.12f))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+                Text(
+                    if (eligiendoCuenta) "Cerrar" else "Cambiar",
+                    fontSize = 11.sp,
+                    color = MinTextMute,
+                )
+            }
+            // En renglón propio y no al lado del chip: a 375 dp, «Destino: Bancolombia Ahorros La
+            // puso Movi Cambiar» no entra en una línea, y lo primero que se recorta es justamente
+            // lo que hay que leer.
+            avisoDeLaCuentaDelBanco(destino.origen)?.let { aviso ->
+                Text(aviso, fontSize = 11.sp, color = MinTextFaint, modifier = Modifier.padding(top = 3.dp))
+            }
+        }
+        if (eligiendoCuenta) {
+            MinCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 8.dp),
+                variant = MinCardVariant.Default,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                ListaDeCuentasElegibles(
+                    // `conservar` sostiene lo que él haya sacado del «Ver todas»: sin eso, la
+                    // cuenta que acaba de elegir se escondería sola al reabrir el selector.
+                    cuentas = cuentasPara(
+                        accounts,
+                        UsoDeCuenta.CUENTA_DEL_EXTRACTO,
+                        conservar = destinationAccount?.id,
+                    ),
+                    uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
+                    selectedId = destinationAccount?.id,
+                    onPick = { id ->
+                        cuentaElegida = id
+                        eligiendoCuenta = false
+                    },
                 )
             }
         }

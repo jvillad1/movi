@@ -107,4 +107,7 @@ private fun explicacionDeLasOtrasCuentas(uso: UsoDeCuenta): String = when (uso) 
             "Puedes elegirla igual."
     UsoDeCuenta.DEUDA_QUE_SE_PAGA ->
         "Estas no son una deuda que se pague con una cuota. Puedes elegirlas igual."
+    UsoDeCuenta.CUENTA_DEL_EXTRACTO ->
+        "Estas no suelen mandar extracto: del efectivo no hay nada que importar, y un crédito ya " +
+            "desembolsado se mueve con su cuota. Puedes elegirlas igual."
 }

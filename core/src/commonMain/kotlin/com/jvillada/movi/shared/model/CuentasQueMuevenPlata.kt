@@ -71,6 +71,25 @@ enum class UsoDeCuenta {
 
     /** Lo que se paga con una cuota: préstamos y tarjetas. */
     DEUDA_QUE_SE_PAGA,
+
+    /**
+     * **De qué cuenta es esto que llegó del banco**: el destino de un extracto importado.
+     *
+     * No es ni origen ni destino, y por eso no alcanzaba con reusar los dos primeros: un extracto
+     * trae las dos cosas en el mismo archivo —las compras del mes y la nómina que entró—, así que
+     * la pregunta acá no es «¿de esta cuenta sale plata?» sino **«¿quién manda extractos?»**. Los
+     * bancos y las tarjetas, y también la fiduciaria de la inversión: a Skandia le llega el suyo.
+     *
+     * Afuera quedan los dos que no. El **efectivo**, porque nadie recibe un PDF de lo que tiene en
+     * el bolsillo. Y el **préstamo ya desembolsado**, que no acumula movimientos sueltos sino una
+     * cuota con su propia pestaña — y ese es exactamente el caso que abrió esto: la pantalla de
+     * revisión resolvía el destino con `accounts.firstOrNull()`, así que un extracto de
+     * Bancolombia podía terminar importado entero contra el «Vehículo 4083».
+     *
+     * [estaCondicionada] no pesa acá, por lo mismo que en el ingreso y en el traspaso: guardar los
+     * movimientos de Skandia no le saca un peso a nadie. La condición es sobre el retiro.
+     */
+    CUENTA_DEL_EXTRACTO,
 }
 
 /**
@@ -94,7 +113,7 @@ private fun estaCondicionada(account: Account): Boolean = !account.condicionadaA
 /**
  * ¿Esta cuenta sirve para [uso]? **La regla, y el único sitio donde está escrita.**
  *
- * Los dos usos nuevos recorren [AccountType] renglón por renglón en vez de preguntar por el
+ * Tres de los seis usos recorren [AccountType] renglón por renglón en vez de preguntar por el
  * grupo: así, el día que aparezca un tipo de cuenta más, esto no compila hasta que alguien
  * decida si de ahí sale plata o no. Un `else -> false` habría contestado esa pregunta en
  * silencio, y contestarla mal es justamente cómo un préstamo terminó ofrecido como origen de un
@@ -123,6 +142,10 @@ fun sirvePara(account: Account, uso: UsoDeCuenta): Boolean = when (uso) {
     UsoDeCuenta.PUNTA_DE_TRASPASO -> account.type != AccountType.CREDIT_CARD
     UsoDeCuenta.DINERO_PROPIO -> !estaCondicionada(account) && account.type.group != AccountGroup.DEUDA
     UsoDeCuenta.DEUDA_QUE_SE_PAGA -> account.type.group == AccountGroup.DEUDA
+    UsoDeCuenta.CUENTA_DEL_EXTRACTO -> when (account.type) {
+        AccountType.CHECKING, AccountType.SAVINGS, AccountType.CREDIT_CARD, AccountType.INVESTMENT -> true
+        AccountType.CASH, AccountType.LOAN -> false
+    }
 }
 
 /**
