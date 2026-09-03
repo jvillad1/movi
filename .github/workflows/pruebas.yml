@@ -59,8 +59,21 @@ jobs:
       # `--dry-run` porque lo que rompe es la **configuración**, no la compilación: tarda segundos
       # en vez de los ~19 minutos del build real, y falla exactamente donde falló Railway.
       # `ANDROID_SDK_ROOT` también se limpia: el runner define las dos.
+      # `env -u` NO alcanza por sí solo, y se comprobó: `android.sdkDirectory` lee PRIMERO
+      # `local.properties`, así que en una máquina de desarrollo esta guarda pasa en verde con el
+      # mismo archivo que tumbó el despliegue. Medido contra el commit de #131: con
+      # `local.properties` presente da BUILD SUCCESSFUL; sin él, «SDK location not found».
+      #
+      # Hoy el runner no tiene ese archivo, así que la guarda funciona — pero funciona por una
+      # AUSENCIA, no por una decisión. Moverlo la vuelve reproducible en cualquier máquina y evita
+      # que un `local.properties` commiteado por error la convierta en un chequeo que pasa siempre.
+      # Un CI que no puede fallar es peor que no tener CI: además da confianza.
       - name: El despliegue no necesita el Android SDK
-        run: env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew :webApp:wasmJsBrowserDistribution --dry-run
+        run: |
+          restaurar() { [ -f local.properties.aparte ] && mv local.properties.aparte local.properties || true; }
+          trap restaurar EXIT
+          [ -f local.properties ] && mv local.properties local.properties.aparte || true
+          env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew :webApp:wasmJsBrowserDistribution --dry-run
 
       - name: Reportes de prueba
         if: failure()
