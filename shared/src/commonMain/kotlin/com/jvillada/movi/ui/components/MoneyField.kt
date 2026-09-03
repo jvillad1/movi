@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -279,7 +280,23 @@ fun MoneyField(
                         cursorBrush = SolidColor(MinText),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                        // [esAtajoDeSeleccionarTodo], que trae la medición completa. Sin esto,
+                        // seleccionar todo con el teclado y reescribir CONCATENABA: sobre
+                        // $18.000.009, ⌘A + «7000» dejaba $180.000.097.000, guardable y sin aviso.
+                        //
+                        // Con el campo vacío no se consume la tecla: no hay nada que seleccionar y
+                        // quedarse con el atajo sería robarle al navegador algo que sí podría usar.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onPreviewKeyEvent { evento ->
+                                if (esAtajoDeSeleccionarTodo(evento) && field.text.isNotEmpty()) {
+                                    field = conTodoSeleccionado(field)
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                     )
                 }
                 // NO hay un botón de «borrar todo», y es a propósito: se probó y **no funciona
