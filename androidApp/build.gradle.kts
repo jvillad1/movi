@@ -24,8 +24,11 @@ android {
         // SmsFilterConfigStore — el paquete salió SIN el dex de androidMain de :shared.
         // Ver `verificaElDexDe{Debug,Release}` abajo: el bug no estaba en el código sino
         // en el empaquetado, y el build decía BUILD SUCCESSFUL igual.
-        versionCode = 16
-        versionName = "1.15"
+        // 1.16: primer APK con las olas #124-#135 adentro — la plata condicionada, el criterio
+        // del picker de cuentas, editar un movimiento, y la cuota que baja la deuda solo por
+        // capital. El 1.15 se armó de apuro para reemplazar al 1.14 roto y quedó en #127.
+        versionCode = 17
+        versionName = "1.16"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
