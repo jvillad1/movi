@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,6 +73,7 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.theme.MinBorder
 import com.jvillada.movi.theme.MinSurfaceContainerLow
 import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
 
 /**
@@ -546,12 +548,14 @@ private fun CampoDeTexto(
         if (valor.isEmpty()) {
             Text(marcador, fontSize = 14.sp, color = MinTextFaint, maxLines = 1)
         }
+        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
+        val campo = rememberCampoConSeleccion(valor, onCambio)
         BasicTextField(
-            value = valor,
-            onValueChange = onCambio,
+            value = campo.valor,
+            onValueChange = campo::alCambiar,
             textStyle = TextStyle(fontSize = 14.sp, color = MinText),
             cursorBrush = SolidColor(MinPrimary),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
     }
 }

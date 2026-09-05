@@ -27,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -592,6 +593,19 @@ fun CategoryField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                    // [esAtajoDeSeleccionarTodo]. Sin esto, el campo ya seleccionaba solo al ganar
+                    // el foco (abajo), pero volver con el teclado a reemplazar la categoría
+                    // escrita a medias no tenía cómo: ⌘A no seleccionaba nada y lo tecleado se
+                    // pegaba al final.
+                    .onPreviewKeyEvent { evento ->
+                        if (esAtajoDeSeleccionarTodo(evento) && textFieldValue.text.isNotEmpty()) {
+                            textFieldValue = conTodoSeleccionado(textFieldValue)
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     .onFocusChanged { state ->
                         // Ola 2 #3b: al ganar el foco (no en cada recomposición), seleccionar
                         // todo el texto — con el campo prellenado, tipear reemplaza en vez de

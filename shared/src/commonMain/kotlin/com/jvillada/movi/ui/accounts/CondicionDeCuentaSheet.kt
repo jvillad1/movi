@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -40,6 +41,7 @@ import com.jvillada.movi.shared.model.MAX_ACCOUNT_CONDITION_LENGTH
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -147,17 +149,24 @@ fun CondicionDeCuentaSheet(
                     if (texto.isEmpty()) {
                         Text("Vivienda", fontSize = 14.sp, color = MinTextFaint, maxLines = 1)
                     }
-                    BasicTextField(
-                        value = texto,
+                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                    // [esAtajoDeSeleccionarTodo]. El recorte de abajo sigue siendo el de siempre:
+                    // el campo avisa el texto, la pantalla decide con cuánto se queda.
+                    val campo = rememberCampoConSeleccion(texto) {
                         // El recorte va acá y no solo al guardar: un campo que acepta teclas que
                         // después se tiran en silencio es peor que uno que deja de aceptarlas.
-                        onValueChange = { texto = it.take(MAX_ACCOUNT_CONDITION_LENGTH) },
+                        texto = it.take(MAX_ACCOUNT_CONDITION_LENGTH)
+                    }
+                    BasicTextField(
+                        value = campo.valor,
+                        onValueChange = campo::alCambiar,
                         textStyle = TextStyle(fontSize = 14.sp, color = MinText),
                         cursorBrush = SolidColor(MinText),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         singleLine = true,
                         enabled = !guardando,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth()
+                            .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     )
                 }
 

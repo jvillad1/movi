@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +39,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
 
 @Composable
@@ -211,9 +213,11 @@ internal fun AuthField(
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
     val showAsPassword = isPassword && !passwordVisible
+    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
+    val campo = rememberCampoConSeleccion(value, onChange)
     BasicTextField(
-        value = value,
-        onValueChange = onChange,
+        value = campo.valor,
+        onValueChange = campo::alCambiar,
         textStyle = TextStyle(fontSize = 15.sp, color = MinText),
         cursorBrush = SolidColor(MinPrimary),
         singleLine = true,
@@ -246,7 +250,7 @@ internal fun AuthField(
                 }
             }
         },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
     )
 }
 

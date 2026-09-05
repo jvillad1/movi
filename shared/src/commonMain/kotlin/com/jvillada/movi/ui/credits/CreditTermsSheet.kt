@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -781,14 +782,16 @@ internal fun FieldBox(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
+        val campo = rememberCampoConSeleccion(value, onValueChange)
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = campo.valor,
+            onValueChange = campo::alCambiar,
             textStyle = TextStyle(fontSize = 14.sp, color = MinText),
             cursorBrush = SolidColor(MinText),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
     }
 }
@@ -994,14 +997,18 @@ private fun RateFieldBox(placeholder: String, value: String, onValueChange: (Str
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
                 if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = MinTextFaint)
+                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                // [esAtajoDeSeleccionarTodo].
+                val campo = rememberCampoConSeleccion(value, onValueChange)
                 BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
                     textStyle = TextStyle(fontSize = 14.sp, color = MinText),
                     cursorBrush = SolidColor(MinText),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 )
             }
             if (value.isNotEmpty()) Text("%", fontSize = 14.sp, color = MinTextMute)

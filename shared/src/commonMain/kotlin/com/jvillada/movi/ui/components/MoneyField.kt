@@ -220,9 +220,12 @@ fun MoneyField(
         // no es de este archivo. Nadie lo midió todavía — y conviene no darlo por entendido solo
         // porque se parece al de ⌘A: ese resultó ser algo distinto de lo que este bloque afirmaba.
         //
-        // **Y el atajo sigue roto en los demás campos de texto de la web** (NOMBRE, categoría):
-        // se arregló primero donde el error cuesta plata. Las piezas viven sueltas en
-        // `SeleccionarTodo.kt` justamente para que los otros lo adopten llamando a lo mismo.
+        // **El atajo ya no es solo de este campo.** Se arregló primero donde el error cuesta
+        // plata, y después en los otros quince campos de texto de `commonMain` (NOMBRE, la
+        // categoría, la búsqueda, el login…). Los que guardan un `String` no podían engancharse
+        // acá —`BasicTextField(value: String, …)` no expone la selección— y pasan por
+        // [CampoConSeleccion], en `SeleccionarTodo.kt`. Este campo se queda con el
+        // `onPreviewKeyEvent` directo porque ya trabajaba con `TextFieldValue`.
         var field by remember { mutableStateOf(moneyFieldFromDigits(digits)) }
         LaunchedEffect(digits) {
             if (field.text.filter { it.isDigit() } != digits) {
