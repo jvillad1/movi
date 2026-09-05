@@ -29,6 +29,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -471,13 +472,18 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                     if (searchQuery.isEmpty()) {
                         Text("Descripción, comercio o categoría", fontSize = 14.sp, color = MinTextFaint)
                     }
+                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                    // [esAtajoDeSeleccionarTodo].
+                    val campo = rememberCampoConSeleccion(searchQuery) { searchQuery = it }
                     BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
+                        value = campo.valor,
+                        onValueChange = campo::alCambiar,
                         singleLine = true,
                         textStyle = TextStyle(color = MinText, fontSize = 14.sp),
                         cursorBrush = SolidColor(MinText),
-                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                        modifier = Modifier.fillMaxWidth()
+                            .focusRequester(searchFocusRequester)
+                            .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     )
                 }
                 Icon(

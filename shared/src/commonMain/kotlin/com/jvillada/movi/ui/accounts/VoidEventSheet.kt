@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -292,13 +293,17 @@ fun VoidEventSheet(
                         .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                 ) {
+                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                    // [esAtajoDeSeleccionarTodo].
+                    val campo = rememberCampoConSeleccion(reason) { reason = it }
                     BasicTextField(
-                        value = reason,
-                        onValueChange = { reason = it },
+                        value = campo.valor,
+                        onValueChange = campo::alCambiar,
                         cursorBrush = SolidColor(MinText),
                         textStyle = TextStyle(color = MinText, fontSize = 14.sp),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth()
+                            .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                         decorationBox = { inner ->
                             if (reason.isEmpty()) {
                                 Text("Ej: Movimiento duplicado", fontSize = 14.sp, color = MinTextMute)

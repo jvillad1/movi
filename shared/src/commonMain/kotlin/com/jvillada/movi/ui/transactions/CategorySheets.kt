@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -863,17 +864,23 @@ private fun SeccionDelMovimiento(
             .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
-        BasicTextField(
-            value = concepto,
+        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
+        // Este campo llega prellenado con la descripción del movimiento, así que reescribirlo
+        // entero con el teclado es el gesto normal, no el raro.
+        val campo = rememberCampoConSeleccion(concepto) {
             // El tope es el de la COLUMNA, no uno inventado más corto: con 120 aquí, abrir un
             // movimiento cuya descripción viene de un extracto largo y tocar una tecla le habría
             // recortado el texto en silencio.
-            onValueChange = { concepto = it.take(MAX_CONCEPTO_LENGTH) },
+            concepto = it.take(MAX_CONCEPTO_LENGTH)
+        }
+        BasicTextField(
+            value = campo.valor,
+            onValueChange = campo::alCambiar,
             enabled = !guardando,
             cursorBrush = SolidColor(MinText),
             textStyle = TextStyle(color = MinText, fontSize = 14.sp),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
             decorationBox = { inner ->
                 if (concepto.isEmpty()) {
                     Text("Ej: Mesada de la hija", fontSize = 14.sp, color = MinTextMute)

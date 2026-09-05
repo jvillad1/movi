@@ -28,6 +28,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -1480,6 +1481,18 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(noteFocusRequester)
+                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                    // [esAtajoDeSeleccionarTodo]. Es lo mismo que hace la línea de abajo al ganar
+                    // el foco, pero disponible cuando ya se está escribiendo: sin esto, volver a
+                    // reemplazar la nota entera con el teclado no tenía cómo.
+                    .onPreviewKeyEvent { evento ->
+                        if (esAtajoDeSeleccionarTodo(evento) && value.text.isNotEmpty()) {
+                            value = conTodoSeleccionado(value)
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     .onFocusChanged { state ->
                         // Al GANAR el foco (no en cada recomposición, o sería imposible mover
                         // el cursor a mano después).

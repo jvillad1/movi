@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,6 +39,7 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.dashboard.HERO_BALANCE_TITLE
 import io.ktor.client.plugins.ResponseException
@@ -540,14 +542,16 @@ private fun FieldBox(
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = MinTextFaint)
+        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
+        val campo = rememberCampoConSeleccion(value, onValueChange)
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = campo.valor,
+            onValueChange = campo::alCambiar,
             textStyle = TextStyle(fontSize = 14.sp, color = MinText),
             cursorBrush = SolidColor(MinText),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
     }
 }

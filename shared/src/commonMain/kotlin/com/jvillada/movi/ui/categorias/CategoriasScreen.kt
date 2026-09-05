@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -74,6 +75,7 @@ import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.leadingFor
+import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 
@@ -377,13 +379,15 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
             .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 11.dp),
     ) {
+        // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
+        val campo = rememberCampoConSeleccion(valor, onValorCambia)
         BasicTextField(
-            value = valor,
-            onValueChange = onValorCambia,
+            value = campo.valor,
+            onValueChange = campo::alCambiar,
             singleLine = true,
             cursorBrush = SolidColor(MinText),
             textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
             decorationBox = { inner ->
                 if (valor.isEmpty()) Text("Buscar categoría", fontSize = 14.sp, color = MinTextFaint)
                 inner()
@@ -712,14 +716,19 @@ private fun HojaRenombrar(
                     .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
+                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                // [esAtajoDeSeleccionarTodo]. Acá pesa más que en otros campos: el nombre llega
+                // prellenado con el actual, y renombrar es justamente reemplazarlo entero.
+                val campo = rememberCampoConSeleccion(nombre) { nombre = it }
                 BasicTextField(
-                    value = nombre,
-                    onValueChange = { nombre = it },
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
                     singleLine = true,
                     enabled = !guardando,
                     cursorBrush = SolidColor(MinText),
                     textStyle = TextStyle(color = MinText, fontSize = 15.sp, fontWeight = FontWeight.Medium),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     decorationBox = { inner ->
                         if (nombre.isEmpty()) Text("Nombre nuevo", fontSize = 15.sp, color = MinTextFaint)
                         inner()

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -187,9 +188,12 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier.size(20.dp).clickable(enabled = !loading) { attachError = null; launchPicker() },
             )
             Box(modifier = Modifier.weight(1f)) {
+                // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
+                // [esAtajoDeSeleccionarTodo].
+                val campo = rememberCampoConSeleccion(input) { input = it }
                 BasicTextField(
-                    value = input,
-                    onValueChange = { input = it },
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
                     enabled = !loading,
                     cursorBrush = SolidColor(MinText),
                     textStyle = TextStyle(color = MinText, fontSize = 14.sp),
@@ -198,7 +202,8 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     // con el texto vacío mide cero: se tocaba «Pregúntale a Movi…» y no pasaba
                     // nada. Sin `fillMaxWidth` solo se podía escribir después de acertarle a
                     // una raya invisible.
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     decorationBox = { inner ->
                         if (input.isEmpty()) {
                             Text(
