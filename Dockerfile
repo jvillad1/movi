@@ -60,5 +60,14 @@ RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=build /app/server/build/libs/server-all.jar app.jar
+
+# Red de contención para `/version`. En runtime, Railway inyecta `RAILWAY_GIT_COMMIT_SHA` en el
+# proceso y eso alcanza; esto cubre el caso de que no llegue. El ARG queda en la ÚLTIMA capa a
+# propósito: cambiarlo en cada despliegue no invalida ninguna capa de compilación, así que no
+# cuesta un solo segundo del presupuesto de build. Vacío por defecto — sin valor, `/version`
+# contesta «no lo sé» (503), que es justo lo que tiene que hacer.
+ARG RAILWAY_GIT_COMMIT_SHA=""
+ENV MOVI_COMMIT_SHA=$RAILWAY_GIT_COMMIT_SHA
+
 EXPOSE 8080
 CMD ["java", "-jar", "app.jar"]
