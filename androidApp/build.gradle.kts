@@ -27,8 +27,12 @@ android {
         // 1.16: primer APK con las olas #124-#135 adentro — la plata condicionada, el criterio
         // del picker de cuentas, editar un movimiento, y la cuota que baja la deuda solo por
         // capital. El 1.15 se armó de apuro para reemplazar al 1.14 roto y quedó en #127.
-        versionCode = 17
-        versionName = "1.16"
+        // 1.17: #136-#141 — ⌘A y el triple clic reemplazan en los 16 campos (el umbral del
+        // multi-clic era el de Android, 300 ms, contra los 500 del sistema), y producción
+        // dice qué commit corre. Ninguno toca androidMain; el APK se arma porque el dueño
+        // lo pidió con todo adentro.
+        versionCode = 18
+        versionName = "1.17"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
