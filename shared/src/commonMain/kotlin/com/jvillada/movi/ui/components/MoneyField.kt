@@ -214,11 +214,19 @@ fun MoneyField(
         // [esAtajoDeSeleccionarTodo] y el `onPreviewKeyEvent` de abajo. Verificado sobre el
         // artefacto desplegado: $18.000.009 + ⌘A + «7000» = $7.000.
         //
-        // **Sigue abierto, y sin diagnosticar: la pérdida de teclas.** Escribiendo en ráfaga
-        // inmediatamente después de un triple-click, «Bancolombia» + triple-click + «Nequi» daba
-        // «BancolombiaNequi». Aparece igual en el campo NOMBRE común y en [CategoryField], así que
-        // no es de este archivo. Nadie lo midió todavía — y conviene no darlo por entendido solo
-        // porque se parece al de ⌘A: ese resultó ser algo distinto de lo que este bloque afirmaba.
+        // **La «pérdida de teclas»: medida, y no era eso.** «Bancolombia» + triple-click +
+        // «Nequi» daba «BancolombiaNequi», y se anotó acá como teclas que se pierden escribiendo
+        // en ráfaga. **No se pierde ninguna tecla**: están todas. Lo que no ocurría era el
+        // reemplazo, porque el triple-click no llegaba a contar como tal — Compose cierra la
+        // ventana del multi-clic a los 300 ms y el doble clic del sistema son 500. Con los clics
+        // más separados que eso, son tres clics sueltos: mueven el cursor, no seleccionan, y lo
+        // que se escribe se inserta ahí. Arreglado en la web subiendo la ventana; el barrido que
+        // lo midió está en [ViewConfigurationConDobleClicDelSistema].
+        //
+        // Vale como advertencia sobre este archivo: el nombre del defecto mandó a buscar en el
+        // lugar equivocado durante dos olas. Y la primera sonda que se le puso encima —un `Text`
+        // que mostraba la selección al lado del campo— **rompía el conteo de clics que venía a
+        // medir**, con lo cual inventó un segundo defecto que no existía.
         //
         // **El atajo ya no es solo de este campo.** Se arregló primero donde el error cuesta
         // plata, y después en los otros quince campos de texto de `commonMain` (NOMBRE, la
