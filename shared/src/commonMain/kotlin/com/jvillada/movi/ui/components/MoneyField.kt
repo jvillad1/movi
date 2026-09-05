@@ -204,21 +204,25 @@ fun MoneyField(
         // **resincronice el `<input>` en la siguiente tecla real**, así que la divergencia se
         // cura sola en vez de acumularse. Es una propiedad más débil que "ya no discrepan".
         //
-        // **Pendiente de confirmar con un teclado físico (no es de esta rama).** Dos cosas se
-        // vieron en el navegador que NO se explican por este archivo, y las dos aparecen igual en
-        // el campo NOMBRE común, en [CategoryField] y en master:
+        // **⌘A: RESUELTO, y confirmado en producción con un teclado real (2026-09-03).** Este
+        // bloque decía que el atajo «no llega a Compose» y que alguien tenía que teclearlo a mano.
+        // Se tecleó, y después se midió con una sonda escuchando en las dos fases: Compose-wasm
+        // **sí** recibe la tecla, le hace `preventDefault` —matando el «seleccionar todo» nativo
+        // del navegador— y no implementa el suyo. Por eso la selección nunca ocurría (el `<input>`
+        // quedaba en `sel=8..8`) y la tecla siguiente llegaba como un tipeo al final. No era «el
+        // arnés de automatización»: era la plataforma. Ahora lo implementa esta app — ver
+        // [esAtajoDeSeleccionarTodo] y el `onPreviewKeyEvent` de abajo. Verificado sobre el
+        // artefacto desplegado: $18.000.009 + ⌘A + «7000» = $7.000.
         //
-        //  - **Pérdida de teclas** escribiendo en ráfaga inmediatamente después de un
-        //    triple-click («Bancolombia» + triple-click + «Nequi» -> «BancolombiaNequi»).
-        //  - **⌘A no llega a Compose.** Seleccionar todo con el teclado y reescribir CONCATENA:
-        //    sobre $18.000.009, ⌘A + «7000» dejó $180.000.097.000. El mismo campo, con el mismo
-        //    monto, seleccionado con **triple-click** y reescrito da $7.000 exacto — o sea que el
-        //    gesto de reemplazar funciona y lo que falla es el atajo de teclado. Este código no
-        //    puede distinguirlos: cuando la selección no llega, lo que Compose reporta es un
-        //    tipeo al final, y eso es exactamente lo que hace.
+        // **Sigue abierto, y sin diagnosticar: la pérdida de teclas.** Escribiendo en ráfaga
+        // inmediatamente después de un triple-click, «Bancolombia» + triple-click + «Nequi» daba
+        // «BancolombiaNequi». Aparece igual en el campo NOMBRE común y en [CategoryField], así que
+        // no es de este archivo. Nadie lo midió todavía — y conviene no darlo por entendido solo
+        // porque se parece al de ⌘A: ese resultó ser algo distinto de lo que este bloque afirmaba.
         //
-        // Los dos apuntan al enrutado de input de Compose-wasm o al arnés de automatización.
-        // Antes de dar este campo por cerrado, alguien tiene que teclearlo a mano.
+        // **Y el atajo sigue roto en los demás campos de texto de la web** (NOMBRE, categoría):
+        // se arregló primero donde el error cuesta plata. Las piezas viven sueltas en
+        // `SeleccionarTodo.kt` justamente para que los otros lo adopten llamando a lo mismo.
         var field by remember { mutableStateOf(moneyFieldFromDigits(digits)) }
         LaunchedEffect(digits) {
             if (field.text.filter { it.isDigit() } != digits) {
