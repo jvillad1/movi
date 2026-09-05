@@ -6,7 +6,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performTextReplacement
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.shared.model.EdicionDeMovimiento
+import org.junit.After
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.AccountType
@@ -88,7 +100,7 @@ class HojaDelMovimientoTest {
     @Test
     fun corregirElMontoYLaCuentaSeVeSinDesplazar() {
         montar()
-        composeRule.onNodeWithText("MONTO Y CUENTA", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertIsDisplayed()
         // Y con el monto y la cuenta actuales a la vista, no un id ni un campo en blanco.
         composeRule.onNodeWithText("Bancolombia", useUnmergedTree = true).assertIsDisplayed()
     }
@@ -118,7 +130,7 @@ class HojaDelMovimientoTest {
     @Test
     fun sinLaListaDeCuentasLaHojaSigueSirviendo() {
         montar(cuentas = emptyList())
-        composeRule.onNodeWithText("MONTO Y CUENTA", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Anular este movimiento", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
@@ -156,6 +168,52 @@ class HojaDelMovimientoTest {
         timestamp = 1_754_406_000_000L,
         transferId = "tr-cuota",
     )
+
+    @After fun limpiar() { Repositories.sustitutoDePrueba = null }
+
+    /**
+     * **El concepto se puede corregir, y el rótulo lo dice.**
+     *
+     * El dueño reportó «no puedo editar los nombres de los movimientos». El campo existía desde
+     * #126, pero vivía detrás de una fila rotulada «MONTO Y CUENTA»: quien venía a renombrar no
+     * tenía motivo para tocar «Cambiar». Esta prueba hace el recorrido entero que él no encontró
+     * —abrir, reescribir el concepto, guardar— y afirma que lo que llega al repositorio es el
+     * concepto nuevo. Hasta acá ninguna prueba tipeaba en ese campo.
+     */
+    @Test
+    fun elConceptoSeCorrigeYLlegaAlRepositorio() {
+        var guardado: EdicionDeMovimiento? = null
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
+                guardado = cambios
+                return gasto.copy(description = cambios.description ?: gasto.description)
+            }
+        }
+        montar()
+
+        composeRule.onNodeWithText("MONTO, CUENTA Y CONCEPTO", useUnmergedTree = true).assertIsDisplayed()
+        // Se invoca el OnClick de la fila por semántica, no por un toque inyectado: en Robolectric el
+        // toque sobre «Cambiar» (8 px de ancho) y sobre el monto no llegaba al clickable de la fila.
+        // La fila se identifica por lo que contiene —el monto—, que solo está en esta sección.
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("$4.000.000")), useUnmergedTree = true)
+            .onLast() // el fondo de la hoja y la hoja también son clickables y contienen el monto: el más profundo es la fila
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("CONCEPTO", useUnmergedTree = true).assertExists("la sección no se abrió")
+
+        // El campo editable, no el título de la hoja: los dos dicen «Hija».
+        composeRule.onNode(hasSetTextAction() and hasText("Hija"), useUnmergedTree = true)
+            .performTextReplacement("Colegio de la hija")
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Guardar cambios")), useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        val cambios = requireNotNull(guardado) { "no se llamó a updateEvent: el concepto no se guardó" }
+        kotlin.test.assertEquals("Colegio de la hija", cambios.description)
+        kotlin.test.assertEquals(gasto.amount, cambios.amount)
+        kotlin.test.assertEquals(gasto.accountId, cambios.accountId)
+    }
 }
 
 /** El AVD `Movi_Sensor`: 411×731 dp. Mismo tamaño que usa `HojaAgregarGeometriaTest`. */

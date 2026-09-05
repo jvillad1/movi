@@ -742,7 +742,8 @@ fun CardPaymentCandidatesSheet(
  * ## Cerrada por defecto, y por qué
  *
  * Mismo patrón que [SeccionDeFecha]: se ve el monto y la cuenta actuales, y hay que tocar
- * «Cambiar» para editar. La enorme mayoría de las veces esta hoja se abre para recategorizar, y
+ * «Cambiar» para editar — el concepto también, y **el rótulo tiene que decirlo**: se llamó
+ * «MONTO Y CUENTA» y el concepto quedó invisible para quien venía a renombrar. La enorme mayoría de las veces esta hoja se abre para recategorizar, y
  * tres campos de formulario desplegados sobre un movimiento ya guardado invitan a tocar lo que
  * nadie vino a tocar.
  *
@@ -814,7 +815,11 @@ private fun SeccionDelMovimiento(
         }
     }
 
-    SheetLabel("MONTO Y CUENTA")
+    // Los TRES campos nombrados en el rótulo, no dos. Decía «MONTO Y CUENTA» y el dueño reportó
+    // que «no puedo editar los nombres de los movimientos»: el concepto estaba detrás de un
+    // rótulo que hablaba solo de plata, así que quien buscaba renombrar no tenía ningún motivo
+    // para tocar «Cambiar». Un campo que existe pero nadie encuentra es un campo que no existe.
+    SheetLabel("MONTO, CUENTA Y CONCEPTO")
     Spacer(Modifier.height(8.dp))
     Row(
         modifier = Modifier
