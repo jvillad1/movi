@@ -1,0 +1,73 @@
+# Un merge a master no es un despliegue — este workflow es el que lo comprueba.
+#
+# **Por qué existe.** El 2026-09-02 el PR #131 dejó el build de Railway roto. Producción se quedó
+# CUATRO merges atrás durante horas y nadie se enteró: cuando el build falla, Railway sigue
+# sirviendo la versión anterior y la app contesta 200 a todo. El modo de falla es mudo.
+#
+# `pruebas.yml` (#135) cerró UN caso —que la configuración de Gradle rompa sin Android SDK— pero
+# un build que muere por memoria, por Docker, o por cualquier otra cosa seguía siendo invisible.
+# Y la única señal que quedaba, el hash del bundle wasm en `/composeApp.js`, es ciega dos veces:
+# un cambio que no toca la web produce un bundle idéntico (así que «no cambió» significa lo mismo
+# si desplegó bien que si el build murió), y aunque cambie, no dice CUÁL commit es.
+#
+# Ahora el server dice qué commit corre (`GET /version`) y esto lo espera. Si no llega, la falla
+# es una notificación de GitHub en vez de horas de silencio.
+#
+# **Por qué un archivo aparte de `pruebas.yml`.** Solo tiene sentido en push a master; dentro de
+# `pruebas.yml` sería un job saltado en cada PR. Además así no comparte el grupo de concurrencia
+# de las suites (45 min) ni puede tumbar el workflow que verifica los PRs — incluido este mismo.
+name: Despliegue
+
+on:
+  push:
+    branches: [master]
+  # Para poder correrlo a mano contra cualquier commit — incluido uno que producción nunca va a
+  # reportar, que es la forma de comprobar que la alarma sigue sonando.
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'SHA a esperar (vacío = el commit actual de master)'
+        required: false
+        default: ''
+
+# Dos merges seguidos: producción va a terminar en el segundo, así que esperar el primero fallaría
+# por una razón que no es la que interesa. Manda el último.
+concurrency:
+  group: despliegue-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  llego-a-produccion:
+    name: Producción está corriendo este commit
+    runs-on: ubuntu-latest
+    # Holgado respecto de los 35 minutos que espera el script: el job nunca debería morir por el
+    # timeout de GitHub, porque entonces el mensaje de falla no se llega a imprimir.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # **El plazo: 35 minutos.** Los tres últimos despliegues reales cerraron en 17, 18 y 20
+      # minutos, así que el peor caso observado es 20. Se eligió 35 —1,75× ese peor caso— por dos
+      # razones concretas, no por redondeo:
+      #
+      #  1. El propio Dockerfile documenta que el paso del wasm tardó 19m23s y que el build muere
+      #     por el límite de la plataforma cerca de los 20 minutos («Build image ✗» a los 20:02).
+      #     Un build que a los 35 minutos no produjo un despliegue ya falló; no está por llegar.
+      #  2. El caso lento es el de caché fría, que es justo el de los cambios que tocan el
+      #     Dockerfile — o sea, los que más probablemente rompan el despliegue. 15 minutos de
+      #     margen sobre lo observado cubren eso más la cola de Railway.
+      #
+      # **Y el modo de falla de esta guarda misma:** si fallara de a mentiras, alguien la apaga y
+      # volvemos al silencio. Por eso 1,75× de margen, por eso un error de red no cuenta como
+      # falla (el script sigue sondeando), y por eso el mensaje distingue las tres causas: build
+      # roto, `/version` que todavía no existe, y `/version` sin la variable. Un rojo que no se
+      # sabe leer se termina ignorando.
+      - name: Esperar a que producción reporte este commit
+        env:
+          # Vacío en un push a master: `github.event.inputs` solo existe en workflow_dispatch. El
+          # fallback se resuelve en bash y no en una expresión de GitHub, para poder correr el
+          # comando EXACTO fuera de CI y ver qué hace.
+          SHA_PEDIDO: ${{ github.event.inputs.commit }}
+          SHA_DEL_PUSH: ${{ github.sha }}
+        run: ./scripts/esperar-despliegue.sh "${SHA_PEDIDO:-$SHA_DEL_PUSH}" 35

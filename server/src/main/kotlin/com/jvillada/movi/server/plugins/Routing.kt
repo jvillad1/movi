@@ -58,6 +58,7 @@ private fun Route.apiNotFound() {
 fun Application.configureRouting() {
     routing {
         get("/health") { call.respondText("OK") }
+        versionRoutes()                   // public — qué commit está corriendo (ver VersionRoutes.kt)
         authRoutes()                     // public — no auth required
         pushPublicRoutes()                // public — no auth required
         smsFilterConfigRoutes()           // public — no auth required

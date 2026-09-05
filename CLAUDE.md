@@ -144,6 +144,7 @@ JVM-only Ktor application on Netty, port 8080.
 - `plugins/` — one file per Ktor plugin (`CORS.kt`, `Serialization.kt`, `Monitoring.kt`, `Routing.kt`).
 - `routes/WalletRoutes.kt` — REST endpoints under `/api/wallets`.
 - `/health` endpoint returns `"OK"` for liveness checks.
+- `/version` endpoint (público, sin auth) returns `{"commit":"<sha>"}` con 200 — o `{"commit":null}` con 503 si el proceso no sabe qué commit corre. Es la única forma de saber si un merge llegó a producción: cuando el build de Railway falla, la instancia vieja sigue arriba contestando 200 a todo. `.github/workflows/despliegue.yml` lo espera en cada push a master y falla si no llega (`scripts/esperar-despliegue.sh`).
 - Serves the wasm web bundle from `server/src/main/resources/static` via `staticResources("/", "static")`. The Dockerfile builds `:webApp:wasmJsBrowserDistribution` and copies `webApp/build/dist/wasmJs/productionExecutable/` into that dir before building the fat JAR.
 
 ### Version catalog
