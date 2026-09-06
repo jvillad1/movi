@@ -53,9 +53,11 @@ import kotlin.test.assertTrue
  * (`screens_routes_test`), a test-local JWT secret/verifier, and the full
  * serialization+jwt+routing plugin chain wired through wireApp().
  *
- * Ola 4 (F9/F40): el seed es `defaultDashboardDefinition()` de `:core` (generación 2 —
- * HERO_BALANCE -> UPCOMING_PAYMENTS -> ALERTS -> QUICK_LINKS_WITH_TOTALS -> BANNER(IA)), y
- * `seedScreens` ahora también ACTUALIZA filas de una generación anterior (ver el último test).
+ * Ola 4 (F9/F40): el seed es `defaultDashboardDefinition()` de `:core`, y `seedScreens` ahora
+ * también ACTUALIZA filas de una generación anterior (ver los últimos tests).
+ *
+ * Generación 5 (Explora sale del Inicio): HERO_BALANCE -> UPCOMING_PAYMENTS -> ALERTS ->
+ * BANNER(IA) — sin QUICK_LINKS_WITH_TOTALS, que hasta la generación 4 iba entre ALERTS y BANNER.
  */
 class ScreenRoutesTest {
 
@@ -141,7 +143,7 @@ class ScreenRoutesTest {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
-    fun `200 with seeded dashboard serves the Ola 4 layout (generation 2)`() = testApplication {
+    fun `200 with seeded dashboard serves the current layout without Explora`() = testApplication {
         transaction { seedScreens() }
         wireApp()
 
@@ -154,19 +156,14 @@ class ScreenRoutesTest {
         assertEquals("dashboard", body["slug"]!!.jsonPrimitive.content)
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val sections = body["sections"]!!.jsonArray
+        // Generación 5: sin QUICK_LINKS_WITH_TOTALS ("Explora") — sus cinco accesos duplicaban
+        // navegación que ya existe en el rail/bottom-nav y en «Más».
         assertEquals(
-            listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS", "BANNER"),
+            listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"),
             sections.map { it.jsonObject["type"]!!.jsonPrimitive.content },
         )
 
-        val links = sections[3].jsonObject
-        assertEquals("Explora", links["title"]!!.jsonPrimitive.content)
-        val linkTitles = links["cards"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content }
-        // Ola 8: «Suscripciones» pasó a «Recurrentes» — la pantalla se plegó y el acceso lleva
-        // ahora el nombre y la cifra de su destino real.
-        assertEquals(listOf("Cuentas", "Créditos", "Presupuestos", "Metas", "Recurrentes"), linkTitles)
-
-        val aiBanner = sections[4].jsonObject
+        val aiBanner = sections[3].jsonObject
         assertEquals("BANNER", aiBanner["type"]!!.jsonPrimitive.content)
         assertEquals("Pregúntale a Movi AI", aiBanner["text"]!!.jsonPrimitive.content)
     }
@@ -310,5 +307,53 @@ class ScreenRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
         }
         assertEquals(DASHBOARD_LAYOUT_VERSION, Json.parseToJsonElement(again.bodyAsText()).jsonObject["version"]!!.jsonPrimitive.content.toInt())
+    }
+
+    /**
+     * El caso real que motivó la Ola de «Explora»: una instalación que YA está sembrada en
+     * generación 4 (con `seed_version = 4`, no en 0 como una fila nunca tocada por el seed) —
+     * exactamente la fila que el dueño tiene hoy en producción — tiene que perder la sección
+     * después del deploy, no solo las instalaciones nuevas. Si este test pasara con la fila
+     * quedándose en Explora, el deploy no le cambiaría nada al dueño.
+     */
+    @Test
+    fun `an installation already seeded at generation 4 loses Explora after the deploy`() = testApplication {
+        transaction {
+            Screens.insert {
+                it[slug] = "dashboard"
+                it[version] = 4
+                it[sectionsJson] = """
+                    [
+                      {"type":"HERO_BALANCE","title":"Balance neto"},
+                      {"type":"UPCOMING_PAYMENTS","title":"Próximos pagos"},
+                      {"type":"ALERTS","title":"Alertas"},
+                      {"type":"QUICK_LINKS_WITH_TOTALS","title":"Explora","cards":[
+                        {"title":"Cuentas","action":{"type":"NAVIGATE","target":"accounts"}},
+                        {"title":"Créditos","action":{"type":"NAVIGATE","target":"credits"}},
+                        {"title":"Presupuestos","action":{"type":"NAVIGATE","target":"budgets"}},
+                        {"title":"Metas","action":{"type":"NAVIGATE","target":"goals"}},
+                        {"title":"Recurrentes","action":{"type":"NAVIGATE","target":"recurrentes"}}
+                      ]},
+                      {"type":"BANNER","text":"Pregúntale a Movi AI","cards":[{"title":"Pregúntale a Movi AI","action":{"type":"NAVIGATE","target":"aichat"}}]}
+                    ]
+                """.trimIndent()
+                it[active] = true
+                it[updatedAt] = 0L
+                it[seedVersion] = 4
+            }
+        }
+
+        transaction { seedScreens() }
+        wireApp()
+
+        val res = client.get("/api/screens/dashboard") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
+        val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
+        assertEquals(listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"), types)
+        assertTrue("QUICK_LINKS_WITH_TOTALS" !in types, "Explora desaparece tras el deploy, no solo en instalaciones nuevas")
     }
 }

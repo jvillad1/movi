@@ -19,19 +19,34 @@ class DashboardDefaultsTest {
     }
 
     @Test
-    fun default_definition_has_ola4_order_and_version() {
+    fun default_definition_has_current_order_and_version() {
         val def = defaultDashboardDefinition()
         assertEquals("dashboard", def.slug)
         assertEquals(DASHBOARD_LAYOUT_VERSION, def.version)
+        // Generación 5: sin QUICK_LINKS_WITH_TOTALS ("Explora") — sus cinco accesos duplicaban
+        // navegación que ya existe en el rail/bottom-nav y en «Más» (ver el KDoc de
+        // DASHBOARD_LAYOUT_VERSION).
         assertEquals(
-            listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS", "BANNER"),
+            listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"),
             def.sections.map { it.type },
         )
-        val links = def.sections.first { it.type == "QUICK_LINKS_WITH_TOTALS" }.cards.map { it.action!!.target }
-        // F61: sin "investments" — Inversiones ya no es pantalla.
-        // Ola 8: "subscriptions" → "recurrentes" — el acceso lleva el nombre y la cifra de la
-        // pantalla a la que de verdad va.
-        assertEquals(listOf("accounts", "credits", "budgets", "goals", "recurrentes"), links)
+    }
+
+    /**
+     * El dueño: «no le veo mucho sentido a la sección de Explora si es lo mismo que veo en el
+     * menú». La generación 5 le hace caso: la sección sale de la definición por defecto, y la
+     * generación sube para que su fila ya sembrada (generación 4) se reemplace después del
+     * deploy — ver el KDoc largo sobre `DASHBOARD_LAYOUT_VERSION`.
+     */
+    @Test
+    fun explora_section_is_gone_and_the_generation_bumped() {
+        val def = defaultDashboardDefinition()
+        assertTrue("QUICK_LINKS_WITH_TOTALS" !in def.sections.map { it.type }, "Explora ya no viene en el default")
+        assertTrue(DASHBOARD_LAYOUT_VERSION >= 5, "quitar una sección entera exige subir la generación")
+        // QUICK_LINKS_WITH_TOTALS se queda en la taxonomía: sigue siendo un tipo de sección
+        // válido que el Editor puede volver a agregar, y las filas de otras instalaciones que
+        // todavía lo traigan no deben romperse.
+        assertTrue("QUICK_LINKS_WITH_TOTALS" in ScreenTaxonomy.SECTION_TYPES)
     }
 
     /**
@@ -67,23 +82,25 @@ class DashboardDefaultsTest {
     }
 
     /**
-     * Ola 9: el Inicio cambió de portada («Tu plata» arriba, patrimonio debajo) y aun así la
-     * generación **no se movió**, ni la lista, ni el título guardado del hero.
+     * Ola 9: el Inicio cambió de portada («Tu plata» arriba, patrimonio debajo) y aun así el
+     * título GUARDADO del hero no se tocó.
      *
      * No es un olvido, es la decisión. El rótulo del hero se cableó en el renderer
-     * (`HERO_BALANCE_TITLE`, en `:shared`) justamente para no tener que tocar esta lista: subirla
-     * habría empujado `title = "Tu plata"` a TODOS los clientes en el instante del deploy,
-     * incluido el APK ya instalado, que sigue pintando el patrimonio — y lo habría titulado «Tu
-     * plata −$1.492.710.542», la lectura exacta que la ola vino a evitar.
+     * (`HERO_BALANCE_TITLE`, en `:shared`) justamente para no tener que tocar este título:
+     * subirlo habría empujado `title = "Tu plata"` a TODOS los clientes en el instante del
+     * deploy, incluido el APK ya instalado, que sigue pintando el patrimonio — y lo habría
+     * titulado «Tu plata −$1.492.710.542», la lectura exacta que la ola vino a evitar.
      *
-     * Este test es el recordatorio: si alguien cambia el título de HERO_BALANCE en la semilla,
-     * está reabriendo esa ventana. El título es dato inerte; el rótulo vive en el binario.
+     * La generación SÍ subió después (a 5, por la Ola de «Explora» — ver
+     * `explora_section_is_gone_and_the_generation_bumped`), pero por una razón sin relación con
+     * el hero. Este test es el recordatorio de la otra mitad: si alguien cambia el título de
+     * HERO_BALANCE en la semilla, está reabriendo la ventana de desalineación que la Ola 9
+     * cerró. El título es dato inerte; el rótulo vive en el binario.
      */
     @Test
-    fun ola9_kept_the_generation_and_the_inert_hero_title() {
+    fun ola9_kept_the_inert_hero_title() {
         val hero = defaultDashboardDefinition().sections.first { it.type == "HERO_BALANCE" }
         assertEquals("Balance neto", hero.title, "el título del hero es inerte y se queda como está desplegado")
-        assertEquals(4, DASHBOARD_LAYOUT_VERSION, "la Ola 9 no tocó la definición: la generación no sube")
     }
 
     @Test

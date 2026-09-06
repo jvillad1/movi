@@ -26,6 +26,7 @@ import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
+import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.shared.time.currentMonthPrefix
 
@@ -293,6 +294,33 @@ fun heroBalance(accounts: List<Account>): HeroBalance {
         deudas = deudas,
         patrimonio = neto,
     )
+}
+
+/** Una fila del desglose por cuenta del hero: el nombre y su saldo, ya formateado con signo y moneda. */
+data class CuentaHero(val nombre: String, val monto: String)
+
+/**
+ * Las cuentas que componen [HeroBalance.tuPlata], una por una — lo que pidió el dueño viendo
+ * «Tu plata» sumar todas las cuentas en un solo número: *«realmente me gustaría ver no el
+ * total sino el disponible en cada cuenta allí listado»*. Reemplaza la línea que antes
+ * agregaba por GRUPO («Dinero $X · Inversión $Y»); la cifra grande de arriba no cambia.
+ *
+ * **Mismo filtro que [heroBalance] usa para `libres`** (no deuda, no condicionada) y el mismo
+ * orden con el que separa disponible de invertido (`!= INVERSION` primero, `== INVERSION`
+ * después) — no una copia del predicado, para no repetir el desacuerdo entre superficies que
+ * ya pasó dos veces en este proyecto (Créditos vs. Inicio en la Ola 4, `quickLinkFigure` vs.
+ * `assetsDebtsNet` después). Es también el orden de la pantalla de Cuentas: Dinero antes que
+ * Inversión (ver `AccountsScreen`).
+ *
+ * `null` = todavía no contestó — igual que [DashboardData.accounts], para no afirmar una lista
+ * vacía cuando en realidad no se sabe todavía.
+ */
+fun cuentasDelHero(accounts: List<Account>?): List<CuentaHero>? {
+    if (accounts == null) return null
+    val libres = accounts.filter { !isDebtAccount(it.type) && it.condicionadaA.isNullOrBlank() }
+    val disponibles = libres.filter { it.type.group != AccountGroup.INVERSION }
+    val invertidas = libres.filter { it.type.group == AccountGroup.INVERSION }
+    return (disponibles + invertidas).map { CuentaHero(it.name, signedMoney(it.balance, it.currency)) }
 }
 
 // ── Próximos pagos ─────────────────────────────────────────────────────────────────
