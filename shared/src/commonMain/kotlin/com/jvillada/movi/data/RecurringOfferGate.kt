@@ -91,6 +91,29 @@ object RecurringOfferGate {
     }
 
     /**
+     * PR 1 del rediseño de Recurrentes: **las mismas dos listas de acá arriba, para Movimientos**
+     * — el chip «Recurrentes» y la marca en cada fila (ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
+     *
+     * Se reusa este cache y no uno nuevo: son las MISMAS dos llamadas que ya hace este gate, y
+     * Movimientos pintando su propia copia hubiera sido la clase de duplicación que el proyecto
+     * ya pagó cara antes («dos copias de la misma regla»). Si ya están cargadas (por este gate o
+     * por lo que dejó `recordarLoQueYaHay`), no hay ningún viaje de red; si no, se cargan una vez
+     * y quedan cacheadas para el resto de la sesión, igual que [ofrecerPara].
+     *
+     * Si una lectura falla, esa lista vuelve vacía — un chip que no reconoce nada es preferible a
+     * una pantalla que no carga por una función que solo iba a pintar un ícono de más.
+     */
+    suspend fun listasParaMovimientos(): Pair<List<RecurringRule>, List<Subscription>> {
+        val reglasAlDia = reglas ?: runCatching { Repositories.wallets.getRecurringRules() }
+            .onSuccess { reglas = it }
+            .getOrNull()
+        val cobrosAlDia = suscripciones ?: runCatching { Repositories.wallets.getSubscriptions().subscriptions }
+            .onSuccess { suscripciones = it }
+            .getOrNull()
+        return (reglasAlDia ?: emptyList()) to (cobrosAlDia ?: emptyList())
+    }
+
+    /**
      * El formulario prellenado que hay que ofrecer para [event], o `null` si no hay que ofrecer
      * nada. Marca la "cosa" (tipo + categoría + monto) como ya ofrecida y le suma uno al contador
      * de insistencia de su categoría, que [seTomo] descuenta si el dueño la toma (guarda 3 en

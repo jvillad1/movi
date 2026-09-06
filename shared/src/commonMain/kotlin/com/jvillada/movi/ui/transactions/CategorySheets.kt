@@ -45,6 +45,7 @@ import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
@@ -57,6 +58,7 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
+import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.equivalenteYaAnotado
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.prefillFrom
@@ -241,6 +243,19 @@ fun ChangeCategorySheet(
      * que no tenerla.
      */
     onMarcarComoRecurrente: ((RecurringPrefill) -> Unit)? = null,
+    /**
+     * PR 1 del rediseño de Recurrentes: cuando este movimiento **ya** es la ocurrencia de una
+     * [RecurringRule] existente, tocar la fila de [SeccionEstoSeRepite] pide editar esa regla acá
+     * mismo en vez del mensaje mudo de antes («edítalo desde Recurrentes» — una promesa de
+     * navegación que dejó de ser cierta apenas esa pantalla empiece a desaparecer). Quien llama
+     * abre [com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet] con `existing = regla`, el
+     * mismo patrón que ya usa `RecurrentesScreen.editar()`.
+     *
+     * `null` = no se ofrece la edición en el momento — la fila se explica igual, solo sin la
+     * acción tappeable. Es el mismo criterio que [onMarcarComoRecurrente]: una acción sin dónde
+     * caer es peor que no tenerla.
+     */
+    onEditarRecurrente: ((RecurringRule) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -460,6 +475,7 @@ fun ChangeCategorySheet(
                     event = event,
                     onError = { errorDeEdicion = it },
                     onAbrirFormulario = onMarcarComoRecurrente,
+                    onEditarRecurrente = onEditarRecurrente,
                 )
             }
             Spacer(Modifier.height(20.dp))
@@ -998,17 +1014,38 @@ private fun SeccionDelMovimiento(
  * problema que no es suyo; y el duplicado, si ocurre, se ve y se borra en Recurrentes. Es el
  * mismo criterio que ya toma `getEventOccurrenceMark`: un aviso que no se pudo cargar no puede
  * impedir la acción.
+ *
+ * ## PR 1 del rediseño de Recurrentes: el mensaje de «ya existe» dejó de ser un punto muerto
+ *
+ * Hasta acá, cuando [equivalenteYaAnotado] encontraba un equivalente, la sección se limitaba a
+ * decir «edítalo desde Recurrentes» — una instrucción que manda a una pantalla que el dueño pidió
+ * que dejara de existir como destino propio (ver el pedido en el PR que agrega esto). Ahora, si el
+ * equivalente es una **REGLA**, se ofrece editarla en el momento con
+ * [com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet].
+ *
+ * [equivalenteYaAnotado] solo devuelve el NOMBRE con el que ya está anotado — no dice por cuál de
+ * sus tres puertas entró (el sello de ocurrencia, una regla, o una suscripción). Así que acá se
+ * busca ese nombre, normalizado, en las `reglas` que la propia función ya acaba de leer: si hay
+ * una regla con ese nombre, ESA es la que se edita (el sello de ocurrencia, cuando es el que
+ * matcheó, señala igualmente el nombre de una regla real — las dos leídas juntas en la misma
+ * consulta). Si no hay ninguna, el equivalente es una suscripción (o una regla que se renombró
+ * justo entre el sello y esta lectura, un caso angosto): ahí no hay nada seguro que editar desde
+ * acá, así que se explica y no se ofrece una acción que no tiene a dónde ir — la revisión completa
+ * de suscripciones desde Movimientos queda para una próxima entrega de este mismo rediseño.
  */
 @Composable
 private fun SeccionEstoSeRepite(
     event: FinancialEvent,
     onError: (String?) -> Unit,
     onAbrirFormulario: (RecurringPrefill) -> Unit,
+    onEditarRecurrente: ((RecurringRule) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var consultando by remember(event.id) { mutableStateOf(false) }
-    /** «Ya lo tienes, y así se llama» — el resultado de las dos preguntas de arriba. */
-    var yaExiste by remember(event.id) { mutableStateOf<String?>(null) }
+    /** El equivalente es una REGLA de verdad: esta es la fila para editar. */
+    var reglaExistente by remember(event.id) { mutableStateOf<RecurringRule?>(null) }
+    /** El equivalente es una suscripción (o una regla que ya no se encuentra por nombre). */
+    var nombreSinReglaQueEditar by remember(event.id) { mutableStateOf<String?>(null) }
 
     fun intentar() {
         if (consultando) return
@@ -1032,7 +1069,14 @@ private fun SeccionEstoSeRepite(
                 suscripcionesQueYaSuman = nombresDeSuscripcionesQueYaSuman(cobros),
                 nombre = prefillNameFor(event),
             )
-            if (equivalente != null) yaExiste = equivalente else onAbrirFormulario(prefillFrom(event))
+            when {
+                equivalente == null -> onAbrirFormulario(prefillFrom(event))
+                else -> {
+                    val clave = claveDeNombre(equivalente)
+                    val regla = reglas.firstOrNull { claveDeNombre(it.name) == clave }
+                    if (regla != null) reglaExistente = regla else nombreSinReglaQueEditar = equivalente
+                }
+            }
         }
     }
 
@@ -1065,11 +1109,30 @@ private fun SeccionEstoSeRepite(
     }
     // No es un error: es la respuesta correcta a la pregunta que acaba de hacer. Va acá, pegada
     // al botón que tocó, y no en la barra de errores de abajo.
-    yaExiste?.let { nombre ->
+    reglaExistente?.let { regla ->
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "Ya lo tienes en Recurrentes como «$nombre», así que este movimiento no " +
-                "necesita otro. Si quieres cambiarle el monto o el día, edítalo desde Recurrentes.",
+            text = "Ya lo tienes anotado como «${regla.name}», así que este movimiento no necesita otro.",
+            fontSize = 12.sp,
+            color = MinTextMute,
+            lineHeight = 17.sp,
+        )
+        if (onEditarRecurrente != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Editar este recurrente",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = MinPrimary,
+                modifier = Modifier.clickable { onEditarRecurrente(regla) },
+            )
+        }
+    }
+    nombreSinReglaQueEditar?.let { nombre ->
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Ya lo tienes anotado como «$nombre» (una suscripción confirmada), así que " +
+                "este movimiento no necesita otro recurrente.",
             fontSize = 12.sp,
             color = MinTextMute,
             lineHeight = 17.sp,

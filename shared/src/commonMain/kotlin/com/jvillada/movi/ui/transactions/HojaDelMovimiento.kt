@@ -5,8 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.ui.accounts.VoidEventSheet
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
@@ -66,6 +68,12 @@ fun HojaDelMovimiento(
 ) {
     var pidioAnular by remember(event.id) { mutableStateOf(false) }
     var prefillRecurrente by remember(event.id) { mutableStateOf<RecurringPrefill?>(null) }
+    // PR 1 del rediseño de Recurrentes: la regla que el dueño pidió editar desde acá mismo —ver
+    // `SeccionEstoSeRepite` en `CategorySheets.kt`— en vez del mensaje mudo que antes lo mandaba a
+    // Recurrentes. No comparte estado con `prefillRecurrente`: uno CREA una regla nueva a partir
+    // de este movimiento, el otro EDITA una que ya existe; los dos abren la misma hoja pero nunca
+    // los dos a la vez, porque los dos nacen del mismo botón de `SeccionEstoSeRepite`.
+    var reglaAEditar by remember(event.id) { mutableStateOf<RecurringRule?>(null) }
 
     ChangeCategorySheet(
         event = event,
@@ -75,6 +83,7 @@ fun HojaDelMovimiento(
         onVerCuenta = onVerCuenta,
         onAnular = { pidioAnular = true },
         onMarcarComoRecurrente = { prefill -> prefillRecurrente = prefill },
+        onEditarRecurrente = { regla -> reglaAEditar = regla },
     )
 
     // Guardar el recurrente cierra las dos y recarga: el movimiento no cambió, pero Recurrentes sí
@@ -87,6 +96,22 @@ fun HojaDelMovimiento(
                 onCambiado()
             },
             prefill = prefill,
+        )
+    }
+
+    // Editar una regla ya existente: misma hoja, en modo edición. Invalida el cache del gate
+    // (mismo criterio que `RecurrentesScreen.onSaved`, ver `CreateRecurringRuleSheet`): sin esto,
+    // el chip «Recurrentes» y la marca de la fila en Movimientos podían quedarse con el monto o el
+    // día viejo hasta que algo más invalidara el cache.
+    reglaAEditar?.let { regla ->
+        CreateRecurringRuleSheet(
+            onDismiss = { reglaAEditar = null },
+            onSaved = {
+                reglaAEditar = null
+                RecurringOfferGate.olvidarLoCacheado()
+                onCambiado()
+            },
+            existing = regla,
         )
     }
 
