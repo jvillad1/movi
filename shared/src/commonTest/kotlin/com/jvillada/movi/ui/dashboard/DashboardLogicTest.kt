@@ -25,6 +25,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.credits.totalDebtCop
 import kotlin.test.Test
@@ -101,7 +102,7 @@ class DashboardLogicTest {
         assertEquals(
             listOf(
                 "Presupuesto de Mercado superado" to Screen.Budgets,
-                "2 pagos de tarjeta por confirmar" to Screen.Transactions,
+                "2 pagos de tarjeta por confirmar" to Screen.Transactions(),
                 "1 mensaje del banco por confirmar" to Screen.SMSInbox,
             ),
             alerts.map { it.text to it.target },
@@ -671,9 +672,9 @@ class DashboardLogicTest {
             listOf(
                 "Cuota Carro · Vencido ayer" to Screen.Credits,       // synthetic de crédito -> Créditos
                 "Pago Visa · Vence hoy" to Screen.Credits,            // synthetic de tarjeta -> Créditos
-                "Colegio · Vence en 2 días" to Screen.Recurrentes,    // regla real -> Recurrentes
+                "Colegio · Vence en 2 días" to Screen.Transactions(CHIP_RECURRENTES), // regla real -> Movimientos con el chip puesto
                 "Presupuesto de Mercado superado" to Screen.Budgets,
-                "1 pago de tarjeta por confirmar" to Screen.Transactions,
+                "1 pago de tarjeta por confirmar" to Screen.Transactions(),
                 "2 mensajes del banco por confirmar" to Screen.SMSInbox,
             ),
             rows.map { it.text to it.target },

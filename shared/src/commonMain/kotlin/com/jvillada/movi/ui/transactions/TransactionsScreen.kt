@@ -42,11 +42,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.DiasPlegadosStore
+import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -63,12 +69,23 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
+import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
+import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
+import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
+import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
+import com.jvillada.movi.ui.recurrentes.claveDescartada
+import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
+import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
+import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
+import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -327,6 +344,25 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
 fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
 
 /**
+ * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
+ * la abrió pidiendo uno.
+ *
+ * Existe porque los enlaces que antes llevaban a la pantalla de Recurrentes ahora llevan acá (el
+ * «Ver todos» de Próximos pagos del Inicio, la campana, «Anota tus gastos recurrentes», los
+ * targets SDUI). Si esos enlaces cayeran en Movimientos sin filtro, el dueño tocaría un pago que
+ * vence y llegaría a la lista completa de sus movimientos, sin ninguna relación visible con lo que
+ * acaba de tocar: el destino tiene que responder a lo que se tocó, no solo estar cerca.
+ *
+ * `null` —el caso normal, entrar por la pestaña— es «Todo». Un índice fuera de rango también cae
+ * en «Todo» y no explota: el valor viaja adentro de [com.jvillada.movi.ui.Screen.Transactions], y
+ * una pila restaurada o una definición SDUI vieja podrían traer un número que hoy no existe.
+ * Arrancar en «Todo» ahí es la caída correcta — es la pantalla completa, no un filtro que esconde
+ * cosas sin decirlo.
+ */
+fun chipInicialDeMovimientos(pedido: Int?): Int =
+    if (pedido != null && pedido in CHIPS_DE_MOVIMIENTOS.indices) pedido else CHIP_TODO
+
+/**
  * ¿Este movimiento entra en el chip [chip]?
  *
  * **«Gastos» e «Ingresos» son exactamente lo que suma el mes.** Hasta acá cada chip llevaba su
@@ -530,8 +566,11 @@ private fun normalizeForMatch(s: String): String = buildString(s.length) {
 }
 
 @Composable
-fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
-    var activeFilter by remember { mutableStateOf(0) }
+fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
+    // Con qué chip arranca — ver [chipInicialDeMovimientos]. `remember(chipInicial)` y no
+    // `remember { }` a secas: si se vuelve a entrar pidiendo otro filtro, el estado tiene que
+    // rearrancar en el que se pidió, no quedarse con el de la visita anterior.
+    var activeFilter by remember(chipInicial) { mutableStateOf(chipInicialDeMovimientos(chipInicial)) }
     // F13: la lupa era un dibujo sin acción — ahora despliega un campo que filtra en memoria
     // mientras se escribe (no hay ida al servidor: la lista ya está en pantalla).
     var searchActive by remember { mutableStateOf(false) }
@@ -664,6 +703,76 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             .onFailure { error = it.toUserMessage() }
     }
 
+    // PR 3 del rediseño de Recurrentes: los vencimientos y «¿esto ya ocurrió?», la última pieza
+    // que solo vivía en la pantalla vieja. Misma disciplina que las candidatas de arriba: se
+    // traen FRESCAS con el chip activo (acá el dueño viene a sellar un periodo, no a mirar) y se
+    // vuelven a traer tras cada marca con `recurrentesReloadKey`.
+    var upcomingRecurrentes by remember { mutableStateOf<List<UpcomingPayment>>(emptyList()) }
+    var vencimientosOk by remember { mutableStateOf(false) }
+    var ocurrencias by remember { mutableStateOf<List<OccurrenceState>>(emptyList()) }
+    var ocurrenciasOk by remember { mutableStateOf(false) }
+    // Lo que el dueño rechazó con «no fue este», mientras dure esta pantalla. Las claves son
+    // (regla, movimiento) — ver [claveDescartada]. No se persiste: rechazar una propuesta no es un
+    // hecho sobre su plata, a diferencia de confirmarla.
+    var descartadas by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Reglas con una marca en vuelo. Un conjunto y no un id: sellar el salario no puede congelar
+    // el «Ya lo pagué» del arriendo — son dos hechos independientes.
+    var marcando by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Para el aviso ámbar de «pediste que te recordemos y no tenemos por dónde». Ver
+    // [shouldShowReminderWarning]: `canales == null` es «todavía no se sabe» y ahí NO se avisa.
+    var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
+    var pushRefreshTick by remember { mutableStateOf(0) }
+    val canalesDeAviso = ReminderChannelsCache.canales
+    /**
+     * La regla que el dueño pidió editar tocando su renglón en «Próximos».
+     *
+     * En la pantalla vieja ese toque abría la hoja de editar (`RecurrentesScreen.editar()`), y esa
+     * es la única acción que la fila prometía: relocalizarla como «no hace nada» habría sido
+     * perder función, y mandarla a la pantalla vieja habría sido justo lo que este PR viene a
+     * terminar. Es la misma hoja, en modo edición, que ya abre [HojaDelMovimiento] desde el
+     * detalle de un movimiento (PR 1).
+     *
+     * La regla que se pasa sale de `upcomingRecurrentes`, que se recarga al activar el chip y tras
+     * cada cambio (`recurrentesReloadKey`) — la precaución que `editar()` documentaba: prellenar el
+     * formulario con una fila vieja hace que «Guardar cambios» reescriba lo que el dueño ya había
+     * corregido.
+     */
+    var reglaRecurrenteAEditar by remember { mutableStateOf<RecurringRule?>(null) }
+
+    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick) {
+        if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
+        ReminderChannelsCache.cargar()
+        // En paralelo, como las hace la pantalla vieja: en serie son dos viajes encadenados y la
+        // sección se queda a medias el doble de tiempo.
+        coroutineScope {
+            val porVencer = async { runCatching { Repositories.wallets.getUpcomingPayments() } }
+            val porOcurrir = async { runCatching { Repositories.wallets.getOccurrenceStates() } }
+            porVencer.await()
+                .onSuccess { upcomingRecurrentes = it; vencimientosOk = true }
+                .onFailure { error = it.toUserMessage() }
+            // Si esta falla no se pinta ninguna propuesta ni ninguna marca: la sección se ve como
+            // antes de que existiera. Un «ya ocurrió» que en realidad no se pudo leer sería una
+            // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
+            porOcurrir.await()
+                .onSuccess { ocurrencias = it; ocurrenciasOk = true }
+                .onFailure { if (error == null) error = it.toUserMessage() }
+        }
+    }
+
+    // El flujo de permisos del navegador es async (moviPush.js): tras pedirlo se refresca unas
+    // veces para que el aviso desaparezca sin reabrir la app. Solo donde el push existe Y con el
+    // chip activo — en Android/iOS `status()` es una constante, y en el resto de Movimientos este
+    // bucle no tendría a quién servir.
+    if (PushOptIn.supported) {
+        LaunchedEffect(pushRefreshTick, activeFilter) {
+            if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
+            repeat(20) {
+                kotlinx.coroutines.delay(600)
+                pushStatus = PushOptIn.status()
+            }
+        }
+    }
+
     // Las CIFRAS solo se pintan con la fuente fresca ya cargada — un total a medias es peor que
     // ningún total, mismo criterio que la pantalla vieja (`reglasOk && cobrosOk`).
     val resumenRecurrentesDelChip = if (subsParaRecurrentesOk) {
@@ -675,6 +784,48 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // Para avisar en una candidata que el dueño ya la tiene anotada a mano, antes de confirmarla.
     val clavesDeReglasRecurrentes = remember(reglasRecurrentes) {
         reglasRecurrentes.map { claveDeNombre(it.name) }.toSet()
+    }
+
+    // «Próximos» muestra lo que URGE, no todas las reglas: el server manda una entrada por regla
+    // (ver [proximosQueUrgen]). Y lo ya sellado va aparte, con su «Deshacer» — apenas se sella, el
+    // recurrente desaparece de «Próximos», así que sin esa sección marcar por error no tendría
+    // vuelta atrás hasta el mes siguiente (ver [SeccionYaOcurrieron]).
+    val proximosRecurrentes = remember(upcomingRecurrentes) { proximosQueUrgen(upcomingRecurrentes) }
+    val selladasRecurrentes = remember(upcomingRecurrentes, ocurrencias, ocurrenciasOk) {
+        if (ocurrenciasOk) ocurrenciasSelladas(upcomingRecurrentes, ocurrencias) else emptyList()
+    }
+    // El aviso ámbar mira lo que se PIDIÓ, no lo que existe: promete una promesa rota, y sin
+    // promesa no hay nada que anunciar. Ver [hayRecordatoriosPedidos].
+    val pidieronRecordatorios = hayRecordatoriosPedidos(upcomingRecurrentes)
+
+    /**
+     * Sellar «esto ya ocurrió» — con el movimiento que el dueño confirmó, o sin ninguno.
+     *
+     * Después de esto el recurrente deja de leerse como vencido y deja de avisar **ese mes**: su
+     * vencimiento vigente pasa a ser el del mes que viene (lo decide el server, ver `dueDateFor`).
+     * Al mes siguiente vuelve a estar pendiente solo.
+     */
+    fun marcarOcurrio(ruleId: String, period: String, eventId: String?) {
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
+        coroutineRecurrentes.launch {
+            runCatching { Repositories.wallets.markOccurrence(ruleId, period, eventId) }
+                .onSuccess { recurrentesReloadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - ruleId
+        }
+    }
+
+    /** Deshacer: marcar por error tiene que poder revertirse sin ceremonia. */
+    fun deshacerOcurrio(ruleId: String, period: String) {
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
+        coroutineRecurrentes.launch {
+            runCatching { Repositories.wallets.unmarkOccurrence(ruleId, period) }
+                .onSuccess { recurrentesReloadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - ruleId
+        }
     }
 
     /**
@@ -873,19 +1024,69 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             // de días (que acá abajo son los movimientos que YA se reconocen como recurrentes;
             // esto es lo que resume ese total y lo que todavía no se confirmó ni descartó).
             if (mostrarResumenDeRecurrentes(activeFilter)) {
-                item {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-                        // «Buscar cobros» va en este encabezado —que se pinta siempre con el chip
-                        // activo— y no en el de las candidatas, que solo existe cuando ya hay
-                        // alguna. Ver [buscarCobros].
-                        MinSectionHeader(
-                            title = "Recurrentes",
-                            action = if (buscandoCobros) "Buscando…" else "Buscar cobros",
-                            onAction = { buscarCobros() },
-                        )
-                        ResumenFlujoLibreCard(resumenRecurrentesDelChip)
+                // ── El orden: primero lo que pide algo, después lo que solo informa ──────
+                //
+                // El dueño abre este chip para responder «¿qué se repite, y qué necesita algo de
+                // mí?». Así que arriba va lo accionable —el aviso de que sus recordatorios no van
+                // a llegar, los pagos que urgen con su «¿ya ocurrió?», las candidatas por
+                // confirmar— y el resumen pasivo queda abajo, pegado a la lista de movimientos
+                // que resume. En el orden anterior (PR 2) el «Flujo libre» era lo único que había
+                // y por eso encabezaba; con la mudanza del PR 3, dejar una cifra que no pide nada
+                // por encima de una propuesta abierta sería enterrar lo urgente bajo lo bonito.
+
+                // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
+                // Se muda con el resto: era la única pantalla que lo mostraba, y sacarla del menú
+                // lo habría dejado sin ningún lugar donde salir. No es hipotético — hoy no hay
+                // ninguna suscripción de push activa. Ver [shouldShowReminderWarning]: con
+                // `canales == null` («todavía no se sabe») NO se avisa nada.
+                if (shouldShowReminderWarning(pushStatus, pidieronRecordatorios, canalesDeAviso)) {
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                            ReminderWarningBanner(
+                                pushStatus = pushStatus,
+                                onEnable = {
+                                    PushOptIn.enable()
+                                    pushRefreshTick++
+                                },
+                            )
+                        }
                     }
                 }
+
+                // ── Próximos + «¿esto ya ocurrió?» ──────────────────────────────────────
+                item {
+                    SeccionProximosPagos(
+                        proximos = proximosRecurrentes,
+                        ocurrencias = ocurrencias,
+                        ocurrenciasOk = ocurrenciasOk,
+                        descartadas = descartadas,
+                        marcando = marcando,
+                        // «Todavía no llegó la lista», no «la pantalla está cargando»: mientras
+                        // no haya respuesta no se dibuja una tarjeta vacía que diga que no hay
+                        // nada por vencer, porque eso no se sabe todavía.
+                        cargando = !vencimientosOk,
+                        conteoVisible = vencimientosOk,
+                        onAbrirPago = { payment ->
+                            // F20: la cuota de un crédito y el pago de una tarjeta son reglas
+                            // sintéticas del server, no algo que se edite acá — se gestionan en
+                            // Créditos. Misma distinción que hacía la pantalla vieja.
+                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX) ||
+                                payment.rule.id.startsWith(CARD_RULE_PREFIX)
+                            ) {
+                                onNavigate(Screen.Credits)
+                            } else {
+                                reglaRecurrenteAEditar = payment.rule
+                            }
+                        },
+                        onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
+                        onDescartarPropuesta = { ruleId, eventId ->
+                            descartadas = descartadas + claveDescartada(ruleId, eventId)
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                    )
+                }
+
+                // ── Detectadas · por confirmar ──────────────────────────────────────────
                 if (candidatasRecurrentes.isNotEmpty()) {
                     item {
                         Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
@@ -902,6 +1103,33 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                 }
                             }
                         }
+                    }
+                }
+
+                // ── Ya ocurrieron · con su «Deshacer» ───────────────────────────────────
+                if (selladasRecurrentes.isNotEmpty()) {
+                    item {
+                        SeccionYaOcurrieron(
+                            selladas = selladasRecurrentes,
+                            marcando = marcando,
+                            onDeshacer = { ruleId, period -> deshacerOcurrio(ruleId, period) },
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                        )
+                    }
+                }
+
+                // ── El resumen, abajo, pegado a lo que resume ───────────────────────────
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                        // «Buscar cobros» va en este encabezado —que se pinta siempre con el chip
+                        // activo— y no en el de las candidatas, que solo existe cuando ya hay
+                        // alguna. Ver [buscarCobros].
+                        MinSectionHeader(
+                            title = "Recurrentes",
+                            action = if (buscandoCobros) "Buscando…" else "Buscar cobros",
+                            onAction = { buscarCobros() },
+                        )
+                        ResumenFlujoLibreCard(resumenRecurrentesDelChip)
                     }
                 }
             }
@@ -1102,6 +1330,22 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             onVerCuenta = accountTypes[event.accountId]?.let { tipo ->
                 { onNavigate(Screen.AccountDetail(event.accountId, tipo.group)) }
             },
+        )
+    }
+
+    // Editar un recurrente desde su renglón de «Próximos» — la misma hoja, en modo edición, que
+    // abre el detalle de un movimiento. Al guardar se invalida el cache del gate y se recarga la
+    // sección: el monto o el día nuevos tienen que verse en el mismo renglón que se acaba de
+    // tocar, no en la próxima visita.
+    reglaRecurrenteAEditar?.let { regla ->
+        CreateRecurringRuleSheet(
+            onDismiss = { reglaRecurrenteAEditar = null },
+            onSaved = {
+                reglaRecurrenteAEditar = null
+                RecurringOfferGate.olvidarLoCacheado()
+                recurrentesReloadKey++
+            },
+            existing = regla,
         )
     }
 

@@ -11,7 +11,23 @@ sealed class Screen {
     data object OnboardingWelcome : Screen()
     data object OnboardingProfile : Screen()
     data object Dashboard : Screen()
-    data object Transactions : Screen()
+    /**
+     * Movimientos. [chipInicial] es el índice del chip con el que arranca (ver
+     * `CHIPS_DE_MOVIMIENTOS` y [com.jvillada.movi.ui.transactions.chipInicialDeMovimientos]);
+     * `null` —lo normal, entrar por la pestaña— es «Todo».
+     *
+     * PR 3 del rediseño de Recurrentes (2026-09): existe porque los enlaces que llevaban a la
+     * pantalla de Recurrentes ahora llevan acá con el chip «Recurrentes» puesto. Sin el
+     * parámetro, tocar «Ver todos» sobre un pago que vence aterrizaba en la lista completa de
+     * movimientos, sin ninguna relación visible con lo que se acababa de tocar.
+     *
+     * Es un `data class` y no un `data object` por eso, con el mismo precedente que
+     * [QuickAdd]: el valor viaja en la pila, así que dos entradas con chips distintos son
+     * pantallas distintas para [NavStack.shouldPush] y para el `SaveableStateProvider` de
+     * App.kt — volver desde Recurrentes-filtrado a la pestaña deja Movimientos sin filtro, que
+     * es lo correcto.
+     */
+    data class Transactions(val chipInicial: Int? = null) : Screen()
     // F10: cuando se abre "para registrar el primero" desde el detalle de una cuenta puntual,
     // esa cuenta viene preseleccionada — sin esto QuickAdd caía siempre en la primera cuenta de
     // la lista, sin importar desde dónde se entró.
@@ -83,7 +99,7 @@ sealed class Screen {
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOME
-    Screen.Transactions -> NavTab.TRANSACTIONS
+    is Screen.Transactions -> NavTab.TRANSACTIONS
     Screen.Accounts -> NavTab.ACCOUNTS
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse (una tarjeta abierta desde Créditos marca Créditos).
@@ -134,7 +150,7 @@ fun homeScreenFor(group: AccountGroup): Screen =
 /** Pantalla principal de cada destino de la barra/rail (inversa de [navTabFor]). */
 fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.HOME -> Screen.Dashboard
-    NavTab.TRANSACTIONS -> Screen.Transactions
+    NavTab.TRANSACTIONS -> Screen.Transactions()
     NavTab.ADD -> Screen.QuickAdd()
     NavTab.ACCOUNTS -> Screen.Accounts
     NavTab.CREDITS -> Screen.Credits

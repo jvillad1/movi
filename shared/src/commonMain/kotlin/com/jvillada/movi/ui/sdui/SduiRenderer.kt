@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.components.CardRow
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Hairline
@@ -114,7 +115,7 @@ private fun SduiSection(
  */
 private fun screenForTarget(target: String): Screen? = when (target) {
     "dashboard" -> Screen.Dashboard
-    "transactions" -> Screen.Transactions
+    "transactions" -> Screen.Transactions()
     "quickadd" -> Screen.QuickAdd()
     "budgets" -> Screen.Budgets
     "mas" -> Screen.Mas
@@ -127,9 +128,15 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     "investments" -> Screen.Accounts
     // Ola 8: Suscripciones dejó de ser pantalla, igual que Inversiones. Mismo trato: el target
     // sobrevive (el acceso «Suscripciones» del Inicio ya está guardado en la DB de cada
-    // instalación) y se manda a Recurrentes, que es donde ahora viven las suscripciones.
-    "subscriptions" -> Screen.Recurrentes
-    "recurrentes" -> Screen.Recurrentes
+    // instalación) y se manda a donde ahora viven las suscripciones.
+    //
+    // PR 3 del rediseño de Recurrentes (2026-09): ese «donde» ya no es una pantalla aparte sino
+    // Movimientos con el chip «Recurrentes» puesto. Los dos targets **siguen existiendo** —el
+    // editor de pantallas los ofrece y hay definiciones guardadas que los usan— y por eso se
+    // remapean en vez de borrarse: un target que deja de resolver es un acceso del Inicio que no
+    // hace nada al tocarlo.
+    "subscriptions" -> Screen.Transactions(CHIP_RECURRENTES)
+    "recurrentes" -> Screen.Transactions(CHIP_RECURRENTES)
     "categorias" -> Screen.Categorias
     "extractos" -> Screen.Extractos
     "aichat" -> Screen.AIChat
@@ -328,7 +335,10 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
         MinSectionHeader(
             title = section.title ?: "Próximos pagos",
             action = "Ver todos",
-            onAction = { onNavigate(Screen.Recurrentes) },
+            // PR 3: «todos» ahora son los de Movimientos bajo el chip «Recurrentes» — con el
+            // filtro puesto, no la lista completa: quien toca esto viene de mirar un pago que
+            // vence y tiene que aterrizar en algo que hable de eso.
+            onAction = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
         )
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -357,8 +367,11 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                         }
                     },
                     isLast = i == rows.lastIndex,
-                    // Una cuota de crédito se gestiona en Créditos; una regla, en Recurrentes.
-                    onClick = { onNavigate(if (isCredit) Screen.Credits else Screen.Recurrentes) },
+                    // Una cuota de crédito se gestiona en Créditos; una regla, en Movimientos con
+                    // el chip «Recurrentes» — que es donde ahora vive su «¿ya ocurrió?».
+                    onClick = {
+                        onNavigate(if (isCredit) Screen.Credits else Screen.Transactions(CHIP_RECURRENTES))
+                    },
                 )
             }
         }

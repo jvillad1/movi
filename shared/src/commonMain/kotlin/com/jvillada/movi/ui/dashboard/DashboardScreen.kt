@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
@@ -447,7 +448,9 @@ internal fun PrimerosPasosCard(
             done = data.hasRecurringRule,
             title = "Anota tus gastos recurrentes",
             subtitle = "Colegio, arriendo, gimnasio, cuotas",
-            onClick = { onNavigate(Screen.Recurrentes) },
+            // PR 3 del rediseño de Recurrentes: los recurrentes se anotan y se revisan en
+            // Movimientos, con su chip puesto. La pantalla aparte dejó de tener entradas.
+            onClick = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
         )
         Hairline()
         PasoRow(done = data.hasCredit, title = "Si tienes préstamos o tarjetas, cárgalos", onClick = { onNavigate(Screen.Credits) })

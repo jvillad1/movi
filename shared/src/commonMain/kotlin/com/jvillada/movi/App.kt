@@ -224,7 +224,7 @@ fun App() {
                 Screen.OnboardingWelcome -> WelcomeScreen(navigate)
                 Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
                 Screen.Dashboard         -> DashboardScreen(navigate)
-                Screen.Transactions      -> TransactionsScreen(navigate)
+                is Screen.Transactions   -> TransactionsScreen(navigate, chipInicial = currentScreen.chipInicial)
                 // Inalcanzable: `navigate` desvía QuickAdd al overlay de más abajo antes de que
                 // llegue a la pila (ver [opensAsOverlay]). La rama existe para que el `when` siga
                 // siendo exhaustivo sobre `Screen` — con un `else` perdería el chequeo que avisa

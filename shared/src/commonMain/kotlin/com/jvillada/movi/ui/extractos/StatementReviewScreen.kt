@@ -101,7 +101,7 @@ fun StatementReviewScreen(
                 imported = true
                 // Ola 2 #1: pop, no push — coherente con SMS (evita reimportar el mismo extracto
                 // si la ‹ de Transacciones vuelve acá).
-                goBack(Screen.Transactions)
+                goBack(Screen.Transactions())
             }.onFailure {
                 working = false
                 error = it.toUserMessage()

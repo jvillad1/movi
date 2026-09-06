@@ -69,7 +69,9 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun getReminderChannels(): ReminderChannels = noUsado("getReminderChannels")
     override suspend fun getOccurrenceStates(): List<OccurrenceState> = noUsado("getOccurrenceStates")
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence = noUsado("markOccurrence")
-    override suspend fun unmarkOccurrence(ruleId: String, period: String) = noUsado("unmarkOccurrence")
+    // Tipo de retorno explícito: sin él Kotlin lo infiere `Nothing` y ninguna prueba puede
+    // sobrescribirlo con la implementación que de verdad devuelve `Unit`.
+    override suspend fun unmarkOccurrence(ruleId: String, period: String): Unit = noUsado("unmarkOccurrence")
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = noUsado("chatAi")
     override suspend fun getAccounts(): List<Account> = noUsado("getAccounts")
     override suspend fun getAccount(id: String): Account = noUsado("getAccount")
