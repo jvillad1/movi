@@ -58,16 +58,28 @@ class ResumenRecurrentesEnMovimientosTest {
         confidence = SubConfidence.HIGH, firstSeen = 0, lastSeen = 0, occurrences = 2,
     )
 
+    /** Lo que el barrido encuentra cuando se toca «Buscar cobros». */
+    private var barridosPedidos = 0
+    private val spotify = Subscription(
+        id = "sub_spotify", merchantKey = "spotify", displayName = "Spotify",
+        amount = 16_900L, currency = "COP", dayOfMonth = 3, status = SubStatus.CANDIDATE,
+        confidence = SubConfidence.HIGH, firstSeen = 0, lastSeen = 0, occurrences = 3,
+    )
+
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
         override suspend fun getRecurringRules(): List<RecurringRule> = listOf(arriendo)
         override suspend fun getSubscriptions(): SubscriptionsResult =
-            SubscriptionsResult(listOf(disney), monthlyTotalCop = 1_800_000L)
+            SubscriptionsResult(listOfNotNull(disney, spotify.takeIf { barridosPedidos > 0 }), monthlyTotalCop = 1_800_000L)
         override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription {
             disney = subscription
             return subscription
+        }
+        override suspend fun detectSubscriptions(): SubscriptionsResult {
+            barridosPedidos++
+            return getSubscriptions()
         }
     }
 
@@ -114,6 +126,24 @@ class ResumenRecurrentesEnMovimientosTest {
         composeRule.onNodeWithText("Disney+", useUnmergedTree = true).assertIsDisplayed()
         // MinSectionHeader pinta el título en mayúsculas.
         composeRule.onNodeWithText("DETECTADAS · POR CONFIRMAR", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * El barrido se mudó con el resto de Recurrentes. Importa que exista acá: el único disparo
+     * automático del detector está en el import de extractos, y el día a día del dueño entra por
+     * SMS, que no lo dispara. Sin este botón, sacar la pantalla vieja del menú lo dejaba sin
+     * ninguna forma de correr el detector.
+     */
+    @Test
+    fun `buscar cobros corre el detector y muestra lo que encuentra`() {
+        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        esperarTexto("Flujo libre")
+        composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertDoesNotExist()
+
+        composeRule.onNodeWithText("Buscar cobros", useUnmergedTree = true).performClick()
+
+        esperarTexto("Spotify")
+        composeRule.onNodeWithText("Spotify", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test

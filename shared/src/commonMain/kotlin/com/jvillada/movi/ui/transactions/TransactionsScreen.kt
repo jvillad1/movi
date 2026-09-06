@@ -620,7 +620,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // otra pantalla (o esta misma en una visita anterior), no hay ningún viaje de red de más.
     var reglasRecurrentes by remember { mutableStateOf<List<RecurringRule>>(emptyList()) }
     var nombresDeSuscripcionesActivas by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(refreshKey, refreshTick) {
+    // Sube tras cada Confirmar / No es / Buscar cobros, para volver a traer las listas sin
+    // esperar a `refreshKey` (que dispararía además una recarga innecesaria de los movimientos).
+    var recurrentesReloadKey by remember { mutableStateOf(0) }
+    // `recurrentesReloadKey` también es clave acá, y no solo de las candidatas: confirmar una
+    // candidata la vuelve un cobro ACTIVO, y de eso dependen el filtro del chip y la marca de
+    // cada fila (ver [nombreRecurrenteDe]). Sin esta clave, el dueño confirmaba «Netflix» y sus
+    // movimientos seguían sin reconocerse hasta salir de la pantalla y volver a entrar.
+    LaunchedEffect(refreshKey, refreshTick, recurrentesReloadKey) {
         val (reglas, cobros) = RecurringOfferGate.listasParaMovimientos()
         reglasRecurrentes = reglas
         nombresDeSuscripcionesActivas = nombresDeSuscripcionesQueYaSuman(cobros)
@@ -636,12 +643,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // que `listasParaMovimientos` ya usa; la diferencia es que acá SÍ se repite la llamada.
     var subsParaRecurrentes by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
     var subsParaRecurrentesOk by remember { mutableStateOf(false) }
-    // Sube tras cada Confirmar / No es, para volver a traer la lista sin esperar a `refreshKey`
-    // (que dispararía además una recarga innecesaria de los movimientos del día).
-    var recurrentesReloadKey by remember { mutableStateOf(0) }
     // Ids con una acción en vuelo, para no dejar tocar dos veces la misma candidata mientras se
     // guarda — mismo motivo que `marcando` en la pantalla vieja.
     var candidatasEnVuelo by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var buscandoCobros by remember { mutableStateOf(false) }
     val coroutineRecurrentes = rememberCoroutineScope()
 
     LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick) {
@@ -670,6 +675,38 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // Para avisar en una candidata que el dueño ya la tiene anotada a mano, antes de confirmarla.
     val clavesDeReglasRecurrentes = remember(reglasRecurrentes) {
         reglasRecurrentes.map { claveDeNombre(it.name) }.toSet()
+    }
+
+    /**
+     * **Volver a barrer los movimientos buscando cobros que se repiten.**
+     *
+     * Se mudó acá con el resto de Recurrentes, y no era opcional: el barrido automático corre en
+     * UN solo lugar del server —después de importar un extracto (`StatementRoutes`)— y el día a
+     * día del dueño entra por SMS, que nunca lo dispara. Sin este botón, sacar la pantalla vieja
+     * del menú dejaba el detector sin ninguna forma de correr para el camino que él más usa.
+     *
+     * Vive junto al resumen y no dentro de «Detectadas · por confirmar»: esa sección solo existe
+     * cuando YA hay candidatas, y buscar cobros es justamente lo que se hace cuando no hay
+     * ninguna todavía.
+     */
+    fun buscarCobros() {
+        if (buscandoCobros) return
+        buscandoCobros = true
+        error = null
+        coroutineRecurrentes.launch {
+            runCatching { Repositories.wallets.detectSubscriptions() }
+                .onSuccess {
+                    subsParaRecurrentes = it
+                    subsParaRecurrentesOk = true
+                    // Un barrido puede DESCUBRIR cobros: el gate tiene que enterarse, o la barra
+                    // de «¿esto se repite?» ofrecería una regla que duplica uno recién detectado.
+                    RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
+                    // Y las listas del chip también, que es lo que decide qué filas se reconocen.
+                    recurrentesReloadKey++
+                }
+                .onFailure { error = it.toUserMessage() }
+            buscandoCobros = false
+        }
     }
 
     fun confirmarCandidata(sub: Subscription, status: SubStatus) {
@@ -838,6 +875,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             if (mostrarResumenDeRecurrentes(activeFilter)) {
                 item {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                        // «Buscar cobros» va en este encabezado —que se pinta siempre con el chip
+                        // activo— y no en el de las candidatas, que solo existe cuando ya hay
+                        // alguna. Ver [buscarCobros].
+                        MinSectionHeader(
+                            title = "Recurrentes",
+                            action = if (buscandoCobros) "Buscando…" else "Buscar cobros",
+                            onAction = { buscarCobros() },
+                        )
                         ResumenFlujoLibreCard(resumenRecurrentesDelChip)
                     }
                 }
