@@ -1,10 +1,15 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+It is the canonical technical reference for this repo — `README.md` is the short human-facing intro,
+and `AGENTS.md` is a pointer here for tools that don't auto-load `CLAUDE.md`. Keep this file the one
+place that gets updated; don't fork details into the other two.
 
 ## App
 
-**Movi** — personal and family finance management app. Package: `com.jvillada.movi`. Full design spec: `docs/superpowers/specs/2026-04-26-monedero-core-design.md`.
+**Movi** — personal and family finance management app. Package: `com.jvillada.movi`. Design specs for
+individual features live under `docs/superpowers/specs/` (one file per feature, dated); the original
+core design is `2026-04-26-monedero-core-design.md`.
 
 ## Project structure
 
@@ -45,14 +50,13 @@ iosApp      ──▶  shared   (ComposeApp XCFramework)
 # Build server fat JAR
 ./gradlew :server:buildFatJar
 
-# Build all modules
-./gradlew build
-
-# Run tests
-./gradlew test
-./gradlew :core:test
-./gradlew :server:test
+# Run tests — this is exactly what CI runs (.github/workflows/pruebas.yml), nothing more, nothing less
+./gradlew --rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs
 ```
+
+> **Never run `./gradlew build`.** It drags in the iOS release link tasks and takes ~48 minutes.
+> There is no reason to run it — CI never does, and neither should you. Use the test command above,
+> or a scoped task like `./gradlew :androidApp:assembleDebug` when you specifically need an APK.
 
 ### Android (from terminal, no Android Studio)
 ```bash
@@ -113,8 +117,8 @@ This is a full-stack Kotlin project — one language, one codebase, four client 
 
 Targets: `android`, `iosX64/Arm64/SimulatorArm64`, `wasmJs`, `jvm`. Pure Kotlin (no Compose) so the server can depend on it without pulling UI code.
 
-- `model/` — `@Serializable` data classes (`Wallet`, `Transaction`, `TransactionType`). These are the wire types used by both the Ktor server responses and the client deserialization — do not add platform-specific code here.
-- `repository/` — `WalletRepository` interface + `WalletRepositoryImpl` (Ktor client). The impl is constructed with an `HttpClient` and a `baseUrl` string; the caller provides the platform-specific engine.
+- `model/` — `@Serializable` data classes (`Account`, `FinancialEvent`, `CreditTerms`, `Subscription`, `RecurringRule`, and ~25 more). These are the wire types used by both the Ktor server responses and the client deserialization — do not add platform-specific code here. `Wallet`/`Transaction`/`TransactionType` in `Wallet.kt` are an early, largely superseded model kept for compatibility; `Account` + `FinancialEvent` are the ones actual features build on.
+- `repository/` — repository interfaces + Ktor-client impls. Constructed with an `HttpClient` and a `baseUrl` string; the caller provides the platform-specific engine.
 - SQLDelight DB lives here. SQLDelight has no wasmJs artifact, so a `nonWasmMain` intermediate source set holds the DB/driver code and the generated SQLDelight Kotlin; `wasmJs` configurations exclude the `app.cash.sqldelight` group.
 
 ### shared module
@@ -139,17 +143,26 @@ KMP module with a single `wasmJs` executable target. `main()` calls `CanvasBased
 
 JVM-only Ktor application on Netty, port 8080.
 
-`Application.kt` wires four plugins in order: CORS → Serialization → Monitoring → Routing.
+`Application.kt` wires: `DatabaseFactory.init()` → CORS → Serialization → Monitoring → Auth → Routing → `startReminderScheduler()` (no-op without `RESEND_API_KEY`).
 
-- `plugins/` — one file per Ktor plugin (`CORS.kt`, `Serialization.kt`, `Monitoring.kt`, `Routing.kt`).
-- `routes/WalletRoutes.kt` — REST endpoints under `/api/wallets`.
+- `plugins/` — one file per Ktor plugin (`CORS.kt`, `Serialization.kt`, `Monitoring.kt`, `Auth.kt`, `Routing.kt`).
+- `routes/` — one file per resource, registered in `plugins/Routing.kt`: `AccountRoutes` (`/api/accounts`), `EventRoutes`, `CreditRoutes`, `PagoDeCuotaRoutes`, `TransferRoutes`, `SubscriptionRoutes`, `CardRoutes`, `CategoryRoutes`, `GoalRoutes`, `DocumentRoutes`, `StatementRoutes`, `SmsRoutes`/`SmsFilterConfigRoutes`, `PushRoutes`, `ReminderRoutes`, `ScreenRoutes` (SDUI), `AuthRoutes`, `UserRoutes`, `AiRoutes` (Claude API chat, needs `ANTHROPIC_API_KEY`), `DashboardRoutes`, `VersionRoutes`. There is no `WalletRoutes` — that model is legacy (see `core` above).
+- No migration files: `DatabaseFactory.init()` runs `SchemaUtils.create` (new tables) plus a manual `createMissingTablesAndColumns` step (new columns on existing tables) on every boot.
 - `/health` endpoint returns `"OK"` for liveness checks.
 - `/version` endpoint (público, sin auth) returns `{"commit":"<sha>"}` con 200 — o `{"commit":null}` con 503 si el proceso no sabe qué commit corre. Es la única forma de saber si un merge llegó a producción: cuando el build de Railway falla, la instancia vieja sigue arriba contestando 200 a todo. `.github/workflows/despliegue.yml` lo espera en cada push a master y falla si no llega (`scripts/esperar-despliegue.sh`).
 - Serves the wasm web bundle from `server/src/main/resources/static` via `staticResources("/", "static")`. The Dockerfile builds `:webApp:wasmJsBrowserDistribution` and copies `webApp/build/dist/wasmJs/productionExecutable/` into that dir before building the fat JAR.
+- Config is env vars, read via `server/.env` (gitignored) in local dev or process env in prod — see `server/.env.example` for the full list (`DATABASE_URL`/`JWT_SECRET` required; `ANTHROPIC_API_KEY`, `RESEND_API_KEY`+reminder vars, `ALLOWED_ORIGINS`, `APP_TIMEZONE`, `USD_COP_RATE` optional).
 
 ### Version catalog
 
 All dependency versions are centralized in `gradle/libs.versions.toml`. Add new dependencies there and reference them via `libs.*` aliases in build files — never hardcode version strings in `build.gradle.kts` files.
+
+## CI & deploy
+
+- `.github/workflows/pruebas.yml` ("Pruebas") runs on every PR and push to master: the same four Gradle tasks from the Commands section above, plus a deploy guard that moves `local.properties` aside (Railway's image has no Android SDK, and Gradle's config phase would otherwise choke on it) before dry-running the wasm distribution task.
+- `.github/workflows/despliegue.yml` ("Despliegue") runs on push to master, waits on `/version` via `scripts/esperar-despliegue.sh` (35 min timeout), and fails the workflow if the deployed commit never matches — a merge is not proof of a deploy, Railway keeps serving the old build on a failed one.
+- Railway auto-deploys `master` on push (`railway.toml`, builder = Dockerfile). Production: `https://movi-project-production.up.railway.app`.
+- `scripts/` also has `build-apk.sh`, `generate-vapid-keys.sh` (web push), and `seed-credits.sh`.
 
 ## Key conventions
 
