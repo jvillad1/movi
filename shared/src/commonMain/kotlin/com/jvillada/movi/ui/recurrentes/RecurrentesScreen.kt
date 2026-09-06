@@ -19,11 +19,9 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDate
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,10 +34,8 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
-import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.OccurrenceState
-import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -601,74 +597,36 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
                 }
 
                 // ── Próximos section ────────────────────────────────────────────
+                // PR 3 del rediseño: la sección entera vive en `ProximosPagosSection.kt`, la
+                // MISMA que pinta Movimientos bajo el chip «Recurrentes». Dos copias de tres
+                // botones que sellan un periodo con plata adentro era justo lo que no podía pasar.
                 item {
                     Spacer(Modifier.height(20.dp))
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MinSectionHeader(
-                            title = "Próximos",
-                            count = if (vencimientosOk && proximos.isNotEmpty()) proximos.size else null,
-                        )
-                        // Cargando y sin nada todavía: no se pinta NADA. La rama de abajo con la
-                        // lista vacía dibujaba un MinCard sin filas — una astilla de 4dp bajo el
-                        // rótulo, que junto con la otra sección hacía ver la pantalla rota.
-                        if (proximos.isEmpty() && loading) {
-                            Unit
-                        } else if (proximos.isEmpty()) {
-                            MinCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                variant = MinCardVariant.Elevated,
-                                padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+                    SeccionProximosPagos(
+                        proximos = proximos,
+                        ocurrencias = ocurrencias,
+                        ocurrenciasOk = ocurrenciasOk,
+                        descartadas = descartadas,
+                        marcando = marcando,
+                        cargando = loading,
+                        conteoVisible = vencimientosOk,
+                        onAbrirPago = { payment ->
+                            // F20: el pago de una tarjeta (card_) no es una regla editable acá —
+                            // se gestiona en Créditos, como las cuotas.
+                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX) ||
+                                payment.rule.id.startsWith(CARD_RULE_PREFIX)
                             ) {
-                                Text("Nada vence en los próximos días", fontSize = 14.sp, color = MinTextMute)
+                                onNavigate(Screen.Credits)
+                            } else {
+                                editar(payment.rule)
                             }
-                        } else {
-                            MinCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                variant = MinCardVariant.Elevated,
-                                padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
-                            ) {
-                                proximos.forEachIndexed { i, payment ->
-                                    UpcomingPaymentRow(
-                                        payment = payment,
-                                        onClick = {
-                                            // F20: el pago de una tarjeta (card_) no es una regla
-                                            // editable acá — se gestiona en Créditos, como las cuotas.
-                                            if (payment.rule.id.startsWith(CREDIT_RULE_PREFIX) ||
-                                                payment.rule.id.startsWith(CARD_RULE_PREFIX)
-                                            ) {
-                                                onNavigate(Screen.Credits)
-                                            } else {
-                                                editar(payment.rule)
-                                            }
-                                        },
-                                    )
-                                    // «¿Ya ocurrió?», debajo del renglón que lo dio por vencido.
-                                    // Solo con la fuente completa (`ocurrenciasOk`): con las
-                                    // fuentes a medias no se afirma nada — la regla de esta
-                                    // pantalla desde que el «Flujo libre» mintió dos veces.
-                                    val estado = if (ocurrenciasOk) ocurrenciaDe(ocurrencias, payment.rule.id) else null
-                                    if (hayQuePreguntar(estado)) {
-                                        PropuestaOcurrencia(
-                                            estado = estado!!,
-                                            rule = payment.rule,
-                                            propuesta = propuestaActual(estado, descartadas),
-                                            enVuelo = payment.rule.id in marcando,
-                                            onConfirmar = { ev ->
-                                                marcarOcurrio(payment.rule.id, estado.period, ev.id)
-                                            },
-                                            onDescartar = { ev ->
-                                                descartadas = descartadas + claveDescartada(payment.rule.id, ev.id)
-                                            },
-                                            onCerrarSinMovimiento = {
-                                                marcarOcurrio(payment.rule.id, estado.period, null)
-                                            },
-                                        )
-                                    }
-                                    if (i < proximos.size - 1) Hairline()
-                                }
-                            }
-                        }
-                    }
+                        },
+                        onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
+                        onDescartarPropuesta = { ruleId, eventId ->
+                            descartadas = descartadas + claveDescartada(ruleId, eventId)
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
                 }
 
                 // ── Por día del mes section ─────────────────────────────────────
@@ -924,235 +882,4 @@ private fun RecurrenteRow(
         }
     }
 }
-
-/**
- * **«Parece que esto ya ocurrió»** — la propuesta, debajo del renglón que lo dio por vencido.
- *
- * Es un OFRECIMIENTO, no una pregunta que haya que resolver: se puede ignorar y la pantalla sigue
- * funcionando igual. Nada se marca solo. La app **propone** y el dueño **confirma**, porque la
- * asimetría del riesgo manda: dar por ocurrido algo que no ocurrió apaga el aviso de una deuda
- * real, y eso cuesta plata; el ruido de hoy cuesta un toque.
- *
- * Tres salidas, en orden de certeza:
- *
- *  1. **«Sí, fue este»** — el emparejamiento exacto. El periodo queda cerrado *y anclado* a un
- *     movimiento que se puede mirar.
- *  2. **«No fue este»** — pasa a la propuesta siguiente. Sin esto, una propuesta equivocada
- *     tapaba a la buena y el único camino era ignorarlas todas.
- *  3. **«Ya lo pagué» / «Ya me llegó»** — cierra el periodo sin movimiento que emparejar (pagó en
- *     efectivo, todavía no lo anotó, lo anotó en otra cuenta). Está siempre, también cuando no
- *     hay ninguna propuesta: es la salida que hace que la función sirva aunque el emparejamiento
- *     no encuentre nada.
- *
- * **El monto se muestra aunque no coincida, y se dice que no coincide.** El monto de un recurrente
- * es un estimado —«otros meses puede ser menos o más dependiendo de retenciones»—, así que no
- * filtra candidatos; pero por eso mismo confirmar a ciegas podría sellar el mes con otra cosa. La
- * diferencia se pinta: es lo que convierte el «sí» en una decisión.
- */
-@Composable
-private fun PropuestaOcurrencia(
-    estado: OccurrenceState,
-    rule: RecurringRule,
-    propuesta: FinancialEvent?,
-    enVuelo: Boolean,
-    onConfirmar: (FinancialEvent) -> Unit,
-    onDescartar: (FinancialEvent) -> Unit,
-    onCerrarSinMovimiento: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, bottom = 14.dp)) {
-        Text(
-            text = tituloPropuesta(rule.type, estado.period),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = MinText,
-        )
-        if (propuesta != null) {
-            Spacer(Modifier.height(4.dp))
-            // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
-            // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación
-            // el monto quedaba pegado al texto — dos datos distintos leyéndose como uno.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Text(
-                    text = descripcionPropuesta(propuesta),
-                    fontSize = 12.sp,
-                    color = MinTextMute,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = formatMoney(propuesta.amount, propuesta.currency),
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MinText,
-                    lineHeight = 16.sp,
-                )
-            }
-            // `avisaMontoDistinto` y no `difiereDelEsperado` a secas: en una tarjeta el monto de
-            // la regla es el SALDO, no un pago esperado, así que la comparación daba `true` todos
-            // los meses y esta advertencia salía siempre — repitiéndole al dueño como «lo que
-            // anotaste» justamente la cifra que el resto de la pantalla dejó de mostrar como su
-            // pago. Ver `RecurringRule.montoEsSaldo`.
-            if (avisaMontoDistinto(rule, propuesta.amount)) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +
-                        "Puede ser: revísalo antes de confirmar.",
-                    fontSize = 11.sp,
-                    color = MinTextMute,
-                    lineHeight = 15.sp,
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (propuesta != null) {
-                ActionChip(label = if (enVuelo) "Guardando…" else "Sí, fue este", primary = true) {
-                    if (!enVuelo) onConfirmar(propuesta)
-                }
-                ActionChip(label = "No fue este", primary = false) {
-                    if (!enVuelo) onDescartar(propuesta)
-                }
-            } else {
-                ActionChip(
-                    label = if (enVuelo) "Guardando…" else etiquetaCierreManual(rule.type),
-                    primary = true,
-                ) { if (!enVuelo) onCerrarSinMovimiento() }
-            }
-        }
-        if (propuesta != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = etiquetaCierreManual(rule.type) + ", sin emparejar ningún movimiento",
-                fontSize = 11.sp,
-                color = MinPrimary,
-                modifier = Modifier.clickable { if (!enVuelo) onCerrarSinMovimiento() },
-            )
-        }
-    }
-}
-
-/** Los botones de «Confirmar» / «No es» del grupo de detectadas. */
-@Composable
-private fun ActionChip(label: String, primary: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (primary) MinText else MinSurfaceContainerLow)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) MinBg else MinText)
-    }
-}
-
-// ── Status badge helpers ──────────────────────────────────────────────────────
-
-private fun dueDateDay(dueDate: String): Int =
-    runCatching { LocalDate.parse(dueDate).dayOfMonth }.getOrElse {
-        dueDate.takeLast(2).toIntOrNull()
-            ?: dueDate.substringAfterLast('-').toIntOrNull()
-            ?: 0
-    }
-
-private fun statusColor(status: PaymentStatus): Color = when (status) {
-    PaymentStatus.OVERDUE   -> MinExpense
-    PaymentStatus.DUE_TODAY -> MinAmber
-    PaymentStatus.DUE_SOON  -> MinAmber
-    PaymentStatus.UPCOMING  -> MinTextMute
-}
-
-/**
- * El estado de un vencimiento, **con el mes cuando nombra un día**.
- *
- * Decía «Vence el 1 · en 5 días» a secas, y ese renglón puede hablar del mes que viene: la ventana
- * de gracia rueda el vencimiento de una regla de día bajo a fin de mes. Justo debajo puede quedar
- * la tarjeta «¿Ya pagaste el de agosto?», que sí nombra su mes — y entonces el único mes escrito
- * en pantalla era el de la tarjeta mientras la fila de arriba hablaba de otro. Nombrar los dos es
- * la mitad que le faltaba al arreglo de textos.
- *
- * «Vencido hace N días» y «Vence hoy» no llevan mes: no nombran ningún día, así que no hay nada
- * que confundir.
- */
-private fun statusText(payment: UpcomingPayment): String {
-    val n = payment.daysUntil
-    val day = dueDateDay(payment.dueDate)
-    val mes = nombreDelMes(payment.dueDate)
-    val cuando = if (mes.isEmpty()) "Vence el $day" else "Vence el $day de $mes"
-    return when (payment.status) {
-        PaymentStatus.OVERDUE   -> "Vencido hace ${-n} ${if (-n == 1) "día" else "días"}"
-        PaymentStatus.DUE_TODAY -> "Vence hoy"
-        PaymentStatus.DUE_SOON  -> "$cuando · en $n ${if (n == 1) "día" else "días"}"
-        PaymentStatus.UPCOMING  -> "$cuando · en $n ${if (n == 1) "día" else "días"}"
-    }
-}
-
-@Composable
-private fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
-    val rule = payment.rule
-    val isIncome = rule.type == TransactionType.INCOME
-    val color = statusColor(payment.status)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // Status dot
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(color),
-        )
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = rule.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-                letterSpacing = (-0.1).sp,
-            )
-            Spacer(Modifier.height(2.dp))
-            // Status pill badge + category
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // Status label (colored)
-                Text(
-                    text = statusText(payment),
-                    fontSize = 11.sp,
-                    color = color,
-                )
-                // Separator dot
-                Box(
-                    modifier = Modifier
-                        .size(3.dp)
-                        .clip(CircleShape)
-                        .background(MinTextFaint),
-                )
-                Text(rule.category, fontSize = 11.sp, color = MinTextMute)
-            }
-        }
-
-        // Amount
-        Text(
-            text = textoDelMonto(rule, conSigno = true),
-            fontSize = 14.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Medium,
-            color = if (isIncome) MinIncome else MinText,
-            letterSpacing = (-0.3).sp,
-        )
-    }
-}
-
 

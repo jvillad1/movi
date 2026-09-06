@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
@@ -402,7 +403,7 @@ fun dashboardAlerts(overBudget: List<String>, cardCandidates: Int, pendingSms: I
         else -> add(DashboardAlert("${overBudget.size} presupuestos superados", Screen.Budgets))
     }
     if (cardCandidates > 0) {
-        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.Transactions))
+        add(DashboardAlert(plural(cardCandidates, "pago de tarjeta", "pagos de tarjeta") + " por confirmar", Screen.Transactions()))
     }
     if (pendingSms > 0) {
         add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.SMSInbox))
@@ -581,10 +582,13 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
         // F20: las cuotas de crédito y los pagos de tarjeta son sintéticos (UpcomingPayment
         // generado por el server, no una regla que viva en Recurrentes) — se resuelven en
         // Créditos, no en Recurrentes.
+        // PR 3 del rediseño de Recurrentes: una regla se resuelve en Movimientos con el chip
+        // «Recurrentes» puesto — ahí está su «¿ya ocurrió?». Con el chip y no sin él: la campana
+        // habla de UN pago, y caer en la lista completa de movimientos no responde nada.
         val target = if (p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)) {
             Screen.Credits
         } else {
-            Screen.Recurrentes
+            Screen.Transactions(CHIP_RECURRENTES)
         }
         add(NotificationRow("${p.rule.name} · ${dueLabel(p.daysUntil)}", target))
     }

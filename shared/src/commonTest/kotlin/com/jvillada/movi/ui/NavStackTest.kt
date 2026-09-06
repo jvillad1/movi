@@ -146,7 +146,7 @@ class NavStackTest {
     @Test
     fun `el resto de las pantallas son destinos, no modales`() {
         listOf(
-            Screen.Dashboard, Screen.Transactions, Screen.Accounts, Screen.Credits, Screen.Budgets,
+            Screen.Dashboard, Screen.Transactions(), Screen.Accounts, Screen.Credits, Screen.Budgets,
             Screen.Mas, Screen.Profile, Screen.Login, Screen.OCRCapture,
             Screen.AccountDetail("acc_1", AccountGroup.DINERO),
         ).forEach { assertFalse(opensAsOverlay(it), "$it") }
@@ -160,7 +160,7 @@ class NavStackTest {
      */
     @Test
     fun `abrir Agregar no cambia la pestaña activa, porque no entra a la pila`() {
-        val pila = listOf<Screen>(Screen.Transactions)
+        val pila = listOf<Screen>(Screen.Transactions())
         val destino = screenForTab(NavTab.ADD)
 
         val pilaDespues = if (opensAsOverlay(destino)) pila else pila + destino

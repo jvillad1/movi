@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 
 /**
@@ -43,6 +44,69 @@ fun claveDescartada(ruleId: String, eventId: String): String = "$ruleId|$eventId
  */
 fun propuestaActual(estado: OccurrenceState, descartadas: Set<String> = emptySet()): FinancialEvent? =
     estado.candidates.firstOrNull { claveDescartada(estado.ruleId, it.id) !in descartadas }
+
+/**
+ * Los periodos **ya sellados**, emparejados con la regla de la que hablan — la lista que alimenta
+ * la sección «Ya ocurrieron» y sus «Deshacer».
+ *
+ * Las reglas salen de [upcoming] y no de una llamada aparte: `GET /api/payments/upcoming` ya trae
+ * una entrada por regla (por eso «Próximos» tiene que filtrar lo que urge, ver [proximosQueUrgen])
+ * y con ella viene la `RecurringRule` entera. Una ocurrencia sin regla conocida se descarta en
+ * silencio: sin el nombre no hay nada que mostrar, y una fila que diga «Deshacer» sin decir de qué
+ * es peor que no estar.
+ *
+ * Se ordena por nombre y no por fecha de confirmación: es un inventario para revisar, no un
+ * registro cronológico, y el orden estable evita que las filas bailen entre recargas.
+ */
+fun ocurrenciasSelladas(
+    upcoming: List<UpcomingPayment>,
+    estados: List<OccurrenceState>,
+): List<Pair<RecurringRule, OccurrenceState>> {
+    val reglas = upcoming.associate { it.rule.id to it.rule }
+    return estados
+        .filter { it.occurred }
+        .mapNotNull { estado -> reglas[estado.ruleId]?.let { it to estado } }
+        .sortedBy { (rule, _) -> rule.name.lowercase() }
+}
+
+/**
+ * Los periodos **todavía abiertos que ya no urgen** — lo que quedaría sin ninguna puerta si
+ * «Próximos» fuera la única forma de contestar «¿ya ocurrió?».
+ *
+ * ### Por qué existe
+ *
+ * `GET /api/payments/upcoming` corre el vencimiento al mes siguiente cuando pasaron los días de
+ * gracia (`DEFAULT_GRACE_DAYS`, ver `DueDates.kt`), **aunque el dueño nunca haya confirmado el
+ * periodo en curso**. Apenas eso pasa, la regla deja de urgir y sale de «Próximos». Pero
+ * `GET /api/payments/occurrences` no corre nada: sigue preguntando por el mes en curso, así que
+ * su `OccurrenceState` queda abierto.
+ *
+ * En la pantalla vieja eso no se notaba porque el inventario «Por día del mes» listaba TODAS las
+ * reglas y ahí seguía la propuesta. Ese inventario no se mudó a Movimientos —su trabajo lo hacen
+ * ahora el filtro del chip y el resumen— y sin esta función el agujero es grande: un recurrente
+ * de principio de mes (el gimnasio del día 5) quedaría sin forma de confirmarse desde el día ~10
+ * hasta fin de mes. No se sella solo —eso estaría mal, ver [PropuestaOcurrencia]—, simplemente el
+ * mes siguiente se deja de preguntar y la oportunidad de anclarlo a un movimiento se pierde.
+ *
+ * Se excluyen las reglas que ya están en [proximos]: ahí la propuesta se pinta debajo de su fila y
+ * repetirla acá sería preguntar dos veces lo mismo en la misma pantalla.
+ *
+ * Mismo criterio que [ocurrenciasSelladas] para el resto: las reglas salen de [upcoming], una
+ * ocurrencia sin regla conocida se descarta en silencio, y el orden es por nombre para que las
+ * filas no bailen entre recargas.
+ */
+fun ocurrenciasAbiertasSinUrgencia(
+    upcoming: List<UpcomingPayment>,
+    estados: List<OccurrenceState>,
+    proximos: List<UpcomingPayment>,
+): List<Pair<RecurringRule, OccurrenceState>> {
+    val reglas = upcoming.associate { it.rule.id to it.rule }
+    val yaMostradas = proximos.map { it.rule.id }.toSet()
+    return estados
+        .filter { !it.occurred && it.ruleId !in yaMostradas }
+        .mapNotNull { estado -> reglas[estado.ruleId]?.let { it to estado } }
+        .sortedBy { (rule, _) -> rule.name.lowercase() }
+}
 
 /**
  * ¿Hay algo que preguntar para este recurrente?
