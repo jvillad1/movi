@@ -19,6 +19,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.currentMonthWindow
+import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
@@ -48,7 +49,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.BeforeTest
@@ -402,5 +405,34 @@ class DashboardRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
         }
         assertEquals(HttpStatusCode.BadRequest, bad.status)
+    }
+
+    /**
+     * **Esta ruta se quedó con el mes de calendario cuando nació el período financiero.**
+     *
+     * Con corte 1 —el default— las dos cuentas dan igual, así que nadie lo notó hasta que el
+     * dueño puso corte 25 (su día de pago) y Presupuestos se partió en dos: las barras salían de
+     * `spentByCategory` (mes civil) y la lista de movimientos de la misma pantalla usaba la
+     * ventana del período. Un presupuesto con su único gasto el 27 de agosto decía «$0».
+     *
+     * El test no depende del día en que corra. Se apoya en la frontera del período: el gasto
+     * puesto en el PRIMER milisegundo del período cuenta, y el puesto un milisegundo ANTES no.
+     * Con corte 25 el arranque del período nunca es un día 1, así que en cualquier fecha al
+     * menos una de las dos afirmaciones distingue la ventana correcta de la del mes civil.
+     */
+    @Test
+    fun `el gasto por categoria usa la ventana del periodo del usuario, no el mes civil`() = testApplication {
+        transaction {
+            Users.update({ Users.id eq userId }) { it[periodCutoffDay] = 25 }
+        }
+        val inicioDelPeriodo = currentPeriodWindow(25).startMillis
+        event("ev-dentro", savings, "EXPENSE", 40_000L, category = "Fútbol", timestamp = inicioDelPeriodo)
+        event("ev-fuera", savings, "EXPENSE", 999_000L, category = "Fútbol", timestamp = inicioDelPeriodo - 1)
+
+        wireApp()
+        val body = summary()
+
+        assertEquals(mapOf("Fútbol" to 40_000L), body.spentByCategory())
+        assertEquals(40_000L, body.long("monthSpent"))
     }
 }

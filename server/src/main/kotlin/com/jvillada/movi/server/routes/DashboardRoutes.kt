@@ -19,7 +19,10 @@ import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import com.jvillada.movi.server.time.AppClock
-import com.jvillada.movi.server.time.monthWindowOf
+import com.jvillada.movi.server.time.currentPeriodWindow
+import com.jvillada.movi.server.time.cutoffDayOf
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.periodoDe
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.Transaction
@@ -53,12 +56,28 @@ fun Route.dashboardRoutes() {
         val scope = runCatching { Scope.valueOf(raw.uppercase()) }.getOrNull()
             ?: return@get call.respond(HttpStatusCode.BadRequest, "Unknown scope: $raw")
 
-        // Misma convención de mes que `finance-summary` (FinanceRoutes.kt): el mes civil en la
-        // zona de la app (AppClock, Bogotá), del primer milisegundo del mes al primero del
-        // siguiente. Las dos rutas pasan por currentMonthWindow(): es el mismo "mes" para el usuario.
-        val now = AppClock.now()
-        val (monthStart, monthEnd) = monthWindowOf(now)
-        val month = "${now.year}-${now.monthValue.toString().padStart(2, '0')}"
+        // La ventana del PERÍODO del usuario, igual que `finance-summary` (FinanceRoutes.kt) y
+        // que las rutas de categorías. Con corte 1 —el default— da exactamente el mes civil de
+        // Bogotá, o sea lo mismo que decía esta ruta antes.
+        //
+        // **Esta ruta se quedó afuera cuando nació el período y nadie lo notó**, porque con corte
+        // 1 las dos cuentas dan igual. El día que el dueño puso corte 25 (su día de pago) las
+        // cifras se partieron en dos: Presupuestos pinta las barras con el `spentByCategory` que
+        // sale de acá —mes civil— mientras la lista de movimientos de la misma pantalla usa la
+        // ventana del período. Un presupuesto de «Mercado» con su único gasto el 27 de agosto
+        // decía «$0 de $2.000.000» y otro de «Fútbol» contaba 2 de sus 6 movimientos, con el
+        // renglón «este dispositivo tiene $121.210 que el total de arriba todavía no cuenta»
+        // culpando a una desincronización que no existía: las dos mitades miraban meses
+        // distintos. Es exactamente la contradicción que `currentPeriodWindow` vino a eliminar.
+        val cutoffDay = cutoffDayOf(uid)
+        val (monthStart, monthEnd) = currentPeriodWindow(cutoffDay)
+        // El período se llama por el mes en que TERMINA (ver PeriodoFinanciero en :core), no por
+        // el mes en que cae hoy: con corte 25, el 27 de agosto ya es «septiembre». Con corte 1
+        // devuelve el mes civil, igual que antes.
+        val month = periodoDe(
+            AppClock.now().toInstant().toEpochMilli(),
+            PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31)),
+        ).prefijo
 
         val summary = dbQuery {
             val accountTypeById = accountTypesFor(uid)

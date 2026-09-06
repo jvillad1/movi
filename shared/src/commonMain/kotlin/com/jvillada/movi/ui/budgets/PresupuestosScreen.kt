@@ -714,7 +714,9 @@ private fun BudgetSheet(
                 Hairline()
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    text = "Hay ${formatCOP(faltante)} contados en esta categoría que este dispositivo todavía no bajó.",
+                    // Igual que el renglón de más abajo: se nombra la diferencia, no una causa
+                    // que no se puede verificar desde acá.
+                    text = "Hay ${formatCOP(faltante)} contados en esta categoría que no aparecen en esta lista.",
                     fontSize = 11.5.sp,
                     color = MinTextMute,
                     lineHeight = 15.sp,
@@ -740,15 +742,25 @@ private fun BudgetSheet(
                         color = MinTextMute,
                     )
                 }
-                // Si el server contó plata que este aparato todavía no bajó, se dice — no se
-                // deja que el dueño reste dos números y desconfíe de los dos.
+                // Si los dos totales no coinciden se dice — no se deja que el dueño reste dos
+                // números y desconfíe de los dos.
+                //
+                // **Se nombra la diferencia, no su causa.** Antes esto afirmaba que la plata
+                // «todavía no bajó a este dispositivo», y esa explicación fue falsa justo cuando
+                // más importaba: el dueño puso su corte de período en el día 25 y el resumen del
+                // server seguía sumando el mes civil (ver `DashboardRoutes`), así que las dos
+                // mitades de esta misma pantalla miraban meses distintos. El renglón culpaba a
+                // una desincronización inexistente y mandaba a buscar el problema al lado
+                // equivocado. La causa está arreglada; el renglón queda, porque un desacuerdo
+                // real (un SMS que otro aparato ya subió) sigue siendo posible — pero ahora
+                // constata lo que se puede ver y no adivina por qué.
                 if (faltante != 0L) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = if (faltante > 0L)
-                            "Hay ${formatCOP(faltante)} más contados en esta categoría que todavía no bajaron a este dispositivo."
+                            "El total de arriba cuenta ${formatCOP(faltante)} más de lo que suma esta lista."
                         else
-                            "Este dispositivo tiene ${formatCOP(-faltante)} que el total de arriba todavía no cuenta.",
+                            "Esta lista suma ${formatCOP(-faltante)} más de lo que cuenta el total de arriba.",
                         fontSize = 11.sp,
                         color = MinTextMute,
                         lineHeight = 15.sp,
