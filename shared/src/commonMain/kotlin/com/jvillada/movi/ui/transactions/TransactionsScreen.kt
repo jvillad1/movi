@@ -728,14 +728,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     /**
      * La regla que el dueño pidió editar tocando su renglón en «Próximos».
      *
-     * En la pantalla vieja ese toque abría la hoja de editar (`RecurrentesScreen.editar()`), y esa
-     * es la única acción que la fila prometía: relocalizarla como «no hace nada» habría sido
-     * perder función, y mandarla a la pantalla vieja habría sido justo lo que este PR viene a
-     * terminar. Es la misma hoja, en modo edición, que ya abre [HojaDelMovimiento] desde el
-     * detalle de un movimiento (PR 1).
+     * En la pantalla «Recurrentes» —la que el rediseño de 2026-09 disolvió acá adentro— ese toque
+     * abría la hoja de editar, y esa es la única acción que la fila prometía: relocalizarla como
+     * «no hace nada» habría sido perder función, y mandarla a la pantalla vieja habría sido justo
+     * lo que el rediseño venía a terminar. Es la misma hoja, en modo edición, que ya abre
+     * [HojaDelMovimiento] desde el detalle de un movimiento (PR 1).
      *
      * La regla que se pasa sale de `upcomingRecurrentes`, que se recarga al activar el chip y tras
-     * cada cambio (`recurrentesReloadKey`) — la precaución que `editar()` documentaba: prellenar el
+     * cada cambio (`recurrentesReloadKey`) — la precaución que esa pantalla documentaba: prellenar el
      * formulario con una fila vieja hace que «Guardar cambios» reescriba lo que el dueño ya había
      * corregido.
      */
@@ -1553,7 +1553,7 @@ private fun MovementSingleRow(
 
 /**
  * PR 2 del rediseño de Recurrentes (2026-09): el card de «Flujo libre», mudado de la pantalla
- * `RecurrentesScreen` a Movimientos —solo visible con el chip «Recurrentes» activo, ver
+ * «Recurrentes» (ya borrada) a Movimientos —solo visible con el chip «Recurrentes» activo, ver
  * [mostrarResumenDeRecurrentes]—. Las cifras salen de [resumenRecurrentes], la misma función
  * pura que ya usaba esa pantalla y el acceso «Recurrentes» del Inicio: mudar DÓNDE se muestra
  * no puede hacer que el número discrepe de los demás lugares que cuentan lo mismo.
@@ -1644,7 +1644,7 @@ private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
 /**
  * Una candidata «detectada · por confirmar», en su nuevo hogar dentro de Movimientos.
  *
- * Mismo contenido que la fila que tenía `RecurrentesScreen` (nombre, monto en su propia moneda,
+ * Mismo contenido que la fila que tenía la pantalla «Recurrentes» (nombre, monto en su moneda,
  * cuántos meses la vio el detector y su día de cobro, el aviso de «ya la tienes anotada» cuando
  * corresponde) pero con el lenguaje visual de [RecurringOfferBar] —un card compacto, no una hoja
  * modal— que es lo que esta pantalla ya usa para ofrecimientos de esta misma familia.

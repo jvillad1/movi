@@ -78,9 +78,9 @@ import com.jvillada.movi.ui.components.MinCardVariant
  * - "enabled"     -> ya funciona, no hay nada que avisar.
  * - "unsupported" -> la plataforma (iOS/Android nativo hoy) no tiene ninguna
  *                    instrucción posible para el usuario, así que tampoco se avisa.
- * - "disabled" / "denied" -> el aviso aplica; RecurrentesScreen distingue esos dos
+ * - "disabled" / "denied" -> el aviso aplica; [ReminderWarningBanner] distingue esos dos
  *                    para mostrar una acción ("Activar") o una instrucción
- *                    ("reactiva en el navegador"), pero ambos cuentan como "avisar".
+ *                    ("reactívalas en el navegador"), pero ambos cuentan como "avisar".
  *
  * **DEFERIDO (no resuelto, y no cerrado):** si el navegador dice "enabled" pero el server ya no
  * tiene claves VAPID (`canales.push == false`), el push tampoco saldría y acá no se avisa nada.
@@ -206,7 +206,7 @@ fun ReminderOptInField(
 
     if (PushOptIn.supported) {
         LaunchedEffect(pushRefreshTick) {
-            // Mismo gate y misma cadencia que RecurrentesScreen: el permiso del navegador se
+            // Mismo gate y misma cadencia que Movimientos: el permiso del navegador se
             // resuelve async, así que se relee un rato para que el aviso desaparezca solo.
             repeat(20) {
                 kotlinx.coroutines.delay(600)
@@ -303,9 +303,10 @@ enum class ReminderWarningSource { UPCOMING_LIST, OPT_IN_CHECKBOX }
  * Aviso de "tus recordatorios no te van a llegar", con la acción de activar notificaciones
  * cuando la hay.
  *
- * Vive acá y no dentro de `RecurrentesScreen` porque lo usan dos lugares: la pantalla (cuando
- * hay pagos próximos y no hay canal) y [ReminderOptInField] (cuando la casilla queda marcada y
- * no hay canal). Duplicarlo habría dejado dos textos que se pueden desincronizar.
+ * Vive acá y no adentro de una pantalla porque lo usan dos lugares: Movimientos con el chip
+ * «Recurrentes» (cuando hay pagos próximos y no hay canal) y [ReminderOptInField] (cuando la
+ * casilla queda marcada y no hay canal). Duplicarlo habría dejado dos textos que se pueden
+ * desincronizar.
  */
 @Composable
 fun ReminderWarningBanner(

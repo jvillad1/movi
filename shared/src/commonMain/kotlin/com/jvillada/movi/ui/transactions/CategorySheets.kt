@@ -247,9 +247,9 @@ fun ChangeCategorySheet(
      * PR 1 del rediseño de Recurrentes: cuando este movimiento **ya** es la ocurrencia de una
      * [RecurringRule] existente, tocar la fila de [SeccionEstoSeRepite] pide editar esa regla acá
      * mismo en vez del mensaje mudo de antes («edítalo desde Recurrentes» — una promesa de
-     * navegación que dejó de ser cierta apenas esa pantalla empiece a desaparecer). Quien llama
+     * navegación que dejó de ser cierta en cuanto esa pantalla desapareció). Quien llama
      * abre [com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet] con `existing = regla`, el
-     * mismo patrón que ya usa `RecurrentesScreen.editar()`.
+     * mismo patrón con el que la pantalla «Recurrentes» editaba una regla mientras existió.
      *
      * `null` = no se ofrece la edición en el momento — la fila se explica igual, solo sin la
      * acción tappeable. Es el mismo criterio que [onMarcarComoRecurrente]: una acción sin dónde
