@@ -375,4 +375,23 @@ class RecurrentesLogicTest {
     fun `volver a elegir una cuenta despues de Sin cuenta deshace el borrado`() {
         assertEquals("acc-2", cuentaParaElWire("acc-2", elDuenoEligioSinCuenta = false))
     }
+
+    // ── candidatasSinConfirmar (PR 2 del rediseño de Recurrentes) ─────────────
+
+    @Test
+    fun `candidatasSinConfirmar deja afuera lo confirmado, lo descartado y lo activado solo`() {
+        val candidata = sub("Disney+", 25_900, estado = SubStatus.CANDIDATE)
+        val confirmada = sub("Netflix", 44_900, estado = SubStatus.CONFIRMED)
+        val descartada = sub("Spotify", 16_900, estado = SubStatus.DISMISSED)
+        val automatica = sub("HBO Max", 29_900, estado = SubStatus.AUTO)
+
+        val resultado = candidatasSinConfirmar(listOf(candidata, confirmada, descartada, automatica))
+
+        assertEquals(listOf(candidata), resultado)
+    }
+
+    @Test
+    fun `candidatasSinConfirmar sin ninguna candidata devuelve vacio`() {
+        assertTrue(candidatasSinConfirmar(listOf(sub("Netflix", 44_900, estado = SubStatus.CONFIRMED))).isEmpty())
+    }
 }

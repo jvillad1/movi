@@ -43,6 +43,19 @@ import kotlin.math.roundToLong
 fun claveDeNombre(nombre: String): String = claveComparableDeNombre(nombre)
 
 /**
+ * PR 2 del rediseño de Recurrentes (2026-09): las suscripciones que el detector propuso y el
+ * dueño todavía no revisó — ni confirmó ni descartó.
+ *
+ * Extraída de lo que ya calculaba [RecurrentesScreen] en línea (`candidatas`) para que
+ * Movimientos —que ahora también necesita esta misma lista, en su propia sección «Detectadas ·
+ * por confirmar»— la comparta en vez de recalcularla a mano. Pura y testeada por la misma razón
+ * que el resto de este archivo: dos copias del mismo filtro es exactamente el defecto que este
+ * archivo existe para evitar.
+ */
+fun candidatasSinConfirmar(subs: List<Subscription>): List<Subscription> =
+    subs.filter { it.status == SubStatus.CANDIDATE }
+
+/**
  * Cuánto pesa una suscripción en pesos, o `null` si no se puede saber.
  *
  * Replica lo que hace el server en `resultFor` (mismo redondeo por fila), con una diferencia

@@ -104,4 +104,16 @@ class ChipRecurrentesTest {
     fun `el rotulo del chip nuevo esta en el indice nuevo`() {
         assertEquals("Recurrentes", CHIPS_DE_MOVIMIENTOS[CHIP_RECURRENTES])
     }
+
+    // ── PR 2 del rediseño: el resumen de flujo libre y las candidatas ─────────
+
+    @Test
+    fun `el resumen de flujo libre solo se muestra con el chip Recurrentes activo`() {
+        assertTrue(mostrarResumenDeRecurrentes(CHIP_RECURRENTES))
+        assertFalse(mostrarResumenDeRecurrentes(CHIP_TODO))
+        assertFalse(mostrarResumenDeRecurrentes(CHIP_GASTOS))
+        assertFalse(mostrarResumenDeRecurrentes(CHIP_INGRESOS))
+        assertFalse(mostrarResumenDeRecurrentes(CHIP_POR_CONFIRMAR))
+        assertFalse(mostrarResumenDeRecurrentes(CHIP_ENTRE_CUENTAS))
+    }
 }

@@ -51,6 +51,9 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.SubStatus
+import com.jvillada.movi.shared.model.Subscription
+import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
@@ -60,8 +63,13 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
+import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
+import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
+import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
+import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
+import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -305,6 +313,18 @@ const val CHIP_RECURRENTES = 5
 
 /** Los rótulos de los chips, en el orden de sus índices. */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
+
+/**
+ * PR 2 del rediseño de Recurrentes (2026-09): ¿se pinta el card de «Flujo libre» y la sección de
+ * candidatas por confirmar?
+ *
+ * Solo con el chip «Recurrentes» activo — en «Todo» o «Gastos» esas dos piezas hablan de una cosa
+ * que no tiene nada que ver con lo que el chip pidió ver, y encima duplicarían el «Flujo libre»
+ * que ya existía en la pantalla vieja: acá es un resumen DEL FILTRO, no un segundo total suelto
+ * en medio de la lista. Función aparte (en vez de comparar `chip == CHIP_RECURRENTES` en el
+ * `@Composable`) para poder testear la decisión sin montar Compose.
+ */
+fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
 
 /**
  * ¿Este movimiento entra en el chip [chip]?
@@ -600,10 +620,104 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     // otra pantalla (o esta misma en una visita anterior), no hay ningún viaje de red de más.
     var reglasRecurrentes by remember { mutableStateOf<List<RecurringRule>>(emptyList()) }
     var nombresDeSuscripcionesActivas by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(refreshKey, refreshTick) {
+    // Sube tras cada Confirmar / No es / Buscar cobros, para volver a traer las listas sin
+    // esperar a `refreshKey` (que dispararía además una recarga innecesaria de los movimientos).
+    var recurrentesReloadKey by remember { mutableStateOf(0) }
+    // `recurrentesReloadKey` también es clave acá, y no solo de las candidatas: confirmar una
+    // candidata la vuelve un cobro ACTIVO, y de eso dependen el filtro del chip y la marca de
+    // cada fila (ver [nombreRecurrenteDe]). Sin esta clave, el dueño confirmaba «Netflix» y sus
+    // movimientos seguían sin reconocerse hasta salir de la pantalla y volver a entrar.
+    LaunchedEffect(refreshKey, refreshTick, recurrentesReloadKey) {
         val (reglas, cobros) = RecurringOfferGate.listasParaMovimientos()
         reglasRecurrentes = reglas
         nombresDeSuscripcionesActivas = nombresDeSuscripcionesQueYaSuman(cobros)
+    }
+
+    // PR 2 del rediseño de Recurrentes: el «Flujo libre» y las candidatas «por confirmar» que
+    // vivían solo en la pantalla vieja. A diferencia de `reglasRecurrentes` de arriba —que solo
+    // necesita reconocer un nombre, y ahí una lista de hace un rato no hace daño— acá el dueño
+    // viene a hacer algo con lo que ve (confirmar o descartar una candidata), así que se trae
+    // FRESCO cada vez que el chip se activa, sin pasar por el cache de `RecurringOfferGate`: una
+    // candidata que el detector ya encontró en otra sesión, o que otro dispositivo ya resolvió,
+    // tiene que verse tal cual está, no la última que ese cache recuerde. Es el mismo endpoint
+    // que `listasParaMovimientos` ya usa; la diferencia es que acá SÍ se repite la llamada.
+    var subsParaRecurrentes by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
+    var subsParaRecurrentesOk by remember { mutableStateOf(false) }
+    // Ids con una acción en vuelo, para no dejar tocar dos veces la misma candidata mientras se
+    // guarda — mismo motivo que `marcando` en la pantalla vieja.
+    var candidatasEnVuelo by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var buscandoCobros by remember { mutableStateOf(false) }
+    val coroutineRecurrentes = rememberCoroutineScope()
+
+    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick) {
+        if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
+        runCatching { Repositories.wallets.getSubscriptions() }
+            .onSuccess {
+                subsParaRecurrentes = it
+                subsParaRecurrentesOk = true
+                // El gate queda con lo mismo que se acaba de traer — igual que hace el
+                // re-escaneo de la pantalla vieja (`rescan()`), para que la barra de «¿esto se
+                // repite?» de después de guardar no vuelva a proponer una candidata recién
+                // confirmada acá.
+                RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
+            }
+            .onFailure { error = it.toUserMessage() }
+    }
+
+    // Las CIFRAS solo se pintan con la fuente fresca ya cargada — un total a medias es peor que
+    // ningún total, mismo criterio que la pantalla vieja (`reglasOk && cobrosOk`).
+    val resumenRecurrentesDelChip = if (subsParaRecurrentesOk) {
+        resumenRecurrentes(reglasRecurrentes, subsParaRecurrentes)
+    } else null
+    val candidatasRecurrentes = remember(subsParaRecurrentes) {
+        candidatasSinConfirmar(subsParaRecurrentes.subscriptions)
+    }
+    // Para avisar en una candidata que el dueño ya la tiene anotada a mano, antes de confirmarla.
+    val clavesDeReglasRecurrentes = remember(reglasRecurrentes) {
+        reglasRecurrentes.map { claveDeNombre(it.name) }.toSet()
+    }
+
+    /**
+     * **Volver a barrer los movimientos buscando cobros que se repiten.**
+     *
+     * Se mudó acá con el resto de Recurrentes, y no era opcional: el barrido automático corre en
+     * UN solo lugar del server —después de importar un extracto (`StatementRoutes`)— y el día a
+     * día del dueño entra por SMS, que nunca lo dispara. Sin este botón, sacar la pantalla vieja
+     * del menú dejaba el detector sin ninguna forma de correr para el camino que él más usa.
+     *
+     * Vive junto al resumen y no dentro de «Detectadas · por confirmar»: esa sección solo existe
+     * cuando YA hay candidatas, y buscar cobros es justamente lo que se hace cuando no hay
+     * ninguna todavía.
+     */
+    fun buscarCobros() {
+        if (buscandoCobros) return
+        buscandoCobros = true
+        error = null
+        coroutineRecurrentes.launch {
+            runCatching { Repositories.wallets.detectSubscriptions() }
+                .onSuccess {
+                    subsParaRecurrentes = it
+                    subsParaRecurrentesOk = true
+                    // Un barrido puede DESCUBRIR cobros: el gate tiene que enterarse, o la barra
+                    // de «¿esto se repite?» ofrecería una regla que duplica uno recién detectado.
+                    RecurringOfferGate.recordarLoQueYaHay(reglas = null, suscripciones = it.subscriptions)
+                    // Y las listas del chip también, que es lo que decide qué filas se reconocen.
+                    recurrentesReloadKey++
+                }
+                .onFailure { error = it.toUserMessage() }
+            buscandoCobros = false
+        }
+    }
+
+    fun confirmarCandidata(sub: Subscription, status: SubStatus) {
+        if (sub.id in candidatasEnVuelo) return
+        candidatasEnVuelo = candidatasEnVuelo + sub.id
+        coroutineRecurrentes.launch {
+            runCatching { Repositories.wallets.updateSubscription(sub.id, sub.copy(status = status)) }
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recurrentesReloadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            candidatasEnVuelo = candidatasEnVuelo - sub.id
+        }
     }
 
     LaunchedEffect(error) {
@@ -754,6 +868,44 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
+            // PR 2 del rediseño de Recurrentes: el resumen del filtro y lo que falta revisar.
+            // Solo con el chip activo — ver [mostrarResumenDeRecurrentes] — y ARRIBA de la lista
+            // de días (que acá abajo son los movimientos que YA se reconocen como recurrentes;
+            // esto es lo que resume ese total y lo que todavía no se confirmó ni descartó).
+            if (mostrarResumenDeRecurrentes(activeFilter)) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                        // «Buscar cobros» va en este encabezado —que se pinta siempre con el chip
+                        // activo— y no en el de las candidatas, que solo existe cuando ya hay
+                        // alguna. Ver [buscarCobros].
+                        MinSectionHeader(
+                            title = "Recurrentes",
+                            action = if (buscandoCobros) "Buscando…" else "Buscar cobros",
+                            onAction = { buscarCobros() },
+                        )
+                        ResumenFlujoLibreCard(resumenRecurrentesDelChip)
+                    }
+                }
+                if (candidatasRecurrentes.isNotEmpty()) {
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                            MinSectionHeader(title = "Detectadas · por confirmar", count = candidatasRecurrentes.size)
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                candidatasRecurrentes.forEach { s ->
+                                    CandidataSuscripcionCard(
+                                        sub = s,
+                                        yaEsRegla = claveDeNombre(s.displayName) in clavesDeReglasRecurrentes,
+                                        enVuelo = s.id in candidatasEnVuelo,
+                                        onConfirmar = { confirmarCandidata(s, SubStatus.CONFIRMED) },
+                                        onDescartar = { confirmarCandidata(s, SubStatus.DISMISSED) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (!loading && visibleDays.isEmpty()) {
                 item {
                     if (searchQuery.isNotBlank()) {
@@ -1125,5 +1277,175 @@ private fun MovementSingleRow(
             color = colorDelTono(tono),
             letterSpacing = (-0.3).sp,
         )
+    }
+}
+
+/**
+ * PR 2 del rediseño de Recurrentes (2026-09): el card de «Flujo libre», mudado de la pantalla
+ * `RecurrentesScreen` a Movimientos —solo visible con el chip «Recurrentes» activo, ver
+ * [mostrarResumenDeRecurrentes]—. Las cifras salen de [resumenRecurrentes], la misma función
+ * pura que ya usaba esa pantalla y el acceso «Recurrentes» del Inicio: mudar DÓNDE se muestra
+ * no puede hacer que el número discrepe de los demás lugares que cuentan lo mismo.
+ *
+ * `cifras == null` mientras la fuente fresca todavía no llegó (ver el `LaunchedEffect` que la
+ * carga en [TransactionsScreen]) — un total a medias es peor que un guion.
+ */
+@Composable
+private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(20.dp),
+    ) {
+        Text("Flujo libre", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = cifras?.let { formatCOP(it.flujoLibre) } ?: "—",
+            fontSize = 28.sp,
+            fontFamily = FontFamily.Monospace,
+            color = MinText,
+            letterSpacing = (-1.1).sp,
+            lineHeight = 28.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Ingresos recurrentes − Gastos recurrentes",
+            fontSize = 12.sp,
+            color = MinTextMute,
+        )
+        Spacer(Modifier.height(14.dp))
+        Hairline()
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Ingresos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Medium,
+                    color = MinIncome,
+                    letterSpacing = (-0.3).sp,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Gastos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = cifras?.let { formatCOP(it.gastos) } ?: "—",
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.3).sp,
+                )
+            }
+        }
+        // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
+        // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
+        if (cifras != null && cifras.sinConvertir > 0) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = if (cifras.sinConvertir == 1) {
+                    "Este total no incluye 1 cobro en otra moneda: no pudimos convertirlo a pesos."
+                } else {
+                    "Este total no incluye ${cifras.sinConvertir} cobros en otra moneda: no pudimos " +
+                        "convertirlos a pesos."
+                },
+                fontSize = 11.sp,
+                color = MinWarn,
+                lineHeight = 15.sp,
+            )
+        } else if (cifras != null && cifras.hayMonedaExtranjera) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Lo que te cobran en dólares entra al total convertido a pesos con la tasa " +
+                    "de cambio más reciente que pudimos consultar.",
+                fontSize = 11.sp,
+                color = MinTextMute,
+                lineHeight = 15.sp,
+            )
+        }
+    }
+}
+
+/**
+ * Una candidata «detectada · por confirmar», en su nuevo hogar dentro de Movimientos.
+ *
+ * Mismo contenido que la fila que tenía `RecurrentesScreen` (nombre, monto en su propia moneda,
+ * cuántos meses la vio el detector y su día de cobro, el aviso de «ya la tienes anotada» cuando
+ * corresponde) pero con el lenguaje visual de [RecurringOfferBar] —un card compacto, no una hoja
+ * modal— que es lo que esta pantalla ya usa para ofrecimientos de esta misma familia.
+ */
+@Composable
+private fun CandidataSuscripcionCard(
+    sub: Subscription,
+    yaEsRegla: Boolean,
+    enVuelo: Boolean,
+    onConfirmar: () -> Unit,
+    onDescartar: () -> Unit,
+) {
+    MinCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(sub.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
+            Text(
+                text = formatMoney(sub.amount, sub.currency),
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium,
+                color = MinText,
+            )
+        }
+        Text(
+            text = "Visto ${sub.occurrences} ${if (sub.occurrences == 1) "mes" else "meses"} · día ${sub.dayOfMonth}",
+            fontSize = 12.sp,
+            color = MinTextMute,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (yaEsRegla) {
+            Text(
+                text = "Ya lo tienes como recurrente",
+                fontSize = 12.sp,
+                color = MinWarn,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AccionCandidataChip(
+                label = when {
+                    enVuelo -> "Guardando…"
+                    yaEsRegla -> "Confirmar igual"
+                    else -> "Confirmar"
+                },
+                primary = true,
+                habilitado = !enVuelo,
+                onClick = onConfirmar,
+            )
+            AccionCandidataChip(label = "No es", primary = false, habilitado = !enVuelo, onClick = onDescartar)
+        }
+    }
+}
+
+/** Los botones «Confirmar» / «No es» de una candidata — mismo lenguaje que el de la hoja vieja. */
+@Composable
+private fun AccionCandidataChip(label: String, primary: Boolean, habilitado: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (primary) MinText else MinSurfaceContainerLow)
+            .clickable(enabled = habilitado, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) MinBg else MinText)
     }
 }

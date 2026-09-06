@@ -12,7 +12,6 @@ import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PieChart
-import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -41,9 +40,12 @@ val railDestinations: List<RailDestination> = listOf(
     RailDestination(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet),
     RailDestination(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard),
     RailDestination(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart),
-    // Mismo ícono con el que Recurrentes figuraba en Más — el rótulo y el ícono no cambian
-    // al mudarse de superficie.
-    RailDestination(NavTab.RECURRING, "Recurrentes", Icons.Rounded.Repeat),
+    // PR 2 del rediseño de Recurrentes (2026-09): Recurrentes deja de ser un destino propio del
+    // rail — «Flujo libre» y las candidatas por confirmar viven ahora en Movimientos (chip
+    // «Recurrentes»), y editar un recurrente existente se hace desde el detalle de un movimiento
+    // (PR 1). `NavTab.RECURRING` y `Screen.Recurrentes` se quedan sin borrar por ahora (código
+    // muerto a propósito): los quita una PR de limpieza posterior, una vez que también se
+    // retargeteen los enlaces de «Próximos pagos» del Inicio (fuera del alcance de esta PR).
     RailDestination(NavTab.MORE, "Más", Icons.Rounded.GridView),
 )
 

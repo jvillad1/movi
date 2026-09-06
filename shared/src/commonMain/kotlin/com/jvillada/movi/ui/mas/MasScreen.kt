@@ -54,12 +54,13 @@ private val items = listOf(
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
     MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
-    // Ola 8: sin «Suscripciones» — una suscripción es un recurrente, y esta entrada las abre a
-    // todas (lista única con su grupo de detectadas por confirmar).
-    MasItem("Recurrentes",  Icons.Rounded.Repeat,           Color(0xFFFFD479), Color(0x1AFFD479), Screen.Recurrentes),
-    // Ola 10: la única puerta a «Categorías». Va junto a Presupuestos y Recurrentes —las otras
-    // dos pantallas que se cruzan con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño
-    // va a acordarse de que quería arreglar un nombre.
+    // PR 2 del rediseño de Recurrentes (2026-09): sin entrada propia — «Flujo libre» y las
+    // candidatas por confirmar se mudaron a Movimientos (chip «Recurrentes») y editar un
+    // recurrente existente ya se hacía desde el detalle de un movimiento (PR 1). `Screen.Recurrentes`
+    // sigue existiendo (código muerto a propósito, ver `MinNavRail.kt`) hasta la PR de limpieza.
+    // Ola 10: la única puerta a «Categorías». Va junto a Presupuestos —la otra pantalla que se
+    // cruza con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño va a acordarse de que
+    // quería arreglar un nombre.
     MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
     // Ola 18: los papeles. Va PEGADO a «Extractos» porque el importador archiva ahí lo que pasa
     // por él — quien sube un extracto y después se pregunta «¿dónde quedó el PDF?» busca al lado.
