@@ -156,17 +156,27 @@ fun isOrphanedTransferLeg(event: FinancialEvent): Boolean = event.category == OR
 
 /**
  * **De qué color va el monto de un renglón**: rojo si es plata que salió, verde si es plata que
- * entró, gris si no fue ni lo uno ni lo otro.
+ * entró, azul si fue de una cuenta suya a otra, gris si no fue ninguna de las tres cosas.
  *
  * Hasta acá el gasto iba del color del texto normal y solo el ingreso iba en verde, así que a
  * simple vista un día de puros gastos y un día sin nada se parecían. El dueño lo pidió tal cual:
  * *«que el color de cada movimiento indique rojo gasto / verde ingreso»*.
+ *
+ * `ENTRE_CUENTAS` se sumó después: el dueño, mirando traspasos y cuotas ya en gris, preguntó si
+ * no merecían su propio color — *«Ingresos verde, gastos rojo, pagos de cuotas / traspasos otro
+ * color?»*. Antes de esto, un traspaso y la pata huérfana de uno (o la apertura de una cuenta)
+ * se veían exactamente igual: los dos NEUTRO, los dos grises. Ahora el gris queda para lo que de
+ * verdad no tiene nada que contar (ver [tonoDelEvento]) y el azul es solo para lo que SÍ es un
+ * hecho identificable — plata entre sus propias cuentas — así que las dos cosas dejan de
+ * confundirse a simple vista.
  */
 enum class TonoDelMonto {
     /** Plata que salió del bolsillo. Rojo y con «−». */
     GASTO,
     /** Plata que entró al bolsillo. Verde y con «+». */
     INGRESO,
+    /** Plata que fue de una cuenta suya a otra: traspaso, cuota o pago de tarjeta. Azul y sin signo. */
+    ENTRE_CUENTAS,
     /** No movió plata del bolsillo. Gris y sin signo. */
     NEUTRO,
 }
@@ -196,12 +206,15 @@ fun tonoDelEvento(event: FinancialEvent): TonoDelMonto = when {
 
 /**
  * El tono de un renglón. Un **par** —traspaso, cuota, pago de tarjeta, leído como un solo hecho—
- * es siempre neutro: la plata no entró ni salió, cambió de cuenta. Ponerle un signo obligaría a
- * elegir el punto de vista de una de las dos cuentas, que es justo la confusión que el renglón
- * doble vino a sacar (ver [TransferRow]).
+ * es siempre `ENTRE_CUENTAS`, nunca gasto ni ingreso: la plata no entró ni salió, cambió de
+ * cuenta. Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
+ * justo la confusión que el renglón doble vino a sacar (ver [TransferRow]) — pero eso solo dice
+ * que no lleva signo, no que tenga que verse igual que un NEUTRO real (la apertura de una cuenta,
+ * una pata huérfana): son un hecho identificable y el dueño los quiere distinguibles a simple
+ * vista (ver [TonoDelMonto]).
  */
 fun tonoDelRenglon(row: MovementRow): TonoDelMonto = when (row) {
-    is MovementRow.Transfer -> TonoDelMonto.NEUTRO
+    is MovementRow.Transfer -> TonoDelMonto.ENTRE_CUENTAS
     is MovementRow.Single -> tonoDelEvento(row.event)
 }
 
@@ -908,16 +921,20 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 fun colorDelTono(tono: TonoDelMonto): Color = when (tono) {
     TonoDelMonto.GASTO -> MinExpense
     TonoDelMonto.INGRESO -> MinIncome
+    TonoDelMonto.ENTRE_CUENTAS -> MinTransfer
     TonoDelMonto.NEUTRO -> MinTextMute
 }
 
 /**
- * Un traspaso, leído como un solo hecho: "Traspaso · Ahorros → CDT" y el monto **sin signo**.
+ * Un traspaso, leído como un solo hecho: "Traspaso · Ahorros → CDT" y el monto **sin signo**, en
+ * el azul de [TonoDelMonto.ENTRE_CUENTAS].
  *
  * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
  * Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
  * exactamente la confusión que este renglón viene a sacar. El signo de cada pata sí aparece, con
- * su cuenta al lado, en el detalle de cada cuenta.
+ * su cuenta al lado, en el detalle de cada cuenta. El color, en cambio, sí distingue esto de un
+ * NEUTRO real (ver [tonoDelRenglon]): el dueño lo pidió para no confundir un traspaso con un
+ * movimiento que de verdad no cuenta nada.
  */
 @Composable
 private fun TransferRow(
@@ -950,7 +967,7 @@ private fun TransferRow(
             fontSize = 14.5.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
-            color = MinTextMute,
+            color = colorDelTono(tonoDelRenglon(row)),
             letterSpacing = (-0.3).sp,
         )
     }
@@ -1015,7 +1032,11 @@ private fun MovementSingleRow(
             text = when (tono) {
                 TonoDelMonto.INGRESO -> "+${formatCOP(tx.amount)}"
                 TonoDelMonto.GASTO -> "−${formatCOP(tx.amount)}"
-                TonoDelMonto.NEUTRO -> formatCOP(tx.amount)
+                // `tonoDelEvento` (lo único que alimenta `tono` acá) nunca devuelve
+                // ENTRE_CUENTAS — ese tono es solo de [tonoDelRenglon], para el par de
+                // [MovementRow.Transfer] que se pinta en TransferRow, no acá. Rama exhaustiva
+                // igual, con el mismo criterio de NEUTRO: sin signo.
+                TonoDelMonto.NEUTRO, TonoDelMonto.ENTRE_CUENTAS -> formatCOP(tx.amount)
             },
             fontSize = 14.5.sp,
             fontFamily = FontFamily.Monospace,
