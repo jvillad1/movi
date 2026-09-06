@@ -1,7 +1,9 @@
 package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.claveComparableDeNombre
+import com.jvillada.movi.shared.model.montoMensualEquivalente
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -10,6 +12,7 @@ import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatMoney
 import kotlin.math.roundToLong
 
 /**
@@ -69,11 +72,20 @@ fun candidatasSinConfirmar(subs: List<Subscription>): List<Subscription> =
  * Devuelve `null` en dos casos: una moneda que no es COP ni USD (hoy imposible: el alta valida
  * y el detector solo produce esas dos, pero el día que entre un EUR el server lo contaría como
  * 0 y el cliente lo mostraría como faltante en vez de tragárselo), y un USD sin tasa.
+ *
+ * **Ola 16 — prorratea primero y convierte después**, en ese orden, porque es el orden exacto
+ * que usa `resultFor`: al revés, el redondeo del medio daría otro número y los dos totales que
+ * dicen contar lo mismo se separarían por pesos. La división en sí no está acá ni allá, está en
+ * `:core` ([montoMensualEquivalente]), que es lo que hace que no puedan discrepar. Para una
+ * suscripción MENSUAL devuelve `amount` sin tocarlo, así que nada de lo que ya existía cambió.
  */
-fun copDeSuscripcion(sub: Subscription, usdToCop: Double): Long? = when {
-    sub.currency == "COP" -> sub.amount
-    sub.currency == "USD" && usdToCop > 0.0 -> (sub.amount * usdToCop).roundToLong()
-    else -> null
+fun copDeSuscripcion(sub: Subscription, usdToCop: Double): Long? {
+    val mensual = sub.montoMensualEquivalente()
+    return when {
+        sub.currency == "COP" -> mensual
+        sub.currency == "USD" && usdToCop > 0.0 -> (mensual * usdToCop).roundToLong()
+        else -> null
+    }
 }
 
 /**
@@ -128,6 +140,12 @@ sealed class Recurrente {
  * @param hayMonedaExtranjera hay dólares que SÍ entraron a [gastos]. Mira lo que entró y no lo
  *   que existe: una suscripción en dólares excluida por duplicada no justifica avisar sobre una
  *   conversión que no se hizo.
+ * @param hayCobrosAnuales hay cobros de una vez al año que SÍ entraron a [gastos], repartidos en
+ *   doce. Es lo mismo que [hayMonedaExtranjera] pero para la otra transformación que le pasa a
+ *   una fila entre la lista y el total, y existe por el mismo motivo: sin decirlo, el «Flujo
+ *   libre» muestra $30.825 de algo que la lista de abajo dice que cuesta $369.900, y el dueño no
+ *   tiene forma de saber cuál de los dos números está mal. Mira lo que ENTRÓ, así que un cobro
+ *   anual excluido por duplicado no dispara una explicación sobre un prorrateo que no se usó.
  */
 data class ResumenRecurrentes(
     val items: List<Recurrente>,
@@ -135,6 +153,7 @@ data class ResumenRecurrentes(
     val gastos: Long,
     val sinConvertir: Int,
     val hayMonedaExtranjera: Boolean,
+    val hayCobrosAnuales: Boolean = false,
 ) {
     val flujoLibre: Long get() = ingresos - gastos
 }
@@ -157,6 +176,7 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
     val gastosDeSuscripciones: Long
     val sinConvertir: Int
     val dolaresEnElTotal: Boolean
+    val anualesEnElTotal: Boolean
     if (!huboExclusiones) {
         // Nada que restar: el total que ya calculó el server es exacto — y esta rama es además
         // la que salva al cliente nuevo contra un server viejo que todavía no manda la tasa
@@ -166,6 +186,12 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         gastosDeSuscripciones = subs.monthlyTotalCop
         sinConvertir = 0
         dolaresEnElTotal = activas.any { it.currency != "COP" }
+        // El total viene del server, que ya prorrateó (ver `resultFor`); acá solo hay que saber
+        // si adentro hay algún cobro anual para poder explicarlo. Un server anterior a la Ola 16
+        // no manda el campo y todas las filas llegan MENSUAL, así que esto da `false` y no se
+        // explica un prorrateo que ese server tampoco hizo: las dos mitades del desfase dicen lo
+        // mismo.
+        anualesEnElTotal = activas.any { it.periodicidad == PeriodicidadDeCobro.ANUAL }
     } else {
         // Hay que sumar fila por fila para poder saltear las duplicadas, y eso sí necesita la
         // tasa. Lo que no se pueda convertir queda afuera Y contado, para que la pantalla avise.
@@ -174,6 +200,9 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         gastosDeSuscripciones = aportes.mapNotNull { it.second }.sum()
         sinConvertir = aportes.count { it.second == null }
         dolaresEnElTotal = aportes.any { it.second != null && it.first.sub.currency != "COP" }
+        anualesEnElTotal = aportes.any {
+            it.second != null && it.first.sub.periodicidad == PeriodicidadDeCobro.ANUAL
+        }
     }
 
     return ResumenRecurrentes(
@@ -184,6 +213,7 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
             gastosDeSuscripciones,
         sinConvertir = sinConvertir,
         hayMonedaExtranjera = dolaresEnElTotal,
+        hayCobrosAnuales = anualesEnElTotal,
     )
 }
 
@@ -278,6 +308,67 @@ fun contextoDeSuscripcionActiva(item: Recurrente.Suscripcion): String = when {
         OrigenDeSuscripcion.LA_ENCONTRO_MOVI -> "Suscripción · la encontró Movi"
         OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO -> "Suscripción"
     }
+}
+
+/**
+ * **El texto del monto de una suscripción, con su periodicidad puesta.**
+ *
+ * `amount` es el cobro REAL, y para un cobro anual eso significa que la fila dice $369.900 al
+ * lado de filas que dicen $47.900 y cobran todos los meses. Sin las dos palabras del final, esa
+ * columna miente por doce sin que nada lo delate: es exactamente el mismo número, en la misma
+ * tipografía, en la misma posición. Por eso la periodicidad va PEGADA al monto y no en la línea
+ * de contexto de abajo — lo que hay que desambiguar es la cifra, no la fila.
+ *
+ * Lo que NO va acá es el prorrateado: la fila muestra lo que el dueño puede buscar en el
+ * extracto. La cifra del mes es una cuenta de Movi y se dice aparte, ver [notaDeProrrateo].
+ *
+ * En SU moneda, sin convertir — solo el total de arriba pasa por la TRM, y lo dice.
+ *
+ * Existe como función y no como un `if` en cada renderer por lo mismo que [textoDelMonto]: hoy
+ * la leen la fila de «Suscripciones activas» y la candidata «por confirmar», y un `if` que falte
+ * en el tercero es un cobro anual mostrado como mensual.
+ *
+ * @param conSigno ¿la fila pone `−` delante? El inventario de activas sí (son gastos), la
+ *   candidata no.
+ */
+fun textoDelMontoDeSuscripcion(sub: Subscription, conSigno: Boolean = false): String {
+    val monto = (if (conSigno) "−" else "") + formatMoney(sub.amount, sub.currency)
+    return when (sub.periodicidad) {
+        PeriodicidadDeCobro.MENSUAL -> monto
+        PeriodicidadDeCobro.ANUAL -> "$monto al año"
+    }
+}
+
+/**
+ * **Cuánto de un cobro anual entra al total de este mes**, o `null` si no hay nada que aclarar.
+ *
+ * Es la línea que cierra la distancia entre «$369.900 al año» en la fila y los $30.825 que esa
+ * fila aporta al «Flujo libre» de arriba. Sin ella, el total no es la suma de lo que se ve y no
+ * hay forma de saber por qué — la misma confusión que este archivo ya documenta haber peleado
+ * con las filas excluidas por duplicadas.
+ *
+ * Devuelve `null` en tres casos, y los tres son «no hay nada que explicar» o «esto sería
+ * mentira»:
+ * - **Un cobro mensual**: el monto de la fila YA es lo que aporta.
+ * - **Una fila que no suma** ([Recurrente.Suscripcion.yaEsRegla]): decirle cuánto aporta a un
+ *   total al que no entra sería contradecir, en la línea de al lado, el «no se suma dos veces»
+ *   que pone [contextoDeSuscripcionActiva].
+ * - **Una fila que no se pudo convertir a pesos**: un cobro anual en dólares sin tasa queda
+ *   FUERA del total, y el card de arriba ya lo dice («Este total no incluye 1 cobro en otra
+ *   moneda»). Prometer que entra, tres líneas más abajo, sería la misma pantalla diciendo dos
+ *   cosas opuestas sobre la misma fila. Por eso hace falta [usdToCop] acá: sin la tasa, esta
+ *   función no puede saber si su frase es cierta.
+ *
+ * El monto va en la moneda de la suscripción, no en pesos: lo que se explica es la división por
+ * doce, y la conversión a pesos ya la explica el card de arriba por su cuenta. Mezclar las dos
+ * transformaciones en una sola línea haría que ninguna de las dos se entienda.
+ */
+fun notaDeProrrateo(item: Recurrente.Suscripcion, usdToCop: Double): String? = when {
+    item.sub.periodicidad != PeriodicidadDeCobro.ANUAL -> null
+    item.yaEsRegla -> null
+    copDeSuscripcion(item.sub, usdToCop) == null -> null
+    else -> "Entra al total como " +
+        formatMoney(item.sub.montoMensualEquivalente(), item.sub.currency) + " al mes"
 }
 
 /**

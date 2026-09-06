@@ -501,4 +501,192 @@ class SubscriptionRoutesTest {
         assertEquals(1, subs.size)
         assertEquals("CONFIRMED", subs[0].jsonObject["status"]!!.jsonPrimitive.content)
     }
+
+    // ── Ola 16: mensual o anual ──────────────────────────────────────────────
+    //
+    // Los montos son los cobros reales que el dueño está por cargar. Sin periodicidad, NBA
+    // ($112.900/año) y HBO Max ($369.900/año) le habrían dicho que gasta $482.800 TODOS LOS MESES
+    // en ellos, cuando la plata real es $40.234 — doce veces de más sobre su propio dinero.
+
+    private suspend fun ApplicationTestBuilder.crearSuscripcion(token: String, cuerpo: String) =
+        client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpo)
+        }
+
+    private suspend fun ApplicationTestBuilder.listar(token: String) = Json.parseToJsonElement(
+        client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText()
+    ).jsonObject
+
+    @Test
+    fun `el total mensual prorratea un cobro anual en vez de contarlo entero`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        crearSuscripcion(token, """{"displayName":"HBO Max Platinum","amount":369900,"currency":"COP","dayOfMonth":28,"periodicidad":"ANUAL"}""")
+        crearSuscripcion(token, """{"displayName":"NBA League Pass","amount":112900,"currency":"COP","dayOfMonth":4,"periodicidad":"ANUAL"}""")
+        crearSuscripcion(token, """{"displayName":"Google One","amount":79000,"currency":"COP","dayOfMonth":15}""")
+
+        val body = listar(token)
+        // 30.825 (HBO, división exacta) + 9.409 (NBA, redondeado hacia arriba) + 79.000.
+        assertEquals(119_234L, body["monthlyTotalCop"]!!.jsonPrimitive.long)
+
+        // Y lo GUARDADO sigue siendo el cobro real, el que el dueño puede buscar en el extracto:
+        // el prorrateado es una cuenta de Movi y no vive en ninguna fila.
+        val porNombre = body["subscriptions"]!!.jsonArray
+            .associateBy { it.jsonObject["displayName"]!!.jsonPrimitive.content }
+        assertEquals(369_900L, porNombre["HBO Max Platinum"]!!.jsonObject["amount"]!!.jsonPrimitive.long)
+        assertEquals("ANUAL", porNombre["HBO Max Platinum"]!!.jsonObject["periodicidad"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * El alta que manda un APK anterior a la Ola 16: sin la clave. Tiene que significar mensual —
+     * es lo único que esa hoja sabía anotar— y por lo tanto contar entero, como contaba siempre.
+     */
+    @Test
+    fun `un alta sin periodicidad es mensual y cuenta entera`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = crearSuscripcion(token, """{"displayName":"Gimnasio","amount":90000,"currency":"COP","dayOfMonth":3}""")
+        assertEquals(HttpStatusCode.Created, creada.status)
+        assertEquals(
+            "MENSUAL",
+            Json.parseToJsonElement(creada.bodyAsText()).jsonObject["periodicidad"]!!.jsonPrimitive.content,
+        )
+        assertEquals(90_000L, listar(token)["monthlyTotalCop"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * Una fila que YA estaba en producción antes de que existiera la columna. Se siembra sin
+     * tocar `periodicidad` justamente para ejercitar el default de la columna, que es toda la
+     * migración que este proyecto tiene (no hay archivos de migración: `createMissingTablesAndColumns`
+     * corre en cada arranque).
+     */
+    @Test
+    fun `una fila sembrada sin periodicidad se lee como mensual`() = testApplication {
+        wireApp()
+        transaction {
+            Subscriptions.insert {
+                it[id]          = "sub-vieja-spotify"
+                it[userId]      = userAId
+                it[merchantKey] = "spotify"
+                it[displayName] = "Spotify"
+                it[amount]      = 16_900
+                it[currency]    = "COP"
+                it[dayOfMonth]  = 9
+                it[status]      = "CONFIRMED"
+                it[confidence]  = "HIGH"
+                it[firstSeen]   = 0
+                it[lastSeen]    = 0
+                it[occurrences] = 5
+                it[accountId]   = null
+            }
+        }
+        val body = listar(tokenFor(userAId))
+        val spotify = body["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "spotify" }.jsonObject
+        assertEquals("MENSUAL", spotify["periodicidad"]!!.jsonPrimitive.content)
+        assertEquals(16_900L, body["monthlyTotalCop"]!!.jsonPrimitive.long, "vale lo que siempre valió")
+    }
+
+    @Test
+    fun `el PUT guarda la periodicidad y el total la respeta`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = Json.parseToJsonElement(
+            crearSuscripcion(token, """{"displayName":"HBO Max Platinum","amount":369900,"currency":"COP","dayOfMonth":28}""").bodyAsText()
+        ).jsonObject
+        assertEquals("MENSUAL", creada["periodicidad"]!!.jsonPrimitive.content)
+        assertEquals(369_900L, listar(token)["monthlyTotalCop"]!!.jsonPrimitive.long)
+
+        // El dueño se da cuenta de que se lo cobran una vez al año y lo corrige.
+        val id = creada["id"]!!.jsonPrimitive.content
+        val corregida = creada.toMutableMap().apply { put("periodicidad", JsonPrimitive("ANUAL")) }
+        val put = client.put("/api/subscriptions/$id") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(Json.encodeToString(JsonObject.serializer(), JsonObject(corregida)))
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+        assertEquals("ANUAL", Json.parseToJsonElement(put.bodyAsText()).jsonObject["periodicidad"]!!.jsonPrimitive.content)
+        assertEquals(30_825L, listar(token)["monthlyTotalCop"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * **El APK viejo no puede volver mensual un cobro anual.**
+     *
+     * Un cliente anterior a la Ola 16 no conoce el campo, así que cualquier PUT suyo —quitar la
+     * suscripción, corregirle el monto— manda un cuerpo SIN la clave. Si el server usara el
+     * default del objeto deserializado, HBO Max volvería a valer $369.900 al mes sin que el dueño
+     * hubiera cambiado nada: el número plausible que aparece solo, que es la peor forma de un
+     * error de plata. La ruta mira las claves del JSON crudo, igual que `PUT /api/credits/{id}`.
+     */
+    @Test
+    fun `un PUT de un cliente viejo no le borra la periodicidad anual`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = Json.parseToJsonElement(
+            crearSuscripcion(token, """{"displayName":"HBO Max Platinum","amount":369900,"currency":"COP","dayOfMonth":28,"periodicidad":"ANUAL"}""").bodyAsText()
+        ).jsonObject
+        val id = creada["id"]!!.jsonPrimitive.content
+
+        // Exactamente lo que manda el APK 1.17: todos los campos que conoce, ninguno más.
+        val cuerpoDelApkViejo = JsonObject(creada.filterKeys { it != "periodicidad" })
+        val put = client.put("/api/subscriptions/$id") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(Json.encodeToString(JsonObject.serializer(), cuerpoDelApkViejo))
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+        assertEquals(
+            "ANUAL",
+            Json.parseToJsonElement(put.bodyAsText()).jsonObject["periodicidad"]!!.jsonPrimitive.content,
+            "el cliente no habló de periodicidad: no hay nada que cambiar",
+        )
+        assertEquals(30_825L, listar(token)["monthlyTotalCop"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * El barrido no puede pisar lo que decidió el dueño. Es el mismo razonamiento que ya protege
+     * al DISMISSED y al alta manual: la periodicidad no se toca en ninguna rama de
+     * `SubscriptionSync`, ni siquiera en el refresco completo de una CANDIDATE.
+     */
+    @Test
+    fun `un re-scan no vuelve mensual una suscripcion que el dueno marco anual`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        // Se marca ANUAL una fila DETECTADA (clave `netflix`, no `manual_*`), que es la única que
+        // el barrido sí toca — con una manual la guarda del prefijo ya la dejaría afuera sola.
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+        val netflix = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }.jsonObject
+        val id = netflix["id"]!!.jsonPrimitive.content
+        val anual = netflix.toMutableMap().apply {
+            put("status", JsonPrimitive("CONFIRMED"))
+            put("periodicidad", JsonPrimitive("ANUAL"))
+        }
+        client.put("/api/subscriptions/$id") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(Json.encodeToString(JsonObject.serializer(), JsonObject(anual)))
+        }
+
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+        val despues = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }.jsonObject
+        assertEquals("ANUAL", despues["periodicidad"]!!.jsonPrimitive.content)
+    }
+
+    /** Y lo que el detector crea por su cuenta sigue siendo mensual: agrupa por MES. */
+    @Test
+    fun `lo que detecta el barrido nace mensual`() = testApplication {
+        wireApp()
+        val res = client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val subs = Json.parseToJsonElement(res.bodyAsText()).jsonObject["subscriptions"]!!.jsonArray
+        assertEquals(2, subs.size)
+        subs.forEach {
+            assertEquals("MENSUAL", it.jsonObject["periodicidad"]!!.jsonPrimitive.content)
+        }
+    }
 }
