@@ -62,11 +62,14 @@ import com.jvillada.movi.ui.extractos.StatementReviewScreen
 import com.jvillada.movi.ui.extractos.ImportDetailScreen
 import com.jvillada.movi.ui.sdui.editor.ScreenEditorScreen
 import com.jvillada.movi.shared.model.StatementParseResult
+import com.jvillada.movi.ui.components.LocalRelevoDeScroll
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.components.recibeElScrollDeLosMargenes
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 
@@ -195,16 +198,20 @@ fun App() {
                 val showBottomNav = widthClass == WindowWidthClass.Compact && activeTab != null
                 val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 
+                // Los márgenes a los lados de la columna de 600 dp reenvían la rueda del mouse a
+                // la lista de la pantalla activa. Ver [RelevoDeScroll] para el bug y el porqué.
+                val relevoDeScroll = remember { RelevoDeScroll() }
                 CompositionLocalProvider(
                     LocalWindowWidthClass provides widthClass,
                     LocalRefreshTick provides refreshTick,
+                    LocalRelevoDeScroll provides relevoDeScroll,
                 ) {
                 Row(modifier = Modifier.fillMaxSize()) {
                 if (showRail) {
                     MinNavRail(active = activeTab, onTabSelected = onTabSelected)
                 }
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    modifier = Modifier.weight(1f).fillMaxHeight().recibeElScrollDeLosMargenes(relevoDeScroll),
                     contentAlignment = Alignment.TopCenter,
                 ) {
                 Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {

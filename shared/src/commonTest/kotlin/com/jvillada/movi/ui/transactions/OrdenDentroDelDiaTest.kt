@@ -1,7 +1,9 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -34,6 +36,9 @@ class OrdenDentroDelDiaTest {
         id = id, accountId = "acc1", type = type, amount = amount,
         category = category, description = "test", timestamp = ts,
         transferId = transferId, reconciliationStatus = estado,
+        // Derivado como lo deriva el server para una cuenta de activo: desde que los chips leen
+        // esta bandera, el default `true` haría pasar la apertura y las patas del traspaso.
+        countsAsCashFlow = isCashFlow(AccountType.SAVINGS, type, category),
     )
 
     /** Un día real: varias horas, un empate, un traspaso y el saldo inicial. */

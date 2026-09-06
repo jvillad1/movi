@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -33,9 +36,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
@@ -150,20 +155,76 @@ fun diasVisibles(days: List<EventDay>, chip: Int, query: String): List<EventDay>
 fun isOrphanedTransferLeg(event: FinancialEvent): Boolean = event.category == ORPHANED_LEG_CATEGORY
 
 /**
- * ¿El renglón lleva signo y color de ingreso/gasto?
+ * **De qué color va el monto de un renglón**: rojo si es plata que salió, verde si es plata que
+ * entró, gris si no fue ni lo uno ni lo otro.
  *
- * `false` para lo que no movió plata del bolsillo — la apertura de una cuenta y la pata huérfana
- * de un traspaso. Es **exactamente el mismo criterio** que ya usa el renglón de un traspaso, con
- * el mismo motivo escrito ahí abajo: ponerle «+» y pintarlo de verde a algo que después se excluye
- * de todos los totales de ingresos es contradecirse dentro de una misma pantalla (Ola 8 · V6).
- *
- * Ola 15: la pata huérfana entra acá el mismo día en que `isCashFlow` la deja fuera del mes. Sin
- * esto, el borrado de un crédito desembolsado dejaba un **«+$257.000.000» en verde** arriba de
- * todo, bajo un total de ingresos que —correctamente— no lo cuenta. El monto se sigue viendo, en
- * gris y sin signo: el saldo de la cuenta sí se movió y la fila no puede esconderlo.
+ * Hasta acá el gasto iba del color del texto normal y solo el ingreso iba en verde, así que a
+ * simple vista un día de puros gastos y un día sin nada se parecían. El dueño lo pidió tal cual:
+ * *«que el color de cada movimiento indique rojo gasto / verde ingreso»*.
  */
-fun rowShowsSign(event: FinancialEvent): Boolean =
-    !isOpeningBalance(event) && !isOrphanedTransferLeg(event)
+enum class TonoDelMonto {
+    /** Plata que salió del bolsillo. Rojo y con «−». */
+    GASTO,
+    /** Plata que entró al bolsillo. Verde y con «+». */
+    INGRESO,
+    /** No movió plata del bolsillo. Gris y sin signo. */
+    NEUTRO,
+}
+
+/**
+ * El tono de un movimiento suelto, decidido por **una sola bandera**: `countsAsCashFlow`.
+ *
+ * Esa bandera la deriva el server (y el espejo local) con `isCashFlow`, que es la misma regla con
+ * la que se suman «Gastos del mes» e «Ingresos del mes». Por eso acá no se mira la categoría a
+ * mano: este proyecto ya tuvo dos pantallas con su propia copia de «qué cuenta y qué no», y se le
+ * desincronizaron. Lo que la regla deja afuera —y por eso va gris y sin signo— es la apertura de
+ * una cuenta (Ola 8 · V6), la pata huérfana de un traspaso (Ola 15: el borrado de un crédito
+ * desembolsado dejaba un «+$257.000.000» en verde bajo un total que no lo contaba), la pata de un
+ * traspaso vivo que un filtro dejó sola, el pago de tarjeta, la cuota que paga un tercero y todo
+ * lo que pasa en una cuenta de deuda. El monto se sigue viendo: el saldo de la cuenta sí se movió
+ * y la fila no puede esconderlo.
+ *
+ * La pata del dinero de una **cuota de crédito** sí cuenta (`CUOTA_CATEGORY` no es reservada: el
+ * dueño decidió que «es plata que salió»), así que cuando aparece suelta —en «Gastos», donde su
+ * hermana de la deuda no entra— va en rojo, como el gasto que es.
+ */
+fun tonoDelEvento(event: FinancialEvent): TonoDelMonto = when {
+    !event.countsAsCashFlow -> TonoDelMonto.NEUTRO
+    event.type == TransactionType.INCOME -> TonoDelMonto.INGRESO
+    else -> TonoDelMonto.GASTO
+}
+
+/**
+ * El tono de un renglón. Un **par** —traspaso, cuota, pago de tarjeta, leído como un solo hecho—
+ * es siempre neutro: la plata no entró ni salió, cambió de cuenta. Ponerle un signo obligaría a
+ * elegir el punto de vista de una de las dos cuentas, que es justo la confusión que el renglón
+ * doble vino a sacar (ver [TransferRow]).
+ */
+fun tonoDelRenglon(row: MovementRow): TonoDelMonto = when (row) {
+    is MovementRow.Transfer -> TonoDelMonto.NEUTRO
+    is MovementRow.Single -> tonoDelEvento(row.event)
+}
+
+/** ¿El renglón lleva signo y color de ingreso/gasto? Ver [tonoDelEvento]. */
+fun rowShowsSign(event: FinancialEvent): Boolean = tonoDelEvento(event) != TonoDelMonto.NEUTRO
+
+/**
+ * ¿Este movimiento es plata que fue **de una cuenta suya a otra cuenta suya**?
+ *
+ * Son tres pares con la misma forma —traspaso, cuota de crédito y pago de tarjeta— más el pago
+ * de tarjeta viejo, anotado suelto con la categoría reservada antes de que existiera la acción
+ * de «Pagar cuota». Hasta acá caían todos en «Todo», sin signo y mezclados con lo demás, y el
+ * dueño preguntó si no debería haber un filtro para el traspaso y otro para la cuota. Es uno
+ * solo, porque para él son lo mismo: nada de esto es un gasto ni un ingreso, y es lo que quiere
+ * mirar aparte cuando revisa si los saldos cuadran.
+ *
+ * **Es un filtro, no una reclasificación.** La cuota sigue contando en «Gastos» (ver
+ * [tonoDelEvento]); acá solo se la agrupa además con sus pares. La pata huérfana no entra: la
+ * otra cuenta ya no existe, así que dejó de ser «entre cuentas» y hoy se lee como un movimiento
+ * suelto que se puede recategorizar.
+ */
+fun esEntreCuentas(event: FinancialEvent): Boolean =
+    isTransferLeg(event) || event.category == CARD_PAYMENT_CATEGORY
 
 private val MESES = listOf(
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -205,38 +266,88 @@ const val CHIP_TODO = 0
 const val CHIP_GASTOS = 1
 const val CHIP_INGRESOS = 2
 const val CHIP_POR_CONFIRMAR = 3
+const val CHIP_ENTRE_CUENTAS = 4
+
+/** Los rótulos de los chips, en el orden de sus índices. */
+val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas")
 
 /**
  * ¿Este movimiento entra en el chip [chip]?
  *
- * **Las patas de un traspaso no aparecen ni en «Gastos» ni en «Ingresos».** No es un capricho de
- * pureza contable: son DOS chips y cada uno dejaba pasar UNA sola pata, así que
- * [collapseTransfers] se quedaba sin la hermana, caía a `Single` y el traspaso volvía a leerse
- * como «−$500.000 · Traspaso» — exactamente la lectura que esta feature vino a eliminar, una
- * pestaña más allá. Y es la misma regla que ya aplican el mes y los presupuestos
- * (`isCashFlow`): un traspaso no es un gasto ni un ingreso. En «Todo» sí aparece, como un solo
- * renglón, que es donde tiene sentido verlo.
+ * **«Gastos» e «Ingresos» son exactamente lo que suma el mes.** Hasta acá cada chip llevaba su
+ * propia lista de exclusiones escrita a mano —pata de traspaso, apertura, pata huérfana— y esa
+ * lista se fue quedando corta cada vez que `isCashFlow` aprendía una regla nueva: la cuota que
+ * paga un tercero, el descuento de nómina y los intereses de un crédito seguían entrando a los
+ * chips con signo y color, mientras el total del mes —correctamente— no los contaba. Y al revés:
+ * la pata del dinero de una **cuota de crédito** lleva `transferId`, así que la exclusión de
+ * «pata de traspaso» la sacaba de «Gastos», cuando el dueño decidió que la cuota SÍ es plata que
+ * salió y el mes la suma. El chip decía una cosa y la cifra de arriba otra.
+ *
+ * Ahora los dos chips leen `countsAsCashFlow`, la bandera que el server deriva con la misma
+ * `isCashFlow` que usa el mes. Se conservan, por construcción y no por lista, las decisiones que
+ * ya estaban: las patas de un traspaso no aparecen ni en «Gastos» ni en «Ingresos» (cada chip
+ * dejaba pasar UNA pata, [collapseTransfers] se quedaba sin la hermana y el traspaso volvía a
+ * leerse como «−$500.000 · Traspaso»); la apertura de una cuenta no es un ingreso (Ola 8 · V6:
+ * dos «Saldo inicial» en verde bajo un total que no los contaba); la pata huérfana tampoco
+ * (Ola 15, con la cifra de un crédito entero). En «Todo» todo eso sí aparece, que es donde tiene
+ * sentido verlo y donde se lo puede tocar.
+ *
+ * «Entre cuentas» es el cuarto filtro: los tres pares y el pago de tarjeta suelto, ver
+ * [esEntreCuentas]. Las dos patas de cada par pasan, así que [collapseTransfers] las junta.
  */
 fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
-        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED &&
-        !isTransferLeg(event) && !isOpeningBalance(event) && !isOrphanedTransferLeg(event)
-    // Ola 8 · V6: **la apertura de una cuenta tampoco es un ingreso**, por la misma razón que
-    // no lo es una pata de traspaso. El chip «Ingresos» listaba dos «Saldo inicial» en verde y
-    // con «+», y arriba el total decía «+$4.500.000» sin contarlos: filas pintadas como
-    // ingresos, bajo un filtro llamado Ingresos, excluidas a propósito de todos los totales de
-    // ingresos. La contradicción vivía entera en una sola pantalla. `isCashFlow` ya sabía la
-    // respuesta desde siempre (OPENING_CATEGORY nunca es flujo); lo único que faltaba era que
-    // el filtro dijera lo mismo. En «Todo» sí aparece, que es donde tiene sentido verlo.
-    // Ola 15 · lo mismo para la pata huérfana de un traspaso, por la MISMA razón y no por
-    // analogía: desde que `isCashFlow` la deja fuera del mes, listarla bajo «Ingresos» sería
-    // repetir exacto la contradicción de V6 — y con la cifra de un crédito entero, que es el
-    // caso que la volvió urgente. En «Todo» sigue apareciendo, y ahí se la puede tocar para
-    // recategorizarla, que es la acción que esta fila pide.
-    CHIP_INGRESOS -> event.type == TransactionType.INCOME &&
-        !isTransferLeg(event) && !isOpeningBalance(event) && !isOrphanedTransferLeg(event)
+        event.countsAsCashFlow &&
+        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED
+    CHIP_INGRESOS -> event.type == TransactionType.INCOME && event.countsAsCashFlow
     CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
+    CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
     else -> true
+}
+
+/**
+ * Lo que dice la lista cuando **no quedó nada que mostrar**, según por qué no quedó nada.
+ *
+ * Hasta acá todo vacío decía «Sin movimientos aún · + Registrar el primero», que es el estado de
+ * una cuenta recién abierta. Con el chip «Por confirmar» activo y nada por confirmar —que es el
+ * caso normal de quien anota todo a mano— ese texto mentía dos veces: sí hay movimientos, y
+ * registrar uno nuevo no tiene nada que ver con confirmar los que entraron solos. El dueño lo
+ * leyó exactamente así: *«¿Qué es Por confirmar?»*.
+ *
+ * [ofreceRegistrar] solo cuando de verdad no hay nada anotado: es la única situación en la que
+ * el botón contesta la pregunta que el vacío plantea.
+ */
+data class VacioDeMovimientos(
+    val titulo: String,
+    val detalle: String?,
+    val ofreceRegistrar: Boolean,
+)
+
+fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos = when {
+    chip == CHIP_POR_CONFIRMAR -> VacioDeMovimientos(
+        titulo = "Nada por confirmar",
+        detalle = "Todo lo que hay lo registraste tú. Aquí caen los movimientos que entran solos, " +
+            "por SMS o por extracto, hasta que los confirmes.",
+        ofreceRegistrar = false,
+    )
+    !hayMovimientos -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
+    chip == CHIP_GASTOS -> VacioDeMovimientos(
+        titulo = "Sin gastos",
+        detalle = "Hay movimientos, pero ninguno es plata que salió del bolsillo.",
+        ofreceRegistrar = false,
+    )
+    chip == CHIP_INGRESOS -> VacioDeMovimientos(
+        titulo = "Sin ingresos",
+        detalle = "Hay movimientos, pero ninguno es plata que entró al bolsillo.",
+        ofreceRegistrar = false,
+    )
+    chip == CHIP_ENTRE_CUENTAS -> VacioDeMovimientos(
+        titulo = "Nada entre cuentas",
+        detalle = "Aquí van los traspasos, las cuotas de crédito y los pagos de tarjeta: plata que " +
+            "fue de una cuenta tuya a otra.",
+        ofreceRegistrar = false,
+    )
+    else -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
 }
 
 /**
@@ -354,7 +465,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
     val searchFocusRequester = remember { FocusRequester() }
     // F12: "Pendientes" no decía qué es — son los movimientos que entraron solos (SMS, OCR,
     // extracto) y esperan que confirmes monto y categoría. "Por confirmar" sí lo dice.
-    val filters = listOf("Todo", "Gastos", "Ingresos", "Por confirmar")
+    val filters = CHIPS_DE_MOVIMIENTOS
+    // Los días que el dueño plegó, por fecha ISO. Se recuerdan entre visitas: ver
+    // [DiasPlegadosStore] para el porqué.
+    var diasPlegados by remember { mutableStateOf(DiasPlegadosStore.plegados()) }
+    val listState = rememberLazyListState()
+    // Pantalla ancha: la rueda del mouse sobre los márgenes, a los lados de la columna, también
+    // tiene que mover esta lista. Ver [ScrollDesdeLosMargenes].
+    ScrollDesdeLosMargenes(listState)
 
     var allDays by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -565,6 +683,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
@@ -585,30 +704,45 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                         }
                     } else {
                         // F10: el estado vacío ofrece la acción — registrar si ya hay dónde
-                        // anotar, crear una cuenta primero si no.
+                        // anotar, crear una cuenta primero si no. Pero solo cuando el vacío es
+                        // «no hay nada anotado»: si es un chip el que dejó la lista vacía, se
+                        // dice eso y no se ofrece nada (ver [vacioDeMovimientos]).
+                        val hayMovimientos = allDays.any { d -> d.items.any { !isOpeningBalance(it) } }
+                        val vacio = vacioDeMovimientos(activeFilter, hayMovimientos)
                         Column(
-                            modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp),
+                            modifier = Modifier.fillParentMaxWidth().padding(top = 80.dp).padding(horizontal = 32.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(MinPrimaryContainer)
-                                    .clickable {
-                                        if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
-                                        else showCreateSheet = true
-                                    }
-                                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
+                            Text(vacio.titulo, fontSize = 14.sp, color = MinTextMute)
+                            vacio.detalle?.let {
                                 Text(
-                                    text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MinOnPrimaryContainer,
+                                    text = it,
+                                    fontSize = 12.sp,
+                                    color = MinTextFaint,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 17.sp,
                                 )
+                            }
+                            if (vacio.ofreceRegistrar) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(MinPrimaryContainer)
+                                        .clickable {
+                                            if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
+                                            else showCreateSheet = true
+                                        }
+                                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MinOnPrimaryContainer,
+                                    )
+                                }
                             }
                         }
                     }
@@ -616,20 +750,51 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             }
 
             visibleDays.forEach { day ->
+                // Sin `key`: con la fecha como clave, `LazyColumn` ancla el primer día visible al
+                // cambiar de chip, y pasar de «Gastos» a «Todo» dejaba el día nuevo de arriba
+                // escondido por encima del tope (visto a ojo en la web). Posicional, como antes.
                 item {
+                    val rows = collapseTransfers(day.items)
+                    val plegado = day.date in diasPlegados
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp)) {
+                        // El encabezado entero es el botón que pliega y despliega el día. Plegado
+                        // sigue diciendo el «Flujo del día» y cuántos renglones esconde: plegar
+                        // es para acortar la lista, no para perder la información.
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { diasPlegados = DiasPlegadosStore.alternar(day.date) }
+                                .padding(horizontal = 4.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                // V13: «23 DE AGOSTO» / «HOY», no la clave ISO del server.
-                                text = formatDayHeading(day.date, hoyIso).uppercase(),
-                                fontSize = 11.sp,
-                                color = MinTextMute,
-                                fontWeight = FontWeight.Medium,
-                                letterSpacing = 0.4.sp,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = if (plegado) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
+                                    tint = MinTextFaint,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Text(
+                                    // V13: «23 DE AGOSTO» / «HOY», no la clave ISO del server.
+                                    text = formatDayHeading(day.date, hoyIso).uppercase(),
+                                    fontSize = 11.sp,
+                                    color = MinTextMute,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 0.4.sp,
+                                )
+                                if (plegado) {
+                                    Text(
+                                        text = if (rows.size == 1) "· 1 movimiento" else "· ${rows.size} movimientos",
+                                        fontSize = 11.sp,
+                                        color = MinTextFaint,
+                                    )
+                                }
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -651,12 +816,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                 )
                             }
                         }
-                        MinCard(
+                        if (!plegado) MinCard(
                             modifier = Modifier.fillMaxWidth(),
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
-                            val rows = collapseTransfers(day.items)
                             rows.forEachIndexed { i, row ->
                                 Column {
                                     when (row) {
@@ -736,6 +900,18 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
 }
 
 /**
+ * El color de cada tono, con los tokens semánticos del tema — [MinExpense] y [MinIncome] son los
+ * mismos que ya usan el resumen de SMS y el error de los formularios, no un hex suelto de esta
+ * pantalla. Hoy la app trae un solo esquema (oscuro, ver `Theme.kt`); si algún día llega el
+ * claro, se cambia en `Color.kt` y esto lo sigue.
+ */
+fun colorDelTono(tono: TonoDelMonto): Color = when (tono) {
+    TonoDelMonto.GASTO -> MinExpense
+    TonoDelMonto.INGRESO -> MinIncome
+    TonoDelMonto.NEUTRO -> MinTextMute
+}
+
+/**
  * Un traspaso, leído como un solo hecho: "Traspaso · Ahorros → CDT" y el monto **sin signo**.
  *
  * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
@@ -796,10 +972,9 @@ private fun MovementSingleRow(
     accountNames: Map<String, String>,
     onClick: () -> Unit,
 ) {
-    val isIncome = tx.type == TransactionType.INCOME
-    // V6: la apertura de una cuenta no lleva signo ni color — misma decisión, y mismo motivo,
-    // que el renglón de un traspaso (ver [TransferRow]): la plata no entró ni salió, ya estaba.
-    val conSigno = rowShowsSign(tx)
+    // Rojo gasto, verde ingreso, gris lo que no movió plata del bolsillo — la apertura de una
+    // cuenta, la pata huérfana, la cuota que paga un tercero. Una sola regla, ver [tonoDelEvento].
+    val tono = tonoDelEvento(tx)
     val subtitulo = accountNames[tx.accountId]
         ?.let { "${tx.category} · $it" }
         ?: tx.category
@@ -837,16 +1012,15 @@ private fun MovementSingleRow(
             )
         }
         Text(
-            text = if (conSigno) "${if (isIncome) "+" else "−"}${formatCOP(tx.amount)}"
-                   else formatCOP(tx.amount),
+            text = when (tono) {
+                TonoDelMonto.INGRESO -> "+${formatCOP(tx.amount)}"
+                TonoDelMonto.GASTO -> "−${formatCOP(tx.amount)}"
+                TonoDelMonto.NEUTRO -> formatCOP(tx.amount)
+            },
             fontSize = 14.5.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
-            color = when {
-                !conSigno -> MinTextMute
-                isIncome -> MinIncome
-                else -> MinText
-            },
+            color = colorDelTono(tono),
             letterSpacing = (-0.3).sp,
         )
     }
