@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.asBottomBarTab
 import com.jvillada.movi.ui.components.railDestinations
+import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -103,15 +104,25 @@ class NavStackTest {
     }
 
     @Test
-    fun `Presupuestos, Creditos y Recurrentes tienen destino propio y en la barra se resaltan como Mas`() {
+    fun `Presupuestos y Creditos tienen destino propio y en la barra se resaltan como Mas`() {
         assertEquals(NavTab.BUDGETS, navTabFor(Screen.Budgets))
         assertEquals(NavTab.CREDITS, navTabFor(Screen.Credits))
-        // Recurrentes salió de Más y entró al rail: destino propio en ancho, Más en el teléfono.
-        assertEquals(NavTab.RECURRING, navTabFor(Screen.Recurrentes))
         assertEquals(NavTab.MORE, NavTab.BUDGETS.asBottomBarTab())
         assertEquals(NavTab.MORE, NavTab.CREDITS.asBottomBarTab())
-        assertEquals(NavTab.MORE, NavTab.RECURRING.asBottomBarTab())
         assertEquals(NavTab.ACCOUNTS, NavTab.ACCOUNTS.asBottomBarTab())
+    }
+
+    @Test
+    fun `Recurrentes ya no es un destino - es Movimientos con su chip`() {
+        // PR 4 del rediseño de Recurrentes (2026-09): sin `Screen.Recurrentes` ni
+        // `NavTab.RECURRING`. Lo que antes era esa pantalla hoy se pide como Movimientos con el
+        // chip puesto, y por eso resalta la pestaña Movimientos y no Más.
+        assertEquals(NavTab.TRANSACTIONS, navTabFor(Screen.Transactions(CHIP_RECURRENTES)))
+        assertEquals(
+            NavTab.TRANSACTIONS,
+            NavTab.TRANSACTIONS.asBottomBarTab(),
+            "en el teléfono también: no se esconde detrás de Más",
+        )
     }
 
     @Test
@@ -125,8 +136,9 @@ class NavStackTest {
 
     @Test
     fun `las pantallas de Mas marcan Mas y los flujos a pantalla completa no tienen barra`() {
-        // Ola 8: sin Screen.Subscriptions — las suscripciones viven adentro de Recurrentes, que
-        // marca RECURRING (ver el test de arriba), no Más.
+        // Ola 8: sin Screen.Subscriptions — las suscripciones son recurrentes, y desde el
+        // rediseño de 2026-09 los recurrentes son Movimientos con su chip (ver el test de
+        // arriba), así que marcan TRANSACTIONS y no Más.
         listOf(Screen.Mas, Screen.Profile, Screen.Goals,
             Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
             .forEach { assertEquals(NavTab.MORE, navTabFor(it), "$it") }

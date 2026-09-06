@@ -248,13 +248,10 @@ class RecurrentesLogicTest {
         assertEquals(listOf(1, 15, 30), r.items.map { it.dayOfMonth })
     }
 
-    @Test
-    fun `la marca de origen distingue lo que encontro Movi de lo que escribio el dueno`() {
-        val detectada = Recurrente.Suscripcion(sub("Netflix", 1, clave = "netflix"), yaEsRegla = false)
-        val manual = Recurrente.Suscripcion(sub("Gym", 1, clave = "manual_gym"), yaEsRegla = false)
-        assertTrue(detectada.laEncontroMovi)
-        assertFalse(manual.laEncontroMovi)
-    }
+    // PR 4 del rediseño de Recurrentes (2026-09): acá había un test de `laEncontroMovi` /
+    // `seActivoSola`, las dos marcas de origen de una suscripción. Existían para el subtítulo de
+    // la fila («Suscripción · la encontró Movi») del inventario «Por día del mes», que se fue con
+    // la pantalla: nadie las lee ya, así que se borraron con su test en vez de dejarlas verdes.
 
     // ── V4 · por qué las cifras esperan a que llegue TODO ──────────────────────
 

@@ -40,20 +40,18 @@ val railDestinations: List<RailDestination> = listOf(
     RailDestination(NavTab.ACCOUNTS, "Cuentas", Icons.Rounded.AccountBalanceWallet),
     RailDestination(NavTab.CREDITS, "Créditos", Icons.Rounded.CreditCard),
     RailDestination(NavTab.BUDGETS, "Presupuestos", Icons.Rounded.PieChart),
-    // PR 2 del rediseño de Recurrentes (2026-09): Recurrentes deja de ser un destino propio del
-    // rail — «Flujo libre» y las candidatas por confirmar viven ahora en Movimientos (chip
-    // «Recurrentes»), y editar un recurrente existente se hace desde el detalle de un movimiento
-    // (PR 1). `NavTab.RECURRING` y `Screen.Recurrentes` se quedan sin borrar por ahora (código
-    // muerto a propósito): los quita una PR de limpieza posterior, una vez que también se
-    // retargeteen los enlaces de «Próximos pagos» del Inicio (fuera del alcance de esta PR).
+    // Rediseño de Recurrentes (2026-09): Recurrentes dejó de ser un destino propio del rail —
+    // «Flujo libre», las candidatas por confirmar y los próximos pagos viven ahora en
+    // Movimientos (chip «Recurrentes»), y editar un recurrente existente se hace desde el
+    // detalle de un movimiento. Ya no hay `NavTab.RECURRING` ni `Screen.Recurrentes`: quien
+    // quiera llevar ahí navega a `Screen.Transactions(CHIP_RECURRENTES)`.
     RailDestination(NavTab.MORE, "Más", Icons.Rounded.GridView),
 )
 
 /**
  * Wide-window counterpart of MinBottomNav: a left rail rendered once at the
  * App root. Same active-pill language; en pantalla ancha hay lugar para mostrar
- * además Créditos, Presupuestos y Recurrentes como entradas propias (en el teléfono viven
- * en Más).
+ * además Créditos y Presupuestos como entradas propias (en el teléfono viven en Más).
  */
 @Composable
 fun MinNavRail(

@@ -545,11 +545,11 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         }
     }
     // Se queda para los Inicios ya guardados que todavía traen el acceso viejo: el target sigue
-    // siendo válido y abre Recurrentes (ver SduiRenderer.screenForTarget).
+    // siendo válido y abre Movimientos con el chip «Recurrentes» (ver SduiRenderer.screenForTarget).
     "subscriptions" -> {
         val subs = data.subscriptions
-        // Solo las activas (AUTO/CONFIRMED) — es lo que suma monthlyTotalCop y lo que la pantalla
-        // Recurrentes lista como activas. Las candidatas y las descartadas no son suscripciones
+        // Solo las activas (AUTO/CONFIRMED) — es lo que suma monthlyTotalCop y lo que el chip
+        // «Recurrentes» cuenta como activas. Las candidatas y las descartadas no son suscripciones
         // todavía (o ya no): contarlas acá daba «$0 · 4 suscripciones al mes» con cero activas.
         val active = subs?.subscriptions?.count { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED } ?: 0
         val candidates = subs?.subscriptions?.count { it.status == SubStatus.CANDIDATE } ?: 0

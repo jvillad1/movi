@@ -77,7 +77,9 @@ private val NAVIGATE_TARGET_LABELS = mapOf(
     "goals" to "Metas",
     // F61: sin pantalla propia — el cliente lo manda a Cuentas (ver SduiRenderer.screenForTarget).
     "investments" to "Cuentas (inversión)",
-    // Ola 8: sin pantalla propia — el cliente lo manda a Recurrentes (ver SduiRenderer.screenForTarget).
+    // Ola 8 + rediseño de 2026-09: ni las suscripciones ni los recurrentes tienen pantalla propia
+    // — el cliente manda los dos targets a Movimientos con el chip «Recurrentes» puesto (ver
+    // SduiRenderer.screenForTarget). El rótulo sigue nombrando lo que el dueño va a ver ahí.
     "subscriptions" to "Recurrentes (suscripciones)",
     "recurrentes" to "Recurrentes",
     "categorias" to "Categorías",

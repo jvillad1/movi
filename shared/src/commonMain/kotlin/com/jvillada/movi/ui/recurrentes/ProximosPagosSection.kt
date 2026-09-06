@@ -43,9 +43,10 @@ import kotlinx.datetime.LocalDate
  * # «Próximos pagos» y «¿esto ya ocurrió?», en una pieza que no pertenece a ninguna pantalla
  *
  * PR 3 del rediseño de Recurrentes (2026-09). Lo de acá adentro vivía dentro de
- * `RecurrentesScreen.kt`, `private`, y ahora lo usan **dos** pantallas: la vieja (que sigue viva
- * hasta que el PR 4 la borre) y Movimientos bajo el chip «Recurrentes», que es donde el dueño lo
- * va a ver de ahora en adelante.
+ * `RecurrentesScreen.kt`, `private`. Mientras esa pantalla existió lo usaron las dos; el PR 4 la
+ * borró, así que hoy el único llamador es Movimientos bajo el chip «Recurrentes», que es donde
+ * el dueño lo ve. Se queda en su propio archivo igual: es una pieza con lógica de plata adentro,
+ * no el interior de una pantalla.
  *
  * **Se mudó, no se copió.** Copiar y pegar esto era la salida fácil y ya se sabe cómo termina: la
  * decisión de si una tarjeta muestra «saldo» o «cuota» faltaba en uno de los cuatro renderers de

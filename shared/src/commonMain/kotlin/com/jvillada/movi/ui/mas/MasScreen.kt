@@ -54,10 +54,10 @@ private val items = listOf(
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
     MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
     MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
-    // PR 2 del rediseño de Recurrentes (2026-09): sin entrada propia — «Flujo libre» y las
-    // candidatas por confirmar se mudaron a Movimientos (chip «Recurrentes») y editar un
-    // recurrente existente ya se hacía desde el detalle de un movimiento (PR 1). `Screen.Recurrentes`
-    // sigue existiendo (código muerto a propósito, ver `MinNavRail.kt`) hasta la PR de limpieza.
+    // Rediseño de Recurrentes (2026-09): sin entrada propia — «Flujo libre», las candidatas por
+    // confirmar y los próximos pagos se mudaron a Movimientos (chip «Recurrentes») y editar un
+    // recurrente existente ya se hacía desde el detalle de un movimiento. `Screen.Recurrentes`
+    // ya no existe; el destino equivalente es `Screen.Transactions(CHIP_RECURRENTES)`.
     // Ola 10: la única puerta a «Categorías». Va junto a Presupuestos —la otra pantalla que se
     // cruza con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño va a acordarse de que
     // quería arreglar un nombre.
@@ -81,7 +81,7 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
     // Perfil, en una sección "Administración" visible solo para quien administra el Inicio.
 
     // F59: en pantalla ancha el rail de la izquierda ya muestra Inicio, Movimientos, Cuentas,
-    // Créditos, Presupuestos, Recurrentes y Más — repetirlos acá era ruido. La lista sale de la MISMA
+    // Créditos, Presupuestos y Más — repetirlos acá era ruido. La lista sale de la MISMA
     // fuente que pinta el rail (railDestinations), no de una copia a mano. En el teléfono la
     // barra tiene menos destinos, así que Más sigue completo.
     val widthClass = LocalWindowWidthClass.current

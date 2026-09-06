@@ -1,6 +1,5 @@
 package com.jvillada.movi.ui.recurrentes
 
-import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
@@ -13,10 +12,13 @@ import com.jvillada.movi.ui.components.formatCOP
 import kotlin.math.roundToLong
 
 /**
- * Las reglas puras de la pantalla Recurrentes (Ola 8), sin Compose, para poder testearlas —
- * y, sobre todo, para que la cifra del acceso «Recurrentes» del Inicio y el «Flujo libre» de
- * la pantalla salgan de la MISMA función y no puedan discrepar. Ese desacuerdo entre dos
- * pantallas que dicen contar lo mismo ya había pasado antes (Créditos vs. Inicio en la Ola 4).
+ * Las reglas puras de los recurrentes (Ola 8), sin Compose, para poder testearlas — y, sobre
+ * todo, para que la cifra del acceso «Recurrentes» del Inicio y el «Flujo libre» de Movimientos
+ * salgan de la MISMA función y no puedan discrepar. Ese desacuerdo entre dos pantallas que dicen
+ * contar lo mismo ya había pasado antes (Créditos vs. Inicio en la Ola 4).
+ *
+ * (Nacieron para la pantalla «Recurrentes», que el rediseño de 2026-09 disolvió dentro de
+ * Movimientos; el archivo se queda donde está porque lo que hay acá nunca fue de una pantalla.)
  */
 
 /**
@@ -46,7 +48,7 @@ fun claveDeNombre(nombre: String): String = claveComparableDeNombre(nombre)
  * PR 2 del rediseño de Recurrentes (2026-09): las suscripciones que el detector propuso y el
  * dueño todavía no revisó — ni confirmó ni descartó.
  *
- * Extraída de lo que ya calculaba [RecurrentesScreen] en línea (`candidatas`) para que
+ * Extraída de lo que calculaba en línea la pantalla «Recurrentes» (`candidatas`) para que
  * Movimientos —que ahora también necesita esta misma lista, en su propia sección «Detectadas ·
  * por confirmar»— la comparta en vez de recalcularla a mano. Pura y testeada por la misma razón
  * que el resto de este archivo: dos copias del mismo filtro es exactamente el defecto que este
@@ -73,7 +75,16 @@ fun copDeSuscripcion(sub: Subscription, usdToCop: Double): Long? = when {
     else -> null
 }
 
-/** Una fila de la lista única: lo que escribió el dueño y lo que cobra una suscripción. */
+/**
+ * Un recurrente contado por [resumenRecurrentes]: lo que escribió el dueño y lo que cobra una
+ * suscripción, en una sola lista ordenada por día del mes.
+ *
+ * PR 4 del rediseño de Recurrentes (2026-09): la pantalla que pintaba esta lista fila por fila
+ * ya no existe, así que hoy [ResumenRecurrentes.items] se lee solo para CONTAR —el acceso
+ * «Recurrentes» del Inicio dice «libre al mes · N recurrentes»—. Se queda como lista y no como
+ * un `Int` porque el reparto uno-a-uno de [resumenRecurrentes] necesita igual la fila armada
+ * (`yaEsRegla` decide qué entra al total), y porque el día del mes es lo que fija el orden.
+ */
 sealed class Recurrente {
     abstract val dayOfMonth: Int
 
@@ -83,14 +94,10 @@ sealed class Recurrente {
 
     /**
      * @param yaEsRegla el dueño YA tiene una regla recurrente con este mismo nombre. La fila se
-     *   muestra igual (existe de verdad, el cobro está ahí) pero no vuelve a sumar al total.
+     *   cuenta igual (el cobro existe de verdad) pero no vuelve a sumar al total.
      */
     data class Suscripcion(val sub: Subscription, val yaEsRegla: Boolean) : Recurrente() {
         override val dayOfMonth get() = sub.dayOfMonth
-        /** Ver [MANUAL_SUB_PREFIX]: sin ese prefijo, la encontró el detector. */
-        val laEncontroMovi get() = !sub.merchantKey.startsWith(MANUAL_SUB_PREFIX)
-        /** Herencia de antes de F39: se activó sola, sin que el dueño la confirmara. */
-        val seActivoSola get() = sub.status == SubStatus.AUTO
     }
 }
 

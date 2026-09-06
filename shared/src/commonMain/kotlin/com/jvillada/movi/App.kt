@@ -50,7 +50,6 @@ import com.jvillada.movi.ui.onboarding.WelcomeScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
-import com.jvillada.movi.ui.recurrentes.RecurrentesScreen
 import com.jvillada.movi.ui.recurrentes.RecurringOfferBar
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
 import com.jvillada.movi.ui.sms.SMSInboxScreen
@@ -242,7 +241,6 @@ fun App() {
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
-                Screen.Recurrentes       -> RecurrentesScreen(navigate)
                 Screen.Categorias        -> CategoriasScreen(navigate)
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)

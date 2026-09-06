@@ -100,7 +100,7 @@ fun HojaDelMovimiento(
     }
 
     // Editar una regla ya existente: misma hoja, en modo edición. Invalida el cache del gate
-    // (mismo criterio que `RecurrentesScreen.onSaved`, ver `CreateRecurringRuleSheet`): sin esto,
+    // (mismo criterio que el `onSaved` de `CreateRecurringRuleSheet` en el resto de la app): sin esto,
     // el chip «Recurrentes» y la marca de la fila en Movimientos podían quedarse con el monto o el
     // día viejo hasta que algo más invalidara el cache.
     reglaAEditar?.let { regla ->

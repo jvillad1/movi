@@ -20,13 +20,13 @@ import com.jvillada.movi.shared.model.UsedCategory
  * F35: categorías ya usadas por el dueño, para sugerirlas en [com.jvillada.movi.ui.components.CategoryField]
  * sin pedirle nada nuevo al server. Movi no tiene un endpoint de "categorías usadas" — en vez de
  * agregar uno, las pantallas que YA cargan movimientos, presupuestos o reglas recurrentes
- * (PresupuestosScreen, TransactionsScreen, RecurrentesScreen) alimentan este caché de paso con
+ * (PresupuestosScreen y TransactionsScreen) alimentan este caché de paso con
  * [record] al terminar su propia carga; QuickAddScreen (que no carga nada de eso) lo lee tal
  * cual, sin fetch propio.
  *
  * **Ola 9 · A2 — las categorías propias ya están al abrir «Agregar».** Ese diseño tenía un
  * agujero que se notó el primer día de uso real: quien abre la app y va DIRECTO a Agregar no
- * pasó por ninguna de esas tres pantallas, así que el caché estaba vacío y sus propias
+ * pasó por ninguna de esas pantallas, así que el caché estaba vacío y sus propias
  * categorías («Carro») no se le ofrecían aunque las hubiera escrito diez veces. Ahora el Inicio
  * —la pantalla en la que la app arranca— también lo llena, con la lista que le viene DENTRO de
  * `GET /api/dashboard/summary` (ver [UsedCategory] y `DashboardSummary.usedCategories`): es un
