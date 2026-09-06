@@ -69,15 +69,18 @@ fun Route.dashboardRoutes() {
         // renglón «este dispositivo tiene $121.210 que el total de arriba todavía no cuenta»
         // culpando a una desincronización que no existía: las dos mitades miraban meses
         // distintos. Es exactamente la contradicción que `currentPeriodWindow` vino a eliminar.
-        val cutoffDay = cutoffDayOf(uid)
-        val (monthStart, monthEnd) = currentPeriodWindow(cutoffDay)
+        val periodo = PeriodSettings(cutoffDay = cutoffDayOf(uid).coerceIn(1, 31))
+        val (monthStart, monthEnd) = currentPeriodWindow(periodo.cutoffDay)
+        // Segunda lectura del reloj (`currentPeriodWindow` hace la suya): entre las dos podría
+        // cruzarse la medianoche del corte y dejar el rótulo nombrando un período distinto del
+        // que se sumó. Es una ventana de microsegundos una vez al mes y el rótulo hoy no lo lee
+        // nadie; se deja anotado en vez de arrastrar un instante por la firma de una función que
+        // comparten cuatro rutas.
+        val ahora = AppClock.now().toInstant().toEpochMilli()
         // El período se llama por el mes en que TERMINA (ver PeriodoFinanciero en :core), no por
         // el mes en que cae hoy: con corte 25, el 27 de agosto ya es «septiembre». Con corte 1
         // devuelve el mes civil, igual que antes.
-        val month = periodoDe(
-            AppClock.now().toInstant().toEpochMilli(),
-            PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31)),
-        ).prefijo
+        val month = periodoDe(ahora, periodo).prefijo
 
         val summary = dbQuery {
             val accountTypeById = accountTypesFor(uid)

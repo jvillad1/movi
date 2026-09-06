@@ -49,10 +49,17 @@ fun gastosDelPresupuesto(
 /**
  * Cuánto del gastado de la categoría **no** está en la lista de arriba.
  *
- * `0` cuando coinciden, que es el caso normal. Distinto de cero significa que el server contó
- * plata que este dispositivo todavía no bajó (otro teléfono, un SMS, una importación). Se dice
- * en una línea en vez de dejar que el dueño reste dos números y desconfíe de los dos: una lista
- * que no suma lo que dice el título de arriba, sin explicación, es peor que no tener lista.
+ * `0` cuando coinciden, que es el caso normal. Se dice en una línea en vez de dejar que el dueño
+ * reste dos números y desconfíe de los dos: una lista que no suma lo que dice el título de
+ * arriba, sin explicación, es peor que no tener lista.
+ *
+ * **Esta función mide la diferencia; no sabe por qué la hay.** Antes esta doc afirmaba que era
+ * plata que «este dispositivo todavía no bajó (otro teléfono, un SMS, una importación)», y la
+ * pantalla lo repetía al dueño. Fue falso justo cuando más importaba: con su corte de período en
+ * el día 25, el resumen del server seguía sumando el mes civil (ver `DashboardRoutes`) y las dos
+ * mitades de la pantalla miraban meses distintos — ninguna desincronización de por medio. Esa
+ * causa ya está arreglada, y un desacuerdo real sigue siendo posible, pero de acá no se puede
+ * distinguir uno del otro: la UI nombra la diferencia y no la explica.
  *
  * Negativo también es posible —la lista local con algo que el server no cuenta— y por eso el
  * resultado es un `Long` con signo y no un booleano.
