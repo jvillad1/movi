@@ -26,6 +26,7 @@ import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
+import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.shared.time.currentMonthPrefix
 
@@ -266,6 +267,16 @@ fun patrimonioExplicacion(balance: HeroBalance): String {
 }
 
 /**
+ * Cuentas que **sí puede usar** el dueño: ni deuda ni condicionada a algo puntual (ver
+ * [Account.condicionadaA]). [heroBalance] y [cuentasDelHero] llaman a ESTA función en vez de
+ * repetir el filtro cada una por su cuenta — dos copias del mismo predicado ya se
+ * desalinearon dos veces en este proyecto (Créditos vs. Inicio en la Ola 4, `quickLinkFigure`
+ * vs. `assetsDebtsNet` después) y la tercera no iba a ser distinta.
+ */
+private fun cuentasLibres(accounts: List<Account>): List<Account> =
+    accounts.filter { !isDebtAccount(it.type) && it.condicionadaA.isNullOrBlank() }
+
+/**
  * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no
  * reimplementa la suma— para que el hero, la fila «Cuentas» del Inicio y el «Patrimonio neto»
  * de la pantalla de Cuentas no puedan dar tres números distintos.
@@ -275,7 +286,7 @@ fun heroBalance(accounts: List<Account>): HeroBalance {
     // condicionada. Lo que cambia es qué parte de eso el dueño puede usar.
     val (activos, deudas, neto) = assetsDebtsNet(accounts)
 
-    val libres = accounts.filter { !isDebtAccount(it.type) && it.condicionadaA.isNullOrBlank() }
+    val libres = cuentasLibres(accounts)
     val condicionadas = accounts.filter { !isDebtAccount(it.type) && !it.condicionadaA.isNullOrBlank() }
     val condicionado = condicionadas.sumOf { it.balance }
     val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }.sumOf { it.balance }
@@ -293,6 +304,31 @@ fun heroBalance(accounts: List<Account>): HeroBalance {
         deudas = deudas,
         patrimonio = neto,
     )
+}
+
+/** Una fila del desglose por cuenta del hero: el nombre y su saldo, ya formateado con signo y moneda. */
+data class CuentaHero(val nombre: String, val monto: String)
+
+/**
+ * Las cuentas que componen [HeroBalance.tuPlata], una por una — lo que pidió el dueño viendo
+ * «Tu plata» sumar todas las cuentas en un solo número: *«realmente me gustaría ver no el
+ * total sino el disponible en cada cuenta allí listado»*. Reemplaza la línea que antes
+ * agregaba por GRUPO («Dinero $X · Inversión $Y»); la cifra grande de arriba no cambia.
+ *
+ * **Llama a [cuentasLibres], la MISMA función que usa [heroBalance]** — no una copia del
+ * predicado (ver su KDoc). El orden con el que separa disponible de invertido (`!= INVERSION`
+ * primero, `== INVERSION` después) es también el de la pantalla de Cuentas: Dinero antes que
+ * Inversión (ver `AccountsScreen`).
+ *
+ * `null` = todavía no contestó — igual que [DashboardData.accounts], para no afirmar una lista
+ * vacía cuando en realidad no se sabe todavía.
+ */
+fun cuentasDelHero(accounts: List<Account>?): List<CuentaHero>? {
+    if (accounts == null) return null
+    val libres = cuentasLibres(accounts)
+    val disponibles = libres.filter { it.type.group != AccountGroup.INVERSION }
+    val invertidas = libres.filter { it.type.group == AccountGroup.INVERSION }
+    return (disponibles + invertidas).map { CuentaHero(it.name, signedMoney(it.balance, it.currency)) }
 }
 
 // ── Próximos pagos ─────────────────────────────────────────────────────────────────

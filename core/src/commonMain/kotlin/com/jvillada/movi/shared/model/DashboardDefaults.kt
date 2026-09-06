@@ -31,11 +31,24 @@ package com.jvillada.movi.shared.model
 // −$1.492.710.542» — la lectura exacta que la Ola 9 vino a evitar, ahora afirmada por el rótulo.
 //
 // Por eso el rótulo del hero se cableó en el renderer (`HERO_BALANCE_TITLE` en DashboardLogic.kt,
-// mismo trato que «Ingresos»/«Gastos»/«Flujo del mes») y esta lista **no cambió ni un byte**:
-// producción sigue en `version 4 = seed_version 4`, `seedScreens` no toca nada, y el título que
-// queda abajo es dato inerte para HERO_BALANCE — se conserva para que la semilla siga siendo
-// byte a byte lo que ya está desplegado, no porque alguien lo lea.
-const val DASHBOARD_LAYOUT_VERSION = 4
+// mismo trato que «Ingresos»/«Gastos»/«Flujo del mes»), y hasta la generación 4 esta lista se
+// quedó sin cambiar ni un byte por esa misma razón.
+//
+// Generación 5: sale la sección «Explora» (QUICK_LINKS_WITH_TOTALS). El dueño, viendo el Inicio:
+// «no le veo mucho sentido a la sección de Explora si es lo mismo que veo en el menú». Tenía
+// razón — sus cinco accesos (Cuentas, Créditos, Presupuestos, Metas, Recurrentes) ya son
+// destinos de primera clase en el rail/bottom-nav y en «Más» (`MinNavRail`, `MasScreen`): no hay
+// ahí ni un destino que no se pueda alcanzar desde el menú. Lo que pedía en su lugar —«que me
+// traiga cosas a revisar o sugerencias»— ya existe: la sección ALERTS, justo arriba, que solo se
+// pinta cuando hay algo que de verdad avisar (ver `dashboardAlerts`); su screenshot no tenía
+// ninguna alerta pendiente en ese momento, por eso no la vio.
+//
+// Esta SÍ necesita subir la generación: a diferencia del rótulo del hero, quitar una sección
+// entera de la lista es un cambio que solo el seed puede propagar — el fallback cliente (esta
+// misma función) y la fila ya guardada en `screen_definitions` tienen que quedar iguales para
+// que el Inicio del dueño, ya sembrado en generación 4, la deje de mostrar después del deploy
+// (ver `seedScreens`: una fila con `seed_version < version` se reemplaza completa).
+const val DASHBOARD_LAYOUT_VERSION = 5
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
@@ -44,17 +57,6 @@ fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
         ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
         ScreenSection(type = "UPCOMING_PAYMENTS", title = "Próximos pagos"),
         ScreenSection(type = "ALERTS", title = "Alertas"),
-        ScreenSection(
-            type = "QUICK_LINKS_WITH_TOTALS",
-            title = "Explora",
-            cards = listOf(
-                ScreenCard(title = "Cuentas", action = ScreenAction("NAVIGATE", "accounts")),
-                ScreenCard(title = "Créditos", action = ScreenAction("NAVIGATE", "credits")),
-                ScreenCard(title = "Presupuestos", action = ScreenAction("NAVIGATE", "budgets")),
-                ScreenCard(title = "Metas", action = ScreenAction("NAVIGATE", "goals")),
-                ScreenCard(title = "Recurrentes", action = ScreenAction("NAVIGATE", "recurrentes")),
-            ),
-        ),
         // Sin el "✦" que llevaba antes: en la web salía como ▯ (la fuente no tiene el glifo),
         // mismo problema que la Ola 2 arregló en los íconos de texto.
         ScreenSection(

@@ -34,6 +34,7 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LinkFigure
+import com.jvillada.movi.ui.dashboard.cuentasDelHero
 import com.jvillada.movi.ui.dashboard.dashboardAlerts
 import com.jvillada.movi.ui.dashboard.dueLabel
 import com.jvillada.movi.ui.dashboard.heroBalance
@@ -226,16 +227,35 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                 color = MinTextMute,
             )
         }
-        if (balance.hasInvestments) {
-            // Las cuentas de Inversión entran en «tu plata», así que la línea dice cuánto de ese
-            // total está guardado. Usa el vocabulario de la pantalla de Cuentas ("Dinero" e
-            // "Inversión" son sus dos grupos con subtotal), no dos palabras nuevas.
+        // El dueño, viendo esta tarjeta: «realmente me gustaría ver no el total sino el
+        // disponible en cada cuenta allí listado» — no el agregado por grupo que había acá
+        // antes («Dinero $X · Inversión $Y»). La cifra grande de arriba no cambia: sigue siendo
+        // la suma; esto es el desglose que explica de qué está hecha.
+        //
+        // `null` = las cuentas todavía no contestaron: no se afirma una lista (mismo criterio
+        // que el «—» de la cifra grande, unas líneas arriba). Vacía tampoco pinta nada — no hay
+        // nada que desglosar.
+        val cuentas = cuentasDelHero(data.accounts)
+        if (!cuentas.isNullOrEmpty()) {
             Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Dinero ${formatMoneyCompact(balance.disponible)} · Inversión ${formatMoneyCompact(balance.invertido)}",
-                fontSize = 11.5.sp,
-                color = MinTextMute,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                cuentas.forEach { cuenta ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = cuenta.nombre,
+                            fontSize = 11.5.sp,
+                            color = MinTextMute,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        MonoText(cuenta.monto, 11.5f, color = MinTextMute)
+                    }
+                }
+            }
         }
         if (balance.muestraPatrimonio) {
             Spacer(Modifier.height(16.dp))

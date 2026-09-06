@@ -292,6 +292,46 @@ class DashboardLogicTest {
         assertEquals("$12.383.363", quickLinkFigure("accounts", DashboardData(accounts = cuentasDelDueño)).value)
     }
 
+    // ── El desglose por cuenta del hero (reemplaza «Dinero $X · Inversión $Y») ─────
+
+    @Test
+    fun `cuentasDelHero lista Dinero antes que Inversion y excluye deuda y condicionada`() {
+        val cuentas = listOf(
+            Account("l1", "Hipotecario", AccountType.LOAN, 768_000_000),                          // deuda: afuera
+            Account("i1", "CDT Bancolombia", AccountType.INVESTMENT, 3_000_000),                  // inversión libre
+            Account("a1", "Bancolombia Ahorros", AccountType.SAVINGS, 12_383_363),                 // dinero
+            Account("s1", "Skandia pensión", AccountType.INVESTMENT, 106_000_000, condicionadaA = "Vivienda"), // condicionada: afuera
+            Account("c1", "Visa", AccountType.CREDIT_CARD, 500_000),                              // deuda: afuera
+        )
+        val hero = cuentasDelHero(cuentas)
+        assertEquals(
+            listOf("Bancolombia Ahorros", "CDT Bancolombia"),
+            hero?.map { it.nombre },
+            "Dinero antes que Inversión, y ni la deuda ni la cuenta condicionada aparecen",
+        )
+    }
+
+    @Test
+    fun `cuentasDelHero formatea COP y USD cada una en su moneda`() {
+        val hero = cuentasDelHero(
+            listOf(
+                Account("a1", "Bancolombia Ahorros", AccountType.SAVINGS, 2_000_000),
+                Account("i1", "CDT en dólares", AccountType.INVESTMENT, -50, currency = "USD"),
+            ),
+        )
+        assertEquals(listOf("$2.000.000", "−US$50"), hero?.map { it.monto })
+    }
+
+    @Test
+    fun `cuentasDelHero con lista vacia de cuentas es lista vacia, no null`() {
+        assertEquals(emptyList(), cuentasDelHero(emptyList()))
+    }
+
+    @Test
+    fun `cuentasDelHero con cuentas null (aun cargando) devuelve null`() {
+        assertNull(cuentasDelHero(null), "todavía no contestó: no se afirma una lista")
+    }
+
     // ── Accesos con cifra ──────────────────────────────────────────────────────
 
     private val data = DashboardData(
@@ -571,9 +611,12 @@ class DashboardLogicTest {
     // ── Secciones visibles ─────────────────────────────────────────────────────
 
     @Test
-    fun `con la base vacia solo se pintan balance, accesos y Movi AI`() {
+    fun `con la base vacia solo se pintan balance y Movi AI`() {
+        // Generación 5: sin «Explora» (QUICK_LINKS_WITH_TOTALS) — era el único bloque que se
+        // pintaba siempre por tener cards fijas; sin él, una base vacía deja solo el hero y el
+        // banner de IA (Próximos pagos y Alertas ya desaparecían solas cuando no había nada).
         val visible = visibleSections(defaultDashboardDefinition(), DashboardData())
-        assertEquals(listOf("HERO_BALANCE", "QUICK_LINKS_WITH_TOTALS", "BANNER"), visible.map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "BANNER"), visible.map { it.type })
     }
 
     @Test
@@ -583,7 +626,7 @@ class DashboardLogicTest {
             cardCandidates = 1,
         )
         val visible = visibleSections(defaultDashboardDefinition(), withStuff)
-        assertEquals(listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS", "BANNER"), visible.map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"), visible.map { it.type })
     }
 
     @Test
