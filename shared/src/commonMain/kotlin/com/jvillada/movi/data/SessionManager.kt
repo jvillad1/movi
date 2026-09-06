@@ -255,6 +255,8 @@ object SessionManager {
         ReminderChannelsCache.clear()
         // Ola 11: y la última cuenta usada, por lo mismo — es una cuenta del usuario que se va.
         LastAccountStore.clear()
+        // Y los días que plegó en Movimientos: son fechas de SU lista.
+        DiasPlegadosStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo
         // retome el control. Le hace falta a TODOS los caminos que terminan una sesión —hoy el
         // logout explícito de Perfil, el forzado de onUnauthorized tras 401s repetidos, y tres

@@ -1,7 +1,9 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
@@ -78,6 +80,12 @@ class TransactionsScreenTest {
 
     // ── Ola 8 · V6 — el saldo inicial no es un ingreso ────────────────────────────
 
+    /**
+     * `countsAsCashFlow` va **derivado con `isCashFlow`**, como lo manda el server, y no en el
+     * default `true`: desde que los chips y el color leen esa bandera (y no la categoría a mano),
+     * un fixture con el default sería un evento que el server nunca manda, y el test probaría
+     * contra nadie.
+     */
     private fun apertura() = FinancialEvent(
         id = "ap1",
         accountId = "a1",
@@ -86,6 +94,7 @@ class TransactionsScreenTest {
         category = OPENING_CATEGORY,
         description = "Saldo inicial",
         timestamp = 0L,
+        countsAsCashFlow = isCashFlow(AccountType.SAVINGS, TransactionType.INCOME, OPENING_CATEGORY),
     )
 
     @Test
@@ -144,6 +153,8 @@ class TransactionsScreenTest {
         description = "Desembolso desde Crédito · cuenta eliminada",
         timestamp = 0L,
         reconciliationStatus = ReconciliationStatus.RECONCILED,
+        // Derivado como lo deriva el server; ver [apertura].
+        countsAsCashFlow = isCashFlow(AccountType.CHECKING, tipo, ORPHANED_LEG_CATEGORY),
     )
 
     @Test
