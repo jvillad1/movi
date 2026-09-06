@@ -689,4 +689,129 @@ class SubscriptionRoutesTest {
             assertEquals("MENSUAL", it.jsonObject["periodicidad"]!!.jsonPrimitive.content)
         }
     }
+
+    // ── El PUT no acepta estados del detector sobre un alta manual ────────────
+
+    /** Crea el alta manual y devuelve su fila tal cual la respondió el server. */
+    private suspend fun ApplicationTestBuilder.crearManual(
+        nombre: String = "Gimnasio",
+        cuerpo: String = """{"displayName":"$nombre","amount":90000,"currency":"COP","dayOfMonth":3}""",
+    ): JsonObject {
+        val post = client.post("/api/subscriptions") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpo)
+        }
+        assertEquals(HttpStatusCode.Created, post.status)
+        return Json.parseToJsonElement(post.bodyAsText()).jsonObject
+    }
+
+    private suspend fun ApplicationTestBuilder.putSub(id: String, fila: JsonObject, userId: String = userAId) =
+        client.put("/api/subscriptions/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(Json.encodeToString(JsonObject.serializer(), fila))
+        }
+
+    private suspend fun ApplicationTestBuilder.statusEnDb(merchantKey: String): String =
+        Json.parseToJsonElement(
+            client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
+        ).jsonObject["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == merchantKey }
+            .jsonObject["status"]!!.jsonPrimitive.content
+
+    /**
+     * Una suscripción que escribió el dueño (`manual_*`) no puede terminar en AUTO ni en
+     * CANDIDATE: son estados que solo escribe el detector, y el detector no produce esa clave.
+     * Ningún cliente de hoy manda esa transición, pero el endpoint recibe el `Subscription`
+     * entero del body — la invariante tiene que sostenerla el server, no la buena conducta del
+     * cliente. Con la contradicción escrita, la fila diría «la escribiste tú» (el prefijo manda
+     * en `origenDeSuscripcion`) mientras suma en «Flujo libre» como si Movi la hubiera activado
+     * sola: nada en pantalla lo delataría.
+     */
+    @Test
+    fun `PUT rejects AUTO and CANDIDATE on a manual subscription and leaves it untouched`() = testApplication {
+        wireApp()
+        val creada = crearManual()
+        val id = creada["id"]!!.jsonPrimitive.content
+
+        listOf("AUTO", "CANDIDATE").forEach { estado ->
+            val res = putSub(id, JsonObject(creada.toMutableMap().apply { put("status", JsonPrimitive(estado)) }))
+            assertEquals(HttpStatusCode.BadRequest, res.status, "$estado no es un estado válido para un alta manual")
+            assertEquals("CONFIRMED", statusEnDb("manual_gimnasio"), "el $estado rechazado no debe haberse escrito")
+        }
+    }
+
+    /**
+     * El rechazo mira la clave GUARDADA, no la que viaja en el body — que el cliente controla y
+     * este UPDATE ni siquiera escribe. Sin eso, mandar `merchantKey: "netflix"` sobre una fila
+     * `manual_*` saltearía la guarda entera.
+     */
+    @Test
+    fun `PUT cannot dodge the guard by sending a detector merchantKey in the body`() = testApplication {
+        wireApp()
+        val creada = crearManual()
+        val id = creada["id"]!!.jsonPrimitive.content
+
+        val res = putSub(id, JsonObject(creada.toMutableMap().apply {
+            put("merchantKey", JsonPrimitive("netflix"))
+            put("status", JsonPrimitive("AUTO"))
+        }))
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        assertEquals("CONFIRMED", statusEnDb("manual_gimnasio"))
+    }
+
+    /**
+     * La contracara: la guarda no puede romper los dos caminos legítimos que existen hoy.
+     * Sobre una fila del detector, «confirmar» escribe CONFIRMED y «Quitar» escribe DISMISSED
+     * (los dos ya cubiertos arriba); sobre una manual, CONFIRMED y DISMISSED tienen que seguir
+     * pasando — más el editar-sin-tocar-el-estado, que es el PUT más común.
+     */
+    @Test
+    fun `PUT still accepts CONFIRMED, DISMISSED and plain edits on a manual subscription`() = testApplication {
+        wireApp()
+        val creada = crearManual()
+        val id = creada["id"]!!.jsonPrimitive.content
+
+        // Editar monto y nombre sin tocar el estado.
+        val editada = putSub(id, JsonObject(creada.toMutableMap().apply {
+            put("displayName", JsonPrimitive("Gimnasio Premium"))
+            put("amount", JsonPrimitive(120_000))
+        }))
+        assertEquals(HttpStatusCode.OK, editada.status)
+        val body = Json.parseToJsonElement(editada.bodyAsText()).jsonObject
+        assertEquals("Gimnasio Premium", body["displayName"]!!.jsonPrimitive.content)
+        assertEquals(120_000L, body["amount"]!!.jsonPrimitive.long)
+        assertEquals("CONFIRMED", body["status"]!!.jsonPrimitive.content)
+
+        assertEquals(HttpStatusCode.OK,
+            putSub(id, JsonObject(body.toMutableMap().apply { put("status", JsonPrimitive("DISMISSED")) })).status)
+        assertEquals("DISMISSED", statusEnDb("manual_gimnasio"))
+
+        assertEquals(HttpStatusCode.OK,
+            putSub(id, JsonObject(body.toMutableMap().apply { put("status", JsonPrimitive("CONFIRMED")) })).status)
+        assertEquals("CONFIRMED", statusEnDb("manual_gimnasio"))
+    }
+
+    /**
+     * La guarda es solo para las manuales: una fila del detector puede ir a cualquiera de los
+     * cuatro estados. AUTO y CANDIDATE se los escribe el barrido de todos modos, así que
+     * prohibirlos por HTTP no protegería nada.
+     */
+    @Test
+    fun `PUT allows every status on a detector-found subscription`() = testApplication {
+        wireApp()
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val netflix = Json.parseToJsonElement(
+            client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
+        ).jsonObject["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }.jsonObject
+        val id = netflix["id"]!!.jsonPrimitive.content
+
+        listOf("CONFIRMED", "DISMISSED", "CANDIDATE", "AUTO").forEach { estado ->
+            val res = putSub(id, JsonObject(netflix.toMutableMap().apply { put("status", JsonPrimitive(estado)) }))
+            assertEquals(HttpStatusCode.OK, res.status, "$estado es legítimo sobre una fila del detector")
+            assertEquals(estado, statusEnDb("netflix"))
+        }
+    }
 }
