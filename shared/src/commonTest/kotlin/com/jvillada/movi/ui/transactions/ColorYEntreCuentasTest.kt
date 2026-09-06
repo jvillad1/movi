@@ -81,16 +81,20 @@ class ColorYEntreCuentasTest {
     }
 
     @Test
-    fun `las dos patas de un traspaso van en gris, juntas o sueltas`() {
+    fun `las dos patas de un traspaso van en gris sueltas, pero el par va en azul entre cuentas`() {
+        // Suelta —evento por evento, cuando no hay hermana con la que juntarla— sigue siendo
+        // NEUTRO: no hay nada nuevo que decir de una sola pata. Ver [tonoDelEvento].
         assertEquals(TonoDelMonto.NEUTRO, tonoDelEvento(traspasoSale))
         assertEquals(TonoDelMonto.NEUTRO, tonoDelEvento(traspasoEntra))
-        assertEquals(TonoDelMonto.NEUTRO, tonoDelRenglon(MovementRow.Transfer(traspasoSale, traspasoEntra)))
+        // Pero el RENGLÓN —el par leído como un solo hecho— ya no es gris: el dueño pidió un
+        // color propio para distinguirlo de un NEUTRO real (la apertura, la pata huérfana).
+        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(MovementRow.Transfer(traspasoSale, traspasoEntra)))
     }
 
     @Test
-    fun `la cuota como par va en gris, pero su pata del dinero suelta es un gasto en rojo`() {
-        // El par: plata de una cuenta suya a otra, sin signo.
-        assertEquals(TonoDelMonto.NEUTRO, tonoDelRenglon(MovementRow.Transfer(cuotaDinero, cuotaDeuda)))
+    fun `la cuota como par va entre cuentas, pero su pata del dinero suelta es un gasto en rojo`() {
+        // El par: plata de una cuenta suya a otra, sin signo, en el color de ENTRE_CUENTAS.
+        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(MovementRow.Transfer(cuotaDinero, cuotaDeuda)))
         // Suelta —como queda en «Gastos», donde su hermana no entra— es plata que salió.
         assertEquals(TonoDelMonto.GASTO, tonoDelEvento(cuotaDinero))
         // La pata de la deuda nunca es un ingreso: baja la deuda, no llena el bolsillo.
@@ -98,11 +102,41 @@ class ColorYEntreCuentasTest {
     }
 
     @Test
-    fun `el pago de tarjeta va en gris en sus tres formas`() {
-        assertEquals(TonoDelMonto.NEUTRO, tonoDelRenglon(MovementRow.Transfer(tarjetaDinero, tarjetaDeuda)))
+    fun `el pago de tarjeta va entre cuentas como par, y en gris cada pata suelta`() {
+        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(MovementRow.Transfer(tarjetaDinero, tarjetaDeuda)))
         assertEquals(TonoDelMonto.NEUTRO, tonoDelEvento(tarjetaDinero))
         assertEquals(TonoDelMonto.NEUTRO, tonoDelEvento(tarjetaDeuda))
         assertEquals(TonoDelMonto.NEUTRO, tonoDelEvento(tarjetaVieja))
+    }
+
+    @Test
+    fun `entre cuentas no lleva signo, igual que neutro`() {
+        // El pedido del dueño fue de COLOR, no de signo: la plata sigue sin haber entrado ni
+        // salido del bolsillo, así que el par sigue sin «+» ni «−» (ver TransferRow).
+        for (row in listOf(
+            MovementRow.Transfer(traspasoSale, traspasoEntra),
+            MovementRow.Transfer(cuotaDinero, cuotaDeuda),
+            MovementRow.Transfer(tarjetaDinero, tarjetaDeuda),
+        )) {
+            val tono = tonoDelRenglon(row)
+            assertEquals(TonoDelMonto.ENTRE_CUENTAS, tono)
+            assertTrue(tono != TonoDelMonto.GASTO && tono != TonoDelMonto.INGRESO)
+        }
+    }
+
+    @Test
+    fun `gasto, ingreso y entre cuentas son tres colores distintos`() {
+        val gastoColor = colorDelTono(TonoDelMonto.GASTO)
+        val ingresoColor = colorDelTono(TonoDelMonto.INGRESO)
+        val entreCuentasColor = colorDelTono(TonoDelMonto.ENTRE_CUENTAS)
+        val neutroColor = colorDelTono(TonoDelMonto.NEUTRO)
+
+        assertTrue(gastoColor != ingresoColor, "gasto e ingreso no pueden ser el mismo color")
+        assertTrue(gastoColor != entreCuentasColor, "gasto y entre-cuentas no pueden ser el mismo color")
+        assertTrue(ingresoColor != entreCuentasColor, "ingreso y entre-cuentas no pueden ser el mismo color")
+        // Y de paso, que «entre cuentas» dejó de reusar el gris de un NEUTRO real — que es
+        // justo el problema que el dueño reportó.
+        assertTrue(entreCuentasColor != neutroColor, "entre-cuentas ya no puede ser el mismo gris que neutro")
     }
 
     @Test
