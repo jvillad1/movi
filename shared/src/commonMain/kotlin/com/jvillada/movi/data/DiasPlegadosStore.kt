@@ -41,7 +41,7 @@ object DiasPlegadosStore {
 
     /** Pliega [dia] si estaba desplegado y al revés. Devuelve el conjunto nuevo. */
     fun alternar(dia: String): Set<String> {
-        val nuevo = if (dia in memoria) memoria - dia else acotar(memoria + dia)
+        val nuevo = if (dia in memoria) memoria - dia else acotarConservando(memoria + dia, dia)
         memoria = nuevo
         guardar(nuevo)
         return nuevo
@@ -53,9 +53,17 @@ object DiasPlegadosStore {
         guardar(emptySet())
     }
 
-    /** Se queda con las [MAX_DIAS] fechas más recientes; las ISO ordenan como texto. */
-    private fun acotar(dias: Set<String>): Set<String> =
-        if (dias.size <= MAX_DIAS) dias else dias.sortedDescending().take(MAX_DIAS).toSet()
+    /**
+     * Se queda con las [MAX_DIAS] fechas más recientes, pero garantiza que [conservar] quede
+     * adentro aunque sea la más vieja de todas: es el día que el dueño acaba de plegar, y un tap
+     * que no se nota (`acotar` simple lo descartaría de inmediato si ya había 400 fechas más
+     * recientes que él) es peor que perder el pliegue de otra fecha vieja.
+     */
+    private fun acotarConservando(dias: Set<String>, conservar: String): Set<String> {
+        if (dias.size <= MAX_DIAS) return dias
+        val recientes = dias.sortedDescending().take(MAX_DIAS)
+        return if (conservar in recientes) recientes.toSet() else (recientes.dropLast(1) + conservar).toSet()
+    }
 
     private fun leer(): Set<String> = runCatching {
         diasSettings.getStringOrNull(KEY_DIAS_PLEGADOS)
