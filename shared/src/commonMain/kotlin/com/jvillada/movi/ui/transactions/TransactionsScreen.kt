@@ -84,6 +84,7 @@ import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
+import com.jvillada.movi.ui.recurrentes.notaDeProrrateo
 import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
 import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
 import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
@@ -91,6 +92,7 @@ import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
 import com.jvillada.movi.ui.recurrentes.suscripcionesActivas
+import com.jvillada.movi.ui.recurrentes.textoDelMontoDeSuscripcion
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -1213,6 +1215,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     item {
                         SeccionSuscripcionesActivas(
                             activas = activasRecurrentes,
+                            // La misma tasa con la que se armó el total de arriba: es lo único
+                            // que le permite a [notaDeProrrateo] saber si una fila anual en
+                            // dólares de verdad entró a ese total o quedó afuera sin convertir.
+                            usdToCop = subsParaRecurrentes.usdToCop,
                             enVuelo = suscripcionesEnVuelo,
                             onQuitar = { quitarSuscripcion(it) },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
@@ -1698,6 +1704,23 @@ private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
                 lineHeight = 15.sp,
             )
         }
+        // Ola 16: la otra transformación que sufre una fila entre la lista de abajo y este total.
+        // Va aparte del aviso de la TRM —y no en el mismo `else if`— porque las dos pueden pasar
+        // a la vez sobre la misma suscripción, y callar una de ellas dejaría un número sin
+        // explicar igual. Sin esta línea, «Gastos recurrentes» cuenta $30.825 de algo que la
+        // lista de abajo dice que cuesta $369.900, y no hay forma de saber cuál de los dos está
+        // mal. Ver [ResumenRecurrentes.hayCobrosAnuales]: solo aparece si un cobro anual de
+        // verdad entró al total.
+        if (cifras != null && cifras.hayCobrosAnuales) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Lo que te cobran una vez al año entra repartido: dividimos el cobro en 12 " +
+                    "para que este total sea lo que te cuesta cada mes.",
+                fontSize = 11.sp,
+                color = MinTextMute,
+                lineHeight = 15.sp,
+            )
+        }
     }
 }
 
@@ -1724,6 +1747,8 @@ private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
 @Composable
 private fun SeccionSuscripcionesActivas(
     activas: List<Recurrente.Suscripcion>,
+    /** La tasa con la que se armó el total de arriba. Ver [notaDeProrrateo]. */
+    usdToCop: Double,
     enVuelo: Set<String>,
     onQuitar: (Subscription) -> Unit,
     modifier: Modifier = Modifier,
@@ -1766,12 +1791,22 @@ private fun SeccionSuscripcionesActivas(
                         // De dónde salió, en una sola línea y decidido en un solo lugar — ver
                         // [contextoDeSuscripcionActiva].
                         Text(contextoDeSuscripcionActiva(item), fontSize = 12.sp, color = MinTextMute)
+                        // Y, solo en un cobro anual que SÍ suma, cuánto de él entra al total de
+                        // este mes: es lo que explica por qué el «Flujo libre» de arriba no es la
+                        // suma de los montos que se ven acá. Ver [notaDeProrrateo], que devuelve
+                        // null en todos los casos donde no hay nada que aclarar.
+                        notaDeProrrateo(item, usdToCop)?.let { nota ->
+                            Spacer(Modifier.height(2.dp))
+                            Text(nota, fontSize = 12.sp, color = MinTextFaint)
+                        }
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            // En SU moneda, sin convertir: una suscripción en dólares se lee
-                            // "−US$12". Solo el total de arriba pasa por la TRM, y lo dice.
-                            text = "−" + formatMoney(item.sub.amount, item.sub.currency),
+                            // En SU moneda, sin convertir, y con la periodicidad puesta: una
+                            // suscripción en dólares se lee "−US$12" y una anual "−$369.900 al
+                            // año". Solo el total de arriba pasa por la TRM, y lo dice. Ver
+                            // [textoDelMontoDeSuscripcion].
+                            text = textoDelMontoDeSuscripcion(item.sub, conSigno = true),
                             fontSize = 14.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Medium,
@@ -1822,7 +1857,11 @@ private fun CandidataSuscripcionCard(
         ) {
             Text(sub.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
             Text(
-                text = formatMoney(sub.amount, sub.currency),
+                // Con su periodicidad, igual que la fila de una activa. Hoy el detector solo
+                // produce cobros mensuales (agrupa por mes, ver `detectSubscriptions`), así que
+                // acá esto no cambia nada — se usa la misma función igual, para que el día que
+                // una candidata pueda ser anual no haya un renderer al que se le olvidó.
+                text = textoDelMontoDeSuscripcion(sub),
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Medium,

@@ -24,6 +24,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
+import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
@@ -40,21 +41,33 @@ import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 
 /**
- * La ÚNICA hoja para anotar algo que se repite todos los meses (Ola 8).
+ * La ÚNICA hoja para anotar algo que se repite (Ola 8; desde la Ola 16, también si se repite una
+ * vez al año y no todos los meses).
  *
  * Antes había dos —«Nuevo recurrente» y «Nueva suscripción»— y para elegir entre ellas el dueño
- * tenía que saber una distinción que solo existe adentro de Movi. Ahora hay una sola, y la
- * pregunta que decide dónde se guarda es una del mundo real, no del modelo de datos: **en qué
- * moneda te lo cobran**.
+ * tenía que saber una distinción que solo existe adentro de Movi. Ahora hay una sola, y las
+ * preguntas que deciden dónde se guarda son del mundo real, no del modelo de datos: **en qué
+ * moneda te lo cobran** y **cada cuánto**.
  *
- * - **En pesos** → una regla recurrente: ingreso o gasto, con categoría y con recordatorio.
+ * - **En pesos y todos los meses** → una regla recurrente: ingreso o gasto, con categoría y con
+ *   recordatorio.
  * - **En dólares** → una suscripción: las reglas recurrentes son COP puro (`RecurringRule` no
  *   tiene campo de moneda) y agregarle uno tocaría el modelo, la tabla, el barrido de avisos y
  *   los totales. El modelo de suscripciones YA es multi-moneda y ya convierte con la TRM del
  *   día (ver `resultFor` en `SubscriptionRoutes.kt`), así que un cobro en dólares va ahí.
+ * - **Una vez al año** → una suscripción, por la razón simétrica (Ola 16). `RecurringRule` es
+ *   mensual por modelo —tiene `dayOfMonth` y nada más, y el barrido de vencimientos la lee como
+ *   «todos los meses este día»—, así que un cobro anual anotado como regla se convierte en un
+ *   gasto mensual de su monto entero: el HBO Max de $369.900 al año le diría al dueño que gasta
+ *   $369.900 todos los meses. El que sabe de periodicidad es el modelo de suscripciones
+ *   ([PeriodicidadDeCobro]), que además prorratea el cobro para el total del mes.
  *
- * Lo que el dueño pierde al elegir dólares (categoría y recordatorio) se dice en la hoja, en
- * lugar de que los campos desaparezcan sin explicación.
+ * **Sin este último desvío la capacidad no le serviría de nada al dueño**: sus dos cobros
+ * anuales reales —NBA League Pass y HBO Max— son en PESOS, así que la moneda sola los habría
+ * mandado a la rama que no sabe contarlos.
+ *
+ * Lo que el dueño pierde cuando esto se guarda como suscripción (categoría y recordatorio) se
+ * dice en la hoja, en lugar de que los campos desaparezcan sin explicación.
  *
  * Editar es siempre editar una [RecurringRule] (las suscripciones no tienen hoja de edición,
  * se quitan desde la lista), así que en modo edición la moneda ni se muestra.
@@ -119,9 +132,13 @@ fun CreateRecurringRuleSheet(
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
     var currency by remember { mutableStateOf("COP") }
-    // ¿Elegir dólares le cambió al dueño un «Ingreso» que ya había marcado? (V11: la regla se
-    // explica igual, pero si además le pisamos una elección suya, eso se avisa aparte.)
-    var tipoCambiadoPorLaMoneda by remember { mutableStateOf(false) }
+    // Ola 16: cada cuánto llega el cobro. Arranca en MENSUAL, que es lo que era todo hasta hoy,
+    // así que quien no toque estos chips crea exactamente lo mismo que creaba antes.
+    var periodicidad by remember { mutableStateOf(PeriodicidadDeCobro.MENSUAL) }
+    // ¿Mandar esto a la rama de suscripción —por dólares o por anual— le cambió al dueño un
+    // «Ingreso» que ya había marcado? (V11: la regla se explica igual, pero si además le pisamos
+    // una elección suya, eso se avisa aparte.)
+    var tipoCambiadoPorSerSuscripcion by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -168,8 +185,18 @@ fun CreateRecurringRuleSheet(
     }
 
     val isEditMode = existing != null
-    // Editar es editar una regla; solo al crear se puede elegir dólares (ver KDoc).
+    // Editar es editar una regla; solo al crear se puede elegir dólares o anual (ver KDoc).
     val enDolares = !isEditMode && currency == "USD"
+    val esAnual = !isEditMode && periodicidad == PeriodicidadDeCobro.ANUAL
+    /**
+     * **La única condición que decide en cuál de los dos modelos se guarda esto.** Existe como
+     * un solo valor —y no como `enDolares || esAnual` repetido en cada rama— porque de él
+     * dependen cinco cosas a la vez: a qué endpoint se le pega, si «Ingreso» se puede elegir, si
+     * se piden categoría y cuenta, si se ofrece el recordatorio, y qué explicación se muestra. La
+     * primera vez que una de esas cinco use otra condición, la hoja va a prometer una cosa y
+     * guardar otra.
+     */
+    val seGuardaComoSuscripcion = enDolares || esAnual
     val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (dayOfMonth ?: 0) in 1..31 && !saving
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
@@ -190,15 +217,21 @@ fun CreateRecurringRuleSheet(
         error = null
         coroutine.launch {
             val result = when {
-                // Dólares → suscripción (el único modelo multi-moneda que hay). Nace CONFIRMED
-                // del lado del server: la escribió el dueño, no hay nada que confirmar.
-                enDolares -> runCatching {
+                // Dólares o anual → suscripción: es el único modelo multi-moneda que hay y el
+                // único que sabe de periodicidad. Nace CONFIRMED del lado del server: la
+                // escribió el dueño, no hay nada que confirmar. Ver el KDoc de la hoja.
+                seGuardaComoSuscripcion -> runCatching {
                     Repositories.wallets.createSubscription(
                         CreateSubscriptionRequest(
                             displayName = name.trim(),
+                            // El cobro REAL, sin dividir: un HBO Max anual se guarda como
+                            // $369.900 con periodicidad ANUAL, que es el número que el dueño
+                            // puede buscar en el extracto. Repartirlo entre los meses lo hace
+                            // Movi al mostrar el total (ver `montoMensualEquivalente`).
                             amount = amt,
                             currency = currency,
                             dayOfMonth = day,
+                            periodicidad = periodicidad,
                         )
                     )
                 }
@@ -360,7 +393,13 @@ fun CreateRecurringRuleSheet(
                             SheetChip(
                                 label = "Pesos",
                                 selected = currency == "COP",
-                                onClick = { currency = "COP"; tipoCambiadoPorLaMoneda = false },
+                                onClick = {
+                                    currency = "COP"
+                                    // Volver a pesos solo deshace el aviso si lo que mandaba a la
+                                    // rama de suscripción era la moneda: con ANUAL elegido, esto
+                                    // se sigue guardando como suscripción y sigue siendo un cobro.
+                                    if (!esAnual) tipoCambiadoPorSerSuscripcion = false
+                                },
                             )
                             SheetChip(
                                 label = "Dólares",
@@ -373,7 +412,40 @@ fun CreateRecurringRuleSheet(
                                     // Dólares, y que se guarde un gasto — el flujo libre se movía al
                                     // revés por el doble del monto, sin que nada lo dijera.
                                     // Si eso le pisó una elección al dueño, se le dice (ver la nota).
-                                    tipoCambiadoPorLaMoneda = selectedType == TransactionType.INCOME
+                                    tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
+                                    selectedType = TransactionType.EXPENSE
+                                },
+                            )
+                        }
+                        Spacer(Modifier.height(18.dp))
+
+                        // --- CADA CUÁNTO --- (Ola 16)
+                        // La segunda pregunta del mundo real que decide dónde se guarda esto, y la
+                        // que evita el error de doce veces: un cobro anual anotado como mensual le
+                        // dice al dueño que gasta $369.900 al mes en HBO Max. Ver el KDoc de la hoja.
+                        SheetSectionLabel("CADA CUÁNTO")
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SheetChip(
+                                label = "Todos los meses",
+                                selected = periodicidad == PeriodicidadDeCobro.MENSUAL,
+                                onClick = {
+                                    periodicidad = PeriodicidadDeCobro.MENSUAL
+                                    // Simétrico del chip «Pesos»: en dólares el aviso sigue valiendo.
+                                    if (!enDolares) tipoCambiadoPorSerSuscripcion = false
+                                },
+                            )
+                            SheetChip(
+                                label = "Una vez al año",
+                                selected = periodicidad == PeriodicidadDeCobro.ANUAL,
+                                onClick = {
+                                    periodicidad = PeriodicidadDeCobro.ANUAL
+                                    // Mismo motivo exacto que en «Dólares»: esto pasa a guardarse
+                                    // como suscripción, y una suscripción es siempre un cobro.
+                                    tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
                                     selectedType = TransactionType.EXPENSE
                                 },
                             )
@@ -382,7 +454,11 @@ fun CreateRecurringRuleSheet(
                     }
 
                     // --- MONTO ---
-                    SheetSectionLabel("MONTO")
+                    // En un cobro anual el rótulo lo dice: lo que va acá es el cobro COMPLETO, el
+                    // que llega al extracto una vez al año — no la doceava parte. Pedir el número
+                    // que el dueño puede verificar y hacer nosotros la división es lo que impide
+                    // que quede guardada una cifra que no existe en ninguna parte del mundo real.
+                    SheetSectionLabel(if (esAnual) "MONTO DEL COBRO ANUAL" else "MONTO")
                     Spacer(Modifier.height(8.dp))
                     // V12: en Colombia "$20" se lee veinte pesos. Si el cobro es en dólares, el campo
                     // lo dice mientras se escribe — igual que después lo dice la fila de la lista.
@@ -396,6 +472,9 @@ fun CreateRecurringRuleSheet(
                     Spacer(Modifier.height(18.dp))
 
                     // --- DÍA DEL MES ---
+                    // En un cobro anual esto es el día, pero Movi no guarda el MES: el modelo de
+                    // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
+                    // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
                     SheetSectionLabel("DÍA DEL MES")
                     Spacer(Modifier.height(8.dp))
                     DayOfMonthPicker(
@@ -407,10 +486,11 @@ fun CreateRecurringRuleSheet(
                     Spacer(Modifier.height(18.dp))
 
                     // --- TIPO ---
-                    // Siempre visible, también en dólares. Ahí «Ingreso» queda deshabilitado en vez de
-                    // desaparecer: el dueño VE que la opción existe y que no aplica, en lugar de elegirla
-                    // y que Movi la cambie por atrás. (Un ingreso recurrente en dólares no se puede
-                    // registrar hoy — el modelo de suscripciones es de cobros. Ver la nota de abajo.)
+                    // Siempre visible, también cuando esto se va a guardar como suscripción. Ahí
+                    // «Ingreso» queda deshabilitado en vez de desaparecer: el dueño VE que la opción
+                    // existe y que no aplica, en lugar de elegirla y que Movi la cambie por atrás. (Un
+                    // ingreso recurrente en dólares, o uno anual, no se puede registrar hoy — el
+                    // modelo de suscripciones es de cobros. Ver la nota de abajo.)
                     SheetSectionLabel("TIPO")
                     Spacer(Modifier.height(8.dp))
                     Row(
@@ -425,20 +505,21 @@ fun CreateRecurringRuleSheet(
                         SheetChip(
                             label = "Ingreso",
                             selected = selectedType == TransactionType.INCOME,
-                            enabled = !enDolares,
+                            enabled = !seGuardaComoSuscripcion,
                             onClick = { selectedType = TransactionType.INCOME },
                         )
                     }
 
                     Spacer(Modifier.height(18.dp))
 
-                    if (enDolares) {
-                        // No se ocultan los campos en silencio: en dólares esto se guarda como
-                        // suscripción, y una suscripción es siempre un cobro, sin categoría y sin
-                        // recordatorio. Decirlo es más honesto que hacer desaparecer tres secciones.
-                        if (tipoCambiadoPorLaMoneda) {
+                    if (seGuardaComoSuscripcion) {
+                        // No se ocultan los campos en silencio: esto se guarda como suscripción, y
+                        // una suscripción es siempre un cobro, sin categoría y sin recordatorio.
+                        // Decirlo es más honesto que hacer desaparecer tres secciones.
+                        if (tipoCambiadoPorSerSuscripcion) {
                             Text(
-                                text = "Cambiamos el tipo a Gasto: en dólares solo podemos anotar cobros.",
+                                text = "Cambiamos el tipo a Gasto: esto se guarda como suscripción, " +
+                                    "y una suscripción es siempre un cobro.",
                                 fontSize = 12.sp,
                                 color = MinWarn,
                                 lineHeight = 17.sp,
@@ -446,14 +527,37 @@ fun CreateRecurringRuleSheet(
                             Spacer(Modifier.height(8.dp))
                         }
                         Text(
-                            text = "En dólares solo podemos anotar cobros, y guardamos únicamente el " +
-                                "nombre, el monto y el día: sin categoría y sin recordatorio. Para el " +
-                                "total del mes lo convertimos a pesos con la tasa de cambio más " +
-                                "reciente que pudimos consultar.",
+                            text = "Guardamos únicamente el nombre, el monto y el día: sin categoría " +
+                                "y sin recordatorio.",
                             fontSize = 12.sp,
                             color = MinTextMute,
                             lineHeight = 17.sp,
                         )
+                        if (enDolares) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Para el total del mes lo convertimos a pesos con la tasa de " +
+                                    "cambio más reciente que pudimos consultar.",
+                                fontSize = 12.sp,
+                                color = MinTextMute,
+                                lineHeight = 17.sp,
+                            )
+                        }
+                        if (esAnual) {
+                            Spacer(Modifier.height(8.dp))
+                            // Las dos cosas que hay que decir de un cobro anual, y la segunda es la
+                            // incómoda: hoy las suscripciones no alimentan «Próximos pagos» ni los
+                            // recordatorios, así que el cobro del año que viene no le va a avisar a
+                            // nadie. Callarlo dejaría al dueño confiando en un aviso que no existe.
+                            Text(
+                                text = "Anota el cobro completo del año: para tus totales del mes lo " +
+                                    "dividimos en 12. Guardamos el día, pero no el mes, así que este " +
+                                    "cobro no te va a generar un recordatorio.",
+                                fontSize = 12.sp,
+                                color = MinTextMute,
+                                lineHeight = 17.sp,
+                            )
+                        }
                     } else {
                         // --- CATEGORÍA ---
                         // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.

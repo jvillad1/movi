@@ -7,10 +7,12 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.montoMensualEquivalente
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -20,6 +22,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
@@ -34,6 +39,17 @@ import kotlin.math.roundToLong
 // a `:core` (MANUAL_SUB_PREFIX) — el cliente lo necesita para marcar en la lista única de
 // Recurrentes cuáles encontró Movi sola. La garantía es la misma: `upsertDetected`/`applyExisting`
 // (SubscriptionSync.kt) nunca generan esa clave, así que un re-scan no toca ni duplica un alta manual.
+/**
+ * El mismo `Json` que configura `configureSerialization`, para el PUT que deserializa a mano
+ * desde el JSON crudo (ver ahí el porqué). **`ignoreUnknownKeys` no es opcional**: hasta la Ola
+ * 16 ese cuerpo lo leía `call.receive<Subscription>()`, o sea el plugin, que lo trae puesto.
+ * Decodificar con el `Json` por defecto habría vuelto ESTRICTA una ruta que era tolerante, y en
+ * un proyecto donde el APK se entrega a mano eso significa que un cliente más nuevo que el
+ * server —con un campo que el server todavía no conoce— se llevaría un 400 donde antes guardaba
+ * bien.
+ */
+private val jsonDelWire = Json { isLenient = true; ignoreUnknownKeys = true }
+
 private fun manualMerchantKey(displayName: String): String {
     val normalized = displayName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
     return (MANUAL_SUB_PREFIX + normalized.ifBlank { "sub" }).take(80)
@@ -101,6 +117,11 @@ fun Route.subscriptionRoutes() {
                     it[lastSeen]    = now
                     it[occurrences] = 0
                     it[accountId]   = null
+                    // El cobro real va tal cual en `amount`; lo que decide si eso es plata de
+                    // cada mes o de una vez al año es esta columna. No hay nada que validar: el
+                    // enum solo tiene dos valores y un cuerpo sin la clave llega MENSUAL, que es
+                    // lo único que sabía anotar la hoja anterior a la Ola 16.
+                    it[periodicidad] = body.periodicidad.name
                 }
                 true
             }
@@ -117,13 +138,30 @@ fun Route.subscriptionRoutes() {
             val uid = call.userId()
             val id = call.parameters["id"]
                 ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
-            val body = call.receive<Subscription>()
+            // Se recibe el JSON CRUDO además del objeto, para poder distinguir «el cliente mandó
+            // este campo» de «el cliente no lo conoce» — misma técnica y mismo motivo que el
+            // `PUT /api/credits/{id}` (ver su comentario largo).
+            //
+            // Acá el campo en juego es `periodicidad`. El APK se entrega a mano por Drive, así
+            // que un cliente anterior a la Ola 16 sigue vivo y sigue mandando cuerpos sin esa
+            // clave: al deserializar, el default la vuelve MENSUAL, y como este update pisa las
+            // columnas que toca, «Quitar» un HBO Max desde el teléfono viejo lo dejaría
+            // guardado como un cobro de $369.900 TODOS LOS MESES. El dueño no habría cambiado
+            // nada — el número plausible aparece solo, que es la peor forma de un error de plata.
+            //
+            // La distinción no se puede hacer con el objeto deserializado (ahí «ausente» y «su
+            // default» son lo mismo) ni con un valor centinela, que sería un valor legítimo.
+            // Mirar las claves del JSON es exacto y no inventa nada.
+            val crudo = call.receive<JsonObject>()
+            val body = jsonDelWire.decodeFromJsonElement<Subscription>(crudo)
+            val mandoLaPeriodicidad = "periodicidad" in crudo
             val updated = dbQuery {
                 Subscriptions.update({ (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }) {
                     it[status]      = body.status.name
                     it[displayName] = body.displayName
                     it[amount]      = body.amount
                     it[dayOfMonth]  = body.dayOfMonth.coerceIn(1, 31)
+                    if (mandoLaPeriodicidad) it[periodicidad] = body.periodicidad.name
                 }
             }
             if (updated == 0) return@put call.respond(HttpStatusCode.NotFound)
@@ -158,9 +196,17 @@ private suspend fun resultFor(uid: String): SubscriptionsResult {
     val needsFx = active.any { it.currency == "USD" }
     val rate = if (needsFx) FxRateService.usdToCop() else 0.0
     val total = active.sumOf { s ->
+        // PRORRATEAR PRIMERO, convertir después — en ese orden, y el cliente hace lo mismo
+        // (`copDeSuscripcion`, RecurrentesLogic.kt). Al revés el redondeo del medio cambiaría el
+        // resultado, y dos totales que dicen contar lo mismo se separarían por pesos.
+        //
+        // La división vive en `:core` ([montoMensualEquivalente]) justamente para que esta suma
+        // y la del cliente no puedan discrepar. Para una suscripción MENSUAL —o sea, todas las
+        // que existían antes de la Ola 16— devuelve `amount` sin tocarlo.
+        val mensual = s.montoMensualEquivalente()
         when (s.currency) {
-            "COP" -> s.amount
-            "USD" -> (s.amount * rate).roundToLong()
+            "COP" -> mensual
+            "USD" -> (mensual * rate).roundToLong()
             else  -> 0L
         }
     }
@@ -182,4 +228,11 @@ private fun ResultRow.toSubscription() = Subscription(
     lastSeen    = this[Subscriptions.lastSeen],
     occurrences = this[Subscriptions.occurrences],
     accountId   = this[Subscriptions.accountId],
+    // Una fila anterior a la Ola 16 trae 'MENSUAL' por el default de la columna, así que el
+    // `runCatching` no cubre ninguna migración pendiente — cubre que un valor imposible en la
+    // base (una escritura a mano, un enum que se saque en el futuro) no tumbe la lista entera
+    // con un 500. Caer en MENSUAL es lo único razonable: es lo que era todo antes de existir
+    // esta columna, y equivale a leer la fila como se leía siempre.
+    periodicidad = runCatching { PeriodicidadDeCobro.valueOf(this[Subscriptions.periodicidad]) }
+        .getOrDefault(PeriodicidadDeCobro.MENSUAL),
 )

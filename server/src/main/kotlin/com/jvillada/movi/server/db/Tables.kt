@@ -413,7 +413,7 @@ object Subscriptions : Table("subscriptions") {
     val userId      = varchar("user_id", 50)
     val merchantKey = varchar("merchant_key", 80)
     val displayName = varchar("display_name", 100)
-    val amount      = long("amount")                 // gasto mensual típico (moneda nativa)
+    val amount      = long("amount")                 // el cobro REAL, en moneda nativa (ver periodicidad)
     val currency    = varchar("currency", 10)
     val dayOfMonth  = integer("day_of_month")
     val status      = varchar("status", 20)          // AUTO | CANDIDATE | CONFIRMED | DISMISSED
@@ -422,6 +422,18 @@ object Subscriptions : Table("subscriptions") {
     val lastSeen    = long("last_seen")
     val occurrences = integer("occurrences")
     val accountId   = varchar("account_id", 50).nullable()
+    /**
+     * Ola 16 — MENSUAL | ANUAL (ver [PeriodicidadDeCobro]). Decide qué significa [amount]: el
+     * cobro de cada mes, o el de una vez al año que hay que prorratear para el total.
+     *
+     * `.default("MENSUAL")` no es cosmético, es la migración: este proyecto no tiene archivos de
+     * migración —`DatabaseFactory.init()` corre `createMissingTablesAndColumns` en cada arranque—
+     * y el default es lo que hace que la sentencia emitida sea `ADD COLUMN periodicidad
+     * VARCHAR(10) DEFAULT 'MENSUAL' NOT NULL`, o sea que las filas que ya están en producción
+     * queden diciendo lo único que pueden decir con verdad: son mensuales. Mismo mecanismo que
+     * `remind_me` en [RecurringRules].
+     */
+    val periodicidad = varchar("periodicidad", 10).default("MENSUAL")
     override val primaryKey = PrimaryKey(id)
     init {
         index("idx_subscriptions_user_id", false, userId)

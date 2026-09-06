@@ -147,6 +147,20 @@ private fun applyExisting(row: ResultRow, d: DetectedSub) {
     }
 }
 
+// Ola 16 — **la periodicidad NO se toca en ninguna de las ramas de acá, ni siquiera en el
+// refresco completo de una CANDIDATE.**
+//
+// El detector infiere suscripciones de cargos que se repiten MES a MES (ver `detectSubscriptions`:
+// agrupa por mes y pide meses consecutivos), así que todo lo que produce es, por construcción,
+// mensual — y una fila nueva nace MENSUAL por el default de la columna, sin que estas funciones
+// tengan que escribir nada. Lo que un `it[periodicidad] = MENSUAL` agregaría no es corrección
+// sino la capacidad de PISAR: cualquier fila que el dueño hubiera marcado como anual volvería a
+// mensual en el próximo barrido, y su costo se multiplicaría por doce sola.
+//
+// Es el mismo razonamiento que ya protege al alta manual (clave `manual_*`, que el detector nunca
+// genera) y al DISMISSED de `applyExisting`: **lo que decidió el dueño gana sobre lo que infiere
+// el barrido.** Una CANDIDATE es siempre del detector y siempre mensual, así que ni ahí hay algo
+// que reescribir; dejarla fuera del update es lo que hace que la regla valga sin excepciones.
 private fun refreshRow(rowId: String, d: DetectedSub) {
     Subscriptions.update({ Subscriptions.id eq rowId }) {
         it[displayName] = d.displayName
@@ -161,6 +175,8 @@ private fun refreshRow(rowId: String, d: DetectedSub) {
     }
 }
 
+// Sin `periodicidad`: el default de la columna la deja MENSUAL, que es lo único que el detector
+// puede afirmar. Ver el comentario de [refreshRow].
 private fun insertNew(uid: String, d: DetectedSub) {
     Subscriptions.insert {
         it[id]          = "sub_${UUID.randomUUID()}"
