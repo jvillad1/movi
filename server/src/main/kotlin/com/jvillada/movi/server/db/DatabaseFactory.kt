@@ -24,6 +24,21 @@ object DatabaseFactory {
             maximumPoolSize = 10
         }
         Database.connect(HikariDataSource(config))
+        crearYActualizarSchema()
+        seedScreens()
+    }
+
+    /**
+     * El paso de schema del arranque, separado de [init] **para poder probarlo**.
+     *
+     * [init] lee la env y abre el pool contra Postgres; eso no se puede hacer en un test. Y el
+     * agujero que esta separación vino a tapar es justamente invisible sin una prueba: una columna
+     * nueva sobre una tabla que YA existe en producción solo llega si su tabla está en
+     * `createMissingTablesAndColumns`, y olvidarla no rompe nada en CI —los tests de `:server`
+     * arrancan de un schema vacío donde el `create` de abajo la deja completa— pero deja cada
+     * consulta de esa tabla fallando en producción. Ver `SchemaDeArranqueTest`.
+     */
+    fun crearYActualizarSchema() {
         transaction {
             // SchemaUtils.create emite CREATE TABLE IF NOT EXISTS: una tabla nueva se crea sola
             // al arrancar y las existentes quedan intactas. No hay archivos de migración en este
@@ -55,11 +70,22 @@ object DatabaseFactory {
             // la segunda vez la columna ya está y no se emite nada.
             // Accounts: `conditioned_to` (Ola 18) — para qué se puede usar esa plata. NULLABLE, así que el
             // ALTER no puede fallar sobre las cuentas que ya existen y todas quedan en NULL = libre.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts)
+            // Subscriptions: `periodicidad` — mensual o anual. La columna se declara
+            // `.default("MENSUAL")`, así que el ALTER deja en MENSUAL lo que ya existía, que es la
+            // verdad: hasta hoy todo cobro era mensual por modelo.
+            //
+            // **`Subscriptions` TIENE que estar en esta lista, no alcanza con la de arriba.** La
+            // tabla ya existe en producción, así que el `SchemaUtils.create` de arriba es un
+            // `CREATE TABLE IF NOT EXISTS` que no hace nada, y sin esta línea el ALTER nunca se
+            // emite: la columna quedaría solo en el código. Como todas las consultas de Exposed
+            // contra `Subscriptions` la nombran, CADA endpoint de suscripciones habría empezado a
+            // fallar con «column does not exist» apenas desplegara. No lo atrapa ningún test: los
+            // de `:server` corren sobre H2 con `SchemaUtils.create` sobre un schema vacío, donde
+            // la columna siempre existe. Se verificó contra la base real antes de agregarla.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }
-        seedScreens()
     }
 
     // Extracts credentials from postgres:// or postgresql:// URLs and returns
