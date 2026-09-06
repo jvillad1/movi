@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
@@ -79,11 +80,15 @@ fun copDeSuscripcion(sub: Subscription, usdToCop: Double): Long? = when {
  * Un recurrente contado por [resumenRecurrentes]: lo que escribió el dueño y lo que cobra una
  * suscripción, en una sola lista ordenada por día del mes.
  *
- * PR 4 del rediseño de Recurrentes (2026-09): la pantalla que pintaba esta lista fila por fila
- * ya no existe, así que hoy [ResumenRecurrentes.items] se lee solo para CONTAR —el acceso
- * «Recurrentes» del Inicio dice «libre al mes · N recurrentes»—. Se queda como lista y no como
- * un `Int` porque el reparto uno-a-uno de [resumenRecurrentes] necesita igual la fila armada
- * (`yaEsRegla` decide qué entra al total), y porque el día del mes es lo que fija el orden.
+ * PR 4 del rediseño de Recurrentes (2026-09) dejó esta lista solo para CONTAR —el acceso
+ * «Recurrentes» del Inicio dice «libre al mes · N recurrentes»— porque la pantalla que la pintaba
+ * fila por fila ya no existía. Desde el PR 5 la mitad de suscripciones **vuelve a pintarse**, en
+ * la sección «Suscripciones activas» del chip «Recurrentes» de Movimientos: ver
+ * [suscripcionesActivas], que la lee de acá justamente para no recalcular el reparto.
+ *
+ * Se queda como lista y no como un `Int` porque el reparto uno-a-uno de [resumenRecurrentes]
+ * necesita igual la fila armada (`yaEsRegla` decide qué entra al total), y porque el día del mes
+ * es lo que fija el orden.
  */
 sealed class Recurrente {
     abstract val dayOfMonth: Int
@@ -180,6 +185,99 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         sinConvertir = sinConvertir,
         hayMonedaExtranjera = dolaresEnElTotal,
     )
+}
+
+/**
+ * **De dónde salió una suscripción** — la única señal de origen que hay, y la que decide dos
+ * cosas a la vez: qué dice la fila y qué pasa al tocar «Quitar».
+ *
+ * Nació como dos propiedades (`laEncontroMovi` / `seActivoSola`) sobre [Recurrente.Suscripcion],
+ * porque la pantalla «Recurrentes» —la que el rediseño de 2026-09 disolvió dentro de
+ * Movimientos— era la única que las leía. Vuelve como función libre sobre [Subscription], y no
+ * como propiedades de la fila, por un motivo concreto: **«Quitar» también necesita esta misma
+ * distinción y no tiene la fila en la mano, solo la suscripción**. Antes eso eran dos copias de
+ * `startsWith(MANUAL_SUB_PREFIX)` —una para la etiqueta y otra para decidir entre borrar y
+ * marcar DISMISSED—, que es exactamente la clase de duplicado que este archivo existe para
+ * evitar: si alguna vez discreparan, la fila diría «la encontró Movi» sobre algo que se borra
+ * de verdad.
+ *
+ * La prioridad es **el prefijo primero**, y después el estado. Es lo que hace que la etiqueta y
+ * el borrado no puedan contradecirse: lo que se muestra como escrito por el dueño es exactamente
+ * lo que «Quitar» borra. En la práctica no hay diferencia con el orden de la pantalla vieja —el
+ * alta manual siempre nace [SubStatus.CONFIRMED] (ver `SubscriptionRoutes`) y el detector nunca
+ * produce una clave `manual_*` (ver [MANUAL_SUB_PREFIX])—, así que el caso donde los dos órdenes
+ * discreparían no lo produce ningún camino de hoy.
+ */
+enum class OrigenDeSuscripcion {
+    /** La escribió el dueño a mano (clave `manual_*`). */
+    LA_ESCRIBIO_EL_DUENO,
+
+    /** La encontró el detector y el dueño la confirmó. */
+    LA_ENCONTRO_MOVI,
+
+    /**
+     * La encontró el detector y quedó activa **sin que nadie la confirmara** — herencia de antes
+     * de F39, cuando el barrido activaba solo. Está sumando en «Flujo libre» hoy, así que
+     * conviene que se siga notando: es la única de las tres que el dueño nunca aprobó.
+     */
+    LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA,
+}
+
+/** Ver [OrigenDeSuscripcion]. */
+fun origenDeSuscripcion(sub: Subscription): OrigenDeSuscripcion = when {
+    sub.merchantKey.startsWith(MANUAL_SUB_PREFIX) -> OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO
+    sub.status == SubStatus.AUTO -> OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA
+    else -> OrigenDeSuscripcion.LA_ENCONTRO_MOVI
+}
+
+/**
+ * **«Quitar» esta suscripción, ¿es borrarla o marcarla DISMISSED?**
+ *
+ * Las dos ramas y su porqué, tal cual las razonó la pantalla vieja:
+ *
+ * - **La escribió el dueño** (`manual_`): se BORRA. Marcarla DISMISSED la dejaba en un limbo —
+ *   invisible en la lista, imposible de recuperar desde ninguna pantalla, y todavía chocando
+ *   con el alta si volvía a contratar el servicio («Ya tienes una suscripción llamada "Claude"»
+ *   sobre algo que no ve). El detector nunca produce esa clave, así que no hay ningún barrido al
+ *   que haga falta decirle «esta no».
+ * - **La encontró el detector**: sigue siendo [SubStatus.DISMISSED], que ahí sí significa algo —
+ *   es el «no me la propongas más» que respeta `SubscriptionSync` en cada re-scan. Borrarla haría
+ *   que el próximo barrido la volviera a proponer.
+ */
+fun quitarBorraLaSuscripcion(sub: Subscription): Boolean =
+    origenDeSuscripcion(sub) == OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO
+
+/**
+ * **Las suscripciones que hoy están activas y sumando**, listas para pintar.
+ *
+ * Sale de [ResumenRecurrentes.items] y no de un filtro propio sobre la lista cruda, a propósito:
+ * así el inventario que se muestra y el total que se muestra encima salen del MISMO reparto —el
+ * de [resumenRecurrentes], que además de filtrar AUTO+CONFIRMED reparte uno-a-uno qué fila queda
+ * tapada por una regla del dueño ([Recurrente.Suscripcion.yaEsRegla]). Recalcular el filtro acá
+ * habría sido una segunda copia de la misma regla, y con dos cobros que se llaman igual y una
+ * sola regla las dos copias ni siquiera coincidirían.
+ *
+ * Viene ya ordenada por día del mes, que es el orden en que [resumenRecurrentes] arma `items`.
+ */
+fun suscripcionesActivas(resumen: ResumenRecurrentes): List<Recurrente.Suscripcion> =
+    resumen.items.filterIsInstance<Recurrente.Suscripcion>()
+
+/**
+ * La línea de contexto de una suscripción activa: de dónde salió, o —si el dueño ya tiene una
+ * regla con ese nombre— que NO está sumando.
+ *
+ * El aviso de duplicado va primero porque es lo primero que hay que decir: sin esa línea, el
+ * «Flujo libre» de arriba parece no cuadrar con la lista de abajo (ver [resumenRecurrentes], que
+ * es quien decide excluirla del total).
+ */
+fun contextoDeSuscripcionActiva(item: Recurrente.Suscripcion): String = when {
+    item.yaEsRegla -> "Ya lo tienes como recurrente · no se suma dos veces"
+    else -> when (origenDeSuscripcion(item.sub)) {
+        OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA ->
+            "Suscripción · la encontró Movi y la activó sola"
+        OrigenDeSuscripcion.LA_ENCONTRO_MOVI -> "Suscripción · la encontró Movi"
+        OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO -> "Suscripción"
+    }
 }
 
 /**

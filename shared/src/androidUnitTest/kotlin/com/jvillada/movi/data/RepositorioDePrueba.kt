@@ -39,7 +39,10 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun getSubscriptions(): SubscriptionsResult = noUsado("getSubscriptions")
     override suspend fun detectSubscriptions(): SubscriptionsResult = noUsado("detectSubscriptions")
     override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = noUsado("updateSubscription")
-    override suspend fun deleteSubscription(id: String) = noUsado("deleteSubscription")
+    // Tipo de retorno explícito por el mismo motivo que [unmarkOccurrence] más abajo: sin él
+    // Kotlin lo infiere `Nothing` y ninguna prueba puede sobrescribirlo con un cuerpo que
+    // devuelva `Unit`.
+    override suspend fun deleteSubscription(id: String): Unit = noUsado("deleteSubscription")
     override suspend fun createSubscription(request: CreateSubscriptionRequest): Subscription = noUsado("createSubscription")
     override suspend fun getGoals(): List<Goal> = noUsado("getGoals")
     override suspend fun createGoal(goal: Goal): Goal = noUsado("createGoal")
