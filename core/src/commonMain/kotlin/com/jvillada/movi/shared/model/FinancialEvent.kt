@@ -92,9 +92,15 @@ data class FinancialEvent(
      * **Cuánto de esta cuota NO bajaba la deuda**: interés del período + seguro de vida deudor.
      *
      * Lo escribe [pagoDeCuotaLegs] **solo en la pata de la deuda** de un pago de cuota sobre un
-     * crédito que amortiza. `null` en absolutamente todo lo demás —un gasto suelto, un traspaso,
-     * un pago de tarjeta, un pago sobre un crédito sin tasa— y ese `null` significa exactamente
-     * «este par es simétrico», que es lo que esos pares son.
+     * crédito que amortiza, y la ruta de la cuota que paga otro (`payroll-deduction`) en su único
+     * movimiento — ahí no hay par, pero la cifra significa lo mismo. `null` en absolutamente todo
+     * lo demás —un gasto suelto, un traspaso, un pago de tarjeta, un pago sobre un crédito sin
+     * tasa— y ese `null` significa exactamente «este par es simétrico», que es lo que esos pares
+     * son.
+     *
+     * Si el interés vino del extracto ([CreatePagoDeCuotaRequest.interesReal]) acá va ese, más el
+     * seguro; si se estimó, la estimación. La fila no distingue una cosa de la otra, y no le hace
+     * falta: la corrección del monto lee lo que no amortizó, no de dónde salió.
      *
      * ### Por qué se almacena, si es derivable
      *

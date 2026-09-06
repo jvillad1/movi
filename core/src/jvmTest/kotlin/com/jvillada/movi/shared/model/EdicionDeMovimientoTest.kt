@@ -324,4 +324,23 @@ class EdicionDeMovimientoTest {
         assertEquals(MONTO_DE_UN_PAR_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(CARD_PAYMENT_CATEGORY))
         assertEquals(MONTO_DE_UNA_CUOTA_SE_MUEVE_JUNTO, avisoDeMontoDeUnPar(CUOTA_CATEGORY))
     }
+
+    @Test
+    fun `corregir la cuota del 9695 registrada con el interes REAL vuelve a dar el capital correcto`() {
+        // La cuota que el dueño cargó a mano el 5-sep: $1.204.064, con $473.227 de interés del
+        // extracto y $124.800 de seguro → capital $606.037, `noAmortiza` = 598.027. Corregir el
+        // monto no puede volver a la estimación ($363.905): lo que no amortizó ya está guardado y
+        // es un hecho, y la regla lo lee de ahí sin importar si vino del extracto o de la fórmula.
+        val noAmortizaReal = 473_227L + 124_800L
+        assertEquals(606_037L, 1_204_064L - noAmortizaReal, "el caso cargado a mano")
+
+        // La cuota fue de $1.300.000 en vez de $1.204.064: el capital sube por la diferencia.
+        assertEquals(701_973L, alCorregirLaCuota(1_204_064L, 1_300_000L, 606_037L, noAmortizaReal))
+        // Y de vuelta al valor original: exactamente el capital que él cargó, sin perder un peso.
+        assertEquals(606_037L, alCorregirLaCuota(1_300_000L, 1_204_064L, 701_973L, noAmortizaReal))
+        // Por debajo de lo que no amortiza: piso en cero, y el interés real sigue guardado en la
+        // fila (no sale de la resta), así que la vuelta también es exacta.
+        assertEquals(0L, alCorregirLaCuota(1_204_064L, 500_000L, 606_037L, noAmortizaReal))
+        assertEquals(606_037L, alCorregirLaCuota(500_000L, 1_204_064L, 0L, noAmortizaReal))
+    }
 }

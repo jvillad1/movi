@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.MotivoDelDesglose
+import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.ui.components.formatMoney
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -117,6 +118,67 @@ class DesgloseEnLaHojaTest {
 
         assertEquals(0L, d.capital)
         assertTrue(texto.contains("nada de este pago baja la deuda"), texto)
+    }
+
+    // ── El interés real, escrito del extracto ──────────────────────────────────
+
+    /** El Libre inversión ·9695 tal como está en producción. */
+    private val nueveSeisNueveCinco = Account("acc_9695", "Libre inversión 9695", AccountType.LOAN, 40_710_555L)
+    private fun terminosDel9695() = terminos(11.27, seguro = 124_800L).copy(accountId = nueveSeisNueveCinco.id, installment = 1_204_064L)
+
+    @Test
+    fun `el campo se prellena con la estimacion, que no necesita el monto`() {
+        // $363.905: lo que Movi estimaba y lo que el dueño ve antes de escribir nada.
+        assertEquals(363_905L, interesEstimadoDelMes(nueveSeisNueveCinco, terminosDel9695()))
+    }
+
+    @Test
+    fun `sin tasa o sobre una tarjeta no hay estimacion con que prellenar`() {
+        assertNull(interesEstimadoDelMes(carro, terms = null), "sin tasa: el campo arranca vacío")
+        assertNull(interesEstimadoDelMes(amex, null), "una tarjeta no tiene campo")
+        assertNull(interesEstimadoDelMes(null, terminosDel9695()))
+    }
+
+    @Test
+    fun `con el interes real el capital es el del extracto, no el de la estimacion`() {
+        // El caso cargado a mano: $1.204.064 − $473.227 − $124.800 = $606.037.
+        val d = assertNotNull(desgloseDelPago(nueveSeisNueveCinco, terminosDel9695(), 1_204_064L, interesReal = 473_227L))
+
+        assertEquals(MotivoDelDesglose.INTERES_REAL, d.motivo)
+        assertEquals(473_227L, d.interes)
+        assertEquals(124_800L, d.seguro)
+        assertEquals(606_037L, d.capital)
+    }
+
+    @Test
+    fun `con null la hoja estima, igual que el server`() {
+        val d = assertNotNull(desgloseDelPago(nueveSeisNueveCinco, terminosDel9695(), 1_204_064L, interesReal = null))
+
+        assertEquals(MotivoDelDesglose.AMORTIZA, d.motivo)
+        assertEquals(363_905L, d.interes)
+        assertEquals(1_204_064L - 363_905L - 124_800L, d.capital)
+    }
+
+    @Test
+    fun `un interes que no cabe no pinta un capital negativo, y el error lo dice aparte`() {
+        // La hoja sigue mostrando la estimación mientras el renglón de error explica; el botón
+        // queda apagado por `validarInteresReal`, que es la misma guarda del server.
+        val d = assertNotNull(desgloseDelPago(nueveSeisNueveCinco, terminosDel9695(), 500_000L, interesReal = 473_227L))
+
+        assertEquals(MotivoDelDesglose.AMORTIZA, d.motivo)
+        assertTrue(d.capital >= 0L)
+        assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L))
+    }
+
+    @Test
+    fun `la frase del interes real dice que salio del extracto y no habla de la deuda de hoy`() {
+        val d = assertNotNull(desgloseDelPago(nueveSeisNueveCinco, terminosDel9695(), 1_204_064L, interesReal = 473_227L))
+        val texto = assertNotNull(textoDelDesglose(d, "COP"))
+
+        assertTrue(texto.contains("según tu extracto"), texto)
+        assertTrue(texto.contains(formatMoney(473_227L, "COP")), texto)
+        assertTrue(texto.contains(formatMoney(606_037L, "COP")), texto)
+        assertTrue(!texto.contains("deuda de hoy"), "no hubo estimación, no hay salvedad: $texto")
     }
 
     // ── La deuda antes y después ───────────────────────────────────────────────

@@ -57,6 +57,14 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.PAYROLL_DEDUCTION_CATEGORY
 import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
 import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.MotivoDelDesglose
+import com.jvillada.movi.shared.model.RegistrarCuotaAjenaRequest
+import com.jvillada.movi.shared.model.conPuntosDeMiles
+import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
+import com.jvillada.movi.shared.model.signedDelta
+import com.jvillada.movi.shared.model.validarInteresReal
+import io.ktor.http.ContentType
+import io.ktor.server.request.contentType
 
 /**
  * Medio día en milisegundos. El desembolso se sella al mediodía de la zona de la app y no a la
@@ -435,17 +443,66 @@ fun Route.creditRoutes() {
             // de producción antes de tocarlo y no existía ningún `ev_nomina_%` (el dueño nunca
             // había usado «Registrar descuento»). Si algún día hubiera datos viejos con ese
             // prefijo, habría que mirar los dos ids antes de insertar.
+            val idDelMes = "ev_cuota_${accountId}_$periodo"
+
+            // ── Esta cuota también baja la deuda SOLO por el capital ─────────────────────────
+            //
+            // Hasta acá este movimiento valía la cuota ENTERA, o sea que la libranza ·4818 bajaba
+            // $6.040.259 por mes cuando solo $2.394.248 abonan a capital: el mismo error que la
+            // ola de la cuota corrigió en `POST /api/payments/installment`, intacto en el segundo
+            // de los caminos que escriben una cuota. La regla es una sola (`desglosarCuota`) y se
+            // aplica igual acá: mismo desglose, mismo `noAmortiza` guardado en la fila.
+            //
+            // **Y acepta el interés real del extracto**, opcional, en el cuerpo: la estimación se
+            // queda corta por más de $100.000 en una cuota (ver `CreatePagoDeCuotaRequest.interesReal`).
+            // El botón de la app hoy no manda cuerpo —estima—; un cuerpo JSON con `interesReal`
+            // se valida con la misma función que la cuota pagada desde una cuenta, y se rechaza
+            // con 422 antes de escribir nada si el capital quedaría negativo.
+            val pedido = if (call.request.contentType().withoutParameters() == ContentType.Application.Json) {
+                call.receive<RegistrarCuotaAjenaRequest>()
+            } else {
+                RegistrarCuotaAjenaRequest()
+            }
+            validarInteresReal(pedido.interesReal, terms.installment, AccountType.LOAN, terms.insuranceMonthly)?.let {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
+            }
+            // El saldo ANTES de esta cuota, por moneda y sin la fila de este mismo mes: igual que
+            // en la ruta del pago, un reintento no puede calcular el interés sobre la deuda ya
+            // bajada.
+            val saldoAntes = loadNonVoidedEvents(uid, accountId)
+                .filter { it.id != idDelMes && it.currency == cuenta.currency }
+                .sumOf { signedDelta(AccountType.LOAN, it.type, it.amount) }
+            val desglose = desglosarCuotaRegistrada(
+                cuota = terms.installment,
+                tipoDeLaDeuda = AccountType.LOAN,
+                saldoDeLaDeuda = saldoAntes,
+                rateEa = terms.rateEa,
+                seguroMensual = terms.insuranceMonthly,
+                interesReal = pedido.interesReal,
+            )
+            val amortiza = desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL
+            val base = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga"
+
             val evento = FinancialEvent(
-                id = "ev_cuota_${accountId}_$periodo",
+                id = idDelMes,
                 accountId = accountId,
                 type = TransactionType.INCOME,
-                amount = terms.installment,
+                // El capital, no la cuota. Ver `DesgloseDeCuota`.
+                amount = desglose.capital,
                 category = if (terms.payrollDeduction) PAYROLL_DEDUCTION_CATEGORY else THIRD_PARTY_PAYMENT_CATEGORY,
-                description = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga",
+                // El concepto dice que es solo el capital cuando lo es: sin esto, el detalle del
+                // crédito mostraba «Cuota descontada de la nómina · $2.394.248» sobre una cuota
+                // de $6.040.259 y no había dónde leer a dónde se fue el resto.
+                description = if (amortiza && desglose.capital != desglose.cuota) {
+                    "$base (abono a capital de una cuota de $" + conPuntosDeMiles(desglose.cuota) + ")"
+                } else {
+                    base
+                },
                 timestamp = ahora,
                 source = EventSource.MANUAL,
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
                 createdAt = ahora,
+                noAmortiza = if (amortiza) desglose.interes + desglose.seguro else null,
             )
             dbQuery { insertEventRow(uid, evento) }
 

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,6 +44,8 @@ import com.jvillada.movi.shared.model.DesgloseDeCuota
 import com.jvillada.movi.shared.model.MotivoDelDesglose
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.desglosarCuota
+import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
+import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.TransferKind
@@ -261,17 +264,60 @@ private fun saldoEnSuMoneda(cuenta: Account): Long =
  * que llegó con la cuenta; allá, derivado de los eventos vivos en el instante de guardar. Si algo
  * se movió en el medio, la respuesta del server trae el desglose que de verdad quedó escrito.
  */
-fun desgloseDelPago(deuda: Account?, terms: CreditTerms?, monto: Long?): DesgloseDeCuota? {
+fun desgloseDelPago(
+    deuda: Account?,
+    terms: CreditTerms?,
+    monto: Long?,
+    /**
+     * El interés que el dueño escribió del extracto, o `null` para estimarlo. Se ignora si no
+     * pasa [validarInteresReal] — el renglón de error lo dice aparte, y mientras tanto la hoja
+     * sigue mostrando la estimación en vez de un capital negativo.
+     */
+    interesReal: Long? = null,
+): DesgloseDeCuota? {
     if (deuda == null || monto == null || monto <= 0L) return null
     if (deuda.type != AccountType.LOAN && deuda.type != AccountType.CREDIT_CARD) return null
-    return desglosarCuota(
+    val interesValido = interesReal?.takeIf {
+        validarInteresReal(it, monto, deuda.type, terms?.insuranceMonthly) == null
+    }
+    return desglosarCuotaRegistrada(
         cuota = monto,
         tipoDeLaDeuda = deuda.type,
         saldoDeLaDeuda = saldoEnSuMoneda(deuda),
         rateEa = terms?.rateEa,
         seguroMensual = terms?.insuranceMonthly,
+        interesReal = interesValido,
     )
 }
+
+/**
+ * **El interés estimado de este mes**, con el que se prellena el campo de la hoja, o `null` si no
+ * hay con qué estimarlo (no es un crédito, o no tiene tasa).
+ *
+ * No depende del monto —el interés es `saldo × tasa`, la cuota no entra— y por eso el campo se
+ * puede prellenar apenas se elige el crédito, antes de escribir el monto. Es la MISMA aritmética
+ * de [desglosarCuota]; se le pasa una cuota de cero porque solo interesa el interés que devuelve.
+ */
+fun interesEstimadoDelMes(deuda: Account?, terms: CreditTerms?): Long? {
+    if (deuda == null || deuda.type != AccountType.LOAN) return null
+    val d = desglosarCuota(
+        cuota = 0L,
+        tipoDeLaDeuda = deuda.type,
+        saldoDeLaDeuda = saldoEnSuMoneda(deuda),
+        rateEa = terms?.rateEa,
+        seguroMensual = terms?.insuranceMonthly,
+    )
+    return d.interes.takeIf { d.motivo == MotivoDelDesglose.AMORTIZA }
+}
+
+/** La frase corta debajo del campo de interés. Dice que es estimado y qué hacer si tiene el extracto. */
+const val INTERES_ESTIMADO_AVISO: String =
+    "Estimado sobre tu deuda de hoy. Si tienes el extracto, escribe el interés real."
+
+/** Lo mismo, para un crédito sin tasa: no hay estimación, pero el extracto sí sirve. */
+const val INTERES_SIN_TASA_AVISO: String =
+    "Este crédito no tiene tasa registrada, así que no podemos estimar el interés. Si tienes el " +
+        "extracto, escríbelo aquí; si lo dejas vacío, la deuda baja por el monto completo."
 
 /**
  * **La frase que le muestra al dueño en qué se le va la cuota, antes de guardar.**
@@ -315,6 +361,18 @@ fun textoDelDesglose(desglose: DesgloseDeCuota, moneda: String): String? {
             } else {
                 "De tus ${plata(desglose.cuota)}, ${plata(desglose.interes)} son intereses" +
                     "$seguro, y ${plata(desglose.capital)} bajan la deuda.$sobreHoy"
+            }
+        }
+        // El interés lo escribió él del extracto: no hay «calculado sobre tu deuda de hoy» porque
+        // no hubo cálculo, y la frase lo dice para que se lea distinto de la estimación.
+        MotivoDelDesglose.INTERES_REAL -> {
+            val seguro = if (desglose.seguro > 0L) ", ${plata(desglose.seguro)} el seguro" else ""
+            if (desglose.capital <= 0L) {
+                "Tus ${plata(desglose.cuota)} se van enteros en los ${plata(desglose.interes)} " +
+                    "de intereses que escribiste$seguro: nada de este pago baja la deuda."
+            } else {
+                "De tus ${plata(desglose.cuota)}, ${plata(desglose.interes)} son intereses según " +
+                    "tu extracto$seguro, y ${plata(desglose.capital)} bajan la deuda."
             }
         }
     }
@@ -632,16 +690,50 @@ internal fun TransferBody(
 
     val from = elegibles.firstOrNull { it.id == fromId }
     val to = elegiblesDestino.firstOrNull { it.id == toId }
+
+    // ── El interés de este mes: prellenado con la estimación, corregible con el extracto ──────
+    //
+    // Dos estados y no uno, porque «no lo tocó» y «lo borró» tienen que mandar cosas distintas
+    // al server. `interesEscrito` es lo que hay en el campo desde que el dueño lo tocó;
+    // `interesTocado` dice si lo tocó. Mientras no lo toque, el campo muestra la estimación y
+    // la petición lleva `interesReal = null` —que el server estime, con su saldo vivo—: NO se
+    // manda la estimación redondeada de la hoja como si fuera un dato del dueño, porque el server
+    // la recalcula contra los eventos del instante de guardar y la de la hoja puede estar vieja.
+    //
+    // Si lo tocó y lo dejó vacío, también va `null`: vacío es «no sé», y «no sé» es «estímalo».
+    // Se resetea al cambiar de deuda —el interés de un crédito no sirve para otro— pero NO al
+    // cambiar el monto: el interés real depende del saldo del banco, no de cuánto pagó.
+    var interesEscrito by remember { mutableStateOf<Long?>(null) }
+    var interesTocado by remember { mutableStateOf(false) }
+    LaunchedEffect(toId) {
+        interesEscrito = null
+        interesTocado = false
+    }
+    val termsDelDestino = to?.let { terminosPorCuenta[it.id] }
+    val interesEstimado = interesEstimadoDelMes(to, termsDelDestino)
+    /** Lo que va en la petición: el que escribió, o `null` para que el server estime. */
+    val interesEfectivo = if (interesTocado) interesEscrito else null
+    /**
+     * El rechazo del interés, con las mismas palabras que daría el server. Se muestra junto al
+     * campo y apaga el botón; NO va en `missing` porque ese renglón mide una línea y este mensaje
+     * trae tres cifras.
+     */
+    val errorDeInteres = if (esPago && to != null) {
+        validarInteresReal(interesEfectivo, amount ?: 0L, to.type, termsDelDestino?.insuranceMonthly)
+    } else {
+        null
+    }
+
     val missing = if (esPago) {
         validarPagoDeCuota(
-            pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note),
+            pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note, null),
             from,
             to,
         )
     } else {
         validateTransfer(from, to, amount ?: 0L)
     }
-    val canSave = missing == null && !saving
+    val canSave = missing == null && errorDeInteres == null && !saving
 
     /**
      * El aviso de que el server repartió la cuota distinto de lo que esta hoja mostró, cuando lo
@@ -655,7 +747,7 @@ internal fun TransferBody(
         val destino = to ?: return
         // Lo que la hoja le PROMETIÓ, capturado antes de salir: si el server escribe otro reparto
         // hay que poder decir cuál era el que él leyó. Se calcula igual que el renglón de abajo.
-        val desgloseMostrado = if (esPago) desgloseDelPago(destino, terminosPorCuenta[destino.id], amount) else null
+        val desgloseMostrado = if (esPago) desgloseDelPago(destino, terminosPorCuenta[destino.id], amount, interesEfectivo) else null
         // Con «Hoy» (el default) queda la hora real, como siempre; cualquier otro día va al
         // mediodía de Bogotá — ver [timestampParaFecha] y [epochAlMediodia].
         val timestamp = timestampParaFecha(fecha, hoy)
@@ -665,7 +757,7 @@ internal fun TransferBody(
             val result = runCatching {
                 if (esPago) {
                     Repositories.wallets.payInstallment(
-                        pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note),
+                        pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note, interesEfectivo),
                     )
                 } else {
                     Repositories.wallets.createTransfer(
@@ -926,7 +1018,7 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(16.dp))
-        MoneyField(value = amount, onValueChange = { amount = it }, label = "MONTO")
+        MoneyField(value = amount, onValueChange = { amount = it }, label = "MONTO", modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO))
 
         // ── Ola 14 · lo que este traspaso le hace al crédito ────────────────────────────────
         //
@@ -991,8 +1083,44 @@ internal fun TransferBody(
         // Es plata suya: tiene que poder VERIFICAR el número, no confiar en él. Ver
         // [textoDelDesglose].
         if (esPago && to != null) {
-            val desglose = desgloseDelPago(to, terminosPorCuenta[to.id], amount)
+            val desglose = desgloseDelPago(to, termsDelDestino, amount, interesEfectivo)
             Spacer(Modifier.height(12.dp))
+
+            // ── El interés de este mes, editable ─────────────────────────────────────────────
+            //
+            // La estimación se queda corta contra el extracto por más de $100.000 en una sola
+            // cuota (ver `CreatePagoDeCuotaRequest.interesReal`), y hasta acá no había dónde
+            // corregirla: la frase de abajo mostraba el reparto y no dejaba tocarlo. Ahora el
+            // interés es un campo, **prellenado con la estimación**, y el capital de la frase se
+            // recalcula en vivo con lo que él escriba.
+            //
+            // Aparece apenas hay un crédito elegido y sus condiciones cargadas —el interés es
+            // `saldo × tasa`, no necesita el monto—, así que escribir el monto después no mueve
+            // nada bajo el dedo: el campo ya está. Sobre una tarjeta no aparece (el pago baja la
+            // deuda por todo, no hay interés que separar), y mientras las condiciones no llegaron
+            // tampoco: sin el seguro de las condiciones no se puede decir cuánto queda de capital.
+            val muestraElInteres = to.type == AccountType.LOAN && terminosCargados && !falloCargarTerminos
+            if (muestraElInteres) {
+                MoneyField(
+                    // Sin tocar: la estimación (o vacío en un crédito sin tasa). Tocado: lo suyo.
+                    // `MoneyField` se resincroniza solo cuando el valor cambia desde afuera, así
+                    // que la estimación entra al prellenar y no vuelve a pisar lo que escribió.
+                    value = if (interesTocado) interesEscrito else interesEstimado,
+                    onValueChange = { interesTocado = true; interesEscrito = it },
+                    label = "INTERESES DE ESTE MES",
+                    prefix = when (to.currency) { "COP" -> "$"; "USD" -> "US$"; else -> to.currency },
+                    modifier = Modifier.testTag(TAG_CAMPO_DE_INTERES),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (interesEstimado != null) INTERES_ESTIMADO_AVISO else INTERES_SIN_TASA_AVISO,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    lineHeight = 17.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+
             Box(modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp)) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     when {
@@ -1013,6 +1141,11 @@ internal fun TransferBody(
                             Text("Calculando cuánto baja la deuda…", fontSize = 12.sp, color = MinTextMute)
                         to.type == AccountType.LOAN && falloCargarTerminos ->
                             Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+                        // Un interés que no cabe en la cuota: se dice acá, al lado del campo y con
+                        // las mismas palabras que contestaría el server, y el botón queda apagado.
+                        // No se muestra un capital negativo ni se clampa en silencio.
+                        errorDeInteres != null ->
+                            Text(errorDeInteres, fontSize = 12.sp, color = MinExpense, lineHeight = 17.sp)
                         // Nada de `return@Column` acá: un early return se llevaría por delante la
                         // fecha, la nota y el botón de Guardar. Los dos renglones son opcionales
                         // por separado.
@@ -1061,8 +1194,11 @@ internal fun TransferBody(
 
         // Ola 8 · V2 (N4): igual que el error del editor de un movimiento — alto reservado,
         // dos renglones, para que un fallo de red no corra el botón de guardar bajo el dedo.
+        // Mínimo y no fijo: el 422 del interés que no cabe trae tres cifras y ocupa tres
+        // renglones en un teléfono; recortado a dos, el dueño leía media explicación. Crece solo
+        // en ese caso, y después de un toque en Guardar, no bajo el dedo que escribe.
         Spacer(Modifier.height(10.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(32.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp)) {
             if (error != null) {
                 Text(error!!, fontSize = 12.sp, color = MinExpense)
             }
@@ -1221,6 +1357,8 @@ private fun pagoRequestFor(
     amount: Long,
     timestamp: Long,
     note: String,
+    /** `null` = que el server estime. Sin default a propósito: olvidarlo no compila. */
+    interesReal: Long?,
 ) = com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest(
     fromAccountId = fromAccountId,
     debtAccountId = debtAccountId,
@@ -1230,4 +1368,9 @@ private fun pagoRequestFor(
     transferId = ids.transferId,
     fromEventId = ids.fromEventId,
     toEventId = ids.toEventId,
+    interesReal = interesReal,
 )
+
+/** Etiquetas de prueba de los dos campos de monto de esta hoja, para que Robolectric los distinga. */
+internal const val TAG_CAMPO_DE_MONTO = "campo_de_monto_del_traspaso"
+internal const val TAG_CAMPO_DE_INTERES = "campo_de_interes_de_la_cuota"
