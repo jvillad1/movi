@@ -153,7 +153,13 @@ class ResumenRecurrentesEnMovimientosTest {
 
         composeRule.onNodeWithText("Confirmar", useUnmergedTree = true).performClick()
 
-        esperarQueDesaparezca("Disney+")
-        composeRule.onNodeWithText("DETECTADAS · POR CONFIRMAR", useUnmergedTree = true).assertDoesNotExist()
+        esperarQueDesaparezca("DETECTADAS · POR CONFIRMAR")
+        // Sale de «por confirmar», pero NO de la pantalla: confirmarla la vuelve una suscripción
+        // ACTIVA, y desde el PR 5 las activas tienen dónde verse — con su etiqueta de origen y su
+        // «Quitar». Antes de ese PR desaparecía sin dejar rastro, aunque siguiera sumando en el
+        // «Flujo libre» de arriba.
+        esperarTexto("SUSCRIPCIONES ACTIVAS")
+        composeRule.onNodeWithText("Disney+", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Suscripción · la encontró Movi", useUnmergedTree = true).assertExists()
     }
 }

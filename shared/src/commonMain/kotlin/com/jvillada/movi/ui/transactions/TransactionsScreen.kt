@@ -70,6 +70,8 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
+import com.jvillada.movi.ui.recurrentes.OrigenDeSuscripcion
+import com.jvillada.movi.ui.recurrentes.Recurrente
 import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
@@ -78,14 +80,17 @@ import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.claveDescartada
+import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
 import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
 import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
+import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
+import com.jvillada.movi.ui.recurrentes.suscripcionesActivas
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -684,9 +689,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // que `listasParaMovimientos` ya usa; la diferencia es que acá SÍ se repite la llamada.
     var subsParaRecurrentes by remember { mutableStateOf(SubscriptionsResult(emptyList(), 0)) }
     var subsParaRecurrentesOk by remember { mutableStateOf(false) }
-    // Ids con una acción en vuelo, para no dejar tocar dos veces la misma candidata mientras se
-    // guarda — mismo motivo que `marcando` en la pantalla vieja.
-    var candidatasEnVuelo by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Ids con una acción en vuelo, para no dejar tocar dos veces la misma suscripción mientras se
+    // guarda — mismo motivo que `marcando` en la pantalla vieja. Sirve a las dos acciones que hay
+    // sobre una suscripción (Confirmar/No es de una candidata, y Quitar de una activa): son
+    // conjuntos disjuntos de filas, y el id es el id.
+    var suscripcionesEnVuelo by remember { mutableStateOf<Set<String>>(emptySet()) }
     var buscandoCobros by remember { mutableStateOf(false) }
     val coroutineRecurrentes = rememberCoroutineScope()
 
@@ -783,6 +790,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     val candidatasRecurrentes = remember(subsParaRecurrentes) {
         candidatasSinConfirmar(subsParaRecurrentes.subscriptions)
     }
+    // Las ACTIVAS (AUTO + CONFIRMED), que entre el PR 2 y el PR 4 se quedaron sin ninguna
+    // superficie: sumaban en «Gastos recurrentes» y no había dónde verlas ni cómo sacar una. Sale
+    // del resumen y no de un filtro propio — ver [suscripcionesActivas].
+    val activasRecurrentes = remember(resumenRecurrentesDelChip) {
+        resumenRecurrentesDelChip?.let { suscripcionesActivas(it) } ?: emptyList()
+    }
     // Para avisar en una candidata que el dueño ya la tiene anotada a mano, antes de confirmarla.
     val clavesDeReglasRecurrentes = remember(reglasRecurrentes) {
         reglasRecurrentes.map { claveDeNombre(it.name) }.toSet()
@@ -872,13 +885,42 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     }
 
     fun confirmarCandidata(sub: Subscription, status: SubStatus) {
-        if (sub.id in candidatasEnVuelo) return
-        candidatasEnVuelo = candidatasEnVuelo + sub.id
+        if (sub.id in suscripcionesEnVuelo) return
+        suscripcionesEnVuelo = suscripcionesEnVuelo + sub.id
         coroutineRecurrentes.launch {
             runCatching { Repositories.wallets.updateSubscription(sub.id, sub.copy(status = status)) }
                 .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recurrentesReloadKey++ }
                 .onFailure { error = it.toUserMessage() }
-            candidatasEnVuelo = candidatasEnVuelo - sub.id
+            suscripcionesEnVuelo = suscripcionesEnVuelo - sub.id
+        }
+    }
+
+    /**
+     * **«Quitar» una suscripción activa.** Qué significa quitar depende de quién la puso, y esa
+     * decisión no se toma acá: la toma [quitarBorraLaSuscripcion], que es la misma función que
+     * decide la etiqueta de origen de la fila. Así la fila no puede decir «la encontró Movi»
+     * sobre algo que se va a borrar de verdad.
+     *
+     * Después de escribir, lo mismo que hace `confirmarCandidata`: el gate se olvida de lo
+     * cacheado y `recurrentesReloadKey` vuelve a traer las listas. Sin eso, la marca de cada fila
+     * de abajo, el filtro del chip y el «Flujo libre» se quedan mostrando una suscripción que ya
+     * no está.
+     */
+    fun quitarSuscripcion(sub: Subscription) {
+        if (sub.id in suscripcionesEnVuelo) return
+        suscripcionesEnVuelo = suscripcionesEnVuelo + sub.id
+        coroutineRecurrentes.launch {
+            val resultado = if (quitarBorraLaSuscripcion(sub)) {
+                runCatching { Repositories.wallets.deleteSubscription(sub.id) }
+            } else {
+                runCatching {
+                    Repositories.wallets.updateSubscription(sub.id, sub.copy(status = SubStatus.DISMISSED))
+                }
+            }
+            resultado
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recurrentesReloadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            suscripcionesEnVuelo = suscripcionesEnVuelo - sub.id
         }
     }
 
@@ -1044,6 +1086,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 // que resume. En el orden anterior (PR 2) el «Flujo libre» era lo único que había
                 // y por eso encabezaba; con la mudanza del PR 3, dejar una cifra que no pide nada
                 // por encima de una propuesta abierta sería enterrar lo urgente bajo lo bonito.
+                //
+                // El PR 5 agrega «Suscripciones activas» al FINAL, debajo del «Flujo libre»: es
+                // el desglose de ese total, no una decisión pendiente. Ver
+                // [SeccionSuscripcionesActivas].
 
                 // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
                 // Se muda con el resto: era la única pantalla que lo mostraba, y sacarla del menú
@@ -1123,7 +1169,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                     CandidataSuscripcionCard(
                                         sub = s,
                                         yaEsRegla = claveDeNombre(s.displayName) in clavesDeReglasRecurrentes,
-                                        enVuelo = s.id in candidatasEnVuelo,
+                                        enVuelo = s.id in suscripcionesEnVuelo,
                                         onConfirmar = { confirmarCandidata(s, SubStatus.CONFIRMED) },
                                         onDescartar = { confirmarCandidata(s, SubStatus.DISMISSED) },
                                     )
@@ -1157,6 +1203,20 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             onAction = { buscarCobros() },
                         )
                         ResumenFlujoLibreCard(resumenRecurrentesDelChip)
+                    }
+                }
+
+                // ── Suscripciones activas · el desglose de «Gastos recurrentes» ─────────
+                // Pegado al card de arriba a propósito: es lo que ese total tiene adentro, con
+                // la fila marcada «no se suma dos veces» incluida. Ver [SeccionSuscripcionesActivas].
+                if (activasRecurrentes.isNotEmpty()) {
+                    item {
+                        SeccionSuscripcionesActivas(
+                            activas = activasRecurrentes,
+                            enVuelo = suscripcionesEnVuelo,
+                            onQuitar = { quitarSuscripcion(it) },
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                        )
                     }
                 }
             }
@@ -1637,6 +1697,99 @@ private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
                 color = MinTextMute,
                 lineHeight = 15.sp,
             )
+        }
+    }
+}
+
+/**
+ * **Las suscripciones que hoy están activas** — el inventario que el rediseño de Recurrentes se
+ * llevó por delante sin reponer.
+ *
+ * Vale la pena decir qué se había perdido, porque no era solo una etiqueta: entre el PR 2 y el
+ * PR 4 las suscripciones **activas** dejaron de tener cualquier superficie. Seguían sumando en
+ * «Gastos recurrentes» (ver [resumenRecurrentes]) y seguían marcando filas en la lista de abajo,
+ * pero no había dónde verlas ni cómo sacar una. Eso pesa sobre todo en las
+ * [OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA]: están sumando plata todos los meses
+ * sin que el dueño las haya aprobado nunca.
+ *
+ * Va **debajo del card de «Flujo libre»** y no arriba con lo accionable, porque esto es el
+ * desglose de la línea «Gastos recurrentes» de ese card — incluida la fila marcada «no se suma
+ * dos veces», que es lo que explica por qué el total no es la suma ingenua de la lista. Separar
+ * el total de su desglose es justo la duda que la pantalla vieja documentaba querer evitar.
+ * «Quitar» es una corrección, no una decisión pendiente: no compite con las candidatas por
+ * confirmar ni con un «¿esto ya ocurrió?».
+ *
+ * @param enVuelo ids con una acción guardándose, para no dejar tocar «Quitar» dos veces.
+ */
+@Composable
+private fun SeccionSuscripcionesActivas(
+    activas: List<Recurrente.Suscripcion>,
+    enVuelo: Set<String>,
+    onQuitar: (Subscription) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (activas.isEmpty()) return
+    Column(modifier = modifier) {
+        MinSectionHeader(title = "Suscripciones activas", count = activas.size)
+        MinCard(
+            modifier = Modifier.fillMaxWidth(),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+        ) {
+            activas.forEachIndexed { i, item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(MinSurfaceContainerHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "${item.dayOfMonth}",
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.sub.displayName,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                            letterSpacing = (-0.1).sp,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        // De dónde salió, en una sola línea y decidido en un solo lugar — ver
+                        // [contextoDeSuscripcionActiva].
+                        Text(contextoDeSuscripcionActiva(item), fontSize = 12.sp, color = MinTextMute)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            // En SU moneda, sin convertir: una suscripción en dólares se lee
+                            // "−US$12". Solo el total de arriba pasa por la TRM, y lo dice.
+                            text = "−" + formatMoney(item.sub.amount, item.sub.currency),
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                            letterSpacing = (-0.3).sp,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        val guardando = item.sub.id in enVuelo
+                        Text(
+                            text = if (guardando) "Quitando…" else "Quitar",
+                            fontSize = 12.sp,
+                            color = if (guardando) MinTextMute else MinExpense,
+                            modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
+                        )
+                    }
+                }
+                if (i < activas.size - 1) Hairline()
+            }
         }
     }
 }
