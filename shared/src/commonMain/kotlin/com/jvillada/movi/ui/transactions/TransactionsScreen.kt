@@ -73,6 +73,7 @@ import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
+import com.jvillada.movi.ui.recurrentes.SeccionSinConfirmar
 import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
@@ -80,6 +81,7 @@ import com.jvillada.movi.ui.recurrentes.claveDescartada
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
+import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
 import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
 import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
@@ -794,6 +796,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     val selladasRecurrentes = remember(upcomingRecurrentes, ocurrencias, ocurrenciasOk) {
         if (ocurrenciasOk) ocurrenciasSelladas(upcomingRecurrentes, ocurrencias) else emptyList()
     }
+    // Y lo que quedó abierto pero ya no urge: una regla sale de «Próximos» apenas pasan los días
+    // de gracia aunque nadie la haya confirmado, y su periodo sigue abierto igual. Sin esto, un
+    // recurrente de principio de mes no tenía dónde confirmarse hasta el mes siguiente — ver
+    // [ocurrenciasAbiertasSinUrgencia].
+    val abiertasRecurrentes = remember(upcomingRecurrentes, ocurrencias, ocurrenciasOk, proximosRecurrentes) {
+        if (ocurrenciasOk) {
+            ocurrenciasAbiertasSinUrgencia(upcomingRecurrentes, ocurrencias, proximosRecurrentes)
+        } else emptyList()
+    }
     // El aviso ámbar mira lo que se PIDIÓ, no lo que existe: promete una promesa rota, y sin
     // promesa no hay nada que anunciar. Ver [hayRecordatoriosPedidos].
     val pidieronRecordatorios = hayRecordatoriosPedidos(upcomingRecurrentes)
@@ -1084,6 +1095,22 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         },
                         modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                     )
+                }
+
+                // ── Sin confirmar · abiertos que ya no urgen ────────────────────────────
+                if (abiertasRecurrentes.isNotEmpty()) {
+                    item {
+                        SeccionSinConfirmar(
+                            abiertas = abiertasRecurrentes,
+                            descartadas = descartadas,
+                            marcando = marcando,
+                            onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
+                            onDescartarPropuesta = { ruleId, eventId ->
+                                descartadas = descartadas + claveDescartada(ruleId, eventId)
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                        )
+                    }
                 }
 
                 // ── Detectadas · por confirmar ──────────────────────────────────────────

@@ -353,6 +353,81 @@ fun SeccionProximosPagos(
 }
 
 /**
+ * **«Sin confirmar»**: periodos abiertos que ya dejaron de urgir, con su misma pregunta.
+ *
+ * Es la puerta que faltaba. «Próximos» solo muestra lo que urge, y una regla deja de urgir apenas
+ * pasan los días de gracia **aunque nadie haya confirmado nada** (ver
+ * [ocurrenciasAbiertasSinUrgencia], que explica el mecanismo). Sin esta sección, el gimnasio del
+ * día 5 no se podía confirmar desde el día ~10 hasta fin de mes: no urgía, no estaba sellado, y
+ * el inventario donde antes vivía esa propuesta no se mudó a Movimientos.
+ *
+ * Va DEBAJO de «Próximos» y no mezclada con él a propósito: lo que vence pronto y lo que se pasó
+ * de fecha piden cosas distintas —uno es un aviso, el otro es una cuenta pendiente de cerrar— y
+ * juntarlos escondería el urgente entre los viejos.
+ */
+@Composable
+fun SeccionSinConfirmar(
+    abiertas: List<Pair<RecurringRule, OccurrenceState>>,
+    descartadas: Set<String>,
+    marcando: Set<String>,
+    onMarcar: (ruleId: String, period: String, eventId: String?) -> Unit,
+    onDescartarPropuesta: (ruleId: String, eventId: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (abiertas.isEmpty()) return
+    Column(modifier = modifier) {
+        MinSectionHeader(title = "Sin confirmar", count = abiertas.size)
+        MinCard(
+            modifier = Modifier.fillMaxWidth(),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+        ) {
+            abiertas.forEachIndexed { i, (rule, estado) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = rule.name,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MinText,
+                            letterSpacing = (-0.1).sp,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "Día ${rule.dayOfMonth} · sin confirmar",
+                            fontSize = 11.sp,
+                            color = MinTextMute,
+                        )
+                    }
+                    Text(
+                        text = textoDelMonto(rule, conSigno = true),
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium,
+                        color = if (rule.type == TransactionType.INCOME) MinIncome else MinText,
+                        letterSpacing = (-0.3).sp,
+                    )
+                }
+                PropuestaOcurrencia(
+                    estado = estado,
+                    rule = rule,
+                    propuesta = propuestaActual(estado, descartadas),
+                    enVuelo = rule.id in marcando,
+                    onConfirmar = { ev -> onMarcar(rule.id, estado.period, ev.id) },
+                    onDescartar = { ev -> onDescartarPropuesta(rule.id, ev.id) },
+                    onCerrarSinMovimiento = { onMarcar(rule.id, estado.period, null) },
+                )
+                if (i < abiertas.size - 1) Hairline()
+            }
+        }
+    }
+}
+
+/**
  * **«Ya ocurrieron»**: los periodos que el dueño selló, con su «Deshacer».
  *
  * Existe porque sellar es una acción con plata adentro y **tiene que poder revertirse sin
