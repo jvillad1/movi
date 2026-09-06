@@ -297,6 +297,48 @@ fun equivalenteYaAnotado(
 }
 
 /**
+ * PR 1 del rediseño de Recurrentes (2026-09): **¿este movimiento es una ocurrencia reconocida
+ * como recurrente?**, para Movimientos — el chip nuevo y la marca en la fila.
+ *
+ * Comparte con [equivalenteYaAnotado] las puertas 2 y 3 (una regla con este nombre, una
+ * suscripción que ya suma) pero deja afuera **a propósito** la puerta 1, el sello de ocurrencia
+ * (`GET /api/events/{id}/occurrence`): esa lectura es POR movimiento, y Movimientos pinta un día
+ * entero —o varios— de una sola vez. Pedirle el sello a cada fila visible convertiría una lista
+ * de treinta movimientos en una lista de treinta movimientos MÁS treinta viajes de red que crecen
+ * con lo que hay en pantalla, y esta lista no tiene el lujo de "una sola cosa a la vez" que sí
+ * tiene el detalle de un movimiento (ver `SeccionEstoSeRepite` en `CategorySheets.kt`, que sí paga
+ * esa llamada porque ahí solo hay UN movimiento).
+ *
+ * El nombre alcanza para el caso común: un recurrente de verdad se llama igual mes a mes
+ * («Arriendo», «Netflix»), así que compararlo contra las reglas y las suscripciones que YA están
+ * cargadas (sin ningún viaje extra) reconoce la enorme mayoría de las filas. Lo que se pierde: un
+ * movimiento puntual que quedó sellado con un nombre que el dueño **renombró después** en su
+ * regla no se reconoce acá con el nombre nuevo — un caso angosto, y es justo el que ya se resuelve
+ * abriendo el detalle, que sí tiene el sello.
+ *
+ * Estructuralmente, tampoco aplica a lo que [equivalenteYaAnotado] nunca compara: una pata de un
+ * par (`transferId` puesto) o una categoría reservada — ninguna de las dos puede ser un
+ * recurrente, y sin este corte un «Traspaso» o un «Saldo inicial» podrían, por accidente de
+ * nombre, matchear una regla real.
+ *
+ * @return el nombre con el que ya está anotado, o `null` si no matchea nada.
+ */
+fun nombreRecurrenteDe(
+    event: FinancialEvent,
+    reglas: List<RecurringRule>,
+    suscripcionesQueYaSuman: List<String>,
+): String? {
+    if (event.transferId != null) return null
+    if (isReservedCategory(event.category)) return null
+    return equivalenteYaAnotado(
+        selloDeOcurrencia = null,
+        reglas = reglas,
+        suscripcionesQueYaSuman = suscripcionesQueYaSuman,
+        nombre = prefillNameFor(event),
+    )
+}
+
+/**
  * Ola 9 · D (segundo hallazgo): **si el nombre ya dice qué es, no dejes la categoría en un
  * genérico.** El dueño llamó «Salario» a su recurrente y quedó categorizado como «Otros
  * ingresos», teniendo «Salario» en el catálogo: la hoja arranca en «Otros» y nadie la corrigió.

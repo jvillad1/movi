@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertCountEquals
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
@@ -22,7 +23,10 @@ import org.junit.After
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.Rule
@@ -214,6 +218,95 @@ class HojaDelMovimientoTest {
         kotlin.test.assertEquals(gasto.amount, cambios.amount)
         kotlin.test.assertEquals(gasto.accountId, cambios.accountId)
     }
+
+    /**
+     * # PR 1 del rediseño de Recurrentes: «ya lo tienes» deja de ser un punto muerto.
+     *
+     * Hasta acá, tocar «¿Se repite todos los meses?» sobre un movimiento que YA matcheaba una
+     * regla existente solo mostraba texto — «edítalo desde Recurrentes», una promesa de
+     * navegación a una pantalla que este mismo rediseño va a hacer desaparecer. Esta prueba monta
+     * [HojaDelMovimiento] con un repositorio de prueba donde existe una regla «Hija» (el mismo
+     * nombre que el gasto sin recurrente todavía), toca el botón, y afirma que aparece una acción
+     * tappeable «Editar este recurrente» — no solo el mensaje — y que tocarla abre
+     * `CreateRecurringRuleSheet` en modo EDICIÓN sobre esa regla (el título cambia a «Editar
+     * recurrente» y aparece «Eliminar», que solo existe en modo edición).
+     */
+    @Test
+    fun tocarEstoSeRepiteSobreUnMovimientoYaAnotadoOfreceEditarLaRegla() {
+        val reglaHija = RecurringRule(
+            id = "rr-hija",
+            name = "Hija",
+            category = "Otros",
+            amount = 4_000_000L,
+            dayOfMonth = 5,
+            type = TransactionType.EXPENSE,
+        )
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = null
+            override suspend fun getRecurringRules(): List<RecurringRule> = listOf(reglaHija)
+            override suspend fun getSubscriptions(): SubscriptionsResult = SubscriptionsResult(emptyList(), 0)
+        }
+        montar()
+
+        composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo()
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, se repite todos los meses")), useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        // La acción está, tappeable — no solo el mensaje de que ya existe. El `clickable` va
+        // directo sobre este `Text` (no hay una fila que lo envuelva), así que el nodo que dice
+        // «Editar este recurrente» YA es el nodo con la acción de click — a diferencia de
+        // «Guardar cambios» más arriba, acá no hace falta buscar un ancestro clickable.
+        composeRule.onNodeWithText("Editar este recurrente", useUnmergedTree = true)
+            .assertExists("no se ofreció editar la regla existente")
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        // Se abrió CreateRecurringRuleSheet en modo EDICIÓN sobre la regla «Hija», no el alta.
+        composeRule.onNodeWithText("Editar recurrente", useUnmergedTree = true)
+            .assertExists("no se abrió la hoja en modo edición")
+        composeRule.onNodeWithText("Eliminar", useUnmergedTree = true)
+            .assertExists("«Eliminar» solo existe en modo edición")
+    }
+
+    /**
+     * Y cuando lo que ya existe es una SUSCRIPCIÓN (no una regla): se explica, pero no se ofrece
+     * una edición que no tiene a dónde ir — el fix del punto muerto es para la regla, no para
+     * esto (ver el KDoc de `SeccionEstoSeRepite`).
+     */
+    @Test
+    fun tocarEstoSeRepiteSobreUnaSuscripcionYaConfirmadaNoOfreceEditar() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = null
+            override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
+            override suspend fun getSubscriptions(): SubscriptionsResult =
+                SubscriptionsResult(listOf(suscripcionHija), 0)
+        }
+        montar()
+
+        composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo()
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, se repite todos los meses")), useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("una suscripción confirmada", useUnmergedTree = true, substring = true)
+            .assertExists("no se explicó que ya está anotado como suscripción")
+        composeRule.onAllNodes(hasText("Editar este recurrente"), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    private val suscripcionHija = com.jvillada.movi.shared.model.Subscription(
+        id = "sub-hija",
+        merchantKey = "manual_hija",
+        displayName = "Hija",
+        amount = 4_000_000L,
+        currency = "COP",
+        dayOfMonth = 5,
+        status = com.jvillada.movi.shared.model.SubStatus.CONFIRMED,
+        confidence = com.jvillada.movi.shared.model.SubConfidence.HIGH,
+        firstSeen = 0L,
+        lastSeen = 0L,
+        occurrences = 3,
+    )
 }
 
 /** El AVD `Movi_Sensor`: 411×731 dp. Mismo tamaño que usa `HojaAgregarGeometriaTest`. */

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -42,12 +43,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
@@ -57,6 +60,8 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
+import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
+import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -124,15 +129,26 @@ fun isTransferLeg(event: FinancialEvent): Boolean =
  *
  * Un día que se queda sin filas se descarta entero (encabezado incluido): un día vacío con su
  * «Flujo del día» no le dice nada a nadie.
+ *
+ * @param reglas y @param nombresDeSuscripcionesActivas: lo que hace falta para el chip
+ *   [CHIP_RECURRENTES] (ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe]).
+ *   Vacíos por defecto — ningún otro chip los necesita, y así los tests de los chips que ya
+ *   existían no tienen que cambiar una línea.
  */
-fun diasVisibles(days: List<EventDay>, chip: Int, query: String): List<EventDay> =
+fun diasVisibles(
+    days: List<EventDay>,
+    chip: Int,
+    query: String,
+    reglas: List<RecurringRule> = emptyList(),
+    nombresDeSuscripcionesActivas: List<String> = emptyList(),
+): List<EventDay> =
     days.mapNotNull { day ->
         val filtered = day.items
             // Ola 16: la apertura de una cuenta no se lista salvo que la busquen — ver
             // [showsInMovements], que también explica por qué el filtro vive acá y no en
             // `/by-day` ni en `LocalRepository`.
             .filter { showsInMovements(it, query) }
-            .filter { matchesChip(it, chip) }
+            .filter { matchesChip(it, chip, reglas, nombresDeSuscripcionesActivas) }
             .filter { matchesQuery(it, query) }
         if (filtered.isEmpty()) null
         else day.copy(
@@ -280,9 +296,15 @@ const val CHIP_GASTOS = 1
 const val CHIP_INGRESOS = 2
 const val CHIP_POR_CONFIRMAR = 3
 const val CHIP_ENTRE_CUENTAS = 4
+/**
+ * PR 1 del rediseño de Recurrentes (2026-09): el dueño pidió, palabra por palabra, poder «en esa
+ * página revisar cuáles de todos los gastos por filtro o lo que sea son recurrentes» — este es
+ * ese filtro. Ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe].
+ */
+const val CHIP_RECURRENTES = 5
 
 /** Los rótulos de los chips, en el orden de sus índices. */
-val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas")
+val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
 
 /**
  * ¿Este movimiento entra en el chip [chip]?
@@ -307,14 +329,27 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  *
  * «Entre cuentas» es el cuarto filtro: los tres pares y el pago de tarjeta suelto, ver
  * [esEntreCuentas]. Las dos patas de cada par pasan, así que [collapseTransfers] las junta.
+ *
+ * «Recurrentes» es el quinto: lo que ya reconocemos como una regla o una suscripción confirmada,
+ * ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe] — con las mismas dos listas ya
+ * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí).
+ *
+ * @param reglas y @param nombresDeSuscripcionesActivas solo los usa [CHIP_RECURRENTES]; el resto
+ *   de los chips ni los mira, así que quedan con default vacío y no rompen ningún llamado viejo.
  */
-fun matchesChip(event: FinancialEvent, chip: Int): Boolean = when (chip) {
+fun matchesChip(
+    event: FinancialEvent,
+    chip: Int,
+    reglas: List<RecurringRule> = emptyList(),
+    nombresDeSuscripcionesActivas: List<String> = emptyList(),
+): Boolean = when (chip) {
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
         event.countsAsCashFlow &&
         event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED
     CHIP_INGRESOS -> event.type == TransactionType.INCOME && event.countsAsCashFlow
     CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
+    CHIP_RECURRENTES -> nombreRecurrenteDe(event, reglas, nombresDeSuscripcionesActivas) != null
     else -> true
 }
 
@@ -358,6 +393,12 @@ fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos =
         titulo = "Nada entre cuentas",
         detalle = "Aquí van los traspasos, las cuotas de crédito y los pagos de tarjeta: plata que " +
             "fue de una cuenta tuya a otra.",
+        ofreceRegistrar = false,
+    )
+    chip == CHIP_RECURRENTES -> VacioDeMovimientos(
+        titulo = "Nada recurrente",
+        detalle = "Aquí aparecen los movimientos que ya reconocemos como un recurrente que tienes " +
+            "anotado o una suscripción confirmada.",
         ofreceRegistrar = false,
     )
     else -> VacioDeMovimientos("Sin movimientos aún", null, ofreceRegistrar = true)
@@ -552,6 +593,19 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
             .onSuccess { candidates = it }
     }
 
+    // PR 1 del rediseño de Recurrentes: lo que hace falta para el chip «Recurrentes» y la marca
+    // en cada fila (ver [nombreRecurrenteDe]). Sale del MISMO cache que ya usa la barra de
+    // «¿esto se repite?» de después de guardar — ver [RecurringOfferGate.listasParaMovimientos]:
+    // si esta pantalla es la primera en pedirlas esta sesión, las carga UNA vez; si ya las cargó
+    // otra pantalla (o esta misma en una visita anterior), no hay ningún viaje de red de más.
+    var reglasRecurrentes by remember { mutableStateOf<List<RecurringRule>>(emptyList()) }
+    var nombresDeSuscripcionesActivas by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        val (reglas, cobros) = RecurringOfferGate.listasParaMovimientos()
+        reglasRecurrentes = reglas
+        nombresDeSuscripcionesActivas = nombresDeSuscripcionesQueYaSuman(cobros)
+    }
+
     LaunchedEffect(error) {
         val msg = error ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
@@ -559,8 +613,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery) {
-        diasVisibles(allDays, activeFilter, searchQuery)
+    val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas) {
+        diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
@@ -851,6 +905,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit) {
                                         is MovementRow.Single -> MovementSingleRow(
                                             tx = row.event,
                                             accountNames = accountNames,
+                                            esRecurrente = nombreRecurrenteDe(
+                                                row.event,
+                                                reglasRecurrentes,
+                                                nombresDeSuscripcionesActivas,
+                                            ) != null,
                                             onClick = { selectedEvent = row.event },
                                         )
                                     }
@@ -982,11 +1041,17 @@ private fun TransferRow(
  * sale `EventSource` («MANUAL», «SMS»…), que además de no aportar nada acá es el nombre crudo
  * de un enum en una app que habla español; el punto naranja al lado de la descripción ya avisa
  * lo único que importaba de ahí: que el movimiento entró solo y falta confirmarlo.
+ *
+ * PR 1 del rediseño de Recurrentes: el mismo ícono de repetición que ya identifica a Recurrentes
+ * en el rail y en Más ([Icons.Rounded.Repeat]), chico y sin color propio —el mismo `MinTextMute`
+ * del subtítulo— junto a la categoría. No es un botón: solo informa: para editar el recurrente
+ * hay que abrir el movimiento y usar «¿Se repite todos los meses?» (ver `SeccionEstoSeRepite`).
  */
 @Composable
 private fun MovementSingleRow(
     tx: FinancialEvent,
     accountNames: Map<String, String>,
+    esRecurrente: Boolean = false,
     onClick: () -> Unit,
 ) {
     // Rojo gasto, verde ingreso, gris lo que no movió plata del bolsillo — la apertura de una
@@ -1020,13 +1085,29 @@ private fun MovementSingleRow(
                 }
             }
             Spacer(Modifier.height(2.dp))
-            Text(
-                text = subtitulo,
-                fontSize = 12.sp,
-                color = MinTextMute,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (esRecurrente) {
+                    Icon(
+                        imageVector = Icons.Rounded.Repeat,
+                        contentDescription = "Recurrente",
+                        tint = MinTextMute,
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
+                Text(
+                    text = subtitulo,
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // Sin este weight, el Row que ahora envuelve el ícono no le da al texto un
+                    // ancho acotado y el ellipsis de arriba no tiene sobre qué recortar.
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
         }
         Text(
             text = when (tono) {
