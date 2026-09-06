@@ -14,11 +14,12 @@ import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.DesgloseDeCuota
-import com.jvillada.movi.shared.model.desglosarCuota
+import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.pagoDeCuotaLegs
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.signedDelta
+import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.validarPagoDeCuota
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -140,12 +141,26 @@ fun Route.pagoDeCuotaRoutes() {
             } else {
                 null
             }
-            val desglose = desglosarCuota(
+            // ── El interés real, si vino, y sus guardas ──────────────────────────────────────
+            //
+            // La estimación de arriba se queda corta contra el extracto por más de $100.000 en
+            // una sola cuota del ·9695 (ver `CreatePagoDeCuotaRequest.interesReal`). Si el dueño
+            // escribió el interés del extracto, manda ese; si no vino —cliente viejo, o no lo
+            // tocó— se estima como siempre.
+            //
+            // **Se valida ACÁ y no se le cree a la hoja**, antes de escribir nada: un interés que
+            // deja el capital negativo haría SUBIR la deuda con un pago, y eso es 422 con el
+            // motivo, no un clamp silencioso. Misma función que apaga el botón en la app.
+            validarInteresReal(body.interesReal, body.amount, debt.type, terms?.insuranceMonthly)?.let {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
+            }
+            val desglose = desglosarCuotaRegistrada(
                 cuota = body.amount,
                 tipoDeLaDeuda = debt.type,
                 saldoDeLaDeuda = saldoAntesDelPago,
                 rateEa = terms?.rateEa,
                 seguroMensual = terms?.insuranceMonthly,
+                interesReal = body.interesReal,
             )
 
             val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt, desglose)

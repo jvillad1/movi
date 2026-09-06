@@ -68,6 +68,45 @@ data class CreatePagoDeCuotaRequest(
     val transferId: String,
     val fromEventId: String,
     val toEventId: String,
+    /**
+     * **El interés que el banco cobró de verdad en esta cuota, si el dueño lo tiene a mano.**
+     *
+     * ### Por qué existe
+     *
+     * La estimación ([desglosarCuota]) sale de `saldo × tasa mensual`, y contra el extracto se
+     * queda corta **por mucho**: en el Libre inversión ·9695 (saldo $40.710.555, 11,27 % E.A.)
+     * Movi estimó $363.905 de interés y el banco cobró **$473.227**. Son $109.322 en UNA cuota,
+     * siempre en la misma dirección —la deuda baja de más— y con seis créditos con tasa el
+     * error se apila todos los meses. El dueño ya lo corrigió dos veces a mano en la base; desde
+     * la app no había dónde escribirlo.
+     *
+     * ### El contrato
+     *
+     * - `null` (o el campo ausente) significa **«estímalo»**, que es lo que hace un cliente viejo
+     *   —el APK 1.17 instalado no conoce este campo— y lo que manda la hoja de «Cuota» cuando el
+     *   dueño no tocó la estimación. **Sin `@EncodeDefault`** a propósito: un `null` omitido tiene
+     *   que ser indistinguible de un cliente que no sabe que el campo existe.
+     * - Con un valor, el server lo usa **en lugar** de la estimación: la pata de la deuda pasa a
+     *   valer `cuota − interesReal − seguro`, y `noAmortiza` guarda `interesReal + seguro`. La
+     *   estimación NO se mira; la tasa tampoco, así que un crédito **sin tasa** también lo acepta
+     *   —el extracto sabe más que las condiciones.
+     * - El server **no le cree al cliente**: `≥ 0`, solo sobre un crédito (una tarjeta no lleva
+     *   interés adentro del pago, ver [MotivoDelDesglose.TARJETA]), y `interesReal + seguro ≤
+     *   cuota` — si no, el capital sería negativo y la deuda **subiría** con un pago. Ver
+     *   [validarInteresReal], que es la única definición y la usan la hoja y la ruta.
+     *
+     * ### El seguro NO se sobreescribe por cuota, y es una decisión
+     *
+     * El seguro de vida deudor es un cargo **fijo** que el dueño ya declara una vez en las
+     * condiciones del crédito (`credit_terms.insurance_monthly`, editable desde la app). No
+     * depende del saldo como el interés, así que si el extracto dice otra cifra, lo que está mal
+     * son las condiciones, y arreglarlas ahí corrige TODAS las cuotas siguientes en vez de una.
+     * Además el par guarda la suma (`noAmortiza = interés + seguro`), no cada parte: un seguro
+     * distinto por cuota sería indistinguible después de guardado. Y si hiciera falta igual, el
+     * total que no amortiza se puede meter entero en este campo — lo que decide cuánto baja la
+     * deuda es la suma.
+     */
+    val interesReal: Long? = null,
 )
 
 /**
@@ -91,10 +130,18 @@ data class CreatePagoDeCuotaRequest(
  *   del mes» ([CUOTA_CATEGORY] es una categoría normal).
  * - La pata de la **deuda** baja solo por el **capital** = cuota − interés del período − seguro.
  *
- * Vive en `:core` y no en la pantalla porque la usan tres lugares —el server que escribe las
- * patas, la hoja de «Cuota» que muestra el desglose antes de guardar, y la corrección del monto de
- * una pata— y una regla sobre plata duplicada en dos pantallas ya sobrevivió tres rondas de
- * arreglos en este proyecto.
+ * Vive en `:core` y no en la pantalla porque la usan cuatro lugares —el server que escribe las
+ * patas, la ruta de la cuota que paga otro (`payroll-deduction`, que hasta el arreglo del interés
+ * real seguía bajando la deuda por la cuota entera), la hoja de «Cuota» que muestra el desglose
+ * antes de guardar, y la corrección del monto de una pata— y una regla sobre plata duplicada en
+ * dos pantallas ya sobrevivió tres rondas de arreglos en este proyecto.
+ *
+ * ### La estimación se queda corta, y por eso el interés se puede escribir
+ *
+ * `saldo × tasa mensual` no es lo que cobra el banco: en el ·9695 da $363.905 contra $473.227 del
+ * extracto. Cuando el dueño tiene el extracto, escribe el interés real
+ * ([CreatePagoDeCuotaRequest.interesReal]) y esta estimación no se usa — ver
+ * [desglosarCuotaConInteresReal] y [MotivoDelDesglose.INTERES_REAL].
  *
  * ### Qué pasa con los pagos de cuota YA registrados
  *
@@ -143,6 +190,17 @@ enum class MotivoDelDesglose {
      * plausible sería exactamente el error que esta rama vino a matar, con otro disfraz.
      */
     SIN_TASA,
+
+    /**
+     * Un crédito cuyo interés **lo escribió el dueño** del extracto
+     * ([CreatePagoDeCuotaRequest.interesReal]) en vez de estimarse sobre el saldo. El seguro
+     * sigue saliendo de las condiciones. La pantalla NO le agrega «calculado sobre tu deuda de
+     * hoy»: ese aviso es de la estimación, y acá no hubo estimación.
+     *
+     * Un cliente viejo nunca lo recibe: solo se produce cuando la petición trajo el campo, y un
+     * cliente viejo no lo manda.
+     */
+    INTERES_REAL,
 }
 
 /**
@@ -224,6 +282,115 @@ fun desglosarCuota(
     val capital = (cuota - interes - seguro).coerceAtLeast(0L)
     return DesgloseDeCuota(cuota, interes = interes, seguro = seguro, capital = capital, motivo = MotivoDelDesglose.AMORTIZA)
 }
+
+/** Lo que se le dice a quien manda un interés negativo. */
+const val INTERES_REAL_NEGATIVO: String =
+    "El interés no puede ser negativo. Si el banco no cobró interés este mes, escribe 0."
+
+/** Lo que se le dice a quien manda un interés real sobre una tarjeta. */
+const val INTERES_REAL_EN_TARJETA: String =
+    "El pago de una tarjeta baja la deuda por todo lo pagado: los intereses de la tarjeta se " +
+        "anotan como un movimiento aparte, no adentro del pago."
+
+/**
+ * «1204064» → «1.204.064». Solo para textos que nacen en `:core` o en el server (mensajes de rechazo,
+ * el concepto de un movimiento); la app tiene su `formatMoney`, que además sabe de monedas.
+ */
+fun conPuntosDeMiles(valor: Long): String {
+    val digitos = valor.toString().trimStart('-')
+    val agrupado = digitos.reversed().chunked(3).joinToString(".").reversed()
+    return if (valor < 0) "-$agrupado" else agrupado
+}
+
+/**
+ * Lo que se le dice cuando el interés más el seguro se comen la cuota entera y algo más: con esas
+ * cifras el capital sería negativo, o sea que **la deuda subiría con un pago**. Se rechaza en vez
+ * de clamparse a cero como hace la estimación: acá los tres números los escribió una persona, y
+ * uno de los tres está mal.
+ */
+fun mensajeDeInteresQueNoCabe(cuota: Long, interesReal: Long, seguro: Long): String {
+    // Concatenación y no plantilla: un `$` literal pegado a una plantilla ya rompió una URL en
+    // producción, y así el símbolo queda donde se lee.
+    val conSeguro = if (seguro > 0L) " más el seguro ($" + conPuntosDeMiles(seguro) + ")" else ""
+    return "El interés ($" + conPuntosDeMiles(interesReal) + ")" + conSeguro + " supera la cuota ($" +
+        conPuntosDeMiles(cuota) + "): con eso la deuda subiría en vez de bajar. Revisa el interés o el monto."
+}
+
+/**
+ * ¿Se puede usar este interés real? Devuelve el motivo, o `null` si está bien — incluido el caso
+ * en que no vino ninguno, que es «estímalo» y siempre está bien.
+ *
+ * **Es la única definición**, igual que [validarPagoDeCuota]: la hoja de «Cuota» apaga el botón
+ * con esto y el server rechaza con 422 con esto. Es plata; dos copias de la regla ya costaron
+ * caro en este proyecto.
+ *
+ * @param seguroMensual el de las condiciones del crédito, que es el que el server va a restar.
+ */
+fun validarInteresReal(
+    interesReal: Long?,
+    cuota: Long,
+    tipoDeLaDeuda: AccountType,
+    seguroMensual: Long?,
+): String? {
+    if (interesReal == null) return null
+    if (interesReal < 0L) return INTERES_REAL_NEGATIVO
+    if (tipoDeLaDeuda != AccountType.LOAN) return INTERES_REAL_EN_TARJETA
+    val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
+    // `cuota − interés − seguro < 0` y no `interés + seguro > cuota`: la resta no desborda con
+    // cifras que ya pasaron `MONTO_MAXIMO`, la suma de dos entradas ajenas podría.
+    if (cuota - interesReal - seguro < 0L) return mensajeDeInteresQueNoCabe(cuota, interesReal, seguro)
+    return null
+}
+
+/**
+ * El desglose de una cuota cuyo interés **vino del extracto**, no de la estimación.
+ *
+ * Solo aritmética: `capital = cuota − interesReal − seguro`. Ni la tasa ni el saldo entran, así
+ * que sirve igual para un crédito sin tasa registrada — ahí la estimación no puede separar nada
+ * y el extracto sí. Exige que [validarInteresReal] haya pasado: un capital negativo acá no es
+ * un caso a clampar, es un pago mal escrito que se rechazó antes.
+ */
+fun desglosarCuotaConInteresReal(
+    cuota: Long,
+    tipoDeLaDeuda: AccountType,
+    interesReal: Long,
+    seguroMensual: Long?,
+): DesgloseDeCuota {
+    require(validarInteresReal(interesReal, cuota, tipoDeLaDeuda, seguroMensual) == null) {
+        "Un interés real inválido se rechaza antes de desglosar; llama a validarInteresReal primero"
+    }
+    val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
+    return DesgloseDeCuota(
+        cuota = cuota,
+        interes = interesReal,
+        seguro = seguro,
+        capital = cuota - interesReal - seguro,
+        motivo = MotivoDelDesglose.INTERES_REAL,
+    )
+}
+
+/**
+ * **El único punto de entrada para repartir una cuota que se va a escribir**: con interés real
+ * si vino, estimado si no. Lo usan el server y la hoja para que los dos elijan igual; un call
+ * site que llame a [desglosarCuota] directo cuando había un interés real escrito es exactamente
+ * la clase de olvido que este proyecto ya pagó.
+ *
+ * No valida: [validarInteresReal] va antes, y quien no lo llamó se entera por el `require` de
+ * [desglosarCuotaConInteresReal].
+ */
+fun desglosarCuotaRegistrada(
+    cuota: Long,
+    tipoDeLaDeuda: AccountType,
+    saldoDeLaDeuda: Long,
+    rateEa: Double?,
+    seguroMensual: Long?,
+    interesReal: Long?,
+): DesgloseDeCuota =
+    if (interesReal != null) {
+        desglosarCuotaConInteresReal(cuota, tipoDeLaDeuda, interesReal, seguroMensual)
+    } else {
+        desglosarCuota(cuota, tipoDeLaDeuda, saldoDeLaDeuda, rateEa, seguroMensual)
+    }
 
 /** Lo que se le dice a quien intenta pagar desde una deuda. */
 const val PAGO_DESDE_DEUDA_BLOQUEADO =
@@ -334,7 +501,7 @@ fun pagoDeCuotaLegs(
         // Solo en un crédito que amortiza: una tarjeta y un crédito sin tasa arman un par
         // simétrico, y para esos `null` dice la verdad —no hay nada que no amortice— mientras que
         // un 0 explícito diría lo mismo con pinta de calculado.
-        noAmortiza = if (desglose.motivo == MotivoDelDesglose.AMORTIZA) {
+        noAmortiza = if (desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL) {
             desglose.interes + desglose.seguro
         } else {
             null
@@ -357,4 +524,17 @@ data class PagoDeCuotaResult(
      * manda) sigan deserializando, igual que el resto de los campos agregados en este proyecto.
      */
     val desglose: DesgloseDeCuota? = null,
+)
+
+/**
+ * El cuerpo **opcional** de `POST /api/credits/{id}/payroll-deduction`: la cuota que paga otro
+ * (la nómina, Skandia, un familiar) también puede llevar el interés real del extracto.
+ *
+ * Opcional de verdad: el botón «Registrar descuento» de la app manda la petición **sin cuerpo** y
+ * el server estima, igual que con [CreatePagoDeCuotaRequest.interesReal] en `null`. Mismo
+ * contrato, mismas guardas ([validarInteresReal]), mismo `noAmortiza` guardado en la fila.
+ */
+@Serializable
+data class RegistrarCuotaAjenaRequest(
+    val interesReal: Long? = null,
 )

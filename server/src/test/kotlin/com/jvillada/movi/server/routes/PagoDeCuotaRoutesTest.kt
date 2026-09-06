@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.PAGO_DESDE_DEUDA_BLOQUEADO
 import com.jvillada.movi.shared.model.PAGO_MONEDAS_DISTINTAS
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -485,5 +486,183 @@ class PagoDeCuotaRoutesTest {
         pagar(duenoId, cuerpo(ahorros, amex, 1_008_902))
 
         assertEquals(1_008_902L, montoDeLaPataEn(amex, "tr-1"))
+    }
+
+    // ── El interés REAL del extracto, cuando el dueño lo tiene ─────────────────
+    //
+    // La estimación se queda corta por más de $100.000 en una sola cuota del ·9695 (ver
+    // `CreatePagoDeCuotaRequest.interesReal`). Los tests de arriba, que no mandan el campo, son la
+    // prueba de que un cliente viejo sigue exactamente igual: no se tocó ninguno.
+
+    private val libre = "acc-libre-9695"
+
+    /** El Libre inversión ·9695 tal como está en producción: $40.710.555 al 11,27 % E.A., seguro $124.800. */
+    private fun elLibreInversion9695() = transaction {
+        cuenta(libre, duenoId, "Libre inversión 9695", "LOAN", "COP")
+        Events.insert {
+            it[id] = "ev-apertura-libre"
+            it[userId] = duenoId
+            it[accountId] = libre
+            it[type] = "EXPENSE"
+            it[amount] = 40_710_555L
+            it[currency] = "COP"
+            it[category] = "Saldo inicial"
+            it[description] = "Deuda inicial"
+            it[timestamp] = 1_788_000_000_000L
+            it[eventSource] = "MANUAL"
+            it[reconciliationStatus] = "RECONCILED"
+        }
+        Credits.insert {
+            it[accountId] = libre
+            it[userId] = duenoId
+            it[bank] = "Bancolombia"
+            it[principal] = 50_000_000L
+            it[rateEa] = 11.27
+            it[termMonths] = 60
+            it[installment] = 1_204_064L
+            it[dayOfMonth] = 5
+            it[startDate] = "2024-06-05"
+            it[insuranceMonthly] = 124_800L
+        }
+    }
+
+    private fun cuerpoConInteres(from: String, debt: String, monto: Long, interesReal: Long, tr: String = "tr-1") = """
+        {"fromAccountId":"$from","debtAccountId":"$debt","amount":$monto,"interesReal":$interesReal,
+         "timestamp":1788000000000,"transferId":"$tr","fromEventId":"ev-dinero-1","toEventId":"ev-deuda-1"}
+    """.trimIndent()
+
+    @Test
+    fun `con el interes real, la deuda baja cuota menos interes real menos seguro`() = testApplication {
+        // **El caso que el dueño cargó a mano el 5-sep**: cuota $1.204.064, seguro $124.800,
+        // interés real $473.227 → capital $606.037. Movi estimaba $363.905 de interés (capital
+        // $715.359): $109.322 de deuda que desaparecían en una sola cuota.
+        elLibreInversion9695()
+        wireApp()
+        val res = pagar(duenoId, cuerpoConInteres(ahorros, libre, 1_204_064, interesReal = 473_227))
+        val texto = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.Created, res.status, texto)
+        assertEquals(606_037L, montoDeLaPataEn(libre, "tr-1"), "la pata de la deuda es el capital real")
+        assertEquals(40_710_555L - 606_037L, saldoDe(libre))
+        assertEquals(1_204_064L, montoDeLaPataEn(ahorros, "tr-1"), "y de la cuenta sale la cuota entera")
+        assertEquals(473_227L + 124_800L, noAmortizaDeLaPataEn(libre, "tr-1"), "no_amortiza = interés real + seguro")
+        // La respuesta refleja lo que de verdad se escribió, interés real incluido.
+        assertEquals(473_227L, campoNum(texto, "interes"), texto)
+        assertEquals(124_800L, campoNum(texto, "seguro"), texto)
+        assertEquals(606_037L, campoNum(texto, "capital"), texto)
+        assertEquals(40_710_555L - 606_037L, campoNum(texto, "deudaRestante"), texto)
+        assertTrue("INTERES_REAL" in texto, "el motivo dice que fue el del extracto: $texto")
+    }
+
+    @Test
+    fun `sin el campo, el mismo pago se estima como siempre`() = testApplication {
+        // La misma cuota sin `interesReal`: la estimación de antes, sin un peso de diferencia.
+        elLibreInversion9695()
+        wireApp()
+        val texto = pagar(duenoId, cuerpo(ahorros, libre, 1_204_064)).bodyAsText()
+
+        assertEquals(363_905L, campoNum(texto, "interes"), texto)
+        assertEquals(1_204_064L - 363_905L - 124_800L, montoDeLaPataEn(libre, "tr-1"))
+        assertEquals(363_905L + 124_800L, noAmortizaDeLaPataEn(libre, "tr-1"))
+        assertTrue("AMORTIZA" in texto && "INTERES_REAL" !in texto, texto)
+    }
+
+    @Test
+    fun `un interesReal explicito en null tambien estima`() = testApplication {
+        // Un cliente que serializa el default como `null` en vez de omitirlo dice lo mismo.
+        elLibreInversion9695()
+        wireApp()
+        val texto = pagar(
+            duenoId,
+            """{"fromAccountId":"$ahorros","debtAccountId":"$libre","amount":1204064,"interesReal":null,
+                "timestamp":1788000000000,"transferId":"tr-1","fromEventId":"ev-dinero-1","toEventId":"ev-deuda-1"}""",
+        ).bodyAsText()
+
+        assertEquals(363_905L, campoNum(texto, "interes"), texto)
+    }
+
+    @Test
+    fun `un interes que deja el capital negativo se rechaza y NO escribe nada`() = testApplication {
+        // $473.227 + $124.800 sobre una cuota de $500.000: la deuda SUBIRÍA con un pago.
+        elLibreInversion9695()
+        wireApp()
+        val res = pagar(duenoId, cuerpoConInteres(ahorros, libre, 500_000, interesReal = 473_227))
+        val texto = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, texto)
+        assertTrue("473.227" in texto && "124.800" in texto && "500.000" in texto, "dice qué pasó: $texto")
+        assertEquals(0, patas("tr-1").size, "ninguna pata")
+        assertEquals(40_710_555L, saldoDe(libre), "y la deuda no se movió")
+        assertEquals(0L, saldoDe(ahorros), "ni la cuenta")
+    }
+
+    @Test
+    fun `un interes negativo se rechaza`() = testApplication {
+        elLibreInversion9695()
+        wireApp()
+        val res = pagar(duenoId, cuerpoConInteres(ahorros, libre, 1_204_064, interesReal = -1))
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(0, patas("tr-1").size)
+    }
+
+    @Test
+    fun `una tarjeta no acepta interes real`() = testApplication {
+        // El pago de una tarjeta baja la deuda por todo: sus intereses son un movimiento aparte.
+        wireApp()
+        val res = pagar(duenoId, cuerpoConInteres(ahorros, amex, 1_008_902, interesReal = 50_000))
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(0, patas("tr-1").size)
+        assertEquals(0L, saldoDe(amex))
+    }
+
+    @Test
+    fun `un credito sin tasa acepta el interes del extracto`() = testApplication {
+        // El carro no tiene `credit_terms` acá: la estimación bajaría la deuda por todo. Con el
+        // extracto en la mano se separa igual — el extracto sabe más que las condiciones.
+        wireApp()
+        val res = pagar(duenoId, cuerpoConInteres(ahorros, carro, 4_215_223, interesReal = 2_600_000))
+        val texto = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.Created, res.status, texto)
+        assertEquals(4_215_223L - 2_600_000L, montoDeLaPataEn(carro, "tr-1"))
+        assertEquals(2_600_000L, noAmortizaDeLaPataEn(carro, "tr-1"))
+    }
+
+    @Test
+    fun `el reintento con interes real devuelve el mismo reparto`() = testApplication {
+        elLibreInversion9695()
+        wireApp()
+        assertEquals(HttpStatusCode.Created, pagar(duenoId, cuerpoConInteres(ahorros, libre, 1_204_064, 473_227)).status)
+        val segunda = pagar(duenoId, cuerpoConInteres(ahorros, libre, 1_204_064, 473_227))
+
+        assertEquals(HttpStatusCode.OK, segunda.status)
+        assertEquals(40_710_555L - 606_037L, saldoDe(libre), "la deuda bajó UNA vez")
+        assertEquals(606_037L, campoNum(segunda.bodyAsText(), "capital"))
+    }
+
+    // ── Corregir el monto después no pierde el interés real ────────────────────
+
+    @Test
+    fun `corregir el monto de una cuota con interes real recalcula el capital sobre ese interes`() = testApplication {
+        // Registrada con el interés real ($598.027 que no amortizan). La cuota fue en realidad de
+        // $1.300.000: el capital tiene que ser $701.973 —sobre el interés del extracto—, no
+        // $811.295 sobre la estimación.
+        elLibreInversion9695()
+        wireApp()
+        assertEquals(HttpStatusCode.Created, pagar(duenoId, cuerpoConInteres(ahorros, libre, 1_204_064, 473_227)).status)
+
+        val res = client.put("/api/events/ev-dinero-1") {
+            header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"amount":1300000}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals(1_300_000L, montoDeLaPataEn(ahorros, "tr-1"))
+        assertEquals(1_300_000L - 598_027L, montoDeLaPataEn(libre, "tr-1"))
+        assertEquals(701_973L, montoDeLaPataEn(libre, "tr-1"))
+        assertEquals(598_027L, noAmortizaDeLaPataEn(libre, "tr-1"), "lo que no amortiza no se toca")
     }
 }
