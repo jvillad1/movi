@@ -350,7 +350,7 @@ fun RecurrentesScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    val candidatas = subs.subscriptions.filter { it.status == SubStatus.CANDIDATE }
+    val candidatas = candidatasSinConfirmar(subs.subscriptions)
     // Nombres que el dueño ya tiene anotados a mano — para avisar en una candidata que va a
     // duplicar algo que ya existe ANTES de que la confirme.
     val clavesDeReglas = remember(rules) { rules.map { claveDeNombre(it.name) }.toSet() }
