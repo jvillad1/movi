@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.isReservedCategory
@@ -238,6 +239,16 @@ fun prefillFrom(event: FinancialEvent): RecurringPrefill {
  * `SeccionEstoSeRepite`.
  */
 fun puedeOfrecerseComoRecurrenteDesdeElDetalle(event: FinancialEvent): Boolean {
+    // **No unificar estas guardas con las de [nombreRecurrenteDe], por más que se parezcan: las
+    // dos funciones contestan preguntas distintas.**
+    //
+    // Acá se pregunta «¿le ofrezco CREAR una regla desde este movimiento?» y allá «¿este
+    // movimiento SE LEE como recurrente?». Para una cuota de crédito ya pagada las respuestas son
+    // opuestas a propósito: se lee como recurrente (es lo más grande que sale del bolsillo todos
+    // los meses) pero no se puede crear una regla desde ella —`RecurringRule` no modela un par y
+    // el crédito ya arma su propio recordatorio—, así que ofrecerlo fabricaría un duplicado que
+    // encima mentiría sobre lo que pasa cada mes. Compartir el `transferId != null` fue justamente
+    // lo que escondió las cuotas del chip «Recurrentes» hasta este cambio.
     if (event.transferId != null) return false
     if (isReservedCategory(event.category)) return false
     if (event.amount <= 0L) return false
@@ -321,6 +332,12 @@ fun equivalenteYaAnotado(
  * recurrente, y sin este corte un «Traspaso» o un «Saldo inicial» podrían, por accidente de
  * nombre, matchear una regla real.
  *
+ * **Con una excepción, y es el arreglo entero de este cambio: la cuota de un crédito ya pagada**
+ * ([nombreDeCuotaPagada]). Es una pata de un par, así que el corte de arriba la dejaba afuera, y
+ * el dueño la echó de menos con todas las letras: *«en recurrentes no estoy viendo los pagos de
+ * cuota realizados para mis créditos… me permite entender mi flujo de caja mensual»*. Con
+ * $15.500.000 mensuales en cuotas, es lo más grande que sale de su bolsillo todos los meses.
+ *
  * @return el nombre con el que ya está anotado, o `null` si no matchea nada.
  */
 fun nombreRecurrenteDe(
@@ -328,6 +345,11 @@ fun nombreRecurrenteDe(
     reglas: List<RecurringRule>,
     suscripcionesQueYaSuman: List<String>,
 ): String? {
+    // **Antes de cualquier guarda: la cuota de un crédito ya pagada.** No se reconoce por nombre
+    // —no hay contra qué compararla, ver [nombreDeCuotaPagada]— y sus dos patas llevan
+    // `transferId`, así que el corte de abajo la mataría. Va primero y no adentro del `if` para
+    // que quede a la vista que son dos caminos distintos, no una excepción de aquel.
+    nombreDeCuotaPagada(event)?.let { return it }
     if (event.transferId != null) return null
     if (isReservedCategory(event.category)) return null
     return equivalenteYaAnotado(
@@ -336,6 +358,51 @@ fun nombreRecurrenteDe(
         suscripcionesQueYaSuman = suscripcionesQueYaSuman,
         nombre = prefillNameFor(event),
     )
+}
+
+/**
+ * **¿Este movimiento es la cuota de un crédito que el dueño YA pagó?** — y con qué nombre se lee.
+ *
+ * ### Por qué no se puede reconocer por nombre, que es como se reconoce todo lo demás
+ *
+ * Los recurrentes de un crédito **no existen como filas**: `GET /api/recurring-rules` devuelve
+ * solo lo que hay en la tabla `recurring_rules`, y la regla de cada crédito la fabrica el server
+ * al vuelo desde las condiciones del crédito (`CREDIT_RULE_PREFIX`, en `CreditReminders.kt`),
+ * únicamente para armar «Próximos pagos» y los recordatorios. O sea que la lista contra la que
+ * [equivalenteYaAnotado] compara nombres **nunca contiene** «Cuota de Vehículo», y buscarla ahí
+ * no habría encontrado nada por más que se le quitara la guarda del `transferId`.
+ *
+ * ### Cómo se reconoce entonces: por su forma, que es exacta
+ *
+ * Un pago de cuota son dos patas enlazadas que escribe [pagoDeCuotaLegs] y nada más
+ * (`validarPagoDeCuota` cierra las otras puertas):
+ *
+ * - **La pata del dinero** — EXPENSE, en la cuenta de donde salió la plata, con [CUOTA_CATEGORY].
+ *   Es esta, y es la única que se reconoce acá.
+ * - **La pata de la deuda** — INCOME, en la cuenta LOAN, con la MISMA categoría. Es el otro lado
+ *   del mismo hecho: contarla también pondría dos filas por una cuota en una lista que el dueño
+ *   lee justamente para sumar lo que sale al mes. El `type` es lo que las separa.
+ *
+ * ### Un pago de tarjeta NO entra, y esa es la parte que hay que no romper
+ *
+ * También es un par con esta misma forma, pero su pata del dinero lleva [CARD_PAYMENT_CATEGORY]
+ * —reservada y excluida de las cifras del mes— porque **el pago de una tarjeta no es un gasto**:
+ * las compras ya contaron cuando se hicieron, y contar también el pago sería contar la misma
+ * plata dos veces (ver el KDoc de `CreatePagoDeCuotaRequest`). La comparación es contra
+ * [CUOTA_CATEGORY] y solo contra ella, así que la tarjeta queda afuera por construcción; hay un
+ * test que lo fija.
+ *
+ * La cuota que paga un tercero (la nómina, Skandia, un familiar) tampoco entra: lleva sus propias
+ * categorías reservadas y esa plata no sale del bolsillo del dueño, así que no es su flujo de caja.
+ *
+ * @return el concepto de la cuota, que **ya nombra el crédito** («Cuota de Vehículo»): lo escribe
+ *   [pagoDeCuotaLegs] con el nombre de la deuda, así que no hay que inventarle ninguno. Si por lo
+ *   que sea llegara vacío, cae en la categoría, igual que [prefillNameFor] en todos lados.
+ */
+fun nombreDeCuotaPagada(event: FinancialEvent): String? {
+    if (event.type != TransactionType.EXPENSE) return null
+    if (event.category.trim() != CUOTA_CATEGORY) return null
+    return prefillNameFor(event).takeIf { it.isNotBlank() }
 }
 
 /**

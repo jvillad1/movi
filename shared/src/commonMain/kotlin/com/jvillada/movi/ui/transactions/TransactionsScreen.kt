@@ -83,6 +83,7 @@ import com.jvillada.movi.ui.recurrentes.claveDescartada
 import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
+import com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.notaDeProrrateo
@@ -354,6 +355,24 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
 fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
 
 /**
+ * **¿La lista de abajo tiene cuotas de crédito que el total de arriba no cuenta?**
+ *
+ * Desde que el chip «Recurrentes» reconoce la cuota ya pagada (ver
+ * [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]), la lista muestra filas que «Flujo
+ * libre» no suma: ese total es `resumenRecurrentes(reglas, suscripciones)` y las reglas de los
+ * créditos no son filas de la tabla, las fabrica el server al vuelo. Con ~$15.500.000 mensuales
+ * en cuotas, la diferencia entre la lista y el total no es un detalle.
+ *
+ * **Si el total debería incluirlas es una decisión del dueño y no se toma acá.** Lo que sí se
+ * puede hacer mientras tanto es que la pantalla no lo afirme al revés: esta función decide si se
+ * dice, y se dice solo cuando de verdad hay una cuota a la vista — mismo criterio que
+ * `hayCobrosAnuales`, que mira lo que ENTRÓ y no lo que podría existir. Sin cuotas en pantalla no
+ * hay nada que explicar, y una advertencia permanente sobre algo que no está es ruido.
+ */
+fun hayCuotasPagadasEnLaLista(days: List<EventDay>): Boolean =
+    days.any { day -> day.items.any { nombreDeCuotaPagada(it) != null } }
+
+/**
  * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
  * la abrió pidiendo uno.
  *
@@ -398,7 +417,13 @@ fun chipInicialDeMovimientos(pedido: Int?): Int =
  *
  * «Recurrentes» es el quinto: lo que ya reconocemos como una regla o una suscripción confirmada,
  * ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe] — con las mismas dos listas ya
- * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí).
+ * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí) — **más
+ * la cuota de un crédito ya pagada**, que no se reconoce por nombre sino por su forma (ver
+ * [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]). De esa entra **solo la pata del
+ * dinero**: la de la deuda es el otro lado del mismo hecho, y con las dos el chip mostraría dos
+ * filas por cada cuota en la lista que el dueño lee para sumar lo que sale al mes. Como la
+ * hermana no pasa el filtro, [collapseTransfers] la deja suelta y se ve como el gasto que es —el
+ * mismo camino que ya tenía en «Gastos», por el mismo motivo.
  *
  * @param reglas y @param nombresDeSuscripcionesActivas solo los usa [CHIP_RECURRENTES]; el resto
  *   de los chips ni los mira, así que quedan con default vacío y no rompen ningún llamado viejo.
@@ -937,6 +962,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas) {
         diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
     }
+    // Para la línea del card de «Flujo libre» que dice qué NO cuenta ese total. Acá arriba y
+    // recordado, y no adentro del `item` que lo pinta: ahí recorrería todos los días visibles en
+    // cada recomposición del card. Ver [hayCuotasPagadasEnLaLista].
+    val hayCuotasALaVista = remember(visibleDays) { hayCuotasPagadasEnLaLista(visibleDays) }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -1206,7 +1235,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             action = if (buscandoCobros) "Buscando…" else "Buscar cobros",
                             onAction = { buscarCobros() },
                         )
-                        ResumenFlujoLibreCard(resumenRecurrentesDelChip)
+                        ResumenFlujoLibreCard(
+                            cifras = resumenRecurrentesDelChip,
+                            // Lo que de verdad quedó a la vista con el filtro puesto, no lo que
+                            // podría existir. Ver [hayCuotasPagadasEnLaLista].
+                            hayCuotasEnLaLista = hayCuotasALaVista,
+                        )
                     }
                 }
 
@@ -1372,6 +1406,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                             row = row,
                                             accountNames = accountNames,
                                             accountTypes = accountTypes,
+                                            // La pata del dinero, que es la que se reconoce como
+                                            // cuota — ver [TransferRow].
+                                            esRecurrente = nombreRecurrenteDe(
+                                                row.out,
+                                                reglasRecurrentes,
+                                                nombresDeSuscripcionesActivas,
+                                            ) != null,
                                             // Al tocarlo se abre la hoja de categoría sobre la
                                             // pata de origen — que se niega a recategorizar y
                                             // explica por qué. Es la única acción que un traspaso
@@ -1487,12 +1528,20 @@ fun colorDelTono(tono: TonoDelMonto): Color = when (tono) {
  * su cuenta al lado, en el detalle de cada cuenta. El color, en cambio, sí distingue esto de un
  * NEUTRO real (ver [tonoDelRenglon]): el dueño lo pidió para no confundir un traspaso con un
  * movimiento que de verdad no cuenta nada.
+ *
+ * Lleva **el mismo ícono de repetición** que [MovementSingleRow] cuando el par es una cuota de
+ * crédito. Un par plegado es UN renglón, así que marcarlo no duplica nada; sin esto, la misma
+ * cuota se leía como recurrente en el chip «Recurrentes» (donde entra sola la pata del dinero) y
+ * como un par mudo en «Todo», que es la misma fila diciendo dos cosas distintas según el filtro.
+ * La marca sale de la pata del dinero — [MovementRow.Transfer.out] —, que es la que
+ * [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada] reconoce.
  */
 @Composable
 private fun TransferRow(
     row: MovementRow.Transfer,
     accountNames: Map<String, String>,
     accountTypes: Map<String, AccountType>,
+    esRecurrente: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
@@ -1512,7 +1561,29 @@ private fun TransferRow(
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(2.dp))
-            Text(transferRowSubtitle(row, accountNames), fontSize = 12.sp, color = MinTextMute)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (esRecurrente) {
+                    Icon(
+                        imageVector = Icons.Rounded.Repeat,
+                        contentDescription = "Recurrente",
+                        tint = MinTextMute,
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
+                Text(
+                    text = transferRowSubtitle(row, accountNames),
+                    fontSize = 12.sp,
+                    color = MinTextMute,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // Igual que en [MovementSingleRow]: sin el weight, el Row que envuelve al
+                    // ícono no le acota el ancho al texto y el ellipsis no tiene sobre qué cortar.
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
         }
         Text(
             text = formatCOP(row.amount),
@@ -1632,7 +1703,15 @@ private fun MovementSingleRow(
  * carga en [TransactionsScreen]) — un total a medias es peor que un guion.
  */
 @Composable
-private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
+private fun ResumenFlujoLibreCard(
+    cifras: ResumenRecurrentes?,
+    /**
+     * ¿La lista de abajo trae cuotas de crédito que este total no cuenta? Ver
+     * [hayCuotasPagadasEnLaLista]. **Solo agrega una línea; no toca ninguna cifra**: si las
+     * cuotas deberían entrar al «Flujo libre» es una decisión del dueño y se le pregunta aparte.
+     */
+    hayCuotasEnLaLista: Boolean = false,
+) {
     MinCard(
         modifier = Modifier.fillMaxWidth(),
         variant = MinCardVariant.Elevated,
@@ -1720,6 +1799,29 @@ private fun ResumenFlujoLibreCard(cifras: ResumenRecurrentes?) {
             Text(
                 text = "Lo que te cobran una vez al año entra repartido: dividimos el cobro en 12 " +
                     "para que este total sea lo que te cuesta cada mes.",
+                fontSize = 11.sp,
+                color = MinTextMute,
+                lineHeight = 15.sp,
+            )
+        }
+        // La tercera diferencia entre la lista de abajo y este total, y la más cara: las cuotas
+        // de los créditos. Desde este cambio la lista las muestra, y este total —que sale de
+        // `resumenRecurrentes(reglas, suscripciones)`— sigue sin contarlas, porque las reglas de
+        // un crédito no son filas de la tabla: las fabrica el server al vuelo para «Próximos».
+        //
+        // **Se dice, no se arregla, y es a propósito.** Meterlas al total es una decisión sobre
+        // qué significa «Flujo libre» —con ~$15.500.000 mensuales en cuotas, el número cambia de
+        // conversación— y esa la toma el dueño, no este cambio. Lo que sí no puede pasar mientras
+        // tanto es que la pantalla afirme lo contrario en silencio.
+        //
+        // En `MinTextMute` y no en `MinWarn`: no hay nada roto ni nada que reintentar (que es lo
+        // que distingue al aviso de la moneda sin convertir); es el alcance del total, como el
+        // aviso del prorrateo de acá arriba.
+        if (cifras != null && hayCuotasEnLaLista) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Las cuotas de tus créditos aparecen en la lista de abajo, pero todavía no " +
+                    "entran en este total.",
                 fontSize = 11.sp,
                 color = MinTextMute,
                 lineHeight = 15.sp,
