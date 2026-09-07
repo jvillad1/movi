@@ -1032,16 +1032,52 @@ class SubscriptionRoutesTest {
             .jsonObject["amount"]!!.jsonPrimitive.long
 
     /**
-     * **Pedido del dueño: «que el barrido respete lo que yo corregí a mano».**
+     * **Pedido del dueño: «que el barrido respete lo que yo corregí a mano», por el camino que
+     * él de verdad usa.**
      *
      * Hasta la Ola 19 la rama CONFIRMED/AUTO de `applyExisting` reescribía `amount` en cada
      * detección, así que corregirle el monto a una suscripción detectada duraba hasta el próximo
      * «Buscar cobros» —o hasta la próxima importación de extracto, que también dispara el
      * barrido— y el número volvía solo, sin que nada lo dijera. Es plata: el monto es lo que
      * entra al «Flujo libre».
+     *
+     * **Tiene que ser CONFIRMED y no CANDIDATE**, y esa distinción es todo el valor de esta
+     * prueba. `statusForNew` devuelve siempre CANDIDATE, así que una fila recién detectada entra
+     * al barrido por `refreshRow`; pero la hoja de edición se abre desde «Suscripciones activas»
+     * (`suscripcionesActivas` filtra AUTO/CONFIRMED), o sea que **lo único editable desde la app
+     * pasa por la rama CONFIRMED/AUTO**. Sin este caso, esa guarda se podía borrar entera con
+     * toda la suite en verde — comprobado.
      */
     @Test
-    fun `el barrido no le pisa al dueno el monto que corrigio`() = testApplication {
+    fun `el barrido no le pisa el monto corregido a una confirmada`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val netflix = detectarNetflix(token)
+
+        // El camino real: se confirma Y se corrige el monto, que es lo que manda la hoja.
+        putSub(
+            netflix["id"]!!.jsonPrimitive.content,
+            JsonObject(netflix.toMutableMap().apply {
+                this["status"] = JsonPrimitive("CONFIRMED")
+                this["amount"] = JsonPrimitive(60_000)
+            }),
+        )
+        assertEquals("CONFIRMED", statusEnDb("netflix"), "si no quedó CONFIRMED, esto prueba otra rama")
+        assertEquals(60_000L, montoDeNetflix(token))
+
+        detectarNetflix(token)
+
+        assertEquals(60_000L, montoDeNetflix(token), "el barrido le pisó la corrección a una confirmada")
+    }
+
+    /**
+     * La misma regla en la otra rama del barrido, `refreshRow`. Una CANDIDATE no se puede editar
+     * desde la app de hoy (la hoja sale de las activas), pero la regla es «un monto que escribió
+     * el dueño no lo pisa el barrido»: una regla que vale en una rama y no en la otra es la que
+     * se rompe sola el día que la otra se vuelva alcanzable.
+     */
+    @Test
+    fun `el barrido no le pisa el monto corregido a una candidata`() = testApplication {
         wireApp()
         val token = tokenFor(userAId)
         val netflix = detectarNetflix(token)
