@@ -162,7 +162,16 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
 - `.github/workflows/pruebas.yml` ("Pruebas") runs on every PR and push to master: the same four Gradle tasks from the Commands section above, plus a deploy guard that moves `local.properties` aside (Railway's image has no Android SDK, and Gradle's config phase would otherwise choke on it) before dry-running the wasm distribution task.
 - `.github/workflows/despliegue.yml` ("Despliegue") runs on push to master, waits on `/version` via `scripts/esperar-despliegue.sh` (35 min timeout), and fails the workflow if the deployed commit never matches — a merge is not proof of a deploy, Railway keeps serving the old build on a failed one.
 - Railway auto-deploys `master` on push (`railway.toml`, builder = Dockerfile). Production: `https://movi-project-production.up.railway.app`.
-- `scripts/` also has `build-apk.sh`, `generate-vapid-keys.sh` (web push), and `seed-credits.sh`.
+- `scripts/` also has `build-apk.sh`, `generate-vapid-keys.sh` (web push), `seed-credits.sh` and
+  `seed-subscriptions.sh`. Los dos `seed-*` comparten contrato: leen el token de `MOVI_TOKEN`
+  (nunca por argumento — quedaría en el historial del shell), son dry-run salvo `--apply`, y son
+  idempotentes contra lo que ya existe — con el alcance que eso tiene: la criba compara el
+  nombre normalizado igual que el server más la moneda, así que atrapa un re-run pero **no** un
+  registro que alguien haya escrito con otro nombre («Netflix» contra un «Netflix Colombia» que
+  ya está). Para ese caso avisa y sigue; leé el dry-run antes de `--apply`.
+  `seed-subscriptions.sh` resuelve la cuenta por NOMBRE contra `/api/accounts` al correr, en vez
+  de guardar un id en el JSON, y en `--apply` cierra con un resumen y sale distinto de 0 si algún
+  POST falló: un POST que falla no corta los que siguen.
 
 ## Key conventions
 
