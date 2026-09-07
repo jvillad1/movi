@@ -20,21 +20,16 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
-import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.theme.MoviTheme
 import kotlin.math.abs
-import org.junit.AfterClass
 import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.MethodSorters
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -92,68 +87,25 @@ import org.robolectric.annotation.Config
  * debajo queda la barra inferior de 64 dp (`MinBottomNav`), que la hoja no puede usar. Sin ese
  * hueco reservado la ventana da 64 dp de más y las medidas dejan de parecerse al teléfono.
  *
- * ## Y esta hoja NO se mide sola: hay que aislarla. Ver [aislarLoQueOtraClasePudoDejar]
+ * ## Y esta hoja NO se mediría sola: la aísla `AppDePrueba`
  *
  * Lo que el sub-picker de Categoría dibuja no sale solo del catálogo: sale del catálogo **más**
  * lo que haya en `UsedCategoriesCache`, que es un `object` —o sea, estado del proceso—. Y todas
  * las clases Robolectric de `:shared:testDebugUnitTest` corren en un solo fork de JVM
- * compartiendo el mismo *sandbox*, así que ese `object` llega acá con lo que le haya dejado la
- * clase anterior. Sin el `@Before` de abajo, esta clase no mide la hoja: mide la hoja más la
- * resaca de la suite.
+ * compartiendo el mismo *sandbox*, así que ese `object` llegaría acá con lo que le haya dejado la
+ * clase anterior. Sin eso resuelto, esta clase no mide la hoja: mide la hoja más la resaca de la
+ * suite — y ahí estuvo la intermitencia de [lasCategoriasSeVenEnElSubPickerDelTelefono], cuya
+ * cuenta tiene margen de **una fila exacta**.
+ *
+ * No hace falta ningún `@Before` acá: `AppDePrueba` deja los `object` en cero antes de CADA
+ * método de CADA clase de la suite. Leé su KDoc, y `ElForkLlegaLimpioTest` para la prueba de que
+ * de verdad pasa.
  */
 @RunWith(RobolectricTestRunner::class)
-// El orden importa y por eso se fija: [elPanelSeEstiraTambienConLasCategoriasPropias] ensucia el
-// caché global A PROPÓSITO, y ordenado por nombre corre ANTES de
-// [lasCategoriasSeVenEnElSubPickerDelTelefono] — que es la que se caía. Así el aislamiento del
-// `@Before` queda EJERCITADO en cada corrida en vez de ser una buena intención: si alguien lo
-// borra, esta clase se pone roja acá mismo y no una vez de cada tres en la máquina de otro.
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Config(qualifiers = AVD_MOVI_SENSOR)
 class HojaAgregarGeometriaTest {
 
     @get:Rule val composeRule = createComposeRule()
-
-    /**
-     * **El defecto que hacía intermitente a [lasCategoriasSeVenEnElSubPickerDelTelefono].**
-     *
-     * Esa prueba cuenta cuántas categorías entran en la pantalla, y el margen que tiene es
-     * exactamente **una fila**: medido acá, a 411×731, «Vivienda» ya sale recortada 3,5 dp de los
-     * 667 dp útiles, así que se ven 8 de 9 y la aserción pide ≥ 8. Cero holgura. Una sola
-     * sugerencia de más —una categoría propia que otra clase le haya dejado a
-     * `UsedCategoriesCache`— corre la lista 49 dp y tumba DOS: «Transporte» y «Vivienda». Está
-     * medido: con una categoría inyectada a mano sale el mismo mensaje, palabra por palabra.
-     *
-     * O sea que la prueba no fallaba por lo que dice que protege (el panel no volvió a ser una
-     * ventanita) sino porque estaba midiendo un panel que no era el del catálogo. Se arregla
-     * controlando la entrada, no aflojando la cuenta.
-     *
-     * [Repositories.sustitutoDePrueba] va por lo mismo: es otro global, lo ponen media docena de
-     * clases de esta suite, y esta hoja **tiene que** medirse con la lista de cuentas vacía (ver
-     * el KDoc de [montarHoja] y el de `RepositorioDePrueba`). Hoy todas lo devuelven en su
-     * `@After`; esto es para que un olvido ajeno no se cobre acá.
-     */
-    @Before
-    fun aislarLoQueOtraClasePudoDejar() {
-        UsedCategoriesCache.clear()
-        Repositories.sustitutoDePrueba = null
-    }
-
-    companion object {
-        /**
-         * La suciedad que deja [elPanelSeEstiraTambienConLasCategoriasPropias] es deliberada, pero
-         * es **de esta clase**: entre sus métodos sí tiene que sobrevivir —ahí está la gracia— y a
-         * las clases que corren después, no. Predicar el aislamiento y de paso ensuciarle el fork
-         * a la siguiente sería exactamente el defecto que esta clase acaba de pagar.
-         *
-         * Va en `@AfterClass` y no en un `@After` justamente por eso: un `@After` limpiaría entre
-         * método y método y dejaría al `@Before` sin nada que atajar, o sea sin ejercitar.
-         */
-        @JvmStatic
-        @AfterClass
-        fun devolverElCacheComoEstaba() {
-            UsedCategoriesCache.clear()
-        }
-    }
 
     // ── Los tres defectos reales, uno por prueba ──────────────────────────────────────────
 
@@ -380,10 +332,9 @@ class HojaAgregarGeometriaTest {
      * cortadas contra el panel —muy por encima del borde— y esto se pone rojo. Es la misma
      * promesa que la de arriba, dicha de una forma que sobrevive a que el catálogo crezca.
      *
-     * **Además ensucia `UsedCategoriesCache` a propósito y no lo limpia.** Ordenado por nombre
-     * esta prueba corre ANTES que la de arriba, así que la resaca que deja acá es exactamente la
-     * que la ponía intermitente: si alguien borra [aislarLoQueOtraClasePudoDejar], la de arriba se
-     * cae en la corrida siguiente, acá, en esta máquina — y no una de cada tres en la de otro.
+     * Ensucia `UsedCategoriesCache` y no lo limpia, a propósito y sin peligro: `AppDePrueba` lo
+     * deja en cero antes del método siguiente, sea de esta clase o de otra. Justamente por eso no
+     * hace falta fijar el orden de los métodos acá.
      */
     @Test
     fun elPanelSeEstiraTambienConLasCategoriasPropias() {
