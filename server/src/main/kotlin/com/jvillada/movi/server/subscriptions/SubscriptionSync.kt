@@ -161,6 +161,16 @@ private fun applyExisting(row: ResultRow, d: DetectedSub) {
 // genera) y al DISMISSED de `applyExisting`: **lo que decidió el dueño gana sobre lo que infiere
 // el barrido.** Una CANDIDATE es siempre del detector y siempre mensual, así que ni ahí hay algo
 // que reescribir; dejarla fuera del update es lo que hace que la regla valga sin excepciones.
+//
+// **Menos para el MONTO, y conviene decirlo en vez de dejar la frase de arriba sonando absoluta.**
+// La rama CONFIRMED/AUTO de `applyExisting` reescribe `amount` en cada barrido, así que si el
+// dueño le corrige el monto a una suscripción DETECTADA, el próximo «Buscar cobros» —o la próxima
+// importación de extracto, que también dispara el barrido— se lo vuelve a pisar con el del
+// cargo. Hoy no le puede pasar: sus suscripciones son todas `manual_*` y el detector nunca las
+// matchea. Y no es un descuido que se arregle solo: si Netflix sube de precio, querés que el
+// barrido actualice el monto; si el dueño lo corrigió a mano, querés lo contrario, y hoy nada
+// distingue los dos casos. Resolverlo pide una decisión suya (¿una marca de «esto lo toqué yo»?),
+// no un cambio de una línea acá.
 private fun refreshRow(rowId: String, d: DetectedSub) {
     Subscriptions.update({ Subscriptions.id eq rowId }) {
         it[displayName] = d.displayName

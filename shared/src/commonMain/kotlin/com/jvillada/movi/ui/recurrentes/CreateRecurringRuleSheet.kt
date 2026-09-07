@@ -26,6 +26,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.sirvePara
@@ -76,14 +77,35 @@ import kotlinx.coroutines.launch
  * (el detector la copia del evento) y no sabía con cuál se paga lo que el dueño le escribió a
  * mano. Ahora la pregunta es la misma en las dos ramas y la respuesta viaja en las dos.
  *
- * Editar es siempre editar una [RecurringRule] (las suscripciones no tienen hoja de edición,
- * se quitan desde la lista), así que en modo edición la moneda ni se muestra.
+ * **Editar ya no es siempre editar una [RecurringRule].** Desde la Ola 18 esta misma hoja edita
+ * también una [Subscription] (ver [existingSub]), y entonces sí ofrece cambiar la periodicidad:
+ * es la única forma de corregir un cobro que se cargó mensual y en realidad llega una vez al año.
+ * Lo que sigue sin ofrecerse en ningún modo de edición es cambiar la MONEDA, porque cambiarla no
+ * es corregir un dato sino afirmar que el cobro es otro.
  */
 @Composable
 fun CreateRecurringRuleSheet(
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
     existing: RecurringRule? = null,
+    /**
+     * Ola 18 — **la suscripción que se está editando**, o `null` si esto es un alta o la edición
+     * de una regla. Hasta acá el KDoc de arriba decía «las suscripciones no tienen hoja de
+     * edición, se quitan desde la lista»: para corregirle el monto a un cobro había que quitarlo
+     * y volver a escribirlo entero.
+     *
+     * Es un parámetro aparte de [existing] y no un tipo común porque **son dos modelos que no se
+     * pueden confundir**: una regla tiene categoría, tipo y recordatorio; una suscripción tiene
+     * moneda y periodicidad. Fundirlos en un `Any?` obligaría a un `when` en cada campo y a que
+     * el guardado adivine contra qué endpoint va — que es justo lo que
+     * [seGuardaComoSuscripcion] existe para no tener que adivinar.
+     *
+     * **Editando una suscripción, la MONEDA no se muestra.** No es una omisión de diseño: el
+     * `PUT /api/subscriptions/{id}` no escribe esa columna (sí escribe nombre, monto, día,
+     * periodicidad y —desde esta misma ola— la cuenta), y el server la usa para medir choques de
+     * duplicado en el alta. Un selector que no guarda nada es peor que no tenerlo.
+     */
+    existingSub: Subscription? = null,
     /**
      * Ola 9 · B: el formulario llega lleno con lo que el dueño acaba de anotar (nombre, monto,
      * categoría, tipo, cuenta y el día del mes tomado de la fecha del movimiento). **Todo se
@@ -94,11 +116,15 @@ fun CreateRecurringRuleSheet(
     val coroutine = rememberCoroutineScope()
 
     // Prefill state from existing rule when in edit mode
-    var name by remember { mutableStateOf(existing?.name ?: prefill?.name ?: "") }
-    var amount by remember { mutableStateOf(existing?.amount ?: prefill?.amount) }
+    var name by remember { mutableStateOf(existingSub?.displayName ?: existing?.name ?: prefill?.name ?: "") }
+    // El cobro REAL, sin prorratear: un anual llega como sus $369.900, que es lo que el dueño
+    // reconoce del extracto y lo que la hoja tiene que dejarle corregir. Ver Subscription.amount.
+    var amount by remember { mutableStateOf(existingSub?.amount ?: existing?.amount ?: prefill?.amount) }
     // Ola 11: el día se ELIGE, no se escribe (ver [DayOfMonthPicker]). Por eso es un `Int?` y no
     // una cadena: el estado ya no puede contener «45», así que no hay nada que validar después.
-    var dayOfMonth by remember { mutableStateOf(existing?.dayOfMonth ?: prefill?.dayOfMonth) }
+    var dayOfMonth by remember {
+        mutableStateOf(existingSub?.dayOfMonth ?: existing?.dayOfMonth ?: prefill?.dayOfMonth)
+    }
     var selectedType by remember {
         mutableStateOf(existing?.type ?: prefill?.type ?: TransactionType.EXPENSE)
     }
@@ -123,7 +149,9 @@ fun CreateRecurringRuleSheet(
     // [categoriaSugeridaPorNombre].
     var categoriaElegidaAMano by remember { mutableStateOf(existing != null || prefill != null) }
     // Ola 9 · D: a qué cuenta entra o de cuál sale. Opcional siempre (ver RecurringRule.accountId).
-    var accountId by remember { mutableStateOf(existing?.accountId ?: prefill?.accountId) }
+    var accountId by remember {
+        mutableStateOf(existingSub?.accountId ?: existing?.accountId ?: prefill?.accountId)
+    }
     var accounts by remember { mutableStateOf<List<Account>>(emptyList()) }
     var accountPickerOpen by remember { mutableStateOf(false) }
     // ¿El `accountId = null` de acá arriba lo puso el dueño tocando «Sin cuenta», o es que la
@@ -138,10 +166,12 @@ fun CreateRecurringRuleSheet(
     var fallaronLasCuentas by remember { mutableStateOf(false) }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existing?.remindMe ?: true) }
-    var currency by remember { mutableStateOf("COP") }
+    var currency by remember { mutableStateOf(existingSub?.currency ?: "COP") }
     // Ola 16: cada cuánto llega el cobro. Arranca en MENSUAL, que es lo que era todo hasta hoy,
     // así que quien no toque estos chips crea exactamente lo mismo que creaba antes.
-    var periodicidad by remember { mutableStateOf(PeriodicidadDeCobro.MENSUAL) }
+    var periodicidad by remember {
+        mutableStateOf(existingSub?.periodicidad ?: PeriodicidadDeCobro.MENSUAL)
+    }
     // ¿Mandar esto a la rama de suscripción —por dólares o por anual— le cambió al dueño un
     // «Ingreso» que ya había marcado? (V11: la regla se explica igual, pero si además le pisamos
     // una elección suya, eso se avisa aparte.)
@@ -191,10 +221,26 @@ fun CreateRecurringRuleSheet(
         }
     }
 
-    val isEditMode = existing != null
-    // Editar es editar una regla; solo al crear se puede elegir dólares o anual (ver KDoc).
-    val enDolares = !isEditMode && currency == "USD"
-    val esAnual = !isEditMode && periodicidad == PeriodicidadDeCobro.ANUAL
+    val editandoSuscripcion = existingSub != null
+    val isEditMode = existing != null || editandoSuscripcion
+    /**
+     * **¿Esta hoja puede estar mostrando una suscripción?** Editando una REGLA la respuesta es
+     * no, y por eso existe: los chips de moneda y de periodicidad están apagados en ese modo
+     * (`!isEditMode` y `!isEditMode || editandoSuscripcion`), así que `currency` no puede valer
+     * otra cosa que «COP» ni `periodicidad` otra que MENSUAL — pero de esos dos valores depende
+     * [seGuardaComoSuscripcion], o sea a qué endpoint se le pega. Dejarlo atado a lo que hoy
+     * está apagado sería apostar a que nadie prenda esos chips: el día que alguien lo hiciera,
+     * editar una regla la guardaría como una suscripción nueva y dejaría la regla atrás.
+     */
+    val puedeSerSuscripcion = editandoSuscripcion || !isEditMode
+    // Esto decía `!isEditMode`, y editar una suscripción HACE `isEditMode`: los dos valían false
+    // justo en el modo que este PR vino a abrir. Consecuencia visible: una suscripción en dólares
+    // se editaba con el prefijo «$» —«US$12» leído como doce pesos, lo que el comentario de
+    // [MoneyField] más abajo dice explícitamente que hay que evitar— y una anual se editaba sin
+    // el rótulo «MONTO DEL COBRO ANUAL» y sin la nota del prorrateo, que es justo lo que le
+    // avisa al dueño que ahí va el cobro del año entero y no la doceava parte.
+    val enDolares = puedeSerSuscripcion && currency == "USD"
+    val esAnual = puedeSerSuscripcion && periodicidad == PeriodicidadDeCobro.ANUAL
     /**
      * **La única condición que decide en cuál de los dos modelos se guarda esto.** Existe como
      * un solo valor —y no como `enDolares || esAnual` repetido en cada rama— porque de él
@@ -203,7 +249,10 @@ fun CreateRecurringRuleSheet(
      * primera vez que una de esas cinco use otra condición, la hoja va a prometer una cosa y
      * guardar otra.
      */
-    val seGuardaComoSuscripcion = enDolares || esAnual
+    // Editando una suscripción esto es SIEMPRE true, y no por los chips: la fila ya es una
+    // suscripción y ninguna edición la convierte en regla. Sin esta rama, corregirle el monto a
+    // un Netflix —pesos, mensual— lo habría guardado como una regla recurrente nueva.
+    val seGuardaComoSuscripcion = editandoSuscripcion || enDolares || esAnual
     val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (dayOfMonth ?: 0) in 1..31 && !saving
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
@@ -227,6 +276,31 @@ fun CreateRecurringRuleSheet(
                 // Dólares o anual → suscripción: es el único modelo multi-moneda que hay y el
                 // único que sabe de periodicidad. Nace CONFIRMED del lado del server: la
                 // escribió el dueño, no hay nada que confirmar. Ver el KDoc de la hoja.
+                // Editando: PUT sobre la fila que ya existe. Se manda `existingSub.copy(...)` y
+                // no un objeto armado a mano para que los campos que esta hoja NO toca —status,
+                // merchantKey, confidence, firstSeen, occurrences— viajen tal cual estaban. La
+                // `merchantKey` es la que decide si «Quitar» borra o marca DISMISSED, así que
+                // reconstruirla acá sería reescribir el origen de la fila desde un formulario.
+                existingSub != null -> runCatching {
+                    Repositories.wallets.updateSubscription(
+                        existingSub.id,
+                        existingSub.copy(
+                            displayName = name.trim(),
+                            amount = amt,
+                            dayOfMonth = day,
+                            periodicidad = periodicidad,
+                            // `null` acá quiere decir «sin cuenta» y el server lo guarda como
+                            // tal. Eso ahora es cierto: la clave viaja siempre porque
+                            // [Subscription.accountId] lleva `@EncodeDefault(ALWAYS)`. Este
+                            // comentario ya lo afirmaba ANTES de que fuera verdad —kotlinx omite
+                            // una clave que vale su default, y el default es `null`—, así que
+                            // «Sin cuenta» era la única intención que la hoja no podía expresar:
+                            // el PUT la leía como «no la toques» y la cuenta se quedaba. Ver
+                            // `mandoLaCuenta` en SubscriptionRoutes.
+                            accountId = accountId,
+                        ),
+                    )
+                }
                 seGuardaComoSuscripcion -> runCatching {
                     Repositories.wallets.createSubscription(
                         CreateSubscriptionRequest(
@@ -351,13 +425,23 @@ fun CreateRecurringRuleSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = if (isEditMode) "Editar recurrente" else "Nuevo recurrente",
+                            text = when {
+                                editandoSuscripcion -> "Editar suscripción"
+                                isEditMode -> "Editar recurrente"
+                                else -> "Nuevo recurrente"
+                            },
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium,
                             color = MinText,
                             modifier = Modifier.weight(1f),
                         )
-                        if (isEditMode) {
+                        // `existing != null` y no `isEditMode`: desde que editar una
+                        // suscripción también hace `isEditMode`, este enlace se pintaba sobre una
+                        // hoja donde `delete()` sale en la primera línea (`existing == null`).
+                        // Un enlace rojo destructivo que no hacía absolutamente nada, ni siquiera
+                        // fallar. Para una suscripción el camino es «Quitar» desde la fila, que
+                        // además sabe distinguir borrar de marcar DISMISSED.
+                        if (existing != null) {
                             Text(
                                 text = if (saving) "…" else "Eliminar",
                                 fontSize = 13.sp,
@@ -397,6 +481,9 @@ fun CreateRecurringRuleSheet(
                     // La única pregunta que decide dónde se guarda esto, y es una pregunta del mundo
                     // real: cualquiera sabe si le cobran en pesos o en dólares. Al editar no aparece —
                     // editar es siempre editar una regla (ver KDoc).
+                    // La moneda se pregunta solo al CREAR. Editando una regla no aplica (siempre
+                    // es COP) y editando una suscripción el `PUT` no escribe esa columna — ver el
+                    // KDoc de [existingSub].
                     if (!isEditMode) {
                         SheetSectionLabel("MONEDA")
                         Spacer(Modifier.height(8.dp))
@@ -432,11 +519,17 @@ fun CreateRecurringRuleSheet(
                             )
                         }
                         Spacer(Modifier.height(18.dp))
+                    }
 
-                        // --- CADA CUÁNTO --- (Ola 16)
-                        // La segunda pregunta del mundo real que decide dónde se guarda esto, y la
-                        // que evita el error de doce veces: un cobro anual anotado como mensual le
-                        // dice al dueño que gasta $369.900 al mes en HBO Max. Ver el KDoc de la hoja.
+                    // --- CADA CUÁNTO --- (Ola 16)
+                    // La segunda pregunta del mundo real que decide dónde se guarda esto, y la
+                    // que evita el error de doce veces: un cobro anual anotado como mensual le
+                    // dice al dueño que gasta $369.900 al mes en HBO Max. Ver el KDoc de la hoja.
+                    //
+                    // Ola 18: al EDITAR una suscripción sí se muestra —el `PUT` sí escribe esta
+                    // columna—, y hace falta: un cobro que Movi detectó nace mensual, así que un
+                    // anual mal clasificado solo se puede arreglar acá.
+                    if (!isEditMode || editandoSuscripcion) {
                         SheetSectionLabel("CADA CUÁNTO")
                         Spacer(Modifier.height(8.dp))
                         Row(

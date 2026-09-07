@@ -193,6 +193,14 @@ fun Route.subscriptionRoutes() {
             val crudo = call.receive<JsonObject>()
             val body = jsonDelWire.decodeFromJsonElement<Subscription>(crudo)
             val mandoLaPeriodicidad = "periodicidad" in crudo
+            // Ola 18 — misma técnica, mismo motivo, otro campo. La cuenta se volvió editable
+            // (hasta ahora este UPDATE ni la miraba, así que la hoja no podía ofrecerla sin
+            // prometer algo que no guardaba), y con `accountId` el riesgo es idéntico al de
+            // `periodicidad`: es un `String?` cuyo default deserializado es `null`, o sea que
+            // un cliente que no conoce el campo pediría BORRAR la cuenta con solo tocar
+            // «Quitar» desde un teléfono viejo. Ausente tiene que seguir queriendo decir «no la
+            // toques».
+            val mandoLaCuenta = "accountId" in crudo
 
             // La clave que manda el cliente en el body NO se lee para nada: este UPDATE ni
             // siquiera escribe `merchantKey`, así que el origen de la fila lo dice la clave
@@ -218,6 +226,10 @@ fun Route.subscriptionRoutes() {
                     it[amount]      = body.amount
                     it[dayOfMonth]  = body.dayOfMonth.coerceIn(1, 31)
                     if (mandoLaPeriodicidad) it[periodicidad] = body.periodicidad.name
+                    // Un id ajeno o inexistente degrada a `null` en vez de rechazar el update,
+                    // igual que en el alta: perder la cuenta es menos malo que perder la
+                    // corrección del monto que el dueño venía a hacer. Ver [accountIdIfOwned].
+                    if (mandoLaCuenta) it[accountId] = accountIdIfOwned(uid, body.accountId)
                 }
             }
             if (updated == 0) return@put call.respond(HttpStatusCode.NotFound)  // borrado concurrente entre la lectura y el update
