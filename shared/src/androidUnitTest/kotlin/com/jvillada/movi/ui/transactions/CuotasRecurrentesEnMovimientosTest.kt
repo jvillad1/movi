@@ -48,11 +48,14 @@ import org.robolectric.annotation.Config
  * 1. Que con el chip «Recurrentes» la cuota se **pinte**, y como UNA fila (la del dinero), no dos.
  * 2. Que en «Todo» —donde las dos patas sí están y se pliegan en un solo renglón— ese renglón
  *    lleve la misma marca de repetición, en vez de leerse distinto según el filtro.
- * 3. Que el **pago de una tarjeta**, que tiene exactamente la misma forma, siga sin marcarse ni
- *    entrar al chip. Esa es la parte que cuesta plata si se rompe: las compras ya contaron cuando
- *    se hicieron.
- * 4. Que el card de «Flujo libre» las **cuente** —el dueño lo decidió después del PR anterior— y
- *    que diga cuánto, con qué queda afuera y por qué.
+ * 3. Que el **pago de una tarjeta**, que tiene exactamente la misma forma, se vea y se marque
+ *    igual —*«en recurrentes no veo el pago de la cuota de las tarjetas de crédito, deberían
+ *    estar»*— pero **sin signo y sin sumar**: las compras ya contaron cuando se hicieron, y esa es
+ *    la parte que cuesta plata si se rompe. Que las dos filas convivan diciendo cosas distintas es
+ *    justamente lo que una función pura no alcanza a probar.
+ * 4. Que el card de «Flujo libre» cuente las cuotas —el dueño lo decidió después del PR anterior— y
+ *    que diga cuánto, con qué queda afuera y por qué; y que el pago de la tarjeta, visible en la
+ *    lista de abajo, **no** aparezca en ninguna de esas cifras.
  *
  * Mismo patrón de montaje que [ResumenRecurrentesEnMovimientosTest] y
  * [SuscripcionesActivasEnMovimientosTest], y con la ventana alta de esta última por el mismo
@@ -183,18 +186,19 @@ class CuotasRecurrentesEnMovimientosTest {
     private fun marcasDeRecurrente() =
         composeRule.onAllNodesWithContentDescription("Recurrente", useUnmergedTree = true)
 
-    // ── Chip «Todo»: los dos pares plegados, y solo uno marcado ──────────────
+    // ── Chip «Todo»: los dos pares plegados, los dos marcados ────────────────
 
     /**
-     * En «Todo» las dos patas están, así que `collapseTransfers` pliega cada par en UN renglón.
-     * Ese renglón —el de la cuota— lleva la marca; el del pago de tarjeta no. Una sola marca en
-     * pantalla es la aserción que distingue las dos cosas.
+     * En «Todo» las dos patas de cada par están, así que `collapseTransfers` pliega cada par en UN
+     * renglón. Los dos renglones llevan la marca —son plata que sale todos los meses— y lo que los
+     * distingue es el título que ya tenían: «Cuota de crédito» y «Pago de tarjeta». Dos marcas y
+     * **dos títulos distintos** es la aserción: el ícono no borra la diferencia, la dice el rótulo.
      */
     @Test
-    fun `en Todo el par de la cuota va marcado y el pago de tarjeta no`() {
+    fun `en Todo los dos pares van marcados, y el titulo los distingue`() {
         composeRule.onNodeWithText("Cuota de crédito", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Pago de tarjeta", useUnmergedTree = true).assertExists()
-        marcasDeRecurrente().assertCountEquals(1)
+        marcasDeRecurrente().assertCountEquals(2)
     }
 
     // ── Chip «Recurrentes»: lo que el dueño vino a ver ───────────────────────
@@ -229,14 +233,40 @@ class CuotasRecurrentesEnMovimientosTest {
             .assertCountEquals(5)
     }
 
-    /** Y el pago de la tarjeta no se cuela por la puerta nueva. */
+    /**
+     * **Y el pago de la tarjeta también se ve**, que es lo que el dueño vino a pedir esta vez, y
+     * también una sola vez: la pata de la deuda («Pago desde Bancolombia») no pasa el filtro.
+     */
     @Test
-    fun `el chip Recurrentes deja afuera el pago de tarjeta`() {
+    fun `el chip Recurrentes muestra el pago de la tarjeta una sola vez`() {
         composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
-        esperarTexto("Cuota de Vehículo")
+        esperarTexto("Pago de Nubank")
 
-        composeRule.onAllNodesWithText("Pago de Nubank", useUnmergedTree = true).assertCountEquals(0)
-        composeRule.onAllNodesWithText("Pago de tarjeta", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Pago de Nubank", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Pago desde Bancolombia", useUnmergedTree = true)
+            .assertCountEquals(0)
+        // Y con los dos pares filtrados quedan dos filas, las dos marcadas.
+        marcasDeRecurrente().assertCountEquals(2)
+    }
+
+    /**
+     * **Verse no es contar, y la pantalla lo dice sola.** El monto del pago aparece UNA vez —la
+     * fila— y **sin el signo menos**: es el idioma que la app ya usa para «esto no movió plata de
+     * tu bolsillo». La cuota, tres filas más arriba, sí lleva su «−».
+     *
+     * Que el monto salga una sola vez es además la prueba de que no se coló en ninguna cifra de
+     * arriba: si «Flujo libre», «Gastos recurrentes» o el «Flujo del día» lo hubieran sumado, este
+     * número aparecería más de una vez o cambiaría el de la cuota.
+     */
+    @Test
+    fun `el pago de la tarjeta se ve sin signo y no entra a ninguna cifra`() {
+        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        esperarTexto("Pago de Nubank")
+
+        composeRule.onAllNodesWithText("1.200.000", substring = true, useUnmergedTree = true)
+            .assertCountEquals(1)
+        composeRule.onAllNodesWithText("−$1.200.000", substring = true, useUnmergedTree = true)
+            .assertCountEquals(0)
     }
 
     /**

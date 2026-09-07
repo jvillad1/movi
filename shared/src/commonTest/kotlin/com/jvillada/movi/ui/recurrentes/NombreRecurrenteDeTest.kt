@@ -175,36 +175,81 @@ class NombreRecurrenteDeTest {
         assertNull(nombreRecurrenteDe(cuotaDeuda(), emptyList(), emptyList()))
     }
 
+    // ── El pago de una tarjeta ────────────────────────────────────────────────
+    //
+    // El dueño, mirando el chip: «en recurrentes no veo el pago de la cuota de las tarjetas de
+    // crédito, deberían estar». Tiene dos anotados (Nu $115.113, AMEX $1.008.902).
+    //
+    // Se ve en la lista **y sigue sin ser un gasto**: las compras ya contaron cuando se hicieron.
+    // Que las dos cosas convivan es todo el punto — `countsAsCashFlow` no lo toca nadie acá, y el
+    // total del «Flujo libre» tampoco se entera (ver [PagoDeTarjetaEnRecurrentesTest]).
+
+    /** Las dos patas que escribe `pagoDeCuotaLegs` para el pago de la Nu. */
+    private fun tarjetaDinero() = evento(
+        id = "ev_tarjeta_dinero",
+        category = CARD_PAYMENT_CATEGORY,
+        description = "Pago de Nubank",
+        amount = 115_113L,
+        type = TransactionType.EXPENSE,
+        transferId = "tr_tarjeta",
+    )
+
+    private fun tarjetaDeuda() = evento(
+        id = "ev_tarjeta_deuda",
+        category = CARD_PAYMENT_CATEGORY,
+        description = "Pago desde Bancolombia",
+        amount = 115_113L,
+        type = TransactionType.INCOME,
+        transferId = "tr_tarjeta",
+    )
+
     /**
-     * **El pago de una tarjeta NO es un gasto recurrente**, y esta es la prueba que lo fija.
-     *
-     * Tiene exactamente la misma forma que la cuota —un par enlazado, la plata sale de una cuenta
-     * y baja una deuda— pero las compras ya contaron cuando se hicieron: contar también el pago
-     * sería contar la misma plata dos veces. Lo que lo distingue es la categoría reservada
-     * [CARD_PAYMENT_CATEGORY], que es la que la app escribe en la pata del dinero de una tarjeta.
+     * Con las listas vacías, igual que la cuota: no se reconoce por nombre —la regla sintética de
+     * una tarjeta tampoco llega en `GET /api/recurring-rules`— sino por su forma.
      */
     @Test
-    fun `un pago de tarjeta no se reconoce como recurrente por ninguna de sus dos patas`() {
-        val dinero = evento(
-            id = "ev_tarjeta_dinero",
-            category = CARD_PAYMENT_CATEGORY,
-            description = "Pago de Nubank",
-            amount = 1_200_000L,
-            type = TransactionType.EXPENSE,
-            transferId = "tr_tarjeta",
-        )
-        val deuda = evento(
-            id = "ev_tarjeta_deuda",
-            category = CARD_PAYMENT_CATEGORY,
-            description = "Pago desde Bancolombia",
-            amount = 1_200_000L,
-            type = TransactionType.INCOME,
-            transferId = "tr_tarjeta",
-        )
-        assertNull(nombreDeCuotaPagada(dinero))
-        assertNull(nombreDeCuotaPagada(deuda))
-        assertNull(nombreRecurrenteDe(dinero, emptyList(), emptyList()))
-        assertNull(nombreRecurrenteDe(deuda, emptyList(), emptyList()))
+    fun `la pata del dinero de un pago de tarjeta se reconoce y se llama como la tarjeta`() {
+        assertEquals("Pago de Nubank", nombreDePagoDeTarjeta(tarjetaDinero()))
+        assertEquals("Pago de Nubank", nombreRecurrenteDe(tarjetaDinero(), emptyList(), emptyList()))
+    }
+
+    /**
+     * La pata de la deuda es el OTRO LADO del mismo hecho, y las dos llevan la MISMA categoría: lo
+     * único que las separa es el `type`. Si también se reconociera, cada pago ocuparía dos filas en
+     * la lista que el dueño lee justamente para entender su flujo de caja.
+     */
+    @Test
+    fun `la pata de la deuda de un pago de tarjeta no se reconoce`() {
+        assertNull(nombreDePagoDeTarjeta(tarjetaDeuda()))
+        assertNull(nombreRecurrenteDe(tarjetaDeuda(), emptyList(), emptyList()))
+    }
+
+    /**
+     * Un pago anotado **suelto** —sin par, con la categoría reservada— es el mismo hecho: así se
+     * anotaba antes de que existiera «Pagar cuota» y así sigue entrando por SMS.
+     */
+    @Test
+    fun `un pago de tarjeta suelto tambien se reconoce`() {
+        val suelto = tarjetaDinero().copy(transferId = null)
+        assertEquals("Pago de Nubank", nombreRecurrenteDe(suelto, emptyList(), emptyList()))
+    }
+
+    /** Y no se cruzan: la cuota no es un pago de tarjeta ni al revés. */
+    @Test
+    fun `las dos formas no se confunden entre si`() {
+        assertNull(nombreDePagoDeTarjeta(cuotaDinero()))
+        assertNull(nombreDeCuotaPagada(tarjetaDinero()))
+    }
+
+    /**
+     * **Verse no es contar.** El pago de una tarjeta se reconoce como recurrente y aun así no se
+     * puede crear una regla desde él: `RecurringRule` no modela un par, y su monto es distinto
+     * cada mes.
+     */
+    @Test
+    fun `un pago de tarjeta se lee como recurrente pero no se puede crear una regla desde el`() {
+        assertEquals("Pago de Nubank", nombreRecurrenteDe(tarjetaDinero(), emptyList(), emptyList()))
+        assertFalse(puedeOfrecerseComoRecurrenteDesdeElDetalle(tarjetaDinero()))
     }
 
     /** Un traspaso entre cuentas propias tampoco: no es plata que salió del bolsillo. */
