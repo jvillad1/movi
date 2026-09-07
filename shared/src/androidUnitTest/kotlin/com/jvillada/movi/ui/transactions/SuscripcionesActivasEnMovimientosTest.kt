@@ -242,4 +242,34 @@ class SuscripcionesActivasEnMovimientosTest {
         assertEquals(SubStatus.DISMISSED, actualizada?.status)
         assertNull(borrada)
     }
+
+    // ── El total al pie ───────────────────────────────────────────────────────
+
+    /**
+     * La sección listaba los cobros y no decía cuánto suman: el dueño tenía que sumarlos de
+     * cabeza, y ni siquiera eso servía, porque un cobro anual no aporta su monto entero.
+     *
+     * Lo que esta prueba cubre y la de la función pura no puede: que el total que llega al pie
+     * es el del MISMO resumen que armó la lista —el que ya prorrateó, convirtió y salteó
+     * duplicadas— y no una suma nueva hecha sobre las filas visibles.
+     */
+    @Test
+    fun `la seccion cierra con el total del mes`() {
+        composeRule.onNodeWithText("Total al mes", useUnmergedTree = true).assertExists()
+        // 67.800 es el `monthlyTotalCop` del repositorio de prueba, no la suma de los montos
+        // que se ven arriba: las filas están en su propia moneda y una va en dólares.
+        //
+        // UN solo nodo, y ahí está el punto de toda la sección: «Gastos recurrentes» —el card de
+        // arriba— mezcla reglas, cuotas de créditos y suscripciones, así que esta cifra no
+        // aparece en ninguna otra parte de la pantalla. El pie es el único lugar donde el dueño
+        // puede leer qué le cuestan sus suscripciones.
+        composeRule.onAllNodesWithText("$67.800", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    /** Sin nada raro que reportar, el pie no inventa advertencias. */
+    @Test
+    fun `el total no avisa de cobros sin convertir cuando no los hay`() {
+        composeRule.onAllNodesWithText("no pudimos pasar a pesos", substring = true, useUnmergedTree = true)
+            .assertCountEquals(0)
+    }
 }

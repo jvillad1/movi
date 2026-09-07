@@ -1243,10 +1243,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 // ── Suscripciones activas · el desglose de «Gastos recurrentes» ─────────
                 // Pegado al card de arriba a propósito: es lo que ese total tiene adentro, con
                 // la fila marcada «no se suma dos veces» incluida. Ver [SeccionSuscripcionesActivas].
-                if (activasRecurrentes.isNotEmpty()) {
+                resumenRecurrentesDelChip?.takeIf { activasRecurrentes.isNotEmpty() }?.let { resumen ->
                     item {
                         SeccionSuscripcionesActivas(
                             activas = activasRecurrentes,
+                            // El total sale del resumen, no de una suma sobre `activas`: es el
+                            // mismo reparto que ya prorrateó, convirtió y salteó duplicadas.
+                            // Ver [ResumenRecurrentes.gastosDeSuscripciones].
+                            totalMensual = resumen.gastosDeSuscripciones,
+                            sinConvertir = resumen.sinConvertir,
                             // La misma tasa con la que se armó el total de arriba: es lo único
                             // que le permite a [notaDeProrrateo] saber si una fila anual en
                             // dólares de verdad entró a ese total o quedó afuera sin convertir.
@@ -1890,6 +1895,16 @@ private fun ResumenFlujoLibreCard(
 @Composable
 private fun SeccionSuscripcionesActivas(
     activas: List<Recurrente.Suscripcion>,
+    /**
+     * Lo que suman estas filas en UN mes, ya en pesos. Llega calculado desde
+     * [ResumenRecurrentes.gastosDeSuscripciones] — no se suma acá, ver ahí el porqué.
+     */
+    totalMensual: Long,
+    /**
+     * Cuántos cobros quedaron FUERA de [totalMensual] por no poder pasarlos a pesos. Se dice al
+     * pie, corto: la explicación larga ya está en el card de «Flujo libre», justo encima.
+     */
+    sinConvertir: Int,
     /** La tasa con la que se armó el total de arriba. Ver [notaDeProrrateo]. */
     usdToCop: Double,
     /**
@@ -1910,7 +1925,8 @@ private fun SeccionSuscripcionesActivas(
             variant = MinCardVariant.Elevated,
             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
         ) {
-            activas.forEachIndexed { i, item ->
+            // Hairline en TODAS, la última incluida: ahora hay un pie que separar.
+            activas.forEach { item ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1977,7 +1993,50 @@ private fun SeccionSuscripcionesActivas(
                         )
                     }
                 }
-                if (i < activas.size - 1) Hairline()
+                Hairline()
+            }
+            // ── El total, cerrando la lista que resume ──────────────────────────────
+            // Va al pie y no en el encabezado de sección: es la consecuencia de las filas de
+            // arriba, y leerlo después de verlas es lo que hace evidente que $369.900 al año no
+            // aportan $369.900 al mes. El encabezado además ya lleva el contador.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        // «al mes» no es decoración: es lo único que distingue este número de la
+                        // suma de los montos que se ven arriba, que da otra cosa.
+                        text = "Total al mes",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                    )
+                    if (sinConvertir > 0) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = if (sinConvertir == 1) {
+                                "No incluye 1 cobro que no pudimos pasar a pesos."
+                            } else {
+                                "No incluye $sinConvertir cobros que no pudimos pasar a pesos."
+                            },
+                            fontSize = 12.sp,
+                            color = MinWarn,
+                            lineHeight = 15.sp,
+                        )
+                    }
+                }
+                Text(
+                    // Sin signo, igual que «Gastos recurrentes» en el card de arriba: los dos son
+                    // totales de gasto y se leen en la misma pantalla, uno debajo del otro.
+                    text = formatCOP(totalMensual),
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                    letterSpacing = (-0.3).sp,
+                )
             }
         }
     }
