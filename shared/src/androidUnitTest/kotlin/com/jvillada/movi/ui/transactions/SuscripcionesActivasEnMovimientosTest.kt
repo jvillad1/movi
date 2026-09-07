@@ -13,14 +13,19 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -92,6 +97,28 @@ class SuscripcionesActivasEnMovimientosTest {
         sub("s_google", "Google One", MANUAL_SUB_PREFIX + "google_one", 79_000L, "COP", 25, SubStatus.CONFIRMED, cuenta = nubank.id),
     )
 
+    /**
+     * La cuota de un crédito, tal como se la manda el server por `/api/payments/upcoming`. Está en
+     * este fixture por dos motivos, y los dos hacen falta:
+     *
+     * 1. **Sin esa llamada contestada la sección no se pinta.** El total del pie sale del mismo
+     *    reparto que decide qué suscripción ya está tapada por una regla, y ese reparto mira
+     *    también las reglas sintéticas de los créditos: si la llamada falla, la lista llega corta
+     *    y el total puede salir alto. Por eso `vencimientosOk` gatea el pie igual que al card.
+     * 2. **Separa las dos cifras.** «Gastos recurrentes» suma la cuota y el pie no, así que
+     *    $67.800 sigue apareciendo UNA sola vez en pantalla y la aserción de abajo sigue
+     *    diciendo algo.
+     */
+    private val cuotaDelCarro = UpcomingPayment(
+        rule = RecurringRule(
+            id = CREDIT_RULE_PREFIX + "acc-carro", name = "Cuota Vehículo", category = "Créditos",
+            amount = 4_215_223L, dayOfMonth = 17, type = TransactionType.EXPENSE,
+        ),
+        dueDate = "2026-09-17",
+        daysUntil = 10,
+        status = PaymentStatus.UPCOMING,
+    )
+
     /** Lo que la pantalla le pidió al repositorio, que es lo único que distingue las dos ramas. */
     private var actualizada: Subscription? = null
     private var borrada: String? = null
@@ -103,6 +130,8 @@ class SuscripcionesActivasEnMovimientosTest {
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
         override suspend fun getSubscriptions(): SubscriptionsResult =
             SubscriptionsResult(suscripciones, monthlyTotalCop = 67_800L, usdToCop = 4_000.0)
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = listOf(cuotaDelCarro)
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
 
         override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription {
             actualizada = subscription

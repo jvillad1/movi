@@ -6,7 +6,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.jvillada.movi.data.RecurringOfferGate
@@ -158,13 +157,13 @@ class SuscripcionAnualEnMovimientosTest {
      */
     @Test
     fun `el flujo libre cuenta el prorrateado y no el cobro entero`() {
-        // `onAllNodes…onFirst` y no `onNodeWithText`: desde que «Suscripciones activas» cierra
-        // con su propio total, este fixture —que no tiene ninguna regla recurrente— muestra el
-        // MISMO número dos veces, arriba como «Gastos recurrentes» y abajo como «Total al mes».
-        // Lo que esta prueba afirma es que la cifra prorrateada está en pantalla, no dónde.
+        // DOS nodos, y el número es parte de lo que se afirma: desde que «Suscripciones activas»
+        // cierra con su propio total, este fixture —que no tiene ninguna regla recurrente— muestra
+        // la misma cifra arriba como «Gastos recurrentes» y abajo como «Total al mes». Exigir las
+        // dos prueba que el pie también salió prorrateado; `onFirst()` se conformaba con
+        // cualquiera de las dos y dejaba pasar un pie con el cobro entero.
         composeRule.onAllNodesWithText("$119.234", useUnmergedTree = true)
-            .onFirst()
-            .assertExists()
+            .assertCountEquals(2)
         composeRule.onAllNodesWithText("$561.800", useUnmergedTree = true)
             .assertCountEquals(0)
     }

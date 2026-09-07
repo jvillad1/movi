@@ -1243,7 +1243,17 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 // ── Suscripciones activas · el desglose de «Gastos recurrentes» ─────────
                 // Pegado al card de arriba a propósito: es lo que ese total tiene adentro, con
                 // la fila marcada «no se suma dos veces» incluida. Ver [SeccionSuscripcionesActivas].
-                resumenRecurrentesDelChip?.takeIf { activasRecurrentes.isNotEmpty() }?.let { resumen ->
+                //
+                // **Con `vencimientosOk`, igual que la cifra de arriba**, y no solo por coherencia
+                // visual: `resumenRecurrentes` decide qué suscripción está tapada por una regla
+                // comparándola contra `reglasParaElResumen`, que INCLUYE las sintéticas de
+                // `/api/payments/upcoming`. Si esa llamada falló, la lista de reglas llega corta,
+                // una duplicada puede dejar de marcarse «no se suma dos veces» y el total del pie
+                // sale alto. Sería el mismo número plausible y sin nada que lo delate que el card
+                // de arriba ya se niega a pintar — y encima debajo de un guion.
+                resumenRecurrentesDelChip
+                    ?.takeIf { vencimientosOk && activasRecurrentes.isNotEmpty() }
+                    ?.let { resumen ->
                     item {
                         SeccionSuscripcionesActivas(
                             activas = activasRecurrentes,
