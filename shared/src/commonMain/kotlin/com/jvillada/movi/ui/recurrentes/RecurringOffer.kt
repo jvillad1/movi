@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.CategoryPref
@@ -243,12 +244,14 @@ fun puedeOfrecerseComoRecurrenteDesdeElDetalle(event: FinancialEvent): Boolean {
     // dos funciones contestan preguntas distintas.**
     //
     // Acá se pregunta «¿le ofrezco CREAR una regla desde este movimiento?» y allá «¿este
-    // movimiento SE LEE como recurrente?». Para una cuota de crédito ya pagada las respuestas son
-    // opuestas a propósito: se lee como recurrente (es lo más grande que sale del bolsillo todos
-    // los meses) pero no se puede crear una regla desde ella —`RecurringRule` no modela un par y
-    // el crédito ya arma su propio recordatorio—, así que ofrecerlo fabricaría un duplicado que
-    // encima mentiría sobre lo que pasa cada mes. Compartir el `transferId != null` fue justamente
-    // lo que escondió las cuotas del chip «Recurrentes» hasta este cambio.
+    // movimiento SE LEE como recurrente?». Para una cuota de crédito ya pagada —y para el pago de
+    // una tarjeta— las respuestas son opuestas a propósito: se leen como recurrentes (la cuota es
+    // lo más grande que sale del bolsillo todos los meses; el pago de la tarjeta sale igual de la
+    // cuenta) pero no se puede crear una regla desde ninguno —`RecurringRule` no modela un par, el
+    // crédito ya arma su propio recordatorio y el monto de una tarjeta es distinto cada mes—, así
+    // que ofrecerlo fabricaría un duplicado que encima mentiría sobre lo que pasa cada mes.
+    // Compartir el `transferId != null` fue justamente lo que escondió las cuotas del chip
+    // «Recurrentes».
     if (event.transferId != null) return false
     if (isReservedCategory(event.category)) return false
     if (event.amount <= 0L) return false
@@ -332,11 +335,21 @@ fun equivalenteYaAnotado(
  * recurrente, y sin este corte un «Traspaso» o un «Saldo inicial» podrían, por accidente de
  * nombre, matchear una regla real.
  *
- * **Con una excepción, y es el arreglo entero de este cambio: la cuota de un crédito ya pagada**
- * ([nombreDeCuotaPagada]). Es una pata de un par, así que el corte de arriba la dejaba afuera, y
- * el dueño la echó de menos con todas las letras: *«en recurrentes no estoy viendo los pagos de
- * cuota realizados para mis créditos… me permite entender mi flujo de caja mensual»*. Con
- * $15.500.000 mensuales en cuotas, es lo más grande que sale de su bolsillo todos los meses.
+ * **Con dos excepciones, y las dos las pidió el dueño mirando el chip vacío**: los pagos que ya
+ * hizo contra sus deudas. Son patas de un par, así que el corte de arriba las dejaba afuera a las
+ * dos, y las echó de menos con todas las letras:
+ *
+ * 1. **La cuota de un crédito ya pagada** ([nombreDeCuotaPagada]): *«en recurrentes no estoy viendo
+ *    los pagos de cuota realizados para mis créditos… me permite entender mi flujo de caja
+ *    mensual»*. Con $15.500.000 mensuales en cuotas, es lo más grande que sale de su bolsillo todos
+ *    los meses.
+ * 2. **El pago de una tarjeta** ([nombreDePagoDeTarjeta]): *«en recurrentes no veo el pago de la
+ *    cuota de las tarjetas de crédito, deberían estar»*.
+ *
+ * Las dos se ven acá, y **una cuenta como gasto del mes y la otra no** — la tarjeta ya contó cuando
+ * se compró. Esa diferencia no vive en esta función: la decide `isCashFlow` y la fila la muestra
+ * con su color y su signo. Acá solo se contesta si el movimiento se repite. Ver
+ * [nombreDePagoDeTarjeta], que explica por qué las dos preguntas son distintas.
  *
  * @return el nombre con el que ya está anotado, o `null` si no matchea nada.
  */
@@ -345,11 +358,15 @@ fun nombreRecurrenteDe(
     reglas: List<RecurringRule>,
     suscripcionesQueYaSuman: List<String>,
 ): String? {
-    // **Antes de cualquier guarda: la cuota de un crédito ya pagada.** No se reconoce por nombre
-    // —no hay contra qué compararla, ver [nombreDeCuotaPagada]— y sus dos patas llevan
-    // `transferId`, así que el corte de abajo la mataría. Va primero y no adentro del `if` para
-    // que quede a la vista que son dos caminos distintos, no una excepción de aquel.
+    // **Antes de cualquier guarda: lo que el dueño ya pagó contra una deuda suya.** No se reconoce
+    // por nombre —no hay contra qué compararlo, ver [nombreDeCuotaPagada]— y sus patas llevan
+    // `transferId` (la de la tarjeta, encima, una categoría reservada), así que el corte de abajo
+    // las mataría. Van primero y no adentro del `if` para que quede a la vista que son caminos
+    // distintos, no excepciones de aquel.
     nombreDeCuotaPagada(event)?.let { return it }
+    // El pago de una tarjeta se VE acá y sigue sin contar como gasto: son dos preguntas distintas
+    // y las contestan dos lugares distintos. Ver [nombreDePagoDeTarjeta].
+    nombreDePagoDeTarjeta(event)?.let { return it }
     if (event.transferId != null) return null
     if (isReservedCategory(event.category)) return null
     return equivalenteYaAnotado(
@@ -383,14 +400,14 @@ fun nombreRecurrenteDe(
  *   del mismo hecho: contarla también pondría dos filas por una cuota en una lista que el dueño
  *   lee justamente para sumar lo que sale al mes. El `type` es lo que las separa.
  *
- * ### Un pago de tarjeta NO entra, y esa es la parte que hay que no romper
+ * ### El pago de una tarjeta se reconoce aparte, y no acá
  *
- * También es un par con esta misma forma, pero su pata del dinero lleva [CARD_PAYMENT_CATEGORY]
- * —reservada y excluida de las cifras del mes— porque **el pago de una tarjeta no es un gasto**:
- * las compras ya contaron cuando se hicieron, y contar también el pago sería contar la misma
- * plata dos veces (ver el KDoc de `CreatePagoDeCuotaRequest`). La comparación es contra
- * [CUOTA_CATEGORY] y solo contra ella, así que la tarjeta queda afuera por construcción; hay un
- * test que lo fija.
+ * También es un par con esta misma forma, pero su pata del dinero lleva [CARD_PAYMENT_CATEGORY], y
+ * lo que se deduce de eso es distinto en todo salvo en la visibilidad: **también se ve en
+ * «Recurrentes», y sigue sin ser un gasto**. Esa asimetría tiene su propia función,
+ * [nombreDePagoDeTarjeta], que la explica entera. Acá la comparación es contra [CUOTA_CATEGORY] y
+ * solo contra ella, así que las dos no pueden mezclarse por accidente; hay tests que fijan las dos
+ * mitades.
  *
  * La cuota que paga un tercero (la nómina, Skandia, un familiar) tampoco entra: lleva sus propias
  * categorías reservadas y esa plata no sale del bolsillo del dueño, así que no es su flujo de caja.
@@ -402,6 +419,59 @@ fun nombreRecurrenteDe(
 fun nombreDeCuotaPagada(event: FinancialEvent): String? {
     if (event.type != TransactionType.EXPENSE) return null
     if (event.category.trim() != CUOTA_CATEGORY) return null
+    return prefillNameFor(event).takeIf { it.isNotBlank() }
+}
+
+/**
+ * **¿Este movimiento es el pago de una tarjeta?** — y con qué nombre se lee en «Recurrentes».
+ *
+ * El dueño, mirando el chip: *«en recurrentes no veo el pago de la cuota de las tarjetas de
+ * crédito, deberían estar»*. Tiene dos anotados —Nu por $115.113 y AMEX por $1.008.902— y ninguno
+ * aparecía: la pata del dinero lleva `transferId` **y** una categoría reservada, o sea que chocaba
+ * contra las dos guardas de [nombreRecurrenteDe] a la vez.
+ *
+ * ### Verse en la lista y contar en el mes son dos preguntas distintas
+ *
+ * **La regla de plata no cambia: el pago de una tarjeta NO es un gasto del mes.** Las compras ya
+ * contaron cuando se hicieron, y contar también el pago sería contar la misma plata dos veces (ver
+ * el KDoc de `CreatePagoDeCuotaRequest`). Eso lo decide `isCashFlow` —vía `countsAsCashFlow`— y
+ * esta función no lo toca ni podría: acá solo se contesta «¿esto se repite todos los meses?», que
+ * es lo que el chip filtra y lo que la marca de la fila dice.
+ *
+ * Puesto a elegir entre las dos, el dueño eligió las dos por separado: que se **vea** en la lista,
+ * marcado como recurrente —porque esa plata sale de su cuenta todos los meses y esa lista es la que
+ * lee para entender su flujo de caja— y que **no** entre ni a «Gastos del mes» ni al total de
+ * «Flujo libre». Por eso la fila se sigue pintando exactamente como antes: en el azul de «entre
+ * cuentas» cuando el par va plegado, gris y **sin signo** cuando el chip deja pasar sola a la pata
+ * del dinero, y fuera del «Flujo del día». Lo único nuevo es el ícono de repetición.
+ *
+ * ### Y no entra al total del «Flujo libre», ni siquiera por accidente
+ *
+ * Ese total no se calcula sobre movimientos sino sobre reglas y suscripciones
+ * (`resumenRecurrentes`), así que reconocer un **evento** no puede llegar hasta allá. Y si llegara:
+ * la regla sintética de una tarjeta ya está excluida por partida doble
+ * (`cuentaComoCompromisoMensual`, por `montoEsSaldo` y por `CARD_RULE_PREFIX`), con razón — el monto
+ * de esa regla es el **saldo** de la tarjeta, no un pago, así que sumarla diría que la AMEX le
+ * cuesta $27.501.150 al mes. Movi no estima el pago mínimo, y eso también lo pidió él: *«si no lo
+ * quieres estimar, entonces simplemente no mencionar el monto del pago»*.
+ *
+ * ### Solo la pata del dinero, igual que en la cuota
+ *
+ * El par lo escribe [pagoDeCuotaLegs]: EXPENSE en la cuenta de donde salió la plata e INCOME en la
+ * tarjeta, **las dos con la misma categoría**. El `type` es lo único que las separa, y por eso la
+ * comparación lo mira: con las dos, cada pago ocuparía dos filas en la lista que él lee justamente
+ * para sumar lo que le sale al mes.
+ *
+ * Un pago anotado **suelto** —con la categoría reservada y sin par, que es como se anotaba antes de
+ * que existiera «Pagar cuota» y como sigue entrando por SMS— también se reconoce, a propósito: es
+ * el mismo hecho, y esconderlo según cómo quedó registrado sería arbitrario para quien lo mira.
+ *
+ * @return el concepto, que ya nombra la tarjeta («Pago de Nubank», lo escribe [pagoDeCuotaLegs]).
+ *   Si llegara vacío cae en la categoría, igual que [prefillNameFor] en todos lados.
+ */
+fun nombreDePagoDeTarjeta(event: FinancialEvent): String? {
+    if (event.type != TransactionType.EXPENSE) return null
+    if (event.category.trim() != CARD_PAYMENT_CATEGORY) return null
     return prefillNameFor(event).takeIf { it.isNotBlank() }
 }
 

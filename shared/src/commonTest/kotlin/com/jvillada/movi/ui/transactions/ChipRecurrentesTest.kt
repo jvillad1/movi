@@ -125,10 +125,21 @@ class ChipRecurrentesTest {
         description = "Abono a capital desde Bancolombia", amount = 1_733_905L, transferId = "tr_cuota",
     )
 
-    /** El pago de una tarjeta, que tiene la misma forma y NO es un gasto recurrente. */
+    /**
+     * El pago de una tarjeta: la misma forma que la cuota, y **plata que no cuenta como gasto**
+     * (las compras ya contaron cuando se hicieron). Se ve en el chip igual —el dueño lo pidió:
+     * «en recurrentes no veo el pago de la cuota de las tarjetas de crédito, deberían estar»— pero
+     * su `countsAsCashFlow` es `false` y por eso no entra al «Flujo del día».
+     */
     private val pagoDeTarjetaDinero = ev(
         "tarjeta_dinero", AccountType.SAVINGS, TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY,
         description = "Pago de Nubank", amount = 1_200_000L, transferId = "tr_tarjeta",
+    )
+
+    /** Su otra pata, en la tarjeta. Lleva la MISMA categoría: lo único que las separa es el `type`. */
+    private val pagoDeTarjetaDeuda = ev(
+        "tarjeta_deuda", AccountType.CREDIT_CARD, TransactionType.INCOME, CARD_PAYMENT_CATEGORY,
+        description = "Pago desde Bancolombia", amount = 1_200_000L, transferId = "tr_tarjeta",
     )
 
     /**
@@ -147,27 +158,63 @@ class ChipRecurrentesTest {
         assertFalse(matchesChip(cuotaDeuda, CHIP_RECURRENTES, reglas, nombresDeSuscripciones))
     }
 
-    /** Plata que ya se contó cuando se compró: el pago de la tarjeta no es un gasto recurrente. */
+    /**
+     * **El pago de una tarjeta también entra al chip**, y por la misma puerta: se reconoce por su
+     * forma, sin reglas cargadas. El dueño lo pidió mirando el chip: *«en recurrentes no veo el
+     * pago de la cuota de las tarjetas de crédito, deberían estar»*.
+     */
     @Test
-    fun `un pago de tarjeta sigue afuera del chip`() {
-        assertFalse(matchesChip(pagoDeTarjetaDinero, CHIP_RECURRENTES, reglas, nombresDeSuscripciones))
+    fun `el chip incluye el pago de una tarjeta`() {
+        assertTrue(matchesChip(pagoDeTarjetaDinero, CHIP_RECURRENTES))
+        assertTrue(matchesChip(pagoDeTarjetaDinero, CHIP_RECURRENTES, reglas, nombresDeSuscripciones))
+    }
+
+    /** Y solo la pata del dinero, igual que en la cuota: una fila por pago, no dos. */
+    @Test
+    fun `la pata de la deuda de un pago de tarjeta no entra al chip`() {
+        assertFalse(matchesChip(pagoDeTarjetaDeuda, CHIP_RECURRENTES, reglas, nombresDeSuscripciones))
     }
 
     /**
-     * El día completo, que es lo que se pinta: de la cuota queda **una** fila —la del dinero— y el
-     * «Flujo del día» la cuenta como el gasto que es. El pago de tarjeta no queda ninguna.
+     * El día completo, que es lo que se pinta, y donde se ve que **verse no es contar**: de cada
+     * par queda una sola fila —la del dinero— pero el «Flujo del día» suma la cuota y NO el pago de
+     * la tarjeta, porque las compras ya contaron cuando se hicieron. La misma lista, dos
+     * tratamientos, y ninguno de los dos cambió por hacerse visible.
      */
     @Test
-    fun `diasVisibles deja una sola fila por cuota y la suma al flujo del dia`() {
+    fun `diasVisibles deja una fila por pago, y solo la cuota suma al flujo del dia`() {
         val dia = EventDay(
             date = "2026-09-01",
             total = 0L,
-            items = listOf(arriendo, cuotaDinero, cuotaDeuda, pagoDeTarjetaDinero, mercado),
+            items = listOf(
+                arriendo, cuotaDinero, cuotaDeuda, pagoDeTarjetaDinero, pagoDeTarjetaDeuda, mercado,
+            ),
         )
         val visibles = diasVisibles(listOf(dia), CHIP_RECURRENTES, "", reglas, nombresDeSuscripciones).single()
 
-        assertEquals(listOf("arriendo", "cuota_dinero"), visibles.items.map { it.id })
+        assertEquals(listOf("arriendo", "cuota_dinero", "tarjeta_dinero"), visibles.items.map { it.id })
         assertEquals(-(arriendo.amount + cuotaDinero.amount), visibles.total)
+    }
+
+    /**
+     * Y la fila se sigue pintando como siempre: **sin signo y en gris**, que es como la app dice
+     * «esto no movió plata de tu bolsillo». La cuota, al lado, va roja. Es la diferencia que el
+     * dueño ve sin que haya que escribirle nada encima.
+     */
+    @Test
+    fun `con el chip puesto el pago de tarjeta se ve sin signo`() {
+        val dia = EventDay(
+            date = "2026-09-01", total = 0L,
+            items = listOf(pagoDeTarjetaDinero, pagoDeTarjetaDeuda),
+        )
+        val visibles = diasVisibles(listOf(dia), CHIP_RECURRENTES, "", reglas, nombresDeSuscripciones).single()
+        val fila = collapseTransfers(visibles.items).single()
+
+        assertIs<MovementRow.Single>(fila)
+        assertEquals("tarjeta_dinero", fila.event.id)
+        assertEquals(TonoDelMonto.NEUTRO, tonoDelEvento(fila.event))
+        assertFalse(rowShowsSign(fila.event))
+        assertEquals(0L, visibles.total)
     }
 
     /**

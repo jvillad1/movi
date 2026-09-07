@@ -399,13 +399,20 @@ fun chipInicialDeMovimientos(pedido: Int?): Int =
  *
  * «Recurrentes» es el quinto: lo que ya reconocemos como una regla o una suscripción confirmada,
  * ver [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe] — con las mismas dos listas ya
- * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí) — **más
- * la cuota de un crédito ya pagada**, que no se reconoce por nombre sino por su forma (ver
- * [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]). De esa entra **solo la pata del
- * dinero**: la de la deuda es el otro lado del mismo hecho, y con las dos el chip mostraría dos
- * filas por cada cuota en la lista que el dueño lee para sumar lo que sale al mes. Como la
- * hermana no pasa el filtro, [collapseTransfers] la deja suelta y se ve como el gasto que es —el
- * mismo camino que ya tenía en «Gastos», por el mismo motivo.
+ * cargadas, sin ningún viaje de red por fila (ese es el precio, y está documentado ahí) — **más lo
+ * que el dueño ya pagó contra una deuda suya**, que no se reconoce por nombre sino por su forma:
+ * la cuota de un crédito ([com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]) y el pago de una
+ * tarjeta ([com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta]). De cada par entra **solo la
+ * pata del dinero**: la de la deuda es el otro lado del mismo hecho, y con las dos el chip
+ * mostraría dos filas por cada pago en la lista que el dueño lee para sumar lo que sale al mes.
+ * Como la hermana no pasa el filtro, [collapseTransfers] la deja suelta — la cuota se ve como el
+ * gasto que es (rojo, con signo) y el pago de tarjeta como lo que es (gris, sin signo, fuera del
+ * «Flujo del día»), que es el mismo camino que ya tenían, por el mismo motivo.
+ *
+ * **Que el pago de una tarjeta se vea acá no lo convierte en un gasto**: `countsAsCashFlow` sigue
+ * diciendo `false` y ni «Gastos del mes» ni el total de «Flujo libre» lo suman. El dueño pidió las
+ * dos cosas a la vez — verlo y que no cuente — y el porqué está en
+ * [com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta].
  *
  * @param reglas y @param nombresDeSuscripcionesActivas solo los usa [CHIP_RECURRENTES]; el resto
  *   de los chips ni los mira, así que quedan con default vacío y no rompen ningún llamado viejo.
@@ -1519,11 +1526,16 @@ fun colorDelTono(tono: TonoDelMonto): Color = when (tono) {
  * movimiento que de verdad no cuenta nada.
  *
  * Lleva **el mismo ícono de repetición** que [MovementSingleRow] cuando el par es una cuota de
- * crédito. Un par plegado es UN renglón, así que marcarlo no duplica nada; sin esto, la misma
- * cuota se leía como recurrente en el chip «Recurrentes» (donde entra sola la pata del dinero) y
- * como un par mudo en «Todo», que es la misma fila diciendo dos cosas distintas según el filtro.
- * La marca sale de la pata del dinero — [MovementRow.Transfer.out] —, que es la que
- * [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada] reconoce.
+ * crédito o el pago de una tarjeta. Un par plegado es UN renglón, así que marcarlo no duplica nada;
+ * sin esto, el mismo pago se leía como recurrente en el chip «Recurrentes» (donde entra sola la
+ * pata del dinero) y como un par mudo en «Todo», que es la misma fila diciendo dos cosas distintas
+ * según el filtro. La marca sale de la pata del dinero — [MovementRow.Transfer.out] —, que es la
+ * que reconocen [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada] y
+ * [com.jvillada.movi.ui.recurrentes.nombreDePagoDeTarjeta].
+ *
+ * Los dos pares se siguen viendo igual que antes —el azul de «entre cuentas», sin signo— y el
+ * título los distingue («Cuota de crédito» / «Pago de tarjeta», ver [transferRowTitle]), que es lo
+ * que hace falta: uno cuenta en el mes y el otro no.
  */
 @Composable
 private fun TransferRow(
