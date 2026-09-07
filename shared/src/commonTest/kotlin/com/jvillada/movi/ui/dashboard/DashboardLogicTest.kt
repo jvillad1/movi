@@ -11,6 +11,7 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
@@ -109,6 +110,63 @@ class DashboardLogicTest {
         )
         val many = dashboardAlerts(overBudget = listOf("Mercado", "Salidas"), cardCandidates = 1, pendingSms = 0)
         assertEquals(listOf("2 presupuestos superados", "1 pago de tarjeta por confirmar"), many.map { it.text })
+    }
+
+    // ── La captura de SMS que nunca recibió nada ────────────────────────────────
+
+    /**
+     * El defecto que trajo esta fila: la captura de SMS pasó varias entregas sin entregar un
+     * solo mensaje y el dueño no se enteró, porque el único indicador vivía en una pantalla de
+     * Android a la que no tenía motivo para entrar. La fila es el motivo para entrar.
+     */
+    @Test
+    fun `el Inicio avisa cuando nunca ha llegado un mensaje del banco`() {
+        val alerts = dashboardAlerts(
+            overBudget = emptyList(), cardCandidates = 0, pendingSms = 0,
+            captura = CapturaDeSms(),
+        )
+        assertEquals(
+            listOf("Movi nunca ha recibido un mensaje de tu banco" to Screen.SMSInbox),
+            alerts.map { it.text to it.target },
+        )
+    }
+
+    /** Sin respuesta del resumen no se afirma nada: `null` no es «nunca llegó nada». */
+    @Test
+    fun `sin saber nada de la captura, el Inicio no la menciona`() {
+        assertTrue(
+            dashboardAlerts(overBudget = emptyList(), cardCandidates = 0, pendingSms = 0, captura = null).isEmpty(),
+        )
+    }
+
+    /** Los dos frenos al ruido crónico: el primer mensaje que llega, y el silencio a mano. */
+    @Test
+    fun `la fila desaparece con el primer mensaje, o si el dueno pidio no verla`() {
+        assertTrue(
+            dashboardAlerts(
+                overBudget = emptyList(), cardCandidates = 0, pendingSms = 0,
+                captura = CapturaDeSms(total = 1, ultimo = "2026-08-01 10:00"),
+            ).isEmpty(),
+        )
+        assertTrue(
+            dashboardAlerts(
+                overBudget = emptyList(), cardCandidates = 0, pendingSms = 0,
+                captura = CapturaDeSms(), capturaSilenciada = true,
+            ).isEmpty(),
+        )
+    }
+
+    /**
+     * «Nunca llegó nada» y «hay mensajes por confirmar» no pueden convivir: si hay pendientes,
+     * llegó algo. Se fija por si alguna vez las dos cifras salen de fuentes distintas.
+     */
+    @Test
+    fun `nunca conviven la fila de pendientes y la de que nunca llego nada`() {
+        val alerts = dashboardAlerts(
+            overBudget = emptyList(), cardCandidates = 0, pendingSms = 2,
+            captura = CapturaDeSms(total = 5, ultimo = "2026-09-03 07:15"),
+        )
+        assertEquals(listOf("2 mensajes del banco por confirmar"), alerts.map { it.text })
     }
 
     @Test

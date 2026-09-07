@@ -30,6 +30,11 @@ data class UserProfile(
      * del lado del server, igual que [avatarColor] y [periodCutoffDay].
      */
     val reminderLeadDays: Int = DEFAULT_REMINDER_LEAD_DAYS,
+    /**
+     * El dueño silenció el aviso del Inicio sobre la captura de SMS (ver [CapturaDeSms]). Nunca
+     * `null` en la respuesta: una cuenta que no lo tocó cae a `false` del lado del server.
+     */
+    val smsAlertMuted: Boolean = false,
 )
 
 /**
@@ -45,6 +50,14 @@ data class UpdateProfileRequest(
     val periodCutoffDay: Int? = null,
     /** Días de aviso, 0..30. `null` = no tocar. */
     val reminderLeadDays: Int? = null,
+    /**
+     * Silenciar (o volver a mostrar) el aviso del Inicio sobre la captura de SMS. `null` = no
+     * tocar.
+     *
+     * Se manda desde «Mensajes del banco», que es donde el hecho está a la vista, y no desde
+     * Perfil: quien decide callar el recordatorio tiene que estar viendo lo que se calla.
+     */
+    val smsAlertMuted: Boolean? = null,
 )
 
 /**

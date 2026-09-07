@@ -32,6 +32,21 @@ object Users : Table("users") {
      * Nullable y se lee como el default: las cuentas que ya existen no la tienen.
      */
     val reminderLeadDays = integer("reminder_lead_days").nullable()
+    /**
+     * El dueño pidió que el Inicio deje de recordarle que la captura de SMS nunca recibió nada
+     * (ver `CapturaDeSms` en :core). Silencia el recordatorio del Inicio, **no** el hecho: la
+     * pantalla «Mensajes del banco» lo sigue diciendo.
+     *
+     * Es una preferencia de la cuenta y no del dispositivo a propósito: el dueño mira el Inicio
+     * desde el navegador y desde el teléfono, y un silencio que valiera solo en un navegador
+     * volvería a aparecer en el otro. Por eso vive acá y no en `localStorage`.
+     *
+     * Nullable y se lee como `false`, por lo mismo que las dos de arriba: las cuentas que ya
+     * existen no la tienen, y una columna nullable es el único DDL que
+     * `createMissingTablesAndColumns` puede agregar sin riesgo dentro de la transacción de
+     * arranque.
+     */
+    val smsAlertMuted = bool("sms_alert_muted").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

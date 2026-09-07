@@ -35,6 +35,32 @@ data class DashboardSummary(
     /** Mensajes del banco en estado `pending` — lo que el inbox de SMS llama «por confirmar». */
     val pendingSms: Int = 0,
     /**
+     * **Cuántos mensajes del banco han llegado alguna vez** (cualquier estado), y el `time` del
+     * más reciente. Ver [CapturaDeSms]: durante varias entregas la captura de SMS no entregó ni
+     * un mensaje y nadie lo supo, porque su único indicador vivía en la app de Android y el
+     * dueño trabaja en la web.
+     *
+     * Viajan en esta respuesta y no en un endpoint propio porque el Inicio ya la pide y es donde
+     * la app arranca: la alerta «Movi nunca ha recibido un mensaje de tu banco» aparece sin una
+     * llamada nueva en la pantalla que más se abre. La bandeja de SMS no consume estos campos —
+     * ya se baja la lista completa y saca lo mismo con la MISMA función de `:core`
+     * ([capturaDeSms]), sin depender del resumen del Inicio.
+     *
+     * `smsLastAt` es el string crudo de la columna (varchar libre, `"yyyy-MM-dd HH:mm"` o su
+     * variante ISO); `null` = nunca llegó ninguno.
+     */
+    val smsTotal: Int = 0,
+    val smsLastAt: String? = null,
+    /**
+     * El dueño pidió no ver el aviso de captura en el Inicio (preferencia de la cuenta, columna
+     * `users.sms_alert_muted`). Viaja acá y no se pide aparte por lo mismo que los dos campos de
+     * arriba: la decisión de pintar la alerta se toma con UNA sola respuesta.
+     *
+     * Silencia el recordatorio del Inicio, nunca el hecho: «Mensajes del banco» sigue diciendo
+     * que no ha llegado nada.
+     */
+    val smsAlertMuted: Boolean = false,
+    /**
      * Ola 9 · A2: **las categorías que el dueño ya usó alguna vez**, con el tipo (o los tipos)
      * con los que las usó. Viaja acá y no en un endpoint propio a propósito: el Inicio ya pide
      * esta respuesta y es la pantalla en la que la app arranca, así que las categorías propias

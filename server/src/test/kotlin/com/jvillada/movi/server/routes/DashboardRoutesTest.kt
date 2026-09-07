@@ -58,6 +58,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 
 /**
  * `GET /api/dashboard/summary`: el Inicio deja de bajarse colecciones enteras (todos los SMS,
@@ -162,11 +163,16 @@ class DashboardRoutesTest {
         }
     }
 
-    private fun sms(id: String, state: String, uid: String = userId) = transaction {
+    private fun sms(
+        id: String,
+        state: String,
+        uid: String = userId,
+        cuando: String = "2026-08-01T10:00:00",
+    ) = transaction {
         SmsMessages.insert {
             it[SmsMessages.id]     = id
             it[SmsMessages.userId] = uid
-            it[time]               = "2026-08-01T10:00:00"
+            it[time]               = cuando
             it[bank]               = "Bancolombia"
             it[text]               = "Compra \$50.000 en Netflix"
             it[SmsMessages.state]  = state
@@ -375,22 +381,99 @@ class DashboardRoutesTest {
         assertEquals(0L, summary().long("pendingSms"))
     }
 
+    // ── Cuándo llegó el último mensaje del banco (y si llegó alguno) ─────────────────
+
+    /**
+     * **La cifra que faltaba, y su ausencia costó semanas de trabajo a mano.** La captura de SMS
+     * no entregó un solo mensaje durante varias entregas: `sms_messages` estaba vacía en
+     * producción y los 73 movimientos del dueño eran `MANUAL`. Nadie se enteró porque el único
+     * indicador vivía en la app de Android y él trabaja en la web.
+     *
+     * Sin mensajes no viaja ningún campo (`encodeDefaults=false`), y eso ES la respuesta: total
+     * 0 y sin último. El cliente lo lee como «nunca llegó nada» (ver `CapturaDeSms` en :core).
+     */
+    @Test
+    fun `sin un solo mensaje, el resumen dice cero y no inventa una fecha`() = testApplication {
+        wireApp()
+        val body = summary()
+        assertEquals(0L, body.long("smsTotal"))
+        assertNull(body["smsLastAt"], "no hay último mensaje que nombrar")
+    }
+
+    @Test
+    fun `con un solo mensaje, ese es el ultimo`() = testApplication {
+        wireApp()
+        sms("s-1", SMS_STATE_PENDING, cuando = "2026-08-01 10:00")
+
+        val body = summary()
+        assertEquals(1L, body.long("smsTotal"))
+        assertEquals("2026-08-01 10:00", body["smsLastAt"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * Gana el más reciente, y **cuentan todos los estados**: la pregunta es si LLEGARON, no qué
+     * se hizo con ellos. Un inbox entero confirmado no significa que la captura esté muda.
+     */
+    @Test
+    fun `con varios gana el mas reciente, en cualquier estado`() = testApplication {
+        wireApp()
+        sms("s-1", SMS_STATE_PENDING, cuando = "2026-08-01 10:00")
+        sms("s-2", SMS_STATE_CONFIRMED, cuando = "2026-09-03 07:15")
+        sms("s-3", SMS_STATE_IGNORED, cuando = "2026-08-30 23:59")
+
+        val body = summary()
+        assertEquals(3L, body.long("smsTotal"), "confirmados e ignorados también llegaron")
+        assertEquals(1L, body.long("pendingSms"), "y «por confirmar» sigue contando solo los pending")
+        assertEquals("2026-09-03 07:15", body["smsLastAt"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * El `time` es un varchar libre y conviven `"yyyy-MM-dd HH:mm"` con la variante ISO con 'T'.
+     * Comparando strings crudos, `' '` va antes que `'T'` y el de las 09:00 le ganaría al de las
+     * 10:00 del mismo día. El criterio vive en :core y es el mismo que usa la bandeja del
+     * cliente — dos superficies que ordenan por su cuenta nombran mensajes distintos.
+     */
+    @Test
+    fun `mezclar los dos formatos de fecha no desordena cual fue el ultimo`() = testApplication {
+        wireApp()
+        sms("s-espacio", SMS_STATE_PENDING, cuando = "2026-08-01 09:00")
+        sms("s-iso", SMS_STATE_PENDING, cuando = "2026-08-01T10:00:00")
+
+        assertEquals("2026-08-01T10:00:00", summary()["smsLastAt"]!!.jsonPrimitive.content)
+    }
+
+    /** El aviso del Inicio se puede callar, y ese silencio es de la cuenta (web y teléfono). */
+    @Test
+    fun `el silencio del aviso viaja en el resumen y es por usuario`() = testApplication {
+        wireApp()
+        transaction { Users.update({ Users.id eq userId }) { it[smsAlertMuted] = true } }
+
+        assertEquals(true, summary()["smsAlertMuted"]?.jsonPrimitive?.content?.toBoolean())
+        assertNull(summary(uid = otherUserId)["smsAlertMuted"], "el silencio de uno no calla al otro")
+    }
+
     @Test
     fun `todo queda aislado por usuario`() = testApplication {
         wireApp()
         event("b-spent", "acc-b", "EXPENSE", 40_000L, uid = otherUserId)
         event("b-cand", "acc-b", "EXPENSE", 40_000L, category = "Otros", description = "Pago tarjeta", uid = otherUserId)
-        sms("b-sms", SMS_STATE_PENDING, uid = otherUserId)
+        sms("b-sms", SMS_STATE_PENDING, uid = otherUserId, cuando = "2026-09-05 08:00")
 
         val a = summary()
         assertEquals(0L, a.long("monthSpent"))
         assertEquals(0L, a.long("cardPaymentCandidates"))
         assertEquals(0L, a.long("pendingSms"))
+        // Lo importante del aislamiento acá: los mensajes de OTRO no pueden hacerle creer a este
+        // que su captura anduvo alguna vez.
+        assertEquals(0L, a.long("smsTotal"))
+        assertNull(a["smsLastAt"])
 
         val b = summary(uid = otherUserId)
         assertEquals(80_000L, b.long("monthSpent"))
         assertEquals(1L, b.long("cardPaymentCandidates"))
         assertEquals(1L, b.long("pendingSms"))
+        assertEquals(1L, b.long("smsTotal"))
+        assertEquals("2026-09-05 08:00", b["smsLastAt"]!!.jsonPrimitive.content)
     }
 
     @Test

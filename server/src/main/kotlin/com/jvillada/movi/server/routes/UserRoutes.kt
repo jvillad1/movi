@@ -83,7 +83,7 @@ fun Route.userRoutes() {
                 return@put call.respond(HttpStatusCode.BadRequest, "Los días de aviso van de 0 a 30")
             }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
-                req.reminderLeadDays == null
+                req.reminderLeadDays == null && req.smsAlertMuted == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
@@ -94,6 +94,9 @@ fun Route.userRoutes() {
                     req.avatarColor?.let { stmt[Users.avatarColor] = it }
                     req.periodCutoffDay?.let { stmt[Users.periodCutoffDay] = it }
                     req.reminderLeadDays?.let { stmt[Users.reminderLeadDays] = it }
+                    // Sin rango que validar: es un sí o un no. Mandar `false` es tan válido como
+                    // mandar `true` — así se vuelve a mostrar el aviso del Inicio.
+                    req.smsAlertMuted?.let { stmt[Users.smsAlertMuted] = it }
                 }
                 Users.selectAll().where { Users.id eq uid }.firstOrNull()
             } ?: return@put call.respond(HttpStatusCode.NotFound)
@@ -150,4 +153,6 @@ private fun ResultRow.toProfile() = UserProfile(
     periodCutoffDay = this[Users.periodCutoffDay] ?: 1,
     // Sin elegir = lo que el server tenga configurado, que a su vez cae al default de :core.
     reminderLeadDays = this[Users.reminderLeadDays] ?: ReminderConfig.leadDays(),
+    // Sin tocar = no silenciado: el aviso de captura se muestra hasta que alguien pida callarlo.
+    smsAlertMuted = this[Users.smsAlertMuted] ?: false,
 )

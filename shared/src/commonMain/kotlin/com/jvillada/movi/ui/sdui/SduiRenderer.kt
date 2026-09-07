@@ -382,7 +382,10 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
 
 @Composable
 private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
-    val alerts = dashboardAlerts(overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms)
+    val alerts = dashboardAlerts(
+        overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
+        data.captura, data.capturaSilenciada,
+    )
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         MinSectionHeader(title = section.title ?: "Alertas", count = alerts.size)
         MinCard(
