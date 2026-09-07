@@ -29,11 +29,18 @@ class SuscripcionesActivasTest {
         dia: Int = 5,
         estado: SubStatus = SubStatus.CONFIRMED,
         clave: String = nombre.lowercase(),
+        cuenta: String? = null,
     ) = Subscription(
         id = "s_$nombre", merchantKey = clave, displayName = nombre, amount = monto, currency = moneda,
         dayOfMonth = dia, status = estado, confidence = SubConfidence.HIGH,
-        firstSeen = 0, lastSeen = 0, occurrences = 3,
+        firstSeen = 0, lastSeen = 0, occurrences = 3, accountId = cuenta,
     )
+
+    /** Las cuentas del dueño, tal como llegan a la pantalla: id → nombre. */
+    private val cuentas = mapOf("acc-nu" to "Nubank", "acc-banco" to "Bancolombia")
+
+    private fun contexto(s: Subscription, yaEsRegla: Boolean = false, nombres: Map<String, String> = cuentas) =
+        contextoDeSuscripcionActiva(Recurrente.Suscripcion(s, yaEsRegla = yaEsRegla), nombres)
 
     private fun regla(nombre: String, monto: Long = 20_000, dia: Int = 5) = RecurringRule(
         id = "r_$nombre", name = nombre, category = "Otros", amount = monto,
@@ -47,10 +54,7 @@ class SuscripcionesActivasTest {
         val s = sub("Netflix", estado = SubStatus.CONFIRMED)
 
         assertEquals(OrigenDeSuscripcion.LA_ENCONTRO_MOVI, origenDeSuscripcion(s))
-        assertEquals(
-            "Suscripción · la encontró Movi",
-            contextoDeSuscripcionActiva(Recurrente.Suscripcion(s, yaEsRegla = false)),
-        )
+        assertEquals("Suscripción · la encontró Movi", contexto(s))
     }
 
     /** La única de las tres que el dueño nunca aprobó, y que sigue sumando en «Flujo libre». */
@@ -59,10 +63,7 @@ class SuscripcionesActivasTest {
         val s = sub("YouTube", estado = SubStatus.AUTO)
 
         assertEquals(OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA, origenDeSuscripcion(s))
-        assertEquals(
-            "Suscripción · la encontró Movi y la activó sola",
-            contextoDeSuscripcionActiva(Recurrente.Suscripcion(s, yaEsRegla = false)),
-        )
+        assertEquals("Suscripción · la encontró Movi y la activó sola", contexto(s))
     }
 
     @Test
@@ -70,10 +71,7 @@ class SuscripcionesActivasTest {
         val s = sub("Claude", clave = MANUAL_SUB_PREFIX + "claude")
 
         assertEquals(OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO, origenDeSuscripcion(s))
-        assertEquals(
-            "Suscripción",
-            contextoDeSuscripcionActiva(Recurrente.Suscripcion(s, yaEsRegla = false)),
-        )
+        assertEquals("Suscripción", contexto(s))
     }
 
     /**
@@ -104,10 +102,7 @@ class SuscripcionesActivasTest {
     fun `si ya hay una regla con ese nombre la fila dice que no se suma dos veces`() {
         val s = sub("Netflix", estado = SubStatus.AUTO)
 
-        assertEquals(
-            "Ya lo tienes como recurrente · no se suma dos veces",
-            contextoDeSuscripcionActiva(Recurrente.Suscripcion(s, yaEsRegla = true)),
-        )
+        assertEquals("Ya lo tienes como recurrente · no se suma dos veces", contexto(s, yaEsRegla = true))
     }
 
     // ── Qué entra a la sección ────────────────────────────────────────────────
@@ -165,11 +160,98 @@ class SuscripcionesActivasTest {
         assertEquals(1, activas.count { it.yaEsRegla })
         assertEquals(
             "Ya lo tienes como recurrente · no se suma dos veces",
-            contextoDeSuscripcionActiva(activas.first { it.yaEsRegla }),
+            contextoDeSuscripcionActiva(activas.first { it.yaEsRegla }, cuentas),
         )
         assertEquals(
             "Suscripción · la encontró Movi",
-            contextoDeSuscripcionActiva(activas.first { !it.yaEsRegla }),
+            contextoDeSuscripcionActiva(activas.first { !it.yaEsRegla }, cuentas),
+        )
+    }
+
+    // ── Ola 17 · con qué cuenta se paga ───────────────────────────────────────
+    //
+    // Lo que se fija acá es que la línea NUNCA crece: la cuenta ocupa el lugar del rótulo
+    // genérico «Suscripción», que dentro de una sección titulada «Suscripciones activas» no
+    // informaba nada. Dos segmentos antes, dos segmentos después.
+
+    @Test
+    fun `la cuenta que paga reemplaza el rotulo generico de una manual`() {
+        val s = sub("HBO Max", clave = MANUAL_SUB_PREFIX + "hbo_max", cuenta = "acc-nu")
+
+        assertEquals("Nubank", contexto(s))
+    }
+
+    @Test
+    fun `la cuenta convive con la marca de origen sin agregar un tercer segmento`() {
+        assertEquals(
+            "Nubank · la encontró Movi",
+            contexto(sub("Netflix", cuenta = "acc-nu")),
+        )
+        assertEquals(
+            "Bancolombia · la encontró Movi y la activó sola",
+            contexto(sub("YouTube", estado = SubStatus.AUTO, cuenta = "acc-banco")),
+        )
+    }
+
+    /**
+     * Sin cuenta la fila se ve **exactamente** como antes de la Ola 17. Es el caso de toda fila
+     * que ya existía —el alta manual guardaba `null` a la fuerza— y también el de una detectada
+     * cuyos cargos aparecieron en dos tarjetas. No hay «sin cuenta» ni un hueco: no falta nada.
+     */
+    @Test
+    fun `sin cuenta la linea es la de siempre`() {
+        assertEquals("Suscripción", contexto(sub("Claude", clave = MANUAL_SUB_PREFIX + "claude")))
+        assertEquals("Suscripción · la encontró Movi", contexto(sub("Netflix")))
+    }
+
+    /**
+     * Y un id que el mapa todavía no conoce se trata igual que no tener cuenta. La lista de
+     * cuentas se lee aparte y puede llegar tarde o fallar: pintar el id crudo, o un «cuenta
+     * desconocida», convertiría medio segundo de espera en un mensaje de error.
+     */
+    @Test
+    fun `una cuenta que la pantalla todavia no conoce se calla`() {
+        val s = sub("Netflix", cuenta = "acc-que-no-llego")
+
+        assertEquals("Suscripción · la encontró Movi", contexto(s))
+        // El mismo caso, por el otro lado: la lista de cuentas todavía vacía.
+        assertEquals("Suscripción · la encontró Movi", contexto(sub("Netflix", cuenta = "acc-nu"), nombres = emptyMap()))
+    }
+
+    /**
+     * El aviso de duplicado se queda con la línea entera, incluso con cuenta conocida. Es la
+     * explicación de un número que no cuadra —ya usa dos segmentos— y un tercero la partiría en
+     * dos renglones justo en la fila donde más importa leerla de un vistazo.
+     */
+    @Test
+    fun `la fila que no suma sigue explicando eso y nada mas`() {
+        val s = sub("Netflix", cuenta = "acc-nu")
+
+        assertEquals("Ya lo tienes como recurrente · no se suma dos veces", contexto(s, yaEsRegla = true))
+    }
+
+    // ── La candidata «por confirmar» ──────────────────────────────────────────
+
+    /**
+     * Acá la cuenta se SUMA en vez de reemplazar: el card no tiene un rótulo genérico del que
+     * prescindir, y saber en qué tarjeta vio Movi el cargo es justo lo que vuelve reconocible un
+     * comercio cuyo nombre normalizado no le dice nada al dueño.
+     */
+    @Test
+    fun `la candidata dice en que cuenta vio Movi el cargo`() {
+        assertEquals(
+            "Visto 3 meses · día 5 · Nubank",
+            contextoDeCandidata(sub("Netflix", cuenta = "acc-nu"), cuentas),
+        )
+    }
+
+    /** Sin cuenta —o con una que no se conoce— dice lo mismo que decía antes de la Ola 17. */
+    @Test
+    fun `la candidata sin cuenta conocida no agrega nada`() {
+        assertEquals("Visto 3 meses · día 5", contextoDeCandidata(sub("Netflix"), cuentas))
+        assertEquals(
+            "Visto 3 meses · día 5",
+            contextoDeCandidata(sub("Netflix", cuenta = "acc-nu"), emptyMap()),
         )
     }
 }

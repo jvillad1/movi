@@ -293,21 +293,81 @@ fun suscripcionesActivas(resumen: ResumenRecurrentes): List<Recurrente.Suscripci
     resumen.items.filterIsInstance<Recurrente.Suscripcion>()
 
 /**
- * La línea de contexto de una suscripción activa: de dónde salió, o —si el dueño ya tiene una
- * regla con ese nombre— que NO está sumando.
+ * **El nombre de la cuenta que paga esto**, o `null` si no hay nada que decir.
+ *
+ * Devuelve `null` en los dos casos donde afirmar algo sería inventar: la suscripción no tiene
+ * cuenta (ver [Subscription.accountId], donde `null` es una respuesta legítima y no un dato
+ * pendiente), o la tiene pero [accountNames] todavía no la conoce — la lista de cuentas se lee
+ * aparte y puede llegar tarde, fallar, o no traer una cuenta que se borró.
+ *
+ * **Los dos casos se tratan igual a propósito.** Un `accountId` que no resuelve NO se pinta como
+ * el id crudo («acc-9f3a…», que no le dice nada a nadie) ni como un «cuenta desconocida» que
+ * suena a error del dueño: se calla, exactamente como lo hacía la fila de la pantalla vieja de
+ * Recurrentes. Una fila que espera medio segundo por la lista de cuentas no debería parpadear un
+ * mensaje de falla.
+ */
+private fun nombreDeLaCuenta(sub: Subscription, accountNames: Map<String, String>): String? =
+    sub.accountId?.let { accountNames[it] }
+
+/**
+ * La línea de contexto de una suscripción activa: con qué se paga y de dónde salió, o —si el
+ * dueño ya tiene una regla con ese nombre— que NO está sumando.
  *
  * El aviso de duplicado va primero porque es lo primero que hay que decir: sin esa línea, el
  * «Flujo libre» de arriba parece no cuadrar con la lista de abajo (ver [resumenRecurrentes], que
- * es quien decide excluirla del total).
+ * es quien decide excluirla del total). Y se lleva la línea ENTERA: es la explicación de un
+ * número que no cuadra, ya usa dos segmentos, y meterle un tercero la parte en dos renglones
+ * justo en la fila donde más importa que se lea de un vistazo. La cuenta es contexto; esa frase
+ * es una corrección.
+ *
+ * ## Por qué la cuenta REEMPLAZA la palabra «Suscripción» en vez de sumarse
+ *
+ * La línea tiene dos segmentos y sigue teniendo dos: nunca se hace más larga que antes de la Ola
+ * 17. El primero era la palabra «Suscripción», que dentro de una sección titulada
+ * «Suscripciones activas» —y con su contador al lado— no informa nada; el nombre de la tarjeta
+ * que paga el cobro sí, y es justamente el dato que el dueño pidió. Cuando no hay cuenta que
+ * mostrar, el rótulo genérico vuelve a ocupar su lugar y la fila se ve igual que siempre: no hay
+ * «sin cuenta» ni un hueco, porque a una suscripción que nunca tuvo cuenta no le falta nada.
+ *
+ * El segmento de origen no se toca — es la marca que distingue lo que encontró Movi de lo que
+ * escribió el dueño, y [quitarBorraLaSuscripcion] lee esa misma distinción para decidir si
+ * «Quitar» borra o descarta.
  */
-fun contextoDeSuscripcionActiva(item: Recurrente.Suscripcion): String = when {
+fun contextoDeSuscripcionActiva(
+    item: Recurrente.Suscripcion,
+    accountNames: Map<String, String>,
+): String = when {
     item.yaEsRegla -> "Ya lo tienes como recurrente · no se suma dos veces"
-    else -> when (origenDeSuscripcion(item.sub)) {
-        OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA ->
-            "Suscripción · la encontró Movi y la activó sola"
-        OrigenDeSuscripcion.LA_ENCONTRO_MOVI -> "Suscripción · la encontró Movi"
-        OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO -> "Suscripción"
+    else -> {
+        // La cuenta si la sabemos; si no, el rótulo genérico de siempre.
+        val cabeza = nombreDeLaCuenta(item.sub, accountNames) ?: "Suscripción"
+        when (origenDeSuscripcion(item.sub)) {
+            OrigenDeSuscripcion.LA_ENCONTRO_MOVI_Y_LA_ACTIVO_SOLA ->
+                "$cabeza · la encontró Movi y la activó sola"
+            OrigenDeSuscripcion.LA_ENCONTRO_MOVI -> "$cabeza · la encontró Movi"
+            OrigenDeSuscripcion.LA_ESCRIBIO_EL_DUENO -> cabeza
+        }
     }
+}
+
+/**
+ * La línea de contexto de una candidata «detectada · por confirmar»: cuántos meses la vio el
+ * detector, qué día cobra y —si se sabe— con qué cuenta.
+ *
+ * **La cuenta vale más acá que en cualquier otra fila**, y por eso se muestra aunque el card ya
+ * esté lleno de datos. Lo que la candidata le pide al dueño es una decisión —¿esto es una
+ * suscripción tuya, sí o no?— y «lo cobran en la Nubank» es lo que la vuelve reconocible cuando
+ * el nombre normalizado del comercio no alcanza. A diferencia de una activa, además, una
+ * candidata casi siempre TIENE cuenta: la copia del evento que la originó.
+ *
+ * Se calla igual que la fila de una activa cuando no hay cuenta o no se conoce su nombre — entre
+ * otras cosas porque el detector resuelve la cuenta con `singleOrNull()`, así que un cobro que
+ * apareció en dos tarjetas llega acá sin ninguna, y eso no es un error que haya que anunciar.
+ */
+fun contextoDeCandidata(sub: Subscription, accountNames: Map<String, String>): String {
+    val visto = "Visto ${sub.occurrences} ${if (sub.occurrences == 1) "mes" else "meses"} · día ${sub.dayOfMonth}"
+    val cuenta = nombreDeLaCuenta(sub, accountNames)
+    return if (cuenta != null) "$visto · $cuenta" else visto
 }
 
 /**

@@ -140,6 +140,23 @@ data class Subscription(
     val firstSeen: Long,
     val lastSeen: Long,
     val occurrences: Int,       // meses distintos detectados
+    /**
+     * **Con qué cuenta se paga esto** — la tarjeta o el banco de donde sale el cobro, o `null`
+     * si no se sabe.
+     *
+     * `null` es un valor de primera clase, no un dato faltante que haya que completar. Tres
+     * caminos legítimos llegan a él y ninguno es un error:
+     * - Toda fila anterior a la Ola 17: el alta manual escribía `accountId = null` a la fuerza,
+     *   aunque el dueño hubiera elegido una cuenta en la hoja.
+     * - Un alta donde el dueño tocó «Sin cuenta», que es una opción y no una omisión.
+     * - Una detectada cuyos cargos aparecieron en VARIAS cuentas: `detectSubscriptions` la
+     *   resuelve con `singleOrNull()` justamente para no elegir una al azar entre dos.
+     *
+     * Por eso nada exige que tenga valor, y la fila que la muestra se calla cuando no lo hay
+     * (ver `contextoDeSuscripcionActiva`): pintar un «sin cuenta» le daría forma de dato faltante
+     * a algo que no falta, e inventar una cuenta sería afirmar algo que Movi no sabe sobre de
+     * dónde sale la plata del dueño.
+     */
     val accountId: String? = null,
     /**
      * **Cada cuánto llega [amount]**, y por lo tanto qué significa ese número. Ver
@@ -225,4 +242,16 @@ data class CreateSubscriptionRequest(
      * mensuales.
      */
     val periodicidad: PeriodicidadDeCobro = PeriodicidadDeCobro.MENSUAL,
+    /**
+     * **Con qué cuenta se paga** — ver [Subscription.accountId]. Opcional, y **sin
+     * [EncodeDefault]** por el mismo motivo que [periodicidad]: es un alta, no hay fila previa
+     * que pisar, y un cliente anterior a la Ola 17 que no manda la clave está diciendo la verdad
+     * — esa hoja descartaba la cuenta antes de llegar al wire, así que «ausente» y `null`
+     * significan exactamente lo mismo.
+     *
+     * El server NO confía en este id: si la cuenta no es del dueño guarda `null` en vez de
+     * rechazar el alta (ver `accountIdIfOwned`). Perder la cuenta es mucho menos malo que perder
+     * la suscripción entera por un id que mandó mal un cliente viejo.
+     */
+    val accountId: String? = null,
 )
