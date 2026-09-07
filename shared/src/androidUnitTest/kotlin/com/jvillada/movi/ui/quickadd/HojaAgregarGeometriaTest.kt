@@ -15,18 +15,26 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.theme.MoviTheme
 import kotlin.math.abs
+import org.junit.AfterClass
 import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.runners.MethodSorters
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -83,12 +91,69 @@ import org.robolectric.annotation.Config
  * [montarHoja] reproduce lo que hace `App.kt`: la hoja vive dentro del área de contenido, y
  * debajo queda la barra inferior de 64 dp (`MinBottomNav`), que la hoja no puede usar. Sin ese
  * hueco reservado la ventana da 64 dp de más y las medidas dejan de parecerse al teléfono.
+ *
+ * ## Y esta hoja NO se mide sola: hay que aislarla. Ver [aislarLoQueOtraClasePudoDejar]
+ *
+ * Lo que el sub-picker de Categoría dibuja no sale solo del catálogo: sale del catálogo **más**
+ * lo que haya en `UsedCategoriesCache`, que es un `object` —o sea, estado del proceso—. Y todas
+ * las clases Robolectric de `:shared:testDebugUnitTest` corren en un solo fork de JVM
+ * compartiendo el mismo *sandbox*, así que ese `object` llega acá con lo que le haya dejado la
+ * clase anterior. Sin el `@Before` de abajo, esta clase no mide la hoja: mide la hoja más la
+ * resaca de la suite.
  */
 @RunWith(RobolectricTestRunner::class)
+// El orden importa y por eso se fija: [elPanelSeEstiraTambienConLasCategoriasPropias] ensucia el
+// caché global A PROPÓSITO, y ordenado por nombre corre ANTES de
+// [lasCategoriasSeVenEnElSubPickerDelTelefono] — que es la que se caía. Así el aislamiento del
+// `@Before` queda EJERCITADO en cada corrida en vez de ser una buena intención: si alguien lo
+// borra, esta clase se pone roja acá mismo y no una vez de cada tres en la máquina de otro.
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Config(qualifiers = AVD_MOVI_SENSOR)
 class HojaAgregarGeometriaTest {
 
     @get:Rule val composeRule = createComposeRule()
+
+    /**
+     * **El defecto que hacía intermitente a [lasCategoriasSeVenEnElSubPickerDelTelefono].**
+     *
+     * Esa prueba cuenta cuántas categorías entran en la pantalla, y el margen que tiene es
+     * exactamente **una fila**: medido acá, a 411×731, «Vivienda» ya sale recortada 3,5 dp de los
+     * 667 dp útiles, así que se ven 8 de 9 y la aserción pide ≥ 8. Cero holgura. Una sola
+     * sugerencia de más —una categoría propia que otra clase le haya dejado a
+     * `UsedCategoriesCache`— corre la lista 49 dp y tumba DOS: «Transporte» y «Vivienda». Está
+     * medido: con una categoría inyectada a mano sale el mismo mensaje, palabra por palabra.
+     *
+     * O sea que la prueba no fallaba por lo que dice que protege (el panel no volvió a ser una
+     * ventanita) sino porque estaba midiendo un panel que no era el del catálogo. Se arregla
+     * controlando la entrada, no aflojando la cuenta.
+     *
+     * [Repositories.sustitutoDePrueba] va por lo mismo: es otro global, lo ponen media docena de
+     * clases de esta suite, y esta hoja **tiene que** medirse con la lista de cuentas vacía (ver
+     * el KDoc de [montarHoja] y el de `RepositorioDePrueba`). Hoy todas lo devuelven en su
+     * `@After`; esto es para que un olvido ajeno no se cobre acá.
+     */
+    @Before
+    fun aislarLoQueOtraClasePudoDejar() {
+        UsedCategoriesCache.clear()
+        Repositories.sustitutoDePrueba = null
+    }
+
+    companion object {
+        /**
+         * La suciedad que deja [elPanelSeEstiraTambienConLasCategoriasPropias] es deliberada, pero
+         * es **de esta clase**: entre sus métodos sí tiene que sobrevivir —ahí está la gracia— y a
+         * las clases que corren después, no. Predicar el aislamiento y de paso ensuciarle el fork
+         * a la siguiente sería exactamente el defecto que esta clase acaba de pagar.
+         *
+         * Va en `@AfterClass` y no en un `@After` justamente por eso: un `@After` limpiaría entre
+         * método y método y dejaría al `@Before` sin nada que atajar, o sea sin ejercitar.
+         */
+        @JvmStatic
+        @AfterClass
+        fun devolverElCacheComoEstaba() {
+            UsedCategoriesCache.clear()
+        }
+    }
 
     // ── Los tres defectos reales, uno por prueba ──────────────────────────────────────────
 
@@ -278,6 +343,13 @@ class HojaAgregarGeometriaTest {
      * Cuenta solo las que se ven ENTERAS (ver [assertSeVeEntero] para por qué
      * `assertIsDisplayed()` a secas no alcanza), y deja «Comida» afuera de la cuenta porque es el
      * valor inicial del campo: su texto aparece dos veces y `onNodeWithText` no sabría cuál medir.
+     *
+     * **La cuenta vale para ESTE panel: el del catálogo y nada más.** El margen es de una fila
+     * exacta —«Vivienda» ya sale recortada 3,5 dp— así que una sugerencia de más la tumba. Eso no
+     * es un defecto de la hoja sino de la entrada, y por eso la entrada se controla en
+     * [aislarLoQueOtraClasePudoDejar]. Quien tenga categorías propias está cubierto por
+     * [elPanelSeEstiraTambienConLasCategoriasPropias], que afirma lo mismo sin depender de que
+     * quepan.
      */
     @Test
     fun lasCategoriasSeVenEnElSubPickerDelTelefono() {
@@ -290,6 +362,65 @@ class HojaAgregarGeometriaTest {
                 "scroll propio adentro de la hoja: eso es el «al hacer scroll desaparecen».",
             visibles.size >= CATEGORIAS_OFRECIDAS.size - 1,
         )
+    }
+
+    /**
+     * **4b — y lo mismo con las categorías del dueño, que son las que de verdad no caben.**
+     *
+     * [lasCategoriasSeVenEnElSubPickerDelTelefono] afirma «se ven casi todas», que es una medida
+     * de cuántas ENTRAN. Sirve mientras el panel sea el del catálogo, y a 411×731 entra por 3,5
+     * dp: es una afirmación con el margen justo. En un teléfono de verdad no hay tal margen —el
+     * dueño tiene categorías propias, el catálogo puede crecer, y el día que no entren la lista
+     * **debe** desplazarse con la hoja, que es lo que la Ola 14 vino a conseguir—. Contar, ese
+     * día, se pondría rojo por la razón equivocada.
+     *
+     * Por eso esta afirma el invariante SIN contar: con 12 sugerencias (el catálogo más dos
+     * propias), lo único que puede recortar una fila es **el borde de la hoja**. Si el panel
+     * volviera a tener su tope de 220 dp con scroll propio, las filas de abajo quedarían
+     * cortadas contra el panel —muy por encima del borde— y esto se pone rojo. Es la misma
+     * promesa que la de arriba, dicha de una forma que sobrevive a que el catálogo crezca.
+     *
+     * **Además ensucia `UsedCategoriesCache` a propósito y no lo limpia.** Ordenado por nombre
+     * esta prueba corre ANTES que la de arriba, así que la resaca que deja acá es exactamente la
+     * que la ponía intermitente: si alguien borra [aislarLoQueOtraClasePudoDejar], la de arriba se
+     * cae en la corrida siguiente, acá, en esta máquina — y no una de cada tres en la de otro.
+     */
+    @Test
+    fun elPanelSeEstiraTambienConLasCategoriasPropias() {
+        UsedCategoriesCache.record("Mercado", TransactionType.EXPENSE)
+        UsedCategoriesCache.record("Carro", TransactionType.EXPENSE)
+        montarHoja()
+        tocar("Categoría")
+
+        val ofrecidas = CATEGORIAS_OFRECIDAS + listOf("Mercado", "Carro")
+        val fondoDeLaHoja = composeRule.onRoot().getUnclippedBoundsInRoot().bottom - ALTO_BARRA_INFERIOR
+        val masProfunda = ofrecidas.maxOf {
+            composeRule.onNodeWithText(it, useUnmergedTree = true).getUnclippedBoundsInRoot().bottom.value
+        }
+        assertTrue(
+            "Con 12 sugerencias la lista tiene que pasarse del borde de la hoja " +
+                "(${fondoDeLaHoja.value} dp) y llegó a $masProfunda. Si no se pasa, esta prueba no " +
+                "está probando nada: no hay nada recortado que mirar.",
+            masProfunda > fondoDeLaHoja.value,
+        )
+
+        ofrecidas.forEach { nombre ->
+            val nodo = composeRule.onNodeWithText(nombre, useUnmergedTree = true)
+            val recortado = nodo.getBoundsInRoot()
+            val entero = nodo.getUnclippedBoundsInRoot()
+            // Las que quedaron ENTERAS fuera de la ventana no tienen recorte que mirar: Compose
+            // devuelve un rectángulo en cero. Lo que importa son las que se ven a medias.
+            val seVeAMedias = recortado.bottom.value > 0f && !mismoRect(recortado, entero)
+            if (seVeAMedias) {
+                assertTrue(
+                    "«$nombre» está recortada en ${recortado.bottom.value} dp, y el borde de la " +
+                        "hoja está en ${fondoDeLaHoja.value} dp. O sea que la recortó algo de " +
+                        "adentro y no la ventana: el panel volvió a ser una ventanita con scroll " +
+                        "propio. Eso es el «al hacer scroll desaparecen».",
+                    abs(recortado.bottom.value - fondoDeLaHoja.value) < TOLERANCIA_DP,
+                )
+            }
+        }
     }
 
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
