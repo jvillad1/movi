@@ -40,6 +40,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -1014,6 +1015,191 @@ class SubscriptionRoutesTest {
         putCon(JsonPrimitive(accountA2Id))
         putCon(JsonPrimitive(cuentaDeOtroUsuario))
         assertEquals(JsonNull, cuentaGuardada())
+    }
+
+    // ── Ola 19 · el barrido respeta el monto que corrigió el dueño ───────────
+
+    /** La fila de Netflix como la ve la API, tras correr el detector. */
+    private suspend fun ApplicationTestBuilder.detectarNetflix(token: String): JsonObject {
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+        return listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }.jsonObject
+    }
+
+    private suspend fun ApplicationTestBuilder.montoDeNetflix(token: String): Long =
+        listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }
+            .jsonObject["amount"]!!.jsonPrimitive.long
+
+    /**
+     * **Pedido del dueño: «que el barrido respete lo que yo corregí a mano», por el camino que
+     * él de verdad usa.**
+     *
+     * Hasta la Ola 19 la rama CONFIRMED/AUTO de `applyExisting` reescribía `amount` en cada
+     * detección, así que corregirle el monto a una suscripción detectada duraba hasta el próximo
+     * «Buscar cobros» —o hasta la próxima importación de extracto, que también dispara el
+     * barrido— y el número volvía solo, sin que nada lo dijera. Es plata: el monto es lo que
+     * entra al «Flujo libre».
+     *
+     * **Tiene que ser CONFIRMED y no CANDIDATE**, y esa distinción es todo el valor de esta
+     * prueba. `statusForNew` devuelve siempre CANDIDATE, así que una fila recién detectada entra
+     * al barrido por `refreshRow`; pero la hoja de edición se abre desde «Suscripciones activas»
+     * (`suscripcionesActivas` filtra AUTO/CONFIRMED), o sea que **lo único editable desde la app
+     * pasa por la rama CONFIRMED/AUTO**. Sin este caso, esa guarda se podía borrar entera con
+     * toda la suite en verde — comprobado.
+     */
+    @Test
+    fun `el barrido no le pisa el monto corregido a una confirmada`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val netflix = detectarNetflix(token)
+
+        // El camino real: se confirma Y se corrige el monto, que es lo que manda la hoja.
+        putSub(
+            netflix["id"]!!.jsonPrimitive.content,
+            JsonObject(netflix.toMutableMap().apply {
+                this["status"] = JsonPrimitive("CONFIRMED")
+                this["amount"] = JsonPrimitive(60_000)
+            }),
+        )
+        assertEquals("CONFIRMED", statusEnDb("netflix"), "si no quedó CONFIRMED, esto prueba otra rama")
+        assertEquals(60_000L, montoDeNetflix(token))
+
+        detectarNetflix(token)
+
+        assertEquals(60_000L, montoDeNetflix(token), "el barrido le pisó la corrección a una confirmada")
+    }
+
+    /**
+     * La misma regla en la otra rama del barrido, `refreshRow`. Una CANDIDATE no se puede editar
+     * desde la app de hoy (la hoja sale de las activas), pero la regla es «un monto que escribió
+     * el dueño no lo pisa el barrido»: una regla que vale en una rama y no en la otra es la que
+     * se rompe sola el día que la otra se vuelva alcanzable.
+     */
+    @Test
+    fun `el barrido no le pisa el monto corregido a una candidata`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val netflix = detectarNetflix(token)
+        assertEquals(44_900L, netflix["amount"]!!.jsonPrimitive.long, "el detector lo dedujo del cargo")
+
+        // El dueño lo corrige a mano: su cobro real es otro.
+        putSub(
+            netflix["id"]!!.jsonPrimitive.content,
+            JsonObject(netflix.toMutableMap().apply { this["amount"] = JsonPrimitive(60_000) }),
+        )
+        assertEquals(60_000L, montoDeNetflix(token))
+        assertEquals(true, marcaDeNetflix(token), "corregir el monto es lo que prende la marca")
+
+        // Y el barrido vuelve a correr, con los mismos cargos de siempre.
+        detectarNetflix(token)
+
+        assertEquals(60_000L, montoDeNetflix(token), "el barrido le pisó al dueño su corrección")
+    }
+
+    /**
+     * **Ausente quiere decir `false`**, y está bien que así sea: el server serializa sin
+     * `encodeDefaults`, y a diferencia de `accountId` o `periodicidad` —donde el default ERA una
+     * decisión del dueño que el `PUT` tenía que poder distinguir de «no lo toques»— acá el
+     * cliente no puede pedir nada, así que la clave ausente y la clave en `false` dicen lo mismo.
+     */
+    private suspend fun ApplicationTestBuilder.marcaDeNetflix(token: String): Boolean =
+        listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }
+            .jsonObject["montoCorregidoAMano"]?.jsonPrimitive?.boolean ?: false
+
+    /** Ensucia el monto guardado sin pasar por la API, para ver si el barrido lo repone. */
+    private fun ensuciarElMontoDeNetflix() = transaction {
+        Subscriptions.update({ Subscriptions.merchantKey eq "netflix" }) { it[amount] = 1L }
+    }
+
+    /**
+     * **Y sigue actualizando el monto de lo que nadie tocó**, que es la mitad que hace bien: si
+     * el servicio sube de precio, el barrido lo refleja. Congelar TODOS los montos —que era la
+     * otra forma de cumplir el pedido— habría cambiado un monto que se pisa por uno que
+     * envejece callado.
+     *
+     * El monto se ensucia en la base en vez de simular un aumento con cargos nuevos porque el
+     * detector usa la MEDIANA de las sumas mensuales y descarta lo que se desvíe más de 15 %:
+     * un aumento chico no movería la mediana y uno grande haría que Netflix dejara de
+     * detectarse. Lo que esta prueba tiene que afirmar es que el update escribe `amount`, y eso
+     * se ve igual de bien.
+     */
+    @Test
+    fun `el barrido sigue actualizando el monto de lo que nadie corrigio`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        detectarNetflix(token)
+
+        ensuciarElMontoDeNetflix()
+        detectarNetflix(token)
+
+        assertEquals(44_900L, montoDeNetflix(token), "sin nadie que lo corrigiera, el barrido manda")
+    }
+
+    /**
+     * **Confirmar una candidata no es corregirle nada.** Por eso la guarda es la marca y no
+     * «status == CONFIRMED»: si fuera el estado, confirmar un cobro dejaría su monto congelado
+     * para siempre, y los aumentos de precio dejarían de llegar justo en las suscripciones que
+     * el dueño sí mira.
+     */
+    @Test
+    fun `confirmar una candidata no congela su monto`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val netflix = detectarNetflix(token)
+
+        putSub(
+            netflix["id"]!!.jsonPrimitive.content,
+            JsonObject(netflix.toMutableMap().apply { this["status"] = JsonPrimitive("CONFIRMED") }),
+        )
+        assertEquals(false, marcaDeNetflix(token), "confirmar no es corregir el monto")
+
+        ensuciarElMontoDeNetflix()
+        detectarNetflix(token)
+
+        assertEquals(44_900L, montoDeNetflix(token))
+    }
+
+    /**
+     * Un PUT que no toca el monto no puede PRENDER la marca — si no, «Quitar» (que manda el
+     * objeto entero) o un cambio de nombre congelarían el monto sin que el dueño lo corrigiera.
+     */
+    @Test
+    fun `renombrar sin tocar el monto no congela el monto`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val netflix = detectarNetflix(token)
+
+        putSub(
+            netflix["id"]!!.jsonPrimitive.content,
+            JsonObject(netflix.toMutableMap().apply { this["displayName"] = JsonPrimitive("Netflix Hogar") }),
+        )
+        assertEquals(false, marcaDeNetflix(token))
+
+        ensuciarElMontoDeNetflix()
+        detectarNetflix(token)
+
+        assertEquals(44_900L, montoDeNetflix(token))
+    }
+
+    /**
+     * **La marca la deduce el server, no la pide el cliente.** Mandarla en `true` sin cambiar el
+     * monto no la prende: si se leyera del cuerpo, cualquier APK podría prender —o apagar— la
+     * protección del monto sin que nadie lo hubiera corregido nunca.
+     */
+    @Test
+    fun `la marca no se puede pedir desde el cuerpo`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val netflix = detectarNetflix(token)
+
+        putSub(
+            netflix["id"]!!.jsonPrimitive.content,
+            JsonObject(netflix.toMutableMap().apply { this["montoCorregidoAMano"] = JsonPrimitive(true) }),
+        )
+
+        assertEquals(false, marcaDeNetflix(token), "el cliente prendió una marca que solo el server escribe")
     }
 
     /** Lo que el detector encuentra sigue trayendo la cuenta del evento que lo originó. */

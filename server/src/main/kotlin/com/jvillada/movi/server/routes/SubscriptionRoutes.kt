@@ -219,11 +219,24 @@ fun Route.subscriptionRoutes() {
                 )
             }
 
+            // Ola 19 — **el dueño acaba de corregir el monto**, así que a partir de acá el barrido
+            // lo respeta (ver `applyExisting`). Se deduce comparando contra lo guardado y no se
+            // lee del cuerpo a propósito: es un hecho sobre lo que pasó, no una preferencia que
+            // el cliente pueda pedir, y leerla del body dejaría que un APK cualquiera apagara la
+            // protección del monto sin que nadie la hubiera corregido nunca.
+            //
+            // La marca solo se PRENDE. Un PUT que no toca el monto —«Quitar», que manda el objeto
+            // entero con el mismo número, o un cambio de nombre— la deja como está: apagarla ahí
+            // devolvería el monto corregido a merced del próximo barrido, que es exactamente lo
+            // que esta marca vino a impedir.
+            val corrigioElMonto = body.amount != stored[Subscriptions.amount]
+
             val updated = dbQuery {
                 Subscriptions.update({ (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }) {
                     it[status]      = body.status.name
                     it[displayName] = body.displayName
                     it[amount]      = body.amount
+                    if (corrigioElMonto) it[montoCorregidoAMano] = true
                     it[dayOfMonth]  = body.dayOfMonth.coerceIn(1, 31)
                     if (mandoLaPeriodicidad) it[periodicidad] = body.periodicidad.name
                     // Un id ajeno o inexistente degrada a `null` en vez de rechazar el update,
@@ -303,4 +316,5 @@ private fun ResultRow.toSubscription() = Subscription(
     // esta columna, y equivale a leer la fila como se leía siempre.
     periodicidad = runCatching { PeriodicidadDeCobro.valueOf(this[Subscriptions.periodicidad]) }
         .getOrDefault(PeriodicidadDeCobro.MENSUAL),
+    montoCorregidoAMano = this[Subscriptions.montoCorregidoAMano],
 )

@@ -51,6 +51,9 @@ class SchemaDeArranqueTest {
     private val columnasNuevasSobreTablasViejas = listOf(
         "subscriptions" to "periodicidad",   // #155 — periodicidad mensual/anual
         "users" to "sms_alert_muted",        // #168 — silenciar el aviso de captura de SMS
+        // Ola 19 — la marca de «este monto lo corregí yo», que el barrido consulta en CADA
+        // detección. Sin la columna, «Buscar cobros» falla entero en producción.
+        "subscriptions" to "monto_corregido_a_mano",
     )
 
     private val todasLasTablas = arrayOf(
@@ -99,6 +102,41 @@ class SchemaDeArranqueTest {
                     "y en producción cada consulta que la nombre va a fallar con «column does not exist»",
             )
         }
+    }
+
+    /**
+     * **Y la marca del monto queda en `false`, no en NULL.** Es la misma clase de trampa que la
+     * de arriba con un final peor: `toSubscription` lee esta columna como `Boolean` no nulo, así
+     * que un NULL tumbaría el `GET /api/subscriptions` entero —la lista de suscripciones y el
+     * total del mes— y no solo una fila. Lo que lo evita es el `.default(false)`, que viaja
+     * dentro del mismo `ALTER TABLE … ADD COLUMN`.
+     */
+    @Test
+    fun `las filas que ya existian no quedan marcadas como corregidas`() {
+        schemaSinLaColumna("subscriptions", "monto_corregido_a_mano")
+        transaction {
+            exec(
+                """
+                INSERT INTO subscriptions
+                    (id, user_id, merchant_key, display_name, amount, currency, day_of_month,
+                     status, confidence, first_seen, last_seen, occurrences)
+                VALUES ('sub_vieja_monto', 'usr_1', 'netflix', 'Netflix', 44900, 'COP', 19,
+                        'CONFIRMED', 'HIGH', 0, 0, 3)
+                """.trimIndent(),
+            )
+        }
+
+        DatabaseFactory.crearYActualizarSchema()
+
+        val marcada = transaction {
+            var leida: Boolean? = null
+            var eraNull = true
+            exec("SELECT monto_corregido_a_mano FROM subscriptions WHERE id = 'sub_vieja_monto'") { rs ->
+                if (rs.next()) { leida = rs.getBoolean(1); eraNull = rs.wasNull() }
+            }
+            eraNull to leida
+        }
+        assertEquals(false to false, marcada, "una fila vieja no puede nacer con el monto congelado")
     }
 
     /**
