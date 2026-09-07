@@ -55,6 +55,34 @@ private fun manualMerchantKey(displayName: String): String {
     return (MANUAL_SUB_PREFIX + normalized.ifBlank { "sub" }).take(80)
 }
 
+/**
+ * **¿Puede una fila con esta `merchantKey` quedar en este estado?** La guarda del `PUT /{id}`.
+ *
+ * [SubStatus.AUTO] y [SubStatus.CANDIDATE] son estados del DETECTOR: los escribe
+ * `SubscriptionSync` en un barrido, y significan «esto lo encontró Movi» —AUTO además
+ * arrastra «y la activó sola», que es la herencia de antes de F39 que la UI marca aparte—.
+ * Un alta manual nace [SubStatus.CONFIRMED] (ver el POST de acá abajo) y el detector nunca
+ * produce una clave `manual_*` (ver [MANUAL_SUB_PREFIX]), así que una fila manual en uno de
+ * esos dos estados es una contradicción: no hay barrido que la haya puesto ahí.
+ *
+ * Hoy ningún cliente manda esa transición —«confirmar» escribe CONFIRMED/DISMISSED sobre
+ * candidatas del detector, y «Quitar» sobre una manual BORRA en vez de marcar DISMISSED (ver
+ * `quitarBorraLaSuscripcion`)—, pero eso es una invariante del CLIENTE y este endpoint recibe
+ * el `Subscription` entero tal cual viene del body. Con la contradicción escrita en la DB,
+ * `origenDeSuscripcion` lee el prefijo primero y la fila seguiría diciendo «la escribiste tú»
+ * mientras «Quitar» la borra — el estado quedaría mintiendo en silencio, sin ninguna pantalla
+ * que lo delate.
+ *
+ * Lo que a propósito NO restringe: las cuatro transiciones sobre una fila del detector. Una
+ * detectada puede ir a CONFIRMED (el dueño la aceptó), a DISMISSED («no me la propongas más»,
+ * que es lo que respeta el re-scan), y también volver a CANDIDATE o AUTO — el barrido las
+ * escribe de todos modos, así que prohibirlas por HTTP no protegería nada y sí rompería
+ * `confirmarCandidata` si alguna vez ofrece deshacer.
+ */
+private fun estadoPermitido(merchantKey: String, nuevo: SubStatus): Boolean =
+    !merchantKey.startsWith(MANUAL_SUB_PREFIX) ||
+        nuevo == SubStatus.CONFIRMED || nuevo == SubStatus.DISMISSED
+
 fun Route.subscriptionRoutes() {
     route("/api/subscriptions") {
         get {
@@ -155,6 +183,24 @@ fun Route.subscriptionRoutes() {
             val crudo = call.receive<JsonObject>()
             val body = jsonDelWire.decodeFromJsonElement<Subscription>(crudo)
             val mandoLaPeriodicidad = "periodicidad" in crudo
+
+            // La clave que manda el cliente en el body NO se lee para nada: este UPDATE ni
+            // siquiera escribe `merchantKey`, así que el origen de la fila lo dice la clave
+            // GUARDADA. Si se validara contra la del body, mandar `merchantKey: "netflix"`
+            // sobre una fila `manual_*` saltearía la guarda de abajo.
+            val stored = dbQuery {
+                Subscriptions.selectAll()
+                    .where { (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }
+                    .firstOrNull()
+            } ?: return@put call.respond(HttpStatusCode.NotFound)
+
+            if (!estadoPermitido(stored[Subscriptions.merchantKey], body.status)) {
+                return@put call.respond(
+                    HttpStatusCode.BadRequest,
+                    "Una suscripción que escribiste tú solo puede quedar activa o quitada",
+                )
+            }
+
             val updated = dbQuery {
                 Subscriptions.update({ (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }) {
                     it[status]      = body.status.name
@@ -164,7 +210,7 @@ fun Route.subscriptionRoutes() {
                     if (mandoLaPeriodicidad) it[periodicidad] = body.periodicidad.name
                 }
             }
-            if (updated == 0) return@put call.respond(HttpStatusCode.NotFound)
+            if (updated == 0) return@put call.respond(HttpStatusCode.NotFound)  // borrado concurrente entre la lectura y el update
             val row = dbQuery {
                 Subscriptions.selectAll()
                     .where { (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }
