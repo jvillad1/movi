@@ -179,7 +179,10 @@ class SuscripcionAnualTest {
     fun `un cobro anual que ya es regla no dice cuanto aporta`() {
         val item = Recurrente.Suscripcion(hboMax, yaEsRegla = true)
         assertNull(notaDeProrrateo(item, usdToCop = 0.0))
-        assertEquals("Ya lo tienes como recurrente · no se suma dos veces", contextoDeSuscripcionActiva(item))
+        assertEquals(
+            "Ya lo tienes como recurrente · no se suma dos veces",
+            contextoDeSuscripcionActiva(item, accountNames = emptyMap()),
+        )
     }
 
     /**

@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.sirvePara
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.CategoryField
@@ -68,6 +69,12 @@ import kotlinx.coroutines.launch
  *
  * Lo que el dueño pierde cuando esto se guarda como suscripción (categoría y recordatorio) se
  * dice en la hoja, en lugar de que los campos desaparezcan sin explicación.
+ *
+ * **La CUENTA no está entre esas pérdidas — desde la Ola 17.** Hasta entonces sí lo estaba, y sin
+ * decirlo: el selector solo se pintaba en la rama de regla y el alta de suscripción mandaba la
+ * cuenta a `null` de todos modos, así que Movi sabía con qué tarjeta se paga lo que encontró sola
+ * (el detector la copia del evento) y no sabía con cuál se paga lo que el dueño le escribió a
+ * mano. Ahora la pregunta es la misma en las dos ramas y la respuesta viaja en las dos.
  *
  * Editar es siempre editar una [RecurringRule] (las suscripciones no tienen hoja de edición,
  * se quitan desde la lista), así que en modo edición la moneda ni se muestra.
@@ -232,6 +239,13 @@ fun CreateRecurringRuleSheet(
                             currency = currency,
                             dayOfMonth = day,
                             periodicidad = periodicidad,
+                            // Ola 17: la cuenta que paga el cobro. **Acá no va
+                            // [cuentaParaElWire]**, y la diferencia importa: ese `""` existe para
+                            // decirle a un PUT «quítale la cuenta que tenía», y esto es un POST
+                            // de alta — no hay fila previa, así que «sin cuenta» y «no hablé de
+                            // cuentas» valen lo mismo y los dos son `null`. Mandar `""` acá
+                            // guardaría una cadena vacía como id de cuenta.
+                            accountId = accountId,
                         )
                     )
                 }
@@ -527,8 +541,12 @@ fun CreateRecurringRuleSheet(
                             Spacer(Modifier.height(8.dp))
                         }
                         Text(
-                            text = "Guardamos únicamente el nombre, el monto y el día: sin categoría " +
-                                "y sin recordatorio.",
+                            // Ola 17: la cuenta salió de esta lista de renuncias. Ya no se
+                            // pierde — se guarda igual que en una regla— y decir que sí se
+                            // guarda es parte de lo mismo que esta frase viene haciendo: no
+                            // esconder qué se lleva y qué no.
+                            text = "Guardamos el nombre, el monto, el día y la cuenta que lo paga: " +
+                                "sin categoría y sin recordatorio.",
                             fontSize = 12.sp,
                             color = MinTextMute,
                             lineHeight = 17.sp,
@@ -572,36 +590,88 @@ fun CreateRecurringRuleSheet(
                             label = "CATEGORÍA",
                             placeholder = "Ej: Vivienda, Suscripción, Salud",
                         )
+                    }
 
-                        Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-                        // --- CUENTA (opcional) ---
-                        AccountPickerField(
-                            accounts = accounts,
-                            // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
-                            // banco, tarjeta) y una de ingreso entra donde entra plata (efectivo,
-                            // banco, inversión). Mismo criterio que la hoja de «Agregar», y por
-                            // eso sale de la misma función de `:core` en vez de repetirse acá.
-                            uso = if (selectedType == TransactionType.EXPENSE) {
-                                UsoDeCuenta.ORIGEN_DE_GASTO
-                            } else {
-                                UsoDeCuenta.DESTINO_DE_INGRESO
-                            },
-                            cuentasLeidas = cuentasLeidas,
-                            fallaronLasCuentas = fallaronLasCuentas,
-                            selectedId = accountId,
-                            open = accountPickerOpen,
-                            enabled = !saving,
-                            onToggle = { accountPickerOpen = !accountPickerOpen },
-                            onPick = {
-                                accountId = it
-                                // Tocar «Sin cuenta» (it == null) es la ÚNICA forma de pedir que
-                                // se quite la cuenta. Volver a elegir una cuenta lo deshace.
-                                elDuenoEligioSinCuenta = it == null
-                                accountPickerOpen = false
-                            },
-                        )
+                    // --- CUENTA (opcional) ---
+                    //
+                    // Para qué tiene que servir la cuenta, en un solo lugar: lo lee el selector y
+                    // lo vigila el efecto de abajo.
+                    val uso = if (selectedType == TransactionType.EXPENSE) {
+                        UsoDeCuenta.ORIGEN_DE_GASTO
+                    } else {
+                        UsoDeCuenta.DESTINO_DE_INGRESO
+                    }
+                    //
+                    // **Ola 17 — este selector está FUERA del `if`, y ahí está el arreglo.** Vivía
+                    // dentro de la rama de regla, así que la hoja le preguntaba de qué cuenta sale
+                    // el cobro a todo el mundo MENOS a quien anota una suscripción — justo el caso
+                    // donde el dueño paga cuatro servicios con la misma tarjeta y quiere poder
+                    // mirarlo. Peor: el estado `accountId` seguía vivo, así que elegir la cuenta y
+                    // recién después tocar «Dólares» o «Una vez al año» hacía desaparecer el
+                    // selector con su valor puesto, y el alta lo tiraba en silencio.
+                    //
+                    // Una sola instancia y no una copia por rama: si fueran dos, la primera
+                    // corrección que se le haga a una la va a dejar distinta de la otra.
+                    //
+                    // **Y si cambia para qué sirve la cuenta, la elegida se suelta.** Sacar el
+                    // selector del `if` abrió un agujero que antes no existía: elegir «Ingreso»,
+                    // marcar ahí una cuenta de inversión (que para un ingreso es válida), y recién
+                    // después tocar «Dólares» o «Una vez al año». Esos chips fuerzan el tipo a
+                    // Gasto, pero `accountId` quedaba intacto — y `cuentasPara(..., conservar)`
+                    // deja la elegida visible y marcada aunque ya no sirva, así que se guardaba una
+                    // suscripción cobrada de una cuenta de la que no sale plata. Antes no podía
+                    // pasar porque el selector desaparecía en esa rama.
+                    //
+                    // Va acá y no adentro de los dos `onClick` a propósito: la regla es «cambió el
+                    // uso», no «tocaron este chip». Cualquier camino nuevo que mueva el tipo queda
+                    // cubierto sin acordarse de esto.
+                    //
+                    // Solo suelta lo que YA NO SIRVE, y nunca en la primera composición: una regla
+                    // vieja que quedó con una cuenta que hoy no calificaría se abre como está, y
+                    // que el dueño la vea es mejor que borrársela sin avisar al abrir la hoja.
+                    var usoAnterior by remember { mutableStateOf(uso) }
+                    LaunchedEffect(uso) {
+                        if (uso != usoAnterior) {
+                            if (!laCuentaSobreviveAlUso(accounts.firstOrNull { it.id == accountId }, uso)) {
+                                accountId = null
+                                elDuenoEligioSinCuenta = false
+                            }
+                            usoAnterior = uso
+                        }
+                    }
+                    AccountPickerField(
+                        accounts = accounts,
+                        // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
+                        // banco, tarjeta) y una de ingreso entra donde entra plata (efectivo,
+                        // banco, inversión). Mismo criterio que la hoja de «Agregar», y por
+                        // eso sale de la misma función de `:core` en vez de repetirse acá.
+                        //
+                        // En la rama de suscripción esto siempre da ORIGEN_DE_GASTO sin que haga
+                        // falta un caso aparte: una suscripción es siempre un cobro, y los chips
+                        // «Dólares» / «Una vez al año» ya fuerzan `selectedType` a EXPENSE.
+                        uso = uso,
+                        cuentasLeidas = cuentasLeidas,
+                        fallaronLasCuentas = fallaronLasCuentas,
+                        selectedId = accountId,
+                        open = accountPickerOpen,
+                        enabled = !saving,
+                        onToggle = { accountPickerOpen = !accountPickerOpen },
+                        onPick = {
+                            accountId = it
+                            // Tocar «Sin cuenta» (it == null) es la ÚNICA forma de pedir que
+                            // se quite la cuenta. Volver a elegir una cuenta lo deshace.
+                            //
+                            // Esa distinción es de la rama de REGLA, que edita filas existentes
+                            // (ver [cuentaParaElWire]). El alta de una suscripción no tiene fila
+                            // previa que pisar: ahí «Sin cuenta» y «no elegí» son los dos `null`.
+                            elDuenoEligioSinCuenta = it == null
+                            accountPickerOpen = false
+                        },
+                    )
 
+                    if (!seGuardaComoSuscripcion) {
                         Spacer(Modifier.height(18.dp))
 
                         // --- RECORDATORIO ---
@@ -995,3 +1065,17 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
 fun diaCortoHint(day: Int?): String? =
     if (day == null || day < 29) null
     else "En los meses que no llegan al $day, se toma el último día del mes; el siguiente vuelve al $day."
+
+/**
+ * ¿La cuenta que el dueño ya había elegido sigue sirviendo para lo que ahora es el cobro?
+ *
+ * `true` también cuando no eligió ninguna: no hay nada que soltar. Existe como función y no como
+ * un `if` adentro del efecto para poder probar la regla sin montar la hoja entera — el efecto que
+ * la llama solo agrega el «solo cuando el uso CAMBIA», que es plomería de Compose.
+ *
+ * Ver el efecto en [CreateRecurringRuleSheet] para el agujero que esto tapa: elegir «Ingreso»,
+ * marcar una cuenta de inversión, y recién después pasar a suscripción con «Dólares» o «Una vez al
+ * año» dejaba guardado un cobro que sale de una cuenta de la que no sale plata.
+ */
+internal fun laCuentaSobreviveAlUso(elegida: Account?, uso: UsoDeCuenta): Boolean =
+    elegida == null || sirvePara(elegida, uso)

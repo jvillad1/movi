@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -57,6 +58,9 @@ class SuscripcionesActivasEnMovimientosTest {
 
     private val bancolombia = Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 1_000_000L, "COP")
 
+    /** Ola 17: la tarjeta con la que el dueño paga sus cuatro suscripciones reales. */
+    private val nubank = Account("acc-nu", "Nubank", AccountType.CREDIT_CARD, -200_000L, "COP")
+
     private fun sub(
         id: String,
         nombre: String,
@@ -65,10 +69,11 @@ class SuscripcionesActivasEnMovimientosTest {
         moneda: String,
         dia: Int,
         estado: SubStatus,
+        cuenta: String? = null,
     ) = Subscription(
         id = id, merchantKey = clave, displayName = nombre, amount = monto, currency = moneda,
         dayOfMonth = dia, status = estado, confidence = SubConfidence.HIGH,
-        firstSeen = 0, lastSeen = 0, occurrences = 4,
+        firstSeen = 0, lastSeen = 0, occurrences = 4, accountId = cuenta,
     )
 
     /**
@@ -82,6 +87,9 @@ class SuscripcionesActivasEnMovimientosTest {
         sub("s_youtube", "YouTube", "youtube", 22_900L, "COP", 12, SubStatus.AUTO),
         // día 20 · la encontró el detector y el dueño la confirmó
         sub("s_netflix", "Netflix", "netflix", 44_900L, "COP", 20, SubStatus.CONFIRMED),
+        // día 25 · Ola 17: la escribió el dueño y le dijo con qué tarjeta la paga. Va ÚLTIMA a
+        // propósito, para no correr los índices de [quitarDeLaFila] de las tres de arriba.
+        sub("s_google", "Google One", MANUAL_SUB_PREFIX + "google_one", 79_000L, "COP", 25, SubStatus.CONFIRMED, cuenta = nubank.id),
     )
 
     /** Lo que la pantalla le pidió al repositorio, que es lo único que distingue las dos ramas. */
@@ -89,7 +97,7 @@ class SuscripcionesActivasEnMovimientosTest {
     private var borrada: String? = null
 
     private inner class Repo : RepositorioDePrueba() {
-        override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
+        override suspend fun getAccounts(): List<Account> = listOf(bancolombia, nubank)
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
@@ -154,6 +162,36 @@ class SuscripcionesActivasEnMovimientosTest {
             .assertExists()
         // La del dueño no dice que la encontró nadie.
         composeRule.onNodeWithText("Suscripción", useUnmergedTree = true).assertExists()
+    }
+
+    /**
+     * Ola 17 — **la fila dice con qué cuenta se paga**, resolviendo el id contra la lista de
+     * cuentas de la pantalla. Es lo que una función pura no puede probar: que ese mapa de verdad
+     * le llega a la sección, que hasta ahora nadie se lo pasaba.
+     *
+     * El nombre de la cuenta ocupa el lugar del rótulo genérico «Suscripción» en vez de sumarse:
+     * dentro de una sección titulada «Suscripciones activas» esa palabra no informaba nada, y la
+     * línea sigue teniendo dos segmentos como antes.
+     */
+    @Test
+    fun `una suscripcion con cuenta dice el nombre de la cuenta que la paga`() {
+        composeRule.onNodeWithText("Google One", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Nubank", useUnmergedTree = true).assertExists()
+        // Y ocupó el lugar del rótulo, no se sumó a él: la única fila que sigue diciendo
+        // «Suscripción» a secas es la de Claude, que no tiene cuenta. Si el mapa de cuentas no
+        // llegara a la sección, acá habría DOS y esta aserción fallaría.
+        composeRule.onAllNodesWithText("Suscripción", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    /**
+     * Y las que no tienen cuenta se ven **exactamente** como antes: sin «sin cuenta» y sin un
+     * hueco donde iría el nombre. A una suscripción que nunca tuvo cuenta no le falta nada — que
+     * es el caso de todas las filas que ya estaban en producción.
+     */
+    @Test
+    fun `las que no tienen cuenta no inventan ninguna`() {
+        composeRule.onAllNodesWithText("sin cuenta", substring = true, ignoreCase = true, useUnmergedTree = true)
+            .assertCountEquals(0)
     }
 
     /** En SU moneda, sin convertir: solo el «Flujo libre» de arriba pasa por la TRM. */

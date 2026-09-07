@@ -73,8 +73,14 @@ private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
  * así que un id desconocido no rechaza el alta: se guarda `null`. Rechazar dejaría al dueño sin
  * poder anotar su arriendo por un id que mandó mal un cliente viejo, y el plan mensual (nombre,
  * monto, día) es válido igual — perder el plan es peor que perder la cuenta.
+ *
+ * Ola 17: dejó de ser `private` porque el alta de una SUSCRIPCIÓN necesita exactamente la misma
+ * decisión —cuenta opcional, id ajeno se degrada a `null`, el alta nunca se rechaza por eso— y
+ * copiarla en `SubscriptionRoutes` habría dejado dos versiones de una regla de seguridad que
+ * puede cambiar. Sigue viviendo acá porque acá nació; `internal` la comparte dentro de `:server`
+ * sin exponerla al wire.
  */
-private fun org.jetbrains.exposed.sql.Transaction.accountIdIfOwned(uid: String, accountId: String?): String? {
+internal fun org.jetbrains.exposed.sql.Transaction.accountIdIfOwned(uid: String, accountId: String?): String? {
     val id = accountId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val exists = Accounts.selectAll()
         .where { (Accounts.id eq id) and (Accounts.userId eq uid) }

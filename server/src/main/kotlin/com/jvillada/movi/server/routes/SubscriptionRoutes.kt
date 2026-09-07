@@ -144,7 +144,17 @@ fun Route.subscriptionRoutes() {
                     it[firstSeen]   = now
                     it[lastSeen]    = now
                     it[occurrences] = 0
-                    it[accountId]   = null
+                    // Ola 17 — **acá había un `null` fijo**, y era todo el agujero: la hoja ya
+                    // le preguntaba al dueño de qué cuenta sale el cobro, y esta línea tiraba la
+                    // respuesta. Una detectada sí guardaba su cuenta (SubscriptionSync la copia
+                    // del evento), así que Movi sabía con qué tarjeta se paga lo que encontró
+                    // sola y no sabía con cuál se paga lo que el dueño le escribió a mano.
+                    //
+                    // Se filtra por dueño y no se rechaza: la cuenta es opcional (ver
+                    // [Subscription.accountId]), así que un id ajeno o inexistente guarda `null`
+                    // y el alta sigue. Mismo criterio, y misma función, que el alta de una regla
+                    // recurrente.
+                    it[accountId]   = accountIdIfOwned(uid, body.accountId)
                     // El cobro real va tal cual en `amount`; lo que decide si eso es plata de
                     // cada mes o de una vez al año es esta columna. No hay nada que validar: el
                     // enum solo tiene dos valores y un cuerpo sin la clave llega MENSUAL, que es

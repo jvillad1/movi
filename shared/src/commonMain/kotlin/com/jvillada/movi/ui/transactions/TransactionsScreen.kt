@@ -80,6 +80,7 @@ import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.claveDescartada
+import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
@@ -1170,6 +1171,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 candidatasRecurrentes.forEach { s ->
                                     CandidataSuscripcionCard(
                                         sub = s,
+                                        accountNames = accountNames,
                                         yaEsRegla = claveDeNombre(s.displayName) in clavesDeReglasRecurrentes,
                                         enVuelo = s.id in suscripcionesEnVuelo,
                                         onConfirmar = { confirmarCandidata(s, SubStatus.CONFIRMED) },
@@ -1219,6 +1221,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             // que le permite a [notaDeProrrateo] saber si una fila anual en
                             // dólares de verdad entró a ese total o quedó afuera sin convertir.
                             usdToCop = subsParaRecurrentes.usdToCop,
+                            // El mismo mapa que usan las filas de movimientos de esta pantalla.
+                            accountNames = accountNames,
                             enVuelo = suscripcionesEnVuelo,
                             onQuitar = { quitarSuscripcion(it) },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
@@ -1749,6 +1753,12 @@ private fun SeccionSuscripcionesActivas(
     activas: List<Recurrente.Suscripcion>,
     /** La tasa con la que se armó el total de arriba. Ver [notaDeProrrateo]. */
     usdToCop: Double,
+    /**
+     * Los nombres de las cuentas, para poder decir con qué se paga cada cobro. Es el mismo mapa
+     * que ya usan las filas de movimientos de esta pantalla, no una lectura nueva: si todavía no
+     * llegó, la fila simplemente no nombra la cuenta (ver [contextoDeSuscripcionActiva]).
+     */
+    accountNames: Map<String, String>,
     enVuelo: Set<String>,
     onQuitar: (Subscription) -> Unit,
     modifier: Modifier = Modifier,
@@ -1788,9 +1798,14 @@ private fun SeccionSuscripcionesActivas(
                             letterSpacing = (-0.1).sp,
                         )
                         Spacer(Modifier.height(2.dp))
-                        // De dónde salió, en una sola línea y decidido en un solo lugar — ver
-                        // [contextoDeSuscripcionActiva].
-                        Text(contextoDeSuscripcionActiva(item), fontSize = 12.sp, color = MinTextMute)
+                        // Con qué se paga y de dónde salió, en una sola línea de dos segmentos y
+                        // decidido en un solo lugar — ver [contextoDeSuscripcionActiva], que es
+                        // también quien se calla la cuenta cuando no hay ninguna que nombrar.
+                        Text(
+                            contextoDeSuscripcionActiva(item, accountNames),
+                            fontSize = 12.sp,
+                            color = MinTextMute,
+                        )
                         // Y, solo en un cobro anual que SÍ suma, cuánto de él entra al total de
                         // este mes: es lo que explica por qué el «Flujo libre» de arriba no es la
                         // suma de los montos que se ven acá. Ver [notaDeProrrateo], que devuelve
@@ -1840,6 +1855,8 @@ private fun SeccionSuscripcionesActivas(
 @Composable
 private fun CandidataSuscripcionCard(
     sub: Subscription,
+    /** Para poder decir en qué tarjeta vio Movi el cobro. Ver [contextoDeCandidata]. */
+    accountNames: Map<String, String>,
     yaEsRegla: Boolean,
     enVuelo: Boolean,
     onConfirmar: () -> Unit,
@@ -1869,7 +1886,10 @@ private fun CandidataSuscripcionCard(
             )
         }
         Text(
-            text = "Visto ${sub.occurrences} ${if (sub.occurrences == 1) "mes" else "meses"} · día ${sub.dayOfMonth}",
+            // Cuántos meses la vio, qué día cobra y —si Movi la pudo resolver— en qué cuenta vio
+            // el cargo. Esa última parte es la que vuelve reconocible un comercio cuyo nombre
+            // normalizado no le dice nada al dueño. Ver [contextoDeCandidata].
+            text = contextoDeCandidata(sub, accountNames),
             fontSize = 12.sp,
             color = MinTextMute,
             modifier = Modifier.padding(top = 4.dp),

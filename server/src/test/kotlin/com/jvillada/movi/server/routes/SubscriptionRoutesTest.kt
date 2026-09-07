@@ -33,6 +33,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -50,6 +51,7 @@ import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * HTTP-level tests for GET/POST-detect/PUT/DELETE /api/subscriptions (Task 3 of
@@ -813,5 +815,149 @@ class SubscriptionRoutesTest {
             assertEquals(HttpStatusCode.OK, res.status, "$estado es legítimo sobre una fila del detector")
             assertEquals(estado, statusEnDb("netflix"))
         }
+    }
+
+    // ── Ola 17: con qué cuenta se paga ───────────────────────────────────────
+    //
+    // El alta manual guardaba `accountId = null` fijo, así que Movi sabía con qué tarjeta se paga
+    // lo que el detector encontró solo (lo copia del evento) y no sabía con cuál se paga lo que
+    // el dueño escribió a mano. Sus cuatro suscripciones reales salen todas de la misma Nubank.
+
+    /**
+     * **«Esta fila no tiene cuenta», tal como se ve en el wire.** Son dos formas y dicen lo
+     * mismo: la clave AUSENTE —que es lo que sale hoy, porque `accountId` tiene default `null` y
+     * kotlinx no serializa los defaults sin `@EncodeDefault`— o un `null` explícito. Se aceptan
+     * las dos a propósito: cuál de las dos viaja es una decisión de serialización que no cambia
+     * nada para nadie (todos los clientes leen el campo como nullable), y fijar una sola acá
+     * volvería estos tests frágiles a un detalle que no es el que están cuidando.
+     */
+    private fun JsonObject.sinCuenta(): Boolean = this["accountId"].let { it == null || it is JsonNull }
+
+    /** El caso que motivó el cambio: la cuenta que el dueño eligió llega a la base y vuelve. */
+    @Test
+    fun `un alta con cuenta la guarda y la devuelve`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = crearSuscripcion(
+            token,
+            """{"displayName":"Google One","amount":79000,"currency":"COP","dayOfMonth":15,"accountId":"$accountAId"}""",
+        )
+        assertEquals(HttpStatusCode.Created, creada.status)
+        assertEquals(
+            accountAId,
+            Json.parseToJsonElement(creada.bodyAsText()).jsonObject["accountId"]!!.jsonPrimitive.content,
+        )
+
+        // Y sobrevive a la re-lectura: no es solo el eco de la respuesta del POST.
+        val guardada = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["displayName"]!!.jsonPrimitive.content == "Google One" }.jsonObject
+        assertEquals(accountAId, guardada["accountId"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * Sin cuenta el alta sigue funcionando igual que siempre y la fila queda con `null`. Es lo
+     * que manda un cliente anterior a la Ola 17 —y lo que manda esta misma hoja cuando el dueño
+     * toca «Sin cuenta»—, y `null` es una respuesta legítima, no un dato pendiente.
+     */
+    @Test
+    fun `un alta sin cuenta sigue valiendo y queda en null`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = crearSuscripcion(token, """{"displayName":"Gimnasio","amount":90000,"currency":"COP","dayOfMonth":3}""")
+        assertEquals(HttpStatusCode.Created, creada.status)
+        assertTrue(
+            Json.parseToJsonElement(creada.bodyAsText()).jsonObject.sinCuenta(),
+            "sin la clave en el cuerpo, la fila nace sin cuenta",
+        )
+        assertEquals(90_000L, listar(token)["monthlyTotalCop"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * Una cuenta que no es del dueño NO rechaza el alta: se degrada a `null`. La cuenta es
+     * opcional, así que perder el plan entero por un id que mandó mal un cliente viejo sería un
+     * precio absurdo — mismo criterio que el alta de una regla recurrente (`accountIdIfOwned`).
+     *
+     * Lo que sí importa es que no se GUARDE: un id ajeno guardado sería una fila de A apuntando a
+     * una cuenta de B.
+     */
+    @Test
+    fun `una cuenta ajena o inexistente se guarda como null y no rechaza el alta`() = testApplication {
+        wireApp()
+        val token = tokenFor(userBId)   // B no tiene ninguna cuenta; accountAId es de A
+        val creada = crearSuscripcion(
+            token,
+            """{"displayName":"Claude","amount":80000,"currency":"COP","dayOfMonth":9,"accountId":"$accountAId"}""",
+        )
+        assertEquals(HttpStatusCode.Created, creada.status, "la suscripción vale aunque la cuenta no")
+        val guardada = listar(token)["subscriptions"]!!.jsonArray.single().jsonObject
+        assertTrue(guardada.sinCuenta(), "una cuenta ajena no puede quedar guardada en la fila")
+    }
+
+    /**
+     * **El re-scan no le puede pisar la cuenta al dueño.** Mismo razonamiento que ya protege al
+     * DISMISSED, al alta manual y a la periodicidad: lo que decidió el dueño gana sobre lo que
+     * infiere el barrido.
+     *
+     * Acá se sostiene por dos guardas independientes, y este test las ejercita juntas: la clave
+     * `manual_*` que el detector nunca genera (así que ni siquiera busca esta fila), y la rama
+     * CONFIRMED de `applyExisting`, que no toca `accountId` ni aunque la encontrara.
+     */
+    @Test
+    fun `un re-scan no le cambia la cuenta a una suscripcion del dueno`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        crearSuscripcion(
+            token,
+            """{"displayName":"Google One","amount":79000,"currency":"COP","dayOfMonth":15,"accountId":"$accountAId"}""",
+        )
+
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+        val filas = listar(token)["subscriptions"]!!.jsonArray
+            .filter { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "manual_google_one" }
+        assertEquals(1, filas.size, "el barrido no crea una segunda fila")
+        assertEquals(accountAId, filas[0].jsonObject["accountId"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * Y el «Quitar» —que es un PUT con el objeto entero— tampoco. La ruta no escribe `accountId`,
+     * así que un APK anterior a la Ola 17, que ni siquiera conoce el campo, no puede borrarlo:
+     * la misma trampa que en la Ola 16 le habría borrado la periodicidad anual.
+     */
+    @Test
+    fun `un PUT de un cliente viejo no le borra la cuenta`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = Json.parseToJsonElement(
+            crearSuscripcion(
+                token,
+                """{"displayName":"Google One","amount":79000,"currency":"COP","dayOfMonth":15,"accountId":"$accountAId"}""",
+            ).bodyAsText()
+        ).jsonObject
+        val id = creada["id"]!!.jsonPrimitive.content
+
+        // El cuerpo que manda una hoja anterior a la Ola 17: sin la clave `accountId`.
+        val cuerpoViejo = JsonObject(creada.toMutableMap().apply { remove("accountId") })
+        client.put("/api/subscriptions/$id") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(Json.encodeToString(JsonObject.serializer(), cuerpoViejo))
+        }
+
+        val despues = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["id"]!!.jsonPrimitive.content == id }.jsonObject
+        assertEquals(accountAId, despues["accountId"]!!.jsonPrimitive.content)
+    }
+
+    /** Lo que el detector encuentra sigue trayendo la cuenta del evento que lo originó. */
+    @Test
+    fun `una detectada conserva la cuenta donde aparecio el cargo`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+        val netflix = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }.jsonObject
+        assertEquals(accountAId, netflix["accountId"]!!.jsonPrimitive.content)
     }
 }
