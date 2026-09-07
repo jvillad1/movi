@@ -24,6 +24,25 @@ const val OPENING_CATEGORY = "Saldo inicial"
 const val TRANSFER_CATEGORY = "Traspaso"
 
 /**
+ * **Corregir cuánto debés no es gastar plata.**
+ *
+ * Un ajuste de saldo es lo que Movi escribe cuando el dueño le dice «esta cuenta en realidad
+ * quedó en X»: la diferencia se guarda como un movimiento para que la aritmética cierre. Es una
+ * corrección de lo que Movi CREÍA, no plata que se movió.
+ *
+ * Vivía en `BalanceAdjustment.kt`, del lado del server, y por eso [isCashFlow] —que está acá— no
+ * podía nombrarlo. El KDoc de allá afirmaba «el ajuste ya no cuenta como flujo de caja (ver
+ * `isCashFlow`)» y era verdad a medias: se cumplía por accidente en las cuentas LOAN, que están
+ * excluidas enteras, y **no se cumplía en las tarjetas**, donde un ajuste que sube la deuda tiene
+ * tipo EXPENSE y entraba a los gastos del mes como si fuera una compra.
+ *
+ * Lo vio el dueño: cuatro ajustes iguales el mismo día, tres en gris y uno en rojo restando del
+ * «Flujo del día». El que restaba era el de la tarjeta en dólares — y encima sumaba US$208 a un
+ * total en pesos como si fueran $208.
+ */
+const val ADJUSTMENT_CATEGORY = "Ajuste de saldo"
+
+/**
  * ¿Este movimiento es **flujo de caja del mes** — plata que entró o salió del bolsillo?
  *
  * No todo evento es un ingreso o un egreso. El saldo de una cuenta de deuda (LOAN,
@@ -107,6 +126,11 @@ fun isCashFlow(accountType: AccountType, type: TransactionType, category: String
     category == OPENING_CATEGORY -> false
     category == CARD_PAYMENT_CATEGORY -> false
     category == ORPHANED_LEG_CATEGORY -> false
+    // Ver [ADJUSTMENT_CATEGORY]: corregir cuánto debés no es gastar. Va ARRIBA de las ramas por
+    // tipo de cuenta y no adentro de la de tarjeta, porque no depende de dónde esté la cuenta:
+    // un ajuste no es flujo en ninguna. Antes se cumplía solo por la exclusión de LOAN, o sea
+    // por accidente, y en las tarjetas no se cumplía.
+    category == ADJUSTMENT_CATEGORY -> false
     // Por nombre y no solo por tipo de cuenta: un descuento de nómina vive en una cuenta LOAN,
     // que ya está excluida más abajo, pero dejarlo implícito haría que la exclusión dependiera de
     // dónde quedó guardado. La plata retenida del sueldo NUNCA es gasto ni ingreso del mes.
