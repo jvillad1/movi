@@ -185,18 +185,11 @@ class ChipRecurrentesTest {
         assertEquals(TonoDelMonto.GASTO, tonoDelEvento(fila.event))
     }
 
-    /** Sin cuotas a la vista no hay nada que aclararle al «Flujo libre». */
-    @Test
-    fun `el aviso del flujo libre solo aparece si hay una cuota en la lista`() {
-        val conCuota = EventDay("2026-09-01", 0L, listOf(cuotaDinero))
-        val sinCuota = EventDay("2026-09-01", 0L, listOf(arriendo, netflix))
-
-        assertTrue(hayCuotasPagadasEnLaLista(listOf(conCuota)))
-        assertFalse(hayCuotasPagadasEnLaLista(listOf(sinCuota)))
-        assertFalse(hayCuotasPagadasEnLaLista(emptyList()))
-        // Ni la pata de la deuda ni el pago de tarjeta lo disparan.
-        assertFalse(hayCuotasPagadasEnLaLista(listOf(EventDay("2026-09-01", 0L, listOf(cuotaDeuda, pagoDeTarjetaDinero)))))
-    }
+    // (Acá vivía la prueba de `hayCuotasPagadasEnLaLista`, la función que decidía si el card de
+    // «Flujo libre» avisaba que las cuotas de la lista NO entraban a ese total. El dueño decidió
+    // que sí entran, así que el aviso y la función desaparecieron: lo que el card dice ahora sale
+    // de lo que ENTRÓ al total, no de lo que hay en la lista. Ver `ResumenRecurrentes.cuotasDeCredito`
+    // y `CuotasEnElFlujoLibreTest`.)
 
     // ── PR 2 del rediseño: el resumen de flujo libre y las candidatas ─────────
 

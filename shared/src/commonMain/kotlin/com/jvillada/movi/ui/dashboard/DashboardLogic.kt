@@ -521,17 +521,22 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // encontrado ese desacuerdo entre Créditos y el Inicio.)
         //
         // `upcoming` trae UNA entrada por regla (ver `upcomingPayments`: mapea 1:1), así que
-        // sirve de lista de reglas sin pedir nada nuevo — el Inicio sigue liviano. Las cuotas
-        // sintéticas de créditos y tarjetas se descartan: no son reglas que el dueño escribió y
-        // tampoco salen en la lista de Recurrentes.
+        // sirve de lista de reglas sin pedir nada nuevo — el Inicio sigue liviano.
+        //
+        // **Se manda entero, sintéticas incluidas.** Este acceso descartaba por prefijo de id las
+        // cuotas de créditos y los pagos de tarjeta antes de llamar; desde que las cuotas SÍ
+        // entran al «Flujo libre» (pedido del dueño: son lo más grande que le sale al mes), ese
+        // filtro de acá habría dejado al Inicio mostrando un número $5.445.772 más alto que la
+        // pantalla que se abre al tocarlo — el desacuerdo entre dos cifras que dicen contar lo
+        // mismo que `resumenRecurrentes` existe justamente para hacer imposible. Quién entra y
+        // quién no lo decide una sola función, allá adentro: `cuentaComoCompromisoMensual`.
+        //
         // Esta cifra COMPONE dos fuentes, así que exige las dos. Con una sola —la otra se cayó,
         // o todavía no llegó— el número saldría plausible y equivocado: sin las reglas, un
         // sueldo de +$5.000.000 desaparece y «libre al mes» queda en −$44.900, en rojo, contra
         // los $2.955.100 que muestra la pantalla de destino. Sin las dos no se pinta cifra
         // (título solo), que es la regla de toda esta función: nunca un número inventado.
-        val reglas = data.upcoming?.filterNot {
-            it.rule.id.startsWith(CREDIT_RULE_PREFIX) || it.rule.id.startsWith(CARD_RULE_PREFIX)
-        }?.map { it.rule }
+        val reglas = data.upcoming?.map { it.rule }
         val subs = data.subscriptions
         if (reglas == null || subs == null) LinkFigure()
         else {

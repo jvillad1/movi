@@ -418,6 +418,30 @@ data class RecurringRule(
      */
     val montoEsSaldo: Boolean = false,
     /**
+     * **Esto se paga UNA vez, no todos los meses.**
+     *
+     * Hermano de [montoEsSaldo], y por el mismo motivo: hay reglas sintéticas cuyo monto no
+     * significa lo que un lector asumiría al verlo bajo el rótulo «recurrente». Ahí el problema
+     * era *qué* número es (un saldo y no una cuota); acá es *cada cuánto* sale (una vez y no
+     * todos los meses).
+     *
+     * Solo es `true` en la regla sintética de un crédito de **plazo ≤ 1 mes** — un pago único
+     * disfrazado de cuota. El dueño tiene uno: el «Crédito Techo Gardenera», $10.000.000 a un
+     * mes, que es su saldo entero y vence una sola vez. Contarlo como compromiso mensual le
+     * diría que tiene $10.000.000 menos **todos los meses, para siempre**, que es falso por un
+     * factor que no se puede disimular.
+     *
+     * Lo que este campo **no** hace es apagar el aviso: la deuda existe, vence, y hay que
+     * recordarla. `entraAlBarridoDeAvisos` no lo mira y la regla sigue entrando a «Próximos» y
+     * al barrido de recordatorios igual que siempre. Lo único que decide es si la cuota entra a
+     * un total que dice «al mes» (ver `cuentaComoCompromisoMensual` en `RecurrentesLogic`).
+     *
+     * `false` en todo lo demás, incluidas las reglas que el dueño escribió: la tabla
+     * `recurring_rules` no tiene esta columna y no la va a tener — una regla que el dueño anota
+     * es, por definición, algo que se repite.
+     */
+    val esPagoUnico: Boolean = false,
+    /**
      * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
      * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el
      * 25 pero no dónde — y al ofrecer «esto se repite» desde un movimiento (Ola 9 · B) el dato

@@ -83,7 +83,6 @@ import com.jvillada.movi.ui.recurrentes.claveDescartada
 import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
-import com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.notaDeProrrateo
@@ -91,6 +90,7 @@ import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
 import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
 import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
 import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
+import com.jvillada.movi.ui.recurrentes.reglasSinteticas
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
 import com.jvillada.movi.ui.recurrentes.suscripcionesActivas
@@ -353,24 +353,6 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * `@Composable`) para poder testear la decisión sin montar Compose.
  */
 fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
-
-/**
- * **¿La lista de abajo tiene cuotas de crédito que el total de arriba no cuenta?**
- *
- * Desde que el chip «Recurrentes» reconoce la cuota ya pagada (ver
- * [com.jvillada.movi.ui.recurrentes.nombreDeCuotaPagada]), la lista muestra filas que «Flujo
- * libre» no suma: ese total es `resumenRecurrentes(reglas, suscripciones)` y las reglas de los
- * créditos no son filas de la tabla, las fabrica el server al vuelo. Con ~$15.500.000 mensuales
- * en cuotas, la diferencia entre la lista y el total no es un detalle.
- *
- * **Si el total debería incluirlas es una decisión del dueño y no se toma acá.** Lo que sí se
- * puede hacer mientras tanto es que la pantalla no lo afirme al revés: esta función decide si se
- * dice, y se dice solo cuando de verdad hay una cuota a la vista — mismo criterio que
- * `hayCobrosAnuales`, que mira lo que ENTRÓ y no lo que podría existir. Sin cuotas en pantalla no
- * hay nada que explicar, y una advertencia permanente sobre algo que no está es ruido.
- */
-fun hayCuotasPagadasEnLaLista(days: List<EventDay>): Boolean =
-    days.any { day -> day.items.any { nombreDeCuotaPagada(it) != null } }
 
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
@@ -812,8 +794,17 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
 
     // Las CIFRAS solo se pintan con la fuente fresca ya cargada — un total a medias es peor que
     // ningún total, mismo criterio que la pantalla vieja (`reglasOk && cobrosOk`).
+    //
+    // **A las reglas del dueño se les suman las sintéticas** (las cuotas de sus créditos, que no
+    // son filas de ninguna tabla y solo llegan por `/api/payments/upcoming`), porque desde este
+    // cambio entran al «Flujo libre». Quién de ellas suma lo decide `cuentaComoCompromisoMensual`
+    // adentro de `resumenRecurrentes` —la de una tarjeta no, la de un crédito de pago único
+    // tampoco—, no este llamado. Ver [reglasSinteticas].
+    val reglasParaElResumen = remember(reglasRecurrentes, upcomingRecurrentes) {
+        reglasRecurrentes + reglasSinteticas(upcomingRecurrentes)
+    }
     val resumenRecurrentesDelChip = if (subsParaRecurrentesOk) {
-        resumenRecurrentes(reglasRecurrentes, subsParaRecurrentes)
+        resumenRecurrentes(reglasParaElResumen, subsParaRecurrentes)
     } else null
     val candidatasRecurrentes = remember(subsParaRecurrentes) {
         candidatasSinConfirmar(subsParaRecurrentes.subscriptions)
@@ -962,10 +953,6 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas) {
         diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
     }
-    // Para la línea del card de «Flujo libre» que dice qué NO cuenta ese total. Acá arriba y
-    // recordado, y no adentro del `item` que lo pinta: ahí recorrería todos los días visibles en
-    // cada recomposición del card. Ver [hayCuotasPagadasEnLaLista].
-    val hayCuotasALaVista = remember(visibleDays) { hayCuotasPagadasEnLaLista(visibleDays) }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -1236,10 +1223,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             onAction = { buscarCobros() },
                         )
                         ResumenFlujoLibreCard(
-                            cifras = resumenRecurrentesDelChip,
-                            // Lo que de verdad quedó a la vista con el filtro puesto, no lo que
-                            // podría existir. Ver [hayCuotasPagadasEnLaLista].
-                            hayCuotasEnLaLista = hayCuotasALaVista,
+                            // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
+                            // llegan solo por ahí y son la mitad del mes del dueño: si esa
+                            // llamada falló, el total saldría plausible y $5.445.772 más alto
+                            // que la verdad, sin nada que lo delate. Un guion se entiende; un
+                            // número optimista, no. Mismo criterio que `subsParaRecurrentesOk`.
+                            cifras = resumenRecurrentesDelChip?.takeIf { vencimientosOk },
                         )
                     }
                 }
@@ -1699,18 +1688,24 @@ private fun MovementSingleRow(
  * pura que ya usaba esa pantalla y el acceso «Recurrentes» del Inicio: mudar DÓNDE se muestra
  * no puede hacer que el número discrepe de los demás lugares que cuentan lo mismo.
  *
- * `cifras == null` mientras la fuente fresca todavía no llegó (ver el `LaunchedEffect` que la
- * carga en [TransactionsScreen]) — un total a medias es peor que un guion.
+ * `cifras == null` mientras las fuentes frescas todavía no llegaron (ver los `LaunchedEffect` que
+ * las cargan en [TransactionsScreen]) — un total a medias es peor que un guion. Desde que las
+ * cuotas de los créditos entran a este total, «las fuentes» son **dos**: las suscripciones y los
+ * vencimientos, que es por donde llegan esas cuotas.
+ *
+ * ## Las líneas de abajo, y por qué ninguna puede contradecir a otra
+ *
+ * Todas salen de lo que ENTRÓ al total, nunca de lo que existe en otra parte de la pantalla, así
+ * que cualquier combinación de las cuatro sigue siendo cierta al mismo tiempo: dos hablan de una
+ * transformación que sufre una fila entre la lista y el total (la TRM y el prorrateo anual), una
+ * de lo que el total sí incluye (las cuotas, con su cifra) y otra de lo que deja afuera a
+ * propósito (el crédito de pago único). La quinta —el aviso ámbar de lo que no se pudo convertir—
+ * es la única que reemplaza a otra: con un cobro sin convertir, prometer que la TRM se aplicó
+ * sería falso.
  */
 @Composable
 private fun ResumenFlujoLibreCard(
     cifras: ResumenRecurrentes?,
-    /**
-     * ¿La lista de abajo trae cuotas de crédito que este total no cuenta? Ver
-     * [hayCuotasPagadasEnLaLista]. **Solo agrega una línea; no toca ninguna cifra**: si las
-     * cuotas deberían entrar al «Flujo libre» es una decisión del dueño y se le pregunta aparte.
-     */
-    hayCuotasEnLaLista: Boolean = false,
 ) {
     MinCard(
         modifier = Modifier.fillMaxWidth(),
@@ -1805,23 +1800,53 @@ private fun ResumenFlujoLibreCard(
             )
         }
         // La tercera diferencia entre la lista de abajo y este total, y la más cara: las cuotas
-        // de los créditos. Desde este cambio la lista las muestra, y este total —que sale de
-        // `resumenRecurrentes(reglas, suscripciones)`— sigue sin contarlas, porque las reglas de
-        // un crédito no son filas de la tabla: las fabrica el server al vuelo para «Próximos».
+        // de los créditos. El PR anterior las hizo visibles en la lista y puso acá una línea que
+        // admitía que el total no las contaba; el dueño decidió que **sí deben contar**, así que
+        // esa línea ya sería mentira y en su lugar va la cifra.
         //
-        // **Se dice, no se arregla, y es a propósito.** Meterlas al total es una decisión sobre
-        // qué significa «Flujo libre» —con ~$15.500.000 mensuales en cuotas, el número cambia de
-        // conversación— y esa la toma el dueño, no este cambio. Lo que sí no puede pasar mientras
-        // tanto es que la pantalla afirme lo contrario en silencio.
+        // **Se dice con número y no con un «ya se cuentan».** «Gastos recurrentes» le crece
+        // $5.445.772 de un día para el otro; sin decir cuánto de ese total son cuotas, el dueño
+        // no tiene cómo verificar el número nuevo contra sus créditos.
+        //
+        // Y se nombra lo que queda afuera, que es lo que más se nota en su caso: de sus ocho
+        // créditos, cuatro los paga alguien más (dos libranzas, dos hipotecas que gira Skandia) y
+        // esas cuotas ni siquiera llegan al cliente —el server las filtra con
+        // `entraAlBarridoDeAvisos`, porque su salario ya viene neto y contarlas restaría dos
+        // veces—. Sin esta frase, la suma de sus cuotas no le va a dar y no va a saber por qué.
         //
         // En `MinTextMute` y no en `MinWarn`: no hay nada roto ni nada que reintentar (que es lo
         // que distingue al aviso de la moneda sin convertir); es el alcance del total, como el
         // aviso del prorrateo de acá arriba.
-        if (cifras != null && hayCuotasEnLaLista) {
+        if (cifras != null && cifras.cuotasDeCredito > 0L) {
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "Las cuotas de tus créditos aparecen en la lista de abajo, pero todavía no " +
-                    "entran en este total.",
+                text = "Las cuotas de tus créditos entran en este total: ${formatCOP(cifras.cuotasDeCredito)} " +
+                    "al mes. No contamos las que te descuentan de la nómina ni las que paga otra " +
+                    "persona, porque esa plata no sale de tu bolsillo.",
+                fontSize = 11.sp,
+                color = MinTextMute,
+                lineHeight = 15.sp,
+            )
+        }
+        // Y la cuota que se paga una sola vez, que es la otra mitad de decir la verdad sobre las
+        // cuotas: entró la del carro, no entró la del «Techo Gardenera» —$10.000.000 a un mes—
+        // porque no es un gasto de todos los meses. Se cuenta y se dice por el mismo motivo que
+        // `sinConvertir`: es una fila que existe, vence y sale en «Próximos», y este total no la
+        // suma a propósito. Ver [ResumenRecurrentes.pagosUnicosFuera].
+        if (cifras != null && cifras.pagosUnicosFuera > 0) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                // Sin prometer dónde se ve: «Próximos» muestra lo que URGE (ver
+                // `proximosQueUrgen`), así que un pago único con fecha lejana no está ahí todavía,
+                // y el aviso depende de que el dueño lo haya pedido. Una frase que no se pueda
+                // desmentir en la misma pantalla vale más que una que ayude a buscarlo.
+                text = if (cifras.pagosUnicosFuera == 1) {
+                    "Un crédito tuyo se paga de una sola vez, así que su cuota no entra en este " +
+                        "total: no es un gasto de todos los meses."
+                } else {
+                    "${cifras.pagosUnicosFuera} créditos tuyos se pagan de una sola vez, así que sus " +
+                        "cuotas no entran en este total: no son un gasto de todos los meses."
+                },
                 fontSize = 11.sp,
                 color = MinTextMute,
                 lineHeight = 15.sp,
