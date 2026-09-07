@@ -272,6 +272,46 @@ class SuscripcionesActivasEnMovimientosTest {
         assertNull(borrada)
     }
 
+    // ── Editar, la acción que faltaba ─────────────────────────────────────────
+
+    /**
+     * Ola 18. Antes de esto la fila solo ofrecía «Quitar», así que corregir un monto era quitar
+     * y volver a escribir — y en una suscripción DETECTADA eso ni siquiera funcionaba: «Quitar»
+     * la marca DISMISSED en vez de borrarla, o sea que el cobro quedaba invisible y el alta
+     * manual chocaba con él.
+     */
+    @Test
+    fun `cada suscripcion activa se puede editar`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)
+            .assertCountEquals(suscripciones.size)
+    }
+
+    /** Y abre la hoja sobre ESA fila, con lo que ya estaba guardado adentro. */
+    @Test
+    fun `editar abre la hoja con los datos de la suscripcion`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[3].performClick() // Google One
+
+        esperarTexto("Editar suscripción")
+        // El nombre llega prellenado: es una corrección, no un alta desde cero.
+        composeRule.onAllNodesWithText("Google One", useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty().let { assertEquals(true, it) }
+    }
+
+    /**
+     * La moneda NO se ofrece al editar: el `PUT /api/subscriptions/{id}` no escribe esa columna.
+     * Un selector que no guarda nada es peor que no tenerlo.
+     */
+    @Test
+    fun `la hoja de edicion no ofrece cambiar la moneda`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[3].performClick()
+
+        esperarTexto("Editar suscripción")
+        composeRule.onAllNodesWithText("MONEDA", useUnmergedTree = true).assertCountEquals(0)
+        // Pero «cada cuánto» sí, porque el PUT sí la escribe — y una detectada nace mensual, así
+        // que un cobro anual mal clasificado solo se arregla acá.
+        composeRule.onAllNodesWithText("CADA CUÁNTO", useUnmergedTree = true).assertCountEquals(1)
+    }
+
     // ── El total al pie ───────────────────────────────────────────────────────
 
     /**

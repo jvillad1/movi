@@ -764,6 +764,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      * corregido.
      */
     var reglaRecurrenteAEditar by remember { mutableStateOf<RecurringRule?>(null) }
+    // Ola 18: la suscripción abierta para editar. Hasta acá la fila solo ofrecía «Quitar», así
+    // que corregirle el monto a un cobro era quitarlo y volver a escribirlo entero — y en una
+    // detectada eso ni siquiera funcionaba: «Quitar» la marca DISMISSED, no la borra.
+    var suscripcionAEditar by remember { mutableStateOf<Subscription?>(null) }
 
     LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick) {
         if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
@@ -1270,6 +1274,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             accountNames = accountNames,
                             enVuelo = suscripcionesEnVuelo,
                             onQuitar = { quitarSuscripcion(it) },
+                            onEditar = { suscripcionAEditar = it },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                         )
                     }
@@ -1495,6 +1500,21 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 recurrentesReloadKey++
             },
             existing = regla,
+        )
+    }
+
+    // La misma hoja, en modo suscripción. Al guardar se recarga la sección por el mismo camino
+    // que usa la edición de una regla: el monto nuevo tiene que verse —y sumar distinto en el
+    // «Total al mes»— en la fila que se acaba de tocar.
+    suscripcionAEditar?.let { suscripcion ->
+        CreateRecurringRuleSheet(
+            onDismiss = { suscripcionAEditar = null },
+            onSaved = {
+                suscripcionAEditar = null
+                RecurringOfferGate.olvidarLoCacheado()
+                recurrentesReloadKey++
+            },
+            existingSub = suscripcion,
         )
     }
 
@@ -1925,6 +1945,7 @@ private fun SeccionSuscripcionesActivas(
     accountNames: Map<String, String>,
     enVuelo: Set<String>,
     onQuitar: (Subscription) -> Unit,
+    onEditar: (Subscription) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (activas.isEmpty()) return
@@ -1995,12 +2016,25 @@ private fun SeccionSuscripcionesActivas(
                         )
                         Spacer(Modifier.height(2.dp))
                         val guardando = item.sub.id in enVuelo
-                        Text(
-                            text = if (guardando) "Quitando…" else "Quitar",
-                            fontSize = 12.sp,
-                            color = if (guardando) MinTextMute else MinExpense,
-                            modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
-                        )
+                        // «Editar» antes que «Quitar», y en ese orden: es la acción que el dueño
+                        // va a querer casi siempre —un precio que subió, un día que se corrió— y
+                        // la que no destruye nada. Mientras hay una operación en vuelo las dos se
+                        // apagan: tocar «Editar» sobre una fila que se está quitando abriría una
+                        // hoja sobre algo que quizá ya no exista.
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                text = "Editar",
+                                fontSize = 12.sp,
+                                color = if (guardando) MinTextMute else MinPrimary,
+                                modifier = Modifier.clickable { if (!guardando) onEditar(item.sub) },
+                            )
+                            Text(
+                                text = if (guardando) "Quitando…" else "Quitar",
+                                fontSize = 12.sp,
+                                color = if (guardando) MinTextMute else MinExpense,
+                                modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
+                            )
+                        }
                     }
                 }
                 Hairline()
