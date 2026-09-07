@@ -215,6 +215,29 @@ data class ResumenRecurrentes(
     val items: List<Recurrente>,
     val ingresos: Long,
     val gastos: Long,
+    /**
+     * **Cuánto de [gastos] son suscripciones** — el total que la sección «Suscripciones activas»
+     * muestra al pie de su lista.
+     *
+     * Sale de acá y no de una suma propia de la pantalla por el mismo motivo por el que
+     * [suscripcionesActivas] lee `items` en vez de filtrar la lista cruda: **el inventario y el
+     * total que lo cierra tienen que salir del MISMO reparto.** Esta función no suma las filas
+     * activas y ya — prorratea los cobros anuales, convierte los dólares con la tasa del server,
+     * y saltea las que el dueño ya tiene anotadas como regla recurrente
+     * ([Recurrente.Suscripcion.yaEsRegla]). Una suma hecha en la UI sobre las filas visibles
+     * daría otro número, y las dos cifras se contradirían dentro de la misma pantalla: el defecto
+     * exacto que este archivo existe para no repetir.
+     *
+     * Por eso **no es la suma de los montos que se ven en la lista**, y no debería serlo: un HBO
+     * Max de $369.900 al año entra por $30.825, y una fila marcada «ya lo tienes como recurrente»
+     * entra por cero. Las dos cosas ya están dichas fila por fila —ver `notaDeProrrateo` y
+     * `contextoDeSuscripcionActiva` en TransactionsScreen—, así que el total no vuelve a
+     * explicarlas: solo se anuncia como lo que es, una cifra del mes.
+     *
+     * Lo que [sinConvertir] dejó afuera de [gastos] está afuera de acá también, porque es el
+     * mismo sumando. Un total incompleto se avisa; no se disimula.
+     */
+    val gastosDeSuscripciones: Long,
     val sinConvertir: Int,
     val hayMonedaExtranjera: Boolean,
     val hayCobrosAnuales: Boolean = false,
@@ -294,6 +317,7 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         ingresos = cuentan.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
         // Las reglas son COP por modelo; las suscripciones entran según lo de arriba.
         gastos = gastosDeReglas.sumOf { it.amount } + gastosDeSuscripciones,
+        gastosDeSuscripciones = gastosDeSuscripciones,
         sinConvertir = sinConvertir,
         hayMonedaExtranjera = dolaresEnElTotal,
         hayCobrosAnuales = anualesEnElTotal,

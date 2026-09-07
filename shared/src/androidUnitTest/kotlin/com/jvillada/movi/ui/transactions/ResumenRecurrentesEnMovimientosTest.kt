@@ -15,11 +15,13 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
@@ -73,6 +75,12 @@ class ResumenRecurrentesEnMovimientosTest {
         override suspend fun getRecurringRules(): List<RecurringRule> = listOf(arriendo)
         override suspend fun getSubscriptions(): SubscriptionsResult =
             SubscriptionsResult(listOfNotNull(disney, spotify.takeIf { barridosPedidos > 0 }), monthlyTotalCop = 1_800_000L)
+        // Vacíos, pero CONTESTADOS: el card de «Flujo libre» y el pie de «Suscripciones activas»
+        // esperan los dos a que `/api/payments/upcoming` responda antes de mostrar una cifra —las
+        // cuotas de los créditos llegan solo por ahí y son la mitad del mes del dueño—, así que
+        // dejar la llamada sin contestar dejaba a esta pantalla probándose en su estado de error.
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
         override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription {
             disney = subscription
             return subscription

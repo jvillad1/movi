@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.PaymentStatus
+import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -39,6 +40,81 @@ class RecurrentesLogicTest {
      *  que la UI de verdad pinta, en vez de desde un campo del resumen que nadie más usaría. */
     private fun ResumenRecurrentes.duplicadas() =
         items.filterIsInstance<Recurrente.Suscripcion>().count { it.yaEsRegla }
+
+    // ── El total de suscripciones, que la sección de abajo muestra al pie ─────
+
+    /**
+     * Lo que motivó exponerlo: «Gastos recurrentes» mezcla reglas y suscripciones, así que la
+     * sección «Suscripciones activas» no tenía de dónde sacar SU total sin volver a sumarlo por
+     * su cuenta — y una segunda suma no habría prorrateado ni excluido igual.
+     */
+    @Test
+    fun `el total de suscripciones sale aparte del de las reglas`() {
+        val reglas = listOf(regla("Arriendo", 2_000_000))
+        val subs = SubscriptionsResult(listOf(sub("Netflix", 44_900)), monthlyTotalCop = 44_900)
+
+        val r = resumenRecurrentes(reglas, subs)
+
+        assertEquals(2_044_900, r.gastos, "el total grande sigue incluyendo las dos cosas")
+        assertEquals(44_900, r.gastosDeSuscripciones, "pero el de suscripciones va solo")
+    }
+
+    @Test
+    fun `una suscripcion tapada por una regla no suma al total de suscripciones`() {
+        val reglas = listOf(regla("Netflix", 44_900))
+        val subs = SubscriptionsResult(
+            subscriptions = listOf(sub("Netflix", 44_900), sub("Spotify", 16_900)),
+            monthlyTotalCop = 61_800,
+        )
+
+        val r = resumenRecurrentes(reglas, subs)
+
+        // La fila de Netflix se sigue viendo —marcada— pero el pie no la cuenta: ese cobro ya
+        // está en el total por el lado de la regla.
+        assertEquals(16_900, r.gastosDeSuscripciones)
+        assertEquals(2, r.items.filterIsInstance<Recurrente.Suscripcion>().size)
+    }
+
+    /**
+     * El caso que hace que el pie NO sea la suma de lo que se ve: un cobro anual se muestra
+     * «$369.900 al año» y entra al total por su doceava parte.
+     */
+    @Test
+    fun `un cobro anual entra al total prorrateado, no por su monto entero`() {
+        val hboMax = sub("HBO Max", 369_900, dia = 21)
+            .copy(periodicidad = PeriodicidadDeCobro.ANUAL)
+        val subs = SubscriptionsResult(listOf(hboMax), monthlyTotalCop = 30_825)
+
+        val r = resumenRecurrentes(emptyList(), subs)
+
+        assertEquals(30_825, r.gastosDeSuscripciones, "369.900 ÷ 12, no 369.900")
+        assertTrue(r.hayCobrosAnuales)
+    }
+
+    @Test
+    fun `lo que no se pudo convertir queda fuera del total de suscripciones tambien`() {
+        val reglas = listOf(regla("Netflix", 44_900))
+        val subs = SubscriptionsResult(
+            subscriptions = listOf(sub("Netflix", 44_900), sub("Claude", 160, moneda = "USD")),
+            monthlyTotalCop = 547_985,
+            usdToCop = 0.0, // el server no expone la tasa
+        )
+
+        val r = resumenRecurrentes(reglas, subs)
+
+        // El dólar no se pudo pasar a pesos y Netflix ya está como regla: no queda nada que sumar.
+        assertEquals(0, r.gastosDeSuscripciones)
+        assertEquals(1, r.sinConvertir, "el pie tiene que poder avisarlo")
+    }
+
+    @Test
+    fun `sin suscripciones el total de suscripciones es cero, no el de las reglas`() {
+        val reglas = listOf(regla("Arriendo", 2_000_000))
+        val r = resumenRecurrentes(reglas, SubscriptionsResult(emptyList(), monthlyTotalCop = 0))
+
+        assertEquals(0, r.gastosDeSuscripciones)
+        assertEquals(2_000_000, r.gastos)
+    }
 
     // ── El defecto que motivó todo esto ───────────────────────────────────────
 

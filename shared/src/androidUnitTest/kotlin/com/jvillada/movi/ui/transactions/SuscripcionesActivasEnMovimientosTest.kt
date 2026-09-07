@@ -13,14 +13,19 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -92,6 +97,28 @@ class SuscripcionesActivasEnMovimientosTest {
         sub("s_google", "Google One", MANUAL_SUB_PREFIX + "google_one", 79_000L, "COP", 25, SubStatus.CONFIRMED, cuenta = nubank.id),
     )
 
+    /**
+     * La cuota de un crédito, tal como se la manda el server por `/api/payments/upcoming`. Está en
+     * este fixture por dos motivos, y los dos hacen falta:
+     *
+     * 1. **Sin esa llamada contestada la sección no se pinta.** El total del pie sale del mismo
+     *    reparto que decide qué suscripción ya está tapada por una regla, y ese reparto mira
+     *    también las reglas sintéticas de los créditos: si la llamada falla, la lista llega corta
+     *    y el total puede salir alto. Por eso `vencimientosOk` gatea el pie igual que al card.
+     * 2. **Separa las dos cifras.** «Gastos recurrentes» suma la cuota y el pie no, así que
+     *    $67.800 sigue apareciendo UNA sola vez en pantalla y la aserción de abajo sigue
+     *    diciendo algo.
+     */
+    private val cuotaDelCarro = UpcomingPayment(
+        rule = RecurringRule(
+            id = CREDIT_RULE_PREFIX + "acc-carro", name = "Cuota Vehículo", category = "Créditos",
+            amount = 4_215_223L, dayOfMonth = 17, type = TransactionType.EXPENSE,
+        ),
+        dueDate = "2026-09-17",
+        daysUntil = 10,
+        status = PaymentStatus.UPCOMING,
+    )
+
     /** Lo que la pantalla le pidió al repositorio, que es lo único que distingue las dos ramas. */
     private var actualizada: Subscription? = null
     private var borrada: String? = null
@@ -103,6 +130,8 @@ class SuscripcionesActivasEnMovimientosTest {
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
         override suspend fun getSubscriptions(): SubscriptionsResult =
             SubscriptionsResult(suscripciones, monthlyTotalCop = 67_800L, usdToCop = 4_000.0)
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = listOf(cuotaDelCarro)
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
 
         override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription {
             actualizada = subscription
@@ -241,5 +270,35 @@ class SuscripcionesActivasEnMovimientosTest {
         assertEquals("s_youtube", actualizada?.id)
         assertEquals(SubStatus.DISMISSED, actualizada?.status)
         assertNull(borrada)
+    }
+
+    // ── El total al pie ───────────────────────────────────────────────────────
+
+    /**
+     * La sección listaba los cobros y no decía cuánto suman: el dueño tenía que sumarlos de
+     * cabeza, y ni siquiera eso servía, porque un cobro anual no aporta su monto entero.
+     *
+     * Lo que esta prueba cubre y la de la función pura no puede: que el total que llega al pie
+     * es el del MISMO resumen que armó la lista —el que ya prorrateó, convirtió y salteó
+     * duplicadas— y no una suma nueva hecha sobre las filas visibles.
+     */
+    @Test
+    fun `la seccion cierra con el total del mes`() {
+        composeRule.onNodeWithText("Total al mes", useUnmergedTree = true).assertExists()
+        // 67.800 es el `monthlyTotalCop` del repositorio de prueba, no la suma de los montos
+        // que se ven arriba: las filas están en su propia moneda y una va en dólares.
+        //
+        // UN solo nodo, y ahí está el punto de toda la sección: «Gastos recurrentes» —el card de
+        // arriba— mezcla reglas, cuotas de créditos y suscripciones, así que esta cifra no
+        // aparece en ninguna otra parte de la pantalla. El pie es el único lugar donde el dueño
+        // puede leer qué le cuestan sus suscripciones.
+        composeRule.onAllNodesWithText("$67.800", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    /** Sin nada raro que reportar, el pie no inventa advertencias. */
+    @Test
+    fun `el total no avisa de cobros sin convertir cuando no los hay`() {
+        composeRule.onAllNodesWithText("no pudimos pasar a pesos", substring = true, useUnmergedTree = true)
+            .assertCountEquals(0)
     }
 }

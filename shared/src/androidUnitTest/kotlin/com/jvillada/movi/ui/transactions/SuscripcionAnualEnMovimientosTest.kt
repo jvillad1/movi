@@ -157,8 +157,13 @@ class SuscripcionAnualEnMovimientosTest {
      */
     @Test
     fun `el flujo libre cuenta el prorrateado y no el cobro entero`() {
-        composeRule.onNodeWithText("$119.234", useUnmergedTree = true)
-            .assertExists()
+        // DOS nodos, y el número es parte de lo que se afirma: desde que «Suscripciones activas»
+        // cierra con su propio total, este fixture —que no tiene ninguna regla recurrente— muestra
+        // la misma cifra arriba como «Gastos recurrentes» y abajo como «Total al mes». Exigir las
+        // dos prueba que el pie también salió prorrateado; `onFirst()` se conformaba con
+        // cualquiera de las dos y dejaba pasar un pie con el cobro entero.
+        composeRule.onAllNodesWithText("$119.234", useUnmergedTree = true)
+            .assertCountEquals(2)
         composeRule.onAllNodesWithText("$561.800", useUnmergedTree = true)
             .assertCountEquals(0)
     }
