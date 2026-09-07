@@ -51,6 +51,9 @@ class SchemaDeArranqueTest {
     private val columnasNuevasSobreTablasViejas = listOf(
         "subscriptions" to "periodicidad",   // #155 — periodicidad mensual/anual
         "users" to "sms_alert_muted",        // #168 — silenciar el aviso de captura de SMS
+        // Ola 19 — la marca de «este monto lo corregí yo», que el barrido consulta en CADA
+        // detección. Sin la columna, «Buscar cobros» falla entero en producción.
+        "subscriptions" to "monto_corregido_a_mano",
     )
 
     private val todasLasTablas = arrayOf(

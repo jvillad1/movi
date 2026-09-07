@@ -138,12 +138,23 @@ private fun applyExisting(row: ResultRow, d: DetectedSub) {
         // pidiendo confirmación — exactamente lo que el enum congelado busca evitar.
         SubStatus.CONFIRMED.name, SubStatus.AUTO.name ->
             Subscriptions.update({ Subscriptions.id eq row[Subscriptions.id] }) {
-                it[amount]      = d.amount
+                // **El monto solo si nadie lo corrigió** (Ola 19, pedido del dueño: «que el
+                // barrido respete lo que yo corregí a mano»). Sin esta guarda, corregirle el
+                // monto a una detectada duraba hasta el próximo «Buscar cobros» o la próxima
+                // importación de extracto, que también dispara el barrido — y el número volvía
+                // solo, sin que nada lo dijera.
+                //
+                // La guarda es la marca y no «status == CONFIRMED»: confirmar una candidata no
+                // es corregirle nada, y congelar el monto de todo lo confirmado dejaría de
+                // seguir los aumentos de precio, que es justo lo que este update hace bien.
+                if (!row[Subscriptions.montoCorregidoAMano]) it[amount] = d.amount
                 it[lastSeen]    = d.lastSeen
                 it[occurrences] = d.occurrences
                 it[confidence]  = d.confidence.name
             }
-        else -> refreshRow(row[Subscriptions.id], d)  // CANDIDATE: refrescar todo (status se queda en CANDIDATE)
+        // CANDIDATE: refrescar todo (status se queda en CANDIDATE), menos el monto si lo corrigió
+        // el dueño — misma regla que arriba.
+        else -> refreshRow(row[Subscriptions.id], d, row[Subscriptions.montoCorregidoAMano])
     }
 }
 
@@ -162,19 +173,24 @@ private fun applyExisting(row: ResultRow, d: DetectedSub) {
 // el barrido.** Una CANDIDATE es siempre del detector y siempre mensual, así que ni ahí hay algo
 // que reescribir; dejarla fuera del update es lo que hace que la regla valga sin excepciones.
 //
-// **Menos para el MONTO, y conviene decirlo en vez de dejar la frase de arriba sonando absoluta.**
-// La rama CONFIRMED/AUTO de `applyExisting` reescribe `amount` en cada barrido, así que si el
-// dueño le corrige el monto a una suscripción DETECTADA, el próximo «Buscar cobros» —o la próxima
-// importación de extracto, que también dispara el barrido— se lo vuelve a pisar con el del
-// cargo. Hoy no le puede pasar: sus suscripciones son todas `manual_*` y el detector nunca las
-// matchea. Y no es un descuido que se arregle solo: si Netflix sube de precio, querés que el
-// barrido actualice el monto; si el dueño lo corrigió a mano, querés lo contrario, y hoy nada
-// distingue los dos casos. Resolverlo pide una decisión suya (¿una marca de «esto lo toqué yo»?),
-// no un cambio de una línea acá.
-private fun refreshRow(rowId: String, d: DetectedSub) {
+// **Y desde la Ola 19 vale también para el MONTO, que era la excepción.** La rama CONFIRMED/AUTO
+// de `applyExisting` reescribía `amount` en cada barrido, así que corregirle el monto a una
+// suscripción detectada duraba hasta el próximo «Buscar cobros» —o hasta la próxima importación
+// de extracto, que también dispara el barrido—, y el número volvía solo.
+//
+// No se arregló dejando de escribir el monto: si el servicio sube de precio, que el barrido lo
+// actualice es lo que hace bien. Se arregló distinguiendo los dos casos con
+// `monto_corregido_a_mano`, que el `PUT` prende cuando el monto que llega difiere del guardado.
+// Congelar todos los montos habría cambiado uno que se pisa por uno que envejece callado.
+// [loCorrigioElDueno] llega como parámetro y no se vuelve a consultar: el único llamador ya
+// tiene la fila leída. Y se respeta acá aunque hoy una CANDIDATE no se pueda editar desde la app
+// (la hoja sale de las ACTIVAS) porque la regla es «un monto que escribió el dueño no lo pisa el
+// barrido»: una regla que vale en una rama y no en la otra es la que se rompe sola el día que la
+// otra se vuelva alcanzable.
+private fun refreshRow(rowId: String, d: DetectedSub, loCorrigioElDueno: Boolean) {
     Subscriptions.update({ Subscriptions.id eq rowId }) {
         it[displayName] = d.displayName
-        it[amount]      = d.amount
+        if (!loCorrigioElDueno) it[amount] = d.amount
         it[dayOfMonth]  = d.dayOfMonth
         it[status]      = statusForNew(d).name
         it[confidence]  = d.confidence.name

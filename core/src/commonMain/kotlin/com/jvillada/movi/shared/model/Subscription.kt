@@ -196,6 +196,22 @@ data class Subscription(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val periodicidad: PeriodicidadDeCobro = PeriodicidadDeCobro.MENSUAL,
+    /**
+     * Ola 19 — **¿[amount] lo escribió el dueño, o lo dedujo el barrido?** Cuando vale `true`,
+     * `runSubscriptionDetection` deja el monto como está en vez de reescribirlo con el del cargo
+     * detectado. Ver la columna `monto_corregido_a_mano` y `applyExisting`.
+     *
+     * **Es un hecho, no una preferencia.** Lo escribe solo el server, comparando el monto que
+     * llega en el `PUT` contra el guardado; lo que mande el cliente en este campo se ignora. Por
+     * eso tampoco lleva [EncodeDefault]: no hay ninguna intención que el cliente pueda expresar
+     * acá, así que «ausente» y «false» pueden significar lo mismo sin que se pierda nada — al
+     * revés que en [accountId] y [periodicidad], donde el default sí era una decisión del dueño.
+     *
+     * Un cliente viejo lo ignora al leer (`ignoreUnknownKeys`), que es lo correcto: es
+     * información sobre por qué el número es el que es, no algo que la fila necesite para
+     * pintarse.
+     */
+    val montoCorregidoAMano: Boolean = false,
 )
 
 @Serializable

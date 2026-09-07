@@ -449,6 +449,28 @@ object Subscriptions : Table("subscriptions") {
      * `remind_me` en [RecurringRules].
      */
     val periodicidad = varchar("periodicidad", 10).default("MENSUAL")
+    /**
+     * Ola 19 — **¿el [amount] de esta fila lo escribió el dueño, o lo dedujo el barrido?**
+     *
+     * El barrido reescribe el monto de toda fila CONFIRMED/AUTO que vuelva a detectar (ver
+     * `applyExisting`), y eso es lo correcto mientras nadie lo haya tocado: si el servicio sube
+     * de precio, el monto se actualiza solo. Pero desde que la app deja editar una suscripción,
+     * ese mismo update le pisaba al dueño la corrección que acababa de hacer — en el próximo
+     * «Buscar cobros», o en la próxima importación de extracto, que también dispara el barrido.
+     *
+     * Con esta marca el barrido puede respetar lo corregido **sin** dejar de actualizar todo lo
+     * demás. La alternativa —no volver a tocar ningún monto— habría congelado también las filas
+     * que nadie editó nunca, o sea cambiar un monto que se pisa por uno que envejece callado.
+     *
+     * La escribe SOLO el server, comparando el monto que llega contra el guardado (ver el `PUT`
+     * de `SubscriptionRoutes`). Lo que mande el cliente en este campo se ignora: es un hecho
+     * sobre lo que pasó, no una preferencia que se pueda pedir.
+     *
+     * `.default(false)` es la migración, igual que en [periodicidad]: hace que la sentencia sea
+     * `ADD COLUMN ... DEFAULT FALSE NOT NULL`, y las filas que ya están en producción quedan
+     * diciendo lo único cierto de ellas — a ninguna le corrigieron el monto todavía.
+     */
+    val montoCorregidoAMano = bool("monto_corregido_a_mano").default(false)
     override val primaryKey = PrimaryKey(id)
     init {
         index("idx_subscriptions_user_id", false, userId)
