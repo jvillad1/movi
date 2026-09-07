@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.balance
 
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -8,16 +9,6 @@ import com.jvillada.movi.shared.model.TransactionType
 import java.util.UUID
 import kotlin.math.abs
 
-/**
- * Categoría propia del ajuste, en vez de `"Otros"`.
- *
- * El ajuste ya no cuenta como flujo de caja (ver `isCashFlow`), pero **sigue siendo una fila
- * visible** en movimientos y en el detalle de la cuenta. Bajo `"Otros"` era indistinguible de
- * un gasto misceláneo real y además chocaba de frente con un presupuesto llamado "Otros",
- * que quedaba en OVER al instante. Con nombre propio se puede separar en cualquier desglose
- * que lo siga mostrando, sin depender de la bandera.
- */
-const val ADJUSTMENT_CATEGORY = "Ajuste de saldo"
 
 /** Movimiento que hay que registrar para llevar la deuda de un valor a otro. */
 data class DebtAdjustment(val type: TransactionType, val amount: Long)

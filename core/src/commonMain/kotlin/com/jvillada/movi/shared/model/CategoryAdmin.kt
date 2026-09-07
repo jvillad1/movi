@@ -29,13 +29,22 @@ import kotlinx.serialization.Serializable
  */
 
 /**
- * Las **cuatro categorías reservadas** de Movi: las escribe la app sola y de su nombre EXACTO
- * dependen las cifras del mes (ver [isCashFlow], que compara por string). Renombrar cualquiera
- * de ellas rompería el cálculo de ingresos y gastos de toda la historia; unificarla o esconderla
- * la sacaría de la vista sin sacarla de los datos.
+ * Las categorías reservadas de Movi: las escribe la app sola y de su nombre EXACTO dependen las
+ * cifras del mes (ver [isCashFlow], que compara por string). Renombrar cualquiera de ellas
+ * rompería el cálculo de ingresos y gastos de toda la historia; unificarla o esconderla la
+ * sacaría de la vista sin sacarla de los datos.
  *
  * Por eso quedan **fuera de todas las acciones** de esta pantalla — se muestran, para que el
  * dueño entienda de dónde salen esos movimientos, pero con candado.
+ *
+ * **Esta lista y las exclusiones por nombre de [isCashFlow] son la MISMA lista, y tienen que
+ * moverse juntas.** Agregar una exclusión allá sin sumarla acá abre dos agujeros a la vez: el
+ * dueño puede renombrar la categoría desde «Categorías» —y `rewriteCategory` reescribe los
+ * movimientos, así que lo que estaba fuera del mes vuelve a entrar, en silencio y sin vuelta
+ * atrás— y el campo de categoría se la ofrece al anotar un gasto, que entonces desaparece de
+ * «Gastos del mes» sin que nada lo diga. Ese segundo caso es el que
+ * `POST /api/events` rechaza mirando esta lista. Ya pasó con [ADJUSTMENT_CATEGORY], y el test de
+ * abajo solo miraba la dirección contraria.
  */
 val RESERVED_CATEGORIES: Set<String> = setOf(
     TRANSFER_CATEGORY,        // «Traspaso»
@@ -44,6 +53,7 @@ val RESERVED_CATEGORIES: Set<String> = setOf(
     ORPHANED_LEG_CATEGORY,
     PAYROLL_DEDUCTION_CATEGORY,// «Descuento de nómina»
     THIRD_PARTY_PAYMENT_CATEGORY, // «Pago de un tercero»
+    ADJUSTMENT_CATEGORY,      // «Ajuste de saldo»
 )
 
 /**
