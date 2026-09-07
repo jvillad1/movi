@@ -156,7 +156,20 @@ data class Subscription(
      * (ver `contextoDeSuscripcionActiva`): pintar un «sin cuenta» le daría forma de dato faltante
      * a algo que no falta, e inventar una cuenta sería afirmar algo que Movi no sabe sobre de
      * dónde sale la plata del dueño.
+     *
+     * **Con [EncodeDefault] `ALWAYS`, por el mismo motivo que [periodicidad].** El
+     * `PUT /api/subscriptions/{id}` distingue «quítale la cuenta» de «no la toques» mirando si
+     * la clave `accountId` viene en el JSON crudo (ver `mandoLaCuenta` en `SubscriptionRoutes`).
+     * Sin esta anotación kotlinx omite la clave justo cuando vale `null` —que es exactamente el
+     * caso en que el dueño tocó «Sin cuenta»—, así que la única intención que el modelo no podía
+     * expresar era la de BORRAR. La hoja de edición cerraba, la lista recargaba, y la cuenta
+     * seguía ahí.
+     *
+     * La ruta igual se sigue defendiendo mirando el JSON crudo: un APK viejo no manda la clave
+     * por más anotaciones que le pongamos acá, y para ese cliente «ausente» tiene que seguir
+     * queriendo decir «no la toques». Las dos capas cubren cosas distintas y ninguna sobra.
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val accountId: String? = null,
     /**
      * **Cada cuánto llega [amount]**, y por lo tanto qué significa ese número. Ver

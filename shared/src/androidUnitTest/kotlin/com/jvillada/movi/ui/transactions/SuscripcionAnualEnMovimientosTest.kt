@@ -168,6 +168,41 @@ class SuscripcionAnualEnMovimientosTest {
             .assertCountEquals(0)
     }
 
+    /**
+     * **Editar un cobro ANUAL tiene que seguir diciendo que es anual.** El rótulo del monto y la
+     * nota del prorrateo salían de una condición que valía `false` en cuanto la hoja entraba en
+     * modo edición — o sea siempre, en el modo que la Ola 18 vino a abrir. Sin ellos, la hoja
+     * muestra «MONTO» y $369.900 sin ninguna pista de que ahí va el cobro del año entero: quien
+     * lo corrija a lo que paga «por mes» le mete a Movi una cifra que no existe, y el total del
+     * mes queda dividido por doce otra vez.
+     *
+     * Es también el camino que este cambio hace alcanzable en el otro sentido: pasar un cobro
+     * mensual a «Una vez al año» desde acá, sin que nada explique qué número va en el campo.
+     */
+    @Test
+    fun `editar un cobro anual dice que el monto es el del ano`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[2].performClick() // HBO, anual
+        composeRule.waitForIdle()
+        esperarTexto("Editar suscripción")
+
+        composeRule.onNodeWithText("MONTO DEL COBRO ANUAL", useUnmergedTree = true).assertExists()
+        composeRule.onAllNodesWithText("dividimos en 12", substring = true, useUnmergedTree = true)
+            .assertCountEquals(1)
+    }
+
+    /** Y una mensual editada no inventa ninguna de esas dos cosas. */
+    @Test
+    fun `editar un cobro mensual no habla de prorrateo`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[1].performClick() // Google One
+        composeRule.waitForIdle()
+        esperarTexto("Editar suscripción")
+
+        composeRule.onAllNodesWithText("MONTO DEL COBRO ANUAL", useUnmergedTree = true)
+            .assertCountEquals(0)
+        composeRule.onAllNodesWithText("dividimos en 12", substring = true, useUnmergedTree = true)
+            .assertCountEquals(0)
+    }
+
     /** Y el card explica de dónde sale ese total, en vez de dejarlo sin cuadrar contra la lista. */
     @Test
     fun `el card explica que los cobros anuales entran repartidos`() {

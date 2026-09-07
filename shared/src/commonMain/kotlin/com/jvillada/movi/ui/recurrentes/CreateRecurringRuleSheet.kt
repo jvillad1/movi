@@ -77,8 +77,11 @@ import kotlinx.coroutines.launch
  * (el detector la copia del evento) y no sabía con cuál se paga lo que el dueño le escribió a
  * mano. Ahora la pregunta es la misma en las dos ramas y la respuesta viaja en las dos.
  *
- * Editar es siempre editar una [RecurringRule] (las suscripciones no tienen hoja de edición,
- * se quitan desde la lista), así que en modo edición la moneda ni se muestra.
+ * **Editar ya no es siempre editar una [RecurringRule].** Desde la Ola 18 esta misma hoja edita
+ * también una [Subscription] (ver [existingSub]), y entonces sí ofrece cambiar la periodicidad:
+ * es la única forma de corregir un cobro que se cargó mensual y en realidad llega una vez al año.
+ * Lo que sigue sin ofrecerse en ningún modo de edición es cambiar la MONEDA, porque cambiarla no
+ * es corregir un dato sino afirmar que el cobro es otro.
  */
 @Composable
 fun CreateRecurringRuleSheet(
@@ -220,9 +223,24 @@ fun CreateRecurringRuleSheet(
 
     val editandoSuscripcion = existingSub != null
     val isEditMode = existing != null || editandoSuscripcion
-    // Editar es editar una regla; solo al crear se puede elegir dólares o anual (ver KDoc).
-    val enDolares = !isEditMode && currency == "USD"
-    val esAnual = !isEditMode && periodicidad == PeriodicidadDeCobro.ANUAL
+    /**
+     * **¿Esta hoja puede estar mostrando una suscripción?** Editando una REGLA la respuesta es
+     * no, y por eso existe: los chips de moneda y de periodicidad están apagados en ese modo
+     * (`!isEditMode` y `!isEditMode || editandoSuscripcion`), así que `currency` no puede valer
+     * otra cosa que «COP» ni `periodicidad` otra que MENSUAL — pero de esos dos valores depende
+     * [seGuardaComoSuscripcion], o sea a qué endpoint se le pega. Dejarlo atado a lo que hoy
+     * está apagado sería apostar a que nadie prenda esos chips: el día que alguien lo hiciera,
+     * editar una regla la guardaría como una suscripción nueva y dejaría la regla atrás.
+     */
+    val puedeSerSuscripcion = editandoSuscripcion || !isEditMode
+    // Esto decía `!isEditMode`, y editar una suscripción HACE `isEditMode`: los dos valían false
+    // justo en el modo que este PR vino a abrir. Consecuencia visible: una suscripción en dólares
+    // se editaba con el prefijo «$» —«US$12» leído como doce pesos, lo que el comentario de
+    // [MoneyField] más abajo dice explícitamente que hay que evitar— y una anual se editaba sin
+    // el rótulo «MONTO DEL COBRO ANUAL» y sin la nota del prorrateo, que es justo lo que le
+    // avisa al dueño que ahí va el cobro del año entero y no la doceava parte.
+    val enDolares = puedeSerSuscripcion && currency == "USD"
+    val esAnual = puedeSerSuscripcion && periodicidad == PeriodicidadDeCobro.ANUAL
     /**
      * **La única condición que decide en cuál de los dos modelos se guarda esto.** Existe como
      * un solo valor —y no como `enDolares || esAnual` repetido en cada rama— porque de él
@@ -272,8 +290,12 @@ fun CreateRecurringRuleSheet(
                             dayOfMonth = day,
                             periodicidad = periodicidad,
                             // `null` acá quiere decir «sin cuenta» y el server lo guarda como
-                            // tal: la clave viaja siempre (kotlinx la serializa aunque valga
-                            // null), así que el PUT sabe distinguirlo de «no la toques». Ver
+                            // tal. Eso ahora es cierto: la clave viaja siempre porque
+                            // [Subscription.accountId] lleva `@EncodeDefault(ALWAYS)`. Este
+                            // comentario ya lo afirmaba ANTES de que fuera verdad —kotlinx omite
+                            // una clave que vale su default, y el default es `null`—, así que
+                            // «Sin cuenta» era la única intención que la hoja no podía expresar:
+                            // el PUT la leía como «no la toques» y la cuenta se quedaba. Ver
                             // `mandoLaCuenta` en SubscriptionRoutes.
                             accountId = accountId,
                         ),
@@ -413,7 +435,13 @@ fun CreateRecurringRuleSheet(
                             color = MinText,
                             modifier = Modifier.weight(1f),
                         )
-                        if (isEditMode) {
+                        // `existing != null` y no `isEditMode`: desde que editar una
+                        // suscripción también hace `isEditMode`, este enlace se pintaba sobre una
+                        // hoja donde `delete()` sale en la primera línea (`existing == null`).
+                        // Un enlace rojo destructivo que no hacía absolutamente nada, ni siquiera
+                        // fallar. Para una suscripción el camino es «Quitar» desde la fila, que
+                        // además sabe distinguir borrar de marcar DISMISSED.
+                        if (existing != null) {
                             Text(
                                 text = if (saving) "…" else "Eliminar",
                                 fontSize = 13.sp,

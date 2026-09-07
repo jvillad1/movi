@@ -33,6 +33,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -71,6 +72,10 @@ class SubscriptionRoutesTest {
     private val userBEmail = "b@subs.test"
 
     private val accountAId = "acc-tc-a"
+    // Segunda cuenta de A, y una de B: sin las dos no se puede probar que el PUT distinga
+    // «cambiala por otra tuya» de «esa no es tuya».
+    private val accountA2Id = "acc-ahorros-a"
+    private val cuentaDeOtroUsuario = "acc-tc-b"
 
     // ── DB bootstrap ─────────────────────────────────────────────────────────
 
@@ -111,6 +116,21 @@ class SubscriptionRoutesTest {
                 it[id]       = accountAId
                 it[userId]   = userAId
                 it[name]     = "Tarjeta de Crédito"
+                it[type]     = "CREDIT_CARD"
+                it[currency] = "COP"
+            }
+
+            Accounts.insert {
+                it[id]       = accountA2Id
+                it[userId]   = userAId
+                it[name]     = "Ahorros"
+                it[type]     = "SAVINGS"
+                it[currency] = "COP"
+            }
+            Accounts.insert {
+                it[id]       = cuentaDeOtroUsuario
+                it[userId]   = userBId
+                it[name]     = "Tarjeta de B"
                 it[type]     = "CREDIT_CARD"
                 it[currency] = "COP"
             }
@@ -920,9 +940,11 @@ class SubscriptionRoutesTest {
     }
 
     /**
-     * Y el «Quitar» —que es un PUT con el objeto entero— tampoco. La ruta no escribe `accountId`,
-     * así que un APK anterior a la Ola 17, que ni siquiera conoce el campo, no puede borrarlo:
-     * la misma trampa que en la Ola 16 le habría borrado la periodicidad anual.
+     * Y el «Quitar» —que es un PUT con el objeto entero— tampoco. **Desde la Ola 18 la ruta SÍ
+     * escribe `accountId`** (la hoja de edición ya puede cambiarlo), así que lo que protege a un
+     * APK viejo no es que la ruta no lo toque nunca sino `mandoLaCuenta`: sin la clave en el JSON
+     * crudo, la columna no se escribe. Un cliente que ni conoce el campo no puede borrarlo — la
+     * misma trampa que en la Ola 16 le habría borrado la periodicidad anual.
      */
     @Test
     fun `un PUT de un cliente viejo no le borra la cuenta`() = testApplication {
@@ -947,6 +969,51 @@ class SubscriptionRoutesTest {
         val despues = listar(token)["subscriptions"]!!.jsonArray
             .first { it.jsonObject["id"]!!.jsonPrimitive.content == id }.jsonObject
         assertEquals(accountAId, despues["accountId"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * **La otra mitad de la Ola 18: el PUT ahora SÍ escribe la cuenta.** Es lo que hace útil a la
+     * hoja de edición —hasta acá la cuenta solo se podía decidir en el alta— y no tenía ninguna
+     * prueba. Las tres intenciones que el cliente puede expresar se prueban juntas porque lo que
+     * importa es que se distingan entre sí, no cada una por separado.
+     */
+    @Test
+    fun `el PUT cambia la cuenta, la quita, o la deja donde estaba`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = Json.parseToJsonElement(
+            crearSuscripcion(
+                token,
+                """{"displayName":"Netflix","amount":44900,"currency":"COP","dayOfMonth":19,"accountId":"$accountAId"}""",
+            ).bodyAsText()
+        ).jsonObject
+        val id = creada["id"]!!.jsonPrimitive.content
+
+        suspend fun putCon(accountId: JsonElement) {
+            val cuerpo = JsonObject(creada.toMutableMap().apply { this["accountId"] = accountId })
+            client.put("/api/subscriptions/$id") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody(Json.encodeToString(JsonObject.serializer(), cuerpo))
+            }
+        }
+        suspend fun cuentaGuardada(): JsonElement = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["id"]!!.jsonPrimitive.content == id }.jsonObject["accountId"]!!
+
+        // 1 · Cambiarla por otra propia.
+        putCon(JsonPrimitive(accountA2Id))
+        assertEquals(accountA2Id, cuentaGuardada().jsonPrimitive.content)
+
+        // 2 · Quitarla: `null` EXPLÍCITO es «Sin cuenta», y por eso el cliente tiene que mandar
+        //     la clave aunque valga null (ver `@EncodeDefault` en Subscription.accountId).
+        putCon(JsonNull)
+        assertEquals(JsonNull, cuentaGuardada())
+
+        // 3 · Una cuenta ajena degrada a null en vez de rechazar el update: perder la cuenta es
+        //     menos malo que perder la corrección del monto que el dueño venía a hacer.
+        putCon(JsonPrimitive(accountA2Id))
+        putCon(JsonPrimitive(cuentaDeOtroUsuario))
+        assertEquals(JsonNull, cuentaGuardada())
     }
 
     /** Lo que el detector encuentra sigue trayendo la cuenta del evento que lo originó. */

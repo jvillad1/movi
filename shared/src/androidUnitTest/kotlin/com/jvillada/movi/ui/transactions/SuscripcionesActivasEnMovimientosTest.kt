@@ -3,11 +3,17 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -292,9 +298,10 @@ class SuscripcionesActivasEnMovimientosTest {
         composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[3].performClick() // Google One
 
         esperarTexto("Editar suscripción")
-        // El nombre llega prellenado: es una corrección, no un alta desde cero.
-        composeRule.onAllNodesWithText("Google One", useUnmergedTree = true)
-            .fetchSemanticsNodes().isNotEmpty().let { assertEquals(true, it) }
+        // DOS nodos: el de la fila que quedó atrás y el del campo prellenado de la hoja. Con
+        // «hay al menos uno» esta prueba pasaba igual sin prefill —la fila sola ya lo aportaba—,
+        // así que no probaba lo único que dice probar. Medido: 1 antes de abrir, 2 después.
+        composeRule.onAllNodesWithText("Google One", useUnmergedTree = true).assertCountEquals(2)
     }
 
     /**
@@ -310,6 +317,108 @@ class SuscripcionesActivasEnMovimientosTest {
         // Pero «cada cuánto» sí, porque el PUT sí la escribe — y una detectada nace mensual, así
         // que un cobro anual mal clasificado solo se arregla acá.
         composeRule.onAllNodesWithText("CADA CUÁNTO", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    /** Toca el clickable que CONTIENE ese texto — el toque sobre el texto suelto no llega. */
+    private fun tocarPorSemantica(texto: String) {
+        composeRule.onAllNodes(
+            hasClickAction() and hasAnyDescendant(hasText(texto)),
+            useUnmergedTree = true,
+        ).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    /** El botón de guardar de la hoja: el toque directo cae en el scrim, el semántico no. */
+    private fun guardarLaHoja() {
+        composeRule.onAllNodes(
+            hasClickAction() and hasAnyDescendant(hasText("Guardar cambios")),
+            useUnmergedTree = true,
+        ).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * **Lo único que de verdad importa de esta acción: que guarde donde tiene que guardar.**
+     * La hoja es la misma que crea reglas recurrentes, y la rama equivocada no falla ni avisa —
+     * escribiría una regla NUEVA y dejaría la suscripción intacta, o sea el cobro contado dos
+     * veces en «Gastos recurrentes». Todo lo que la hoja no ofrece tocar tiene que llegar igual
+     * que estaba: la clave de origen, el estado, la moneda.
+     */
+    @Test
+    fun `guardar la edicion actualiza la suscripcion y no crea una regla`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[2].performClick() // Netflix
+        esperarTexto("Editar suscripción")
+
+        guardarLaHoja()
+
+        val cambios = requireNotNull(actualizada) { "no se llamó a updateSubscription" }
+        assertEquals("s_netflix", cambios.id)
+        assertNull("editar no crea ni borra nada", borrada)
+        // Lo que la hoja no toca llega igual: es una corrección, no un alta.
+        assertEquals("netflix", cambios.merchantKey)
+        assertEquals(SubStatus.CONFIRMED, cambios.status)
+        assertEquals("COP", cambios.currency)
+    }
+
+    /**
+     * **«Sin cuenta» tiene que poder quitarla de verdad.** El `PUT` distingue «quítala» de «no la
+     * toques» por la PRESENCIA de la clave `accountId` en el JSON, y kotlinx omite una clave que
+     * vale su default — que para `accountId` es `null`, justo el valor que significa «sin
+     * cuenta». O sea que era la única intención que el cliente no podía expresar: la hoja
+     * cerraba, la lista recargaba, y la cuenta seguía puesta. Lo arregla `@EncodeDefault(ALWAYS)`
+     * en el modelo; esta prueba es lo que impide que vuelva.
+     */
+    @Test
+    fun `quitarle la cuenta a una suscripcion la deja sin cuenta`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[3].performClick() // Google One
+        esperarTexto("Editar suscripción")
+        // Por acción semántica y no por toque: lo clickable es la fila, y el toque sobre el
+        // texto que está adentro no siempre le llega (mismo motivo que en [guardarLaHoja]).
+        tocarPorSemantica("Elegir")
+        // Esta fila del selector es un `Text` que ES el clickable, no uno adentro de otro, así
+        // que va por el nodo mismo y no por un ancestro que lo contenga.
+        composeRule.onAllNodesWithText("Sin cuenta", useUnmergedTree = true)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+
+        guardarLaHoja()
+
+        val cambios = requireNotNull(actualizada) { "no se llamó a updateSubscription" }
+        assertEquals("s_google", cambios.id)
+        assertNull("«Sin cuenta» tiene que llegar como accountId nulo", cambios.accountId)
+    }
+
+    /**
+     * **Un cobro en dólares se edita con «US$», no con «$».** El comentario de la hoja lo dice
+     * desde la V12: en Colombia «$12» se lee doce pesos. El prefijo salía de una condición que
+     * valía `false` en cuanto la hoja entraba en modo edición — o sea siempre, en este modo.
+     */
+    @Test
+    fun `editar una suscripcion en dolares muestra el prefijo en dolares`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[0].performClick() // Claude, USD
+        esperarTexto("Editar suscripción")
+
+        // El prefijo es su propio nodo dentro de [MoneyField] y su texto es exactamente «US$»
+        // (la fila que quedó atrás dice «−US$12», que no coincide exacto). Si el prefijo saliera
+        // en pesos, acá habría cero nodos.
+        composeRule.onAllNodesWithText("US$", useUnmergedTree = true).assertCountEquals(1)
+        // Y el campo NO ofrece cambiar la moneda: cambiarla no sería corregir un dato.
+        composeRule.onAllNodesWithText("MONEDA", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /**
+     * **La hoja de una suscripción no ofrece «Eliminar».** Lo ofrecía: ese enlace se pintaba con
+     * `isEditMode`, que editar una suscripción también enciende, pero `delete()` sale en su
+     * primera línea cuando no hay una regla detrás. Era un enlace rojo destructivo que no hacía
+     * nada — ni borraba, ni fallaba, ni avisaba. Para una suscripción el camino es «Quitar» desde
+     * la fila, que además sabe distinguir borrar una manual de marcar DISMISSED una detectada.
+     */
+    @Test
+    fun `la hoja de una suscripcion no ofrece Eliminar`() {
+        composeRule.onAllNodesWithText("Editar", useUnmergedTree = true)[2].performClick()
+        esperarTexto("Editar suscripción")
+
+        composeRule.onAllNodesWithText("Eliminar", useUnmergedTree = true).assertCountEquals(0)
     }
 
     // ── El total al pie ───────────────────────────────────────────────────────
