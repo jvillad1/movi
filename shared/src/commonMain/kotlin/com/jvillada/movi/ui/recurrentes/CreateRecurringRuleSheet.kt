@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.sirvePara
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.CategoryField
@@ -595,6 +596,14 @@ fun CreateRecurringRuleSheet(
 
                     // --- CUENTA (opcional) ---
                     //
+                    // Para qué tiene que servir la cuenta, en un solo lugar: lo lee el selector y
+                    // lo vigila el efecto de abajo.
+                    val uso = if (selectedType == TransactionType.EXPENSE) {
+                        UsoDeCuenta.ORIGEN_DE_GASTO
+                    } else {
+                        UsoDeCuenta.DESTINO_DE_INGRESO
+                    }
+                    //
                     // **Ola 17 — este selector está FUERA del `if`, y ahí está el arreglo.** Vivía
                     // dentro de la rama de regla, así que la hoja le preguntaba de qué cuenta sale
                     // el cobro a todo el mundo MENOS a quien anota una suscripción — justo el caso
@@ -605,6 +614,33 @@ fun CreateRecurringRuleSheet(
                     //
                     // Una sola instancia y no una copia por rama: si fueran dos, la primera
                     // corrección que se le haga a una la va a dejar distinta de la otra.
+                    //
+                    // **Y si cambia para qué sirve la cuenta, la elegida se suelta.** Sacar el
+                    // selector del `if` abrió un agujero que antes no existía: elegir «Ingreso»,
+                    // marcar ahí una cuenta de inversión (que para un ingreso es válida), y recién
+                    // después tocar «Dólares» o «Una vez al año». Esos chips fuerzan el tipo a
+                    // Gasto, pero `accountId` quedaba intacto — y `cuentasPara(..., conservar)`
+                    // deja la elegida visible y marcada aunque ya no sirva, así que se guardaba una
+                    // suscripción cobrada de una cuenta de la que no sale plata. Antes no podía
+                    // pasar porque el selector desaparecía en esa rama.
+                    //
+                    // Va acá y no adentro de los dos `onClick` a propósito: la regla es «cambió el
+                    // uso», no «tocaron este chip». Cualquier camino nuevo que mueva el tipo queda
+                    // cubierto sin acordarse de esto.
+                    //
+                    // Solo suelta lo que YA NO SIRVE, y nunca en la primera composición: una regla
+                    // vieja que quedó con una cuenta que hoy no calificaría se abre como está, y
+                    // que el dueño la vea es mejor que borrársela sin avisar al abrir la hoja.
+                    var usoAnterior by remember { mutableStateOf(uso) }
+                    LaunchedEffect(uso) {
+                        if (uso != usoAnterior) {
+                            if (!laCuentaSobreviveAlUso(accounts.firstOrNull { it.id == accountId }, uso)) {
+                                accountId = null
+                                elDuenoEligioSinCuenta = false
+                            }
+                            usoAnterior = uso
+                        }
+                    }
                     AccountPickerField(
                         accounts = accounts,
                         // Ola 15: una regla de gasto se cobra de donde sale plata (efectivo,
@@ -615,11 +651,7 @@ fun CreateRecurringRuleSheet(
                         // En la rama de suscripción esto siempre da ORIGEN_DE_GASTO sin que haga
                         // falta un caso aparte: una suscripción es siempre un cobro, y los chips
                         // «Dólares» / «Una vez al año» ya fuerzan `selectedType` a EXPENSE.
-                        uso = if (selectedType == TransactionType.EXPENSE) {
-                            UsoDeCuenta.ORIGEN_DE_GASTO
-                        } else {
-                            UsoDeCuenta.DESTINO_DE_INGRESO
-                        },
+                        uso = uso,
                         cuentasLeidas = cuentasLeidas,
                         fallaronLasCuentas = fallaronLasCuentas,
                         selectedId = accountId,
@@ -1033,3 +1065,17 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
 fun diaCortoHint(day: Int?): String? =
     if (day == null || day < 29) null
     else "En los meses que no llegan al $day, se toma el último día del mes; el siguiente vuelve al $day."
+
+/**
+ * ¿La cuenta que el dueño ya había elegido sigue sirviendo para lo que ahora es el cobro?
+ *
+ * `true` también cuando no eligió ninguna: no hay nada que soltar. Existe como función y no como
+ * un `if` adentro del efecto para poder probar la regla sin montar la hoja entera — el efecto que
+ * la llama solo agrega el «solo cuando el uso CAMBIA», que es plomería de Compose.
+ *
+ * Ver el efecto en [CreateRecurringRuleSheet] para el agujero que esto tapa: elegir «Ingreso»,
+ * marcar una cuenta de inversión, y recién después pasar a suscripción con «Dólares» o «Una vez al
+ * año» dejaba guardado un cobro que sale de una cuenta de la que no sale plata.
+ */
+internal fun laCuentaSobreviveAlUso(elegida: Account?, uso: UsoDeCuenta): Boolean =
+    elegida == null || sirvePara(elegida, uso)
