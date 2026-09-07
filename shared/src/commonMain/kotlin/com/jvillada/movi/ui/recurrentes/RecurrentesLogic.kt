@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.claveComparableDeNombre
@@ -119,6 +121,59 @@ sealed class Recurrente {
 }
 
 /**
+ * **Las reglas que no existen como filas**: las que el server fabrica al vuelo para «Próximos»
+ * desde las condiciones de un crédito o de una tarjeta.
+ *
+ * Se sacan de `GET /api/payments/upcoming` porque es el único lugar donde llegan —
+ * `GET /api/recurring-rules` devuelve la tabla, y ahí no están (ver [nombreDeCuotaPagada], que
+ * documenta el mismo hueco desde el otro lado). Se reconocen por el prefijo de su id, que es lo
+ * único que las distingue de las que el dueño escribió.
+ *
+ * Devuelve las DOS clases, tarjetas incluidas, y **no** decide cuál suma: eso es de
+ * [cuentaComoCompromisoMensual], y tener un segundo filtro acá sería la forma de que algún día
+ * discrepen. Acá solo se contesta «¿de dónde salió esta regla?».
+ */
+fun reglasSinteticas(upcoming: List<UpcomingPayment>): List<RecurringRule> =
+    upcoming.map { it.rule }.filter {
+        it.id.startsWith(CREDIT_RULE_PREFIX) || it.id.startsWith(CARD_RULE_PREFIX)
+    }
+
+/**
+ * **¿Esta regla es plata que sale del bolsillo TODOS los meses?** — la puerta única del «Flujo
+ * libre».
+ *
+ * Desde 2026-09 la lista de reglas que entra a [resumenRecurrentes] ya no son solo las que el
+ * dueño escribió: trae también las **sintéticas**, las que el server fabrica al vuelo para
+ * «Próximos» desde las condiciones de un crédito o de una tarjeta (`CREDIT_RULE_PREFIX` /
+ * `CARD_RULE_PREFIX`). Eso fue el pedido del dueño —sus cuotas son lo más grande que le sale al
+ * mes y el total las ignoraba— pero **no todas las sintéticas son un compromiso mensual**, y
+ * meterlas todas habría cambiado un número incompleto por uno inflado.
+ *
+ * Dice que **no** en dos casos, y los dos son «este monto no significa lo que parece»:
+ *
+ * - **La regla de una tarjeta** ([RecurringRule.montoEsSaldo]): su monto es la DEUDA de la
+ *   tarjeta, no un pago. Sumarla sería repetir el error que ese campo ya documenta haber
+ *   arreglado una vez —Movi anunciando $27.501.150 como el próximo pago de una tarjeta cuyo
+ *   mínimo ronda el 5 %—, esta vez adentro de un total. Y encima el monto viene en la moneda de
+ *   la cuenta, así que una tarjeta en dólares habría entrado a un total en pesos como si nada.
+ *   Se mira **también el prefijo del id**, y no solo la marca: son la misma decisión dicha dos
+ *   veces, y sostener un total con un `Boolean` con default `false` que tiene que acordarse de
+ *   viajar es apostar plata a que ningún server lo omita nunca.
+ * - **Un crédito de pago único** ([RecurringRule.esPagoUnico]): plazo ≤ 1 mes. Contarlo diría
+ *   que tiene ese monto menos todos los meses, para siempre, cuando vence una sola vez.
+ *
+ * **Lo que NO se decide acá, porque ya está decidido antes:** la cuota que retiene el empleador
+ * (libranza) y la que paga un tercero (Skandia, la esposa) **nunca llegan al cliente**. El server
+ * las filtra en `loadCreditRulePairs` con `entraAlBarridoDeAvisos`, por el mismo razonamiento que
+ * vale acá: el sueldo que el dueño registra ya viene NETO de la libranza, así que contar además
+ * la cuota como gasto la restaría dos veces. Repetir ese filtro acá sería una segunda copia de
+ * una regla que ya tiene dueño, y el día que discreparan el error sería justamente el doble
+ * descuento. Si alguna vez esas reglas empezaran a viajar, esta función habría que ampliarla.
+ */
+fun cuentaComoCompromisoMensual(rule: RecurringRule): Boolean =
+    !rule.montoEsSaldo && !rule.esPagoUnico && !rule.id.startsWith(CARD_RULE_PREFIX)
+
+/**
  * Todo lo que la pantalla necesita mostrar arriba, calculado una sola vez.
  *
  * El punto delicado es [gastos]. Antes de la Ola 8, «gastos recurrentes» y «total de
@@ -146,6 +201,15 @@ sealed class Recurrente {
  *   libre» muestra $30.825 de algo que la lista de abajo dice que cuesta $369.900, y el dueño no
  *   tiene forma de saber cuál de los dos números está mal. Mira lo que ENTRÓ, así que un cobro
  *   anual excluido por duplicado no dispara una explicación sobre un prorrateo que no se usó.
+ * @param cuotasDeCredito cuánto de [gastos] son cuotas de créditos. Desde 2026-09 entran al total
+ *   (era el pedido del dueño: son lo más grande que le sale al mes) y este número existe para
+ *   poder DECIRLO con una cifra que él pueda verificar contra sus créditos, en vez de que
+ *   «Gastos recurrentes» crezca $5.445.772 de un mes al otro sin explicación. Mira lo que ENTRÓ,
+ *   igual que los dos de arriba: sin créditos vale 0 y la pantalla no dice nada.
+ * @param pagosUnicosFuera cuántas cuotas quedaron FUERA de [gastos] por ser de un crédito que se
+ *   paga de una sola vez (ver [RecurringRule.esPagoUnico]). Se cuenta por el mismo motivo que
+ *   [sinConvertir]: es una fila que existe, vence y aparece en «Próximos», y que este total no
+ *   suma a propósito. Callarlo dejaría al dueño buscando $10.000.000 que no están.
  */
 data class ResumenRecurrentes(
     val items: List<Recurrente>,
@@ -154,15 +218,29 @@ data class ResumenRecurrentes(
     val sinConvertir: Int,
     val hayMonedaExtranjera: Boolean,
     val hayCobrosAnuales: Boolean = false,
+    val cuotasDeCredito: Long = 0L,
+    val pagosUnicosFuera: Int = 0,
 ) {
     val flujoLibre: Long get() = ingresos - gastos
 }
 
+/**
+ * @param rules **todas** las reglas que el cliente conoce, incluidas las sintéticas de créditos y
+ *   tarjetas — quién entra al total lo decide [cuentaComoCompromisoMensual], acá adentro y en un
+ *   solo lugar. Antes cada pantalla filtraba por su cuenta antes de llamar (el Inicio descartaba
+ *   por prefijo de id, Movimientos ni siquiera las pedía), que es la forma exacta en que las dos
+ *   cifras que dicen contar lo mismo se separan.
+ */
 fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): ResumenRecurrentes {
+    val cuentan = rules.filter { cuentaComoCompromisoMensual(it) }
     // Reparto uno-a-uno: cada regla puede tapar UNA suscripción, no todas las que se llamen
     // igual. Con dos cobros «Netflix» distintos y una sola regla, excluir los dos borraría un
     // gasto real del total; así se excluye uno y el otro sigue contando.
-    val reglasDisponibles = rules.map { claveDeNombre(it.name) }.toMutableList()
+    //
+    // Sobre `cuentan` y no sobre `rules`: una regla que NO suma tampoco puede tapar una
+    // suscripción que sí sumaba — eso borraría un gasto real del total en vez de evitar un
+    // duplicado que no existe.
+    val reglasDisponibles = cuentan.map { claveDeNombre(it.name) }.toMutableList()
     val activas = subs.subscriptions.filter {
         it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED
     }
@@ -205,15 +283,25 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         }
     }
 
+    val gastosDeReglas = cuentan.filter { it.type == TransactionType.EXPENSE }
     return ResumenRecurrentes(
-        items = (rules.map { Recurrente.Regla(it) } + suscripciones).sortedBy { it.dayOfMonth },
-        ingresos = rules.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+        // `items` sale de lo mismo que el total, no de `rules`: el acceso «Recurrentes» del Inicio
+        // lo lee para decir «libre al mes · N recurrentes», y un conteo que incluyera lo que la
+        // cifra de al lado no suma sería la contradicción de siempre, en chiquito. La cuota de un
+        // crédito SÍ cuenta como recurrente —entra al total, así que también al rótulo—; el pago
+        // de una tarjeta y el crédito de pago único no entran a ninguno de los dos.
+        items = (cuentan.map { Recurrente.Regla(it) } + suscripciones).sortedBy { it.dayOfMonth },
+        ingresos = cuentan.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
         // Las reglas son COP por modelo; las suscripciones entran según lo de arriba.
-        gastos = rules.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount } +
-            gastosDeSuscripciones,
+        gastos = gastosDeReglas.sumOf { it.amount } + gastosDeSuscripciones,
         sinConvertir = sinConvertir,
         hayMonedaExtranjera = dolaresEnElTotal,
         hayCobrosAnuales = anualesEnElTotal,
+        // Lo que ENTRÓ, y por eso se filtra sobre `gastosDeReglas` y no sobre `rules`.
+        cuotasDeCredito = gastosDeReglas
+            .filter { it.id.startsWith(CREDIT_RULE_PREFIX) }
+            .sumOf { it.amount },
+        pagosUnicosFuera = rules.count { it.esPagoUnico },
     )
 }
 

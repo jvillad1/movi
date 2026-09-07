@@ -22,6 +22,16 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         name       = "Cuota $accountName",
         category   = "Créditos",
         amount     = terms.installment,
+        // **Un crédito a un mes no es un compromiso mensual: es un pago y se acabó.** El dueño
+        // tiene uno («Crédito Techo Gardenera», $10.000.000 a un plazo de 1 mes, que es su saldo
+        // entero). El plazo vive en credit_terms y no viaja en la regla, así que sin este campo
+        // el cliente —que es quien suma el «Flujo libre»— no tiene forma de distinguirlo de una
+        // cuota de verdad, y lo contaría todos los meses. Ver [RecurringRule.esPagoUnico].
+        //
+        // `<= 1` y no `== 1`: un plazo en 0 (dato viejo, o a medio cargar) tampoco describe algo
+        // que se repita, y equivocarse hacia «no lo cuentes todos los meses» es lo barato.
+        // El aviso de vencimiento NO se toca: sigue saliendo por `entraAlBarridoDeAvisos`.
+        esPagoUnico = terms.termMonths <= 1,
         dayOfMonth = terms.dayOfMonth,
         type       = TransactionType.EXPENSE,
         // La regla es sintética, pero la decisión de avisar es del dueño y vive en credit_terms.

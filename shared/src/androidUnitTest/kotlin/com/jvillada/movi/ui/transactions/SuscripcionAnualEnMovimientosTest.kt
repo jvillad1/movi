@@ -16,12 +16,14 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
+import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Before
@@ -84,6 +86,13 @@ class SuscripcionAnualEnMovimientosTest {
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
         override suspend fun getSubscriptions(): SubscriptionsResult =
             SubscriptionsResult(suscripciones, monthlyTotalCop = totalProrrateado, usdToCop = 0.0)
+
+        // Vacíos, pero contestados: desde que las cuotas de los créditos entran al «Flujo libre»,
+        // el card no muestra ninguna cifra hasta que `/api/payments/upcoming` responde — un total
+        // al que le falten las cuotas es peor que un guion. Acá no hay créditos y el total es el
+        // de siempre.
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
     }
 
     @Before

@@ -564,8 +564,19 @@ class DashboardLogicTest {
         assertEquals("Sin recurrentes", quickLinkFigure("recurrentes", vacioReal).sub)
     }
 
+    /**
+     * **La cuota de un crédito SÍ cuenta; el pago de una tarjeta no.**
+     *
+     * Este test fijaba lo contrario —el acceso descartaba las dos por el prefijo del id— hasta
+     * que el dueño decidió que sus cuotas tienen que entrar al «Flujo libre»: son lo más grande
+     * que le sale al mes. Lo que no cambió es la tarjeta, cuyo monto es el SALDO y no un pago.
+     *
+     * La cifra y el rótulo se mueven JUNTOS: si la cuota entra al total, entra también al conteo
+     * de «N recurrentes». Un número que cuenta tres cosas al lado de un rótulo que dice dos es la
+     * misma contradicción de siempre, en chiquito.
+     */
     @Test
-    fun `el acceso Recurrentes ignora las cuotas sinteticas de creditos y tarjetas`() {
+    fun `el acceso Recurrentes cuenta las cuotas de creditos y deja afuera la tarjeta`() {
         val d = DashboardData(
             upcoming = listOf(
                 upcoming("${CREDIT_RULE_PREFIX}l1", "Cuota del carro", 900_000, daysUntil = 4),
@@ -575,9 +586,25 @@ class DashboardLogicTest {
             subscriptions = SubscriptionsResult(emptyList(), 0),
         )
         val f = quickLinkFigure("recurrentes", d)
-        assertEquals("−$2.000.000", f.value)
-        assertEquals("libre al mes · 1 recurrente", f.sub)
+        assertEquals("−$2.900.000", f.value)
+        assertEquals("libre al mes · 2 recurrentes", f.sub)
         assertEquals(true, f.isAlert, "un flujo libre negativo se marca")
+    }
+
+    /** Un crédito de pago único no es un gasto de todos los meses: ni en la cifra ni en el conteo. */
+    @Test
+    fun `el acceso Recurrentes deja afuera el credito de pago unico`() {
+        val techo = upcoming("${CREDIT_RULE_PREFIX}techo", "Cuota Techo", 10_000_000, daysUntil = 4)
+        val d = DashboardData(
+            upcoming = listOf(
+                upcoming("${CREDIT_RULE_PREFIX}l1", "Cuota del carro", 900_000, daysUntil = 4),
+                techo.copy(rule = techo.rule.copy(esPagoUnico = true)),
+            ),
+            subscriptions = SubscriptionsResult(emptyList(), 0),
+        )
+        val f = quickLinkFigure("recurrentes", d)
+        assertEquals("−$900.000", f.value)
+        assertEquals("libre al mes · 1 recurrente", f.sub)
     }
 
     @Test

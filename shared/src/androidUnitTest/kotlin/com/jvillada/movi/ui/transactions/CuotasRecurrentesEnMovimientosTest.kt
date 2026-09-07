@@ -18,10 +18,13 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
@@ -48,7 +51,8 @@ import org.robolectric.annotation.Config
  * 3. Que el **pago de una tarjeta**, que tiene exactamente la misma forma, siga sin marcarse ni
  *    entrar al chip. Esa es la parte que cuesta plata si se rompe: las compras ya contaron cuando
  *    se hicieron.
- * 4. Que el card de «Flujo libre» diga que ese total todavía no las cuenta.
+ * 4. Que el card de «Flujo libre» las **cuente** —el dueño lo decidió después del PR anterior— y
+ *    que diga cuánto, con qué queda afuera y por qué.
  *
  * Mismo patrón de montaje que [ResumenRecurrentesEnMovimientosTest] y
  * [SuscripcionesActivasEnMovimientosTest], y con la ventana alta de esta última por el mismo
@@ -114,6 +118,20 @@ class CuotasRecurrentesEnMovimientosTest {
         items = listOf(cuotaDinero, cuotaDeuda, tarjetaDinero, tarjetaDeuda),
     )
 
+    /**
+     * Las reglas sintéticas de sus créditos, tal como se las manda el server por
+     * `/api/payments/upcoming`: la del carro (una cuota de verdad) y la del techo, que es un pago
+     * único de $10.000.000 a un mes.
+     */
+    private val reglaDelCarro = RecurringRule(
+        id = "credit_acc-carro", name = "Cuota Vehículo", category = "Créditos",
+        amount = 4_215_223L, dayOfMonth = 1, type = TransactionType.EXPENSE,
+    )
+    private val reglaDelTecho = RecurringRule(
+        id = "credit_acc-techo", name = "Cuota Crédito Techo Gardenera", category = "Créditos",
+        amount = 10_000_000L, dayOfMonth = 1, type = TransactionType.EXPENSE, esPagoUnico = true,
+    )
+
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(bancolombia, vehiculo, nubank)
         override suspend fun getEventsByDay(): List<EventDay> = listOf(dia)
@@ -124,6 +142,18 @@ class CuotasRecurrentesEnMovimientosTest {
         override suspend fun getRecurringRules(): List<RecurringRule> = emptyList()
         override suspend fun getSubscriptions(): SubscriptionsResult =
             SubscriptionsResult(emptyList(), monthlyTotalCop = 0L)
+
+        // La única puerta por la que las cuotas llegan al cliente. Sin esto el card no muestra
+        // ninguna cifra (a propósito: ver el `takeIf { vencimientosOk }` de la pantalla).
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
+            listOf(reglaDelCarro, reglaDelTecho).map {
+                UpcomingPayment(
+                    rule = it, dueDate = "2026-10-01", daysUntil = 25,
+                    status = PaymentStatus.UPCOMING,
+                )
+            }
+
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
     }
 
     @Before
@@ -186,12 +216,17 @@ class CuotasRecurrentesEnMovimientosTest {
         // Por el monto completo de la cuota (la plata que salió), no por el capital que abonó.
         // Por subcadena para no depender de qué signo «menos» exacto usa `formatCOP`.
         //
-        // Son DOS nodos y las dos veces es la misma cuota: la fila, y el «Flujo del día» del
-        // encabezado, que con este filtro puesto vale exactamente eso. Que coincidan es la
-        // aserción: si la pata de la deuda también hubiera pasado, el total del día ya no diría
-        // lo mismo que la única fila de abajo.
+        // Son CINCO nodos y las cinco veces es la misma cuota — que sea la misma cifra en todas
+        // es la aserción, porque es la pantalla entera diciendo lo mismo de una sola plata:
+        //   1. «Flujo libre» del card (−$4.215.223: no hay ingresos recurrentes)
+        //   2. «Gastos recurrentes» del card
+        //   3. la línea que dice cuánto de ese total son cuotas
+        //   4. el «Flujo del día» del encabezado del día
+        //   5. la fila de la cuota
+        // Si la pata de la deuda también hubiera pasado el filtro, 4 y 5 dejarían de coincidir; y
+        // si el total no contara la cuota, 1-3 tampoco.
         composeRule.onAllNodesWithText("4.215.223", substring = true, useUnmergedTree = true)
-            .assertCountEquals(2)
+            .assertCountEquals(5)
     }
 
     /** Y el pago de la tarjeta no se cuela por la puerta nueva. */
@@ -205,19 +240,39 @@ class CuotasRecurrentesEnMovimientosTest {
     }
 
     /**
-     * **Y el total de arriba dice que no las cuenta.** «Flujo libre» es
-     * `resumenRecurrentes(reglas, suscripciones)` y las reglas de los créditos no son filas de la
-     * tabla, así que la lista muestra plata que ese número no suma. Si eso debería cambiar es una
-     * decisión del dueño; que la pantalla lo calle mientras tanto, no.
+     * **Y el total de arriba las cuenta.** El PR anterior dejó acá una línea que admitía que
+     * «Flujo libre» no las sumaba; el dueño decidió que sí deben sumar, así que esa línea sería
+     * hoy una mentira y esta prueba fija que no está.
+     *
+     * El total es la cuota del carro y nada más: la del techo es un pago único de $10.000.000 y
+     * no entra. Que el número sea $4.215.223 y no $14.215.223 es la aserción.
      */
     @Test
-    fun `el card de Flujo libre avisa que las cuotas no entran en ese total`() {
+    fun `el card de Flujo libre cuenta las cuotas y dice cuanto`() {
         composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("Flujo libre")
 
-        composeRule.onNodeWithText(
-            "Las cuotas de tus créditos aparecen en la lista de abajo, pero todavía no entran en este total.",
-            useUnmergedTree = true,
-        ).assertExists()
+        composeRule.onAllNodesWithText(
+            "Las cuotas de tus créditos entran en este total: $4.215.223 al mes.",
+            substring = true, useUnmergedTree = true,
+        ).assertCountEquals(1)
+        // La confesión del PR anterior ya no puede estar en ninguna forma.
+        composeRule.onAllNodesWithText(
+            "todavía no entran en este total", substring = true, useUnmergedTree = true,
+        ).assertCountEquals(0)
+    }
+
+    /** Y el pago único queda afuera **diciéndolo**: es plata que vence, solo que una sola vez. */
+    @Test
+    fun `el card explica el credito que se paga de una sola vez`() {
+        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        esperarTexto("Flujo libre")
+
+        composeRule.onAllNodesWithText(
+            "Un crédito tuyo se paga de una sola vez", substring = true, useUnmergedTree = true,
+        ).assertCountEquals(1)
+        // Los $10.000.000 del techo no están en ninguna cifra del card.
+        composeRule.onAllNodesWithText("14.215.223", substring = true, useUnmergedTree = true)
+            .assertCountEquals(0)
     }
 }
