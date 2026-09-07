@@ -165,8 +165,13 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
 - `scripts/` also has `build-apk.sh`, `generate-vapid-keys.sh` (web push), `seed-credits.sh` and
   `seed-subscriptions.sh`. Los dos `seed-*` comparten contrato: leen el token de `MOVI_TOKEN`
   (nunca por argumento — quedaría en el historial del shell), son dry-run salvo `--apply`, y son
-  idempotentes contra lo que ya existe. `seed-subscriptions.sh` resuelve la cuenta por NOMBRE
-  contra `/api/accounts` al correr, en vez de guardar un id en el JSON.
+  idempotentes contra lo que ya existe — con el alcance que eso tiene: la criba compara el
+  nombre normalizado igual que el server más la moneda, así que atrapa un re-run pero **no** un
+  registro que alguien haya escrito con otro nombre («Netflix» contra un «Netflix Colombia» que
+  ya está). Para ese caso avisa y sigue; leé el dry-run antes de `--apply`.
+  `seed-subscriptions.sh` resuelve la cuenta por NOMBRE contra `/api/accounts` al correr, en vez
+  de guardar un id en el JSON, y en `--apply` cierra con un resumen y sale distinto de 0 si algún
+  POST falló: un POST que falla no corta los que siguen.
 
 ## Key conventions
 
