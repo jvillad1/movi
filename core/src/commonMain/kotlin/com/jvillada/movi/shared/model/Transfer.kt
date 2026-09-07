@@ -85,7 +85,7 @@ const val TRANSFER_ID_ALREADY_USED =
  * `signedDelta`/`computeBalances` no pasan por [isCashFlow].
  *
  * **Por qué NO es «Otros», que era la primera respuesta:** este código ya cometió ese error y lo
- * dejó escrito. Ver `ADJUSTMENT_CATEGORY` en `BalanceAdjustment.kt`: el ajuste de saldo vivía en
+ * dejó escrito. Ver [ADJUSTMENT_CATEGORY] (vive en `CashFlow.kt` desde que `isCashFlow` la excluye): el ajuste de saldo vivía en
  * «Otros» y ahí *«chocaba de frente con un presupuesto llamado "Otros", que quedaba en OVER al
  * instante»*. Acá el choque sería peor, no mejor: el ajuste al menos queda fuera del flujo de
  * caja, y bajo «Otros» esta pata quedaría con el tipo equivocado y sin nada que la distinga de un

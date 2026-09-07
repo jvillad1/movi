@@ -22,7 +22,7 @@ class CategoryAdminTest {
         assertEquals(
             setOf(
                 "Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada",
-                "Descuento de nómina", "Pago de un tercero",
+                "Descuento de nómina", "Pago de un tercero", "Ajuste de saldo",
             ),
             RESERVED_CATEGORIES,
         )
@@ -32,6 +32,48 @@ class CategoryAdminTest {
         assertEquals(ORPHANED_LEG_CATEGORY, "Cuenta eliminada")
         assertEquals(PAYROLL_DEDUCTION_CATEGORY, "Descuento de nómina")
         assertEquals(THIRD_PARTY_PAYMENT_CATEGORY, "Pago de un tercero")
+        assertEquals(ADJUSTMENT_CATEGORY, "Ajuste de saldo")
+    }
+
+    /**
+     * **La dirección que faltaba: toda categoría que `isCashFlow` excluye POR NOMBRE tiene que
+     * estar en [RESERVED_CATEGORIES].**
+     *
+     * El test de abajo recorre la lista y comprueba que `isCashFlow` las deje afuera. Eso atrapa
+     * que alguien SAQUE una exclusión. No atrapa lo contrario —agregar una exclusión sin sumarla
+     * a la lista— y por ahí se coló [ADJUSTMENT_CATEGORY] en la Ola 19, con CI en verde.
+     *
+     * Lo que abre esa mitad son dos agujeros de plata, los dos silenciosos:
+     *
+     *  1. La pantalla de «Categorías» la deja **renombrar**, y `rewriteCategory` reescribe los
+     *     movimientos: lo que estaba fuera del mes vuelve a entrar, sin aviso y sin vuelta atrás.
+     *  2. El campo de categoría **la sugiere** al anotar, y un gasto real anotado con ella
+     *     desaparece de «Gastos del mes». `POST /api/events` rechaza escribir una reservada a
+     *     mano justamente para eso — mirando esta lista.
+     *
+     * No se puede enumerar por reflexión lo que excluye un `when`, así que la lista de candidatas
+     * se mantiene a mano; lo que sí es automático es que **cualquiera** de ellas que quede fuera
+     * del flujo tiene que estar protegida.
+     */
+    @Test
+    fun `lo que isCashFlow excluye por nombre esta protegido contra renombres`() {
+        val excluidasPorNombre = listOf(
+            TRANSFER_CATEGORY, OPENING_CATEGORY, CARD_PAYMENT_CATEGORY, ORPHANED_LEG_CATEGORY,
+            PAYROLL_DEDUCTION_CATEGORY, THIRD_PARTY_PAYMENT_CATEGORY, ADJUSTMENT_CATEGORY,
+        )
+        for (categoria in excluidasPorNombre) {
+            // La premisa: esta categoría de verdad queda fuera del flujo por su NOMBRE — en una
+            // cuenta SAVINGS, donde ni el tipo de cuenta ni el de movimiento la excluirían.
+            assertFalse(
+                isCashFlow(AccountType.SAVINGS, TransactionType.EXPENSE, categoria),
+                "«$categoria» ya no se excluye por nombre: sacala de esta lista o revisá isCashFlow",
+            )
+            assertTrue(
+                isReservedCategory(categoria),
+                "«$categoria» queda fuera del mes pero NO está reservada: el dueño la puede " +
+                    "renombrar (y sus movimientos vuelven al mes) y Movi se la sugiere al anotar",
+            )
+        }
     }
 
     @Test
@@ -67,7 +109,9 @@ class CategoryAdminTest {
         // Y la vuelta: `isReservedCategory` compara sobre RESERVED_CATEGORIES, así que
         // preguntárselo por cada elemento del mismo conjunto no probaría nada. Lo que sí prueba
         // algo es que la lista de arriba —la de nombres literales— caiga entera adentro.
-        for (nombre in listOf("Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada")) {
+        for (nombre in listOf(
+            "Traspaso", "Saldo inicial", "Pago de tarjeta", "Cuenta eliminada", "Ajuste de saldo",
+        )) {
             assertTrue(isReservedCategory(nombre), "«$nombre» tiene que estar protegida")
         }
     }

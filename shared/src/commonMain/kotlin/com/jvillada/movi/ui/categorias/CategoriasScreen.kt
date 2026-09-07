@@ -550,10 +550,11 @@ private fun HojaDetalle(
                         color = MinWarn,
                     )
                     Text(
-                        "La escribe la app sola para traspasos, saldos iniciales, pagos de tarjeta " +
-                            "y cuentas eliminadas, " +
-                            "y de su nombre exacto dependen las cifras de tu mes. No se puede renombrar, " +
-                            "unificar ni esconder.",
+                        // Sin enumerar cuáles son: la lista ya iba desactualizada (le faltaban
+                        // «Descuento de nómina» y «Pago de un tercero») y esta pantalla ya está
+                        // mostrando CUÁL es. Lo que hace falta decir es por qué tiene candado.
+                        "La escribe Movi sola, y de su nombre exacto dependen las cifras de tu " +
+                            "mes. No se puede renombrar, unificar ni esconder.",
                         fontSize = 12.5.sp,
                         color = MinTextMute,
                         lineHeight = 17.sp,
