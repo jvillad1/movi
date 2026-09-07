@@ -109,9 +109,14 @@ class CuotasEnElFlujoLibreTest {
         assertEquals(CUOTAS_REALES, r.gastos)
         assertEquals(CUOTAS_REALES, r.cuotasDeCredito)
         assertEquals(-CUOTAS_REALES, r.flujoLibre)
-        // Y no las dos cifras equivocadas que están a un `filter` de distancia.
-        assertFalse(r.gastos == 25_470_538L, "sumó también el saldo de la tarjeta")
+        // Y no las cifras equivocadas que están a un `filter` de distancia. Son las que de verdad
+        // salen de este fixture si se cae cada exclusión: con las cinco reglas de arriba, olvidar
+        // la del saldo de la tarjeta da 5.445.772 + 27.501.150, y olvidar la del pago único da
+        // 5.445.772 + 10.000.000. (La primera decía 25.470.538, que no es la suma de nada de acá:
+        // era una cifra real de sus ocho créditos, así que la aserción no podía fallar nunca.)
+        assertFalse(r.gastos == 32_946_922L, "sumó también el saldo de la tarjeta")
         assertFalse(r.gastos == 15_445_772L, "sumó el crédito de pago único")
+        assertFalse(r.gastos == 42_946_922L, "se cayeron las dos exclusiones")
     }
 
     @Test
