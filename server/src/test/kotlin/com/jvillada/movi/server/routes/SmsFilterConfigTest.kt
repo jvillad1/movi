@@ -120,6 +120,32 @@ class SmsFilterConfigTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val obj = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals(listOf("85540", "891333", "87400"), obj["senderCodes"]!!.jsonArray.map { it.jsonPrimitive.content })
-        assertEquals(listOf("bancolombia"), obj["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("bancolombia", "nubank"), obj["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content })
+    }
+
+    /**
+     * **Ninguna keyword puede ser tan corta que aparezca dentro de palabras comunes.**
+     *
+     * El cliente compara por substring (`lower.contains(keyword)`, ver `BankSenderFilter`), y lo
+     * que pasa el filtro **se sube al server**. O sea que una keyword como `nu` no haría ruido:
+     * le mandaría la bandeja de SMS personal entera, porque coincide con «número», «nuevo»,
+     * «nunca», «continuar». Este test existe para que agregar un banco nuevo con una keyword
+     * corta falle acá y no en el teléfono del dueño.
+     */
+    @Test
+    fun `ninguna keyword coincide dentro de una palabra española común`() = testApplication {
+        wireApp()
+        val res = client.get("/api/sms/filter-config")
+        val keywords = Json.parseToJsonElement(res.bodyAsText())
+            .jsonObject["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content.lowercase() }
+
+        val fraseInocente = "tu numero de pedido continua en el nuevo local, nunca antes visto"
+        keywords.forEach { k ->
+            assertEquals(
+                false,
+                fraseInocente.contains(k),
+                "la keyword «$k» coincide dentro de una frase común: capturaría SMS personales",
+            )
+        }
     }
 }

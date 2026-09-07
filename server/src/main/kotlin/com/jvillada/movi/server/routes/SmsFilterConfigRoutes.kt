@@ -23,9 +23,21 @@ import kotlinx.serialization.Serializable
 @Serializable
 private data class SmsFilterConfig(val senderCodes: List<String>, val bodyKeywords: List<String>)
 
+/**
+ * **`nubank` y no `nu`.** El cliente compara por SUBSTRING (`lower.contains(keyword)`, ver
+ * `BankSenderFilter`), así que `nu` coincidiría con «número», «nuevo», «nunca», «continuar» —
+ * es decir, con casi cualquier SMS en español. Eso no sería ruido: los mensajes que pasan el
+ * filtro se SUBEN al server, así que una keyword corta le manda la bandeja personal entera.
+ * Cualquier keyword nueva tiene que ser lo bastante larga para no aparecer dentro de palabras
+ * comunes.
+ *
+ * Falta el código de remitente de Nu: sin un SMS suyo a la vista no se sabe cuál es, y adivinarlo
+ * no cuesta nada pero tampoco captura nada. Mientras tanto esta keyword cubre los mensajes que
+ * digan «Nubank» en el cuerpo.
+ */
 private val CURRENT_FILTER = SmsFilterConfig(
     senderCodes = listOf("85540", "891333", "87400"),
-    bodyKeywords = listOf("bancolombia"),
+    bodyKeywords = listOf("bancolombia", "nubank"),
 )
 
 fun Route.smsFilterConfigRoutes() {
