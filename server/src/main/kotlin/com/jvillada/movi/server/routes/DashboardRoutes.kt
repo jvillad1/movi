@@ -6,6 +6,7 @@ import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.SmsMessages
+import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
@@ -15,6 +16,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
+import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
@@ -27,7 +29,6 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
@@ -91,6 +92,25 @@ fun Route.dashboardRoutes() {
 
             val (income, spentByCategory) = monthCashFlow(uid, monthStart, monthEnd, voidedIds, accountTypeById)
 
+            // **Una sola lectura de `sms_messages` para las tres cifras que salen de ahí.**
+            //
+            // Antes acá había un `COUNT(*)` de los pendientes y nada más. Ahora el Inicio además
+            // tiene que poder decir «Movi nunca ha recibido un mensaje de tu banco» —ver
+            // `CapturaDeSms` en :core, y el defecto que la hizo nacer— y eso necesita el total y
+            // el `time` más reciente. Tres agregados serían tres consultas; dos columnas de las
+            // mismas filas son una. El conjunto está acotado por usuario y son mensajes de banco,
+            // no la historia de movimientos: bastante menos de lo que ya recorren en memoria
+            // `cardPaymentCandidateCount` y `usedCategories` acá al lado.
+            //
+            // El `time` es un varchar libre y el criterio de «cuál es el último» vive en :core,
+            // en la MISMA función que usa la bandeja de SMS del cliente: dos superficies que
+            // ordenan por su cuenta terminan nombrando mensajes distintos.
+            val filasDeSms = SmsMessages
+                .select(SmsMessages.time, SmsMessages.state)
+                .where { SmsMessages.userId eq uid }
+                .map { it[SmsMessages.time] to it[SmsMessages.state] }
+            val captura = capturaDeSms(filasDeSms.map { it.first })
+
             DashboardSummary(
                 scope = scope,
                 month = month,
@@ -98,9 +118,12 @@ fun Route.dashboardRoutes() {
                 monthSpent = spentByCategory.values.sum(),
                 spentByCategory = spentByCategory,
                 cardPaymentCandidates = cardPaymentCandidateCount(uid, voidedIds, accountTypeById),
-                pendingSms = SmsMessages.select(SmsMessages.id.count())
-                    .where { (SmsMessages.userId eq uid) and (SmsMessages.state eq SMS_STATE_PENDING) }
-                    .single()[SmsMessages.id.count()].toInt(),
+                pendingSms = filasDeSms.count { (_, state) -> state == SMS_STATE_PENDING },
+                smsTotal = captura.total,
+                smsLastAt = captura.ultimo,
+                smsAlertMuted = Users.select(Users.smsAlertMuted)
+                    .where { Users.id eq uid }
+                    .firstOrNull()?.get(Users.smsAlertMuted) ?: false,
                 usedCategories = usedCategories(uid),
             )
         }

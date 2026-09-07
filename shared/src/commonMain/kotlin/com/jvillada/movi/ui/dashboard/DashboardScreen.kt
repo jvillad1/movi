@@ -25,6 +25,7 @@ import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -265,6 +266,13 @@ fun DashboardScreen(
                             spentByCategory = s.spentByCategory,
                             cardCandidates = s.cardPaymentCandidates,
                             pendingSms = s.pendingSms,
+                            // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta
+                            // —no es una llamada nueva— y es lo que le permite al Inicio decir
+                            // «Movi nunca ha recibido un mensaje de tu banco». Ver CapturaDeSms
+                            // en :core: la captura estuvo muda semanas y el único lugar que
+                            // podía delatarlo era una pantalla de Android que el dueño no abre.
+                            captura = CapturaDeSms(total = s.smsTotal, ultimo = s.smsLastAt),
+                            capturaSilenciada = s.smsAlertMuted,
                         )
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por

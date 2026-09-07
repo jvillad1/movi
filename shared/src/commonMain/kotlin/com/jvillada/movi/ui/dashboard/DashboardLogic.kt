@@ -9,6 +9,8 @@ import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.CapturaDeSms
+import com.jvillada.movi.shared.model.alertaDeCapturaEnInicio
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
@@ -77,6 +79,19 @@ data class DashboardData(
     val spentByCategory: Map<String, Long> = emptyMap(),
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
+    /**
+     * Qué se sabe de la captura de SMS: cuántos mensajes del banco llegaron alguna vez y cuándo
+     * llegó el último (ver [CapturaDeSms] en `:core`). `null` = el resumen todavía no contestó.
+     *
+     * La distinción importa más que en otros campos: `CapturaDeSms()` vacío significa «nunca
+     * llegó nada», que es justamente lo que dispara la alerta. Con un default no nulo, un
+     * arranque en frío sin señal pintaría «Movi nunca ha recibido un mensaje de tu banco» a
+     * alguien cuya captura funciona perfecto — la misma clase de afirmación sin datos que
+     * [accounts] tuvo que dejar de hacer.
+     */
+    val captura: CapturaDeSms? = null,
+    /** El dueño pidió no ver el aviso de captura en el Inicio (`users.sms_alert_muted`). */
+    val capturaSilenciada: Boolean = false,
     val goals: List<Goal> = emptyList(),
     val subscriptions: SubscriptionsResult? = null,
 ) {
@@ -395,8 +410,18 @@ fun overBudgetCategories(budgets: List<Budget>, spentByCategory: Map<String, Lon
 /**
  * Cada alerta es una fila tocable que lleva a donde se resuelve. Sin nada pendiente devuelve
  * vacío y la sección entera no se pinta — nada de "Sin alertas por ahora".
+ *
+ * @param captura qué se sabe de la captura de SMS; `null` = el resumen no contestó todavía y no
+ *   se afirma nada. Ver [alertaDeCapturaEnInicio] para por qué esa fila solo aparece en el caso
+ *   «nunca llegó nada» y cómo deja de aparecer.
  */
-fun dashboardAlerts(overBudget: List<String>, cardCandidates: Int, pendingSms: Int): List<DashboardAlert> = buildList {
+fun dashboardAlerts(
+    overBudget: List<String>,
+    cardCandidates: Int,
+    pendingSms: Int,
+    captura: CapturaDeSms? = null,
+    capturaSilenciada: Boolean = false,
+): List<DashboardAlert> = buildList {
     when (overBudget.size) {
         0 -> Unit
         1 -> add(DashboardAlert("Presupuesto de ${overBudget[0]} superado", Screen.Budgets))
@@ -407,6 +432,13 @@ fun dashboardAlerts(overBudget: List<String>, cardCandidates: Int, pendingSms: I
     }
     if (pendingSms > 0) {
         add(DashboardAlert(plural(pendingSms, "mensaje del banco", "mensajes del banco") + " por confirmar", Screen.SMSInbox))
+    }
+    // Va última y nunca convive con la de arriba: si hay algo por confirmar, es que llegó algo.
+    // El dueño pasó semanas anotando a mano creyendo que la captura corría, y no se enteró
+    // porque el único indicador vivía en una pantalla a la que no tenía motivo para entrar. La
+    // fila es el motivo.
+    captura?.let { c ->
+        alertaDeCapturaEnInicio(c, capturaSilenciada)?.let { add(DashboardAlert(it, Screen.SMSInbox)) }
     }
 }
 
@@ -599,6 +631,7 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
     }
     dashboardAlerts(
         overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
+        data.captura, data.capturaSilenciada,
     ).forEach { add(NotificationRow(it.text, it.target)) }
 }
 
@@ -615,6 +648,7 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
             "ALERTS" -> dashboardAlerts(
                 overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
+                data.captura, data.capturaSilenciada,
             ).isNotEmpty()
             "QUICK_LINKS_WITH_TOTALS", "LINK_LIST", "CARD_ROW", "CARD_LIST" -> section.cards.isNotEmpty()
             else -> true

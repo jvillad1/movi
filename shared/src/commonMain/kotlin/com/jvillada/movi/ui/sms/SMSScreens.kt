@@ -34,6 +34,9 @@ import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UpdateProfileRequest
+import com.jvillada.movi.shared.model.avisoDeCaptura
+import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.newId
@@ -46,14 +49,32 @@ import kotlinx.datetime.Clock
 
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
-    var smsItems by remember { mutableStateOf<List<SmsMessage>>(emptyList()) }
+    val coroutine = rememberCoroutineScope()
+    /**
+     * `null` = la bandeja todavía no contestó (o su lectura falló); lista vacía = contestó y no
+     * hay nada. La distinción no era necesaria mientras esta lista solo pintaba filas, y pasó a
+     * serlo cuando de su vacío se deduce «Movi nunca ha recibido un mensaje de tu banco»: con un
+     * `emptyList()` por defecto, quedarse sin señal un segundo bastaba para afirmarle eso a
+     * alguien cuya captura anda perfecto. Misma disciplina que `DashboardData.accounts`.
+     */
+    var smsItems by remember { mutableStateOf<List<SmsMessage>?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    /** `null` = el perfil todavía no contestó; hasta entonces no se ofrece silenciar ni no. */
+    var silenciada by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(refreshKey) {
         runCatching { Repositories.wallets.getSmsMessages() }
             .onSuccess { smsItems = it }
     }
-    val pendingCount = smsItems.count { it.state == SMS_STATE_PENDING }
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getUserProfile() }
+            .onSuccess { silenciada = it.smsAlertMuted }
+    }
+    val mensajes = smsItems.orEmpty()
+    val pendingCount = mensajes.count { it.state == SMS_STATE_PENDING }
+    // El estado de la captura sale de la MISMA función que usa el server para el Inicio
+    // (`capturaDeSms`, en :core) — acá sin un viaje extra, porque la lista ya está bajada.
+    val aviso = smsItems?.let { avisoDeCaptura(capturaDeSms(it.map { sms -> sms.time })) }
     Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
         // F60: encabezado único — se abre desde Más (flecha, F22); la cuenta de pendientes
         // va como subtítulo y «Actualizar» es la acción propia.
@@ -81,41 +102,98 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(18.dp),
                 ) {
-                    // La lectura automática solo existe en Android (permiso READ_SMS + bandeja
-                    // del sistema). En web/iOS mostrar "AUTO-LECTURA ACTIVA" sería mentir: acá
-                    // no hay ninguna lectura pasando, solo la revisión de lo que el teléfono ya
-                    // subió.
-                    if (isAndroid) {
-                        // m4: el rótulo responde al estado real. Con sesión garantizada
-                        // por la pantalla, lo único que puede faltar es el permiso de SMS
-                        // — y si falta, afirmar "ACTIVA" contradiría a la sección de
-                        // captura de abajo, que es donde se arregla.
-                        val captureReady = rememberSmsCaptureReady()
+                    // **El hecho primero, y en todas las plataformas.**
+                    //
+                    // Acá decía "AUTO-LECTURA ACTIVA" en cuanto el permiso estuviera concedido,
+                    // y solo en Android; la web no pintaba nada. Las dos cosas fallaron a la vez:
+                    // el permiso concedido con el receiver muerto es exactamente el estado en el
+                    // que estuvo el dueño —semanas sin que llegara un solo mensaje— y él usa la
+                    // web, donde ni siquiera había un rótulo que pudiera mentirle.
+                    //
+                    // Ahora se dice lo observado, que no depende de la plataforma: qué llegó y
+                    // cuándo llegó lo último. Ver `CapturaDeSms` en :core.
+                    //
+                    // Mientras la bandeja no conteste no se dice nada: un `null` no es «nunca
+                    // llegó nada», y afirmarlo por una lectura caída sería el mismo error al
+                    // revés.
+                    aviso?.let { hecho ->
                         Text(
-                            if (captureReady) "AUTO-LECTURA ACTIVA" else "CAPTURA PENDIENTE DE PERMISO",
+                            hecho.rotulo,
                             fontSize = 11.sp,
-                            color = if (captureReady) MinTextMute else MinWarn,
+                            color = if (hecho.esAlerta) MinWarn else MinTextMute,
                             letterSpacing = 1.4.sp,
                             fontWeight = FontWeight.Medium,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            if (captureReady) {
-                                "Movi lee tus SMS bancarios automáticamente. Revisa los pendientes para confirmar comercios o categoría."
-                            } else {
-                                "Movi puede leer tus SMS bancarios automáticamente, pero falta el permiso: concédelo en la sección de abajo para activar la captura."
-                            },
+                            hecho.detalle,
                             fontSize = 13.5.sp,
                             color = MinText,
                             lineHeight = 19.sp,
                         )
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    // Y recién después, lo que depende de dónde estés parado. «Este dispositivo
+                    // no puede leer SMS» y «nunca llegó nada» son dos afirmaciones distintas: la
+                    // primera es normal en la web y en iOS, la segunda no lo es en ninguna parte.
+                    if (isAndroid) {
+                        // Solo se nombra lo que FALTA. Que el permiso esté dado no prueba que la
+                        // captura corra, así que no se dice nada cuando está dado.
+                        if (!rememberSmsCaptureReady()) {
+                            Text(
+                                "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo.",
+                                fontSize = 12.5.sp,
+                                color = MinWarn,
+                                lineHeight = 18.sp,
+                            )
+                        }
                     } else {
                         Text(
-                            "Los mensajes del banco los lee tu teléfono con Movi instalado. Aquí los revisas antes de que cuenten.",
-                            fontSize = 13.5.sp,
-                            color = MinText,
-                            lineHeight = 19.sp,
+                            "Este dispositivo no puede leer mensajes: eso lo hace un teléfono Android con Movi instalado. Aquí los revisas antes de que cuenten.",
+                            fontSize = 12.5.sp,
+                            color = MinTextMute,
+                            lineHeight = 18.sp,
                         )
+                    }
+
+                    // El freno al ruido crónico, y vive acá y no en el Inicio a propósito: para
+                    // callar el recordatorio hay que estar viendo lo que se calla. Solo aparece
+                    // en el caso que genera la alerta — si ya llegó algo, no hay nada que callar.
+                    if (aviso?.esAlerta == true) {
+                        silenciada?.let { silencioActual ->
+                            Spacer(Modifier.height(12.dp))
+                            Hairline()
+                            Spacer(Modifier.height(12.dp))
+                            if (silencioActual) {
+                                Text(
+                                    "Este aviso no se muestra en Inicio.",
+                                    fontSize = 12.5.sp,
+                                    color = MinTextMute,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            Text(
+                                if (silencioActual) "Volver a avisarme en Inicio" else "No me avises de esto en Inicio",
+                                fontSize = 12.5.sp,
+                                color = MinText,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickableSimple {
+                                    val nuevo = !silencioActual
+                                    silenciada = nuevo
+                                    coroutine.launch {
+                                        runCatching {
+                                            Repositories.wallets.updateUserProfile(
+                                                UpdateProfileRequest(smsAlertMuted = nuevo),
+                                            )
+                                        }.onFailure {
+                                            // Sin snackbar en esta pantalla: se revierte para no
+                                            // afirmar un silencio que el server no guardó.
+                                            silenciada = silencioActual
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
                 // Solo Android pinta algo acá: la configuración de la captura de SMS (permisos,
@@ -126,10 +204,10 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
 
                 Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = "Bandeja", count = smsItems.size)
+                MinSectionHeader(title = "Bandeja", count = mensajes.size)
             }
 
-            smsItems.forEach { sms ->
+            mensajes.forEach { sms ->
                 item {
                     MinCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),

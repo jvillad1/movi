@@ -195,6 +195,36 @@ class UserRoutesTest {
         assertEquals(color, dbAvatarColor())
     }
 
+    /**
+     * Silenciar el aviso del Inicio sobre la captura de SMS es una preferencia de la **cuenta**,
+     * no del navegador: el dueño mira el Inicio desde Chrome y desde el teléfono, y un silencio
+     * guardado en `localStorage` volvería a aparecer en el otro. Por eso pasa por acá.
+     *
+     * Y se puede deshacer: mandar `false` es tan válido como mandar `true`. Un silencio sin
+     * vuelta atrás sería otra forma de esconder el mismo hecho.
+     */
+    @Test
+    fun `PUT silencia el aviso de captura de SMS, y lo puede volver a encender`() = testApplication {
+        wireApp()
+        assertEquals(false, Json.parseToJsonElement(getProfile().bodyAsText()).jsonObject["smsAlertMuted"]?.jsonPrimitive?.content?.toBoolean() ?: false)
+
+        val silenciar = putProfile("""{"smsAlertMuted":true}""")
+        assertEquals(HttpStatusCode.OK, silenciar.status)
+        assertEquals(
+            true,
+            Json.parseToJsonElement(silenciar.bodyAsText()).jsonObject["smsAlertMuted"]!!.jsonPrimitive.content.toBoolean(),
+        )
+        assertEquals(true, dbSmsAlertMuted())
+
+        val revertir = putProfile("""{"smsAlertMuted":false}""")
+        assertEquals(HttpStatusCode.OK, revertir.status)
+        assertEquals(false, dbSmsAlertMuted())
+    }
+
+    private fun dbSmsAlertMuted(): Boolean? = transaction {
+        Users.selectAll().where { Users.id eq userId }.single()[Users.smsAlertMuted]
+    }
+
     // ── PUT /api/users/me/password ───────────────────────────────────────────
 
     @Test
