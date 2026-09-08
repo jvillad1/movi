@@ -20,10 +20,12 @@ import kotlin.test.assertTrue
  *
  * Los casos de acá son literalmente los suyos, con los días reales de sus créditos y tarjetas:
  * Crediágil y Libre inversión (día 15) pagados el 5 de septiembre, Nu (día 1) pagada el 5, y AMEX
- * (día 16) pagada el 30 de agosto — la que ninguna ventana centrada en el vencimiento atrapa.
+ * (día 16) pagada el 30 de agosto.
  *
- * Lo que se prueba no es que la función devuelva algo: es **qué NO cuenta como pago**. Dar por
- * pagada una cuota que nadie pagó apaga el aviso de una deuda real, y eso cuesta plata.
+ * Lo que se prueba no es que la función devuelva algo: es **qué NO cuenta como pago** y **a qué mes
+ * NO se le atribuye**. Dar por pagada una cuota que nadie pagó apaga el aviso de una deuda real, y
+ * eso cuesta plata — y atribuirle el pago a un vencimiento que todavía no llegó es la misma cosa
+ * con otra forma: deja el mes que sí venció figurando abierto y apaga el aviso del que viene.
  */
 class PagosDeDeudaTest {
 
@@ -80,16 +82,19 @@ class PagosDeDeudaTest {
     }
 
     /**
-     * **El caso AMEX, y el que decide la forma de esta función.** Pagó el 30 de agosto una tarjeta
-     * que vence el 16. Para el 30 de agosto la app ya no hablaba del 16 de agosto —pasada la
-     * ventana de gracia el vencimiento vigente rueda— sino del **16 de septiembre**: eso es lo que
-     * el dueño estaba pagando y eso es lo que se salda.
+     * **El caso AMEX — y este test cambió de respuesta.** Antes exigía «septiembre»; ahora exige
+     * **agosto**, que es el mes que de verdad venció antes del pago.
      *
-     * Una ventana centrada en el vencimiento (±10 días, como la de `occurrenceCandidatesFor`)
-     * habría dejado este pago sin dueño: el 30 de agosto no cae ni cerca del 16 de agosto ni del
-     * 16 de septiembre. Si alguien "simplifica" [periodoQueSalda] a una ventana, este test cae.
+     * Pagó el 30 de agosto una tarjeta que vence el 16. Para esa fecha `dueDateFor` ya había
+     * rodado al 16 de SEPTIEMBRE (pasada la gracia rueda), así que atribuirle el pago a ese
+     * vencimiento era darle por saldado un mes que todavía no había llegado. El mismo movimiento
+     * tiene dos lecturas —adelantó el extracto de septiembre, o pagó el de agosto con dos semanas
+     * de atraso— y movi no conoce el extracto para distinguirlas; lo que sí se puede comparar es el
+     * costo de equivocarse, y **no es simétrico**: darlo por pagado de más apaga el aviso del 16 de
+     * septiembre y se paga con mora, darlo por pagado de menos cuesta un recordatorio que se
+     * descarta en dos segundos. Se elige el lado barato. (Todo el argumento, en `PagosDeDeuda.kt`.)
      */
-    @Test fun `el pago hecho pasada la gracia salda el vencimiento siguiente`() {
+    @Test fun `el pago hecho pasada la gracia salda el vencimiento que ya paso, no el que viene`() {
         val regla = reglaDeTarjeta(dia = 16)
         val pagos = listOf(
             pago(
@@ -97,13 +102,55 @@ class PagosDeDeudaTest {
                 fecha = LocalDate.of(2026, 8, 30), monto = 1_008_902,
             ),
         )
+        assertEquals(
+            setOf("2026-08"), periodosSaldados(listOf(regla), pagos)[regla.id],
+            "Un pago no puede saldar un vencimiento que todavía no llegó",
+        )
+    }
+
+    /**
+     * **El caso Nu, el que costaba plata.** Vence el 1, pagó el **7**: un día pasada la ventana de
+     * gracia, así que `dueDateFor` ya apuntaba al 1 de octubre y el pago le saldaba OCTUBRE.
+     * Resultado: septiembre seguía apareciendo «vencido» —el reclamo original, intacto— y el aviso
+     * del 1 de octubre no salía. Los dos errores a la vez, y el segundo se paga con mora.
+     */
+    @Test fun `el pago hecho un dia tarde salda el mes que vencio, no el siguiente`() {
+        val regla = reglaDeTarjeta(dia = 1)
+        val pagos = listOf(
+            pago(
+                cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
+                fecha = LocalDate.of(2026, 9, 7), monto = 115_113,
+            ),
+        )
         assertEquals(setOf("2026-09"), periodosSaldados(listOf(regla), pagos)[regla.id])
     }
 
     /**
-     * El caso Nu: vence el 1, pagó el 5. Dentro de la gracia, así que salda **septiembre** y no
-     * octubre — si saldara octubre, el pago de septiembre seguiría figurando como pendiente y el
-     * de octubre no avisaría. Los dos errores a la vez.
+     * Y la consecuencia que se paga en plata: **el vencimiento siguiente sigue avisando**. Con la
+     * atribución vieja el pago tardío del 7 de septiembre saldaba octubre, así que el barrido del
+     * 1 de octubre no mandaba nada por una cuota que sí se debía.
+     */
+    @Test fun `el pago tardio no apaga el aviso del mes siguiente`() {
+        val regla = reglaDeTarjeta(dia = 1)
+        val pagos = listOf(
+            pago(
+                cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
+                fecha = LocalDate.of(2026, 9, 7), monto = 115_113,
+            ),
+        )
+        val saldados = periodosSaldados(listOf(regla), pagos)
+        assertEquals(
+            listOf(regla.id),
+            selectDueForReminder(listOf(regla to null), LocalDate.of(2026, 10, 1), leadDays = 3, occurredBy = saldados)
+                .map { it.id },
+            "El 1 de octubre vence de nuevo: el pago de septiembre no puede apagar ese aviso",
+        )
+    }
+
+    /**
+     * El caso Nu del reclamo: vence el 1, pagó el 5. Dentro de la gracia, así que salda
+     * **septiembre** y no octubre — si saldara octubre, el pago de septiembre seguiría figurando
+     * como pendiente y el de octubre no avisaría. Los dos errores a la vez.
      */
     @Test fun `el pago dentro de la gracia salda el vencimiento que acaba de pasar`() {
         val regla = reglaDeTarjeta(dia = 1)
@@ -204,20 +251,59 @@ class PagosDeDeudaTest {
         assertTrue(periodosSaldados(listOf(regla), pagos).isEmpty())
     }
 
-    /** Dos pagos dentro del mismo ciclo saldan un periodo, no dos. */
-    @Test fun `dos abonos en el mismo ciclo saldan un solo periodo`() {
+    /**
+     * Dos pagos dentro del mismo ciclo saldan un periodo, no dos — **y gana el último**.
+     *
+     * Lo segundo no es un detalle: la ruta publica `pago.id` y `pago.timestamp` de ese ganador, o
+     * sea que de él salen el movimiento que la fila dice que la prueba, el monto que muestra y la
+     * fecha. Sin fijarlo, sacar el `sortedBy { it.timestamp }` de [pagosDeDeudaPorPeriodo] dejaba
+     * el test en verde y la fila pasaba a mostrar el abono que la base devolviera primero.
+     */
+    @Test fun `dos abonos en el mismo ciclo saldan un solo periodo, y gana el ultimo`() {
         val regla = reglaDeTarjeta(dia = 16)
-        val pagos = listOf(
-            pago(
-                id = "ev_a", cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
-                fecha = LocalDate.of(2026, 9, 3),
-            ),
-            pago(
-                id = "ev_b", cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
-                fecha = LocalDate.of(2026, 9, 10),
-            ),
+        val primero = pago(
+            id = "ev_a", cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
+            fecha = LocalDate.of(2026, 9, 3), monto = 50_000,
         )
-        assertEquals(setOf("2026-09"), periodosSaldados(listOf(regla), pagos)[regla.id])
+        val ultimo = pago(
+            id = "ev_b", cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
+            fecha = LocalDate.of(2026, 9, 10), monto = 900_000,
+        )
+        // En los dos órdenes de llegada, para que lo que decida sea la fecha y no la lista.
+        listOf(listOf(primero, ultimo), listOf(ultimo, primero)).forEach { pagos ->
+            assertEquals(setOf("2026-09"), periodosSaldados(listOf(regla), pagos)[regla.id])
+            assertEquals(
+                "ev_b", pagosDeDeudaPorPeriodo(listOf(regla), pagos)[regla.id]?.get("2026-09")?.id,
+                "El movimiento que se publica es el último del ciclo, no el que llegó primero",
+            )
+        }
+    }
+
+    /**
+     * **La plata que salió de la cuenta, no la que bajó la deuda.** En una cuota son distintas a
+     * propósito: la deuda baja por el capital ($12.157) y de la cuenta salió la cuota entera
+     * ($26.485). La fila de «Ya ocurrieron» muestra este número, así que tomar el equivocado le
+     * diría al dueño que pagó la mitad de lo que pagó.
+     */
+    @Test fun `la plata que salio es la otra pata del traspaso`() {
+        val pataDeLaDeuda = pago(
+            id = "ev_deuda", cuenta = cuentaDelCredito, categoria = CUOTA_CATEGORY,
+            fecha = LocalDate.of(2026, 9, 5), monto = 12_157,
+        )
+        val pataDelDinero = pago(
+            id = "ev_dinero", cuenta = cuentaDeAhorros, categoria = CUOTA_CATEGORY,
+            fecha = LocalDate.of(2026, 9, 5), tipo = TransactionType.EXPENSE, monto = 26_485,
+        )
+        assertEquals(26_485, plataQueSalio(pataDeLaDeuda, listOf(pataDeLaDeuda, pataDelDinero)).amount)
+    }
+
+    /** Sin traspaso —un pago suelto, o importado— se muestra lo único que se sabe. */
+    @Test fun `sin la otra pata se cae al mismo movimiento`() {
+        val suelto = pago(
+            id = "ev_solo", cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
+            fecha = LocalDate.of(2026, 9, 5), monto = 115_113,
+        ).copy(transferId = null)
+        assertEquals(115_113, plataQueSalio(suelto, listOf(suelto)).amount)
     }
 
     /**

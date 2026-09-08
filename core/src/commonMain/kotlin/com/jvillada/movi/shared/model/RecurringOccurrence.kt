@@ -90,6 +90,9 @@ data class MarkOccurrenceRequest(
  *                  `occurrenceCandidatesFor` en el server para por qué el monto ordena y no
  *                  filtra).
  * @param derivadaDeUnMovimiento ver abajo.
+ * @param montoDelPago cuánta plata prueba la fila derivada, y con [monedaDelPago] en qué moneda:
+ *                  el monto **no** decide si el periodo quedó saldado (no puede), así que se
+ *                  muestra. Ver abajo.
  */
 @Serializable
 data class OccurrenceState(
@@ -122,4 +125,20 @@ data class OccurrenceState(
      * deserialización. (Este endpoint es nuevo igual, pero la regla vale para los dos.)
      */
     val derivadaDeUnMovimiento: Boolean = false,
+    /**
+     * **Cuánta plata prueba esta fila** —y su moneda—, cuando sale de un movimiento y no de un
+     * sello. `null` en las selladas a mano: ahí lo que hay es la palabra del dueño.
+     *
+     * Existe porque el monto **no filtra**: un abono de $50.000 sobre un extracto de $1.008.902
+     * salda el periodo igual que un pago completo y apaga el recordatorio. No puede filtrar —movi
+     * no conoce el extracto, y ni el saldo de la tarjeta ni la cuota del crédito son comparables
+     * con lo que se movió; el porqué largo está en `PagosDeDeuda.kt`—, así que la fila hace lo
+     * único honesto que queda: **decir el número**, para que «ya ocurrió» no tape un abono
+     * simbólico.
+     *
+     * Es la plata que SALIÓ DE LA CUENTA, no la que bajó la deuda: en una cuota son distintas a
+     * propósito (capital contra cuota). Ver `plataQueSalio`.
+     */
+    val montoDelPago: Long? = null,
+    val monedaDelPago: String? = null,
 )

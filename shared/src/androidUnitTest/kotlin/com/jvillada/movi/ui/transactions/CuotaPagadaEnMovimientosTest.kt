@@ -87,10 +87,12 @@ class CuotaPagadaEnMovimientosTest {
         )
 
         override suspend fun getOccurrenceStates(): List<OccurrenceState> = listOf(
-            // Derivada: la escribió el pago, no el dueño.
+            // Derivada: la escribió el pago, no el dueño. Y viaja con el monto — la plata que
+            // salió de la cuenta, que es la cuota entera y no el abono a capital.
             OccurrenceState(
                 ruleId = cuotaDelCredito.id, period = "2026-09", dueDate = "2026-09-15",
                 occurred = true, eventId = "ev-cuota-deuda", derivadaDeUnMovimiento = true,
+                montoDelPago = 26_485L, monedaDelPago = "COP",
             ),
             // Sellada a mano: esta sí se deshace.
             OccurrenceState(
@@ -134,14 +136,19 @@ class CuotaPagadaEnMovimientosTest {
         }
     }
 
+    /**
+     * Y la fila **dice cuánta plata fue**: el monto no filtra —un abono parcial salda el periodo
+     * igual, porque movi no conoce el extracto— así que sin el número a la vista el dueño no
+     * tendría cómo notar que pagó una parte. Ver `PagosDeDeuda.kt`.
+     */
     @Test
-    fun `la cuota pagada aparece en Ya ocurrieron diciendo que la prueba un movimiento`() {
+    fun `la cuota pagada aparece en Ya ocurrieron diciendo cuanto prueba el movimiento`() {
         montar()
         esperarTexto("YA OCURRIERON")
 
         composeRule.onNodeWithText("Cuota Crediágil 3090", useUnmergedTree = true).assertIsDisplayed()
         composeRule
-            .onNodeWithText("Ya ocurrió en septiembre · lo prueba un movimiento", useUnmergedTree = true)
+            .onNodeWithText("Ya ocurrió en septiembre · lo prueba un pago de $26.485", useUnmergedTree = true)
             .assertIsDisplayed()
     }
 

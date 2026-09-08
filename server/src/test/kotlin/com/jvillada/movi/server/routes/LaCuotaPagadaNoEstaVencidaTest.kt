@@ -362,12 +362,70 @@ class LaCuotaPagadaNoEstaVencidaTest {
         registrarPagoDeCuota()
         val conPago = client.ocurrencias()
 
-        (sinPago + conPago)
+        val sinteticas = (sinPago + conPago)
             .filter { it.ruleId.startsWith(CREDIT_RULE_PREFIX) || it.ruleId.startsWith(CARD_RULE_PREFIX) }
-            .forEach {
-                assertTrue(it.occurred, "Una regla sintética solo puede salir de acá si YA está pagada")
-                assertTrue(it.candidates.isEmpty(), "Una sintética no propone candidatos: no se sella a mano")
-            }
+        // **Sin esto el test pasaba vacío.** El `forEach` de abajo corre sobre una lista filtrada:
+        // si mañana la sintética pagada dejara de emitirse, no quedaría ni una fila que revisar y
+        // el test seguiría verde afirmando algo sobre nada. Con el pago registrado tiene que haber
+        // exactamente una, la de la cuota.
+        assertEquals(
+            listOf(reglaDelCredito), sinteticas.map { it.ruleId },
+            "Con el pago registrado sale la sintética pagada, y solo esa: sin ella el forEach no prueba nada",
+        )
+        sinteticas.forEach {
+            assertTrue(it.occurred, "Una regla sintética solo puede salir de acá si YA está pagada")
+            assertTrue(it.candidates.isEmpty(), "Una sintética no propone candidatos: no se sella a mano")
+        }
+    }
+
+    // ── Cuánta plata prueba la fila ───────────────────────────────────────────
+
+    /**
+     * **La fila dice cuánto se pagó, y dice la plata que SALIÓ DE LA CUENTA.**
+     *
+     * En una cuota las dos patas tienen montos distintos a propósito: la deuda baja por el capital
+     * ($12.157) y de la cuenta salió la cuota entera ($26.485). Publicar el monto de la pata de la
+     * deuda le diría al dueño que pagó la mitad de lo que pagó.
+     */
+    @Test
+    fun `la fila derivada publica la plata que salio de la cuenta`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        registrarPagoDeCuota()
+
+        val estado = client.ocurrencias().first { it.ruleId == reglaDelCredito }
+        assertEquals(26_485L, estado.montoDelPago, "Es la cuota que salió de ahorros, no el abono a capital")
+        assertEquals("COP", estado.monedaDelPago)
+    }
+
+    /**
+     * **El abono parcial no se esconde.** El monto no filtra —movi no conoce el extracto, y ni el
+     * saldo de la tarjeta ni la cuota del crédito son comparables con lo que se movió: ver
+     * `PagosDeDeuda.kt`— así que un abono de $50.000 salda el periodo igual que un pago completo y
+     * apaga el recordatorio. Lo único honesto que queda es decir el número, para que el dueño vea
+     * que fue un abono en vez de leer un «ya ocurrió» pelado.
+     */
+    @Test
+    fun `un abono parcial salda el periodo pero muestra su monto`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        transaction {
+            evento(
+                id = "ev-abono-dinero", cuenta = cuentaDeAhorros, categoria = CARD_PAYMENT_CATEGORY,
+                tipo = "EXPENSE", monto = 50_000L, fecha = hoy, transfer = "tr-abono",
+            )
+            evento(
+                id = "ev-abono-deuda", cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY,
+                tipo = "INCOME", monto = 50_000L, fecha = hoy, transfer = "tr-abono",
+            )
+        }
+
+        val estado = client.ocurrencias().first { it.ruleId == reglaDeLaTarjeta }
+        assertTrue(estado.occurred, "El abono salda el periodo: movi no sabe cuánto pedía el extracto")
+        assertEquals(
+            50_000L, estado.montoDelPago,
+            "Y la fila muestra el monto, que es lo que deja ver que fue un abono sobre una deuda de 5 millones",
+        )
     }
 
     /** Y una ocurrencia de regla real sigue sin decir que viene de un movimiento derivado. */

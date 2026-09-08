@@ -122,6 +122,36 @@ class OccurrenceLogicTest {
     }
 
     /**
+     * **Y dice cuánta plata.** El monto no filtra: un abono de $50.000 sobre un extracto de
+     * $1.008.902 salda el periodo igual que un pago completo y apaga el recordatorio, porque movi
+     * no conoce el extracto contra el cual comparar (ver `PagosDeDeuda.kt` en el server). Lo único
+     * honesto que queda es mostrar el número — sin él la fila diría «ya ocurrió» sobre un abono
+     * simbólico y el dueño no tendría cómo notarlo.
+     */
+    @Test fun `una fila derivada dice cuanta plata la prueba`() {
+        val derivada = estado(true, "ev_1")
+            .copy(derivadaDeUnMovimiento = true, montoDelPago = 50_000, monedaDelPago = "COP")
+        assertEquals("Ya ocurrió en agosto · lo prueba un pago de $50.000", textoYaOcurrio(derivada))
+    }
+
+    /** Una tarjeta en dólares no se lee en pesos: la moneda viaja con el monto. */
+    @Test fun `el monto derivado respeta la moneda`() {
+        val derivada = estado(true, "ev_1")
+            .copy(derivadaDeUnMovimiento = true, montoDelPago = 181, monedaDelPago = "USD")
+        assertEquals("Ya ocurrió en agosto · lo prueba un pago de US$181", textoYaOcurrio(derivada))
+    }
+
+    /**
+     * Un sello a mano no muestra monto aunque venga con movimiento: ahí el emparejamiento lo
+     * confirmó el dueño y la fila ya dice lo suyo. El monto se agregó para el caso donde NADIE
+     * confirmó nada.
+     */
+    @Test fun `un sello a mano no se disfraza de derivado`() {
+        val sellada = estado(true, "ev_1").copy(montoDelPago = 50_000, monedaDelPago = "COP")
+        assertEquals("Ya ocurrió en agosto · con un movimiento", textoYaOcurrio(sellada))
+    }
+
+    /**
      * **«Deshacer» solo donde hay un sello que borrar.** En una ocurrencia derivada el DELETE
      * contestaría 404 y la pantalla se quedaría igual: un control muerto, el error exacto que este
      * repo ya cometió una vez. Se revierte borrando el movimiento, no desmarcando nada.

@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.ui.components.formatMoney
 
 /**
  * Las reglas puras de «¿esto ya ocurrió?» en la pantalla de Recurrentes — sin Compose, para poder
@@ -176,11 +177,21 @@ fun etiquetaCierreManual(tipo: TransactionType): String =
  * [OccurrenceState.derivadaDeUnMovimiento]). Esa fila no dice «lo marcaste», porque no lo marcó;
  * dice de dónde sale. Es la mitad visible de que ahí no haya un «Deshacer»: lo que se deshace es
  * el movimiento, no un sello que no existe.
+ *
+ * **Y dice cuánta plata fue.** Un abono de $50.000 sobre un extracto de $1.008.902 salda el
+ * periodo igual que un pago completo —el monto no filtra, y no puede: movi no conoce el extracto
+ * (ver `PagosDeDeuda.kt` en el server)—, así que si la fila dijera solo «ya ocurrió», el dueño no
+ * tendría cómo notar que pagó una parte. Con el número a la vista lo ve de un vistazo. Si el
+ * server no mandó monto (un cliente contra una versión vieja) se cae al texto de antes, que sigue
+ * siendo cierto.
  */
 fun textoYaOcurrio(estado: OccurrenceState): String {
     val mes = nombreDelMes(estado.period)
     val cuando = if (mes.isEmpty()) "Ya ocurrió" else "Ya ocurrió en $mes"
+    val monto = estado.montoDelPago
     return when {
+        estado.derivadaDeUnMovimiento && monto != null ->
+            "$cuando · lo prueba un pago de ${formatMoney(monto, estado.monedaDelPago ?: "COP")}"
         estado.derivadaDeUnMovimiento -> "$cuando · lo prueba un movimiento"
         estado.eventId != null -> "$cuando · con un movimiento"
         else -> cuando

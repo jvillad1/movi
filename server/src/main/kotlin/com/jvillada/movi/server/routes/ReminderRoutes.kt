@@ -20,6 +20,7 @@ import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
 import com.jvillada.movi.server.reminders.occurrenceInMonth
 import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
+import com.jvillada.movi.server.reminders.plataQueSalio
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.unirOcurridos
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
@@ -413,6 +414,15 @@ fun Route.reminderRoutes() {
             pagosDeDeudaPorPeriodo(sinteticas, pagos).mapNotNull { (ruleId, porPeriodo) ->
                 val pago = porPeriodo[periodoEnCurso] ?: return@mapNotNull null
                 val rule = sinteticas.first { it.id == ruleId }
+                // **Cuánta plata fue.** El monto no filtra —no puede: movi no conoce el extracto,
+                // y el saldo de la tarjeta o la cuota del crédito no son comparables con lo que se
+                // movió (ver `PagosDeDeuda.kt`)— así que un abono de $50.000 salda el periodo
+                // igual que un pago completo. Lo que queda es decirlo: la fila viaja con el monto
+                // para que el dueño vea el abono en vez de un «ya ocurrió» pelado.
+                //
+                // Y es la plata que SALIÓ DE LA CUENTA, no la que bajó la deuda: en una cuota son
+                // distintas a propósito ($12.157 de capital de una cuota de $26.485).
+                val salida = plataQueSalio(pago, pagos)
                 OccurrenceState(
                     ruleId = ruleId,
                     period = periodoEnCurso,
@@ -423,6 +433,8 @@ fun Route.reminderRoutes() {
                     // quedó respaldada, que es cuándo se hizo el pago.
                     confirmedAt = pago.timestamp,
                     derivadaDeUnMovimiento = true,
+                    montoDelPago = salida.amount,
+                    monedaDelPago = salida.currency,
                 )
             }
         }

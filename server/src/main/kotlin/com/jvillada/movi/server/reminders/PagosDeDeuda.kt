@@ -61,26 +61,75 @@ import java.time.ZoneId
  *    es EXPENSE: sube la deuda, no la baja. Categorizado a mano como «Pago de tarjeta» pasaría las
  *    otras dos puertas.
  *
+ * ## El monto NO es una cuarta puerta — y por eso la fila lo dice
+ *
+ * Un abono de $50.000 sobre una AMEX cuyo extracto era $1.008.902 salda el periodo igual que un
+ * pago completo, y apaga el recordatorio. Es una decisión, no un olvido: **movi no conoce el
+ * extracto**, así que no tiene contra qué comparar. Los dos montos que sí tiene a mano no sirven:
+ *
+ *  - En una TARJETA el monto de la regla es el SALDO TOTAL de la cuenta (ver `virtualRuleForCard`
+ *    y su `montoEsSaldo`), no lo que hay que pagar este mes: el mínimo de esa tarjeta ronda el
+ *    5 %. Exigir que el pago cubra el monto de la regla dejaría TODAS las tarjetas eternamente
+ *    «vencidas» — justo el reclamo que este archivo vino a arreglar, de vuelta.
+ *  - En un CRÉDITO la pata que baja la deuda es el ABONO A CAPITAL, no la cuota: $12.157 de una
+ *    cuota de $26.485, porque el resto se fue en intereses y seguro (ver `pagoDeCuotaLegs`).
+ *    Exigirle que cubra la cuota no daría por pagada ninguna cuota nunca.
+ *
+ * Lo que sí se puede hacer —y se hace— es **decir cuánta plata fue**: la fila derivada viaja con
+ * el monto del pago (`OccurrenceState.montoDelPago`, ver [plataQueSalio]) para que un abono de
+ * $50.000 se lea como lo que es en vez de esconderse detrás de un «ya ocurrió» pelado. La app no
+ * puede decidir si alcanzó; el dueño sí, mirando el número.
+ *
  * ## A qué vencimiento se le atribuye un pago
  *
- * **Al que la app consideraba vigente el día en que se pagó** — literalmente
- * `dueDateFor(regla, fecha del pago)`, la misma función con la que se pinta «Próximos». No es una
- * ventana nueva inventada para esto, y por eso no puede divergir de lo que el dueño vio:
+ * **Al que la app consideraba vigente el día en que se pagó, pero nunca a uno que todavía no
+ * llegó.** Son dos mitades, y la segunda cuesta plata si falta.
  *
- *  - La cuota de Crediágil (día 15) pagada el 5 de septiembre: el 5, el vencimiento vigente era el
- *    15 de septiembre → salda septiembre. ✔
- *  - El pago de AMEX (día 16) hecho el 30 de agosto: para entonces el 16 de agosto ya había pasado
- *    la ventana de gracia, así que la app misma anunciaba «vence el 16 de septiembre» → salda
- *    septiembre. ✔ Una ventana centrada en el vencimiento habría dejado ese pago sin dueño, que es
- *    justo el caso que el dueño reclamó.
- *  - El pago de Nu (día 1) hecho el 5 de septiembre, dentro de la gracia: salda septiembre, no
- *    octubre. ✔
+ * La primera es `dueDateFor(regla, fecha del pago)`, la misma función con la que se pinta
+ * «Próximos»: así la atribución no puede divergir de lo que el dueño vio en la pantalla.
  *
- * La propiedad que se gana: un pago se atribuye **al vencimiento que la app le estaba mostrando
- * cuando lo hizo**. Y como el mismo `dueDateFor` rueda pasada la gracia, ningún pago queda
- * huérfano ni dos pagos consecutivos caen en el mismo periodo salvo que de verdad se hayan hecho
- * dentro del mismo ciclo (y ahí el `Map` se queda con el último, que es lo correcto: el periodo
- * está saldado igual).
+ * La segunda es el tope. `dueDateFor` **rueda al mes siguiente** apenas pasan [DEFAULT_GRACE_DAYS]
+ * días de atraso, así que sin tope un pago hecho con 6 días de retraso saldaba un vencimiento que
+ * ni siquiera había llegado. El caso concreto es la Nu del dueño (día 1) pagada el 7: saldaba
+ * **octubre**, y entonces septiembre seguía figurando «vencido» —el reclamo original, intacto— y
+ * encima **el aviso del 1 de octubre no salía**. Los dos errores a la vez, y el segundo se paga con
+ * mora e intereses. Peor: volviendo a pagar tarde, el corrimiento se acumulaba mes a mes.
+ *
+ * Es el mismo criterio que ya aplica el POST manual de ocurrencias («Ese vencimiento todavía no
+ * llegó: no se puede dar por ocurrido»), acá del lado de la lectura.
+ *
+ * Con el tope, los tres pagos reales del dueño quedan así:
+ *
+ *  - Crediágil (día 15) pagada el 5 de septiembre → **septiembre**: el vencimiento vigente ese día
+ *    era el 15 de septiembre, del mismo mes, así que el tope no lo mueve. ✔
+ *  - Nu (día 1) pagada el 7 de septiembre, pasada la gracia → **septiembre**, el mes que de verdad
+ *    venció. Y octubre vuelve a avisar. ✔
+ *  - AMEX (día 16) pagada el 30 de agosto → **agosto**, no septiembre. Ver acá abajo.
+ *
+ * ### El 30 de agosto de la AMEX: agosto, no septiembre
+ *
+ * El mismo movimiento tiene dos lecturas —adelantó el extracto del 16 de septiembre, o pagó el del
+ * 16 de agosto con dos semanas de atraso— y movi no tiene con qué distinguirlas: no conoce el
+ * extracto, solo el día del mes. Lo que sí se puede comparar es el costo de equivocarse, y **no es
+ * simétrico**: atribuirlo a septiembre apaga el aviso de un vencimiento que todavía no llegó, así
+ * que si en realidad era el pago de agosto el dueño llega al 16 de septiembre sin que nadie le
+ * avise → mora e intereses. Atribuirlo a agosto, si de verdad estaba adelantando, cuesta un
+ * recordatorio de más que él descarta en dos segundos. Se elige el lado barato.
+ *
+ * ### Lo que este tope NO cierra
+ *
+ * El pago que cruza el fin de mes: una cuota del 30 de septiembre pagada el 2 de octubre se
+ * atribuye a **octubre**, así que septiembre sigue avisando (ruido, tolerable) y el 30 de octubre
+ * queda dado por pagado sin que nadie lo haya pagado (eso sí cuesta). El agujero ya existía —el
+ * código de antes hacía exactamente lo mismo en ese caso— y el tope no lo ensancha: lo reduce de
+ * «cualquier pago con 6+ días de atraso» a «solo los que cruzan el mes». Cerrarlo pide atribuir el
+ * pago a la ocurrencia MÁS CERCANA, y esa regla trae su propia forma de fallar —un pago hecho con
+ * mucha anticipación saldaría el mes siguiente, que es el error caro—, así que se deja anotado en
+ * vez de resolverlo a medias.
+ *
+ * Dos pagos dentro del mismo ciclo caen en el mismo periodo y ahí el `Map` se queda con el último:
+ * el periodo está saldado igual. Ver [pagosDeDeudaPorPeriodo], que ordena por fecha para que «el
+ * último» sea el último de verdad y no el que la base devolvió primero.
  *
  * ## Y el riesgo de «marcar de más»
  *
@@ -108,13 +157,21 @@ fun categoriaQueSalda(ruleId: String): String? = when {
 val CATEGORIAS_QUE_SALDAN: List<String> = listOf(CUOTA_CATEGORY, CARD_PAYMENT_CATEGORY)
 
 /**
- * **El periodo que salda un pago hecho el [fecha]**: el del vencimiento que estaba vigente ese día.
+ * **El periodo que salda un pago hecho el [fecha]**: el del vencimiento que estaba vigente ese día,
+ * topeado al día del pago — porque **un pago no salda un vencimiento que todavía no llegó**.
  *
- * Ver el KDoc de arriba para el porqué. `occurredPeriods` va vacío a propósito: acá se pregunta a
- * qué vencimiento apuntaba el calendario, no cuál quedó libre después de saldar otros.
+ * Ver el KDoc de arriba para el porqué de cada mitad, para el caso AMEX y para lo que el tope no
+ * cierra. `occurredPeriods` va vacío a propósito: acá se pregunta a qué vencimiento apuntaba el
+ * calendario, no cuál quedó libre después de saldar otros.
+ *
+ * Como `dueDateFor` nunca mira más atrás del mes de [fecha], hoy esto equivale a «el mes en que se
+ * pagó». Se escribe igual como el mínimo de los dos, y no como `periodOf(fecha)` a secas, porque lo
+ * que hay que fijar es la REGLA —el vencimiento vigente, nunca uno futuro— y no la coincidencia: el
+ * día que `dueDateFor` aprenda a mirar un vencimiento del mes pasado que sigue abierto, esta
+ * función lo hereda sin que nadie tenga que acordarse.
  */
 fun periodoQueSalda(rule: RecurringRule, fecha: LocalDate, graceDays: Int = DEFAULT_GRACE_DAYS): String =
-    periodOf(dueDateFor(rule, fecha, graceDays))
+    periodOf(minOf(dueDateFor(rule, fecha, graceDays), fecha))
 
 /**
  * Para cada regla sintética de [rules], **qué movimiento saldó cada periodo**.
@@ -149,6 +206,25 @@ fun pagosDeDeudaPorPeriodo(
     }
     .toMap()
 
+/**
+ * **La plata que de verdad salió de la cuenta** por [pagoDeLaDeuda]: la otra pata del traspaso que
+ * escribió `pagoDeCuotaLegs`, buscada dentro de los mismos [pagos] ya cargados (las dos patas
+ * llevan la misma categoría, así que la otra ya está en la lista — no hay consulta nueva).
+ *
+ * No es un detalle de presentación. En una CUOTA las dos patas tienen montos distintos a
+ * propósito: la deuda baja por el capital y no por la cuota, así que mostrar la pata de la deuda
+ * le diría al dueño «pagaste $12.157» de una cuota de $26.485. En una TARJETA las dos coinciden.
+ *
+ * Si no hay traspaso —un pago anotado suelto, o importado— se devuelve el mismo movimiento: es lo
+ * único que se sabe, y sigue siendo más que no decir nada.
+ */
+fun plataQueSalio(pagoDeLaDeuda: FinancialEvent, pagos: List<FinancialEvent>): FinancialEvent {
+    val traspaso = pagoDeLaDeuda.transferId ?: return pagoDeLaDeuda
+    return pagos.firstOrNull {
+        it.transferId == traspaso && it.id != pagoDeLaDeuda.id && it.type == TransactionType.EXPENSE
+    } ?: pagoDeLaDeuda
+}
+
 /** Lo mismo que [pagosDeDeudaPorPeriodo] pero en la forma que espera `dueDateFor`: solo periodos. */
 fun periodosSaldados(
     rules: List<RecurringRule>,
@@ -181,11 +257,12 @@ fun unirOcurridos(
 /**
  * Cuántos meses hacia atrás y hacia adelante se buscan pagos.
  *
- * Dos para cada lado, y no «este mes»: el pago de AMEX del 30 de agosto salda el vencimiento del
- * 16 de septiembre (ver arriba), así que un piso en el primero del mes en curso lo habría dejado
- * afuera — el caso concreto que el dueño reclamó. Hacia adelante, por un pago anotado con fecha
- * futura. Es una franja acotada para que el índice `(user_id, timestamp)` la resuelva, no un
- * criterio de negocio: quien decide a qué periodo va cada pago es [periodoQueSalda].
+ * Dos para cada lado. Con el tope de [periodoQueSalda] un pago salda el mes en que se hizo, así
+ * que para lo que hoy se lee —el periodo en curso— alcanzaría con el mes en curso; la franja
+ * sobra a propósito, porque es una guarda para que el índice `(user_id, timestamp)` resuelva la
+ * consulta y no un criterio de negocio. Quien decide a qué periodo va cada pago es
+ * [periodoQueSalda], y el día que esa función mire un vencimiento más viejo, los datos ya están
+ * acá en vez de faltar en silencio. Hacia adelante, por un pago anotado con fecha futura.
  */
 private const val MESES_DE_PAGOS: Long = 2
 
