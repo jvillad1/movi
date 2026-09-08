@@ -108,6 +108,30 @@ class OccurrenceLogicTest {
         )
     }
 
+    /**
+     * **Lo que el dueño marcó y lo que un movimiento prueba no se leen igual.**
+     *
+     * La cuota de un crédito y el pago de una tarjeta llegan a «Ya ocurrieron» derivados del
+     * movimiento que bajó la deuda: nadie los marcó. Decir «con un movimiento» —la frase de un
+     * sello que el dueño ancló a mano— borraría justamente la diferencia que explica por qué esa
+     * fila no tiene «Deshacer».
+     */
+    @Test fun `una fila derivada dice que la prueba un movimiento`() {
+        val derivada = estado(true, "ev_1").copy(derivadaDeUnMovimiento = true)
+        assertEquals("Ya ocurrió en agosto · lo prueba un movimiento", textoYaOcurrio(derivada))
+    }
+
+    /**
+     * **«Deshacer» solo donde hay un sello que borrar.** En una ocurrencia derivada el DELETE
+     * contestaría 404 y la pantalla se quedaría igual: un control muerto, el error exacto que este
+     * repo ya cometió una vez. Se revierte borrando el movimiento, no desmarcando nada.
+     */
+    @Test fun `una ocurrencia derivada no se puede deshacer`() {
+        assertTrue(sePuedeDeshacer(estado(true, "ev_1")))
+        assertTrue(sePuedeDeshacer(estado(true, null)))
+        assertFalse(sePuedeDeshacer(estado(true, "ev_1").copy(derivadaDeUnMovimiento = true)))
+    }
+
     @Test fun `la diferencia de monto se dice, no se disimula`() {
         // El caso del dueño: anotó 5.000.000 y le entraron 4.780.000 por una retención. La
         // propuesta es válida (el monto no filtra) pero la diferencia se muestra.

@@ -89,6 +89,7 @@ data class MarkOccurrenceRequest(
  *                  menos. Nunca se marca solo: siempre confirma el dueño (ver
  *                  `occurrenceCandidatesFor` en el server para por qué el monto ordena y no
  *                  filtra).
+ * @param derivadaDeUnMovimiento ver abajo.
  */
 @Serializable
 data class OccurrenceState(
@@ -99,4 +100,26 @@ data class OccurrenceState(
     val eventId: String? = null,
     val confirmedAt: Long = 0L,
     val candidates: List<FinancialEvent> = emptyList(),
+    /**
+     * **Esto no lo marcó nadie: se dedujo de un movimiento que ya existe.**
+     *
+     * Es `true` solo en las reglas SINTÉTICAS —la cuota de un crédito ([CREDIT_RULE_PREFIX]) y el
+     * pago de una tarjeta ([CARD_RULE_PREFIX])—, que no se sellan en `recurring_occurrences` y
+     * nunca lo harán: ahí el pago **mueve la deuda**, y ese hecho es más fuerte que un sello. El
+     * server lo lee del movimiento (ver `PagosDeDeuda.kt`) en vez de pedirle al dueño que
+     * confirme por segunda vez algo que ya registró.
+     *
+     * ## Por qué la pantalla TIENE que distinguirlo
+     *
+     * Porque **«Deshacer» no existe para esto**. Un sello a mano se borra con un DELETE; una
+     * ocurrencia derivada solo desaparece si desaparece el movimiento que la prueba, y no hay
+     * ningún endpoint que «desderive» nada. Una fila en «Ya ocurrieron» con un «Deshacer» que no
+     * hace nada es un control muerto —el error exacto que este repo ya cometió una vez— así que
+     * la fila derivada se pinta sin él y dice de dónde sale.
+     *
+     * Es un CAMPO nuevo con default y no un valor nuevo en ningún enum, por lo de siempre: un
+     * campo lo ignora el cliente que no lo conoce, un valor de enum le revienta la
+     * deserialización. (Este endpoint es nuevo igual, pero la regla vale para los dos.)
+     */
+    val derivadaDeUnMovimiento: Boolean = false,
 )

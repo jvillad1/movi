@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.push.WebPushSender
+import com.jvillada.movi.server.reminders.cargarPagosDeDeuda
 import com.jvillada.movi.server.reminders.loadCardRulePairs
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.reminders.loadEventsBetween
@@ -18,6 +19,9 @@ import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
 import com.jvillada.movi.server.reminders.occurrenceInMonth
+import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
+import com.jvillada.movi.server.reminders.periodosSaldados
+import com.jvillada.movi.server.reminders.unirOcurridos
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
@@ -267,6 +271,7 @@ fun Route.reminderRoutes() {
         // Antes era un `System.getenv` suelto, que ignoraba `server/.env` y podía dar un número
         // distinto al que de verdad usa el scheduler.
         val leadDays = leadDaysOf(uid)
+        val hoy = AppClock.today()
         val (rules, occurredBy) = dbQuery {
             val r = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
             r to loadOccurredBy(uid)
@@ -274,11 +279,24 @@ fun Route.reminderRoutes() {
         val creditRules = loadCreditRulePairs(uid).map { it.first }
         // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
         val cardRules = loadCardRulePairs(uid).map { it.first }
-        // Lo que el dueño ya dio por ocurrido no vuelve a leerse como vencido: su vencimiento
-        // vigente rodó al mes que viene (ver `dueDateFor`). Un cliente que no conoce esta función
-        // —el APK 1.6 instalado en el teléfono— no ve ningún campo nuevo: ve la fecha correcta.
+        val sinteticas = creditRules + cardRules
+        // **Y una cuota que YA ESTÁ PAGADA no está vencida.**
+        //
+        // Las reglas sintéticas no se sellan a mano —el POST de ocurrencias las rechaza a
+        // propósito, ver `/api/payments/occurrences`— así que hasta hoy su estado salía solo del
+        // calendario: la app decía «Vencido hace 5 días» sobre la cuota de Crediágil con el pago
+        // registrado, con sus dos patas, en la misma base. El hecho existía y nadie lo leía; ver
+        // `PagosDeDeuda.kt`.
+        //
+        // Entra por el MISMO parámetro que un sello a mano (`occurredPeriods`) y no por un `if`
+        // aparte: así el vencimiento vigente rueda al mes que viene una sola vez, en `dueDateFor`,
+        // y todo lo que deriva de él —el estado, el orden, la clave de dedupe de los avisos— lo
+        // hereda sin que nadie tenga que acordarse. Y el APK que el dueño tiene instalado no ve
+        // ningún campo nuevo ni ningún valor de enum que no conozca: ve la fecha correcta.
+        val derivadas = if (sinteticas.isEmpty()) emptyMap()
+            else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy))
         call.respond(
-            upcomingPayments(rules + creditRules + cardRules, AppClock.today(), leadDays, occurredBy),
+            upcomingPayments(rules + sinteticas, hoy, leadDays, unirOcurridos(occurredBy, derivadas)),
         )
     }
 
@@ -292,6 +310,10 @@ fun Route.reminderRoutes() {
      * Endpoint aparte de `/api/payments/upcoming` a propósito: ese ya lo consume el APK que el
      * dueño tiene instalado, y crecerle campos (o agregarle un valor al enum `PaymentStatus`) le
      * rompería la deserialización. Uno nuevo lo ignora quien no lo conoce.
+     *
+     * Las reglas sintéticas entran **solo cuando ya están pagadas**, y derivado del movimiento
+     * (ver el bloque de abajo y `PagosDeDeuda.kt`): nunca abiertas, nunca con candidatos, nunca
+     * con un sello propio.
      */
     get("/api/payments/occurrences") {
         val uid = call.userId()
@@ -303,6 +325,10 @@ fun Route.reminderRoutes() {
             // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
             // propia forma de saldarse (ahí el pago mueve la deuda, que es un hecho más fuerte
             // que un sello). Meterlas acá sería un segundo mecanismo compitiendo con ese.
+            //
+            // Siguen sin entrar por acá: lo que se agregó abajo NO sella nada — lee el pago que
+            // ya está registrado y lo reporta. Es la otra mitad de este mismo argumento, la que
+            // faltaba: el hecho más fuerte existía y nadie lo leía.
             val rules = RecurringRules.selectAll()
                 .where { RecurringRules.userId eq uid }
                 .map { it.toRule() }
@@ -366,7 +392,41 @@ fun Route.reminderRoutes() {
                 }
             }
         }
-        call.respond(estados)
+        // ── Las sintéticas que YA ESTÁN PAGADAS ──────────────────────────────────────
+        //
+        // «Ya ocurrieron · 1» era falso: había cuatro pagos registrados que nadie leía. Estas
+        // filas salen del movimiento que bajó la deuda, no de un sello, y por eso viajan marcadas
+        // con `derivadaDeUnMovimiento` — la pantalla no puede ofrecerles un «Deshacer» que no
+        // haría nada (para deshacerlo hay que borrar el movimiento).
+        //
+        // **Solo las pagadas.** Una sintética abierta no se emite: la pantalla pintaría su
+        // propuesta con el botón «Ya lo pagué», que en una regla sintética responde 400 — un
+        // control muerto — y si respondiera 201 sería el segundo mecanismo de sellado que este
+        // endpoint existe para no tener.
+        //
+        // Y no se le exige que el vencimiento ya haya llegado, a diferencia de las reales: ahí la
+        // guarda evita preguntar por algo que todavía no pasó, pero acá no se pregunta nada. El
+        // movimiento existe; la cuota de Crediágil pagada el 5 está pagada aunque venza el 15.
+        val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
+        val derivadas = if (sinteticas.isEmpty()) emptyList() else {
+            val pagos = cargarPagosDeDeuda(uid, today)
+            pagosDeDeudaPorPeriodo(sinteticas, pagos).mapNotNull { (ruleId, porPeriodo) ->
+                val pago = porPeriodo[periodoEnCurso] ?: return@mapNotNull null
+                val rule = sinteticas.first { it.id == ruleId }
+                OccurrenceState(
+                    ruleId = ruleId,
+                    period = periodoEnCurso,
+                    dueDate = occurrenceInMonth(mesEnCurso, rule.dayOfMonth).toString(),
+                    occurred = true,
+                    eventId = pago.id,
+                    // No hubo confirmación que fechar: lo más cierto que se puede decir es cuándo
+                    // quedó respaldada, que es cuándo se hizo el pago.
+                    confirmedAt = pago.timestamp,
+                    derivadaDeUnMovimiento = true,
+                )
+            }
+        }
+        call.respond(estados + derivadas)
     }
 
     /**
