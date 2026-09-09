@@ -69,6 +69,7 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
+import com.jvillada.movi.ui.recurrentes.ETIQUETA_MINIMOS_DE_TARJETA
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.OrigenDeSuscripcion
 import com.jvillada.movi.ui.recurrentes.Recurrente
@@ -77,6 +78,7 @@ import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
 import com.jvillada.movi.ui.recurrentes.SeccionSinConfirmar
 import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
+import com.jvillada.movi.ui.recurrentes.avisoDeMinimosQueFaltan
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.claveDescartada
@@ -93,6 +95,7 @@ import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
 import com.jvillada.movi.ui.recurrentes.reglasSinteticas
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
+import com.jvillada.movi.ui.recurrentes.subtituloDelFlujoLibre
 import com.jvillada.movi.ui.recurrentes.suscripcionesActivas
 import com.jvillada.movi.ui.recurrentes.textoDelMontoDeSuscripcion
 import kotlinx.coroutines.async
@@ -1761,8 +1764,13 @@ private fun ResumenFlujoLibreCard(
     ) {
         Text("Flujo libre", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
+        // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
+        // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
+        // es plata que hay que pagar sí o sí, y mientras el número grande la ignoraba el dueño leía
+        // $601.574 libres sin saber que el mínimo de su Master Black son $1.843.014. Las dos
+        // cifras se muestran; la que manda es la que ya descontó lo comprometido.
         Text(
-            text = cifras?.let { formatCOP(it.flujoLibre) } ?: "—",
+            text = cifras?.let { formatCOP(it.disponible) } ?: "—",
             fontSize = 28.sp,
             fontFamily = FontFamily.Monospace,
             color = MinText,
@@ -1771,7 +1779,7 @@ private fun ResumenFlujoLibreCard(
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Ingresos recurrentes − Gastos recurrentes",
+            text = cifras?.let { subtituloDelFlujoLibre(it) } ?: "Ingresos recurrentes − Gastos recurrentes",
             fontSize = 12.sp,
             color = MinTextMute,
         )
@@ -1803,6 +1811,49 @@ private fun ResumenFlujoLibreCard(
                     letterSpacing = (-0.3).sp,
                 )
             }
+        }
+        // **Los mínimos, en su propia fila y no adentro de «Gastos recurrentes».** Es la tensión
+        // que esta feature tuvo que resolver: el pago de una tarjeta NO es gasto del mes (las
+        // compras ya contaron), así que sumarlo ahí contaría la misma plata dos veces; pero sí es
+        // plata comprometida, así que ignorarlo deja al dueño con una cifra optimista. La salida
+        // es restarlo del disponible **con rótulo propio**, que además es lo único que le permite
+        // verificar la resta contra su extracto.
+        if (cifras != null && cifras.minimosDeTarjeta > 0L) {
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(ETIQUETA_MINIMOS_DE_TARJETA, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        // El signo lo trae el formato, no un prefijo pegado afuera (F36): `formatCOP` ya sabe
+                        // escribir un negativo, y duplicarlo daría «− −$…» el día que alguien pase otra cifra.
+                        text = formatCOP(-cifras.minimosDeTarjeta),
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                        letterSpacing = (-0.3).sp,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Libre sin las tarjetas", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = formatCOP(cifras.flujoLibre),
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium,
+                        color = MinTextMute,
+                        letterSpacing = (-0.3).sp,
+                    )
+                }
+            }
+        }
+        // Y cuando el mínimo no está cargado, la cifra grande deja de ser un hecho y se dice.
+        // Ver [avisoDeMinimosQueFaltan].
+        cifras?.let { avisoDeMinimosQueFaltan(it) }?.let { aviso ->
+            Spacer(Modifier.height(12.dp))
+            Text(aviso, fontSize = 11.sp, color = MinWarn, lineHeight = 15.sp)
         }
         // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
         // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].

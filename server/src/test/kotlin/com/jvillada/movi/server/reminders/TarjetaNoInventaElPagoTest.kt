@@ -28,7 +28,7 @@ class TarjetaNoInventaElPagoTest {
 
     @Test
     fun la_regla_de_una_tarjeta_declara_que_su_monto_es_un_saldo() {
-        val regla = virtualRuleForCard(terms(), "AMEX 9208", currentDebt = 19_818_701)
+        val regla = virtualRuleForCard(terms(), "AMEX 9208", currentDebt = 19_818_701, accountCurrency = "COP", usdToCop = 0.0)
 
         assertTrue(regla.montoEsSaldo, "sin esta bandera, la UI lo pinta como si fuera la cuota")
         assertEquals(19_818_701, regla.amount, "el saldo se conserva: es la mejor pista para emparejar el pago")
@@ -62,7 +62,7 @@ class TarjetaNoInventaElPagoTest {
     // miraban que la regla naciera marcada, no que alguien hiciera algo con la marca. (Los dos
     // renderers de `:shared` —el Inicio y Recurrentes— los fija `MontoEsSaldoEnPantallaTest`.)
 
-    private val tarjetaDelDueno = virtualRuleForCard(terms(), "AMEX 9208", currentDebt = 27_501_150)
+    private val tarjetaDelDueno = virtualRuleForCard(terms(), "AMEX 9208", currentDebt = 27_501_150, accountCurrency = "COP", usdToCop = 0.0)
 
     private val cuotaDelCarro = virtualRuleFor(
         com.jvillada.movi.shared.model.CreditTerms(

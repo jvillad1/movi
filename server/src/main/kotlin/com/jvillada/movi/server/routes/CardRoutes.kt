@@ -25,6 +25,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
@@ -114,7 +117,28 @@ fun Route.cardRoutes() {
             if (account.type != AccountType.CREDIT_CARD) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, "Solo tarjetas de crédito llevan estos términos")
             }
-            val body = call.receive<CardTerms>().copy(accountId = accountId).sanitized()
+            // Se recibe el JSON CRUDO además del objeto, por lo mismo que en `creditRoutes`: para
+            // poder distinguir «el cliente mandó este campo» de «el cliente no lo conoce».
+            //
+            // `fillCardTerms` sobrescribe TODAS las columnas, así que un APK anterior a este
+            // cambio —el que él tiene instalado hoy— manda un cuerpo sin `pagoMinimo` y lo dejaría
+            // en NULL. Y el borrado sería silencioso y caro: editar el día de pago desde el
+            // teléfono le borraría los $1.843.014 del Master Black, el «Flujo libre» volvería a
+            // afirmar un número optimista, y nada en la pantalla diría que pasó algo.
+            //
+            // No se puede hacer con el objeto deserializado —ahí «ausente» y «null» son lo
+            // mismo— ni con un centinela, que sería un valor legítimo el día que alguien lo
+            // escriba. Mirar las claves del JSON es exacto.
+            val crudo = call.receive<JsonObject>()
+            val previo = dbQuery {
+                Cards.selectAll()
+                    .where { (Cards.accountId eq accountId) and (Cards.userId eq uid) }
+                    .firstOrNull()?.toCardTerms()
+            }
+            val body = Json.decodeFromJsonElement<CardTerms>(crudo)
+                .copy(accountId = accountId)
+                .let { if ("pagoMinimo" in crudo) it else it.copy(pagoMinimo = previo?.pagoMinimo) }
+                .sanitized()
             // upsert atómico por PK (accountId), igual que en creditRoutes: lastRemindedPeriod
             // no está en el upsert, así que se conserva — un cambio de día aplica desde el mes
             // siguiente.
@@ -155,6 +179,11 @@ private fun fillCardTerms(
     it[Cards.creditLimit] = terms.creditLimit
     it[Cards.cutoffDay]   = terms.cutoffDay
     it[Cards.paymentDay]  = terms.paymentDay
+    // `> 0` y no `>= 0`, igual que `insurance_monthly` y `otros_cargos_mensuales`: un mínimo en
+    // cero es la forma de decir «no le debo nada este mes», y eso ya lo dice la deuda en $0. Lo
+    // que hay que poder distinguir es «no lo cargué» (null) de «lo cargué» (un número), y un 0
+    // guardado se leería como el segundo.
+    it[Cards.pagoMinimo]  = terms.pagoMinimo?.takeIf { v -> v > 0L }
     it[Cards.notes]       = terms.notes
     it[Cards.remindMe]    = terms.remindMe
 }

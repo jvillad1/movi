@@ -53,6 +53,9 @@ fun CardTermsSheet(
     var bank by remember { mutableStateOf(existingTerms?.bank ?: "") }
     var creditLimit by remember { mutableStateOf(existingTerms?.creditLimit) }
     var cutoffDay by remember { mutableStateOf(existingTerms?.cutoffDay?.toString() ?: "") }
+    // El pago mínimo del extracto. Nullable y sin default: null significa «no lo cargué», no 0.
+    // Ver [CardTerms.pagoMinimo].
+    var pagoMinimo by remember { mutableStateOf(existingTerms?.pagoMinimo) }
     var paymentDay by remember { mutableStateOf(existingTerms?.paymentDay?.toString() ?: "") }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existingTerms?.remindMe ?: true) }
@@ -87,6 +90,7 @@ fun CardTermsSheet(
                     bank = bank.trim(),
                     creditLimit = creditLimit,
                     cutoffDay = cutoffDay.toIntOrNull(),
+                    pagoMinimo = pagoMinimo,
                     paymentDay = paymentDay.toInt(),
                     remindMe = remindMe,
                 )
@@ -183,6 +187,23 @@ fun CardTermsSheet(
                         FieldBox("Día de pago", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number)
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                // **El único campo de esta hoja que Movi no puede deducir de nada.** El cupo
+                // disponible sale del cupo menos la deuda, la deuda sale de los eventos; el mínimo
+                // no sale de ningún lado, y estimarlo con el 5 % de Bancolombia sería un número
+                // sobre su plata que él no puede verificar contra el extracto. Opcional a
+                // propósito: vacío significa «no lo sé», que se dice, no se rellena.
+                MoneyField(
+                    pagoMinimo, { pagoMinimo = it },
+                    placeholder = "Pago mínimo del extracto (${editing?.account?.currency ?: currency}, opcional)",
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = TEXTO_DE_AYUDA_DEL_MINIMO,
+                    fontSize = 11.sp,
+                    color = MinTextFaint,
+                    lineHeight = 15.sp,
+                )
 
                 Spacer(Modifier.height(16.dp))
                 // El pago de esta tarjeta entra al barrido de recordatorios salvo que el dueño
@@ -259,3 +280,18 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
         )
     }
 }
+
+/**
+ * Lo que la hoja dice debajo del campo del mínimo.
+ *
+ * Dice **para qué sirve** y no **qué es**: el dueño ya sabe qué es un pago mínimo, lo que no sabe
+ * es que cargarlo cambia la cifra grande de otra pantalla. Sin esa frase, el campo se lee como un
+ * dato más de archivo y se queda vacío — y vacío es exactamente el estado en el que el «Flujo
+ * libre» le decía $601.574 sin descontarle $1.843.014.
+ *
+ * Y dice que **cambia todos los meses**, porque cambia: es la razón por la que no se estima y la
+ * razón por la que hay que volver a este campo cada tanto.
+ */
+const val TEXTO_DE_AYUDA_DEL_MINIMO: String =
+    "Con esto, el «Flujo libre» descuenta lo que esta tarjeta te obliga a pagar. Cambia con cada " +
+        "extracto: no lo estimamos, revísalo cuando te llegue."

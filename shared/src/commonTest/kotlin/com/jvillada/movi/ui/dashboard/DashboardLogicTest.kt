@@ -643,9 +643,11 @@ class DashboardLogicTest {
             ),
             subscriptions = SubscriptionsResult(emptyList(), 0),
         )
+        // La tarjeta de este fixture no trae su pago mínimo, así que el rótulo lo dice en vez de
+        // contar recurrentes: la cifra es un techo y no un hecho. Ver `avisoDeMinimosQueFaltan`.
         val f = quickLinkFigure("recurrentes", d)
         assertEquals("−$2.900.000", f.value)
-        assertEquals("libre al mes · 2 recurrentes", f.sub)
+        assertEquals("libre al mes · falta 1 mínimo de tarjeta", f.sub)
         assertEquals(true, f.isAlert, "un flujo libre negativo se marca")
     }
 
@@ -663,6 +665,47 @@ class DashboardLogicTest {
         val f = quickLinkFigure("recurrentes", d)
         assertEquals("−$900.000", f.value)
         assertEquals("libre al mes · 1 recurrente", f.sub)
+    }
+
+    /**
+     * **El mínimo de la tarjeta baja la cifra del Inicio, y la baja igual que en Movimientos.**
+     *
+     * Es el motivo entero de que esta función exista: el acceso y la pantalla de destino salen de
+     * la MISMA `resumenRecurrentes`, así que si el Inicio siguiera mostrando `flujoLibre` estaría
+     * $1.843.014 por encima de lo que se abre al tocarlo.
+     */
+    @Test
+    fun `el minimo de la tarjeta descuenta tambien en el acceso del Inicio`() {
+        val tarjeta = upcoming("${CARD_RULE_PREFIX}master", "Pago tarjeta Master Black", 27_647_837, daysUntil = 6)
+        val d = DashboardData(
+            upcoming = listOf(
+                upcoming("rr_1", "Sueldo", 12_000_000, daysUntil = 5, type = TransactionType.INCOME),
+                upcoming("${CREDIT_RULE_PREFIX}l1", "Cuota del carro", 4_101_123, daysUntil = 4),
+                upcoming("rr_2", "Arriendo", 7_297_303, daysUntil = 5),
+                tarjeta.copy(rule = tarjeta.rule.copy(montoEsSaldo = true, pagoMinimoCop = 1_843_014)),
+            ),
+            subscriptions = SubscriptionsResult(emptyList(), 0),
+        )
+        val f = quickLinkFigure("recurrentes", d)
+        // 12.000.000 − 4.101.123 − 7.297.303 = 601.574, menos el mínimo = −1.241.440.
+        assertEquals("−$1.241.440", f.value)
+        assertEquals("libre al mes · 3 recurrentes", f.sub, "con el dato cargado el rótulo vuelve a contar")
+        assertEquals(true, f.isAlert)
+    }
+
+    /** Con dos tarjetas sin mínimo el rótulo va en plural, y sin ninguna vuelve a contar recurrentes. */
+    @Test
+    fun `el rotulo del acceso dice cuantos minimos faltan`() {
+        val base = listOf(
+            upcoming("rr_1", "Sueldo", 12_000_000, daysUntil = 5, type = TransactionType.INCOME),
+            upcoming("${CARD_RULE_PREFIX}a", "Pago tarjeta A", 1_000_000, daysUntil = 6),
+            upcoming("${CARD_RULE_PREFIX}b", "Pago tarjeta B", 2_000_000, daysUntil = 6),
+        )
+        val dosSinDato = DashboardData(upcoming = base, subscriptions = SubscriptionsResult(emptyList(), 0))
+        assertEquals("libre al mes · faltan 2 mínimos de tarjeta", quickLinkFigure("recurrentes", dosSinDato).sub)
+
+        val sinTarjetas = DashboardData(upcoming = base.take(1), subscriptions = SubscriptionsResult(emptyList(), 0))
+        assertEquals("libre al mes · 1 recurrente", quickLinkFigure("recurrentes", sinTarjetas).sub)
     }
 
     @Test

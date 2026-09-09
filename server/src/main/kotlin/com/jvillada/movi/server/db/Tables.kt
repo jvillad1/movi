@@ -448,6 +448,23 @@ object Cards : Table("card_terms") {
     val creditLimit        = long("credit_limit").nullable()   // cupo (moneda de la cuenta)
     val cutoffDay          = integer("cutoff_day").nullable()
     val paymentDay         = integer("payment_day")
+    /**
+     * El pago mínimo del extracto, en la moneda de la cuenta. Ver `CardTerms.pagoMinimo` — es la
+     * primera cifra de una tarjeta que Movi no puede derivar de nada que ya tenga, y por eso se
+     * teclea en vez de estimarse.
+     *
+     * Nullable por lo mismo que `credit_limit` y que `credit_terms.otros_cargos_mensuales`:
+     * `createMissingTablesAndColumns` corre DENTRO de la transacción de arranque, y
+     * `ALTER TABLE … ADD COLUMN … NULL` es el único DDL que no puede fallar sobre las filas que ya
+     * están. **Y `Cards` tiene que seguir en esa lista** (ya está), o esta columna se queda en el
+     * código y cada consulta de tarjetas revienta en producción con «column does not exist»:
+     * fijado por `SchemaDeArranqueTest` y por `PagoMinimoColumnTest`.
+     *
+     * Y nullable también en el sentido que importa: `null` no es 0. Un mínimo en 0 diría que esa
+     * tarjeta no le exige nada este mes; `null` dice que no se sabe, que es la verdad para las
+     * cinco tarjetas que ya están en producción.
+     */
+    val pagoMinimo         = long("pago_minimo").nullable()
     val notes              = varchar("notes", 300).nullable()
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
     /** Ver `RecurringRules.remindMe`. */
