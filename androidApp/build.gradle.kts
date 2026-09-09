@@ -31,8 +31,15 @@ android {
         // multi-clic era el de Android, 300 ms, contra los 500 del sistema), y producción
         // dice qué commit corre. Ninguno toca androidMain; el APK se arma porque el dueño
         // lo pidió con todo adentro.
-        versionCode = 18
-        versionName = "1.17"
+        // 1.18: la ola más grande hasta hoy — #143-#172, y **43 commits** desde el 1.14 que
+        // todavía está en Drive. Movimientos con color por renglón y días plegables, Explora
+        // borrada, Recurrentes disuelta adentro de Movimientos, presupuestos sobre el período
+        // y no el mes civil, las cuotas dentro del flujo libre, suscripciones anuales y con
+        // tarjeta, el aviso de que nunca llegó un SMS, y que una cuota ya pagada deje de
+        // decir «vencida». Ninguno toca androidMain: el APK se arma porque el dueño lo pidió,
+        // y porque el 1.14 que tiene en el teléfono es de antes de todo esto.
+        versionCode = 19
+        versionName = "1.18"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
