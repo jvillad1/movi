@@ -394,7 +394,27 @@ object Credits : Table("credit_terms") {
     val installment        = long("installment")          // cuota mensual total
     val dayOfMonth         = integer("day_of_month")
     val startDate          = varchar("start_date", 10)    // ISO desembolso
-    val notes              = varchar("notes", 300).nullable()
+    /**
+     * **500 y no 300, porque acá vive el *porqué* de un número que no cuadra con el banco.**
+     *
+     * Con 300 se cortó tres veces en un solo día cargando datos reales: no cupo explicar que la
+     * cuota del Vehículo 8761 trae $25.000 de «otros conceptos» que Movi termina contando como
+     * capital, ni el detalle del Crediexpress que está detrás del Techo Gardenera. Una nota
+     * mutilada es peor que ninguna: deja media explicación y ninguna pista de que falta la otra.
+     *
+     * 500 es el techo que este repo ya usa para prosa que escribe una persona sobre un registro
+     * —`documents.notes` y `void_events.reason`, que son el mismo tipo de campo—. Un `text()` sin
+     * tope (como `sms_messages.text`) se descartó a propósito: eso es para lo que llega de afuera,
+     * y un campo de notas sin límite invita a pegar un extracto entero adentro de una fila que la
+     * app pinta en una tarjeta.
+     *
+     * **Ensanchar SÍ llega a producción.** `credit_terms` ya existe allá, así que el
+     * `SchemaUtils.create` del arranque no hace nada; pero `Credits` está en la lista de
+     * `createMissingTablesAndColumns`, y Exposed 0.55 emite el `ALTER TABLE … ALTER COLUMN notes
+     * TYPE VARCHAR(500)` también cuando lo único que cambió es el largo — no solo cuando falta la
+     * columna. Verificado contra Postgres 16 de verdad y fijado por `SchemaDeArranqueTest`.
+     */
+    val notes              = varchar("notes", 500).nullable()
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
     /** Ver `RecurringRules.remindMe`. */
     val remindMe           = bool("remind_me").default(true)
