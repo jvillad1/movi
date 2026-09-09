@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.ui.components.formatMoney
 
 /**
  * Las reglas puras de «¿esto ya ocurrió?» en la pantalla de Recurrentes — sin Compose, para poder
@@ -170,12 +171,46 @@ fun etiquetaCierreManual(tipo: TransactionType): String =
  * Se distingue además si quedó **respaldada por un movimiento** o si el dueño la cerró a mano: son
  * dos grados de certeza distintos y la fila no debería sonar igual en los dos casos. Un sello a
  * mano es una palabra suya; uno con movimiento está anclado a una plata que se puede ver.
+ *
+ * Y hay un tercer grado, el más fuerte: la cuota de un crédito o el pago de una tarjeta que **el
+ * dueño nunca marcó** porque no hizo falta — el movimiento que bajó la deuda ya lo prueba (ver
+ * [OccurrenceState.derivadaDeUnMovimiento]). Esa fila no dice «lo marcaste», porque no lo marcó;
+ * dice de dónde sale. Es la mitad visible de que ahí no haya un «Deshacer»: lo que se deshace es
+ * el movimiento, no un sello que no existe.
+ *
+ * **Y dice cuánta plata fue.** Un abono de $50.000 sobre un extracto de $1.008.902 salda el
+ * periodo igual que un pago completo —el monto no filtra, y no puede: movi no conoce el extracto
+ * (ver `PagosDeDeuda.kt` en el server)—, así que si la fila dijera solo «ya ocurrió», el dueño no
+ * tendría cómo notar que pagó una parte. Con el número a la vista lo ve de un vistazo. Si el
+ * server no mandó monto (un cliente contra una versión vieja) se cae al texto de antes, que sigue
+ * siendo cierto.
  */
 fun textoYaOcurrio(estado: OccurrenceState): String {
     val mes = nombreDelMes(estado.period)
     val cuando = if (mes.isEmpty()) "Ya ocurrió" else "Ya ocurrió en $mes"
-    return if (estado.eventId != null) "$cuando · con un movimiento" else cuando
+    val monto = estado.montoDelPago
+    return when {
+        estado.derivadaDeUnMovimiento && monto != null ->
+            "$cuando · lo prueba un pago de ${formatMoney(monto, estado.monedaDelPago ?: "COP")}"
+        estado.derivadaDeUnMovimiento -> "$cuando · lo prueba un movimiento"
+        estado.eventId != null -> "$cuando · con un movimiento"
+        else -> cuando
+    }
 }
+
+/**
+ * ¿Esta fila puede ofrecer «Deshacer»?
+ *
+ * **Solo si hay un sello que borrar.** Una ocurrencia derivada de un movimiento no se deshace: no
+ * existe ninguna fila en `recurring_occurrences` que borrar, y el DELETE contestaría 404 mientras
+ * la pantalla se queda igual. Un control que no hace nada es peor que la ausencia del control —
+ * este repo ya se comió ese error una vez— así que la fila derivada aparece sin él, y su renglón
+ * dice por qué está ahí (ver [textoYaOcurrio]).
+ *
+ * Para deshacerla de verdad hay un solo camino honesto: borrar o anular el movimiento. Ahí la fila
+ * desaparece sola, porque el server la deriva en cada lectura.
+ */
+fun sePuedeDeshacer(estado: OccurrenceState): Boolean = !estado.derivadaDeUnMovimiento
 
 /**
  * Una línea que describa la propuesta sin obligar a abrirla: el día **con su mes** y **qué fue** —

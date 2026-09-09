@@ -441,6 +441,12 @@ fun SeccionSinConfirmar(
  *
  * Cada fila dice el mes y si quedó respaldada por un movimiento — ver [textoYaOcurrio]: un sello a
  * mano es una palabra suya, uno con movimiento está anclado a una plata que se puede ver.
+ *
+ * **No todas las filas se sellaron.** La cuota de un crédito y el pago de una tarjeta llegan acá
+ * *derivadas* del movimiento que bajó la deuda: nadie las marcó y no hay nada que desmarcar. Esas
+ * se pintan sin «Deshacer» (ver [sePuedeDeshacer]) y diciendo cómo se revierten de verdad. La
+ * sección sigue siendo la misma —«qué se dio por ocurrido este mes»— con dos orígenes distintos
+ * que la fila no esconde.
  */
 @Composable
 fun SeccionYaOcurrieron(
@@ -474,14 +480,28 @@ fun SeccionYaOcurrieron(
                         Spacer(Modifier.height(2.dp))
                         Text(textoYaOcurrio(estado), fontSize = 11.sp, color = MinTextMute)
                     }
-                    Text(
-                        text = if (rule.id in marcando) "Guardando…" else "Deshacer",
-                        fontSize = 12.sp,
-                        color = MinPrimary,
-                        modifier = Modifier.clickable {
-                            if (rule.id !in marcando) onDeshacer(rule.id, estado.period)
-                        },
-                    )
+                    // El «Deshacer» solo existe donde hay un sello que borrar. Una cuota o un pago
+                    // de tarjeta llega acá **derivado del movimiento** que bajó la deuda, y eso no
+                    // se desmarca: el DELETE contestaría 404 y la fila se quedaría igual. Se
+                    // muestra en su lugar cómo se revierte de verdad — borrando el movimiento —
+                    // porque un control muerto es peor que no tener control (ver [sePuedeDeshacer]).
+                    if (sePuedeDeshacer(estado)) {
+                        Text(
+                            text = if (rule.id in marcando) "Guardando…" else "Deshacer",
+                            fontSize = 12.sp,
+                            color = MinPrimary,
+                            modifier = Modifier.clickable {
+                                if (rule.id !in marcando) onDeshacer(rule.id, estado.period)
+                            },
+                        )
+                    } else {
+                        Text(
+                            text = "Se quita borrando\nel movimiento",
+                            fontSize = 10.sp,
+                            color = MinTextMute,
+                            lineHeight = 13.sp,
+                        )
+                    }
                 }
                 if (i < selladas.size - 1) Hairline()
             }
