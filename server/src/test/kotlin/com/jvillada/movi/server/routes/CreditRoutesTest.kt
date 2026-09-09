@@ -956,6 +956,62 @@ class CreditRoutesTest {
         assertEquals(5_000_000L, terms["installment"]!!.jsonPrimitive.long)
     }
 
+    /**
+     * **Y un cliente que NO manda la clave tampoco lo vuelve a prender.** La prueba de arriba
+     * cubre al cliente que sigue mandando `remindMe:false`; el agujero estaba al lado: `true` es
+     * el default, así que kotlinx omite la clave cuando la casilla está marcada y un cuerpo sin
+     * `remindMe` es idéntico al de un APK que no conoce el campo. `fillCreditTerms` escribía el
+     * default deserializado sobre la columna, y editar la cuota desde el teléfono viejo le
+     * devolvía el aviso a un crédito silenciado — la misma clase de agujero que `paidBy`,
+     * `insuranceMonthly` y `otrosCargosMensuales` ya tienen tapada acá.
+     */
+    @Test
+    fun `un cliente viejo que no manda el aviso no lo vuelve a prender`() = testApplication {
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","remindMe":false}""")
+        }
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.replace("\"installment\":4888000", "\"installment\":5000000"))
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean, "el APK viejo volvió a prender el aviso")
+        assertEquals(5_000_000L, terms["installment"]!!.jsonPrimitive.long, "y su edición sí se guardó")
+    }
+
+    /**
+     * Y **volver a prenderlo sí se puede**: la mitad que la guarda sola rompe. Sin
+     * `@EncodeDefault(ALWAYS)` en `CreditTerms.remindMe`, marcar la casilla manda un cuerpo sin la
+     * clave, el server lo lee como «cliente viejo» y repone el `false` — la casilla quedaría
+     * muerta en una dirección. El cuerpo lo serializa [comoElCliente], no se escribe a mano.
+     */
+    @Test
+    fun `volver a prender el aviso si se puede`() = testApplication {
+        wireApp()
+        val silenciado = terminosDelCliente.copy(remindMe = false)
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(silenciado))
+        }
+        // Exactamente lo que hace la hoja al volver a marcar la casilla.
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(silenciado.copy(remindMe = true)))
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.decodeFromJsonElement<CreditTerms>(
+            Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
+        )
+        assertTrue(terms.remindMe, "el cliente pidió volver a avisar y el server lo dejó mudo")
+    }
+
     // ══ Ola 16 — el desembolso nace con el crédito ════════════════════════════════════════
     //
     // El escenario real, y el que se mide de punta a punta más abajo: una libranza de

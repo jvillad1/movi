@@ -602,4 +602,70 @@ class CardRoutesTest {
         )
         assertNull(terms.notes, "el cliente pidió borrarla y el server la repuso")
     }
+
+    // ─────────────────────── el aviso que él apagó sigue apagado ──────────────────────────
+
+    /**
+     * **La casilla se volvía a prender sola.** El tercer campo de esta tabla sin guarda, y el que
+     * más fácil se cuela: `remindMe` vale `true` por default, así que kotlinx **omite la clave**
+     * cuando está prendida — un cuerpo sin `remindMe` es indistinguible de un cliente que no
+     * conoce el campo. `fillCardTerms` escribía el default deserializado (`true`) sobre la
+     * columna, así que editar el día de pago desde un teléfono viejo le devolvía el recordatorio a
+     * una tarjeta que él había silenciado.
+     *
+     * No se pierde plata: se pierde una decisión, y reaparece como un aviso que él ya había dicho
+     * que no quería.
+     */
+    @Test
+    fun `un cliente viejo que no manda el aviso no lo vuelve a prender`() = testApplication {
+        wireApp()
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","remindMe":false}""")
+        }
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.replace("\"paymentDay\":25", "\"paymentDay\":18"))
+        }
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(false, terms["remindMe"]!!.jsonPrimitive.boolean, "el APK viejo volvió a prender el aviso")
+        assertEquals(18L, terms["paymentDay"]!!.jsonPrimitive.long, "y su edición sí se guardó")
+    }
+
+    /**
+     * Y **volver a prenderlo sí se puede**, que es la mitad que la guarda sola rompe: `true` es el
+     * default del campo, así que sin `@EncodeDefault(ALWAYS)` el cliente que marca la casilla manda
+     * un cuerpo **sin la clave**, el server lo lee como «cliente viejo» y repone el `false`. La
+     * casilla quedaría muerta en una dirección: se puede apagar y nunca más prender.
+     *
+     * El cuerpo lo serializa la misma `Json` que arman los tres `Platform`, no se escribe a mano.
+     */
+    @Test
+    fun `volver a prender el aviso si se puede`() = testApplication {
+        wireApp()
+        val jsonDeCliente = Json { ignoreUnknownKeys = true }
+        val silenciada = CardTerms(
+            accountId = cardAccountId, bank = "Bancolombia", creditLimit = 20_000_000L,
+            cutoffDay = 10, paymentDay = 25, remindMe = false,
+        )
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(jsonDeCliente.encodeToString(CardTerms.serializer(), silenciada))
+        }
+        // Exactamente lo que hace la hoja al volver a marcar la casilla.
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(jsonDeCliente.encodeToString(CardTerms.serializer(), silenciada.copy(remindMe = true)))
+        }
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.decodeFromJsonElement<CardTerms>(
+            Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
+        )
+        assertTrue(terms.remindMe, "el cliente pidió volver a avisar y el server lo dejó mudo")
+    }
 }

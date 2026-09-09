@@ -289,6 +289,12 @@ fun Route.creditRoutes() {
                 // teléfono manda un cuerpo sin la clave y borraría los $25.000 del Vehículo 8761
                 // en silencio — devolviendo la deriva de ~$25.500/mes que este cambio vino a matar.
                 .let { if ("otrosCargosMensuales" in crudo) it else it.copy(otrosCargosMensuales = previo?.otrosCargosMensuales) }
+                // Y la casilla del aviso, que es la más fácil de pasar por alto de todo el club:
+                // no hace falta un APK viejo para omitir la clave — `true` es su default, así que
+                // kotlinx la omite en CUALQUIER cliente que la tenga marcada. Sin esta línea, el
+                // default deserializado se escribía sobre la columna y editar la cuota desde el
+                // teléfono viejo le devolvía el recordatorio a un crédito que él había silenciado.
+                .let { if ("remindMe" in crudo) it else it.copy(remindMe = previo?.remindMe ?: true) }
                 // El tope de la columna es varchar(60): un nombre más largo hacía fallar el
                 // INSERT en Postgres y se caía el guardado ENTERO del crédito con un 500 sin
                 // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
