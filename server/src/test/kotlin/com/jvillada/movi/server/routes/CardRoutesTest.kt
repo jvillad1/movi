@@ -32,6 +32,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -529,5 +530,76 @@ class CardRoutesTest {
             ).jsonArray[0].jsonObject["terms"]!!,
         )
         assertEquals(1_843_014L, terms.pagoMinimo, "y lo que sí conocía se guardó")
+    }
+
+    // ─────────────────────────────── la nota de la tarjeta ────────────────────────────────
+
+    /**
+     * **La nota se borraba sola en cada guardado.** Mismo agujero exacto que `pagoMinimo` arriba,
+     * y peor por dos razones: la hoja de tarjetas no tenía campo de notas —así que el dato era
+     * inescribible desde la app y aun así destruible— y lo que se pierde no se deriva de ningún
+     * lado. `fillCardTerms` escribe TODAS las columnas.
+     *
+     * El segundo PUT es el que manda el APK instalado: sin la clave `notes`, y cambiando el día de
+     * pago, que es la edición realista («me movieron la fecha»).
+     */
+    @Test
+    fun `un cliente viejo que no manda las notas no las borra`() = testApplication {
+        wireApp()
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","notes":"Difiere a 36 cuotas toda compra internacional"}""")
+        }
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.replace("\"paymentDay\":25", "\"paymentDay\":18"))
+        }
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+        assertEquals(
+            "Difiere a 36 cuotas toda compra internacional",
+            terms["notes"]?.jsonPrimitive?.contentOrNull,
+            "el APK viejo borró la nota",
+        )
+        assertEquals(18L, terms["paymentDay"]!!.jsonPrimitive.long, "y su edición sí se guardó")
+    }
+
+    /**
+     * Y **vaciar el campo sí la borra**: la guarda mira la CLAVE, no el valor — si mirara el valor,
+     * la nota sería imborrable desde la app, que es el otro extremo del mismo error.
+     *
+     * **El cuerpo lo serializa la misma `Json` que arman los tres `Platform`, no se escribe a
+     * mano.** Esa es la mitad que importa: `"notes":null` escrito a mano manda algo que ningún
+     * cliente produce, y la prueba pasaría con el modelo roto. Sin `@EncodeDefault(ALWAYS)` en
+     * `CardTerms.notes`, kotlinx omite la clave por valer su default, el PUT la lee como «cliente
+     * viejo» y repone la nota vieja.
+     */
+    @Test
+    fun `vaciar las notas si las borra`() = testApplication {
+        wireApp()
+        val jsonDeCliente = Json { ignoreUnknownKeys = true }
+        val cargado = CardTerms(
+            accountId = cardAccountId, bank = "Bancolombia", creditLimit = 20_000_000L,
+            cutoffDay = 10, paymentDay = 25, notes = "Difiere a 36 cuotas toda compra internacional",
+        )
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(jsonDeCliente.encodeToString(CardTerms.serializer(), cargado))
+        }
+        // Exactamente lo que hace la hoja al vaciar el campo: el mismo objeto con `notes` en null,
+        // serializado por el cliente.
+        client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(jsonDeCliente.encodeToString(CardTerms.serializer(), cargado.copy(notes = null)))
+        }
+        val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.decodeFromJsonElement<CardTerms>(
+            Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
+        )
+        assertNull(terms.notes, "el cliente pidió borrarla y el server la repuso")
     }
 }

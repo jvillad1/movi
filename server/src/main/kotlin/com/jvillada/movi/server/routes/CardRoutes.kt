@@ -138,6 +138,9 @@ fun Route.cardRoutes() {
             val body = jsonDeLaApi.decodeFromJsonElement<CardTerms>(crudo)
                 .copy(accountId = accountId)
                 .let { if ("pagoMinimo" in crudo) it else it.copy(pagoMinimo = previo?.pagoMinimo) }
+                // Misma guarda, y por una razón todavía más cara: la nota es texto que el dueño
+                // escribió y que no se deriva de nada — perderla no se repara mirando el extracto.
+                .let { if ("notes" in crudo) it else it.copy(notes = previo?.notes) }
                 .sanitized()
             // upsert atómico por PK (accountId), igual que en creditRoutes: lastRemindedPeriod
             // no está en el upsert, así que se conserva — un cambio de día aplica desde el mes
