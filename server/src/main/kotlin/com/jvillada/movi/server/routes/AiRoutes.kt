@@ -10,6 +10,8 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigAdaptive
+import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
+import com.jvillada.movi.server.ai.renderizarDocumentos
 import com.jvillada.movi.server.balance.accountCopValue
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
@@ -74,6 +76,8 @@ Estructura: responde en máximo 4-5 frases cortas. Si la respuesta tiene un cál
 No uses emojis ni símbolos decorativos: la interfaz no los renderiza.
 
 F32: si el usuario te manda una foto de un recibo, un extracto o una oferta del banco, extrae lo relevante (montos, fechas, comercio o condiciones) y opina usando los datos del usuario en "DATOS DEL USUARIO".
+
+Documentos: el bloque "Documentos guardados" lista los papeles que el usuario subió a Movi, con las notas que él mismo escribió al guardarlos. Esas notas son lo que él leyó en el papel el día que lo subió —cada renglón dice de cuándo es—, así que pueden haber quedado viejas: úsalas para contestar y para contrastar contra los movimientos, pero si una nota no cuadra con los movimientos no des por hecho que manda la nota, di de cuándo es y que los movimientos pueden ser posteriores. Cuando una cifra tuya salga de ahí, DI DE QUÉ DOCUMENTO SALE, nombrándolo tal cual aparece en la lista (por ejemplo: "según TC_Master_3684_09_2026.pdf"). De los documentos solo tienes el nombre, el tipo, el período, la fecha en que se subió y esas notas: nunca el texto de adentro del archivo, así que no describas lo que dice un PDF ni inventes cifras que no estén ni en los movimientos ni en las notas.
 """
 
 /** F32: tope de peso decodificado de una imagen adjunta al chat (Claude cobra por tokens de imagen). */
@@ -296,6 +300,10 @@ internal suspend fun buildUserContext(uid: String): String {
         inc to exp
     }
 
+    // Los papeles del dueño: solo metadatos y notas, nunca los bytes — ver
+    // `consultaDeDocumentos`, donde eso no es un detalle de eficiencia.
+    val documentos = cargarDocumentosParaContexto(uid)
+
     // Budgets
     val budgets = dbQuery {
         Budgets.selectAll().where { Budgets.userId eq uid }
@@ -334,6 +342,16 @@ internal suspend fun buildUserContext(uid: String): String {
             appendLine("- (sin presupuestos)")
         } else {
             budgets.forEach { (cat, limit) -> appendLine("- $cat: límite \$$limit") }
+        }
+
+        // Vacío cuando no hay documentos: el bloque no se anuncia solo para decir que está vacío.
+        val bloqueDeDocumentos = renderizarDocumentos(
+            documentos,
+            accountRows.associate { it.id to it.name },
+        )
+        if (bloqueDeDocumentos.isNotEmpty()) {
+            appendLine()
+            append(bloqueDeDocumentos)
         }
     }
 }

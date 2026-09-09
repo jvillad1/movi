@@ -5,6 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -63,13 +64,20 @@ class AiChatImageRoutesTest {
         )
 
         transaction {
+            // `Documents` está acá porque /api/ai/chat arma el contexto del asistente y ese
+            // contexto ahora también lee los papeles guardados (ver `renderizarDocumentos`). En
+            // producción la tabla siempre existe —`DatabaseFactory.init()` las crea todas al
+            // arrancar—, así que su ausencia era un agujero de este fixture y no del producto:
+            // sin ANTHROPIC_API_KEY la ruta corta antes con 503 y no se nota, pero
+            // `resolveApiKey()` también lee `server/.env`, así que en una máquina de desarrollo
+            // con ese archivo el test chocaba contra una tabla inexistente.
             SchemaUtils.drop(
                 Subscriptions, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
-                StatementImports, Budgets, Accounts, Users,
+                StatementImports, Budgets, Documents, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, Subscriptions,
+                Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, Documents,
             )
 
             Users.insert {
