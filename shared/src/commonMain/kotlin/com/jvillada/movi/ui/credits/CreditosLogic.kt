@@ -2,7 +2,14 @@ package com.jvillada.movi.ui.credits
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.PlanDelCredito
+import com.jvillada.movi.shared.model.mas
+import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.ui.components.formatCOP
+import kotlin.math.round
 
 /**
  * F20 — deuda total en COP: préstamos + tarjetas, **una sola función** para que la pantalla de
@@ -27,8 +34,25 @@ private fun debtCopOf(account: Account): Long = account.estimatedTotalCop ?: acc
  *   pantalla: dibujar una frase con la fuente monoespaciada —que está para que los porcentajes se
  *   alineen entre tarjetas— solo la ensancha. Deducirlo allá de `hasMovements` daba mal el caso
  *   de un crédito sin términos, que no tiene movimientos y sin embargo muestra «0% pagado».
+ * @property mostrarBarra si se dibuja la barra de progreso.
+ *
+ *   **Una barra que se satura en cero cuando la deuda creció comunica lo contrario de lo que
+ *   pasa.** `paidPct` es `1 − deuda/principal` clampado a `[0, 1]`, así que una deuda por encima
+ *   del capital original sale como 0 — y una barra vacía se lee «todavía no empezaste» cuando lo
+ *   cierto es «vas para atrás». En el Hipotecario ·2334 del dueño (capital $200.000.000, deuda
+ *   $204.183.376) y en la Libranza ·4818 ($257.000.000 contra $262.386.162) la barra decía 0 %
+ *   sobre $4,18 y $5,39 millones de deuda **de más**.
+ *
+ *   La salida no es pintar la barra hacia el otro lado —una barra no puede ir hacia atrás sin
+ *   inventarse una escala— sino **no pintarla**: donde no hay progreso que mostrar, la tarjeta
+ *   dice en pesos cuánto se pasó y no dibuja nada. Ver [progresoDeCredito].
  */
-data class ProgresoDeCredito(val etiqueta: String, val fraccion: Float, val esAviso: Boolean)
+data class ProgresoDeCredito(
+    val etiqueta: String,
+    val fraccion: Float,
+    val esAviso: Boolean,
+    val mostrarBarra: Boolean = true,
+)
 
 /**
  * **Un crédito sin un solo movimiento no está pagado: está sin registrar.**
@@ -94,6 +118,18 @@ fun progresoDeCredito(credit: CreditSummary): ProgresoDeCredito {
     if (deudaEnOtraMoneda(credit)) return aviso("Deuda en otra moneda")
     if (credit.account.balance < 0L) return aviso("Deuda en negativo — revísala")
 
+    // **La deuda pasó por encima del capital original.** No hay progreso que pintar, y «0 % pagado»
+    // dice justo lo contrario de lo que pasó. Ver [ProgresoDeCredito.mostrarBarra].
+    val deMas = credit.account.balance - capital
+    if (deMas > 0L) {
+        return ProgresoDeCredito(
+            etiqueta = formatCOP(deMas) + " más que al inicio",
+            fraccion = 0f,
+            esAviso = true,
+            mostrarBarra = false,
+        )
+    }
+
     return porcentajePagado(credit)
 }
 
@@ -113,3 +149,99 @@ private fun porcentajePagado(credit: CreditSummary): ProgresoDeCredito {
  */
 private fun deudaEnOtraMoneda(credit: CreditSummary): Boolean =
     credit.account.balancesByCurrency.any { (moneda, saldo) -> moneda != "COP" && saldo != 0L }
+
+/**
+ * **«$2.479.256 de interés · 60 % de la cuota»** — lo que de la cuota es alquiler de la plata.
+ *
+ * [desglosarCuota] ya calculaba esto cada vez que se registraba un pago, lo usaba para mover el
+ * saldo y lo tiraba. Es la primera de las tres preguntas que la pantalla no contestaba, y en la
+ * cartera del dueño la respuesta va del **29,8 %** (Libre inversión ·9695) al **100 %** (Crédito
+ * Mamá).
+ *
+ * El porcentaje va con **un decimal**: entre 29,8 % y 30 % hay $2.500 al mes, y redondear al entero
+ * los haría desaparecer justo en el crédito donde más importan. El decimal se omite cuando es cero,
+ * para que «100 %» no se lea «100,0 %».
+ */
+fun textoDelInteres(plan: PlanDelCredito): String {
+    val fraccion = plan.fraccionDeInteres
+        // Sin tasa no es 0 %: es que no se sabe. Misma postura que [MotivoDelDesglose.SIN_TASA].
+        ?: return "Sin tasa registrada: no se sabe cuánto de la cuota es interés"
+    return formatCOP(plan.interes) + " de interés · " + porcentaje(fraccion) + " de la cuota"
+}
+
+/** «29,8 %», «100 %». Ver [textoDelInteres] para por qué el decimal. */
+private fun porcentaje(fraccion: Double): String {
+    val decimas = round(fraccion * 1000).toLong()
+    val entero = decimas / 10
+    val decima = decimas % 10
+    return if (decima == 0L) "$entero %" else "$entero,$decima %"
+}
+
+/**
+ * Lo que la tarjeta dice **debajo** del interés: cuándo se termina la deuda, o por qué no se
+ * termina.
+ *
+ * @property texto la frase, ya armada.
+ * @property esAlerta si va con el color de aviso. **Solo la amortización negativa de verdad.**
+ *   Ver [ComoVaLaDeuda.LA_DEUDA_CRECE] para dónde queda el límite, y por qué el Crédito Mamá —cuya
+ *   cuota también es interés puro— no lo cruza.
+ */
+data class ComoVaEstaDeuda(val texto: String, val esAlerta: Boolean)
+
+/**
+ * @param periodoActual el mes en curso, para poder decir «enero de 2046» en vez de «232 cuotas».
+ *   Entra como parámetro y no se lee el reloj acá adentro para que esto siga siendo una función
+ *   pura y probable sin congelar el tiempo.
+ */
+fun comoVaEstaDeuda(plan: PlanDelCredito, periodoActual: PeriodoFinanciero): ComoVaEstaDeuda? = when (plan.comoVa) {
+    // Sin tasa ya lo dijo [textoDelInteres]; repetirlo con otras palabras no agrega nada.
+    ComoVaLaDeuda.SIN_TASA -> null
+
+    // **La alerta.** En pesos y por mes, que es como se siente: una barra en 0 % no dice que a esta
+    // cuota le faltan $21.894 para cubrir siquiera los intereses.
+    ComoVaLaDeuda.LA_DEUDA_CRECE -> ComoVaEstaDeuda(
+        "La cuota no alcanza: tu deuda crece " + formatCOP(-plan.capital) + " cada mes",
+        esAlerta = true,
+    )
+
+    // Ni alerta ni fecha: la deuda se queda donde está. Es lo que pasa con el préstamo de su mamá,
+    // y es el acuerdo, no un accidente.
+    ComoVaLaDeuda.SOLO_INTERESES -> ComoVaEstaDeuda(
+        "La cuota se va toda en intereses: la deuda se queda donde está",
+        esAlerta = false,
+    )
+
+    ComoVaLaDeuda.AMORTIZA -> {
+        val meses = plan.mesesHastaLaUltimaCuota
+        if (meses == null) {
+            // Amortiza, pero tan despacio que una fecha sería una burla. Ver [MAX_MESES_PROYECTADOS].
+            ComoVaEstaDeuda("A este ritmo tardarías más de cien años", esAlerta = false)
+        } else if (meses <= 0) {
+            ComoVaEstaDeuda("Ya está pagada", esAlerta = false)
+        } else {
+            val cuantas = if (meses == 1) "Te falta 1 cuota" else "Te faltan $meses cuotas"
+            ComoVaEstaDeuda(cuantas + " · la última en " + nombreDe(periodoActual.mas(meses - 1)), esAlerta = false)
+        }
+    }
+}
+
+/**
+ * La frase que acompaña a toda proyección de esta pantalla.
+ *
+ * **No es letra chica y por eso no está en letra chica**: una fecha a veinte años sale de suponer
+ * que la cuota y la tasa no se mueven, y en Colombia la tasa de un hipotecario se recalcula. Decir
+ * la fecha sin decir el supuesto es inventar precisión, que es la forma más cara de mentir con
+ * números que se ven bien.
+ */
+const val SUPUESTO_DE_LA_PROYECCION: String =
+    "Proyectado con la cuota y la tasa de hoy. Si el banco las recalcula, las fechas cambian."
+
+/**
+ * La barra de «% pagado» de la tarjeta de un préstamo.
+ *
+ * Existe solo para poder afirmar en una prueba que **no está**: una barra de 2 dp sin texto no
+ * tiene nada por dónde agarrarla desde `onNodeWithText`, y sin esta etiqueta la regla de
+ * [ProgresoDeCredito.mostrarBarra] quedaba probada en el dato y no en la pantalla — que es
+ * justo donde importa, porque lo que engañaba era el dibujo.
+ */
+const val TAG_BARRA_DE_PROGRESO: String = "barra-de-progreso-del-credito"
