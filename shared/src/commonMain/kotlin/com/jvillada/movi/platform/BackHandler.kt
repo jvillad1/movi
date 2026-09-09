@@ -1,4 +1,4 @@
-package com.jvillada.movi
+package com.jvillada.movi.platform
 
 import androidx.compose.runtime.Composable
 

@@ -38,8 +38,15 @@ android {
         // tarjeta, el aviso de que nunca llegó un SMS, y que una cuota ya pagada deje de
         // decir «vencida». Ninguno toca androidMain: el APK se arma porque el dueño lo pidió,
         // y porque el 1.14 que tiene en el teléfono es de antes de todo esto.
-        versionCode = 19
-        versionName = "1.18"
+        // 1.19: el 1.18 crasheaba al abrir, otra vez por empaquetado y no por código —
+        // esta vez faltaba `BackHandlerEffect`, del mismo `androidMain` de `:shared` que se
+        // perdió entero en el 1.14. La guarda de abajo lo dejó pasar porque miraba UNA clase
+        // canaria, y esa sí estaba. Ahora compara el paquete contra TODO lo compilado.
+        // Adentro van además #175-#179: Movi AI leyendo tus documentos, la cuota que no es ni
+        // interés ni seguro ni capital, qué pasa si abonas de más, y los mínimos de tarjeta
+        // descontados del flujo libre.
+        versionCode = 20
+        versionName = "1.19"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -95,20 +102,34 @@ dependencies {
  * **Y el build decía `BUILD SUCCESSFUL`.** El APK se arma pocas veces y se entrega a mano, así que
  * un defecto de empaquetado se descubre cuando el dueño no puede abrir la app.
  *
+ * ## Por qué una canaria no alcanzó
+ *
+ * La primera versión de esta verificación buscaba **una sola clase**, `SmsFilterConfigStore`,
+ * elegida porque vive en el source set que se había perdido. El APK 1.19 existe porque **el 1.18
+ * pasó esa verificación y crasheó igual**:
+ *
+ * ```
+ * java.lang.ClassNotFoundException: Didn't find class "com.jvillada.movi.BackHandler_androidKt"
+ *     ... durante la primera composición
+ * ```
+ *
+ * `SmsFilterConfigStore` sí estaba definida en `classes3.dex`. `BackHandler_androidKt` —del mismo
+ * `androidMain`, compilada y presente en `shared/build/tmp/kotlin-classes/release/`— no estaba
+ * definida en ningún dex. Una canaria no mide si el paquete está completo: mide si esa clase está.
+ * Con el empaquetado partiéndose de a pedazos, eso es una lotería.
+ *
+ * Así que ahora no hay canaria. **Se compara el APK contra todo lo que el build compiló**: cada
+ * `.class` del paquete de Movi que salga de `:core`, `:shared` y `:androidApp` tiene que estar
+ * *definido* en algún dex. Lo que falte se lista con nombre y apellido.
+ *
  * ## Por qué `dexdump` y no buscar el nombre como texto
  *
- * La primera versión de esta tarea buscaba `com/jvillada/movi/sms/SmsFilterConfigStore` como
- * substring en los dex. **No sirve, y se comprobó:** un dex guarda ese nombre tanto donde la clase
- * está *definida* como donde alguien la *llama*, y `MainActivity` la llama. O sea que el nombre
- * sigue apareciendo aunque la definición se haya perdido — exactamente el caso que hay que atrapar.
- * Medido sobre un APK bueno: la definición está en `classes3.dex`, y `classes5/16/17` la nombran sin
- * definirla.
+ * Buscar el nombre como substring en los dex **no sirve, y se comprobó dos veces:** un dex guarda
+ * ese nombre tanto donde la clase está *definida* como donde alguien la *llama*. En el APK 1.18
+ * roto, `BackHandler_androidKt` aparecía como texto en dos dexes —los que la llaman— y no estaba
+ * definida en ninguno. Exactamente el caso que hay que atrapar.
  *
- * `dexdump` sí distingue: imprime una línea `Class descriptor` por cada *class_def*. Tarda ~4 s en
- * encontrarla, una vez por `assemble`.
- *
- * La canaria es `SmsFilterConfigStore` a propósito: vive en el `androidMain` de `:shared` —el source
- * set que se perdió— y es la primera clase que toca `MainActivity`, así que si falta, la app no abre.
+ * `dexdump` sí distingue: imprime una línea `Class descriptor` por cada *class_def*.
  */
 /**
  * **Dónde está el SDK, o `null` si esta máquina no tiene.**
@@ -136,48 +157,77 @@ if (sdkDeEstaMaquina == null) {
     // Todo local, nada de propiedades del script: la caché de configuración no serializa
     // referencias a objetos del build script, y `doLast` captura lo que nombra. Y `android` no se
     // puede tocar dentro de `doLast`, así que su ruta se resuelve acá.
-    val canaria = "Lcom/jvillada/movi/sms/SmsFilterConfigStore;"
     val dexdump = File(sdkDeEstaMaquina, "build-tools/${android.buildToolsVersion}/dexdump")
     val salidaDeLaVariante = layout.buildDirectory.dir("outputs/apk/${variante.lowercase()}")
     val temporal = layout.buildDirectory.dir("tmp/dexDe$variante")
+    // Lo que el build compiló, por módulo: la salida de Kotlin para esta variante de Android,
+    // o sea `commonMain` y `androidMain` juntos — justo el conjunto que tiene que llegar al APK.
+    val compilado = listOf(":core", ":shared", ":androidApp").map { modulo ->
+        project(modulo).layout.buildDirectory.dir("tmp/kotlin-classes/${variante.lowercase()}")
+    }
 
     val verifica = tasks.register("verificaElDexDe$variante") {
-        description = "Falla si al APK de $variante le falta el dex del androidMain de :shared."
+        description = "Falla si al APK de $variante le falta alguna clase que este build compiló."
         doLast {
             check(dexdump.canExecute()) {
                 "No encontré dexdump ejecutable en $dexdump. Sin él no puedo verificar el APK, y " +
                     "un APK sin verificar no se entrega: instalá las build-tools o corregí la versión."
             }
+            // `Lcom/jvillada/movi/...;` por cada .class compilado. Solo el paquete de la app:
+            // las dependencias las mete AGP y no son lo que se pierde.
+            val prefijo = "Lcom/jvillada/movi/"
+            val esperadas = compilado.flatMap { dir ->
+                val raiz = dir.get().asFile
+                if (!raiz.isDirectory) emptyList() else raiz.walkTopDown()
+                    .filter { it.isFile && it.extension == "class" }
+                    .map { "L" + it.relativeTo(raiz).invariantSeparatorsPath.removeSuffix(".class") + ";" }
+                    .filter { it.startsWith(prefijo) }
+                    .toList()
+            }.toSortedSet()
+            check(esperadas.isNotEmpty()) {
+                "No encontré ninguna clase compilada de Movi en ${compilado.map { it.get().asFile }}. " +
+                    "Sin eso contra qué comparar, la verificación no prueba nada — y un APK sin " +
+                    "verificar no se entrega."
+            }
+
             val dir = salidaDeLaVariante.get().asFile
             val apks = dir.listFiles { f -> f.name.endsWith(".apk") }.orEmpty()
             check(apks.isNotEmpty()) { "No se armó ningún APK en $dir" }
 
             apks.forEach { apk ->
                 val donde = temporal.get().asFile.also { it.deleteRecursively(); it.mkdirs() }
-                var definida = false
+                val definidas = mutableSetOf<String>()
                 ZipFile(apk).use { zip ->
                     for (entrada in zip.entries().asSequence()) {
-                        if (definida) break
                         if (!entrada.name.matches(Regex("""classes\d*\.dex"""))) continue
                         val suelto = File(donde, entrada.name)
                         zip.getInputStream(entrada).use { e -> suelto.outputStream().use { s -> e.copyTo(s) } }
                         val proceso = ProcessBuilder(dexdump.absolutePath, suelto.absolutePath)
                             .redirectErrorStream(true).start()
-                        definida = proceso.inputStream.bufferedReader().useLines { lineas ->
-                            lineas.any { it.contains("Class descriptor") && it.contains(canaria) }
+                        // Se lee la salida ENTERA: cortar antes deja al proceso escribiendo en
+                        // una tubería llena y el build se cuelga.
+                        proceso.inputStream.bufferedReader().forEachLine { linea ->
+                            if (linea.contains("Class descriptor")) {
+                                val d = linea.substringAfter('\'', "").substringBeforeLast('\'', "")
+                                if (d.startsWith(prefijo)) definidas += d
+                            }
                         }
-                        // `destroy` y no `waitFor`: `any` corta apenas encuentra, y esperar a un
-                        // proceso con salida sin leer se cuelga.
-                        proceso.destroy()
+                        proceso.waitFor()
                         suelto.delete()
                     }
                 }
                 donde.deleteRecursively()
-                check(definida) {
-                    "${apk.name} no DEFINE $canaria en ningún dex: le falta el androidMain " +
-                        "de :shared y la app va a crashear al abrir. Volvé a armarlo con " +
-                        "--no-build-cache, o desde el checkout principal en vez de un worktree."
+
+                val faltantes = esperadas - definidas
+                check(faltantes.isEmpty()) {
+                    val muestra = faltantes.take(20).joinToString("\n  ")
+                    val resto = if (faltantes.size > 20) "\n  ...y ${faltantes.size - 20} más" else ""
+                    "${apk.name} no DEFINE ${faltantes.size} de las ${esperadas.size} clases de " +
+                        "Movi que este build compiló. La app va a crashear al abrir. Faltan:\n  " +
+                        muestra + resto + "\nVolvé a armarlo con --no-build-cache, o desde el " +
+                        "checkout principal en vez de un worktree."
                 }
+                logger.lifecycle("${apk.name}: las ${esperadas.size} clases de Movi están adentro.")
             }
         }
     }

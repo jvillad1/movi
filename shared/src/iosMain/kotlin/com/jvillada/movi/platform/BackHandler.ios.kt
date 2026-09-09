@@ -1,9 +1,8 @@
-package com.jvillada.movi
+package com.jvillada.movi.platform
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 
 @Composable
 actual fun BackHandlerEffect(enabled: Boolean, onBack: () -> Unit) {
-    BackHandler(enabled = enabled, onBack = onBack)
+    // iOS handles back navigation via native swipe gesture
 }

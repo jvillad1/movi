@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.RecurringOfferGate
+import com.jvillada.movi.platform.BackHandlerEffect
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MinBg
