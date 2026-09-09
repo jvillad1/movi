@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.RecurringRules
@@ -79,13 +80,18 @@ class CondicionDeCuentaRoutesTest {
         )
 
         transaction {
+            // `Documents` está acá porque el contexto del asistente ahora también lee los papeles
+            // guardados (ver `renderizarDocumentos`). En producción la tabla siempre existe —
+            // `DatabaseFactory.init()` las crea todas al arrancar—, así que su ausencia era un
+            // agujero de este fixture y no del producto.
             SchemaUtils.drop(
                 Cards, Goals, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
-                StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
+                StatementImports, Budgets, Documents, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, Cards, Goals,
+                Documents,
             )
             Users.insert {
                 it[id] = userId

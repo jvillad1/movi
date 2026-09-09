@@ -87,8 +87,12 @@ private fun ResultRow.toDocumento() = Documento(
  * veinte extractos guardados, abrir la pantalla bajaría decenas de megas para pintar veinte
  * renglones. Exposed no lo hace obvio —una lista de columnas explícita es la única forma— así
  * que la lista vive acá una sola vez y no repetida en cada consulta.
+ *
+ * `internal` y no `private` porque el contexto de Movi AI lee los mismos metadatos y tiene el
+ * mismo motivo para no traer los bytes (ver `consultaDeDocumentos`): dos listas paralelas se
+ * desincronizan el día que alguien agregue una columna.
  */
-private val COLUMNAS_SIN_CONTENIDO = listOf(
+internal val COLUMNAS_SIN_CONTENIDO = listOf(
     Documents.id, Documents.userId, Documents.name, Documents.kind, Documents.mimeType,
     Documents.sizeBytes, Documents.uploadedAt, Documents.accountId, Documents.period, Documents.notes,
 )
