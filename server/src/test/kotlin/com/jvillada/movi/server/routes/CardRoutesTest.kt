@@ -469,27 +469,65 @@ class CardRoutesTest {
     }
 
     /**
-     * Y **quitarlo a propósito sí se puede**: mandar la clave en `null` es lo que hace la hoja
-     * cuando el dueño borra el campo. La guarda mira la CLAVE, no el valor — si mirara el valor,
-     * el dato sería imborrable desde la app, que es el otro extremo del mismo error.
+     * Y **quitarlo a propósito sí se puede**: la guarda mira la CLAVE, no el valor — si mirara el
+     * valor, el dato sería imborrable desde la app, que es el otro extremo del mismo error.
+     *
+     * **El cuerpo se serializa con la misma `Json` que arman los tres `Platform`, no se escribe a
+     * mano**, y esa es la mitad que importa: escribir `"pagoMinimo":null` a mano manda un cuerpo
+     * que ningún cliente produce, y la prueba pasaría igual con el modelo roto. Sin
+     * `@EncodeDefault(ALWAYS)` en `CardTerms.pagoMinimo`, kotlinx omite la clave por valer su
+     * default, el PUT lo lee como «cliente viejo» y repone los $1.843.014. Ver `MinimoEnElWireTest`
+     * en `:core`, que fija el otro extremo del mismo contrato.
      */
     @Test
     fun `mandar el minimo en null si lo borra`() = testApplication {
         wireApp()
+        val jsonDeCliente = Json { ignoreUnknownKeys = true }
+        val cargado = CardTerms(
+            accountId = cardAccountId, bank = "Bancolombia", creditLimit = 20_000_000L,
+            cutoffDay = 10, paymentDay = 25, pagoMinimo = 1_843_014L,
+        )
         client.put("/api/cards/$cardAccountId") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             header(HttpHeaders.ContentType, "application/json")
-            setBody(validTermsJson.dropLast(1) + ""","pagoMinimo":1843014}""")
+            setBody(jsonDeCliente.encodeToString(CardTerms.serializer(), cargado))
         }
+        // Exactamente lo que hace la hoja al vaciar el campo: el mismo objeto con `pagoMinimo`
+        // en null, serializado por el cliente.
         client.put("/api/cards/$cardAccountId") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             header(HttpHeaders.ContentType, "application/json")
-            setBody(validTermsJson.dropLast(1) + ""","pagoMinimo":null}""")
+            setBody(jsonDeCliente.encodeToString(CardTerms.serializer(), cargado.copy(pagoMinimo = null)))
         }
         val res = client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
         val terms = Json.decodeFromJsonElement<CardTerms>(
             Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!,
         )
-        assertNull(terms.pagoMinimo)
+        assertNull(terms.pagoMinimo, "el cliente pidió borrarlo y el server lo repuso")
+    }
+
+    /**
+     * **Un cliente más nuevo que el server no se cae.** El PUT de tarjetas decodifica el JSON
+     * crudo a mano (para poder mirar las claves), y con la instancia por defecto de `Json` una
+     * clave desconocida es una excepción — un 500 sin cuerpo, porque no hay `StatusPages`. Se usa
+     * la misma configuración del `ContentNegotiation` (`ignoreUnknownKeys`), que es lo que el
+     * resto de las rutas ya hace.
+     */
+    @Test
+    fun `una clave que el server no conoce no tumba el guardado`() = testApplication {
+        wireApp()
+        val res = client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","pagoMinimo":1843014,"campoDelFuturo":"lo que sea"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val terms = Json.decodeFromJsonElement<CardTerms>(
+            Json.parseToJsonElement(
+                client.get("/api/cards") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+                    .bodyAsText(),
+            ).jsonArray[0].jsonObject["terms"]!!,
+        )
+        assertEquals(1_843_014L, terms.pagoMinimo, "y lo que sí conocía se guardó")
     }
 }

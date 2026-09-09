@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -25,7 +26,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -135,7 +135,7 @@ fun Route.cardRoutes() {
                     .where { (Cards.accountId eq accountId) and (Cards.userId eq uid) }
                     .firstOrNull()?.toCardTerms()
             }
-            val body = Json.decodeFromJsonElement<CardTerms>(crudo)
+            val body = jsonDeLaApi.decodeFromJsonElement<CardTerms>(crudo)
                 .copy(accountId = accountId)
                 .let { if ("pagoMinimo" in crudo) it else it.copy(pagoMinimo = previo?.pagoMinimo) }
                 .sanitized()

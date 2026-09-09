@@ -137,14 +137,16 @@ class MinimoDeTarjetaEnElFlujoLibreTest {
     }
 
     /**
-     * **Solo llegan las tarjetas CON deuda** (`loadCardRulePairs` no fabrica regla para una en
-     * $0), así que el AMEX ·9208, Nu y Davivienda ·9418 —los tres en $0 hoy— no piden un dato que
-     * no le hace falta a nadie. Se fija acá porque este contador es lo único que decide si la
-     * pantalla dice «te faltan datos», y un contador que gritara por tres tarjetas al día se
-     * apagaría solo en la cabeza del dueño.
+     * **Una tarjeta que no llega no pide nada.** Es la mitad de este lado del contrato: el AMEX
+     * ·9208, Nu y Davivienda ·9418 están en $0 hoy y `loadCardRulePairs` no les fabrica regla, así
+     * que acá simplemente no aparecen y el contador no las nombra. Un aviso que gritara por tres
+     * tarjetas que no deben nada se apagaría solo en la cabeza del dueño.
+     *
+     * La otra mitad —que el server efectivamente no las mande— vive en el server y se prueba allá:
+     * `SoloLasTarjetasConDeudaPidenMinimoTest`.
      */
     @Test
-    fun `una tarjeta en cero no llega y por lo tanto no pide nada`() {
+    fun `sin ninguna regla de tarjeta el disponible es el flujo libre y no falta nada`() {
         val r = resumenRecurrentes(loQueYaContaba, sinSuscripciones)
         assertEquals(0, r.tarjetasSinMinimo)
         assertEquals(FLUJO_LIBRE, r.disponible)

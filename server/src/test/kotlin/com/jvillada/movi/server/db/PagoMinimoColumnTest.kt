@@ -47,18 +47,36 @@ class PagoMinimoColumnTest {
     }
 
     @Test
-    fun `el unico DDL es un ADD COLUMN nullable, sin indices ni NOT NULL`() {
+    fun `el unico DDL de columnas es un ADD COLUMN nullable`() {
         // La verificación que el arranque necesita, hecha ANTES de ejecutar nada: se le pregunta a
-        // Exposed qué sentencias piensa correr. Un `CREATE INDEX` sobre datos o un `NOT NULL` sin
-        // default son las dos formas conocidas de tumbar esta transacción — y `card_terms` tiene
-        // un índice declarado en su `init`, así que la pregunta no es retórica.
+        // Exposed qué sentencias piensa correr. Un `NOT NULL` sin default sobre filas que ya
+        // existen es la forma conocida de tumbar esta transacción.
         val sentencias = transaction { SchemaUtils.addMissingColumnsStatements(Cards) }
 
         assertEquals(1, sentencias.size, "una sola sentencia: $sentencias")
         val ddl = sentencias.single().uppercase()
         assertTrue(ddl.contains("ADD") && ddl.contains("PAGO_MINIMO"), ddl)
         assertTrue(!ddl.contains("NOT NULL"), "una columna nullable no puede fallar sobre filas existentes: $ddl")
-        assertTrue(!ddl.contains("CREATE INDEX"), ddl)
+    }
+
+    /**
+     * **Y el arranque tampoco toca el índice.** `card_terms` tiene uno declarado en su `init`, y un
+     * `CREATE INDEX` emitido sobre una tabla con datos corre dentro de la misma transacción: si
+     * fallara, el server no levanta.
+     *
+     * La pregunta va donde vive la respuesta: el DDL de índices **no** sale de
+     * `addMissingColumnsStatements` —esa función no emite índices por construcción, así que
+     * preguntárselo a ella es una aserción que no puede fallar— sino de `checkMappingConsistence`,
+     * el otro paso que `createMissingTablesAndColumns` ejecuta.
+     */
+    @Test
+    fun `el arranque no emite ningun DDL de indices sobre card_terms`() {
+        val sentencias = transaction { SchemaUtils.checkMappingConsistence(Cards) }
+
+        assertTrue(
+            sentencias.none { it.uppercase().contains("INDEX") },
+            "el índice ya está en la tabla y no hay que recrearlo: $sentencias",
+        )
     }
 
     @Test

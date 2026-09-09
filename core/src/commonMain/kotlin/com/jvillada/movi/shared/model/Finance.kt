@@ -492,6 +492,13 @@ data class RecurringRule(
      * está hecha del lado del server, que es el único que tiene la TRM; una tarjeta que no se
      * pudo convertir llega en `null`, o sea igual que una sin mínimo cargado — y en los dos casos
      * la pantalla dice que el total está incompleto en vez de completarlo con un número.
+     *
+     * **«No se pudo convertir» incluye «se pudo, pero con una tasa que no es una tasa».**
+     * `FxRateService` nunca falla: si la fuente oficial se cae y `USD_COP_RATE` no está configurada
+     * —es opcional— devuelve una constante de $4.000 sin decirlo, y con eso un mínimo de US$500
+     * entraría acá como $2.000.000 exactos, se restaría del disponible y no lo contaría ni
+     * `tarjetasSinMinimo` ni `sinConvertir`. Por eso `minimoEnPesos` mira `TasaUsdCop.esRespaldo` y
+     * prefiere el `null`: restar de menos y avisarlo es el error barato.
      */
     val pagoMinimoCop: Long? = null,
     /**

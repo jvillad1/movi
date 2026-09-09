@@ -291,7 +291,19 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
  *
  * Y dice que **cambia todos los meses**, porque cambia: es la razón por la que no se estima y la
  * razón por la que hay que volver a este campo cada tanto.
+ *
+ * ### Y de cuál de los dos mínimos se está hablando
+ *
+ * Una Master Black tiene **dos cuentas en Movi**, una en pesos y otra en dólares, y desde acá eso
+ * se ve como «un mínimo, dos campos» — que invita a teclear el mismo número en los dos y restarlo
+ * dos veces del disponible.
+ *
+ * No es así, y lo contesta el extracto: el de Bancolombia trae **dos pagos mínimos separados**, uno
+ * por moneda («Pago mínimo: $1.843.014,00» en el bloque de pesos, «Pago mínimo: USD $71,00» en el
+ * de dólares). O sea que un mínimo por cuenta es el modelo correcto, y cada uno se teclea del
+ * bloque que le corresponde. La frase lo dice para que no se cargue dos veces el mismo número.
  */
 const val TEXTO_DE_AYUDA_DEL_MINIMO: String =
     "Con esto, el «Flujo libre» descuenta lo que esta tarjeta te obliga a pagar. Cambia con cada " +
-        "extracto: no lo estimamos, revísalo cuando te llegue."
+        "extracto: no lo estimamos, revísalo cuando te llegue. Si tu tarjeta maneja pesos y " +
+        "dólares, el extracto trae un mínimo por cada moneda: aquí va solo el de esta cuenta."
