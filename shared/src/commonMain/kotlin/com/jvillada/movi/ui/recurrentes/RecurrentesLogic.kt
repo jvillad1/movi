@@ -243,8 +243,49 @@ data class ResumenRecurrentes(
     val hayCobrosAnuales: Boolean = false,
     val cuotasDeCredito: Long = 0L,
     val pagosUnicosFuera: Int = 0,
+    /**
+     * **Los pagos mínimos de las tarjetas con deuda**, sumados y en pesos. Ver
+     * [RecurringRule.pagoMinimoCop].
+     *
+     * **No entra a [gastos], y ese es el punto entero.** El pago de una tarjeta no es un gasto del
+     * mes —las compras ya contaron cuando se hicieron, y por eso `CARD_PAYMENT_CATEGORY` está
+     * excluida de `isCashFlow` y [cuentaComoCompromisoMensual] deja afuera la regla `card_*`—,
+     * pero sí es **plata comprometida**: el mínimo hay que pagarlo, no es una decisión. Meterlo
+     * en «Gastos recurrentes» habría contado dos veces la misma plata (la compra y su pago) para
+     * ganar una alarma; restarlo aparte da la alarma sin romper la regla.
+     *
+     * Por eso el número grande de la pantalla es [disponible] y no [flujoLibre], y los dos se
+     * muestran: son dos preguntas distintas —cuánto sobra de lo recurrente, y cuánto sobra de
+     * verdad— y colapsarlas en una sola cifra es lo que produjo el problema que esto arregla.
+     */
+    val minimosDeTarjeta: Long = 0L,
+    /**
+     * **Cuántas tarjetas con deuda no dijeron su mínimo**, y por eso no están en
+     * [minimosDeTarjeta].
+     *
+     * Es la mitad honesta de la feature. Con las cinco tarjetas del dueño y ningún mínimo
+     * cargado, [disponible] vale exactamente lo mismo que [flujoLibre] —**$601.574**— y sin este
+     * contador la pantalla lo afirmaría como un hecho, que es el estado del que se viene: el
+     * mínimo de su Master Black son $1.843.014, o sea que el número real es negativo, y Movi le
+     * mostraba una cifra positiva donde tenía que haber una alarma.
+     *
+     * Cuenta las reglas `card_*` que llegaron sin [RecurringRule.pagoMinimoCop]. **Solo llegan
+     * las tarjetas con deuda** (ver `loadCardRulePairs`), así que una tarjeta en $0 —el AMEX
+     * ·9208, Nu, Davivienda ·9418— no pide un dato que no le hace falta a nadie.
+     */
+    val tarjetasSinMinimo: Int = 0,
 ) {
+    /** Lo recurrente contra lo recurrente: ingresos menos gastos, sin las tarjetas. */
     val flujoLibre: Long get() = ingresos - gastos
+
+    /**
+     * **Lo que de verdad queda libre**: [flujoLibre] menos los mínimos de tarjeta que sí se
+     * conocen. Es la cifra grande de la pantalla.
+     *
+     * Con [tarjetasSinMinimo] > 0 esto es un techo, no un hecho — puede ser tan optimista como
+     * mínimos falten. La pantalla lo dice; este campo no puede.
+     */
+    val disponible: Long get() = flujoLibre - minimosDeTarjeta
 }
 
 /**
@@ -307,6 +348,11 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
     }
 
     val gastosDeReglas = cuentan.filter { it.type == TransactionType.EXPENSE }
+    // **Sobre `rules` y no sobre `cuentan`, a propósito**: las reglas de tarjeta son justamente
+    // las que `cuentaComoCompromisoMensual` deja afuera del total, y ahí se quedan — su monto es
+    // la deuda. Lo que se saca de ellas es el otro campo, el mínimo, que no es un gasto del mes
+    // pero sí plata comprometida. Ver [ResumenRecurrentes.minimosDeTarjeta].
+    val reglasDeTarjeta = rules.filter { it.id.startsWith(CARD_RULE_PREFIX) }
     return ResumenRecurrentes(
         // `items` sale de lo mismo que el total, no de `rules`: el acceso «Recurrentes» del Inicio
         // lo lee para decir «libre al mes · N recurrentes», y un conteo que incluyera lo que la
@@ -326,7 +372,50 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
             .filter { it.id.startsWith(CREDIT_RULE_PREFIX) }
             .sumOf { it.amount },
         pagosUnicosFuera = rules.count { it.esPagoUnico },
+        minimosDeTarjeta = reglasDeTarjeta.sumOf { it.pagoMinimoCop ?: 0L },
+        tarjetasSinMinimo = reglasDeTarjeta.count { it.pagoMinimoCop == null },
     )
+}
+
+// ------------------------------------------------- lo que la pantalla dice de los mínimos
+
+/** El rótulo de la deducción, en la tarjeta del «Flujo libre» y en cualquier otra que la muestre. */
+const val ETIQUETA_MINIMOS_DE_TARJETA: String = "Mínimos de tarjeta"
+
+/**
+ * **De qué está hecha la cifra grande**, dicho debajo de ella.
+ *
+ * Cambia cuando hay mínimos adentro porque si no la resta no cerraría a la vista: el dueño puede
+ * sumar los dos números de abajo y ver que no dan. Una cifra que no cuadra con su propio desglose
+ * es la forma más rápida de que deje de creerle a la pantalla.
+ */
+fun subtituloDelFlujoLibre(cifras: ResumenRecurrentes): String =
+    if (cifras.minimosDeTarjeta > 0L) {
+        "Ingresos − Gastos recurrentes − Mínimos de tarjeta"
+    } else {
+        "Ingresos recurrentes − Gastos recurrentes"
+    }
+
+/**
+ * **El aviso de que la cifra grande no es un hecho**, o `null` si no falta ningún mínimo.
+ *
+ * Mismo criterio que [ResumenRecurrentes.sinConvertir] y que `pagosUnicosFuera`: un total al que
+ * le falta un sumando se dice, no se disimula. La diferencia es el tamaño del sumando — con las
+ * cinco tarjetas del dueño sin mínimo cargado, lo que falta son $1.843.014 sobre un disponible de
+ * $601.574, o sea que el signo de la respuesta está mal y no solo su magnitud.
+ *
+ * Dice **dónde se carga**, no solo que falta: un aviso que no se puede accionar se vuelve
+ * decorado a la segunda vez que se lee.
+ */
+fun avisoDeMinimosQueFaltan(cifras: ResumenRecurrentes): String? {
+    if (cifras.tarjetasSinMinimo <= 0) return null
+    val cuantas = if (cifras.tarjetasSinMinimo == 1) {
+        "1 tarjeta con deuda"
+    } else {
+        "${cifras.tarjetasSinMinimo} tarjetas con deuda"
+    }
+    return "Falta el pago mínimo de $cuantas: esta cifra es lo más que te podría quedar, no lo " +
+        "que te queda. Ese dato está en tu extracto y se carga en Créditos, con el lápiz de la tarjeta."
 }
 
 /**

@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -14,14 +16,65 @@ import kotlinx.serialization.Serializable
  *
  * Montos en la moneda de la cuenta (las Mastercard en USD existen): el cupo de una tarjeta USD
  * es un número en USD, igual que su deuda derivada.
+ *
+ * ### El campo que SIEMPRE viaja, aunque valga su default
+ *
+ * El mismo agujero que [CreditTerms] ya documenta, en esta tabla: `PUT /api/cards/{id}` distingue
+ * **«el cliente no conoce este campo»** de **«el cliente lo borró»** mirando las claves del JSON
+ * recibido, porque `fillCardTerms` sobrescribe todas las columnas y el APK instalado manda cuerpos
+ * incompletos. Esa guarda protege bien la primera mitad y rompía la segunda:
+ * kotlinx-serialization **omite** una propiedad que vale igual que su default —los tres `Platform`
+ * usan `Json { ignoreUnknownKeys = true }`, que no cambia `encodeDefaults`—, así que el cliente de
+ * verdad, el que sí conoce [pagoMinimo], al borrar el campo mandaba un cuerpo **sin la clave**:
+ * indistinguible de un APK viejo. El server le reponía el valor anterior, la hoja cerraba sin
+ * error, y el «Flujo libre» seguía restando el mínimo que él acababa de quitar.
+ *
+ * [EncodeDefault] con `ALWAYS` hace que la clave viaje siempre, así que un `null` explícito llega
+ * como tal. Ya había pasado con `Subscription.accountId` (Ola 18) y con los tres campos de
+ * [CreditTerms]. Lo fija `MinimoEnElWireTest`, que mira el **JSON serializado** y no el objeto: una
+ * prueba que arma el cuerpo a mano manda algo que ningún cliente produce y no ve nada.
  */
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 data class CardTerms(
     val accountId: String,
     val bank: String,
     val creditLimit: Long? = null,  // cupo total, en la moneda de la cuenta
     val cutoffDay: Int? = null,     // día de corte (1–31)
     val paymentDay: Int,            // día límite de pago (1–31)
+    /**
+     * **El pago mínimo del extracto**, en la moneda de la cuenta. `null` = todavía no se cargó.
+     *
+     * ### Por qué es un dato tecleado y no una cuenta
+     *
+     * Es la primera cifra de una tarjeta que Movi **no puede derivar**. La deuda sale de los
+     * eventos, el cupo disponible sale del cupo menos la deuda; el mínimo no sale de nada que la
+     * app tenga: cada banco lo arma distinto y cambia con los diferidos y los avances. El mínimo
+     * de Bancolombia ronda el 5 % del saldo, y estimarlo con ese 5 % es exactamente el error que
+     * [RecurringRule.montoEsSaldo] documenta haber cometido en la otra dirección — ahí Movi
+     * anunció la deuda entera como el próximo pago; acá anunciaría un porcentaje inventado sobre
+     * la plata del dueño que él no puede verificar contra ningún papel.
+     *
+     * Misma postura que [CreditTerms.insuranceMonthly] y [CreditTerms.otrosCargosMensuales], y
+     * por el mismo motivo: **es un dato del extracto**. Se teclea, es nullable, y cuando es
+     * `null` no se inventa nada — se dice que falta. Esa segunda mitad es la que hace que la
+     * decisión no le cueste al dueño una cifra optimista: `ResumenRecurrentes.tarjetasSinMinimo`
+     * (en `:shared`) hace que el «Flujo libre» deje de afirmar un número y diga cuántas tarjetas
+     * con deuda le faltan por cargar.
+     *
+     * ### Y por qué el mínimo y no «la cuota»
+     *
+     * Una tarjeta no tiene cuota (ver [RecurringRule.montoEsSaldo]). Tiene un piso —lo que hay
+     * que pagar para no entrar en mora— y un techo —la deuda entera—. El mínimo es el único de
+     * los dos que es un compromiso: pagarlo no es opcional, y por eso es el que le come el
+     * disponible del mes. Lo que pague por encima del mínimo es una decisión, no una obligación.
+     *
+     * Viaja siempre, aunque valga `null`: sin eso **borrar el campo desde la hoja no lo borraba en
+     * la base**, porque el PUT leía la clave ausente como «cliente viejo» y reponía el valor
+     * anterior. Ver el KDoc de la clase.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val pagoMinimo: Long? = null,
     val notes: String? = null,
     /**
      * Ver [com.jvillada.movi.shared.model.RecurringRule.remindMe]: el pago de esta tarjeta entra

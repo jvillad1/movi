@@ -473,6 +473,35 @@ data class RecurringRule(
      */
     val esPagoUnico: Boolean = false,
     /**
+     * **Lo que de esta tarjeta SÍ hay que pagar este mes**, en pesos — o `null` si no se sabe.
+     *
+     * El tercer hermano de [montoEsSaldo] y [esPagoUnico], y el que cierra el hueco que abrió el
+     * primero. Desde que [montoEsSaldo] existe, nadie muestra la deuda de una tarjeta como si
+     * fuera su cuota — correcto— pero el resultado fue que la tarjeta desapareció entera del
+     * «Flujo libre»: `cuentaComoCompromisoMensual` la deja afuera, y el dueño leía **$601.574
+     * libres al mes** sin saber que el mínimo de su Master Black son **$1.843.014**. La cifra no
+     * era una cuota inventada; era una alarma que no estaba.
+     *
+     * Sale de [CardTerms.pagoMinimo], que es un dato del extracto que él teclea. Lo llena solo
+     * `virtualRuleForCard`; en cualquier otra regla —las que el dueño escribió, las cuotas de
+     * crédito— es `null` y no significa «cero», significa que la pregunta no aplica.
+     *
+     * **`Cop` en el nombre no es decoración.** [amount] viaja en la moneda de la cuenta (una
+     * tarjeta en dólares debe dólares), y ese es justamente uno de los motivos por los que
+     * `cuentaComoCompromisoMensual` no la deja entrar a un total en pesos. Acá la conversión ya
+     * está hecha del lado del server, que es el único que tiene la TRM; una tarjeta que no se
+     * pudo convertir llega en `null`, o sea igual que una sin mínimo cargado — y en los dos casos
+     * la pantalla dice que el total está incompleto en vez de completarlo con un número.
+     *
+     * **«No se pudo convertir» incluye «se pudo, pero con una tasa que no es una tasa».**
+     * `FxRateService` nunca falla: si la fuente oficial se cae y `USD_COP_RATE` no está configurada
+     * —es opcional— devuelve una constante de $4.000 sin decirlo, y con eso un mínimo de US$500
+     * entraría acá como $2.000.000 exactos, se restaría del disponible y no lo contaría ni
+     * `tarjetasSinMinimo` ni `sinConvertir`. Por eso `minimoEnPesos` mira `TasaUsdCop.esRespaldo` y
+     * prefiere el `null`: restar de menos y avisarlo es el error barato.
+     */
+    val pagoMinimoCop: Long? = null,
+    /**
      * Ola 9 · D: **a qué cuenta entra (o de cuál sale) esto todos los meses.** Un movimiento
      * siempre tuvo cuenta; una regla recurrente no, así que Movi sabía que el salario entra el
      * 25 pero no dónde — y al ofrecer «esto se repite» desde un movimiento (Ola 9 · B) el dato

@@ -13,6 +13,7 @@ import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -41,7 +42,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -268,7 +268,7 @@ fun Route.creditRoutes() {
             // Aplica también a `payrollDeduction`, que arrastra este mismo agujero desde la ola
             // 17 sin que nadie lo hubiera nombrado.
             val crudo = call.receive<JsonObject>()
-            val recibido = Json.decodeFromJsonElement<CreditTerms>(crudo)
+            val recibido = jsonDeLaApi.decodeFromJsonElement<CreditTerms>(crudo)
             val previo = dbQuery {
                 Credits.selectAll()
                     .where { (Credits.accountId eq accountId) and (Credits.userId eq uid) }

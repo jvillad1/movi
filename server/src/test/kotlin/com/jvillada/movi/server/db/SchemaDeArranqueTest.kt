@@ -58,6 +58,10 @@ class SchemaDeArranqueTest {
         // 8761). `credit_terms` existe en producción desde hace olas, y TODA consulta de créditos
         // nombra esta columna: sin el ALTER, la pantalla de créditos entera deja de cargar.
         "credit_terms" to "otros_cargos_mensuales",
+        // El pago mínimo del extracto. `card_terms` existe en producción con las cinco tarjetas
+        // del dueño adentro, y TODA consulta de tarjetas nombra esta columna (`toCardTerms`):
+        // sin el ALTER, la pantalla de Créditos y «Próximos pagos» dejan de cargar enteras.
+        "card_terms" to "pago_minimo",
     )
 
     /**

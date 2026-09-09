@@ -575,9 +575,23 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
             val resumen = resumenRecurrentes(reglas, subs)
             if (resumen.items.isEmpty()) LinkFigure(sub = "Sin recurrentes")
             else LinkFigure(
-                formatCOP(resumen.flujoLibre),
-                "libre al mes · " + plural(resumen.items.size, "recurrente", "recurrentes"),
-                isAlert = resumen.flujoLibre < 0,
+                // La MISMA cifra grande que la pantalla de destino, que desde los mínimos de
+                // tarjeta es `disponible` y no `flujoLibre`: mostrar acá el número de antes
+                // dejaría al Inicio $1.843.014 por encima de lo que se abre al tocarlo, que es el
+                // desacuerdo exacto que esta función existe para hacer imposible.
+                formatCOP(resumen.disponible),
+                // Y cuando falta un mínimo, el rótulo deja de contar recurrentes y dice qué le
+                // falta a la cifra. Es el único renglón que hay para explicarla, y «te faltan
+                // datos» es más útil que «14 recurrentes» sobre un número que puede tener el
+                // signo cambiado. Ver [avisoDeMinimosQueFaltan], que dice lo mismo con espacio.
+                sub = if (resumen.tarjetasSinMinimo == 1) {
+                    "libre al mes · falta 1 mínimo de tarjeta"
+                } else if (resumen.tarjetasSinMinimo > 1) {
+                    "libre al mes · faltan ${resumen.tarjetasSinMinimo} mínimos de tarjeta"
+                } else {
+                    "libre al mes · " + plural(resumen.items.size, "recurrente", "recurrentes")
+                },
+                isAlert = resumen.disponible < 0,
             )
         }
     }
