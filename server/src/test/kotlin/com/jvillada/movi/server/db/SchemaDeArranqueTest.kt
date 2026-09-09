@@ -54,6 +54,10 @@ class SchemaDeArranqueTest {
         // Ola 19 — la marca de «este monto lo corregí yo», que el barrido consulta en CADA
         // detección. Sin la columna, «Buscar cobros» falla entero en producción.
         "subscriptions" to "monto_corregido_a_mano",
+        // Ola 19 — el cuarto renglón de la cuota (los $25.000 de «otros conceptos» del Vehículo
+        // 8761). `credit_terms` existe en producción desde hace olas, y TODA consulta de créditos
+        // nombra esta columna: sin el ALTER, la pantalla de créditos entera deja de cargar.
+        "credit_terms" to "otros_cargos_mensuales",
     )
 
     /**

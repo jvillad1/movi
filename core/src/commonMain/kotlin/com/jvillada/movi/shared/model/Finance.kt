@@ -128,6 +128,37 @@ data class CreditTerms(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val insuranceMonthly: Long? = null,
+    /**
+     * **La plata que va dentro de la cuota y no es interés, ni seguro, ni capital.** `null` o 0 =
+     * no hay, que es el caso normal.
+     *
+     * Existe por lo mismo que [insuranceMonthly] —hay plata adentro de la cuota que **no baja la
+     * deuda**— pero para el renglón que ese campo no puede nombrar sin mentir. El extracto del
+     * Banco de Occidente del crédito 40830208761 (cuenta «Vehículo 8761») reparte la cuota en
+     * **cuatro**:
+     *
+     * ```
+     * cuota 4.101.122,91 = capital 1.508.284 + interés 2.478.738 + seguro vida 89.100 + otros conceptos 25.000
+     * ```
+     *
+     * Esos $25.000 no tenían dónde ir. Meterlos en [insuranceMonthly] habría hecho que la app le
+     * dijera «seguro $114.100» a una cifra que el banco llama de otra forma —un dato que después
+     * nadie puede contrastar contra el extracto—, así que se dejaron afuera y
+     * [desglosarCuota] se los contaba como capital: Movi calculaba $1.533.784 de abono contra los
+     * $1.508.284 del banco. Son **~$25.500 al mes** de deriva, siempre en la misma dirección: la
+     * de creer que la deuda baja más rápido de lo que baja.
+     *
+     * Es un cargo **fijo del crédito**, no de la cuota: se declara una vez acá y vale para todas
+     * las cuotas siguientes, igual que el seguro y por el mismo motivo (ver el KDoc de
+     * [com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest.interesReal], sección «El seguro NO
+     * se sobreescribe por cuota»).
+     *
+     * En la moneda de la cuenta, igual que [installment]. Editable desde la hoja de condiciones
+     * del crédito: en este proyecto nada se configura tocando código. Ver el KDoc de la clase para
+     * por qué viaja aunque valga `null`.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val otrosCargosMensuales: Long? = null,
 )
 
 @Serializable

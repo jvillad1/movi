@@ -385,6 +385,19 @@ object Credits : Table("credit_terms") {
      * sin app.
      */
     val insuranceMonthly = long("insurance_monthly").nullable()
+    /**
+     * El cuarto renglón de la cuota: ni interés, ni seguro, ni capital. Ver
+     * `CreditTerms.otrosCargosMensuales` — los $25.000 de «otros conceptos» que el Banco de
+     * Occidente le cobra al Vehículo 8761 y que Movi contaba como abono a capital.
+     *
+     * Nullable por lo mismo que `insurance_monthly` y las dos de arriba:
+     * `createMissingTablesAndColumns` corre DENTRO de la transacción de arranque, y
+     * `ALTER TABLE … ADD COLUMN … NULL` es el único DDL que no puede fallar sobre las filas que ya
+     * están. **Y `Credits` tiene que seguir en esa lista**, o esta columna se queda en el código y
+     * cada consulta de créditos revienta en producción con «column does not exist»: fijado por
+     * `SchemaDeArranqueTest` y por `OtrosCargosColumnTest`.
+     */
+    val otrosCargosMensuales = long("otros_cargos_mensuales").nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

@@ -278,7 +278,7 @@ fun desgloseDelPago(
     if (deuda == null || monto == null || monto <= 0L) return null
     if (deuda.type != AccountType.LOAN && deuda.type != AccountType.CREDIT_CARD) return null
     val interesValido = interesReal?.takeIf {
-        validarInteresReal(it, monto, deuda.type, terms?.insuranceMonthly) == null
+        validarInteresReal(it, monto, deuda.type, terms?.insuranceMonthly, terms?.otrosCargosMensuales) == null
     }
     return desglosarCuotaRegistrada(
         cuota = monto,
@@ -286,6 +286,7 @@ fun desgloseDelPago(
         saldoDeLaDeuda = saldoEnSuMoneda(deuda),
         rateEa = terms?.rateEa,
         seguroMensual = terms?.insuranceMonthly,
+        otrosCargosMensuales = terms?.otrosCargosMensuales,
         interesReal = interesValido,
     )
 }
@@ -306,6 +307,7 @@ fun interesEstimadoDelMes(deuda: Account?, terms: CreditTerms?): Long? {
         saldoDeLaDeuda = saldoEnSuMoneda(deuda),
         rateEa = terms?.rateEa,
         seguroMensual = terms?.insuranceMonthly,
+        otrosCargosMensuales = terms?.otrosCargosMensuales,
     )
     return d.interes.takeIf { d.motivo == MotivoDelDesglose.AMORTIZA }
 }
@@ -334,6 +336,15 @@ const val INTERES_SIN_TASA_AVISO: String =
  */
 fun textoDelDesglose(desglose: DesgloseDeCuota, moneda: String): String? {
     fun plata(v: Long) = formatMoney(v, moneda)
+    /**
+     * Los renglones fijos de la cuota que no son interés: el seguro y los otros cargos. Cada uno
+     * se nombra con la palabra del extracto y **por separado**, no sumados en un «otros $114.100»
+     * que no cuadraría contra ninguna línea del papel del banco.
+     */
+    val fijos = buildString {
+        if (desglose.seguro > 0L) append(", ${plata(desglose.seguro)} el seguro")
+        if (desglose.otrosCargos > 0L) append(", ${plata(desglose.otrosCargos)} otros cargos")
+    }
     return when (desglose.motivo) {
         MotivoDelDesglose.TARJETA -> null
         // El caso sin tasa **se dice, no se calla**: la deuda va a bajar por todo, que es lo que
@@ -343,7 +354,6 @@ fun textoDelDesglose(desglose: DesgloseDeCuota, moneda: String): String? {
                 "deuda va a bajar los ${plata(desglose.cuota)} completos. Agrega la tasa % EA en " +
                 "las condiciones del crédito para verlo separado."
         MotivoDelDesglose.AMORTIZA -> {
-            val seguro = if (desglose.seguro > 0L) ", ${plata(desglose.seguro)} el seguro" else ""
             // **La limitación, dicha donde el dueño la ve.** El interés se calcula sobre la deuda
             // de HOY, no sobre la que había el mes de la cuota: en Movi la deuda es la suma de
             // todos los eventos sin mirar fechas, así que «el saldo al 15 de julio» no existe.
@@ -357,22 +367,21 @@ fun textoDelDesglose(desglose: DesgloseDeCuota, moneda: String): String? {
                 // Existe de verdad: un pago parcial a la libranza ·4818 del dueño —$3.000.000
                 // contra un interés de $3.646.011— es 100 % interés.
                 "Tus ${plata(desglose.cuota)} no alcanzan a cubrir los ${plata(desglose.interes)} " +
-                    "de intereses$seguro de este mes: nada de este pago baja la deuda.$sobreHoy"
+                    "de intereses$fijos de este mes: nada de este pago baja la deuda.$sobreHoy"
             } else {
                 "De tus ${plata(desglose.cuota)}, ${plata(desglose.interes)} son intereses" +
-                    "$seguro, y ${plata(desglose.capital)} bajan la deuda.$sobreHoy"
+                    "$fijos, y ${plata(desglose.capital)} bajan la deuda.$sobreHoy"
             }
         }
         // El interés lo escribió él del extracto: no hay «calculado sobre tu deuda de hoy» porque
         // no hubo cálculo, y la frase lo dice para que se lea distinto de la estimación.
         MotivoDelDesglose.INTERES_REAL -> {
-            val seguro = if (desglose.seguro > 0L) ", ${plata(desglose.seguro)} el seguro" else ""
             if (desglose.capital <= 0L) {
                 "Tus ${plata(desglose.cuota)} se van enteros en los ${plata(desglose.interes)} " +
-                    "de intereses que escribiste$seguro: nada de este pago baja la deuda."
+                    "de intereses que escribiste$fijos: nada de este pago baja la deuda."
             } else {
                 "De tus ${plata(desglose.cuota)}, ${plata(desglose.interes)} son intereses según " +
-                    "tu extracto$seguro, y ${plata(desglose.capital)} bajan la deuda."
+                    "tu extracto$fijos, y ${plata(desglose.capital)} bajan la deuda."
             }
         }
     }
@@ -719,7 +728,13 @@ internal fun TransferBody(
      * trae tres cifras.
      */
     val errorDeInteres = if (esPago && to != null) {
-        validarInteresReal(interesEfectivo, amount ?: 0L, to.type, termsDelDestino?.insuranceMonthly)
+        validarInteresReal(
+            interesEfectivo,
+            amount ?: 0L,
+            to.type,
+            termsDelDestino?.insuranceMonthly,
+            termsDelDestino?.otrosCargosMensuales,
+        )
     } else {
         null
     }

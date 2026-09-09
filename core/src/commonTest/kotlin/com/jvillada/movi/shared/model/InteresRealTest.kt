@@ -40,7 +40,7 @@ class InteresRealTest {
     @Test
     fun la_estimacion_del_9695_es_la_que_se_queda_corta() {
         // Lo que Movi estimaba, para que el tamaño del error quede escrito y no en una anécdota.
-        val estimado = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L)
+        val estimado = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, null)
 
         assertEquals(363_905L, estimado.interes)
         assertEquals(473_227L - 363_905L, 109_322L, "la diferencia contra el extracto")
@@ -54,6 +54,7 @@ class InteresRealTest {
             saldoDeLaDeuda = 40_710_555L,
             rateEa = 11.27,
             seguroMensual = 124_800L,
+            otrosCargosMensuales = null,
             interesReal = 473_227L,
         )
 
@@ -61,13 +62,13 @@ class InteresRealTest {
         assertEquals(124_800L, d.seguro, "el seguro sigue saliendo de las condiciones")
         assertEquals(606_037L, d.capital)
         assertEquals(MotivoDelDesglose.INTERES_REAL, d.motivo)
-        assertEquals(d.cuota, d.interes + d.seguro + d.capital)
+        assertEquals(d.cuota, d.interes + d.seguro + d.otrosCargos + d.capital)
     }
 
     @Test
     fun sin_interes_real_se_estima_exactamente_como_antes() {
-        val conNull = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, interesReal = null)
-        val directo = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L)
+        val conNull = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, otrosCargosMensuales = null, interesReal = null)
+        val directo = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, null)
 
         assertEquals(directo, conNull, "null es «estímalo», y estimar es lo mismo de siempre")
     }
@@ -76,7 +77,7 @@ class InteresRealTest {
     fun la_pata_de_la_deuda_guarda_el_interes_real_mas_el_seguro() {
         // Lo que después lee la corrección del monto (`montoDeLaHermanaAlCorregir`): con el
         // interés real guardado, corregir la cuota vuelve a dar el capital correcto.
-        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 473_227L, 124_800L)
+        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 473_227L, 124_800L, null)
         val (dinero, deuda) = pagoDeCuotaLegs(peticion(473_227L), ahorros, nueveSeisNueveCinco, d)
 
         assertEquals(1_204_064L, dinero.amount, "la plata que salió es la cuota entera")
@@ -90,33 +91,33 @@ class InteresRealTest {
 
     @Test
     fun null_siempre_pasa() {
-        assertNull(validarInteresReal(null, 1_204_064L, AccountType.LOAN, 124_800L))
-        assertNull(validarInteresReal(null, 100L, AccountType.CREDIT_CARD, null))
+        assertNull(validarInteresReal(null, 1_204_064L, AccountType.LOAN, 124_800L, null))
+        assertNull(validarInteresReal(null, 100L, AccountType.CREDIT_CARD, null, null))
     }
 
     @Test
     fun un_interes_negativo_se_rechaza() {
-        assertEquals(INTERES_REAL_NEGATIVO, validarInteresReal(-1L, 1_204_064L, AccountType.LOAN, 124_800L))
+        assertEquals(INTERES_REAL_NEGATIVO, validarInteresReal(-1L, 1_204_064L, AccountType.LOAN, 124_800L, null))
     }
 
     @Test
     fun cero_es_un_interes_valido() {
         // «El banco no cobró interés este mes» es una afirmación legítima, y distinta de «no sé».
-        assertNull(validarInteresReal(0L, 1_204_064L, AccountType.LOAN, 124_800L))
-        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 0L, 124_800L)
+        assertNull(validarInteresReal(0L, 1_204_064L, AccountType.LOAN, 124_800L, null))
+        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 0L, 124_800L, null)
         assertEquals(1_204_064L - 124_800L, d.capital)
     }
 
     @Test
     fun una_tarjeta_no_lleva_interes_adentro_del_pago() {
-        assertEquals(INTERES_REAL_EN_TARJETA, validarInteresReal(10_000L, 1_008_902L, AccountType.CREDIT_CARD, null))
+        assertEquals(INTERES_REAL_EN_TARJETA, validarInteresReal(10_000L, 1_008_902L, AccountType.CREDIT_CARD, null, null))
     }
 
     @Test
     fun un_interes_que_deja_el_capital_negativo_se_rechaza_con_las_cifras() {
         // 473.227 + 124.800 = 598.027 > 500.000: la deuda SUBIRÍA con un pago. Eso no se clampa,
         // se rechaza, y el mensaje dice las tres cifras para que se vea cuál está mal.
-        val motivo = assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L))
+        val motivo = assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null))
 
         assertTrue("473.227" in motivo, motivo)
         assertTrue("124.800" in motivo, motivo)
@@ -127,13 +128,13 @@ class InteresRealTest {
     @Test
     fun interes_mas_seguro_igual_a_la_cuota_se_acepta_y_deja_el_capital_en_cero() {
         // El borde: nada abona a capital, pero la deuda tampoco sube. Es un pago que existe.
-        assertNull(validarInteresReal(473_227L, 598_027L, AccountType.LOAN, 124_800L))
-        assertEquals(0L, desglosarCuotaConInteresReal(598_027L, AccountType.LOAN, 473_227L, 124_800L).capital)
+        assertNull(validarInteresReal(473_227L, 598_027L, AccountType.LOAN, 124_800L, null))
+        assertEquals(0L, desglosarCuotaConInteresReal(598_027L, AccountType.LOAN, 473_227L, 124_800L, null).capital)
     }
 
     @Test
     fun sin_seguro_declarado_el_mensaje_no_lo_nombra() {
-        val motivo = assertNotNull(validarInteresReal(600_000L, 500_000L, AccountType.LOAN, null))
+        val motivo = assertNotNull(validarInteresReal(600_000L, 500_000L, AccountType.LOAN, null, null))
         assertTrue("seguro" !in motivo, motivo)
     }
 
@@ -142,10 +143,10 @@ class InteresRealTest {
         // La validación va antes. Si alguien la saltea, que no compile en silencio un capital
         // negativo: que reviente donde se ve.
         assertFailsWith<IllegalArgumentException> {
-            desglosarCuotaConInteresReal(500_000L, AccountType.LOAN, 473_227L, 124_800L)
+            desglosarCuotaConInteresReal(500_000L, AccountType.LOAN, 473_227L, 124_800L, null)
         }
         assertFailsWith<IllegalArgumentException> {
-            desglosarCuotaConInteresReal(1_000_000L, AccountType.CREDIT_CARD, 10_000L, null)
+            desglosarCuotaConInteresReal(1_000_000L, AccountType.CREDIT_CARD, 10_000L, null, null)
         }
     }
 
@@ -155,7 +156,7 @@ class InteresRealTest {
     fun un_credito_sin_tasa_acepta_el_interes_del_extracto() {
         // Sin tasa la estimación no puede separar nada y baja la deuda por todo. Con el extracto
         // en la mano sí se puede, y eso es mejor que las condiciones incompletas.
-        val d = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, rateEa = null, seguroMensual = null, interesReal = 473_227L)
+        val d = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, rateEa = null, seguroMensual = null, otrosCargosMensuales = null, interesReal = 473_227L)
 
         assertEquals(MotivoDelDesglose.INTERES_REAL, d.motivo)
         assertEquals(1_204_064L - 473_227L, d.capital)

@@ -315,7 +315,7 @@ class PagoDeCuotaRoutesTest {
     // ── La cuota baja la deuda SOLO por el capital ─────────────────────────────
 
     /** Le pone condiciones al crédito del carro: sin `credit_terms` no hay tasa que aplicar. */
-    private fun condicionesDelCarro(rateEa: Double, seguro: Long? = null) = transaction {
+    private fun condicionesDelCarro(rateEa: Double, seguro: Long? = null, otros: Long? = null) = transaction {
         Credits.insert {
             it[accountId] = carro
             it[userId] = duenoId
@@ -327,6 +327,7 @@ class PagoDeCuotaRoutesTest {
             it[dayOfMonth] = 5
             it[startDate] = "2024-01-15"
             it[insuranceMonthly] = seguro
+            it[otrosCargosMensuales] = otros
         }
     }
 
@@ -353,6 +354,45 @@ class PagoDeCuotaRoutesTest {
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
         assertEquals(177_200_000L - 1_733_905L, saldoDe(carro), "la deuda baja el CAPITAL")
         assertEquals(1_733_905L, montoDeLaPataEn(carro, "tr-1"))
+    }
+
+    @Test
+    fun `los otros cargos de la cuota tampoco bajan la deuda`() = testApplication {
+        // **El caso del Vehículo 8761, extracto del Banco de Occidente**, hasta el final: cuota
+        // $4.101.123 con $89.100 de seguro y $25.000 de «otros conceptos». Sin el campo, esos
+        // $25.000 se le abonaban a la deuda todos los meses.
+        //
+        // El interés va del extracto y no estimado, para que el reparto que se mide sea el de los
+        // renglones fijos y no el de la tasa: $4.101.123 − $2.478.738 − $89.100 − $25.000.
+        condicionesDelCarro(rateEa = 18.16, seguro = 89_100L, otros = 25_000L)
+        wireApp()
+        val texto = pagar(duenoId, cuerpoConInteres(ahorros, carro, 4_101_123, interesReal = 2_478_738)).bodyAsText()
+
+        assertEquals(1_508_285L, montoDeLaPataEn(carro, "tr-1"), "la deuda baja el capital del banco")
+        assertEquals(4_101_123L, montoDeLaPataEn(ahorros, "tr-1"), "y de la cuenta sale la cuota entera")
+        // Lo que NO amortizó queda guardado en la fila, con los TRES renglones adentro: si esta
+        // suma se olvidara de los otros cargos, corregir el monto después borraría $25.000 de
+        // deuda en silencio (ver `FinancialEvent.noAmortiza`).
+        assertEquals(
+            2_478_738L + 89_100L + 25_000L,
+            noAmortizaDeLaPataEn(carro, "tr-1"),
+            "no_amortiza = interés + seguro + otros cargos",
+        )
+        assertEquals(25_000L, campoNum(texto, "otrosCargos"), texto)
+        assertEquals(89_100L, campoNum(texto, "seguro"), texto)
+        assertEquals(1_508_285L, campoNum(texto, "capital"), texto)
+    }
+
+    @Test
+    fun `sin declarar los otros cargos, el mismo pago abona 25 mil de mas`() = testApplication {
+        // La misma cuota con el crédito como está hoy en producción —seguro declarado, otros
+        // conceptos sin campo donde ir— para que el tamaño de la deriva quede escrito y no en una
+        // anécdota: $25.000 por mes, siempre en la dirección de creer que la deuda baja más rápido.
+        condicionesDelCarro(rateEa = 18.16, seguro = 89_100L)
+        wireApp()
+        pagar(duenoId, cuerpoConInteres(ahorros, carro, 4_101_123, interesReal = 2_478_738))
+
+        assertEquals(1_508_285L + 25_000L, montoDeLaPataEn(carro, "tr-1"))
     }
 
     @Test

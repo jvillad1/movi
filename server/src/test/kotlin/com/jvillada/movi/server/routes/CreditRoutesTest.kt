@@ -724,6 +724,73 @@ class CreditRoutesTest {
         assertEquals(108_800L, terms["insuranceMonthly"]!!.jsonPrimitive.long, "y el seguro sobrevivió")
     }
 
+    // ── Los otros cargos de la cuota ───────────────────────────────────────────
+
+    @Test
+    fun `los otros cargos mensuales se guardan y se releen`() = testApplication {
+        // El cuarto renglón de la cuota del Vehículo 8761: ni interés, ni seguro, ni capital.
+        // Se configura desde la app como todo lo demás.
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","insuranceMonthly":89100,"otrosCargosMensuales":25000}""")
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+
+        assertEquals(25_000L, terms["otrosCargosMensuales"]!!.jsonPrimitive.long)
+        assertEquals(89_100L, terms["insuranceMonthly"]!!.jsonPrimitive.long, "y el seguro sigue siendo el suyo")
+    }
+
+    @Test
+    fun `un APK viejo que edita el credito no borra los otros cargos`() = testApplication {
+        // El mismo agujero que ya se cobró `paidBy` y casi se cobra el seguro, y acá es seguro que
+        // pasa: NINGÚN cliente instalado conoce este campo todavía, así que cualquier edición
+        // hecha desde el teléfono manda un cuerpo sin la clave. Sin la guarda, los $25.000 se
+        // borrarían en la primera edición y volvería la deriva de ~$25.500/mes.
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.dropLast(1) + ""","otrosCargosMensuales":25000}""")
+        }
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.replace("\"dayOfMonth\":5", "\"dayOfMonth\":7"))
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+
+        assertEquals(7, terms["dayOfMonth"]!!.jsonPrimitive.int, "el cambio del cliente viejo sí se aplicó")
+        assertEquals(25_000L, terms["otrosCargosMensuales"]!!.jsonPrimitive.long, "y los otros cargos sobrevivieron")
+    }
+
+    @Test
+    fun `un cliente nuevo SI puede borrar los otros cargos desde la hoja`() = testApplication {
+        // La otra mitad: si «ausente» y «null» se trataran igual, un cargo escrito por error sería
+        // para siempre y cada cuota abonaría de menos a capital.
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(terminosDelCliente.copy(otrosCargosMensuales = 25_000L)))
+        }
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(terminosDelCliente.copy(otrosCargosMensuales = null)))
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+
+        assertTrue(
+            terms["otrosCargosMensuales"] == null || terms["otrosCargosMensuales"] is JsonNull,
+            "los otros cargos tienen que quedar borrados: $terms",
+        )
+    }
+
     /**
      * **El cuerpo que produce la app de verdad, no uno escrito a mano.**
      *
@@ -751,12 +818,13 @@ class CreditRoutesTest {
     )
 
     @Test
-    fun `el cuerpo que arma el cliente lleva las tres claves borrables`() {
+    fun `el cuerpo que arma el cliente lleva las cuatro claves borrables`() {
         // La premisa de las tres pruebas de abajo, y lo que estaba roto: si estas claves no
         // viajan, «borrado» y «no lo conozco» son el mismo cuerpo y el server no puede distinguir.
         val cuerpo = Json.parseToJsonElement(cuerpoDelCliente(terminosDelCliente)).jsonObject
 
         assertTrue("insuranceMonthly" in cuerpo, "sin la clave, el seguro no se puede borrar: $cuerpo")
+        assertTrue("otrosCargosMensuales" in cuerpo, "sin la clave, los otros cargos no se pueden borrar: $cuerpo")
         assertTrue("paidBy" in cuerpo, "sin la clave, «la paga otro» no se puede desmarcar: $cuerpo")
         assertTrue("payrollDeduction" in cuerpo, "sin la clave, la libranza no se puede desmarcar: $cuerpo")
     }

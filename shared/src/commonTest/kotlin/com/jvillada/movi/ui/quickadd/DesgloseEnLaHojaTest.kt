@@ -29,7 +29,7 @@ class DesgloseEnLaHojaTest {
     private val carro = Account("acc_carro", "Vehículo 4083", AccountType.LOAN, 177_200_000L)
     private val amex = Account("acc_amex", "AMEX 9208", AccountType.CREDIT_CARD, 19_818_701L)
 
-    private fun terminos(rateEa: Double, seguro: Long? = null) = CreditTerms(
+    private fun terminos(rateEa: Double, seguro: Long? = null, otros: Long? = null) = CreditTerms(
         accountId = carro.id,
         bank = "Bancolombia",
         principal = 200_000_000L,
@@ -39,6 +39,7 @@ class DesgloseEnLaHojaTest {
         dayOfMonth = 5,
         startDate = "2024-01-15",
         insuranceMonthly = seguro,
+        otrosCargosMensuales = otros,
     )
 
     // ── El desglose ────────────────────────────────────────────────────────────
@@ -78,7 +79,34 @@ class DesgloseEnLaHojaTest {
         // Y —lo que de verdad importa— el capital que se va a escribir en la pata de la deuda.
         assertTrue(texto.contains(formatMoney(d.capital, "COP")), texto)
         assertEquals(108_800L, d.seguro)
-        assertEquals(d.cuota, d.interes + d.seguro + d.capital)
+        assertEquals(d.cuota, d.interes + d.seguro + d.otrosCargos + d.capital)
+    }
+
+    @Test
+    fun `la frase nombra los otros cargos aparte del seguro`() {
+        // El Vehículo 8761: cuota $4.101.123 con $89.100 de seguro y $25.000 de «otros conceptos».
+        // Los dos renglones van SEPARADOS y con la palabra de cada uno: sumarlos en un solo
+        // «$114.100 el seguro» le daría al dueño una cifra que no cuadra contra ninguna línea de
+        // su extracto, que es exactamente lo que este campo vino a evitar.
+        val d = assertNotNull(
+            desgloseDelPago(carro, terminos(18.16, seguro = 89_100L, otros = 25_000L), 4_101_123L),
+        )
+        val texto = assertNotNull(textoDelDesglose(d, "COP"))
+
+        assertEquals(25_000L, d.otrosCargos)
+        assertTrue(texto.contains("${formatMoney(89_100L, "COP")} el seguro"), texto)
+        assertTrue(texto.contains("${formatMoney(25_000L, "COP")} otros cargos"), texto)
+        assertTrue(texto.contains(formatMoney(d.capital, "COP")), texto)
+        assertEquals(d.cuota, d.interes + d.seguro + d.otrosCargos + d.capital)
+    }
+
+    @Test
+    fun `sin otros cargos la frase no los menciona`() {
+        // Mismo criterio que el seguro: un «$0 otros cargos» sobre un crédito que no los tiene es
+        // ruido que enseña a no leer los avisos.
+        val d = assertNotNull(desgloseDelPago(carro, terminos(18.16, seguro = 89_100L), 4_101_123L))
+
+        assertTrue(!assertNotNull(textoDelDesglose(d, "COP")).contains("otros cargos"))
     }
 
     @Test
@@ -167,7 +195,7 @@ class DesgloseEnLaHojaTest {
 
         assertEquals(MotivoDelDesglose.AMORTIZA, d.motivo)
         assertTrue(d.capital >= 0L)
-        assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L))
+        assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null))
     }
 
     @Test
@@ -235,7 +263,7 @@ class DesgloseEnLaHojaTest {
         assertTrue(d.interes > 0L, "con el componente COP (0) el interés habría dado 0: $d")
         assertEquals(474L, d.interes, "50.000 × ((1,12)^(1/12) − 1)")
         assertEquals(526L, d.capital)
-        assertEquals(d.cuota, d.interes + d.seguro + d.capital)
+        assertEquals(d.cuota, d.interes + d.seguro + d.otrosCargos + d.capital)
     }
 
     @Test
