@@ -56,6 +56,23 @@ class SchemaDeArranqueTest {
         "subscriptions" to "monto_corregido_a_mano",
     )
 
+    /**
+     * Columnas de texto que se **ensancharon** sobre una tabla que ya existía en producción:
+     * (tabla, columna, largo viejo, largo nuevo).
+     *
+     * Es una trampa distinta —y peor— que la de la lista de arriba. Una columna que falta revienta
+     * ruidosamente («column does not exist»); un largo que se quedó en el valor viejo no se nota
+     * hasta que alguien escribe un texto largo, y ahí el `PUT` falla con un 500 sin explicación
+     * mientras el resto de la app anda perfecto. Y a diferencia de la lista de arriba, acá el
+     * `create` del arranque tampoco ayuda en local: en una base vacía la columna nace con el largo
+     * nuevo y el test pasaría igual sin haber probado nada.
+     */
+    private val columnasDeTextoEnsanchadas = listOf(
+        Ensanche("credit_terms", "notes", de = 300, a = 500),   // #TBD — la nota mutilada del Vehículo 8761
+    )
+
+    data class Ensanche(val tabla: String, val columna: String, val de: Int, val a: Int)
+
     private val todasLasTablas = arrayOf(
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
@@ -102,6 +119,89 @@ class SchemaDeArranqueTest {
                     "y en producción cada consulta que la nombre va a fallar con «column does not exist»",
             )
         }
+    }
+
+    /** El schema completo, pero con [columna] angosta como en la base vieja de producción. */
+    private fun schemaConLaColumnaAngosta(e: Ensanche) = transaction {
+        exec("DROP ALL OBJECTS")
+        SchemaUtils.create(tables = todasLasTablas)
+        exec("ALTER TABLE ${e.tabla} ALTER COLUMN ${e.columna} SET DATA TYPE VARCHAR(${e.de})")
+    }
+
+    private fun anchoDe(tabla: String, columna: String): Int? = transaction {
+        var ancho: Int? = null
+        exec(
+            "SELECT character_maximum_length FROM information_schema.columns " +
+                "WHERE LOWER(table_name) = '$tabla' AND LOWER(column_name) = '$columna'",
+        ) { rs -> if (rs.next()) ancho = rs.getInt(1) }
+        ancho
+    }
+
+    @Test
+    fun `el arranque ensancha una columna de texto que se quedo corta`() {
+        columnasDeTextoEnsanchadas.forEach { e ->
+            schemaConLaColumnaAngosta(e)
+            assertEquals(
+                e.de, anchoDe(e.tabla, e.columna),
+                "el caso «${e.tabla}.${e.columna}» tiene que arrancar angosto, si no no prueba nada",
+            )
+
+            DatabaseFactory.crearYActualizarSchema()
+
+            assertEquals(
+                e.a, anchoDe(e.tabla, e.columna),
+                "«${e.tabla}.${e.columna}» siguió en ${e.de}: el largo nuevo se quedó en el código y " +
+                    "en producción cualquier texto más largo revienta el guardado con un 500",
+            )
+        }
+    }
+
+    /**
+     * Y lo que ya estaba escrito sigue ahí. Ensanchar un `varchar` en Postgres es metadata y no
+     * reescribe la tabla, pero eso es una promesa del motor: acá se comprueba, porque este DDL
+     * corre DENTRO de la transacción de arranque y sobre las notas reales de seis créditos.
+     */
+    @Test
+    fun `ensanchar no le toca una letra a las notas que ya estaban`() {
+        val e = columnasDeTextoEnsanchadas.single { it.tabla == "credit_terms" && it.columna == "notes" }
+        schemaConLaColumnaAngosta(e)
+        val notaVieja = "Préstamo de papá · un solo pago"
+        transaction {
+            exec(
+                """
+                INSERT INTO credit_terms
+                    (account_id, user_id, bank, principal, rate_ea, term_months, installment,
+                     day_of_month, start_date, notes)
+                VALUES ('acc-techo', 'usr_1', 'Papá', 10000000, 0.0, 1, 10000000, 27,
+                        '2026-09-01', '$notaVieja')
+                """.trimIndent(),
+            )
+        }
+
+        DatabaseFactory.crearYActualizarSchema()
+
+        val leida = transaction {
+            var v: String? = null
+            exec("SELECT notes FROM credit_terms WHERE account_id = 'acc-techo'") { rs ->
+                if (rs.next()) v = rs.getString(1)
+            }
+            v
+        }
+        assertEquals(notaVieja, leida)
+
+        // Y la nota que antes no cabía ahora entra entera: 500 caracteres exactos.
+        val notaLarga = "x".repeat(e.a)
+        transaction {
+            exec("UPDATE credit_terms SET notes = '$notaLarga' WHERE account_id = 'acc-techo'")
+        }
+        val larga = transaction {
+            var v: String? = null
+            exec("SELECT notes FROM credit_terms WHERE account_id = 'acc-techo'") { rs ->
+                if (rs.next()) v = rs.getString(1)
+            }
+            v
+        }
+        assertEquals(e.a, larga?.length, "una nota de ${e.a} caracteres tiene que entrar sin cortarse")
     }
 
     /**
