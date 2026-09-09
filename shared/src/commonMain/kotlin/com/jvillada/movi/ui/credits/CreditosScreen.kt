@@ -58,6 +58,9 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var showCardSheet by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardSummary?>(null) }
     var adjusting by remember { mutableStateOf<CreditSummary?>(null) }
+    // El crédito cuyo abono extraordinario se está simulando. No escribe nada: contesta «¿y si le
+    // abono de más?». Ver [SimuladorDeAbonoSheet].
+    var simulando by remember { mutableStateOf<CreditSummary?>(null) }
     // El crédito cuyo descuento de nómina se está registrando. No abre hoja: es un solo dato
     // (la cuota, que ya está en los términos) y el server lo hace idempotente por mes, así que
     // pedir confirmación sería ceremonia sobre algo que no se puede duplicar.
@@ -171,6 +174,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                                         onOpen = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
                                         onEdit = { editingLoan = c; showLoanSheet = true },
                                         onAdjust = { adjusting = c },
+                                        onSimulate = { simulando = c },
                                         onPayrollDeduction = { descontando = c },
                                     )
                                 }
@@ -218,6 +222,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 editing = editingCard,
                 onDismiss = { showCardSheet = false },
                 onSaved = { showCardSheet = false; reloadKey++ },
+            )
+        }
+        simulando?.let { credit ->
+            SimuladorDeAbonoSheet(
+                credit = credit,
+                periodoActual = periodoActual,
+                onDismiss = { simulando = null },
             )
         }
         adjusting?.let { credit ->
@@ -379,6 +390,7 @@ private fun LoanCard(
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onAdjust: () -> Unit,
+    onSimulate: () -> Unit,
     onPayrollDeduction: () -> Unit,
 ) {
     // Ola 14: no siempre es un porcentaje. Un crédito recién creado en $0 —el paso 1 de registrar
@@ -493,6 +505,27 @@ private fun LoanCard(
                         color = if (comoVa.esAlerta) MinExpense else MinTextFaint,
                         fontWeight = if (comoVa.esAlerta) FontWeight.Medium else FontWeight.Normal,
                         lineHeight = 16.sp,
+                    )
+                }
+                // **«¿Y si abonas de más?»**, pegado a la proyección que modifica y no en la fila
+                // de acciones de abajo. Por dos motivos: ahí abajo son operaciones que ESCRIBEN
+                // (registrar un descuento, ajustar el saldo) y esto no escribe nada; y con un
+                // crédito que paga un tercero eran tres botones en una fila que no entra en 411dp.
+                //
+                // Solo donde hay algo que simular: sin tasa, sin cuota o sin deuda no hay
+                // proyección que acortar, y la hoja solo podría contestar «no se sabe». Ver
+                // [ComoVaLaDeuda.seProyecta].
+                if (p.comoVa.seProyecta) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        ACCION_SIMULAR_ABONO,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinPrimary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickableSimple(onSimulate)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
             }
