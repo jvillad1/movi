@@ -284,6 +284,11 @@ fun Route.creditRoutes() {
                 // y lo dejaría en null. Consecuencia: la cuota del ·9695 volvería a abonar $108.800
                 // de más a capital cada mes, en silencio y con el número plausible.
                 .let { if ("insuranceMonthly" in crudo) it else it.copy(insuranceMonthly = previo?.insuranceMonthly) }
+                // Y los otros cargos fijos entran al mismo club por el mismo agujero: el APK
+                // instalado no conoce este campo, así que cualquier edición que él haga desde el
+                // teléfono manda un cuerpo sin la clave y borraría los $25.000 del Vehículo 8761
+                // en silencio — devolviendo la deriva de ~$25.500/mes que este cambio vino a matar.
+                .let { if ("otrosCargosMensuales" in crudo) it else it.copy(otrosCargosMensuales = previo?.otrosCargosMensuales) }
                 // El tope de la columna es varchar(60): un nombre más largo hacía fallar el
                 // INSERT en Postgres y se caía el guardado ENTERO del crédito con un 500 sin
                 // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
@@ -463,7 +468,7 @@ fun Route.creditRoutes() {
             } else {
                 RegistrarCuotaAjenaRequest()
             }
-            validarInteresReal(pedido.interesReal, terms.installment, AccountType.LOAN, terms.insuranceMonthly)?.let {
+            validarInteresReal(pedido.interesReal, terms.installment, AccountType.LOAN, terms.insuranceMonthly, terms.otrosCargosMensuales)?.let {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
             }
             // El saldo ANTES de esta cuota, por moneda y sin la fila de este mismo mes: igual que
@@ -478,6 +483,7 @@ fun Route.creditRoutes() {
                 saldoDeLaDeuda = saldoAntes,
                 rateEa = terms.rateEa,
                 seguroMensual = terms.insuranceMonthly,
+                otrosCargosMensuales = terms.otrosCargosMensuales,
                 interesReal = pedido.interesReal,
             )
             val amortiza = desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL
@@ -542,6 +548,7 @@ private fun fillTerms(
     it[Credits.payrollDeduction] = terms.payrollDeduction
     it[Credits.paidBy] = terms.paidBy?.trim()?.takeIf { v -> v.isNotBlank() }
     it[Credits.insuranceMonthly] = terms.insuranceMonthly?.takeIf { v -> v > 0L }
+    it[Credits.otrosCargosMensuales] = terms.otrosCargosMensuales?.takeIf { v -> v > 0L }
 }
 
 private fun summaryFor(

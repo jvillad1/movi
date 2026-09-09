@@ -31,4 +31,6 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     // 0 se lee como «no hay seguro», igual que null: las dos cosas significan lo mismo para
     // `desglosarCuota` y dejar pasar el 0 obligaría a cada llamador a acordarse del caso.
     insuranceMonthly = this[Credits.insuranceMonthly]?.takeIf { it > 0L },
+    // Mismo criterio que el seguro, por lo mismo.
+    otrosCargosMensuales = this[Credits.otrosCargosMensuales]?.takeIf { it > 0L },
 )

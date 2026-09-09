@@ -151,7 +151,7 @@ fun Route.pagoDeCuotaRoutes() {
             // **Se valida ACÁ y no se le cree a la hoja**, antes de escribir nada: un interés que
             // deja el capital negativo haría SUBIR la deuda con un pago, y eso es 422 con el
             // motivo, no un clamp silencioso. Misma función que apaga el botón en la app.
-            validarInteresReal(body.interesReal, body.amount, debt.type, terms?.insuranceMonthly)?.let {
+            validarInteresReal(body.interesReal, body.amount, debt.type, terms?.insuranceMonthly, terms?.otrosCargosMensuales)?.let {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
             }
             val desglose = desglosarCuotaRegistrada(
@@ -160,6 +160,7 @@ fun Route.pagoDeCuotaRoutes() {
                 saldoDeLaDeuda = saldoAntesDelPago,
                 rateEa = terms?.rateEa,
                 seguroMensual = terms?.insuranceMonthly,
+                otrosCargosMensuales = terms?.otrosCargosMensuales,
                 interesReal = body.interesReal,
             )
 
@@ -242,9 +243,9 @@ fun Route.pagoDeCuotaRoutes() {
  * el comentario de la relectura). Ahí, devolver [calculado] afirmaría un reparto que no es el que
  * quedó escrito — el mismo error que la relectura de las patas vino a cerrar, por la otra puerta.
  *
- * `interes` y `seguro` no se pueden separar mirando las filas —el par guarda su suma, no cada uno—
- * así que se devuelven como un solo bloque en `interes` y `seguro` en 0. Es honesto: la cifra que
- * el dueño va a comparar es cuánto bajó la deuda, y esa sale exacta.
+ * `interes`, `seguro` y `otrosCargos` no se pueden separar mirando las filas —el par guarda su
+ * suma, no cada uno— así que se devuelven como un solo bloque en `interes`, con los otros dos en 0.
+ * Es honesto: la cifra que el dueño va a comparar es cuánto bajó la deuda, y esa sale exacta.
  */
 private fun desgloseDeLoGuardado(
     guardadas: List<FinancialEvent>,
@@ -259,6 +260,7 @@ private fun desgloseDeLoGuardado(
         cuota = pataDelDinero.amount,
         interes = pataDelDinero.amount - pataDeLaDeuda.amount,
         seguro = 0L,
+        otrosCargos = 0L,
         capital = pataDeLaDeuda.amount,
         motivo = calculado.motivo,
     )

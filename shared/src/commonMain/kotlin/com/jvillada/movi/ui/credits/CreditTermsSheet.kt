@@ -138,6 +138,11 @@ fun CreditTermsSheet(
     // la mayoría de los créditos no lo tienen, y exigirlo trabaría un alta por un dato que no
     // existe. Ver `CreditTerms.insuranceMonthly` y `desglosarCuota` en :core.
     var seguroMensual by remember { mutableStateOf(existingTerms?.insuranceMonthly) }
+    // El cuarto renglón de la cuota, el que no es interés ni seguro ni capital: el extracto del
+    // Vehículo 8761 le cobra $25.000 de «otros conceptos» y sin este campo Movi se los contaba
+    // como abono a capital (~$25.500/mes de deriva). Aparte del seguro a propósito: llamarlos
+    // «seguro» sería mentir contra el papel del banco. Ver `CreditTerms.otrosCargosMensuales`.
+    var otrosCargos by remember { mutableStateOf(existingTerms?.otrosCargosMensuales) }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
     // F23: aceptaba cualquier cosa como fecha — el filtro de abajo (solo dígitos y guiones) más
     // isValidCreditDate son la validación real hasta que exista un selector de calendario
@@ -263,6 +268,8 @@ fun CreditTermsSheet(
                     // 0 y «no hay» son lo mismo acá: `MoneyField` deja el campo en null cuando se
                     // borra, y un 0 escrito a mano significa exactamente lo mismo que vacío.
                     insuranceMonthly = seguroMensual?.takeIf { it > 0L },
+                    // Mismo criterio que el seguro: 0 y «no hay» son lo mismo.
+                    otrosCargosMensuales = otrosCargos?.takeIf { it > 0L },
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -466,6 +473,20 @@ fun CreditTermsSheet(
                 Text(
                     "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
                         "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
+                    fontSize = 11.5.sp,
+                    color = MinTextMute,
+                )
+                Spacer(Modifier.height(8.dp))
+                // El cuarto renglón, pegado al seguro y no al final: los dos son plata que está
+                // adentro de la cuota de arriba, y se leen juntos o no se entienden. Campo aparte
+                // del seguro porque el extracto los nombra distinto, y un dato que no se puede
+                // contrastar contra el papel del banco es un dato que nadie verifica.
+                MoneyField(otrosCargos, { otrosCargos = it }, placeholder = "Otros cargos mensuales (COP, opcional)")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Algunos créditos cobran algo más dentro de la cuota que no es interés, ni " +
+                        "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
+                        "aquí para que Movi no lo cuente como abono a tu deuda.",
                     fontSize = 11.5.sp,
                     color = MinTextMute,
                 )

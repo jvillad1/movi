@@ -19,8 +19,8 @@ import kotlin.test.assertTrue
  */
 class DesgloseDeCuotaTest {
 
-    private fun deUnCredito(cuota: Long, saldo: Long, rateEa: Double, seguro: Long? = null) =
-        desglosarCuota(cuota, AccountType.LOAN, saldo, rateEa, seguro)
+    private fun deUnCredito(cuota: Long, saldo: Long, rateEa: Double, seguro: Long? = null, otros: Long? = null) =
+        desglosarCuota(cuota, AccountType.LOAN, saldo, rateEa, seguro, otros)
 
     // ── Los créditos reales del dueño ──────────────────────────────────────────
 
@@ -51,7 +51,7 @@ class DesgloseDeCuotaTest {
 
         assertEquals(6_700_288L, d.interes)
         assertEquals(2_447_120L, d.capital)
-        assertEquals(d.cuota, d.interes + d.seguro + d.capital, "las tres partes suman la cuota")
+        assertEquals(d.cuota, d.interes + d.seguro + d.otrosCargos + d.capital, "las cuatro partes suman la cuota")
     }
 
     @Test
@@ -69,13 +69,69 @@ class DesgloseDeCuotaTest {
         assertEquals(108_800L, conSeguro.seguro)
         assertEquals(367_332L, conSeguro.interes, "interés del mes sobre \$41.093.905 al 11,27 % E.A.")
         assertEquals(810_416L, conSeguro.capital, "1.286.548 − 367.332 − 108.800")
-        assertEquals(conSeguro.cuota, conSeguro.interes + conSeguro.seguro + conSeguro.capital)
+        assertEquals(conSeguro.cuota, conSeguro.interes + conSeguro.seguro + conSeguro.otrosCargos + conSeguro.capital)
         assertEquals(919_216L, sinDeclararlo.capital, "sin declararlo, el seguro se cuenta como capital")
         assertEquals(
             108_800L,
             sinDeclararlo.capital - conSeguro.capital,
             "declarar el seguro tiene que bajar el capital exactamente por el seguro",
         )
+    }
+
+    @Test
+    fun los_otros_conceptos_del_vehiculo_8761_tampoco_bajan_la_deuda() {
+        // **El extracto del Banco de Occidente, crédito 40830208761, línea por línea:**
+        //
+        //     cuota 4.101.123 = capital 1.508.284 + interés 2.478.738 + seguro 89.100 + otros 25.000
+        //
+        // Los $25.000 de «otros conceptos» no tenían dónde ir. Meterlos en el seguro habría hecho
+        // que la app dijera «seguro $114.100» contra un extracto que dice $89.100 —un número que
+        // el dueño no puede contrastar contra nada—, así que quedaban afuera y se contaban como
+        // abono a capital.
+        //
+        // El interés se pasa del extracto y no se estima: acá lo que se mide es el reparto de los
+        // renglones fijos, no la fórmula de la tasa (esa ya la fijan los tests de arriba).
+        val delBanco = desglosarCuotaConInteresReal(
+            cuota = 4_101_123,
+            tipoDeLaDeuda = AccountType.LOAN,
+            interesReal = 2_478_738,
+            seguroMensual = 89_100,
+            otrosCargosMensuales = 25_000,
+        )
+        val comoEstabaAntes = desglosarCuotaConInteresReal(
+            cuota = 4_101_123,
+            tipoDeLaDeuda = AccountType.LOAN,
+            interesReal = 2_478_738,
+            seguroMensual = 89_100,
+            otrosCargosMensuales = null,
+        )
+
+        // El capital al peso contra el papel del banco, que es el punto entero del cambio.
+        assertEquals(1_508_285L, delBanco.capital, "4.101.123 − 2.478.738 − 89.100 − 25.000")
+        assertEquals(25_000L, delBanco.otrosCargos)
+        assertEquals(89_100L, delBanco.seguro, "el seguro sigue diciendo lo que dice el extracto")
+        assertEquals(delBanco.cuota, delBanco.interes + delBanco.seguro + delBanco.otrosCargos + delBanco.capital)
+
+        // Y el tamaño de la deriva que se cierra: sin declararlos, esos $25.000 se le abonaban a
+        // la deuda todos los meses, siempre en la dirección de creer que baja más rápido.
+        assertEquals(1_533_285L, comoEstabaAntes.capital)
+        assertEquals(25_000L, comoEstabaAntes.capital - delBanco.capital)
+    }
+
+    @Test
+    fun los_otros_cargos_estimando_el_interes_dan_el_mismo_reparto() {
+        // El mismo crédito por el camino de todos los días (sin extracto a mano): la estimación
+        // separa interés, y los dos renglones fijos salen igual de las condiciones. Lo que se fija
+        // acá es que `desglosarCuota` reste los otros cargos, no solo el seguro — el camino del
+        // interés real ya lo cubre el test de arriba, y el bug vivía en los dos.
+        val conOtros = deUnCredito(cuota = 4_101_123, saldo = 177_200_000, rateEa = 18.16, seguro = 89_100, otros = 25_000)
+        val sinOtros = deUnCredito(cuota = 4_101_123, saldo = 177_200_000, rateEa = 18.16, seguro = 89_100)
+
+        assertEquals(25_000L, conOtros.otrosCargos)
+        assertEquals(2_481_318L, conOtros.interes, "el interés estimado no cambia por declarar un cargo fijo")
+        assertEquals(1_505_705L, conOtros.capital, "4.101.123 − 2.481.318 − 89.100 − 25.000")
+        assertEquals(0L, sinOtros.otrosCargos, "sin declararlos, el desglose no los inventa")
+        assertEquals(25_000L, sinOtros.capital - conOtros.capital)
     }
 
     // ── La fórmula ─────────────────────────────────────────────────────────────
@@ -111,7 +167,7 @@ class DesgloseDeCuotaTest {
         // conserva el comportamiento de siempre —la deuda baja por el monto completo— pero el
         // motivo lo dice, y de ahí la pantalla saca el aviso. Inventar un interés plausible acá
         // sería el mismo error que esta ola vino a matar, con otro disfraz.
-        val d = desglosarCuota(1_000_000, AccountType.LOAN, 50_000_000, rateEa = null, seguroMensual = null)
+        val d = desglosarCuota(1_000_000, AccountType.LOAN, 50_000_000, rateEa = null, seguroMensual = null, otrosCargosMensuales = null)
 
         assertEquals(MotivoDelDesglose.SIN_TASA, d.motivo)
         assertEquals(1_000_000L, d.capital)
@@ -132,12 +188,14 @@ class DesgloseDeCuotaTest {
     fun pagar_una_tarjeta_baja_la_deuda_por_TODO_lo_pagado() {
         // Y eso ya era correcto: los intereses de una tarjeta se causan como un movimiento aparte,
         // no escondidos adentro del pago. Este test existe para que nadie "arregle" la tarjeta por
-        // simetría con el crédito — se le pasan tasa y seguro a propósito, y tiene que ignorarlos.
-        val d = desglosarCuota(1_008_902, AccountType.CREDIT_CARD, 19_818_701, rateEa = 32.0, seguroMensual = 50_000)
+        // simetría con el crédito — se le pasan tasa, seguro y otros cargos a propósito, y tiene
+        // que ignorarlos los tres.
+        val d = desglosarCuota(1_008_902, AccountType.CREDIT_CARD, 19_818_701, rateEa = 32.0, seguroMensual = 50_000, otrosCargosMensuales = 25_000)
 
         assertEquals(MotivoDelDesglose.TARJETA, d.motivo)
         assertEquals(1_008_902L, d.capital)
         assertEquals(0L, d.interes, "no se le inventa un interés a una tarjeta")
+        assertEquals(0L, d.otrosCargos, "ni otros cargos: los de una tarjeta se anotan aparte")
     }
 
     @Test
