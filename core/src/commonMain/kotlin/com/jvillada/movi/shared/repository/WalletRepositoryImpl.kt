@@ -55,6 +55,7 @@ import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpdateEventCategoryRequest
 import com.jvillada.movi.shared.model.EventOccurrenceMark
+import com.jvillada.movi.shared.model.UpdateEventRepeatsRequest
 import com.jvillada.movi.shared.model.UpdateEventTimestampRequest
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
@@ -488,6 +489,20 @@ class WalletRepositoryImpl(
         val response = client.put("$baseUrl/api/events/$id/timestamp") {
             contentType(ContentType.Application.Json)
             setBody(UpdateEventTimestampRequest(timestamp))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // Mismo idioma que updateEventTimestamp: el server rechaza con 404 (movimiento inexistente,
+    // de otro usuario o anulado) y ese texto es lo único que le explica al dueño por qué no se
+    // guardó.
+    override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/repeats") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateEventRepeatsRequest(repeats))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

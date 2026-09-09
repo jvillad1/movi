@@ -55,5 +55,6 @@ fun insertEventRow(uid: String, event: FinancialEvent) {
         it[Events.transferId]    = event.transferId
         it[Events.createdAt]     = event.createdAt ?: System.currentTimeMillis()
         it[Events.noAmortiza]    = event.noAmortiza
+        it[Events.noSeRepite]    = event.noSeRepite
     }
 }

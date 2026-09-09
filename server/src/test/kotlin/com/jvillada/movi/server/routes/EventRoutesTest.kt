@@ -228,6 +228,13 @@ class EventRoutesTest {
             setBody("""{"category":"$category"}""")
         }
 
+    private suspend fun ApplicationTestBuilder.putRepeats(id: String, repeats: Boolean, userId: String) =
+        client.put("/api/events/$id/repeats") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"repeats":$repeats}""")
+        }
+
     private suspend fun ApplicationTestBuilder.notCardPayment(id: String, userId: String) =
         client.post("/api/events/$id/not-card-payment") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
@@ -425,6 +432,63 @@ class EventRoutesTest {
 
         val row = transaction { Events.selectAll().where { Events.id eq "evt-pago" }.single() }
         assertEquals("Pago de tarjeta", row[Events.category])
+    }
+
+    // ── «Este no se repite», y la vuelta ──────────────────────────────────────
+    //
+    // Movimientos reconoce recurrentes POR NOMBRE, así que una compra suelta en un comercio del
+    // que además hay una suscripción quedaba marcada como recurrente y no había forma de
+    // desmarcarla: la app solo ofrecía «Sí, se repite todos los meses». El dueño lo dijo así:
+    // «una vez recurrente no puedo hacerlo no recurrente».
+
+    @Test
+    fun `PUT repeats false marca el movimiento como que no se repite`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-suelto", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Microsoft", category = "Entretenimiento",
+        )
+
+        val res = putRepeats("evt-suelto", repeats = false, userId = userAId)
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals(true, body["noSeRepite"]!!.jsonPrimitive.boolean)
+
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-suelto" }.single() }
+        assertEquals(true, row[Events.noSeRepite])
+    }
+
+    /** La misma ruta sirve para arrepentirse: es la vuelta que no existía. */
+    @Test
+    fun `PUT repeats true desmarca lo que se habia marcado`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-suelto", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Microsoft", category = "Entretenimiento",
+        )
+
+        putRepeats("evt-suelto", repeats = false, userId = userAId)
+        val res = putRepeats("evt-suelto", repeats = true, userId = userAId)
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals(false, body["noSeRepite"]!!.jsonPrimitive.boolean)
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-suelto" }.single() }
+        assertEquals(false, row[Events.noSeRepite])
+    }
+
+    /** El movimiento de otro usuario no existe, igual que en el resto de estas rutas. */
+    @Test
+    fun `PUT repeats sobre un movimiento ajeno responde 404`() = testApplication {
+        wireApp()
+        seedEvent(
+            id = "evt-ajeno", userId = userAId, accountId = savingsAccountId,
+            type = "EXPENSE", description = "Microsoft", category = "Entretenimiento",
+        )
+
+        assertEquals(HttpStatusCode.NotFound, putRepeats("evt-ajeno", false, userBId).status)
+        val row = transaction { Events.selectAll().where { Events.id eq "evt-ajeno" }.single() }
+        assertEquals(false, row[Events.noSeRepite], "la fila del otro usuario no se tocó")
     }
 
     // ── Ola 16 · «Saldo inicial» tampoco se escribe ni se saca por esta ruta ───

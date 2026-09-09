@@ -242,6 +242,22 @@ interface WalletRepository {
     suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent
 
     /**
+     * **«Este se repite» / «este no»**, sobre un movimiento concreto
+     * (`PUT /api/events/{id}/repeats`).
+     *
+     * Movimientos reconoce recurrentes **por nombre**, así que un gasto suelto que se llama igual
+     * que una suscripción quedaba marcado como recurrente sin puerta de vuelta. Esto es esa
+     * puerta, y sirve en las dos direcciones. Ver
+     * [com.jvillada.movi.shared.model.FinancialEvent.noSeRepite].
+     *
+     * **No toca la regla ni la suscripción**: el cobro mensual sigue existiendo. Es una anotación
+     * sobre UNA fila.
+     *
+     * Lanza [ApiException] con 404 si el movimiento no existe, es de otro usuario o está anulado.
+     */
+    suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent
+
+    /**
      * **Corrige el monto, la cuenta y el concepto de un movimiento ya registrado**
      * (`PUT /api/events/{id}`).
      *

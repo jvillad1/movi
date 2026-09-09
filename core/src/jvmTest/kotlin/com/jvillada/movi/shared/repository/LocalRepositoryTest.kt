@@ -1796,6 +1796,7 @@ class LocalRepositoryTest {
     ) = db.financialEventQueries.insert(
         id, accountId, tipo.name, monto, categoria, "Pata", null,
         1_788_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, transferId, null, noAmortiza,
+        0L,
     )
 
     /**

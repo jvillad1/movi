@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -8,6 +10,8 @@ enum class EventSource { MANUAL, SMS, OCR, STATEMENT }
 @Serializable
 enum class ReconciliationStatus { UNCONFIRMED, RECONCILED, UNMATCHED }
 
+// `@EncodeDefault` sobre `noSeRepite`: ver el porqué en su KDoc.
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FinancialEvent(
     val id: String,
@@ -131,6 +135,48 @@ data class FinancialEvent(
      * son (ver «Qué pasa con los pagos de cuota YA registrados» en [DesgloseDeCuota]).
      */
     val noAmortiza: Long? = null,
+    /**
+     * **«Este no se repite»**, dicho por el dueño sobre ESTE movimiento y sobre ningún otro.
+     *
+     * Movimientos reconoce un recurrente **por nombre** (ver `nombreRecurrenteDe`): si hay una
+     * regla o una suscripción que se llama igual, la fila entra al filtro «Recurrentes» y se marca
+     * como tal. Eso acierta casi siempre —un recurrente de verdad se llama igual mes a mes— y
+     * falla justo donde el nombre se repite sin que el cobro se repita: el dueño tiene una
+     * suscripción «Microsoft» de $239.900 al mes y además compró algo suelto de $249.000 en
+     * Microsoft. Las dos filas decían «recurrente», y la única puerta que ofrecía la app era
+     * *«Sí, se repite todos los meses»*. No había vuelta: una vez reconocido, no se podía
+     * desreconocer.
+     *
+     * Este campo es esa vuelta, y es **por movimiento**. No borra la regla ni la suscripción —el
+     * cobro mensual de Microsoft sigue existiendo y sigue teniendo que aparecer—: solo saca a
+     * ESTA fila del reconocimiento por nombre.
+     *
+     * ### Por qué gana sobre todo lo demás
+     *
+     * `nombreRecurrenteDe` lo mira **antes** que cualquier otra puerta, incluidas las dos
+     * estructurales (la cuota de un crédito ya pagada y el pago de una tarjeta). Es una
+     * afirmación explícita del dueño sobre un hecho suyo, y una inferencia de la app no le puede
+     * ganar a eso — aunque la inferencia sea buena. Que además pueda arrepentirse es lo que hace
+     * que esto no tenga costo: se vuelve a marcar y listo.
+     *
+     * ### Por qué negativo, y con default `false`
+     *
+     * Porque el default tiene que dejar el comportamiento que ya había: todo lo que hoy se
+     * reconoce se sigue reconociendo. Un campo `esRecurrente` obligaría a decidir qué significa
+     * `false` en las decenas de miles de filas que ya existen. Este dice exactamente lo que
+     * significa: nadie lo marcó.
+     *
+     * ### Por qué viaja siempre
+     *
+     * El Json de este proyecto tiene `encodeDefaults = false`: un `false` se omite, y quien lo
+     * recibe lo reconstruye desde este mismo default. Para leer eso alcanza — el resultado es el
+     * mismo—, pero para **escribir** no: un movimiento marcado sin señal se sube después por
+     * `POST /api/events`, y si la clave no viaja, el server lo crea con su default y la marca del
+     * dueño se pierde en silencio. Con [EncodeDefault] la clave está siempre, en las dos
+     * direcciones, y la respuesta del server dice explícitamente en qué quedó.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val noSeRepite: Boolean = false,
 )
 
 /**
@@ -157,6 +203,20 @@ data class UpdateEventCategoryRequest(val category: String)
  */
 @Serializable
 data class UpdateEventTimestampRequest(val timestamp: Long)
+
+/**
+ * Body de `PUT /api/events/{id}/repeats` — **«esto se repite» / «esto no»**, sobre un movimiento
+ * concreto.
+ *
+ * Un solo booleano y en positivo, aunque lo que se guarda sea [FinancialEvent.noSeRepite]: el
+ * cliente dice lo que el dueño acaba de afirmar («se repite» / «no se repite») y el server lo
+ * traduce a su columna. Así la ruta se puede leer sin saber cómo está almacenado, y sirve para las
+ * dos direcciones — marcar y arrepentirse — con un solo endpoint.
+ *
+ * DTO propio y no [FinancialEvent] entero por el mismo motivo que [UpdateEventCategoryRequest].
+ */
+@Serializable
+data class UpdateEventRepeatsRequest(val repeats: Boolean)
 
 /**
  * El rechazo de `PUT /api/events/{id}/timestamp` cuando la fecha pedida todavía no llegó.

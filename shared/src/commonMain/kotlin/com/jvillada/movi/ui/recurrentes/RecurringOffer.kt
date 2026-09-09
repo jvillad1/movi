@@ -358,7 +358,13 @@ fun nombreRecurrenteDe(
     reglas: List<RecurringRule>,
     suscripcionesQueYaSuman: List<String>,
 ): String? {
-    // **Antes de cualquier guarda: lo que el dueño ya pagó contra una deuda suya.** No se reconoce
+    // **Antes que todo lo demás: lo que el dueño dijo sobre ESTE movimiento.** Ver
+    // [FinancialEvent.noSeRepite]. Va arriba de las dos puertas estructurales —la cuota de un
+    // crédito y el pago de una tarjeta— a propósito: una afirmación explícita suya sobre un hecho
+    // suyo le gana a cualquier inferencia de la app, por buena que sea la inferencia. Y como se
+    // puede desmarcar con el mismo botón, equivocarse no cuesta nada.
+    if (event.noSeRepite) return null
+    // **Después: lo que el dueño ya pagó contra una deuda suya.** No se reconoce
     // por nombre —no hay contra qué compararlo, ver [nombreDeCuotaPagada]— y sus patas llevan
     // `transferId` (la de la tarjeta, encima, una categoría reservada), así que el corte de abajo
     // las mataría. Van primero y no adentro del `if` para que quede a la vista que son caminos

@@ -1,0 +1,19 @@
+-- Migración 7 → 8: agrega financial_event.noSeRepite — **«este no se repite»**, dicho por el dueño
+-- sobre un movimiento concreto. Ver FinancialEvent.noSeRepite en :core.
+--
+-- **Por qué el teléfono también la necesita.** El filtro «Recurrentes» de Movimientos reconoce POR
+-- NOMBRE y se arma en el cliente, sobre eventos que ya están leídos: no hay ninguna consulta al
+-- server involucrada en pintar la marca. Y la marca se pone desde el detalle del movimiento, que
+-- funciona sin señal. Sin esta columna acá, el dueño diría «este no se repite» y la fila seguiría
+-- diciendo que sí hasta el próximo arranque con red.
+--
+-- Mismo mecanismo que 1..6.sqm: SQLDelight deriva `schemaVersion` del .sqm más alto, y sin este
+-- archivo `onUpgrade` no correría sobre las bases ya instaladas — el primer `insert` (que ahora la
+-- nombra) fallaría con "no such column" en TODO movimiento nuevo.
+--
+-- **NOT NULL con DEFAULT 0, y eso es lo que hay que migrar: nada.** Las filas que ya están en el
+-- teléfono quedan en 0, que es la verdad —nadie las marcó— y con eso todo lo que hoy se reconoce
+-- como recurrente se sigue reconociendo. Un `ADD COLUMN` NOT NULL **con** default es legal en
+-- SQLite desde siempre y tampoco reescribe la tabla; lo que SQLite no acepta es NOT NULL sin
+-- default. Sin índice: esta columna nunca se filtra ni se ordena en SQL.
+ALTER TABLE financial_event ADD COLUMN noSeRepite INTEGER NOT NULL DEFAULT 0;
