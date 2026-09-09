@@ -4,14 +4,17 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.QueLograElAbono
 import com.jvillada.movi.shared.model.ResumenDeDeudas
 import com.jvillada.movi.shared.model.SimulacionDeAbono
+import com.jvillada.movi.shared.model.abonoMinimoParaQueSeTermine
 import com.jvillada.movi.shared.model.deudaEnOtraMoneda
 import com.jvillada.movi.shared.model.mas
 import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.simularAbonoUnico
 import com.jvillada.movi.ui.components.formatCOP
 import kotlin.math.round
 
@@ -350,15 +353,94 @@ const val SUPUESTO_DEL_ABONO: String =
         "Pídelo así: si te bajan la cuota, la fecha no se mueve."
 
 /**
- * **La cuota de este crédito no sale de su bolsillo, así que el ahorro tampoco sería suyo.**
+ * **El tercer supuesto: la estimación del interés se queda corta, y siempre para el mismo lado.**
  *
- * Cuatro de los doce créditos del dueño están así: dos por libranza y dos que gira Skandia. Simular
- * un abono ahí es legítimo —la deuda **es de él**, y puede abonarle— pero el interés que se ahorra
- * lo deja de pagar el que paga la cuota. Sin esta línea, la hoja le diría «te ahorras $949.733.944»
- * sobre una plata que hoy no le sale a él. Ver [saleDeTuBolsillo].
+ * Los otros dos supuestos de esta hoja hablan del futuro —que la tasa y la cuota no se muevan
+ * ([SUPUESTO_DE_LA_PROYECCION]), que el banco acorte el plazo ([SUPUESTO_DEL_ABONO])— y los dos
+ * dejan creer que, si eso se cumple, la cifra es exacta. No lo es: **la estimación misma tiene
+ * sesgo**. Movi calcula el interés como `saldo × tasa mensual`, y medido contra un extracto real
+ * (Libre inversión ·9695) el banco cobró **$473.227 donde Movi estimaba $363.905** — un 30 % más,
+ * y «siempre en la misma dirección» (ver `CreatePagoDeCuotaRequest.interesReal`).
+ *
+ * Un error del 30 % en el interés de un mes se apila a lo largo de sesenta o cuatrocientos meses
+ * de proyección. Esta hoja convierte esa cifra en un **comparador entre créditos** —cuál matar
+ * primero— y un comparador aguanta el sesgo mientras el sesgo apunte igual en los dos lados; lo
+ * que no aguanta es presentarse al peso. Por eso, además de esta frase, el ahorro se muestra
+ * redondeado y con un «unos» delante (ver [montoAproximado]).
+ */
+const val SUPUESTO_DE_LA_ESTIMACION: String =
+    "El interés lo estimamos con la tasa, y contra el extracto se queda corto —en un crédito " +
+        "medido, un 30 %—. Toma estos ahorros como un orden de magnitud, no como una cifra al peso."
+
+/**
+ * **La cuota la paga un tercero, así que el ahorro en intereses tampoco sería suyo.**
+ *
+ * Son las dos hipotecas que gira Skandia ([CreditTerms.paidBy]). La deuda **es de él** y puede
+ * abonarle —por eso la simulación no se bloquea— pero el interés que se deja de pagar lo deja de
+ * pagar quien paga la cuota. Sin esta línea, la hoja le diría «te ahorras $949.733.944» sobre una
+ * plata que hoy no sale de su bolsillo ni saldría después.
+ *
+ * **No aplica a las libranzas**, y esa distinción costó este aviso una revisión entera: ver
+ * [AVISO_DE_ABONO_POR_LIBRANZA].
  */
 const val AVISO_DE_ABONO_AJENO: String =
     "Esta cuota no la pagas tú: la deuda sí es tuya, pero el ahorro en intereses no sería tuyo."
+
+/**
+ * **Una libranza sí la paga él**, y decirle lo contrario le costaría plata.
+ *
+ * [saleDeTuBolsillo] es `false` para los dos casos —libranza y tercero— porque contesta una
+ * pregunta de **flujo de caja**: si la cuota aparece o no como salida de la cuenta. Para el abono
+ * la pregunta es otra, la de **de quién es la plata**, y ahí los dos casos se separan:
+ *
+ * - **Libranza** ([CreditTerms.payrollDeduction]): el empleador la retiene antes de depositar el
+ *   sueldo, o sea que el salario que llega a la cuenta **ya viene neto**. Esa cuota sale de su
+ *   plata, solo que antes de que la vea; el ahorro en intereses es suyo entero, y el abono además
+ *   saldría de su bolsillo de la forma normal.
+ * - **La paga un tercero** ([CreditTerms.paidBy]): ahí sí, ni la cuota ni el ahorro son suyos. Ver
+ *   [AVISO_DE_ABONO_AJENO].
+ *
+ * Fundir los dos casos le decía a la Libranza ·4818 —$255.677.421 al 18,01 %, su **segundo**
+ * crédito más grande— que abonarle no le ahorraba a él, que es exactamente lo contrario de lo
+ * cierto, y sobre el crédito donde el ahorro es más grande. La tarjeta de atrás ya los distinguía
+ * («de tu nómina» contra «la paga Skandia»); la hoja no.
+ */
+const val AVISO_DE_ABONO_POR_LIBRANZA: String =
+    "Esta cuota te la descuentan de la nómina: el sueldo te llega neto, así que la plata es tuya " +
+        "y el ahorro en intereses también. El abono sí saldría de tu bolsillo."
+
+/**
+ * Lo que la hoja aclara sobre quién paga esta cuota, o `null` cuando no hay nada que aclarar
+ * (la paga él, de su cuenta, como cualquier otra).
+ *
+ * @property esAdvertencia si va con el color de aviso. **Solo cuando el ahorro no sería suyo**:
+ *   una libranza no es una advertencia, es una aclaración — y pintarla de amarillo diría con el
+ *   color lo que el texto acaba de negar.
+ */
+data class AvisoDeQuienPaga(val texto: String, val esAdvertencia: Boolean)
+
+/**
+ * Qué le aclara la hoja al dueño sobre quién paga esta cuota. Ver [AVISO_DE_ABONO_POR_LIBRANZA]
+ * para por qué son dos casos y no uno.
+ *
+ * Con los dos marcados a la vez —que hoy no pasa en ningún crédito— gana [CreditTerms.paidBy]: un
+ * tercero nombrado es un dato más específico que un booleano, y de los dos errores posibles este
+ * es el barato (aclarar de más sobre una plata que sí es suya, en vez de prometerle un ahorro que
+ * no lo es).
+ */
+fun avisoDeQuienPagaLaCuota(terms: CreditTerms): AvisoDeQuienPaga? = when {
+    !terms.paidBy.isNullOrBlank() -> AvisoDeQuienPaga(AVISO_DE_ABONO_AJENO, esAdvertencia = true)
+    terms.payrollDeduction -> AvisoDeQuienPaga(AVISO_DE_ABONO_POR_LIBRANZA, esAdvertencia = false)
+    else -> null
+}
+
+/**
+ * **¿El interés que se ahorra este abono lo deja de pagar él?**
+ *
+ * No es [saleDeTuBolsillo] negado: una libranza no sale de la cuenta y el ahorro **sí** es suyo.
+ * Ver [AVISO_DE_ABONO_POR_LIBRANZA].
+ */
+fun elAhorroSeriaTuyo(terms: CreditTerms): Boolean = terms.paidBy.isNullOrBlank()
 
 /** Lo que la hoja dice mientras todavía no hay monto escrito. */
 const val PIDE_UN_MONTO: String = "Escribe cuánto abonarías, o toca uno de los montos de arriba."
@@ -376,18 +458,44 @@ const val PIDE_UN_MONTO: String = "Escribe cuánto abonarías, o toca uno de los
 data class ResultadoDelAbono(val titular: String, val detalle: String?, val esAlerta: Boolean)
 
 /**
+ * **El mínimo que le pone fecha a una deuda eterna, con la fecha que compra.** Ver
+ * [abonoMinimoParaQueSeTermine].
+ *
+ * Los dos datos viajan **juntos y en el mismo objeto** a propósito. El monto solo —$2.549.401
+ * sobre una deuda de $204 millones— se lee «un abono chico resuelve el ·2334», y lo que de verdad
+ * compra son **479 cuotas, hasta 2066**. Tenerlos separados fue lo que dejó que la rama de «no
+ * alcanza» mostrara el número desnudo mientras la descripción del cambio prometía lo contrario.
+ */
+data class MinimoConSuFecha(val monto: Long, val cuotas: Int)
+
+/**
+ * El mínimo de este crédito con su fecha, o `null` si la deuda ya se termina (o si ningún abono
+ * la termina). **Es una búsqueda binaria sobre treinta y pico de proyecciones más una proyección
+ * más**: se calcula una vez por crédito, no en cada tecla.
+ */
+fun minimoConSuFecha(credit: CreditSummary): MinimoConSuFecha? {
+    val monto = abonoMinimoParaQueSeTermine(credit) ?: return null
+    val cuotas = simularAbonoUnico(credit, monto)?.despues?.mesesHastaLaUltimaCuota ?: return null
+    return MinimoConSuFecha(monto, cuotas)
+}
+
+/**
  * La respuesta de la hoja, ya en palabras. `null` cuando no hay nada que contestar todavía
  * ([QueLograElAbono.NO_SE_PUEDE_SIMULAR]).
  *
- * @param abonoMinimo lo que haría falta para que la deuda se termine
- *   ([abonoMinimoParaQueSeTermine]), o `null`. Entra como parámetro y no se calcula acá porque es
- *   una búsqueda binaria sobre la deuda —treinta y pico de proyecciones— y esto lo llama cada
- *   tecla que el dueño escribe en el monto. La hoja lo calcula una vez por crédito.
+ * @param minimo lo que haría falta para que la deuda se termine, con su fecha
+ *   ([minimoConSuFecha]), o `null`. Entra como parámetro y no se calcula acá porque es una
+ *   búsqueda binaria sobre la deuda —treinta y pico de proyecciones— y esto lo llama cada tecla
+ *   que el dueño escribe en el monto. La hoja lo calcula una vez por crédito.
+ * @param elAhorroSeriaTuyo si el interés que se ahorra lo deja de pagar él ([elAhorroSeriaTuyo]).
+ *   Cuando no, el titular **no dice «te ahorras»**: decirlo a 14sp mientras el aviso de arriba
+ *   niega lo mismo a 11,5sp deja a la pantalla contradiciéndose, y gana la cifra grande.
  */
 fun textoDeLaSimulacion(
     sim: SimulacionDeAbono,
     periodoActual: PeriodoFinanciero,
-    abonoMinimo: Long?,
+    minimo: MinimoConSuFecha?,
+    elAhorroSeriaTuyo: Boolean,
 ): ResultadoDelAbono? = when (sim.logro) {
     QueLograElAbono.NO_SE_PUEDE_SIMULAR -> null
 
@@ -395,11 +503,13 @@ fun textoDeLaSimulacion(
     // hoy la deuda no se terminaba, no hay cifra que restar y el titular no la promete.
     QueLograElAbono.SALDA_LA_DEUDA -> ResultadoDelAbono(
         titular = sim.interesQueSeAhorra
-            ?.let { "Con esto la saldas hoy y te ahorras " + formatCOP(it) + " en intereses" }
+            ?.let { "Con esto la saldas hoy y " + fraseDelAhorro(it, elAhorroSeriaTuyo) }
             ?: "Con esto la saldas hoy: se acaba una deuda que a este ritmo no se terminaba",
         detalle = listOfNotNull(
             sim.cuotasQueSeAhorra?.let { if (it == 1) "Te quitas 1 cuota de encima." else "Te quitas $it cuotas de encima." },
             // Lo que sobra no ahorró un peso, y decir «te ahorras» sobre el total lo sugeriría.
+            // Acá sí van las dos cifras al peso: el sobrante es `abono − saldo`, aritmética entre
+            // dos números que Movi conoce exactos, y no una estimación de interés.
             sim.sobrante.takeIf { it > 0L }
                 ?.let { "Te sobran " + formatCOP(it) + ": la deuda es de " + formatCOP(sim.antes.saldo) + "." },
         ).joinToString(" ").ifBlank { null },
@@ -409,7 +519,7 @@ fun textoDeLaSimulacion(
     // El caso normal: dos fechas que restar. El ahorro va de titular porque es lo que se compara
     // entre créditos; las fechas van debajo porque sin la de hoy la nueva no dice nada.
     QueLograElAbono.ACORTA_EL_PLAZO -> ResultadoDelAbono(
-        titular = "Te ahorras " + formatCOP(sim.interesQueSeAhorra ?: 0L) + " en intereses",
+        titular = fraseDelAhorro(sim.interesQueSeAhorra ?: 0L, elAhorroSeriaTuyo).replaceFirstChar { it.uppercase() },
         detalle = textoDeLasDosFechas(sim, periodoActual),
         esAlerta = false,
     )
@@ -424,22 +534,50 @@ fun textoDeLaSimulacion(
     )
 
     // No alcanzó. La cifra que sigue es cuánto haría falta — sin ella el dueño no sabe si le faltó
-    // poco o le faltó todo. Ver [abonoMinimoParaQueSeTermine] para por qué va con su fecha.
+    // poco o le faltó todo. **Y va con su fecha en la misma frase**: $2.549.401 leídos solos
+    // parecen alcanzables, y lo que compran son 479 cuotas. Ver [MinimoConSuFecha].
     QueLograElAbono.NO_ALCANZA -> ResultadoDelAbono(
         titular = "Con este abono la deuda sigue sin terminarse",
-        detalle = comoQuedaria(sim.despues) + (abonoMinimo?.let { " Harían falta " + formatCOP(it) + " para que se termine." } ?: ""),
+        detalle = comoQuedaria(sim.despues) + (minimo?.let { conQueFecha(it, periodoActual) } ?: ""),
         esAlerta = sim.despues.comoVa == ComoVaLaDeuda.LA_DEUDA_CRECE,
     )
 }
 
-/** «Terminas 3 cuotas antes: en junio de 2030 en vez de septiembre de 2030.» */
+/**
+ * «te ahorras unos $970.000 en intereses», o la misma cifra sin dueño cuando el ahorro no es suyo.
+ * Ver [elAhorroSeriaTuyo] y [montoAproximado].
+ */
+private fun fraseDelAhorro(interes: Long, elAhorroSeriaTuyo: Boolean): String = if (elAhorroSeriaTuyo) {
+    "te ahorras " + montoAproximado(interes) + " en intereses"
+} else {
+    "esta deuda pagaría " + montoAproximado(interes) + " menos en intereses"
+}
+
+/** «Harían falta $2.549.401, y aun así te faltarían 479 cuotas: hasta agosto de 2066.» */
+private fun conQueFecha(minimo: MinimoConSuFecha, periodoActual: PeriodoFinanciero): String =
+    " Harían falta " + formatCOP(minimo.monto) + ", y aun así te faltarían " + cuotas(minimo.cuotas) +
+        ": hasta " + nombreDe(periodoActual.mas((minimo.cuotas - 1).coerceAtLeast(0))) + "."
+
+/**
+ * «Terminas 3 cuotas antes: en junio de 2030 en vez de septiembre de 2030.»
+ *
+ * ### Y cuando no adelanta ninguna, que es el caso más común
+ *
+ * «Me sobraron cien mil» no mueve el plazo: $100.000 al ·9695 ahorran $50.585 de interés y las
+ * cuotas siguen siendo 46. Con la plantilla de arriba eso salía **«en junio de 2030 en vez de
+ * junio de 2030»** —la misma fecha dos veces, que no es una comparación sino una errata— y además
+ * dejaba sin explicar de dónde sale el ahorro: si el plazo no se mueve, sale de que **la última
+ * cuota queda más pequeña** (medido en el ·9695: de $519.503 a $368.918). O sea de lo contrario de
+ * lo que dice [SUPUESTO_DEL_ABONO], que es el supuesto de qué hace el banco con el abono, no una
+ * promesa de que el plazo siempre se mueva. Decir las dos cosas es más honesto que repetir un mes.
+ */
 private fun textoDeLasDosFechas(sim: SimulacionDeAbono, periodoActual: PeriodoFinanciero): String {
     val menos = sim.cuotasQueSeAhorra ?: 0
-    val cabeza = when {
-        menos <= 0 -> "No te adelanta ninguna cuota"
-        menos == 1 -> "Terminas 1 cuota antes"
-        else -> "Terminas $menos cuotas antes"
+    if (menos <= 0) {
+        return "No te adelanta ninguna cuota: la última sigue siendo la de " +
+            fechaFinal(sim.despues, periodoActual) + ", solo que más pequeña. De ahí sale el ahorro."
     }
+    val cabeza = if (menos == 1) "Terminas 1 cuota antes" else "Terminas $menos cuotas antes"
     return cabeza + ": en " + fechaFinal(sim.despues, periodoActual) +
         " en vez de " + fechaFinal(sim.antes, periodoActual) + "."
 }
@@ -477,6 +615,35 @@ private fun comoQuedaria(plan: PlanDelCredito): String = when (plan.comoVa) {
 private fun cuotas(meses: Int): String = if (meses == 1) "1 cuota" else "$meses cuotas"
 
 /**
+ * **Un ahorro proyectado, dicho con la precisión que tiene**: «unos $970.000», no «$971.366».
+ *
+ * Se redondea a **dos cifras significativas** y se le antepone «unos». No es cosmética: el interés
+ * de cada mes sale de `saldo × tasa mensual`, que contra el extracto se queda corto —un 30 % en el
+ * único crédito que se pudo medir, y siempre para el mismo lado (ver [SUPUESTO_DE_LA_ESTIMACION]).
+ * Un sesgo así, apilado sobre cuarenta y seis o cuatrocientas setenta y nueve cuotas, no deja en
+ * pie el séptimo dígito de nada. Dos cifras alcanzan de sobra para lo que esta hoja hace, que es
+ * **ordenar créditos entre sí**.
+ *
+ * ### Qué NO se redondea, y por qué no es inconsistente
+ *
+ * - **Los montos que son instrucciones**: el abono mínimo, los chips, el sobrante. Ahí la cifra no
+ *   es un pronóstico sino un número que el dueño va a teclear en el banco o restar de su cuenta, y
+ *   redondear un umbral le cambia el valor de verdad («$2.550.000» ya no es *el mínimo*).
+ * - **Las cifras de un solo mes** («la deuda crece $21.894»): son un mes de la misma estimación
+ *   que la tarjeta de atrás ya muestra al peso, sin sesgo acumulado, y redondear acá lo que allá
+ *   se muestra exacto haría que la misma pantalla dijera dos números para lo mismo.
+ */
+fun montoAproximado(monto: Long): String = "unos " + formatCOP(redondeadoADosCifras(monto))
+
+/** El redondeo de [montoAproximado], en Long y sin logaritmos: 971.366 → 970.000. */
+internal fun redondeadoADosCifras(monto: Long): Long {
+    if (monto <= 0L) return monto
+    var escala = 1L
+    while (monto / escala >= 100L) escala *= 10L
+    return (monto + escala / 2) / escala * escala
+}
+
+/**
  * Un monto que la hoja ofrece con un toque.
  *
  * @property etiqueta lo que dice el chip. **Dice qué es el monto, no cuánto es**: «Una cuota más»
@@ -501,7 +668,8 @@ data class MontoSugerido(val etiqueta: String, val monto: Long)
  *
  * Se saltean los que no aplican: nada de ofrecer «tres cuotas» cuando tres cuotas son más que la
  * deuda —«Saldarla» ya cubre ese caso y con el número correcto—, y nada de repetir el mismo monto
- * dos veces con dos nombres.
+ * dos veces con dos nombres (en el ·3090, con $507.553 de deuda y cuota de $26.485, eso no pasa;
+ * en un crédito al que le queda **una** cuota, «Una cuota más» y «Saldarla» son el mismo peso).
  */
 fun montosSugeridosDeAbono(saldo: Long, cuota: Long, abonoMinimo: Long?): List<MontoSugerido> {
     if (saldo <= 0L) return emptyList()

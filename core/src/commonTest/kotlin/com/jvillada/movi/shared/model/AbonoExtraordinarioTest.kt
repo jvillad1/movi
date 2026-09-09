@@ -302,4 +302,43 @@ class AbonoExtraordinarioTest {
         assertNull(simularAbonoUnico(credito.copy(hasMovements = false), 2_000_000L))
         assertNull(abonoMinimoParaQueSeTermine(credito.copy(hasMovements = false)))
     }
+
+    /**
+     * **Y la cuarta guarda, la que hasta ahora no mataba ninguna prueba: la deuda en otra moneda.**
+     *
+     * `account.balance` es solo el **componente COP** del saldo (ver `enrichWith`), así que un
+     * préstamo con plata en dólares llega con el saldo COP de un lado y la deuda en moneda del
+     * otro. Sin esta guarda, [simularAbonoUnico] contestaría un ahorro sobre una deuda que no es la
+     * deuda, y [abonoMinimoParaQueSeTermine] —la cifra que la hoja convierte en un chip—
+     * contestaría un mínimo calculado sobre un saldo que no conoce. Es el mismo `null` que ya
+     * devuelve [planDelCredito]. Ver [deudaEnOtraMoneda].
+     */
+    @Test
+    fun `una deuda con componente en otra moneda no se simula`() {
+        val terms = CreditTerms(
+            accountId = "acc_2334", bank = "Davibank", principal = 200_000_000L, rateEa = 15.23,
+            termMonths = 240, installment = 2_613_714L, dayOfMonth = 7, startDate = "2026-07-07",
+            insuranceMonthly = 209_219L,
+        )
+        val enPesos = CreditSummary(
+            account = Account(
+                "acc_2334", "Hipotecario 2334", AccountType.LOAN, balance = 204_183_376L,
+                balancesByCurrency = mapOf("COP" to 204_183_376L),
+            ),
+            terms = terms,
+            paidPct = 0.0,
+        )
+        val conDolares = enPesos.copy(
+            account = enPesos.account.copy(
+                balancesByCurrency = mapOf("COP" to 204_183_376L, "USD" to 12_000L),
+            ),
+        )
+
+        // El control: en pesos las dos preguntas SÍ se contestan, y con las cifras conocidas.
+        assertEquals(QueLograElAbono.NO_ALCANZA, simularAbonoUnico(enPesos, 1_000_000L)?.logro)
+        assertEquals(2_549_401L, abonoMinimoParaQueSeTermine(enPesos))
+        // Y con un componente en dólares, ninguna de las dos inventa una respuesta.
+        assertNull(simularAbonoUnico(conDolares, 1_000_000L))
+        assertNull(abonoMinimoParaQueSeTermine(conDolares))
+    }
 }

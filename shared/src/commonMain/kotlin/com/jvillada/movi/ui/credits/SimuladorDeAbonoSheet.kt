@@ -19,8 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.PeriodoFinanciero
-import com.jvillada.movi.shared.model.abonoMinimoParaQueSeTermine
-import com.jvillada.movi.shared.model.saleDeTuBolsillo
 import com.jvillada.movi.shared.model.simularAbonoUnico
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
@@ -54,11 +52,15 @@ fun SimuladorDeAbonoSheet(
     val cuota = credit.terms?.installment ?: 0L
     // Una búsqueda binaria sobre treinta y pico de proyecciones: se hace UNA vez por crédito, no
     // en cada tecla. Da `null` en la mayoría —los créditos que ya se terminan no tienen mínimo que
-    // buscar— y solo cuesta algo en las dos deudas que hoy no se terminan.
-    val abonoMinimo = remember(credit.account.id, saldo) { abonoMinimoParaQueSeTermine(credit) }
-    val sugeridos = remember(saldo, cuota, abonoMinimo) { montosSugeridosDeAbono(saldo, cuota, abonoMinimo) }
+    // buscar— y solo cuesta algo en las dos deudas que hoy no se terminan. Viene con su fecha
+    // pegada, porque el monto solo se lee más barato de lo que es. Ver [MinimoConSuFecha].
+    val minimo = remember(credit.account.id, saldo) { minimoConSuFecha(credit) }
+    val sugeridos = remember(saldo, cuota, minimo) { montosSugeridosDeAbono(saldo, cuota, minimo?.monto) }
+    // **De quién sería el ahorro**, que no es lo mismo que de quién sale la cuota: una libranza se
+    // retiene de SU sueldo. Ver [elAhorroSeriaTuyo] y [AVISO_DE_ABONO_POR_LIBRANZA].
+    val elAhorroEsSuyo = credit.terms?.let { elAhorroSeriaTuyo(it) } ?: true
     val resultado = abono?.let { monto ->
-        simularAbonoUnico(credit, monto)?.let { textoDeLaSimulacion(it, periodoActual, abonoMinimo) }
+        simularAbonoUnico(credit, monto)?.let { textoDeLaSimulacion(it, periodoActual, minimo, elAhorroEsSuyo) }
     }
 
     Column(
@@ -100,10 +102,17 @@ fun SimuladorDeAbonoSheet(
                 }
 
                 // **De quién es el ahorro, antes de decir cuánto es.** Cuatro de los doce créditos
-                // del dueño los paga su nómina o Skandia. Ver [AVISO_DE_ABONO_AJENO].
-                if (credit.terms?.let { saleDeTuBolsillo(it) } == false) {
+                // del dueño no salen de su cuenta, y son DOS casos distintos: dos libranzas —donde
+                // la plata sí es suya, retenida antes de que el sueldo llegue— y dos hipotecas que
+                // gira Skandia, donde no. Ver [avisoDeQuienPagaLaCuota].
+                credit.terms?.let { avisoDeQuienPagaLaCuota(it) }?.let { aviso ->
                     Spacer(Modifier.height(12.dp))
-                    Text(AVISO_DE_ABONO_AJENO, fontSize = 11.5.sp, color = MinWarn, lineHeight = 16.sp)
+                    Text(
+                        aviso.texto,
+                        fontSize = 11.5.sp,
+                        color = if (aviso.esAdvertencia) MinWarn else MinTextMute,
+                        lineHeight = 16.sp,
+                    )
                 }
 
                 if (sugeridos.isNotEmpty()) {
@@ -149,13 +158,17 @@ fun SimuladorDeAbonoSheet(
                 Spacer(Modifier.height(16.dp))
                 Hairline()
                 Spacer(Modifier.height(12.dp))
-                // Los DOS supuestos, y ninguno en letra más chica que el otro: el de la proyección
-                // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla, y el del abono (que
-                // el banco acorte el plazo y no la cuota) es propio de esta hoja y además es algo
-                // que él tiene que pedir. Ver [SUPUESTO_DEL_ABONO].
+                // Los TRES supuestos, y ninguno en letra más chica que el otro: el de la proyección
+                // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla; el del abono (que el
+                // banco acorte el plazo y no la cuota) es propio de esta hoja y además es algo que
+                // él tiene que pedir; y el de la estimación —que el interés que Movi calcula se
+                // queda corto contra el extracto— es el único que habla de la cifra misma y no del
+                // futuro. Ver [SUPUESTO_DE_LA_ESTIMACION].
                 Text(SUPUESTO_DEL_ABONO, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(SUPUESTO_DE_LA_PROYECCION, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(SUPUESTO_DE_LA_ESTIMACION, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
             }
 
             Spacer(Modifier.height(16.dp))
