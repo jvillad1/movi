@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.planDeUnaDeuda
+import com.jvillada.movi.shared.model.resumirDeudas
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -164,13 +165,17 @@ class BarraQueNoMienteTest {
      * La tercera pregunta: cuándo termina. La cuenta de meses arranca en el mes en curso —la
      * cuota de este mes es la primera de las que faltan—, así que 46 cuotas desde septiembre de
      * 2026 terminan en **junio de 2030**, no en julio.
+     *
+     * **El supuesto va adentro de la frase**, y no solo en [SUPUESTO_DE_LA_PROYECCION]: esa vive en
+     * la tarjeta de resumen, decenas de dp más arriba, y para cuando el dueño llega a la fecha de un
+     * crédito ya no la tiene a la vista. Una fecha sin su condición es una promesa.
      */
     @Test
     fun `la tarjeta dice cuantas cuotas faltan y en que mes cae la ultima`() {
         val plan = planDeUnaDeuda(40_104_518L, 11.27, 1_204_064L, 124_800L, null, saleDeTuBolsillo = true)
 
         val comoVa = assertNotNull(comoVaEstaDeuda(plan, PeriodoFinanciero(2026, 9)))
-        assertEquals("Te faltan 46 cuotas · la última en junio de 2030", comoVa.texto)
+        assertEquals("Te faltan 46 cuotas · la última en junio de 2030 si la cuota y la tasa no cambian", comoVa.texto)
         assertTrue(!comoVa.esAlerta)
     }
 
@@ -180,6 +185,112 @@ class BarraQueNoMienteTest {
         val plan = planDeUnaDeuda(1_000_000L, 10.0, 50_000_000L, null, null, saleDeTuBolsillo = true)
 
         val comoVa = assertNotNull(comoVaEstaDeuda(plan, PeriodoFinanciero(2026, 9)))
-        assertEquals("Te falta 1 cuota · la última en septiembre de 2026", comoVa.texto)
+        assertEquals("Te falta 1 cuota · la última en septiembre de 2026 si la cuota y la tasa no cambian", comoVa.texto)
+    }
+
+    // ------------------------------------------------------- lo que la tarjeta NO puede decir
+
+    /**
+     * **«Ya está pagada» sobre un crédito recién creado.** El paso 1 del flujo de dos pasos deja el
+     * saldo en $0; con eso, el interés daba $0, el capital daba la cuota entera, la deuda
+     * «amortizaba» y la proyección salía sin girar: cero meses. La tarjeta terminaba diciendo a la
+     * vez «Falta registrar el desembolso», «\$0 de interés» y «Ya está pagada».
+     */
+    @Test
+    fun `un credito sin desembolso no dice ya esta pagada ni cero de interes`() {
+        val plan = planDeUnaDeuda(0L, 12.5, 3_500_000L, null, null, saleDeTuBolsillo = true)
+
+        assertNull(comoVaEstaDeuda(plan, PeriodoFinanciero(2026, 9)), "no hay nada que proyectar")
+        assertTrue(!textoDelInteres(plan).contains("0 % de la cuota"), textoDelInteres(plan))
+        assertEquals("Sin deuda registrada: todavía no corren intereses", textoDelInteres(plan))
+    }
+
+    /** Y el crédito con la deuda en negativo, que decía «Deuda en negativo — revísala» y «Ya está pagada» juntas. */
+    @Test
+    fun `una deuda en negativo tampoco dice ya esta pagada`() {
+        val plan = planDeUnaDeuda(-1_500_000L, 12.5, 3_500_000L, null, null, saleDeTuBolsillo = true)
+
+        assertNull(comoVaEstaDeuda(plan, PeriodoFinanciero(2026, 9)))
+    }
+
+    /**
+     * **Con tasa y sin cuota no se dice «Sin tasa registrada»**, que es lo que decía antes — tres
+     * líneas debajo de la tasa, que está en la misma tarjeta y se ve.
+     */
+    @Test
+    fun `sin cuota se dice el interes del mes y no se contradice la tasa de arriba`() {
+        val plan = planDeUnaDeuda(100_000_000L, 15.23, 0L, null, null, saleDeTuBolsillo = true)
+
+        assertEquals("\$1.188.338 de interés al mes · sin cuota registrada", textoDelInteres(plan))
+        assertTrue(!textoDelInteres(plan).contains("Sin tasa"), textoDelInteres(plan))
+        assertNull(comoVaEstaDeuda(plan, PeriodoFinanciero(2026, 9)))
+    }
+
+    /**
+     * Más de cien años no es una fecha, y la frase que lo dice tiene que existir en alguna parte
+     * que se pueda borrar y notar. Ver [MAX_MESES_PROYECTADOS].
+     */
+    @Test
+    fun `una deuda de mas de cien anos se dice con palabras y sin fecha`() {
+        val plan = planDeUnaDeuda(100_000_000L, 0.0001, 50_000L, null, null, saleDeTuBolsillo = true)
+
+        val comoVa = assertNotNull(comoVaEstaDeuda(plan, PeriodoFinanciero(2026, 9)))
+        assertEquals("A este ritmo tardarías más de cien años", comoVa.texto)
+        assertTrue(!comoVa.esAlerta)
+    }
+
+    // ------------------------------------------------------------------ lo que dice el resumen
+
+    /**
+     * **La fila de la fecha final no puede dar una fecha habiendo deuda que no se termina.** Con
+     * los doce créditos reales decía «diciembre de 2045» mientras \$304.183.376 no bajan.
+     */
+    @Test
+    fun `sin fecha cuando hay una deuda que no se termina`() {
+        val mama = planDeUnaDeuda(100_000_000L, 16.7652, 1_300_000L, null, null, saleDeTuBolsillo = true)
+        val queTermina = planDeUnaDeuda(40_104_518L, 11.27, 1_204_064L, 124_800L, null, saleDeTuBolsillo = true)
+
+        val resumen = resumirDeudas(listOf(mama, queTermina))
+
+        assertEquals("Sin fecha", textoDeLaUltimaCuota(resumen, PeriodoFinanciero(2026, 9)))
+    }
+
+    /** Y con todas terminadas sí hay fecha: 46 cuotas desde septiembre de 2026. */
+    @Test
+    fun `con todas las deudas terminando si hay fecha final`() {
+        val queTermina = planDeUnaDeuda(40_104_518L, 11.27, 1_204_064L, 124_800L, null, saleDeTuBolsillo = true)
+
+        val resumen = resumirDeudas(listOf(queTermina))
+
+        assertEquals("junio de 2030", textoDeLaUltimaCuota(resumen, PeriodoFinanciero(2026, 9)))
+    }
+
+    /**
+     * **La plata que no se acaba nunca, dicha en pesos.** `creditosQueNoSeTerminan` se calculaba,
+     * se probaba y no se dibujaba en ninguna pantalla.
+     */
+    @Test
+    fun `lo que no se termina se cuenta en creditos y en pesos`() {
+        assertEquals(
+            "2 créditos no se terminan a este ritmo: \$304.183.376 que no bajan",
+            textoDeLoQueNoSeTermina(2, 304_183_376L),
+        )
+        assertEquals(
+            "1 crédito no se termina a este ritmo: \$100.000.000 que no bajan",
+            textoDeLoQueNoSeTermina(1, 100_000_000L),
+        )
+    }
+
+    /** La alerta de arriba, en singular y en plural. */
+    @Test
+    fun `la amortizacion negativa de arriba se cuenta en creditos`() {
+        assertEquals(
+            "En 1 crédito la cuota no cubre los intereses: esa deuda crece sola",
+            textoDeLaAmortizacionNegativa(1),
+        )
+        assertEquals(
+            "En 2 créditos la cuota no cubre los intereses: esas deudas crecen solas",
+            textoDeLaAmortizacionNegativa(2),
+        )
     }
 }

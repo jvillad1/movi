@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.credits
 
+import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -75,6 +77,30 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
         paidPct = 0.0,
     )
 
+    /**
+     * Un crédito recién creado, en \$0 y sin un solo movimiento: el paso 1 del flujo de dos pasos
+     * que registra un desembolso. Su tarjeta decía «Ya está pagada».
+     */
+    private val recienCreado = CreditSummary(
+        account = Account("acc_nuevo", "Libranza nueva", AccountType.LOAN, balance = 0L),
+        terms = CreditTerms(
+            accountId = "acc_nuevo", bank = "Bancolombia", principal = 257_000_000L, rateEa = 12.5,
+            termMonths = 120, installment = 3_500_000L, dayOfMonth = 5, startDate = "2026-09-01",
+        ),
+        paidPct = 1.0,
+        hasMovements = false,
+    )
+
+    /** Y uno de verdad pagado: llegó a \$0 con movimientos. Tampoco puede fijar la fecha de nadie. */
+    private val yaPagado = CreditSummary(
+        account = Account("acc_pago", "Crediágil 3090", AccountType.LOAN, balance = 0L),
+        terms = CreditTerms(
+            accountId = "acc_pago", bank = "Bancolombia", principal = 5_000_000L, rateEa = 29.64,
+            termMonths = 24, installment = 26_485L, dayOfMonth = 5, startDate = "2024-01-05",
+        ),
+        paidPct = 1.0,
+    )
+
     @After
     fun limpiarLaCostura() {
         Repositories.sustitutoDePrueba = null
@@ -87,6 +113,18 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
         }
         composeRule.setContent { MoviTheme { CreditosScreen(onNavigate = {}) } }
         composeRule.waitForIdle()
+    }
+
+    /**
+     * Una fila del resumen: el **rótulo con su alcance y la cifra, en la misma fila**.
+     *
+     * Se afirma sobre las dos juntas (`hasAnySibling`) a propósito. Buscar la cifra sola dejaba la
+     * prueba en verde con la fila borrada, porque los intereses de un crédito también salen en su
+     * tarjeta; y buscar el rótulo solo no probaría que arrastra la cifra correcta.
+     */
+    private fun filaDelResumen(rotulo: String, valor: String) {
+        composeRule.onNode(hasText(rotulo) and hasAnySibling(hasText(valor)), useUnmergedTree = true)
+            .assertExists("la fila «$rotulo» tiene que mostrar $valor")
     }
 
     /**
@@ -146,28 +184,118 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
     fun `la pantalla dice cuando termina y con que supuesto`() {
         montar(listOf(libreInversion))
 
-        composeRule.onNodeWithText("Te faltan 46 cuotas", substring = true).assertExists()
+        composeRule.onNodeWithText("Te faltan 46 cuotas · la última en junio de 2030 si la cuota y la tasa no cambian", substring = true)
+            .assertExists()
         composeRule.onNodeWithText(SUPUESTO_DE_LA_PROYECCION, substring = true).assertExists()
     }
 
     /**
-     * **Lo que sale de su bolsillo y lo que no, los dos.** El hipotecario lo gira Skandia: sus
-     * $2.426.389 de interés mensual no pueden sumarse a lo que él paga, y tampoco pueden
-     * desaparecer de la pantalla.
+     * **El plazo del contrato y la proyección son dos números distintos, y la tarjeta lo dice.**
+     * Al ·9695 le quedan 42 meses de los 105 que firmó y 46 de proyección; dos cuentas de cuotas
+     * sin rótulo en la misma tarjeta se leen como un error de la app.
+     */
+    @Test
+    fun `el plazo pactado se distingue de la proyeccion`() {
+        montar(listOf(libreInversion))
+
+        composeRule.onNodeWithText("Plazo pactado 105 meses", substring = true).assertExists()
+        composeRule.onNodeWithText("Te faltan 46 cuotas", substring = true).assertExists()
+    }
+
+    /**
+     * **Lo que sale de su bolsillo y lo que no, los dos, y cada uno con su alcance en el rótulo.**
+     * El hipotecario lo gira Skandia: sus \$2.426.389 de interés mensual no pueden sumarse a lo que
+     * él paga, y tampoco pueden desaparecer de la pantalla.
+     *
+     * Se afirma sobre las **filas del resumen** —rótulo y cifra juntos— y no sobre «\$358.488 en
+     * alguna parte»: esa cifra también está en la tarjeta del ·9695, así que borrar la fila del
+     * resumen entero dejaba la prueba en verde. Es el mismo patrón que ya se corrigió en la barra.
      */
     @Test
     fun `los intereses que paga otro se muestran aparte, no se suman ni se esconden`() {
         montar(listOf(libreInversion, hipotecario))
 
-        // Lo suyo: solo el ·9695. Aparece en el resumen de arriba y en la tarjeta, así que se
-        // cuenta en vez de exigir un único nodo.
-        assertTrue(
-            composeRule.onAllNodesWithText("$358.488", substring = true).fetchSemanticsNodes().isNotEmpty(),
-            "los intereses propios tienen que verse",
-        )
-        // Lo del tercero, dicho y separado.
-        composeRule.onNodeWithText("Más $2.426.389 en créditos que se pagan por nómina o los paga otro", substring = true)
+        composeRule.onNodeWithText(TITULO_INTERES_DEL_MES, substring = true).assertExists()
+        filaDelResumen(ALCANCE_INTERES_PROPIO, "\$358.488")
+        filaDelResumen(ALCANCE_INTERES_AJENO, "\$2.426.389")
+    }
+
+    /**
+     * **Cada cifra dice de qué alcance habla, en el rótulo y no en una nota al pie.** «Te falta en
+     * intereses» eran los intereses propios **y** solo de los créditos que se terminan: el 36 % de
+     * lo que de verdad falta, sin decirlo en ninguna parte.
+     */
+    @Test
+    fun `el interes que falta dice de cuales creditos habla`() {
+        montar(listOf(libreInversion, hipotecario))
+
+        composeRule.onNodeWithText(TITULO_INTERES_POR_PAGAR, substring = true).assertExists()
+        // El ·9695 se termina y lo paga él; el ·2334 no se termina, así que no aporta ninguna cifra.
+        filaDelResumen(ALCANCE_FALTA_PROPIO, "\$8.857.065")
+    }
+
+    /**
+     * **La fila de la fecha final no puede dar una fecha habiendo deuda que no se termina.** Con el
+     * ·9695 (46 cuotas) y el ·2334 (que no baja), decía «la última en junio de 2030» sobre una
+     * cartera de la que \$204.183.376 no se acaban nunca.
+     */
+    @Test
+    fun `sin fecha final mientras haya una deuda que no se termina`() {
+        montar(listOf(libreInversion, hipotecario))
+
+        composeRule.onNodeWithText(TITULO_ULTIMA_CUOTA, substring = true).assertExists()
+        filaDelResumen(ALCANCE_ULTIMA_CUOTA, "Sin fecha")
+        // Y se dice cuántos son y cuánta plata hay adentro, que es lo que el resumen no dibujaba.
+        composeRule.onNodeWithText("1 crédito no se termina a este ritmo: \$204.183.376 que no bajan", substring = true)
             .assertExists()
+    }
+
+    /**
+     * **El Crédito Mamá también entra en esa cuenta.** No dispara la alerta roja —es el acuerdo—
+     * pero \$100.000.000 que no bajan tienen que estar en el resumen: antes la única advertencia
+     * visible contaba amortizaciones negativas y él no aparecía en ningún lado.
+     */
+    @Test
+    fun `el credito mama aparece en lo que no se termina aunque no sea una alerta`() {
+        montar(listOf(libreInversion, mama, hipotecario))
+
+        composeRule.onNodeWithText("2 créditos no se terminan a este ritmo: \$304.183.376 que no bajan", substring = true)
+            .assertExists()
+        composeRule.onNodeWithText("En 1 crédito la cuota no cubre los intereses", substring = true).assertExists()
+    }
+
+    /**
+     * **El caso extremo.** Con el único crédito que amortiza en \$0, el máximo de «las que
+     * terminan» era 0 meses y la fila decía «Tu última cuota — septiembre de 2026» debiendo
+     * \$304.183.376.
+     */
+    @Test
+    fun `un credito en cero no puede fijar la fecha final de la cartera`() {
+        montar(listOf(yaPagado, mama, hipotecario))
+
+        filaDelResumen(ALCANCE_ULTIMA_CUOTA, "Sin fecha")
+    }
+
+    /**
+     * **La tarjeta de un crédito recién creado no dice «Ya está pagada».** Es el paso 1 del flujo de
+     * dos pasos: decía a la vez «Falta registrar el desembolso», «\$0 de interés» y «Ya está
+     * pagada».
+     */
+    @Test
+    fun `un credito recien creado no dice ya esta pagada ni cero de interes`() {
+        montar(listOf(recienCreado))
+
+        composeRule.onNodeWithText("Falta registrar el desembolso", substring = true).assertExists()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Ya está pagada", substring = true).fetchSemanticsNodes().size,
+            "«Falta registrar el desembolso» y «Ya está pagada» no pueden convivir",
+        )
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("de interés", substring = true).fetchSemanticsNodes().size,
+            "sin deuda registrada no hay interés que anunciar",
+        )
     }
 
     /**

@@ -6,6 +6,8 @@ import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PlanDelCredito
+import com.jvillada.movi.shared.model.ResumenDeDeudas
+import com.jvillada.movi.shared.model.deudaEnOtraMoneda
 import com.jvillada.movi.shared.model.mas
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.ui.components.formatCOP
@@ -141,16 +143,6 @@ private fun porcentajePagado(credit: CreditSummary): ProgresoDeCredito {
 }
 
 /**
- * ¿Este préstamo debe plata que **no** está en el componente COP de su saldo?
- *
- * `balancesByCurrency` viene derivado del server junto con el saldo (ver `enrichWith`), así que la
- * pregunta se responde con lo que ya llegó. Un mapa vacío —lo que manda un server viejo, o una
- * cuenta sin eventos— responde `false` y la tarjeta se comporta como siempre.
- */
-private fun deudaEnOtraMoneda(credit: CreditSummary): Boolean =
-    credit.account.balancesByCurrency.any { (moneda, saldo) -> moneda != "COP" && saldo != 0L }
-
-/**
  * **«$2.479.256 de interés · 60 % de la cuota»** — lo que de la cuota es alquiler de la plata.
  *
  * [desglosarCuota] ya calculaba esto cada vez que se registraba un pago, lo usaba para mover el
@@ -162,11 +154,19 @@ private fun deudaEnOtraMoneda(credit: CreditSummary): Boolean =
  * los haría desaparecer justo en el crédito donde más importan. El decimal se omite cuando es cero,
  * para que «100 %» no se lea «100,0 %».
  */
-fun textoDelInteres(plan: PlanDelCredito): String {
-    val fraccion = plan.fraccionDeInteres
-        // Sin tasa no es 0 %: es que no se sabe. Misma postura que [MotivoDelDesglose.SIN_TASA].
-        ?: return "Sin tasa registrada: no se sabe cuánto de la cuota es interés"
-    return formatCOP(plan.interes) + " de interés · " + porcentaje(fraccion) + " de la cuota"
+fun textoDelInteres(plan: PlanDelCredito): String = when (plan.comoVa) {
+    // Sin tasa no es 0 %: es que no se sabe. Misma postura que [MotivoDelDesglose.SIN_TASA].
+    ComoVaLaDeuda.SIN_TASA -> "Sin tasa registrada: no se sabe cuánto de la cuota es interés"
+
+    // **Con tasa y sin cuota el interés SÍ se sabe.** Antes esto decía «Sin tasa registrada» tres
+    // líneas debajo de la tasa, que estaba en la misma tarjeta y se veía.
+    ComoVaLaDeuda.SIN_CUOTA -> formatCOP(plan.interes) + " de interés al mes · sin cuota registrada"
+
+    ComoVaLaDeuda.SIN_DEUDA -> "Sin deuda registrada: todavía no corren intereses"
+
+    else -> plan.fraccionDeInteres
+        ?.let { formatCOP(plan.interes) + " de interés · " + porcentaje(it) + " de la cuota" }
+        ?: "Sin tasa registrada: no se sabe cuánto de la cuota es interés"
 }
 
 /** «29,8 %», «100 %». Ver [textoDelInteres] para por qué el decimal. */
@@ -194,8 +194,11 @@ data class ComoVaEstaDeuda(val texto: String, val esAlerta: Boolean)
  *   pura y probable sin congelar el tiempo.
  */
 fun comoVaEstaDeuda(plan: PlanDelCredito, periodoActual: PeriodoFinanciero): ComoVaEstaDeuda? = when (plan.comoVa) {
-    // Sin tasa ya lo dijo [textoDelInteres]; repetirlo con otras palabras no agrega nada.
-    ComoVaLaDeuda.SIN_TASA -> null
+    // Los tres estados sin proyección ya los dijo [textoDelInteres] en la línea de arriba;
+    // repetirlos con otras palabras no agrega nada. En particular [ComoVaLaDeuda.SIN_DEUDA]:
+    // un crédito al que le falta el desembolso ya dice eso en su etiqueta de progreso, y antes
+    // decía además **«Ya está pagada»** acá abajo.
+    ComoVaLaDeuda.SIN_TASA, ComoVaLaDeuda.SIN_CUOTA, ComoVaLaDeuda.SIN_DEUDA -> null
 
     // **La alerta.** En pesos y por mes, que es como se siente: una barra en 0 % no dice que a esta
     // cuota le faltan $21.894 para cubrir siquiera los intereses.
@@ -213,16 +216,83 @@ fun comoVaEstaDeuda(plan: PlanDelCredito, periodoActual: PeriodoFinanciero): Com
 
     ComoVaLaDeuda.AMORTIZA -> {
         val meses = plan.mesesHastaLaUltimaCuota
-        if (meses == null) {
+        if (meses == null || meses <= 0) {
             // Amortiza, pero tan despacio que una fecha sería una burla. Ver [MAX_MESES_PROYECTADOS].
+            // (`meses <= 0` ya no es alcanzable —sin deuda no hay AMORTIZA— y queda como defensa.)
             ComoVaEstaDeuda("A este ritmo tardarías más de cien años", esAlerta = false)
-        } else if (meses <= 0) {
-            ComoVaEstaDeuda("Ya está pagada", esAlerta = false)
         } else {
             val cuantas = if (meses == 1) "Te falta 1 cuota" else "Te faltan $meses cuotas"
-            ComoVaEstaDeuda(cuantas + " · la última en " + nombreDe(periodoActual.mas(meses - 1)), esAlerta = false)
+            // **El supuesto viaja adentro de la frase.** [SUPUESTO_DE_LA_PROYECCION] vive en la
+            // tarjeta de resumen, decenas de dp más arriba, y para cuando el dueño llega a la fecha
+            // de un crédito ya no lo tiene a la vista. Una fecha sin su condición es una promesa.
+            ComoVaEstaDeuda(
+                cuantas + " · la última en " + nombreDe(periodoActual.mas(meses - 1)) +
+                    " si la cuota y la tasa no cambian",
+                esAlerta = false,
+            )
         }
     }
+}
+
+/**
+ * **El rótulo dice de qué habla cada cifra del resumen, y no una nota al pie.**
+ *
+ * Las cuatro cifras de arriba tienen **cuatro alcances distintos** —dos cortes cruzados: de quién
+ * sale la plata, y si la deuda se termina— y antes solo uno de ellos estaba dicho, en letra chica y
+ * solo cuando era mayor que cero. Así, «Te falta en intereses $549.605.074» era el 36 % de los
+ * $1.511.826.418 que de verdad faltan en la cartera que sí termina, sin decirlo en ninguna parte; y
+ * si el dueño solo tuviera los créditos que gira Skandia, la fila titular habría dicho «$0».
+ *
+ * Son constantes y no literales adentro del `@Composable` para que se puedan afirmar desde una
+ * prueba: es exactamente el pedazo que se puede borrar sin que ninguna prueba de aritmética caiga.
+ */
+const val ALCANCE_INTERES_PROPIO: String = "Los pagas tú"
+const val ALCANCE_INTERES_AJENO: String = "Los paga tu nómina o un tercero"
+const val ALCANCE_FALTA_PROPIO: String = "En tus créditos que se terminan"
+const val ALCANCE_FALTA_AJENO: String = "En los que paga otro y se terminan"
+const val ALCANCE_ULTIMA_CUOTA: String = "Contando todas tus deudas"
+
+/** El título del grupo de filas del interés del mes. */
+const val TITULO_INTERES_DEL_MES: String = "Intereses este mes"
+
+/** El título del grupo de filas del interés que falta por pagar. */
+const val TITULO_INTERES_POR_PAGAR: String = "Te falta en intereses"
+
+/** El título de la fila de la fecha final. */
+const val TITULO_ULTIMA_CUOTA: String = "Tu última cuota"
+
+/**
+ * Cuándo cae la última cuota de toda su deuda, o **por qué no hay fecha**.
+ *
+ * Una deuda que no se termina le gana a cualquier fecha: con los doce créditos reales, decir
+ * «diciembre de 2045» mientras $304.183.376 no bajan es contestar otra pregunta. Acá se contesta
+ * «Sin fecha» y el aviso de abajo dice cuánto y en cuántos créditos.
+ */
+fun textoDeLaUltimaCuota(resumen: ResumenDeDeudas, periodoActual: PeriodoFinanciero): String =
+    resumen.mesesHastaLaUltimaCuota
+        ?.let { nombreDe(periodoActual.mas((it - 1).coerceAtLeast(0))) }
+        ?: "Sin fecha"
+
+/**
+ * **La plata que no se acaba nunca, dicha en pesos.**
+ *
+ * `ResumenDeDeudas.creditosQueNoSeTerminan` se calculaba y se probaba, y no se dibujaba en ninguna
+ * pantalla: la única advertencia visible contaba 1 (la amortización negativa del ·2334) y el
+ * Crédito Mamá —$100.000.000 que no bajan— no aparecía en ningún lado del resumen.
+ */
+fun textoDeLoQueNoSeTermina(cuantos: Int, deuda: Long): String {
+    val cabeza = if (cuantos == 1) "1 crédito no se termina a este ritmo" else "$cuantos créditos no se terminan a este ritmo"
+    return cabeza + ": " + formatCOP(deuda) + " que no bajan"
+}
+
+/**
+ * **La alerta de arriba, contada en créditos.** Si hay uno solo en el que la deuda crece sola, el
+ * dueño tiene que salir de esta pantalla sabiéndolo.
+ */
+fun textoDeLaAmortizacionNegativa(cuantos: Int): String = if (cuantos == 1) {
+    "En 1 crédito la cuota no cubre los intereses: esa deuda crece sola"
+} else {
+    "En $cuantos créditos la cuota no cubre los intereses: esas deudas crecen solas"
 }
 
 /**
