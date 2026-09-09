@@ -77,7 +77,16 @@ data class CreditTerms(
     val dayOfMonth: Int,        // día de pago
     val startDate: String,      // ISO "2026-06-01" (desembolso)
     val notes: String? = null,
-    /** Ver [RecurringRule.remindMe]: la cuota de este crédito entra (o no) al barrido de avisos. */
+    /**
+     * Ver [RecurringRule.remindMe]: la cuota de este crédito entra (o no) al barrido de avisos.
+     *
+     * **Viaja siempre, aunque valga su default**, por lo mismo que los tres campos de arriba y con
+     * una vuelta de tuerca: acá el default es `true`, o sea que el valor omitido es el que el
+     * dueño elige al marcar la casilla. Sin la anotación, prender el aviso manda un cuerpo sin la
+     * clave, la guarda del PUT lo lee como «cliente viejo» y repone el `false` — la casilla se
+     * podría apagar y nunca más prender.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val remindMe: Boolean = true,
     /**
      * **Libranza**: la cuota la retiene el empleador del sueldo antes de depositarlo.

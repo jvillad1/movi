@@ -86,7 +86,14 @@ data class CardTerms(
     /**
      * Ver [com.jvillada.movi.shared.model.RecurringRule.remindMe]: el pago de esta tarjeta entra
      * (o no) al barrido de avisos. Default `true` — las tarjetas que ya existían siguen avisando.
+     *
+     * **Viaja siempre, aunque valga ese default**, por lo mismo que [pagoMinimo] y [notes], y con
+     * una vuelta de tuerca: acá el valor omitido —`true`— es el que el dueño elige al marcar la
+     * casilla. Sin la anotación, volver a prender el aviso manda un cuerpo sin la clave, la guarda
+     * del PUT lo lee como «cliente viejo» y repone el `false`: la casilla se podría apagar y nunca
+     * más prender.
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val remindMe: Boolean = true,
 )
 

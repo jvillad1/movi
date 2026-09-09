@@ -141,6 +141,11 @@ fun Route.cardRoutes() {
                 // Misma guarda, y por una razón todavía más cara: la nota es texto que el dueño
                 // escribió y que no se deriva de nada — perderla no se repara mirando el extracto.
                 .let { if ("notes" in crudo) it else it.copy(notes = previo?.notes) }
+                // Y la casilla del aviso, que no necesita un APK viejo para colarse: `true` es su
+                // default, así que kotlinx omite la clave en CUALQUIER cliente que la tenga
+                // marcada. Sin esta línea el default deserializado pisaba la columna y editar el
+                // día de pago le devolvía el recordatorio a una tarjeta silenciada.
+                .let { if ("remindMe" in crudo) it else it.copy(remindMe = previo?.remindMe ?: true) }
                 .sanitized()
             // upsert atómico por PK (accountId), igual que en creditRoutes: lastRemindedPeriod
             // no está en el upsert, así que se conserva — un cambio de día aplica desde el mes
