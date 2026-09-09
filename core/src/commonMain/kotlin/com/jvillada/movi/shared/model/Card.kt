@@ -75,6 +75,13 @@ data class CardTerms(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val pagoMinimo: Long? = null,
+    /**
+     * Lo que la tarjeta tiene de particular y no cabe en ningún otro campo. **Viaja siempre,
+     * aunque valga `null`**, por lo mismo que [pagoMinimo] y con el mismo costo si no lo hiciera:
+     * la guarda por clave del PUT leería el campo vaciado como «cliente viejo» y repondría la nota
+     * anterior, así que borrarla sería imposible desde la app. Ver el KDoc de la clase.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val notes: String? = null,
     /**
      * Ver [com.jvillada.movi.shared.model.RecurringRule.remindMe]: el pago de esta tarjeta entra

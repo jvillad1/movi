@@ -57,6 +57,10 @@ fun CardTermsSheet(
     // Ver [CardTerms.pagoMinimo].
     var pagoMinimo by remember { mutableStateOf(existingTerms?.pagoMinimo) }
     var paymentDay by remember { mutableStateOf(existingTerms?.paymentDay?.toString() ?: "") }
+    // Mismo campo y mismo tratamiento que en [CreditTermsSheet]: vacío se guarda como null.
+    // Sin esta línea la hoja armaba el `CardTerms` sin `notes`, y como el PUT escribe todas las
+    // columnas, cada «Guardar tarjeta» le borraba la nota a la tarjeta sin decir nada.
+    var notes by remember { mutableStateOf(existingTerms?.notes ?: "") }
     // Marcada por defecto al crear; al editar refleja lo que está guardado.
     var remindMe by remember { mutableStateOf(existingTerms?.remindMe ?: true) }
     var saving by remember { mutableStateOf(false) }
@@ -92,6 +96,7 @@ fun CardTermsSheet(
                     cutoffDay = cutoffDay.toIntOrNull(),
                     pagoMinimo = pagoMinimo,
                     paymentDay = paymentDay.toInt(),
+                    notes = notes.trim().ifBlank { null },
                     remindMe = remindMe,
                 )
                 if (editing == null) {
@@ -204,6 +209,13 @@ fun CardTermsSheet(
                     color = MinTextFaint,
                     lineHeight = 15.sp,
                 )
+
+                Spacer(Modifier.height(8.dp))
+                // Último renglón de los términos, igual que en la hoja de crédito: lo que la
+                // tarjeta tiene de particular y no cabe en ningún campo —«difiere a 36 cuotas
+                // toda compra internacional», el cupo que el banco todavía no sube—. Es el único
+                // dato de esta hoja que Movi no vuelve a derivar de nada si se pierde.
+                FieldBox("Notas (opcional)", notes, { notes = it })
 
                 Spacer(Modifier.height(16.dp))
                 // El pago de esta tarjeta entra al barrido de recordatorios salvo que el dueño
