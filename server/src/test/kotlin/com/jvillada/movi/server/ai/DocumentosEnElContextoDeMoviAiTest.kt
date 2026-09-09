@@ -121,11 +121,19 @@ class DocumentosEnElContextoDeMoviAiTest {
     }
 
     @Test
-    fun `los documentos de otro usuario no entran`() {
+    fun `el contexto trae el documento propio y NO el del otro usuario`() {
+        // Los dos documentos, no solo el ajeno: esta es la única prueba que cubre el
+        // aislamiento entre usuarios, y con un documento solo las dos negaciones también
+        // pasarían si el bloque entero desapareciera del contexto — o sea, pasarían por el
+        // motivo equivocado. Afirmando lo propio y lo ajeno en el MISMO contexto, la única
+        // forma de que pase es que el filtro por usuario esté haciendo su trabajo.
+        documento(duenoId, "Extracto_propio.pdf", "esta plata sí es del dueño")
         documento(otroId, "Extracto_ajeno.pdf", "plata que no es del dueño")
 
         val ctx = contexto()
 
+        assertTrue(ctx.contains("Extracto_propio.pdf"), ctx)
+        assertTrue(ctx.contains("esta plata sí es del dueño"), ctx)
         assertFalse(ctx.contains("Extracto_ajeno.pdf"), ctx)
         assertFalse(ctx.contains("plata que no es del dueño"), ctx)
     }
