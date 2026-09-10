@@ -368,6 +368,69 @@ const val CHIP_RECURRENTES = 5
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
 
 /**
+ * **Los chips que se dibujan**, que ya no son todos.
+ *
+ * El dueño miró la fila de seis y dijo: *«Me parece que ya tenemos muchos filtros o al menos en
+ * ese nivel de jerarquía, se ve bastante mal»* — y sobre este en particular: *«Por confirmar
+ * debería saltar en otro lugar no acá en esta misma vista»*.
+ *
+ * Tiene razón, y el motivo es que **no es un filtro, es una bandeja de entrada**. «Todo»,
+ * «Gastos» e «Ingresos» son formas de mirar los movimientos que uno tiene; «Por confirmar» es una
+ * tarea pendiente, y su estado normal —el de quien anota todo a mano— es *vacío*. Un chip que la
+ * enorme mayoría de los días no lleva a ningún lado ocupa el mismo espacio que los que sí.
+ *
+ * Así que sale de la fila y entra como aviso arriba de la lista, que aparece **solo cuando hay
+ * algo que confirmar** (ver [avisoDePorConfirmar]). Es el mismo camino que ya tenían los
+ * candidatos a pago de tarjeta, por el mismo motivo.
+ *
+ * ### Por qué la constante sigue existiendo y valiendo 3
+ *
+ * [CHIP_POR_CONFIRMAR] no se borra: sigue siendo un filtro de verdad —el aviso lo activa— y
+ * [matchesChip] lo sigue contestando. Y sobre todo, **los índices no se renumeran**: el número
+ * viaja adentro de `Screen.Transactions` y puede volver desde una pila de navegación restaurada.
+ * Correr «Recurrentes» del 5 al 3 haría que un 3 viejo signifique otra cosa, en silencio.
+ */
+val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_ENTRE_CUENTAS, CHIP_RECURRENTES)
+
+/**
+ * **Cuántos movimientos entraron solos y esperan confirmación** — los que llegaron por SMS, por
+ * un extracto o por OCR, y de los que el dueño todavía no dijo si el monto y la categoría están
+ * bien.
+ *
+ * Se cuenta sobre los días completos (`allDays`) y no sobre los visibles: el aviso tiene que
+ * decir la verdad esté donde esté parado el dueño, y con el chip «Gastos» activo los que están
+ * por confirmar ni siquiera aparecen en la lista (ver [matchesChip]).
+ */
+fun cuantosPorConfirmar(days: List<EventDay>): Int =
+    days.sumOf { dia -> dia.items.count { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED } }
+
+/**
+ * ¿Se pinta el aviso de «por confirmar» arriba de la lista?
+ *
+ * Solo si hay algo que confirmar **y** no se está mirando ya esa bandeja: adentro de ella el
+ * aviso sería un botón que lleva a donde uno ya está. Ahí lo que corresponde es el encabezado que
+ * dice en qué modo está y cómo salir (ver [MODO_POR_CONFIRMAR_TITULO]).
+ */
+fun avisoDePorConfirmar(chip: Int, cuantos: Int): Boolean =
+    cuantos > 0 && chip != CHIP_POR_CONFIRMAR
+
+/**
+ * Lo que dice el aviso. **Nombra el hecho, no la etiqueta**: «entraron solos» explica por qué hay
+ * algo que revisar, que es justo la pregunta que el chip viejo dejaba sin contestar — el dueño la
+ * hizo con todas las letras, *«¿Qué es Por confirmar?»*.
+ */
+fun textoDelAvisoPorConfirmar(cuantos: Int): String =
+    if (cuantos == 1) "1 movimiento entró solo y falta confirmarlo"
+    else "$cuantos movimientos entraron solos y faltan confirmar"
+
+/**
+ * El encabezado que reemplaza al chip cuando se está adentro de la bandeja. Hace falta porque, al
+ * no haber chip, **ningún chip queda marcado**: sin esto la lista se vería filtrada sin nada que
+ * dijera por qué ni cómo volver.
+ */
+const val MODO_POR_CONFIRMAR_TITULO = "Por confirmar"
+
+/**
  * PR 2 del rediseño de Recurrentes (2026-09): ¿se pinta el card de «Flujo libre» y la sección de
  * candidatas por confirmar?
  *
@@ -1139,8 +1202,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            filters.forEachIndexed { i, f ->
-                val isActive = i == activeFilter
+            CHIPS_VISIBLES.forEach { chip ->
+                val f = filters[chip]
+                val isActive = chip == activeFilter
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -1149,7 +1213,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             if (!isActive) Modifier.border(1.dp, MinBorderStrong, RoundedCornerShape(8.dp))
                             else Modifier
                         )
-                        .clickable { activeFilter = i }
+                        .clickable { activeFilter = chip }
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1164,6 +1228,60 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         color = if (isActive) MinText else MinTextDim,
                     )
                 }
+            }
+        }
+
+        // «Por confirmar» dejó de ser un chip y es esto: un aviso que **solo existe cuando hay
+        // algo que confirmar**. Ver [CHIPS_VISIBLES] para el porqué, y [avisoDePorConfirmar] para
+        // cuándo se pinta. Mismo camino que los candidatos de pago de tarjeta, acá abajo.
+        val porConfirmar = cuantosPorConfirmar(allDays)
+        if (avisoDePorConfirmar(activeFilter, porConfirmar)) {
+            MinCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                variant = MinCardVariant.Default,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                onClick = { activeFilter = CHIP_POR_CONFIRMAR },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = textoDelAvisoPorConfirmar(porConfirmar),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                    )
+                    ChevronRight()
+                }
+            }
+        }
+        // Y adentro de la bandeja, el encabezado que dice dónde está y cómo salir. Hace falta
+        // porque sin chip **ningún chip queda marcado**: la lista se vería filtrada sin nada que
+        // explicara por qué.
+        if (activeFilter == CHIP_POR_CONFIRMAR) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = MODO_POR_CONFIRMAR_TITULO,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinText,
+                )
+                Text(
+                    text = "Ver todos",
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MinPrimary,
+                    modifier = Modifier.clickable { activeFilter = CHIP_TODO },
+                )
             }
         }
 
