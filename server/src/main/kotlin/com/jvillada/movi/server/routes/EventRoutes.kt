@@ -565,6 +565,51 @@ fun Route.eventRoutes() {
         //    (`collapseTransfers` agrupa dentro de un mismo día). Se cascadea por `transferId`,
         //    en la misma transacción y por el mismo camino explícito que ya usa la anulación —
         //    no por «el otro evento con el mismo monto».
+        /**
+         * **«Este no se repite» / «sí se repite»**, sobre un movimiento concreto.
+         *
+         * Movimientos reconoce recurrentes **por nombre**, así que un gasto suelto que se llama
+         * igual que una suscripción quedaba marcado como recurrente y no había forma de
+         * desmarcarlo: la app solo ofrecía *«Sí, se repite todos los meses»*. Ver
+         * [com.jvillada.movi.shared.model.FinancialEvent.noSeRepite].
+         *
+         * **No toca ninguna regla ni ninguna suscripción**, a propósito: el cobro mensual sigue
+         * existiendo y sigue teniendo que aparecer. Esto es una anotación sobre UNA fila.
+         *
+         * El cuerpo habla en positivo (`repeats`) y la columna en negativo (`no_se_repite`): la
+         * traducción vive acá, en un solo lugar, y el mismo endpoint sirve para marcar y para
+         * arrepentirse.
+         *
+         * Un evento anulado se trata como inexistente, igual que en `PUT /{id}/category` y
+         * `PUT /{id}/timestamp`: ningún GET lo vuelve a mostrar, así que lo que devolviéramos acá
+         * no se vería en ninguna pantalla.
+         */
+        put("/{id}/repeats") {
+            val id = call.parameters["id"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val seRepite = call.receive<UpdateEventRepeatsRequest>().repeats
+
+            val updated: FinancialEvent? = dbQuery {
+                val event = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                val isVoided = event != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (event == null || isVoided) {
+                    null
+                } else {
+                    Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
+                        it[noSeRepite] = !seRepite
+                    }
+                    event.copy(noSeRepite = !seRepite).withCashFlowFlag(accountTypesFor(uid))
+                }
+            }
+            if (updated == null) call.respond(HttpStatusCode.NotFound)
+            else call.respond(updated)
+        }
+
         put("/{id}/timestamp") {
             val id = call.parameters["id"]
                 ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")

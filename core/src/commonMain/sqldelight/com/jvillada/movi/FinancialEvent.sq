@@ -41,7 +41,21 @@ CREATE TABLE financial_event (
     -- Nullable: las filas que ya están en el teléfono no la tienen y no hay de dónde sacarla — los
     -- pagos de cuota anteriores a esta ola tienen las dos patas iguales, así que son simétricos de
     -- verdad. Sin índice: nunca se filtra ni se ordena por ella.
-    noAmortiza              INTEGER
+    noAmortiza              INTEGER,
+    -- **«Este no se repite»**, dicho por el dueño sobre este movimiento. Ver
+    -- FinancialEvent.noSeRepite en :core. El resumen: el filtro «Recurrentes» reconoce POR NOMBRE,
+    -- así que un gasto suelto que se llama igual que una suscripción quedaba marcado como
+    -- recurrente y no había forma de desmarcarlo.
+    --
+    -- Está acá y no solo en el server porque la marca se pone desde el detalle del movimiento, que
+    -- funciona sin señal, y porque el filtro se arma en el cliente sobre eventos ya leídos: sin
+    -- esta columna el teléfono seguiría marcando como recurrente lo que el dueño acaba de decir
+    -- que no lo es, hasta el próximo arranque. Columna nueva → migración 7.sqm.
+    --
+    -- NOT NULL con DEFAULT 0, a diferencia de transferId/createdAt/noAmortiza: acá el default SÍ
+    -- describe bien lo que ya está en el teléfono —nadie marcó nada— así que todo lo que hoy se
+    -- reconoce se sigue reconociendo. Sin índice: nunca se filtra ni se ordena por ella en SQL.
+    noSeRepite              INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -78,8 +92,8 @@ insert:
 INSERT OR REPLACE INTO financial_event(
     id, accountId, type, amount, category, description, merchant,
     timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId,
-    createdAt, noAmortiza
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    createdAt, noAmortiza, noSeRepite
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;
@@ -111,6 +125,13 @@ UPDATE financial_event SET category = :category WHERE id = :id AND userId = :use
 -- PUT /api/events/{id}/timestamp, y camino único cuando el evento todavía no llegó al server.
 updateTimestamp:
 UPDATE financial_event SET timestamp = :timestamp WHERE id = :id AND userId = :userId;
+
+-- «Este se repite» / «este no» (ver LocalRepository.updateEventRepeats). Espejo local de
+-- PUT /api/events/{id}/repeats, y camino único cuando el evento todavía no llegó al server.
+-- No entra en la condición de markSyncedIfUnchanged a propósito: no viaja en el POST de creación
+-- —el server lo deja en su default— así que no puede quedar desincronizado por un POST en vuelo.
+updateNoSeRepite:
+UPDATE financial_event SET noSeRepite = :noSeRepite WHERE id = :id AND userId = :userId;
 
 -- Corregir el monto, la cuenta y el concepto de un movimiento (ver LocalRepository.updateEvent).
 -- Espejo local de PUT /api/events/{id}, y camino único cuando el evento todavía no llegó al

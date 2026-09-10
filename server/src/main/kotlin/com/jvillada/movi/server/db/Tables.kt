@@ -193,6 +193,24 @@ object Events : Table("financial_events") {
      * ola tienen las dos patas iguales, así que son simétricos de verdad y NULL los describe bien.
      */
     val noAmortiza           = long("no_amortiza").nullable()
+    /**
+     * **«Este no se repite»**, dicho por el dueño sobre este movimiento. Ver
+     * [com.jvillada.movi.shared.model.FinancialEvent.noSeRepite] para el porqué completo: el
+     * reconocimiento de recurrentes es por NOMBRE, y sin esta columna un gasto suelto que se llama
+     * igual que una suscripción quedaba marcado como recurrente para siempre.
+     *
+     * `.default(false)` y NO nullable, a diferencia de [transferId], [createdAt] y [noAmortiza]:
+     * acá el default SÍ describe bien lo que ya existe —nadie marcó nada— y el ALTER que emite
+     * `createMissingTablesAndColumns(Events)` deja en FALSE las filas que ya estaban, o sea que
+     * todo lo que hoy se reconoce se sigue reconociendo. Es el mismo mecanismo que ya usó
+     * `remind_me` sobre tablas con datos.
+     *
+     * **Sin índice**: nunca se filtra ni se ordena por ella en SQL — el filtro «Recurrentes» se
+     * arma en el cliente, sobre eventos ya leídos. Un `CREATE INDEX` que falle es lo que puede
+     * dejar el server sin levantar, porque estas migraciones corren dentro de la transacción de
+     * arranque.
+     */
+    val noSeRepite           = bool("no_se_repite").default(false)
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)

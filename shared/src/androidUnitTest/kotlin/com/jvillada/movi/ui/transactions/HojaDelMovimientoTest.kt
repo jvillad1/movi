@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyDescendant
@@ -124,6 +125,38 @@ class HojaDelMovimientoTest {
     fun laHojaOfreceMarcarloComoRecurrente() {
         montar()
         composeRule.onNodeWithText("¿SE REPITE TODOS LOS MESES?", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+    }
+
+    /**
+     * **Y ofrece la respuesta contraria, que es la que faltaba.**
+     *
+     * Movimientos reconoce recurrentes POR NOMBRE, así que una compra suelta en un comercio del
+     * que además hay una suscripción quedaba marcada como recurrente y esta hoja solo sabía decir
+     * *«Sí, se repite todos los meses»*. El dueño lo dijo así: *«una vez recurrente no puedo
+     * hacerlo no recurrente»*. Ver [com.jvillada.movi.shared.model.FinancialEvent.noSeRepite].
+     */
+    @Test
+    fun laHojaTambienOfreceDecirQueNoSeRepite() {
+        montar()
+        composeRule.onNodeWithText("No, este no se repite", useUnmergedTree = true)
+            .performScrollTo().assertIsDisplayed()
+    }
+
+    /**
+     * Y una vez marcado, la hoja **lo dice** y ofrece volver atrás. Sin esto la marca sería un
+     * viaje de ida distinto pero igual de sin retorno que el que vino a arreglar.
+     *
+     * También se afirma que el botón de ida ya NO está: dejar los dos sería ofrecer dos caminos
+     * contradictorios sobre un movimiento que ya tiene respuesta.
+     */
+    @Test
+    fun unMovimientoYaMarcadoLoDiceYOfreceVolverAtras() {
+        montar(event = gasto.copy(noSeRepite = true))
+
+        composeRule.onNodeWithText("Sí se repite, después de todo", useUnmergedTree = true)
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Sí, se repite todos los meses", useUnmergedTree = true)
+            .assertCountEquals(0)
     }
 
     /**

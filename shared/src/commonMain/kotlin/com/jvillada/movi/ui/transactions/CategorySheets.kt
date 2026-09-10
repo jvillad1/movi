@@ -476,6 +476,7 @@ fun ChangeCategorySheet(
                     onError = { errorDeEdicion = it },
                     onAbrirFormulario = onMarcarComoRecurrente,
                     onEditarRecurrente = onEditarRecurrente,
+                    onGuardado = onEventChanged,
                 )
             }
             Spacer(Modifier.height(20.dp))
@@ -1039,8 +1040,24 @@ private fun SeccionEstoSeRepite(
     onError: (String?) -> Unit,
     onAbrirFormulario: (RecurringPrefill) -> Unit,
     onEditarRecurrente: ((RecurringRule) -> Unit)? = null,
+    onGuardado: (FinancialEvent) -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
+    /** Está en vuelo el `PUT /repeats` — el de marcar «no se repite» o el de arrepentirse. */
+    var marcando by remember(event.id) { mutableStateOf(false) }
+
+    fun marcarQueSeRepite(seRepite: Boolean) {
+        if (marcando) return
+        marcando = true
+        onError(null)
+        coroutine.launch {
+            runCatching { Repositories.wallets.updateEventRepeats(event.id, seRepite) }
+                .onSuccess { onGuardado(it) }
+                .onFailure { onError(it.toUserMessage()) }
+            marcando = false
+        }
+    }
+
     var consultando by remember(event.id) { mutableStateOf(false) }
     /** El equivalente es una REGLA de verdad: esta es la fila para editar. */
     var reglaExistente by remember(event.id) { mutableStateOf<RecurringRule?>(null) }
@@ -1082,6 +1099,38 @@ private fun SeccionEstoSeRepite(
 
     SheetLabel("¿SE REPITE TODOS LOS MESES?")
     Spacer(Modifier.height(8.dp))
+    // **Dos estados, y el segundo existe porque el primero no tenía vuelta.** Movimientos
+    // reconoce recurrentes por NOMBRE, así que una compra suelta en un comercio del que además
+    // hay una suscripción quedaba marcada como recurrente para siempre: la única puerta era
+    // «Sí, se repite todos los meses». Ver [FinancialEvent.noSeRepite].
+    if (event.noSeRepite) {
+        Text(
+            text = "Marcaste que este movimiento no se repite, así que no aparece en Recurrentes. " +
+                "Esto vale solo para este movimiento: si tienes un cobro mensual con el mismo " +
+                "nombre, ese sigue igual.",
+            fontSize = 12.sp,
+            color = MinTextMute,
+            lineHeight = 17.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (!marcando) MinPrimaryContainer else MinSurfaceContainerLow)
+                .clickable(enabled = !marcando) { marcarQueSeRepite(true) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (marcando) "Guardando…" else "Sí se repite, después de todo",
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (!marcando) MinOnPrimaryContainer else MinTextFaint,
+            )
+        }
+        return
+    }
     Text(
         text = "Movi puede anotarlo en Recurrentes con lo que ya tiene este movimiento: el " +
             "concepto, el monto, la categoría, la cuenta y el día. El primer recordatorio será " +
@@ -1096,17 +1145,27 @@ private fun SeccionEstoSeRepite(
             .fillMaxWidth()
             .height(46.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(if (!consultando) MinPrimaryContainer else MinSurfaceContainerLow)
-            .clickable(enabled = !consultando) { intentar() },
+            .background(if (!consultando && !marcando) MinPrimaryContainer else MinSurfaceContainerLow)
+            .clickable(enabled = !consultando && !marcando) { intentar() },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = if (consultando) "Revisando…" else "Sí, se repite todos los meses",
             fontSize = 13.5.sp,
             fontWeight = FontWeight.Medium,
-            color = if (!consultando) MinOnPrimaryContainer else MinTextFaint,
+            color = if (!consultando && !marcando) MinOnPrimaryContainer else MinTextFaint,
         )
     }
+    // La otra respuesta a la misma pregunta, y va discreta: la mayoría de las veces que alguien
+    // abre esta sección es para marcar, no para desmarcar.
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = if (marcando) "Guardando…" else "No, este no se repite",
+        fontSize = 12.5.sp,
+        fontWeight = FontWeight.Medium,
+        color = if (marcando) MinTextFaint else MinPrimary,
+        modifier = Modifier.clickable(enabled = !marcando && !consultando) { marcarQueSeRepite(false) },
+    )
     // No es un error: es la respuesta correcta a la pregunta que acaba de hacer. Va acá, pegada
     // al botón que tocó, y no en la barra de errores de abajo.
     reglaExistente?.let { regla ->

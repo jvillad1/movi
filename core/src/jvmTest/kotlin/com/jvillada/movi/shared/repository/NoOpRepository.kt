@@ -336,6 +336,27 @@ open class NoOpRepository(
     }
 
     /**
+     * Mismo criterio que [updateEventTimestamp]: 404 para un evento que no está en
+     * [knownEventIds], y para el que sí conoce, el evento que ya tenía con la marca aplicada.
+     */
+    override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
+        if (id !in knownEventIds) throw ApiException(404)
+        val previo = eventosDelServer.firstOrNull { it.id == id }
+        val base = previo ?: FinancialEvent(
+            id = id,
+            accountId = "acc-stub",
+            type = TransactionType.EXPENSE,
+            amount = 50_000L,
+            category = "Comida",
+            description = "stub",
+            timestamp = 0L,
+            source = EventSource.MANUAL,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        )
+        return base.copy(noSeRepite = !repeats).also { recordarEnElServer(it) }
+    }
+
+    /**
      * Mismo criterio que [updateEventCategory] y [updateEventTimestamp]: 404 para un evento que no
      * está en [knownEventIds] —así el test del camino «todavía sin sincronizar» falla si
      * [LocalRepository] llama al server cuando no debe— y, para el que sí conoce, el evento que ya

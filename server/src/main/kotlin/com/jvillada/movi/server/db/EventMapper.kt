@@ -24,4 +24,5 @@ fun ResultRow.toFinancialEvent(): FinancialEvent = FinancialEvent(
     transferId           = this[Events.transferId],
     createdAt            = this[Events.createdAt],
     noAmortiza           = this[Events.noAmortiza],
+    noSeRepite           = this[Events.noSeRepite],
 )

@@ -425,6 +425,9 @@ class LocalRepository(
                 // Siempre null por esta puerta, igual que `transferId`: lo que no amortiza solo lo
                 // escribe la pata de la deuda de un pago de cuota, que entra por [payInstallment].
                 resolved.noAmortiza,
+                // La columna es INTEGER: el booleano del modelo se guarda como 0/1, igual que
+                // lo haría SQLDelight si el tipo estuviera mapeado.
+                siNoSeRepite(resolved.noSeRepite),
             )
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
@@ -630,7 +633,12 @@ class LocalRepository(
             remoto.reconciliationStatus.name != local.reconciliationStatus ||
             remoto.transferId != local.transferId ||
             remoto.createdAt != local.createdAt ||
-            remoto.noAmortiza != local.noAmortiza
+            remoto.noAmortiza != local.noAmortiza ||
+            // La marca «este no se repite» también entra: se pone desde el detalle del
+            // movimiento, y si el server la tiene y el espejo no, el filtro «Recurrentes» —que se
+            // arma en el cliente sobre estas mismas filas— seguiría mostrando lo que el dueño ya
+            // sacó. Es el mismo motivo por el que entró `category`.
+            remoto.noSeRepite != (local.noSeRepite != 0L)
     }
 
     /** Las filas crudas del espejo, sin mapear — para la foto previa a preguntar. */
@@ -807,6 +815,7 @@ class LocalRepository(
                     // viejo no lo mandara.
                     leg.createdAt ?: now,
                     leg.noAmortiza,
+                    siNoSeRepite(leg.noSeRepite),
                 )
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
@@ -936,6 +945,45 @@ class LocalRepository(
 
         val updated = remote.updateEventCategory(id, category)
         db.financialEventQueries.updateCategory(updated.category, updated.id, uid)
+        return updated
+    }
+
+    /**
+     * **«Este se repite» / «este no»**, espejado en el teléfono.
+     *
+     * Mismo esqueleto que [updateEventCategory]: si el movimiento todavía no llegó al server se
+     * resuelve acá y no se llama a `remote` (no hay a qué evento apuntar todavía); si ya está
+     * sincronizado manda el server y después se copia lo que contestó.
+     *
+     * **Sin guardas propias, a diferencia de las otras dos.** Esta marca no mueve ni un peso: no
+     * toca saldos, no entra en `isCashFlow`, no cambia de qué mes es el movimiento. Lo único que
+     * cambia es si la fila aparece bajo el filtro «Recurrentes». La única guarda que sí vale —el
+     * movimiento anulado— la impone el server con un 404, y acá no hace falta anticiparla porque
+     * un anulado no se puede abrir desde ninguna pantalla.
+     *
+     * **No se toca `syncedAt`, y esta vez no hace falta.** La marca SÍ viaja en el
+     * `POST /api/events` que sube el `SyncEngine` —la clave se serializa siempre, ver
+     * `@EncodeDefault` en [FinancialEvent.noSeRepite]— así que un movimiento marcado sin señal
+     * llega marcado. Lo que `markSyncedIfUnchanged` protege para la categoría, la fecha y el
+     * monto es el caso inverso: que la fila se selle con un valor que el POST no llevaba. Acá el
+     * POST lleva el valor del momento en que se arma, así que no hay ventana.
+     */
+    override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
+        val uid = userId()
+        val types = accountTypes(uid)
+        val resolvedLocally = db.transactionWithResult {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            if (local != null && local.syncedAt == null) {
+                db.financialEventQueries.updateNoSeRepite(siNoSeRepite(!repeats), id, uid)
+                local.toModel(types).copy(noSeRepite = !repeats)
+            } else {
+                null
+            }
+        }
+        if (resolvedLocally != null) return resolvedLocally
+
+        val updated = remote.updateEventRepeats(id, repeats)
+        db.financialEventQueries.updateNoSeRepite(siNoSeRepite(updated.noSeRepite), updated.id, uid)
         return updated
     }
 
@@ -1338,6 +1386,7 @@ class LocalRepository(
                     leg.createdAt ?: now,
                     // La pata de la deuda de una cuota trae lo que NO amortizó; la del dinero, null.
                     leg.noAmortiza,
+                    siNoSeRepite(leg.noSeRepite),
                 )
                 if (leg.accountId == loanAccountId) return@forEach
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
@@ -1410,7 +1459,7 @@ class LocalRepository(
             event.category, event.description, event.merchant,
             event.timestamp, event.source.name, event.rawPayload,
             event.reconciliationStatus.name, event.syncedAt ?: ahora, uid,
-            event.transferId, event.createdAt, event.noAmortiza,
+            event.transferId, event.createdAt, event.noAmortiza, siNoSeRepite(event.noSeRepite),
         )
     }
     /**
@@ -1451,6 +1500,7 @@ class LocalRepository(
                     // El ajuste lo creó el server; se copia su sello, no uno nuevo de acá.
                     event.createdAt ?: Clock.System.now().toEpochMilliseconds(),
                     event.noAmortiza,
+                    siNoSeRepite(event.noSeRepite),
                 )
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
@@ -1723,11 +1773,20 @@ class LocalRepository(
         transferId = transferId,
         createdAt = createdAt,
         noAmortiza = noAmortiza,
+        noSeRepite = noSeRepite != 0L,
         countsAsCashFlow = typeByAccount[accountId]
             ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,
     )
 }
+
+/**
+ * `noSeRepite` viaja como booleano en el modelo y se guarda como 0/1 en la tabla local, que no
+ * tiene tipo booleano. Una función y no un `if` suelto en cinco `insert` distintos: son cinco
+ * llamadas posicionales de diecisiete parámetros, y ahí un `0L` en el lugar equivocado no lo
+ * atrapa el compilador.
+ */
+private fun siNoSeRepite(valor: Boolean): Long = if (valor) 1L else 0L
 
 // Misma zona civil que el server (/api/events/by-day) — ver AppTimeZone. Offline y online
 // tienen que agrupar por el mismo día.
