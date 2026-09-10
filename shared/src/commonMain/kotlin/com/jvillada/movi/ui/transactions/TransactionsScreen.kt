@@ -389,8 +389,15 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * [matchesChip] lo sigue contestando. Y sobre todo, **los índices no se renumeran**: el número
  * viaja adentro de `Screen.Transactions` y puede volver desde una pila de navegación restaurada.
  * Correr «Recurrentes» del 5 al 3 haría que un 3 viejo signifique otra cosa, en silencio.
+ *
+ * ### «Entre cuentas» salió por otro motivo
+ *
+ * El dueño: *«Entre cuentas creo que no hace falta acá, debería ir en cuentas tal vez no?»*. Y
+ * sí: un traspaso, una cuota o un pago de tarjeta son hechos **entre dos cuentas suyas**, no una
+ * forma de mirar sus gastos. La lista sigue existiendo igual —el mismo filtro, la misma pantalla—
+ * pero se entra desde Cuentas, que es de lo que habla. Ver `AccountsScreen`.
  */
-val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_ENTRE_CUENTAS, CHIP_RECURRENTES)
+val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_RECURRENTES)
 
 /**
  * **Cuántos movimientos entraron solos y esperan confirmación** — los que llegaron por SMS, por
@@ -429,6 +436,19 @@ fun textoDelAvisoPorConfirmar(cuantos: Int): String =
  * dijera por qué ni cómo volver.
  */
 const val MODO_POR_CONFIRMAR_TITULO = "Por confirmar"
+
+/**
+ * El rótulo del encabezado cuando se está adentro de un filtro que **no tiene chip**, o `null` si
+ * el filtro activo sí es uno de los que se dibujan.
+ *
+ * Los dos que salieron de la fila necesitan lo mismo y por lo mismo: sin chip marcado, la lista se
+ * vería filtrada sin nada que dijera por qué ni cómo volver. Ver [CHIPS_VISIBLES].
+ */
+fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
+    CHIP_POR_CONFIRMAR -> MODO_POR_CONFIRMAR_TITULO
+    CHIP_ENTRE_CUENTAS -> CHIPS_DE_MOVIMIENTOS[CHIP_ENTRE_CUENTAS]
+    else -> null
+}
 
 /**
  * PR 2 del rediseño de Recurrentes (2026-09): ¿se pinta el card de «Flujo libre» y la sección de
@@ -1260,7 +1280,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         // Y adentro de la bandeja, el encabezado que dice dónde está y cómo salir. Hace falta
         // porque sin chip **ningún chip queda marcado**: la lista se vería filtrada sin nada que
         // explicara por qué.
-        if (activeFilter == CHIP_POR_CONFIRMAR) {
+        val tituloDelModo = tituloDelModoSinChip(activeFilter)
+        if (tituloDelModo != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1270,7 +1291,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = MODO_POR_CONFIRMAR_TITULO,
+                    text = tituloDelModo,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MinText,

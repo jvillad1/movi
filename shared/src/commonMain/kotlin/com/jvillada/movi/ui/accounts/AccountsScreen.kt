@@ -34,6 +34,7 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.transactions.CHIP_ENTRE_CUENTAS
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.dashboard.heroBalance
@@ -271,6 +272,48 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     item {
                         Spacer(Modifier.height(20.dp))
                         AccountsGroup(title = "Inversión", accounts = inversion, onNavigate = onNavigate)
+                    }
+                    // **La plata que se movió entre estas cuentas**, que hasta acá era un chip en
+                    // Movimientos. El dueño: «Entre cuentas creo que no hace falta acá, debería ir
+                    // en cuentas tal vez no?» — y sí: un traspaso, una cuota o un pago de tarjeta
+                    // son hechos ENTRE DOS CUENTAS SUYAS, no una forma de mirar sus gastos.
+                    //
+                    // Es un enlace y no una lista: la pantalla que sabe pintar esos renglones
+                    // —con las dos patas juntas en un solo hecho, ver `collapseTransfers`— ya
+                    // existe y es Movimientos. Duplicarla acá sería mantener dos.
+                    //
+                    // Va al final, debajo de las cuentas: primero lo que uno tiene, después lo que
+                    // se movió entre eso.
+                    item {
+                        Spacer(Modifier.height(20.dp))
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                            onClick = { onNavigate(Screen.Transactions(CHIP_ENTRE_CUENTAS)) },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Movimientos entre cuentas",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MinText,
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        text = "Traspasos, cuotas de crédito y pagos de tarjeta",
+                                        fontSize = 12.sp,
+                                        color = MinTextMute,
+                                    )
+                                }
+                                ChevronRight()
+                            }
+                        }
                     }
                 }
             }

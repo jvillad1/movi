@@ -46,7 +46,7 @@ class PorConfirmarComoAvisoTest {
         // «Recurrentes» del 5 al 3 haría que un 3 viejo signifique otra cosa, en silencio.
         assertEquals(3, CHIP_POR_CONFIRMAR)
         assertEquals(5, CHIP_RECURRENTES)
-        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_ENTRE_CUENTAS, CHIP_RECURRENTES), CHIPS_VISIBLES)
+        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_RECURRENTES), CHIPS_VISIBLES)
     }
 
     @Test
