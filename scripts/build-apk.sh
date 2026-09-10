@@ -6,8 +6,20 @@
 #   movi-debug-1.2.apk  (app + buildType + versión; «-sucio» si hay cambios sin commitear)
 #
 # Uso:
-#   ./scripts/build-apk.sh          # compila y copia a Drive
+#   ./scripts/build-apk.sh            # compila y copia a Drive
 #   ./scripts/build-apk.sh --no-copy  # solo compila y renombra en build/
+#   ./scripts/build-apk.sh --prueba   # lo mismo, pero con nombre de PRUEBA
+#
+# `--prueba` existe porque en Drive conviven dos cosas distintas y hasta acá se llamaban
+# igual: el APK que el dueño usa todos los días y el que se le pasa para probar una rama
+# que todavía no está en master. Con el mismo nombre, el segundo pisaba al primero y no
+# había forma de volver — «el último» dejaba de significar «el bueno».
+#
+#   productivo:  movi-debug-1.19.apk
+#   de prueba:   movi-prueba-1.19-pr183.apk   (o -<sha> si la rama no tiene PR abierto)
+#
+# El nombre de prueba dice QUÉ trae, no solo que es de prueba: mirando el archivo se sabe
+# qué PR hay adentro, que es justo lo que se está por probar.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -26,7 +38,16 @@ DIRTY=""
 # Esquema elegido por el dueño (2026-08-20): app + buildType + versión. El commit ya no va en
 # el nombre — queda impreso abajo al compilar, así la trazabilidad vive en el log y en git.
 BUILD_TYPE="debug"
-NAME="movi-${BUILD_TYPE}-${VERSION}${DIRTY}.apk"
+if [ "${1:-}" = "--prueba" ]; then
+  # De qué rama sale, dicho como lo entiende el dueño: el número del PR si hay uno abierto,
+  # y si no el commit. `gh` puede no estar o no contestar; el sha siempre está.
+  PR=$(gh pr view --json number -q .number 2>/dev/null || true)
+  QUE_TRAE="${PR:+pr$PR}"
+  QUE_TRAE="${QUE_TRAE:-$SHA}"
+  NAME="movi-prueba-${VERSION}-${QUE_TRAE}${DIRTY}.apk"
+else
+  NAME="movi-${BUILD_TYPE}-${VERSION}${DIRTY}.apk"
+fi
 
 echo "Compilando ${NAME}… (commit ${SHA})"
 ./gradlew :androidApp:assembleDebug -q
@@ -36,6 +57,7 @@ cp "$SRC" "$OUT"
 printf 'listo: %s (%.1f MB)\n' "$OUT" "$(echo "scale=2; $(stat -f%z "$OUT")/1048576" | bc)"
 
 [ "${1:-}" = "--no-copy" ] && exit 0
+[ "${2:-}" = "--no-copy" ] && exit 0
 
 if ! command -v rclone >/dev/null 2>&1; then
   echo "AVISO: falta rclone. Instalalo con: brew install rclone" >&2
