@@ -190,8 +190,32 @@ if (sdkDeEstaMaquina == null) {
                     "verificar no se entrega."
             }
 
+            // **Solo los APK que ESTE build produjo, no todo lo que haya en la carpeta.**
+            //
+            // `scripts/build-apk.sh` deja al lado una copia con nombre trazable
+            // (`movi-debug-1.19.apk`), y esa copia sobrevive a los builds siguientes. Tomar todos
+            // los `.apk` del directorio hacía que la verificación midiera **un paquete de otro
+            // build**: al primer cambio de código, las clases nuevas «faltaban» en la copia vieja
+            // y el build fallaba con una lista de faltantes perfectamente correcta sobre un
+            // archivo que a nadie le importa. Es la misma clase de mentira que esta tarea existe
+            // para matar, con el signo cambiado: en vez de dejar pasar un APK roto, condena uno
+            // sano.
+            //
+            // `output-metadata.json` lo escribe AGP en el mismo directorio y nombra exactamente lo
+            // que acaba de empaquetar. Si no está —o no se puede leer— se cae a todos los `.apk`,
+            // que es el comportamiento anterior: más ruidoso, nunca más permisivo.
             val dir = salidaDeLaVariante.get().asFile
-            val apks = dir.listFiles { f -> f.name.endsWith(".apk") }.orEmpty()
+            val todos = dir.listFiles { f -> f.name.endsWith(".apk") }.orEmpty()
+            val declarados = File(dir, "output-metadata.json")
+                .takeIf { it.isFile }
+                ?.let { metadata ->
+                    Regex(""""outputFile"\s*:\s*"([^"]+)"""")
+                        .findAll(metadata.readText())
+                        .map { it.groupValues[1] }
+                        .toSet()
+                }
+                .orEmpty()
+            val apks = todos.filter { declarados.isEmpty() || it.name in declarados }
             check(apks.isNotEmpty()) { "No se armó ningún APK en $dir" }
 
             apks.forEach { apk ->
