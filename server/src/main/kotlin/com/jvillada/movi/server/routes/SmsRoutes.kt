@@ -22,6 +22,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
@@ -81,10 +82,32 @@ private fun categoryFor(text: String, merchant: String, type: TransactionType): 
 }
 
 fun Route.smsRoutes() {
+    /**
+     * La bandeja, **del más nuevo al más viejo**.
+     *
+     * Hasta acá esta consulta no tenía `ORDER BY`, y sin uno Postgres devuelve las filas en el
+     * orden que le convenga — que no es el de inserción ni ningún otro que signifique algo. El
+     * dueño lo vio con 96 mensajes adentro: *«el último mensaje recibido queda de último en la
+     * lista, debe ser el primero»*. En su pantalla ni siquiera quedaba ascendente: dos de agosto
+     * arriba y uno del 10 de septiembre abajo.
+     *
+     * **Se ordena por el texto de `time`, y está bien.** La columna es `varchar` y la escribe el
+     * teléfono con `SimpleDateFormat("yyyy-MM-dd HH:mm")` (ver `SmsSync`): en ese formato el orden
+     * alfabético **es** el cronológico, porque cada campo va de más significativo a menos y con
+     * ancho fijo. Cambiar la columna a timestamp sería una migración sobre una tabla con datos
+     * para no ganar nada acá.
+     *
+     * El cliente vuelve a ordenar por su cuenta (ver `mensajesMasRecientesPrimero`): no por
+     * desconfianza de este `ORDER BY`, sino porque el orden de una lista que el dueño lee no
+     * debería depender de que un endpoint se acuerde.
+     */
     get("/api/sms") {
         val uid = call.userId()
         val list = dbQuery {
-            SmsMessages.selectAll().where { SmsMessages.userId eq uid }.map { it.toSmsMessage() }
+            SmsMessages.selectAll()
+                .where { SmsMessages.userId eq uid }
+                .orderBy(SmsMessages.time to SortOrder.DESC)
+                .map { it.toSmsMessage() }
         }
         call.respond(list)
     }
