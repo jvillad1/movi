@@ -97,18 +97,9 @@ class MovimientosPlegablesTest {
         }
     }
 
-    @Test
-    fun `por confirmar vacio dice que no hay nada por confirmar y no ofrece registrar`() {
-        composeRule.onNodeWithText("Por confirmar", useUnmergedTree = true).performClick()
-        esperarTexto("Nada por confirmar")
-
-        composeRule.onNodeWithText("Nada por confirmar", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("lo registraste tú", substring = true, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("+ Registrar el primero", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Sin movimientos aún", useUnmergedTree = true).assertDoesNotExist()
-        // Y los renglones del día tampoco están: el chip los filtró.
-        composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
-    }
+    // El vacío de «Por confirmar» se mudó a `PorConfirmarEnMovimientosTest`, junto con el resto
+    // de esa bandeja: dejó de ser un chip de esta fila (ver `CHIPS_VISIBLES`) y ya no se llega
+    // tocando acá, así que la prueba tiene que entrar por donde entra el dueño.
 
     @Test
     fun `un dia plegado esconde sus renglones pero sigue diciendo su flujo`() {
