@@ -61,6 +61,7 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.isOpeningBalance
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -144,6 +145,24 @@ sealed class MovementRow {
     data class Transfer(val out: FinancialEvent, val into: FinancialEvent) : MovementRow() {
         override val key: String get() = out.transferId ?: out.id
         val amount: Long get() = out.amount
+    }
+
+    /**
+     * **Los ajustes de saldo de un día, en un solo renglón.**
+     *
+     * Corregir el saldo de una cuenta no es plata que se movió: es una corrección a lo que Movi
+     * creía. Pero se anota como movimiento y se listaba como movimiento, así que una tarde de
+     * conciliar contra el portal del banco dejaba diez renglones «Ajuste al saldo del banco —
+     * quedó en $…» compitiendo de igual a igual con «Carnes y Legumbres Santa Elena». El dueño lo
+     * dijo así: *«Tantos movimientos de ajuste de saldo se ven horribles»*.
+     *
+     * Se agrupan en vez de esconderse —que es lo que se hizo con la apertura de una cuenta, ver
+     * `showsInMovements`— porque no son lo mismo: una apertura la escribe Movi sola y el dueño
+     * nunca la decidió, mientras que **cada ajuste es una edición suya** sobre sus propios
+     * números. Esconderla del todo sería borrarle el rastro de lo que él mismo corrigió.
+     */
+    data class Ajustes(val events: List<FinancialEvent>) : MovementRow() {
+        override val key: String get() = "ajustes-" + events.first().id
     }
 }
 
@@ -271,6 +290,9 @@ fun tonoDelEvento(event: FinancialEvent): TonoDelMonto = when {
 fun tonoDelRenglon(row: MovementRow): TonoDelMonto = when (row) {
     is MovementRow.Transfer -> TonoDelMonto.ENTRE_CUENTAS
     is MovementRow.Single -> tonoDelEvento(row.event)
+    // Un grupo de ajustes no movió plata del bolsillo — ninguno de sus renglones lo hizo, por
+    // `isCashFlow` — así que el gris es literal, no una elección estética.
+    is MovementRow.Ajustes -> TonoDelMonto.NEUTRO
 }
 
 /** ¿El renglón lleva signo y color de ingreso/gasto? Ver [tonoDelEvento]. */
@@ -521,6 +543,72 @@ fun collapseTransfers(items: List<FinancialEvent>): List<MovementRow> {
 }
 
 /**
+ * **Los ajustes de saldo de un día, juntados en un renglón que se abre.**
+ *
+ * Se corre después de [collapseTransfers], sobre los renglones ya armados, y conserva el orden:
+ * el grupo queda donde estaba el PRIMER ajuste del día, así que nada se mueve de lugar. Ver
+ * [MovementRow.Ajustes] para el porqué de agrupar en vez de esconder.
+ *
+ * Dos reglas que no son obvias:
+ *
+ * 1. **Con una búsqueda escrita no se agrupa nada.** Buscar es pedirlos explícitamente, y una
+ *    lista que esconde adentro de un grupo justo lo que acabás de buscar es peor que una que
+ *    muestra de más. Es el mismo escape que ya tiene la apertura de una cuenta en
+ *    `showsInMovements`, y por el mismo motivo.
+ * 2. **Un ajuste solo no se agrupa.** Un grupo de uno ocupa el mismo renglón que el ajuste, no
+ *    ahorra nada, y encima obliga a un toque más para leer lo que ya se veía. El problema del
+ *    dueño empieza cuando son varios.
+ */
+fun agruparAjustesDeSaldo(rows: List<MovementRow>, query: String): List<MovementRow> {
+    if (query.isNotBlank()) return rows
+    val ajustes = rows.filterIsInstance<MovementRow.Single>()
+        .filter { it.event.category == ADJUSTMENT_CATEGORY }
+        .map { it.event }
+    if (ajustes.size < 2) return rows
+
+    var yaPuesto = false
+    return rows.mapNotNull { row ->
+        val esAjuste = row is MovementRow.Single && row.event.category == ADJUSTMENT_CATEGORY
+        when {
+            !esAjuste -> row
+            yaPuesto -> null
+            else -> {
+                yaPuesto = true
+                MovementRow.Ajustes(ajustes)
+            }
+        }
+    }
+}
+
+/**
+ * **Cuántos movimientos dice tener un día plegado.** Cuenta hechos, no renglones — y el grupo de
+ * ajustes no es un hecho.
+ */
+fun cuantosMovimientosDice(rows: List<MovementRow>): Int = rows.sumOf { row ->
+    when (row) {
+        // Un par plegado es UN hecho: la plata cambió de cuenta una sola vez. Esa decisión es
+        // anterior a los ajustes y no se toca.
+        is MovementRow.Transfer -> 1
+        is MovementRow.Single -> 1
+        // Un grupo de ajustes NO es un hecho: son varias correcciones que se muestran juntas por
+        // comodidad. Contarlo como uno le bajaría la cuenta al día en silencio el día que
+        // aparecieron los grupos, y el dueño vería «2 movimientos» sobre un día que tiene cuatro.
+        is MovementRow.Ajustes -> row.events.size
+    }
+}
+
+/**
+ * Lo que dice el renglón agrupado. **Cuenta cuentas, no movimientos**, porque es lo que el dueño
+ * hizo: repasó el saldo de tantas cuentas contra el banco. Dos ajustes sobre la misma cuenta —se
+ * equivocó y volvió a corregir— son una cuenta revisada, no dos.
+ */
+fun tituloDeLosAjustes(events: List<FinancialEvent>): String {
+    val cuentas = events.map { it.accountId }.distinct().size
+    return if (cuentas == 1) "Ajustaste el saldo de una cuenta"
+    else "Ajustaste el saldo de $cuentas cuentas"
+}
+
+/**
  * "De Ahorros a CDT": de qué cuenta a qué cuenta se movió la plata.
  *
  * Con palabras y no con una flecha: en wasm «→» sale como ▯ (la fuente del canvas no trae ese
@@ -609,6 +697,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // Los días que el dueño plegó, por fecha ISO. Se recuerdan entre visitas: ver
     // [DiasPlegadosStore] para el porqué.
     var diasPlegados by remember { mutableStateOf(DiasPlegadosStore.plegados()) }
+    /**
+     * Los grupos de ajustes que el dueño abrió, por clave de grupo. **Transitorio a propósito**, a
+     * diferencia de [DiasPlegadosStore]: plegar un día es una decisión sobre ese día («el 28 ya lo
+     * revisé»), mientras que abrir el grupo de ajustes es un vistazo — se mira qué se corrigió y
+     * se sigue. Que vuelva a cerrarse en la próxima visita es el comportamiento correcto, no una
+     * limitación.
+     */
+    var ajustesAbiertos by remember { mutableStateOf(emptySet<String>()) }
     val listState = rememberLazyListState()
     // Pantalla ancha: la rueda del mouse sobre los márgenes, a los lados de la columna, también
     // tiene que mover esta lista. Ver [ScrollDesdeLosMargenes].
@@ -1351,7 +1447,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 // cambiar de chip, y pasar de «Gastos» a «Todo» dejaba el día nuevo de arriba
                 // escondido por encima del tope (visto a ojo en la web). Posicional, como antes.
                 item {
-                    val rows = collapseTransfers(day.items)
+                    val rows = agruparAjustesDeSaldo(collapseTransfers(day.items), searchQuery)
                     val plegado = day.date in diasPlegados
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp)) {
                         // El encabezado entero es el botón que pliega y despliega el día. Plegado
@@ -1386,7 +1482,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 )
                                 if (plegado) {
                                     Text(
-                                        text = if (rows.size == 1) "· 1 movimiento" else "· ${rows.size} movimientos",
+                                        text = cuantosMovimientosDice(rows).let {
+                                            if (it == 1) "· 1 movimiento" else "· $it movimientos"
+                                        },
                                         fontSize = 11.sp,
                                         color = MinTextFaint,
                                     )
@@ -1449,6 +1547,28 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                             ) != null,
                                             onClick = { selectedEvent = row.event },
                                         )
+                                        is MovementRow.Ajustes -> {
+                                            val abierto = row.key in ajustesAbiertos
+                                            RenglonDeAjustes(
+                                                events = row.events,
+                                                abierto = abierto,
+                                                onAlternar = {
+                                                    ajustesAbiertos = if (abierto) ajustesAbiertos - row.key
+                                                    else ajustesAbiertos + row.key
+                                                },
+                                            )
+                                            // Abiertos, los ajustes se ven y se tocan igual que
+                                            // cualquier renglón: el grupo cambia dónde están, no
+                                            // qué se puede hacer con ellos.
+                                            if (abierto) row.events.forEach { ajuste ->
+                                                Hairline()
+                                                MovementSingleRow(
+                                                    tx = ajuste,
+                                                    accountNames = accountNames,
+                                                    onClick = { selectedEvent = ajuste },
+                                                )
+                                            }
+                                        }
                                     }
                                     if (i < rows.size - 1) Hairline()
                                 }
@@ -1631,6 +1751,53 @@ private fun TransferRow(
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tonoDelRenglon(row)),
             letterSpacing = (-0.3).sp,
+        )
+    }
+}
+
+/**
+ * El renglón que resume los ajustes de saldo de un día y los abre al tocarlo.
+ *
+ * **Sin monto a la derecha, y es lo honesto.** Cada ajuste lleva su delta, pero sumarlos no
+ * significa nada: son deltas de cuentas distintas, algunas de activo y otras de deuda, y ninguno
+ * es plata que entró o salió (`isCashFlow` los excluye). Una cifra ahí se leería como un total del
+ * día y sería falsa. Lo que va en su lugar es cuántos hay, que es lo que el renglón promete abrir.
+ */
+@Composable
+private fun RenglonDeAjustes(
+    events: List<FinancialEvent>,
+    abierto: Boolean,
+    onAlternar: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onAlternar)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = tituloDeLosAjustes(events),
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = MinText,
+                letterSpacing = (-0.1).sp,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = if (events.size == 1) "$ADJUSTMENT_CATEGORY · 1 corrección"
+                else "$ADJUSTMENT_CATEGORY · ${events.size} correcciones",
+                fontSize = 12.sp,
+                color = MinTextMute,
+            )
+        }
+        Icon(
+            imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+            contentDescription = if (abierto) "Ocultar los ajustes" else "Ver los ajustes",
+            tint = MinTextFaint,
+            modifier = Modifier.size(20.dp),
         )
     }
 }
