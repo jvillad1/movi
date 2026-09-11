@@ -185,6 +185,49 @@ class SmsSyncTest {
     }
 
     /**
+     * **La bandeja llega del más nuevo al más viejo.**
+     *
+     * Hasta acá `GET /api/sms` no tenía `ORDER BY`, y sin uno la base devuelve las filas en el
+     * orden que le convenga. El dueño lo vio con 96 mensajes adentro: *«el último mensaje recibido
+     * queda de último en la lista, debe ser el primero»*. En su pantalla ni siquiera quedaba
+     * ascendente — dos del 11 de agosto arriba y uno del 10 de septiembre abajo.
+     *
+     * Los tres se mandan **en ese mismo desorden** para que el test no pueda pasar por accidente
+     * de inserción: si el `ORDER BY` desapareciera, lo más probable es que salgan como entraron.
+     */
+    @Test
+    fun `GET api sms devuelve del mas nuevo al mas viejo`() = testApplication {
+        application { testModule() }
+        val client = smsClient(this)
+        val tokenA = mintToken(userAId, userAEmail)
+
+        client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(
+                listOf(
+                    makeSms("orden-1", "Transferiste \$20.417", time = "2026-08-11 13:38"),
+                    makeSms("orden-2", "Pagaste \$24.000 por codigo QR", time = "2026-08-11 12:24"),
+                    makeSms("orden-3", "Transferiste \$25.910 a @leonett246", time = "2026-09-10 08:50"),
+                )
+            )
+        }
+
+        val lista = client.get("/api/sms") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        assertEquals(HttpStatusCode.OK, lista.status)
+        val tiempos = Json.parseToJsonElement(lista.body<String>()).jsonArray
+            .map { it.jsonObject["time"]!!.jsonPrimitive.content }
+
+        assertEquals(
+            listOf("2026-09-10 08:50", "2026-08-11 13:38", "2026-08-11 12:24"),
+            tiempos,
+            "el más nuevo va primero",
+        )
+    }
+
+    /**
      * Re-syncing the same message id does NOT duplicate rows (count stays the same).
      */
     @Test

@@ -47,6 +47,26 @@ import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
+/**
+ * **La bandeja, del más nuevo al más viejo.**
+ *
+ * El dueño, con 96 mensajes adentro: *«al importar SMS del teléfono el último mensaje recibido
+ * queda de último en la lista, debe ser el primero»*. La causa estaba en el server —`GET /api/sms`
+ * no tenía `ORDER BY`, así que Postgres devolvía las filas en el orden que le conviniera— y se
+ * arregló allá. Esto es lo mismo de este lado, y no sobra: el orden de una lista que el dueño lee
+ * de arriba abajo no debería depender de que un endpoint se acuerde.
+ *
+ * **Se ordena por el texto de `time`, y está bien.** Lo escribe el teléfono con
+ * `SimpleDateFormat("yyyy-MM-dd HH:mm")` (ver `SmsSync`): en ese formato el orden alfabético **es**
+ * el cronológico, porque cada campo va de más significativo a menos y con ancho fijo. Un `time`
+ * con otra forma no rompe nada — queda ordenado entre los suyos, no descarta la lista.
+ *
+ * `sortedByDescending` es **estable**: dos mensajes del mismo minuto conservan el orden en que
+ * llegaron, en vez de bailar entre lecturas.
+ */
+fun mensajesMasRecientesPrimero(mensajes: List<SmsMessage>): List<SmsMessage> =
+    mensajes.sortedByDescending { it.time }
+
 @Composable
 fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
     val coroutine = rememberCoroutineScope()
@@ -70,7 +90,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
         runCatching { Repositories.wallets.getUserProfile() }
             .onSuccess { silenciada = it.smsAlertMuted }
     }
-    val mensajes = smsItems.orEmpty()
+    val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
     val pendingCount = mensajes.count { it.state == SMS_STATE_PENDING }
     // El estado de la captura sale de la MISMA función que usa el server para el Inicio
     // (`capturaDeSms`, en :core) — acá sin un viaje extra, porque la lista ya está bajada.
