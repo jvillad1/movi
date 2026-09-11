@@ -138,6 +138,33 @@ fun periodoDe(epochMillis: Long, settings: PeriodSettings): PeriodoFinanciero {
 fun periodoActual(ahoraMillis: Long, settings: PeriodSettings): PeriodoFinanciero =
     periodoDe(ahoraMillis, settings)
 
+/**
+ * En qué período cae un día civil `"AAAA-MM-DD"` — la forma en que Movimientos tiene sus fechas.
+ *
+ * Se resuelve pasando por el **arranque de ese día en la zona de la app** y delegando en
+ * [periodoDe], en vez de repetir acá la regla del corte. Es a propósito: la regla —«antes del corte
+ * seguís en el período que arrancó el mes pasado»— ya está escrita y probada en un solo lugar, y
+ * dos copias de una regla de fechas es exactamente cómo nacen los desacuerdos de un día.
+ *
+ * Devuelve `null` si la cadena no es una fecha. Quien llama decide qué hacer con eso; acá no se
+ * inventa un período para un dato que no se entiende.
+ */
+fun periodoDeLaFecha(iso: String, settings: PeriodSettings): PeriodoFinanciero? {
+    val fecha = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return null
+    val millis = fecha.atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds()
+    return periodoDe(millis, settings)
+}
+
+/** El período anterior a [periodo]. */
+fun periodoAnterior(periodo: PeriodoFinanciero): PeriodoFinanciero =
+    if (periodo.month == 1) PeriodoFinanciero(periodo.year - 1, 12)
+    else PeriodoFinanciero(periodo.year, periodo.month - 1)
+
+/** El período siguiente a [periodo]. */
+fun periodoSiguiente(periodo: PeriodoFinanciero): PeriodoFinanciero =
+    if (periodo.month == 12) PeriodoFinanciero(periodo.year + 1, 1)
+    else PeriodoFinanciero(periodo.year, periodo.month + 1)
+
 private val MESES = listOf(
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",

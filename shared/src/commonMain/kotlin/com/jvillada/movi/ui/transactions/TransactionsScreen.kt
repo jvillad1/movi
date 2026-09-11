@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.Icon
@@ -62,6 +64,14 @@ import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.periodoActual
+import com.jvillada.movi.shared.model.periodoAnterior
+import com.jvillada.movi.shared.model.periodoDeLaFecha
+import com.jvillada.movi.shared.model.periodoSiguiente
+import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -102,6 +112,7 @@ import com.jvillada.movi.ui.recurrentes.textoDelMontoDeSuscripcion
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -484,6 +495,39 @@ fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
  * que aparezca algo, y una lista que esconde justo lo que acabás de buscar es peor que una que
  * muestra de más.
  */
+/**
+ * **Los días que caen adentro de un período**, para que Movimientos muestre el mes que el dueño
+ * vive y no el del calendario.
+ *
+ * El dueño: *«Como la periodicidad es mensual me debería dejar ver cada mes en las fechas que yo
+ * establecí, de 25 a 25 o cuando comience el período»*. Su corte no es el 1 porque su plata no
+ * empieza el 1: su salario está registrado el **26 de agosto** y se llama **«Salario Septiembre
+ * 2026»**. Movi ya sabía calcular eso —`PeriodSettings` existe y Presupuestos lo respeta— pero la
+ * lista de movimientos seguía siendo una tira infinita de días sin decir de qué mes hablaba.
+ *
+ * **Con corte 1 no cambia nada, por construcción**: el período ES el mes de calendario, así que
+ * quien no toque el ajuste ve lo de siempre, solo que ahora con el mes escrito arriba.
+ *
+ * Un día con fecha ilegible se deja pasar en vez de descartarse: esconder un movimiento porque no
+ * se entendió su fecha es peor que mostrarlo en el período equivocado — uno se ve y se corrige, el
+ * otro no se ve nunca.
+ */
+fun diasDelPeriodo(
+    days: List<EventDay>,
+    periodo: PeriodoFinanciero,
+    settings: PeriodSettings,
+): List<EventDay> = days.filter { dia ->
+    val suyo = periodoDeLaFecha(dia.date, settings)
+    suyo == null || suyo == periodo
+}
+
+/**
+ * ¿Se puede avanzar al período siguiente? **No más allá del actual**: el que viene todavía no
+ * ocurrió, y una lista vacía con el nombre de un mes futuro no le dice nada a nadie.
+ */
+fun puedeAvanzarDePeriodo(visible: PeriodoFinanciero, actual: PeriodoFinanciero): Boolean =
+    visible.prefijo < actual.prefijo
+
 fun mostrarLaListaDeDias(chip: Int, query: String): Boolean =
     chip != CHIP_RECURRENTES || query.isNotBlank()
 
@@ -847,6 +891,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     ScrollDesdeLosMargenes(listState)
 
     var allDays by remember { mutableStateOf<List<EventDay>>(emptyList()) }
+    /**
+     * El día en que arranca el mes del dueño. Sale de su perfil, igual que en Presupuestos; si la
+     * lectura falla queda en 1 —mes de calendario—, que es el comportamiento de siempre.
+     */
+    var cutoffDay by remember { mutableStateOf(1) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -894,6 +943,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
+        runCatching { Repositories.wallets.getUserProfile() }
+            .onSuccess { cutoffDay = it.periodCutoffDay }
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess {
                 allDays = it
@@ -1196,8 +1247,24 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas) {
-        diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
+    val ajustesDelPeriodo = remember(cutoffDay) { PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31)) }
+    val periodoDeHoy = remember(ajustesDelPeriodo) {
+        periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
+    }
+    /**
+     * Qué período se está mirando. `remember(periodoDeHoy)` y no `remember { }` a secas: si el
+     * dueño cambia su día de corte en Perfil y vuelve, el mes que se ve tiene que rearrancar en el
+     * que corresponde al corte nuevo, no quedarse en el que nombraba el viejo.
+     */
+    var periodoVisible by remember(periodoDeHoy) { mutableStateOf(periodoDeHoy) }
+
+    val visibleDays = remember(activeFilter, allDays, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas, periodoVisible, ajustesDelPeriodo) {
+        val filtrados = diasVisibles(allDays, activeFilter, searchQuery, reglasRecurrentes, nombresDeSuscripcionesActivas)
+        // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
+        // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
+        // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
+        if (searchQuery.isNotBlank()) filtrados
+        else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
@@ -1262,6 +1329,57 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         searchActive = false
                         searchQuery = ""
                     },
+                )
+            }
+        }
+
+        // **De qué mes son estas cifras**, y cómo moverse entre meses.
+        //
+        // Con la búsqueda abierta no se pinta: buscar atraviesa los períodos (ver `visibleDays`),
+        // así que un encabezado que dijera «septiembre» encima de resultados de marzo estaría
+        // mintiendo sobre lo que se ve.
+        if (!searchActive) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardArrowLeft,
+                    contentDescription = "Período anterior",
+                    tint = MinTextDim,
+                    modifier = Modifier.size(22.dp).clickable {
+                        periodoVisible = periodoAnterior(periodoVisible)
+                    },
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MinText,
+                    )
+                    // Con corte 1 esto es `null` y no se pinta: no hay nada que aclarar sobre un
+                    // mes de calendario. Con cualquier otro corte es lo único que explica por qué
+                    // «septiembre» empieza en agosto.
+                    rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
+                        Spacer(Modifier.height(2.dp))
+                        Text(text = rango, fontSize = 11.sp, color = MinTextFaint)
+                    }
+                }
+                val puedeAvanzar = puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardArrowRight,
+                    contentDescription = "Período siguiente",
+                    tint = if (puedeAvanzar) MinTextDim else MinTextFaint,
+                    modifier = Modifier.size(22.dp).then(
+                        if (puedeAvanzar) Modifier.clickable {
+                            periodoVisible = periodoSiguiente(periodoVisible)
+                        } else Modifier
+                    ),
                 )
             }
         }
