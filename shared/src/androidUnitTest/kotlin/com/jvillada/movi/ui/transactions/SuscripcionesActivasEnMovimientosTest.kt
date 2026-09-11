@@ -161,6 +161,13 @@ class SuscripcionesActivasEnMovimientosTest {
         esperarTexto("Sin movimientos aún")
         composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("SUSCRIPCIONES ACTIVAS")
+        // La sección **arranca plegada** desde que el dueño pidió que no ocupara la pantalla
+        // entera («que suscripciones sea una opción de filtro o de menú colapsable dentro de
+        // recurrentes»). Todo lo que esta clase afirma es sobre las FILAS, así que se abre acá una
+        // vez en vez de repetir el toque en cada test. Que arranque plegada tiene su propia prueba
+        // en `SuscripcionesPlegablesTest`.
+        composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()
+        esperarTexto("Quitar")
     }
 
     @After

@@ -667,6 +667,27 @@ fun agruparAjustesDeSaldo(rows: List<MovementRow>, query: String): List<Movement
  * **Cuántos movimientos dice tener un día plegado.** Cuenta hechos, no renglones — y el grupo de
  * ajustes no es un hecho.
  */
+/**
+ * **Lo que dice «Suscripciones activas» cuando está plegada.**
+ *
+ * El dueño, mirando Recurrentes: *«Debemos dejar que suscripciones sea una opción de filtro o de
+ * menú colapsable dentro de recurrentes»*. Con nueve cobros activos la sección medía más que todo
+ * lo demás junto, y la enorme mayoría de las veces que se abre esa pantalla no es para revisar el
+ * inventario: es para ver qué vence y qué falta confirmar.
+ *
+ * Plegada, entonces, tiene que seguir diciendo **lo que se mira de reojo** —cuánto suman al mes— y
+ * dejar la lista a un toque. Sin esto, plegar escondería la cifra junto con las filas y la sección
+ * dejaría de informar en vez de ocupar menos.
+ *
+ * El total llega calculado desde `ResumenRecurrentes.gastosDeSuscripciones`, que es el mismo que
+ * alimenta el «Flujo libre» de arriba: acá no se suma nada, para que las dos cifras no puedan
+ * discrepar.
+ */
+fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
+    val plural = if (cuantas == 1) "1 cobro" else "$cuantas cobros"
+    return "$plural · ${formatCOP(totalMensual)} al mes"
+}
+
 fun cuantosMovimientosDice(rows: List<MovementRow>): Int = rows.sumOf { row ->
     when (row) {
         // Un par plegado es UN hecho: la plata cambió de cuenta una sola vez. Esa decisión es
@@ -788,6 +809,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      * limitación.
      */
     var ajustesAbiertos by remember { mutableStateOf(emptySet<String>()) }
+    /**
+     * ¿Está abierta la lista de suscripciones activas? **Arranca cerrada**, y por lo mismo que el
+     * grupo de ajustes es transitorio: abrir el inventario es un vistazo, no una preferencia. La
+     * cifra que se mira de reojo —cuánto suman al mes— sigue a la vista plegada, así que cerrar no
+     * esconde información, solo filas. Ver [resumenPlegadoDeSuscripciones].
+     */
+    var suscripcionesAbiertas by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     // Pantalla ancha: la rueda del mouse sobre los márgenes, a los lados de la columna, también
     // tiene que mover esta lista. Ver [ScrollDesdeLosMargenes].
@@ -1513,6 +1541,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             enVuelo = suscripcionesEnVuelo,
                             onQuitar = { quitarSuscripcion(it) },
                             onEditar = { suscripcionAEditar = it },
+                            abierta = suscripcionesAbiertas,
+                            onAlternar = { suscripcionesAbiertas = !suscripcionesAbiertas },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                         )
                     }
@@ -2303,11 +2333,34 @@ private fun SeccionSuscripcionesActivas(
     enVuelo: Set<String>,
     onQuitar: (Subscription) -> Unit,
     onEditar: (Subscription) -> Unit,
+    /** ¿Se ven las filas, o solo el resumen? Ver [resumenPlegadoDeSuscripciones]. */
+    abierta: Boolean,
+    onAlternar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (activas.isEmpty()) return
     Column(modifier = modifier) {
-        MinSectionHeader(title = "Suscripciones activas", count = activas.size)
+        MinSectionHeader(
+            title = "Suscripciones activas",
+            count = activas.size,
+            action = if (abierta) "Ocultar" else "Ver",
+            onAction = onAlternar,
+        )
+        if (!abierta) {
+            MinCard(
+                modifier = Modifier.fillMaxWidth(),
+                variant = MinCardVariant.Elevated,
+                padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                onClick = onAlternar,
+            ) {
+                Text(
+                    text = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
+                    fontSize = 13.sp,
+                    color = MinTextMute,
+                )
+            }
+            return@Column
+        }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,

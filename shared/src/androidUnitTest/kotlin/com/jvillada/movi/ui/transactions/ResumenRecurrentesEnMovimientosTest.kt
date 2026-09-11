@@ -167,6 +167,12 @@ class ResumenRecurrentesEnMovimientosTest {
         // «Quitar». Antes de ese PR desaparecía sin dejar rastro, aunque siguiera sumando en el
         // «Flujo libre» de arriba.
         esperarTexto("SUSCRIPCIONES ACTIVAS")
+        // La sección de activas arranca plegada desde que el dueño pidió que no ocupara la
+        // pantalla entera (ver `SuscripcionesPlegablesTest`), así que se abre para mirar adentro.
+        // Que la candidata confirmada esté AHÍ sigue siendo el punto: antes desaparecía sin dejar
+        // rastro aunque siguiera sumando en el «Flujo libre».
+        composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()
+        esperarTexto("Disney+")
         composeRule.onNodeWithText("Disney+", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Suscripción · la encontró Movi", useUnmergedTree = true).assertExists()
     }
