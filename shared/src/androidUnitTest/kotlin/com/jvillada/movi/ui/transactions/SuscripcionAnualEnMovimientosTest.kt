@@ -105,6 +105,10 @@ class SuscripcionAnualEnMovimientosTest {
         esperarTexto("Sin movimientos aún")
         composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
         esperarTexto("SUSCRIPCIONES ACTIVAS")
+        // La sección arranca plegada (ver `SuscripcionesPlegablesTest`); todo lo que esta clase
+        // afirma es sobre las FILAS, así que se abre una vez acá.
+        composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
     }
 
     @After
