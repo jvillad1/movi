@@ -463,6 +463,31 @@ fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
 fun mostrarResumenDeRecurrentes(chip: Int): Boolean = chip == CHIP_RECURRENTES
 
 /**
+ * **¿Se pinta la lista de movimientos agrupada por día?**
+ *
+ * Con el chip «Recurrentes» activo, no. El dueño: *«Me gusta lo de Ya ocurrieron pero se repiten
+ * más abajo agrupando por día, creo que esto no tiene mucho sentido: solo debería tener pendientes
+ * y ya ocurrieron, nada más»*.
+ *
+ * Tiene razón, y el motivo es que esa lista **no agrega nada acá**: arriba ya está el mismo hecho
+ * dicho mejor. «Ya ocurrieron» no es una lista de movimientos, es la respuesta a «¿este mes ya
+ * pagaste el arriendo?» — con el pago que lo prueba y un «Deshacer» si no era ese. Repetir abajo
+ * los mismos pagos, ahora sueltos y sin esa pregunta encima, obliga a leer dos veces para
+ * enterarse de lo mismo.
+ *
+ * Con eso, «Recurrentes» deja de ser una lista filtrada y pasa a ser lo que el dueño usa: el
+ * **tablero de lo que se repite** — qué vence, qué ya ocurrió, qué falta confirmar y cuánto suma.
+ * Los movimientos siguen enteros en «Todo» y en «Gastos», que es donde se leen como movimientos.
+ *
+ * **Buscar es la excepción**, por tercera vez en esta pantalla y por el mismo motivo que las otras
+ * dos (`showsInMovements`, `agruparAjustesDeSaldo`): escribir una consulta es pedir explícitamente
+ * que aparezca algo, y una lista que esconde justo lo que acabás de buscar es peor que una que
+ * muestra de más.
+ */
+fun mostrarLaListaDeDias(chip: Int, query: String): Boolean =
+    chip != CHIP_RECURRENTES || query.isNotBlank()
+
+/**
  * PR 3 del rediseño de Recurrentes (2026-09): **con qué chip arranca Movimientos** cuando alguien
  * la abrió pidiendo uno.
  *
@@ -1549,7 +1574,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 }
             }
 
-            if (!loading && visibleDays.isEmpty()) {
+            // Con «Recurrentes» la lista de días no se pinta (ver [mostrarLaListaDeDias]), así que
+            // su vacío tampoco: decir «no hay movimientos recurrentes» debajo de un tablero lleno
+            // de vencimientos sería contradecirse en la misma pantalla.
+            val hayListaDeDias = mostrarLaListaDeDias(activeFilter, searchQuery)
+            if (!loading && visibleDays.isEmpty() && hayListaDeDias) {
                 item {
                     if (searchQuery.isNotBlank()) {
                         // F13: nada que ver acá con "no hay dónde anotar" — la búsqueda no dio
@@ -1611,7 +1640,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 }
             }
 
-            visibleDays.forEach { day ->
+            (if (hayListaDeDias) visibleDays else emptyList()).forEach { day ->
                 // Sin `key`: con la fecha como clave, `LazyColumn` ancla el primer día visible al
                 // cambiar de chip, y pasar de «Gastos» a «Todo» dejaba el día nuevo de arriba
                 // escondido por encima del tope (visto a ojo en la web). Posicional, como antes.

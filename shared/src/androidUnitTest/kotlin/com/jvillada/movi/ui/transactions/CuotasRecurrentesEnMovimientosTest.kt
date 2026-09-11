@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -204,6 +207,29 @@ class CuotasRecurrentesEnMovimientosTest {
     // ── Chip «Recurrentes»: lo que el dueño vino a ver ───────────────────────
 
     /**
+     * Entra a «Recurrentes» y **escribe una búsqueda**, que es donde la lista por día se pinta
+     * desde que el dueño pidió que ese chip dejara de repetir abajo lo que ya dice arriba
+     * (*«solo debería tener pendientes y ya ocurrieron, nada más»*, ver [mostrarLaListaDeDias]).
+     *
+     * Lo que estas pruebas afirman **no cambió**: que con el filtro puesto pasa una sola pata de
+     * cada par, y cómo se ve esa fila. La búsqueda es solo por dónde se llega a verla — filtra por
+     * texto encima del chip, no en lugar de él, así que el filtro sigue siendo lo que decide.
+     *
+     * **El texto que se escribe no es el que después se cuenta**, a propósito: el campo de
+     * búsqueda es un nodo de texto más, así que buscar «Cuota de Vehículo» y contar los nodos que
+     * dicen «Cuota de Vehículo» encontraría dos —la fila y el campo— y la prueba fallaría por su
+     * propia herramienta.
+     */
+    private fun buscarEnRecurrentes(texto: String) {
+        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Buscar", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextReplacement(texto)
+        composeRule.waitForIdle()
+    }
+
+    /**
      * Con el filtro puesto pasa **solo la pata del dinero**, así que la cuota se ve suelta, con el
      * concepto que ya nombra el crédito y por el monto que de verdad salió de la cuenta. La pata
      * de la deuda («Abono a capital desde…») no está: con las dos, cada cuota ocuparía dos filas
@@ -211,7 +237,7 @@ class CuotasRecurrentesEnMovimientosTest {
      */
     @Test
     fun `el chip Recurrentes muestra la cuota una sola vez, con el nombre del credito`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        buscarEnRecurrentes("Vehíc")
         esperarTexto("Cuota de Vehículo")
 
         composeRule.onAllNodesWithText("Cuota de Vehículo", useUnmergedTree = true).assertCountEquals(1)
@@ -239,14 +265,16 @@ class CuotasRecurrentesEnMovimientosTest {
      */
     @Test
     fun `el chip Recurrentes muestra el pago de la tarjeta una sola vez`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        buscarEnRecurrentes("Nubank")
         esperarTexto("Pago de Nubank")
 
         composeRule.onAllNodesWithText("Pago de Nubank", useUnmergedTree = true).assertCountEquals(1)
         composeRule.onAllNodesWithText("Pago desde Bancolombia", useUnmergedTree = true)
             .assertCountEquals(0)
-        // Y con los dos pares filtrados quedan dos filas, las dos marcadas.
-        marcasDeRecurrente().assertCountEquals(2)
+        // «Y los dos pares quedan marcados» ya no se afirma acá: la búsqueda deja una sola fila a
+        // la vista, así que contar marcas mediría el filtro de texto y no el chip. Eso lo prueba
+        // `en Todo los dos pares van marcados, y el titulo los distingue`, donde las dos filas
+        // están.
     }
 
     /**
@@ -260,7 +288,7 @@ class CuotasRecurrentesEnMovimientosTest {
      */
     @Test
     fun `el pago de la tarjeta se ve sin signo y no entra a ninguna cifra`() {
-        composeRule.onNodeWithText("Recurrentes", useUnmergedTree = true).performClick()
+        buscarEnRecurrentes("Nubank")
         esperarTexto("Pago de Nubank")
 
         composeRule.onAllNodesWithText("1.200.000", substring = true, useUnmergedTree = true)
