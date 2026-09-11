@@ -32,7 +32,40 @@ jobs:
 
       # JetBrains Runtime 21, no un OpenJDK cualquiera: `gradle/gradle-daemon-jvm.properties`
       # pinta `toolchainVendor=jetbrains`, y con otro vendor el daemon no arranca.
-      - uses: actions/setup-java@v4
+      #
+      # ## Por qué esto se intenta dos veces
+      #
+      # Para resolver «la 21 de jetbrains» esta acción le pregunta a la API de GitHub cuál es la
+      # última, y esa consulta **se quedó sin cuota tres veces** (2026-09-09 dos veces, 2026-09-11
+      # una más), siempre con el mismo error:
+      #
+      #     ##[error]API rate limit exceeded for 57.154.7.202.
+      #
+      # El límite es por IP del runner y lo comparten todos los trabajos que caen en esa máquina,
+      # así que no depende de este repo ni se arregla esperando: las tres veces el arreglo fue
+      # `gh run rerun --failed`, o sea una persona mirando. Un CI que hay que reintentar a mano no
+      # es un CI, es un recordatorio.
+      #
+      # El reintento con pausa ataca exactamente eso, que es transitorio por definición: la cuota
+      # se repone sola. No tapa un fallo real — si el JDK de verdad no se puede instalar, el
+      # segundo intento falla igual y el trabajo se cae, que es lo correcto.
+      #
+      # `continue-on-error` va SOLO en el primer intento. En el segundo no: ahí sí tiene que
+      # romper. Sin esa asimetría, un JDK que nunca se instala dejaría pasar el trabajo entero y
+      # los pasos de abajo fallarían con un error que no explica nada.
+      - id: jdk
+        uses: actions/setup-java@v5
+        continue-on-error: true
+        with:
+          distribution: jetbrains
+          java-version: '21'
+
+      - name: Reintentar el JDK
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 45
+
+      - if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v5
         with:
           distribution: jetbrains
           java-version: '21'
