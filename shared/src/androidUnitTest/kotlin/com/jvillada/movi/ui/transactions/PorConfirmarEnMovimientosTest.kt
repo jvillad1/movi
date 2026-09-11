@@ -18,7 +18,9 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -54,7 +56,7 @@ class PorConfirmarEnMovimientosTest {
             amount = 18_500L,
             category = "Comida",
             description = descripcion,
-            timestamp = 1_710_500_000_000L,
+            timestamp = Clock.System.now().toEpochMilliseconds(),
             source = fuente,
             reconciliationStatus = estado,
             countsAsCashFlow = true,
@@ -68,7 +70,7 @@ class PorConfirmarEnMovimientosTest {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(banco)
             override suspend fun getEventsByDay(): List<EventDay> =
-                listOf(EventDay(date = "2024-03-15", total = -18_500L, items = items))
+                listOf(EventDay(date = HOY_ISO, total = -18_500L, items = items))
             override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
         }
         composeRule.setContent {
@@ -164,3 +166,11 @@ class PorConfirmarEnMovimientosTest {
 
 /** El mismo tamaño de pantalla que usan las otras pruebas de esta carpeta (privado por archivo). */
 private const val AVD_POR_CONFIRMAR = "w411dp-h731dp-xhdpi"
+
+/**
+ * **Hoy, en la zona de la app.** Los fixtures de esta clase tienen que caer adentro del período
+ * que Movimientos muestra al abrirse (ver `diasDelPeriodo`), así que la fecha sale del reloj en vez
+ * de ser una constante vieja. El encabezado del día queda en «HOY», que es igual de estable que una
+ * fecha fija y además no depende del corte que tenga configurado el usuario de prueba.
+ */
+private val HOY_ISO: String = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString()

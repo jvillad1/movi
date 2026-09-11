@@ -18,7 +18,9 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -57,13 +59,13 @@ class MovimientosPlegablesTest {
         amount = amount,
         category = "Comida",
         description = description,
-        timestamp = 1_710_500_000_000L,
+        timestamp = Clock.System.now().toEpochMilliseconds(),
         reconciliationStatus = ReconciliationStatus.RECONCILED,
         countsAsCashFlow = true,
     )
 
     private val dia = EventDay(
-        date = "2024-03-15",
+        date = HOY_ISO,
         total = -69_489L,
         items = listOf(gasto("e1", "Señor Gol", 46_489L), gasto("e2", "Las Doce", 23_000L)),
     )
@@ -106,7 +108,7 @@ class MovimientosPlegablesTest {
         composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertIsDisplayed()
 
-        composeRule.onNode(hasText("15 DE MARZO DE 2024"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("HOY"), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
@@ -114,16 +116,16 @@ class MovimientosPlegablesTest {
         composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("−$69.489", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("2 movimientos", substring = true, useUnmergedTree = true).assertIsDisplayed()
-        assertTrue("2024-03-15" in DiasPlegadosStore.plegados(), "el pliegue tiene que quedar recordado por fecha")
+        assertTrue(HOY_ISO in DiasPlegadosStore.plegados(), "el pliegue tiene que quedar recordado por fecha")
     }
 
     @Test
     fun `volver a tocar el encabezado despliega el dia`() {
-        composeRule.onNode(hasText("15 DE MARZO DE 2024"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("HOY"), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertDoesNotExist()
 
-        composeRule.onNode(hasText("15 DE MARZO DE 2024"), useUnmergedTree = true).performClick()
+        composeRule.onNode(hasText("HOY"), useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Señor Gol", useUnmergedTree = true).assertIsDisplayed()
@@ -133,3 +135,11 @@ class MovimientosPlegablesTest {
 }
 
 private const val AVD_MOVI_SENSOR = "w411dp-h731dp-xhdpi"
+
+/**
+ * **Hoy, en la zona de la app.** Los fixtures de esta clase tienen que caer adentro del período
+ * que Movimientos muestra al abrirse (ver `diasDelPeriodo`), así que la fecha sale del reloj en vez
+ * de ser una constante vieja. El encabezado del día queda en «HOY», que es igual de estable que una
+ * fecha fija y además no depende del corte que tenga configurado el usuario de prueba.
+ */
+private val HOY_ISO: String = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString()
