@@ -19,8 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextMute
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
@@ -79,10 +78,10 @@ fun MinScreenHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp - backInset, end = 20.dp)
-            .padding(top = 8.dp, bottom = 12.dp),
+            .padding(start = Movi.espacios.margen - backInset, end = Movi.espacios.margen)
+            .padding(top = Movi.espacios.corto, bottom = Movi.espacios.medio),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
     ) {
         when (leading) {
             is HeaderLeading.Avatar -> AvatarButton(onClick = leading.onClick)
@@ -91,7 +90,7 @@ fun MinScreenHeader(
                 Icon(
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "Volver",
-                    tint = MinText,
+                    tint = Movi.colores.texto,
                     modifier = Modifier
                         .clickable { goBack(leading.fallback) }
                         .padding(11.dp)
@@ -100,17 +99,23 @@ fun MinScreenHeader(
             }
         }
         Column(modifier = Modifier.weight(1f)) {
+            // `titular` es 19.sp contra los 17 de antes, y semibold contra medium. El título de
+            // la pantalla es el ancla de toda la jerarquía: si no gana, no hay jerarquía.
             Text(
                 text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinText,
-                letterSpacing = (-0.3).sp,
+                style = Movi.textos.titular,
+                color = Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
-                Text(subtitle, fontSize = 12.sp, color = MinTextMute, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = subtitle,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         if (action != null) action()
