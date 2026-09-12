@@ -20,10 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.UsoDeCuenta
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextMute
 
 /**
  * **La lista de cuentas para elegir con el dedo, en las pantallas de lo que llegó del banco.**
@@ -69,7 +68,7 @@ fun ListaDeCuentasElegibles(
             Text(
                 "No tienes cuentas todavía.",
                 fontSize = 13.5.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(vertical = 14.dp),
             )
         } else {
@@ -85,7 +84,7 @@ fun ListaDeCuentasElegibles(
                     Text(
                         account.name,
                         fontSize = 14.5.sp,
-                        color = MinText,
+                        color = Movi.colores.texto,
                         fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                         modifier = Modifier.weight(1f),
                     )
@@ -93,7 +92,7 @@ fun ListaDeCuentasElegibles(
                         Icon(
                             Icons.Rounded.Check,
                             contentDescription = null,
-                            tint = MinText,
+                            tint = Movi.colores.texto,
                             modifier = Modifier.size(16.dp),
                         )
                     }

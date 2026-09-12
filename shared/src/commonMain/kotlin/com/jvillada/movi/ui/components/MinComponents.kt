@@ -239,7 +239,7 @@ fun ChevronRight() {
     Icon(
         Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
-        // Era MinTextFaint: 2,51:1 contra el fondo. Una flecha que dice «esto se toca» y no se
+        // Era Movi.colores.textoApagado: 2,51:1 contra el fondo. Una flecha que dice «esto se toca» y no se
         // ve no dice nada. textoApagado da 7,51:1.
         tint = Movi.colores.textoApagado,
         modifier = Modifier.size(18.dp),

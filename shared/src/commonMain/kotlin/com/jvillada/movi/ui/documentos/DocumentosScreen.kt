@@ -40,16 +40,10 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
-import com.jvillada.movi.theme.MinBg
-import com.jvillada.movi.theme.MinExpense
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinSurfaceContainerHigh
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.Hairline
@@ -70,8 +64,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.TipoDeDocumento
-import com.jvillada.movi.theme.MinBorder
-import com.jvillada.movi.theme.MinSurfaceContainerLow
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
@@ -174,7 +166,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
         error = null
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
             MinScreenHeader(
                 title = "Documentos",
@@ -197,7 +189,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                         text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
                             "que quieras tener a mano. Los extractos que importes se archivan solos.",
                         fontSize = 13.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 18.sp,
                     )
                     Spacer(Modifier.height(16.dp))
@@ -271,18 +263,18 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .clickable(enabled = false) {}
                 .padding(horizontal = 20.dp, vertical = 22.dp),
         ) {
-            Text("¿Borrar este documento?", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MinText)
+            Text("¿Borrar este documento?", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Spacer(Modifier.height(8.dp))
-            Text(doc.nombre, fontSize = 14.sp, color = MinText)
+            Text(doc.nombre, fontSize = 14.sp, color = Movi.colores.texto)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
                 fontSize = 12.5.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 17.sp,
             )
             Spacer(Modifier.height(20.dp))
@@ -290,7 +282,7 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                 Text(
                     "Cancelar",
                     fontSize = 14.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
@@ -301,7 +293,7 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                 Text(
                     "Borrar",
                     fontSize = 14.sp,
-                    color = MinExpense,
+                    color = Movi.colores.sale,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
@@ -330,7 +322,7 @@ private fun FilaDeDocumento(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(doc.nombre, fontSize = 14.sp, color = MinText, fontWeight = FontWeight.Medium)
+                Text(doc.nombre, fontSize = 14.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(2.dp))
                 // Peso, fecha y período en un renglón: son los tres datos con los que uno
                 // reconoce cuál de tres extractos parecidos es el que busca.
@@ -341,11 +333,11 @@ private fun FilaDeDocumento(
                         doc.periodo,
                     ).joinToString(" · "),
                     fontSize = 11.5.sp,
-                    color = MinTextFaint,
+                    color = Movi.colores.textoApagado,
                 )
                 doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
                     Spacer(Modifier.height(2.dp))
-                    Text(nota, fontSize = 11.5.sp, color = MinTextMute)
+                    Text(nota, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -353,13 +345,13 @@ private fun FilaDeDocumento(
                 "Abrir",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinPrimary,
+                color = Movi.colores.marca,
             )
             Spacer(Modifier.width(4.dp))
             Text(
                 "Editar",
                 fontSize = 12.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onEditar)
@@ -369,7 +361,7 @@ private fun FilaDeDocumento(
             Text(
                 "Borrar",
                 fontSize = 12.sp,
-                color = MinExpense,
+                color = Movi.colores.sale,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onBorrar)
@@ -450,7 +442,7 @@ private fun EditarDocumentoSheet(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .clickable(enabled = false) {}
                 .padding(horizontal = 20.dp),
         ) {
@@ -465,7 +457,7 @@ private fun EditarDocumentoSheet(
                 CampoDeTexto("NOMBRE", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
                 Spacer(Modifier.height(14.dp))
 
-                Text("TIPO", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                Text("TIPO", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
                 Spacer(Modifier.height(8.dp))
                 TipoDeDocumento.entries.forEach { t ->
                     Row(
@@ -479,7 +471,7 @@ private fun EditarDocumentoSheet(
                         Text(
                             nombreDeTipo(t),
                             fontSize = 14.sp,
-                            color = if (t == tipo) MinText else MinTextMute,
+                            color = if (t == tipo) Movi.colores.texto else Movi.colores.textoMedio,
                             fontWeight = if (t == tipo) FontWeight.Medium else FontWeight.Normal,
                             modifier = Modifier.weight(1f),
                         )
@@ -489,7 +481,7 @@ private fun EditarDocumentoSheet(
                             Icon(
                                 Icons.Rounded.Check,
                                 contentDescription = null,
-                                tint = MinPrimary,
+                                tint = Movi.colores.marca,
                                 modifier = Modifier.size(15.dp),
                             )
                         }
@@ -506,21 +498,21 @@ private fun EditarDocumentoSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (nombre.isNotBlank()) MinText else MinTextFaint)
+                        .background(if (nombre.isNotBlank()) Movi.colores.texto else Movi.colores.textoApagado)
                         .clickable(enabled = !guardando && nombre.isNotBlank()) { guardar() }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         if (guardando) "Guardando…" else "Guardar",
-                        color = MinBg,
+                        color = Movi.colores.fondo,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
                 }
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.sp, color = MinExpense)
+                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
                 }
                 Spacer(Modifier.height(20.dp))
             }
@@ -535,26 +527,26 @@ private fun CampoDeTexto(
     onCambio: (String) -> Unit,
     marcador: String,
 ) {
-    Text(etiqueta, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+    Text(etiqueta, fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
     Spacer(Modifier.height(8.dp))
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         if (valor.isEmpty()) {
-            Text(marcador, fontSize = 14.sp, color = MinTextFaint, maxLines = 1)
+            Text(marcador, fontSize = 14.sp, color = Movi.colores.textoApagado, maxLines = 1)
         }
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
         val campo = rememberCampoConSeleccion(valor, onCambio)
         BasicTextField(
             value = campo.valor,
             onValueChange = campo::alCambiar,
-            textStyle = TextStyle(fontSize = 14.sp, color = MinText),
-            cursorBrush = SolidColor(MinPrimary),
+            textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+            cursorBrush = SolidColor(Movi.colores.marca),
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
     }

@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
@@ -44,13 +45,6 @@ import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.theme.MinBorder
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinSurfaceContainerHigh
-import com.jvillada.movi.theme.MinSurfaceContainerLow
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
 import kotlinx.coroutines.delay
 
 /**
@@ -570,15 +564,15 @@ fun CategoryField(
 
     Column(modifier = modifier) {
         if (label != null) {
-            Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+            Text(label, fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
             Spacer(Modifier.height(8.dp))
         }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(MinSurfaceContainerLow)
-                .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                .background(Movi.colores.tarjeta)
+                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             BasicTextField(
@@ -588,8 +582,8 @@ fun CategoryField(
                     onValueChange(it.text)
                 },
                 singleLine = true,
-                cursorBrush = SolidColor(MinText),
-                textStyle = TextStyle(color = MinText, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                cursorBrush = SolidColor(Movi.colores.texto),
+                textStyle = TextStyle(color = Movi.colores.texto, fontSize = 15.sp, fontWeight = FontWeight.Medium),
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -616,7 +610,7 @@ fun CategoryField(
                         focused = state.isFocused
                     },
                 decorationBox = { inner ->
-                    if (value.isEmpty()) Text(placeholder, fontSize = 15.sp, color = MinTextFaint)
+                    if (value.isEmpty()) Text(placeholder, fontSize = 15.sp, color = Movi.colores.textoApagado)
                     inner()
                 },
             )
@@ -639,8 +633,8 @@ fun CategoryField(
                         },
                     )
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MinSurfaceContainerHigh)
-                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),
+                    .background(Movi.colores.tarjeta)
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
             ) {
                 if (esReservada) {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -648,12 +642,12 @@ fun CategoryField(
                             "«$nuevaCategoria» la usa Movi sola",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                         )
                         Text(
                             "Es una categoría reservada y de ella dependen las cifras de tu mes. Elige otra.",
                             fontSize = 11.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                     }
                     if (matches.isNotEmpty()) Hairline()
@@ -669,12 +663,12 @@ fun CategoryField(
                             "Crear \"$nuevaCategoria\"",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinPrimary,
+                            color = Movi.colores.marca,
                         )
                         Text(
                             "Se guarda tal cual, como categoría tuya",
                             fontSize = 11.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                     }
                     if (matches.isNotEmpty()) Hairline()
@@ -693,12 +687,12 @@ fun CategoryField(
                             "Usar \"$nombreConocido\"",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinPrimary,
+                            color = Movi.colores.marca,
                         )
                         Text(
                             ladoConocido ?: "Ya la tienes anotada",
                             fontSize = 11.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                     }
                     if (matches.isNotEmpty()) Hairline()
@@ -707,7 +701,7 @@ fun CategoryField(
                     Text(
                         name,
                         fontSize = 14.sp,
-                        color = MinText,
+                        color = Movi.colores.texto,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { pick(name) }
@@ -739,7 +733,7 @@ fun CategoryField(
         Text(
             text = "Administrar categorías",
             fontSize = 12.5.sp,
-            color = MinPrimary,
+            color = Movi.colores.marca,
             fontWeight = FontWeight.Medium,
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))

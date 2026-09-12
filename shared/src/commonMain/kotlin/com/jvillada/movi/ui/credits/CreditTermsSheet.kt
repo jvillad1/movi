@@ -330,7 +330,7 @@ fun CreditTermsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -355,7 +355,7 @@ fun CreditTermsSheet(
                         Text(
                             "Ya tienes una deuda cargada como cuenta, ¿es esta?",
                             fontSize = 12.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                         Spacer(Modifier.height(8.dp))
                         candidates.forEach { acc ->
@@ -404,7 +404,7 @@ fun CreditTermsSheet(
                             "¿Acabas de recibir la plata de este crédito?",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                         )
                         Spacer(Modifier.height(8.dp))
                         OpcionDeAlta(
@@ -438,7 +438,7 @@ fun CreditTermsSheet(
                                 "Lo que tu banco dice que debes hoy. Si no lo tienes a mano, " +
                                     "déjalo en blanco y cuádralo después con «Ajustar saldo».",
                                 fontSize = 11.5.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                             )
                         }
                     }
@@ -474,7 +474,7 @@ fun CreditTermsSheet(
                     "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
                         "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
                     fontSize = 11.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(8.dp))
                 // El cuarto renglón, pegado al seguro y no al final: los dos son plata que está
@@ -488,7 +488,7 @@ fun CreditTermsSheet(
                         "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
                         "aquí para que Movi no lo cuente como abono a tu deuda.",
                     fontSize = 11.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(8.dp))
                 // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
@@ -509,17 +509,17 @@ fun CreditTermsSheet(
                     SectionLabel("LA PLATA QUE TE ENTRÓ")
                     Spacer(Modifier.height(8.dp))
                     when {
-                        !cuentasCargadas -> Text("Cargando tus cuentas…", fontSize = 12.sp, color = MinTextMute)
+                        !cuentasCargadas -> Text("Cargando tus cuentas…", fontSize = 12.sp, color = Movi.colores.textoMedio)
                         // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
                         // ofrece volver a intentar, en vez de mandar a crear una cuenta que ya
                         // existe. Ver [falloCargarCuentas].
                         falloCargarCuentas -> {
-                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, fontSize = 12.sp, color = MinTextMute)
+                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, fontSize = 12.sp, color = Movi.colores.textoMedio)
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 "Reintentar",
                                 fontSize = 13.sp,
-                                color = MinText,
+                                color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier
                                     .clickable(enabled = !saving) { intentoDeCarga++ }
@@ -534,10 +534,10 @@ fun CreditTermsSheet(
                         sinCuentasDestino -> Text(
                             SIN_CUENTA_PARA_EL_DESEMBOLSO,
                             fontSize = 12.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                         else -> {
-                            Text("¿A qué cuenta te entró?", fontSize = 12.sp, color = MinTextMute)
+                            Text("¿A qué cuenta te entró?", fontSize = 12.sp, color = Movi.colores.textoMedio)
                             Spacer(Modifier.height(8.dp))
                             cuentasDestino.forEach { acc ->
                                 SelectRow(
@@ -572,7 +572,7 @@ fun CreditTermsSheet(
                                 // Una brecha implausible se pinta distinto: es lo único que
                                 // separa a la vista «esto está bien» de «revisa lo que
                                 // escribiste». Ver [ExplicacionDelDesembolso].
-                                color = if (explicacion?.esAdvertencia == true) MinExpense else MinTextMute,
+                                color = if (explicacion?.esAdvertencia == true) Movi.colores.sale else Movi.colores.textoMedio,
                             )
                         }
                     }
@@ -593,7 +593,7 @@ fun CreditTermsSheet(
                         modifier = Modifier
                             .size(20.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (esLibranza) MinPrimary else MinSurfaceContainerHighest),
+                            .background(if (esLibranza) Movi.colores.marca else Movi.colores.tarjeta),
                         contentAlignment = Alignment.Center,
                     ) {
                         // Ícono, no el carácter «✓».
@@ -608,20 +608,20 @@ fun CreditTermsSheet(
                             Icon(
                                 Icons.Rounded.Check,
                                 contentDescription = null,
-                                tint = MinBg,
+                                tint = Movi.colores.fondo,
                                 modifier = Modifier.size(14.dp),
                             )
                         }
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Se descuenta de mi nómina", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
+                        Text("Se descuenta de mi nómina", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                         Text(
                             text = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
                                 "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
                                 "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
                             fontSize = 11.5.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
                     }
@@ -640,7 +640,7 @@ fun CreditTermsSheet(
                     Text(
                         "¿LA PAGA ALGUIEN MÁS?",
                         fontSize = 11.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         fontWeight = FontWeight.Medium,
                         letterSpacing = 0.4.sp,
                     )
@@ -675,7 +675,7 @@ fun CreditTermsSheet(
                                 "paga otra persona o sale de otra bolsa — una pensión voluntaria, tu " +
                                 "pareja, un familiar.",
                             fontSize = 11.5.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
                     } else {
@@ -684,7 +684,7 @@ fun CreditTermsSheet(
                                 "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
                                 "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
                             fontSize = 11.5.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
                     }
@@ -720,7 +720,7 @@ fun CreditTermsSheet(
                 Text(
                     text = it,
                     fontSize = 12.sp,
-                    color = MinExpense,
+                    color = Movi.colores.sale,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -731,12 +731,12 @@ fun CreditTermsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) MinText else MinTextFaint)
+                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                     .clickable(enabled = canSave) { save() }
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (saving) "Guardando…" else "Guardar crédito", color = MinBg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(if (saving) "Guardando…" else "Guardar crédito", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
             // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
             if (!canSave && !saving && missingFieldMessage != null) {
@@ -744,7 +744,7 @@ fun CreditTermsSheet(
                 Text(
                     text = missingFieldMessage,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -754,7 +754,7 @@ fun CreditTermsSheet(
                 Text(
                     "Eliminar términos",
                     fontSize = 13.sp,
-                    color = MinExpense,
+                    color = Movi.colores.sale,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { deleteTerms() }.padding(vertical = 8.dp),
                 )
@@ -769,7 +769,7 @@ internal fun SectionLabel(text: String) {
     Text(
         text = text,
         fontSize = 11.sp,
-        color = MinTextMute,
+        color = Movi.colores.textoMedio,
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
@@ -786,8 +786,8 @@ internal fun FieldBox(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         // Una sola línea SIEMPRE, igual que en [MoneyField] y por lo mismo: estos campos se usan
@@ -797,7 +797,7 @@ internal fun FieldBox(
             Text(
                 placeholder,
                 fontSize = 14.sp,
-                color = MinTextFaint,
+                color = Movi.colores.textoApagado,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
@@ -808,8 +808,8 @@ internal fun FieldBox(
         BasicTextField(
             value = campo.valor,
             onValueChange = campo::alCambiar,
-            textStyle = TextStyle(fontSize = 14.sp, color = MinText),
-            cursorBrush = SolidColor(MinText),
+            textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+            cursorBrush = SolidColor(Movi.colores.texto),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
@@ -836,19 +836,19 @@ private fun OpcionDeAlta(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MinSurfaceContainerLow else Color.Transparent)
-            .border(1.dp, if (selected) MinText else MinBorder, RoundedCornerShape(12.dp))
+            .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
+            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Text(
             titulo,
             fontSize = 13.5.sp,
-            color = MinText,
+            color = Movi.colores.texto,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
         )
         Spacer(Modifier.height(3.dp))
-        Text(detalle, fontSize = 11.5.sp, color = MinTextMute)
+        Text(detalle, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
     }
 }
 
@@ -991,13 +991,13 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MinSurfaceContainerLow else Color.Transparent)
-            .border(1.dp, if (selected) MinText else MinBorder, RoundedCornerShape(12.dp))
+            .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
+            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 13.5.sp, color = MinText, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Text(label, fontSize = 13.5.sp, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }
 
@@ -1011,28 +1011,28 @@ private fun RateFieldBox(placeholder: String, value: String, onValueChange: (Str
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
-                if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = MinTextFaint)
+                if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = Movi.colores.textoApagado)
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                 // [esAtajoDeSeleccionarTodo].
                 val campo = rememberCampoConSeleccion(value, onValueChange)
                 BasicTextField(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
-                    textStyle = TextStyle(fontSize = 14.sp, color = MinText),
-                    cursorBrush = SolidColor(MinText),
+                    textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+                    cursorBrush = SolidColor(Movi.colores.texto),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                         .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 )
             }
-            if (value.isNotEmpty()) Text("%", fontSize = 14.sp, color = MinTextMute)
+            if (value.isNotEmpty()) Text("%", fontSize = 14.sp, color = Movi.colores.textoMedio)
         }
     }
 }

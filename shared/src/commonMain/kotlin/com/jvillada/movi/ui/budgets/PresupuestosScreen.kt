@@ -46,7 +46,6 @@ import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.EstadoDePresupuesto
 import com.jvillada.movi.shared.model.estadoDePresupuesto
-import com.jvillada.movi.theme.MinIncome
 import com.jvillada.movi.shared.model.FinancialEvent
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -209,7 +208,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     val warnCount = progresses.count { it.state == EstadoDePresupuesto.CERCA || it.state == EstadoDePresupuesto.AL_LIMITE }
     val overCount = progresses.count { it.state.estaSuperado }
 
-    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // F60: encabezado único — avatar en ancho (Presupuestos está en el rail), flecha a
             // Más en el teléfono (se llega por Más). Con presupuestos ya creados, el alta
@@ -242,13 +241,13 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(22.dp),
                     ) {
-                        Text("Gastado en $monthName", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                        Text("Gastado en $monthName", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(10.dp))
                         Text(
                             text = formatCOP(totalSpent),
                             fontSize = 36.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             letterSpacing = (-1.4).sp,
                             lineHeight = 36.sp,
                         )
@@ -256,7 +255,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                         Text(
                             text = "de ${formatCOP(totalLimit)}",
                             fontSize = 13.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             fontFamily = FontFamily.Monospace,
                         )
                         if (warnCount + overCount > 0) {
@@ -272,10 +271,10 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                             // se contradecía a sí misma en color y en palabra.
                             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                                 if (overCount > 0) {
-                                    AlertBadge("Sobrepasados", overCount, MinExpense)
+                                    AlertBadge("Sobrepasados", overCount, Movi.colores.sale)
                                 }
                                 if (warnCount > 0) {
-                                    AlertBadge("Sin margen o cerca", warnCount, MinIncome)
+                                    AlertBadge("Sin margen o cerca", warnCount, Movi.colores.entra)
                                 }
                             }
                         }
@@ -380,7 +379,7 @@ private fun AlertBadge(label: String, count: Int, color: Color) {
             color = color,
             letterSpacing = (-0.4).sp,
         )
-        Text(label, fontSize = 11.sp, color = MinTextMute)
+        Text(label, fontSize = 11.sp, color = Movi.colores.textoMedio)
     }
 }
 
@@ -396,11 +395,11 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
         // estaba justo en el límite.
         //
         // Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
-        EstadoDePresupuesto.EXCEDIDO_MUCHO -> MinExpense
-        EstadoDePresupuesto.EXCEDIDO_POCO -> MinWarn
-        EstadoDePresupuesto.AL_LIMITE -> MinIncome
-        EstadoDePresupuesto.CERCA -> MinIncome
-        EstadoDePresupuesto.DENTRO -> MinIncome
+        EstadoDePresupuesto.EXCEDIDO_MUCHO -> Movi.colores.sale
+        EstadoDePresupuesto.EXCEDIDO_POCO -> Movi.colores.aviso
+        EstadoDePresupuesto.AL_LIMITE -> Movi.colores.entra
+        EstadoDePresupuesto.CERCA -> Movi.colores.entra
+        EstadoDePresupuesto.DENTRO -> Movi.colores.entra
     }
     val pctColor = when (p.state) {
         // El semáforo, tal como lo pidió el dueño: «verde si estoy igual o por debajo, amarillo
@@ -412,11 +411,11 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
         // estaba justo en el límite.
         //
         // Sin `else`: así el `when` es exhaustivo y un estado nuevo no puede colarse sin color.
-        EstadoDePresupuesto.EXCEDIDO_MUCHO -> MinExpense
-        EstadoDePresupuesto.EXCEDIDO_POCO -> MinWarn
-        EstadoDePresupuesto.AL_LIMITE -> MinIncome
-        EstadoDePresupuesto.CERCA -> MinIncome
-        EstadoDePresupuesto.DENTRO -> MinIncome
+        EstadoDePresupuesto.EXCEDIDO_MUCHO -> Movi.colores.sale
+        EstadoDePresupuesto.EXCEDIDO_POCO -> Movi.colores.aviso
+        EstadoDePresupuesto.AL_LIMITE -> Movi.colores.entra
+        EstadoDePresupuesto.CERCA -> Movi.colores.entra
+        EstadoDePresupuesto.DENTRO -> Movi.colores.entra
     }
     MinCard(
         modifier = Modifier.fillMaxWidth(),
@@ -433,7 +432,7 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                 text = p.budget.category,
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
             )
             // F15: el chevron es lo que insinúa que la tarjeta se toca — mismo ícono que usa la
@@ -456,10 +455,10 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row {
-                Text(formatCOP(p.spent), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+                Text(formatCOP(p.spent), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
                 // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
                 // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
-                Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinTextMute, letterSpacing = (-0.3).sp)
+                Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
             }
             val tail = when (p.state) {
                 EstadoDePresupuesto.EXCEDIDO_MUCHO,
@@ -477,7 +476,7 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .height(2.dp)
                 .clip(RoundedCornerShape(1.dp))
-                .background(MinHairline)
+                .background(Movi.colores.hilo)
         ) {
             Box(
                 modifier = Modifier
@@ -545,7 +544,7 @@ private fun BudgetSheet(
                 // antes de que llegara a producción.
                 .verticalScroll(rememberScrollState())
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -556,7 +555,7 @@ private fun BudgetSheet(
                 text = title,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 letterSpacing = (-0.2).sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
             )
@@ -592,7 +591,7 @@ private fun BudgetSheet(
                         text = "El gasto se cruza por nombre: si renombras \"$initialCategory\" a otra cosa, " +
                             "los movimientos que digan \"$initialCategory\" dejan de contar aquí.",
                         fontSize = 11.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 15.sp,
                     )
                 }
@@ -605,7 +604,7 @@ private fun BudgetSheet(
                     Text(
                         text = aviso.texto,
                         fontSize = 11.5.sp,
-                        color = if (aviso.esAdvertencia) MinWarn else MinTextMute,
+                        color = if (aviso.esAdvertencia) Movi.colores.aviso else Movi.colores.textoMedio,
                         lineHeight = 15.sp,
                     )
                     // Los movimientos del período que se LLAMAN como la categoría pero están en
@@ -632,7 +631,7 @@ private fun BudgetSheet(
                                     "Tienes ${candidatos.size} movimientos que mencionan \"${category.trim()}\" en otras categorías:"
                             },
                             fontSize = 11.5.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
                         candidatos.take(3).forEach { (ev, _) ->
@@ -646,10 +645,10 @@ private fun BudgetSheet(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(ev.description, fontSize = 13.sp, color = MinText, fontWeight = FontWeight.Medium)
-                                    Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", fontSize = 11.sp, color = MinTextMute)
+                                    Text(ev.description, fontSize = 13.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                    Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", fontSize = 11.sp, color = Movi.colores.textoMedio)
                                 }
-                                Text(formatCOP(ev.amount), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinText)
+                                Text(formatCOP(ev.amount), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto)
                             }
                         }
                     }
@@ -660,7 +659,7 @@ private fun BudgetSheet(
                                 Text(
                                     text = sugerida,
                                     fontSize = 12.sp,
-                                    color = MinPrimary,
+                                    color = Movi.colores.marca,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
@@ -674,13 +673,13 @@ private fun BudgetSheet(
             } else {
                 // Al editar un presupuesto existente la categoría es su clave — no se cambia acá.
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Categoría", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                    Text("Categoría", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = category,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                         modifier = Modifier.padding(vertical = 6.dp),
                     )
                 }
@@ -718,7 +717,7 @@ private fun BudgetSheet(
                     // que no se puede verificar desde acá.
                     text = "Hay ${formatCOP(faltante)} contados en esta categoría que no aparecen en esta lista.",
                     fontSize = 11.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 15.sp,
                 )
             }
@@ -730,7 +729,7 @@ private fun BudgetSheet(
                     Text(
                         text = if (movimientos.size == 1) "1 movimiento" else "${movimientos.size} movimientos",
                         fontSize = 11.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         fontWeight = FontWeight.Medium,
                         letterSpacing = 0.4.sp,
                         modifier = Modifier.weight(1f),
@@ -739,7 +738,7 @@ private fun BudgetSheet(
                         text = formatCOP(movimientos.sumOf { it.amount }),
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                     )
                 }
                 // Si los dos totales no coinciden se dice — no se deja que el dueño reste dos
@@ -762,7 +761,7 @@ private fun BudgetSheet(
                         else
                             "Esta lista suma ${formatCOP(-faltante)} más de lo que cuenta el total de arriba.",
                         fontSize = 11.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 15.sp,
                     )
                 }
@@ -773,14 +772,14 @@ private fun BudgetSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(ev.description, fontSize = 13.5.sp, color = MinText)
-                            Text(etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone()), fontSize = 11.sp, color = MinTextMute)
+                            Text(ev.description, fontSize = 13.5.sp, color = Movi.colores.texto)
+                            Text(etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone()), fontSize = 11.sp, color = Movi.colores.textoMedio)
                         }
                         Text(
                             text = formatCOP(ev.amount),
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = MinText,
+                            color = Movi.colores.texto,
                         )
                     }
                 }
@@ -799,14 +798,14 @@ private fun BudgetSheet(
                     fontSize = 48.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Normal,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-1.8).sp,
                     lineHeight = 48.sp,
                 )
                 Spacer(Modifier.height(6.dp))
                 // F16: decía "Límite mensual · COP" — la moneda ya es obvia en toda la app, pero
                 // que se reinicia cada mes no, y es la pregunta real ("¿por cuánto tiempo?").
-                Text("Límite mensual · se reinicia cada mes", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
+                Text("Límite mensual · se reinicia cada mes", fontSize = 12.sp, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
             }
 
             Spacer(Modifier.height(14.dp))
@@ -829,14 +828,14 @@ private fun BudgetSheet(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (key == "⌫") {
-                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = MinText, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(20.dp))
                                 } else {
                                     Text(
                                         text = key,
                                         fontSize = 20.sp,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Normal,
-                                        color = MinText,
+                                        color = Movi.colores.texto,
                                     )
                                 }
                             }
@@ -847,7 +846,7 @@ private fun BudgetSheet(
 
             error?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, fontSize = 12.sp, color = MinExpense)
+                Text(it, fontSize = 12.sp, color = Movi.colores.sale)
             }
             Spacer(Modifier.height(12.dp))
 
@@ -862,7 +861,7 @@ private fun BudgetSheet(
                             .weight(1f)
                             .height(50.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .border(1.dp, MinBorder, RoundedCornerShape(999.dp))
+                            .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
                             .clickable(onClick = onDelete),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -870,7 +869,7 @@ private fun BudgetSheet(
                             text = "Eliminar",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinExpense,
+                            color = Movi.colores.sale,
                         )
                     }
                 }
@@ -879,7 +878,7 @@ private fun BudgetSheet(
                         .weight(if (onDelete != null) 1.4f else 1f)
                         .height(50.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                         // Ola 2 #2: recorte al guardar — canSave ya exige no-vacío, pero
                         // "  Comida  " pasaba esa guarda y se guardaba con espacios.
                         .clickable(enabled = canSave) { onSave(category.trim(), parsedAmount) },
@@ -889,7 +888,7 @@ private fun BudgetSheet(
                         text = "Guardar",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (canSave) MinOnPrimaryContainer else MinTextDim,
+                        color = if (canSave) Movi.colores.marca else Movi.colores.textoMedio,
                     )
                 }
             }
@@ -898,7 +897,7 @@ private fun BudgetSheet(
                 Text(
                     text = missingFieldMessage,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )

@@ -169,7 +169,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             .sumOf { it.amount }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Header
@@ -187,7 +187,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         Icon(
                             imageVector = accountTypePair.first,
                             contentDescription = accountTypePair.second,
-                            tint = MinTextDim,
+                            tint = Movi.colores.textoMedio,
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -197,8 +197,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             if (loading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
-                    color = MinPrimaryContainer,
-                    trackColor = MinSurfaceContainerHigh,
+                    color = Movi.colores.marca.copy(alpha = 0.16f),
+                    trackColor = Movi.colores.tarjeta,
                 )
             } else {
                 Spacer(Modifier.height(4.dp))
@@ -223,7 +223,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             Text(
                                 text = if (isCard) "DEUDA ACTUAL" else "SALDO ACTUAL",
                                 fontSize = 11.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                                 letterSpacing = 0.4.sp,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -239,14 +239,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 Cifra(
                                     text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
                                     fontSize = 28f,
-                                    color = if (saldo.aFavor) MinIncome else MinExpense,
+                                    color = if (saldo.aFavor) Movi.colores.entra else Movi.colores.sale,
                                     fontWeight = FontWeight.Medium,
                                 )
                             } else {
                                 Cifra(
                                     text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
                                     fontSize = 28f,
-                                    color = if (acc.balance >= 0) MinIncome else MinExpense,
+                                    color = if (acc.balance >= 0) Movi.colores.entra else Movi.colores.sale,
                                     fontWeight = FontWeight.Medium,
                                 )
                             }
@@ -255,7 +255,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 Text(
                                     text = if (isCard) typeLabel else "COP · $typeLabel",
                                     fontSize = 11.sp,
-                                    color = MinTextMute,
+                                    color = Movi.colores.textoMedio,
                                 )
                             }
                             if (hasForeignBalance(acc)) {
@@ -286,7 +286,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                             "¿Solo sirve para algo?",
                                             fontSize = 14.5.sp,
                                             fontWeight = FontWeight.Medium,
-                                            color = MinText,
+                                            color = Movi.colores.texto,
                                         )
                                     },
                                     sub = acc.condicionadaA
@@ -320,11 +320,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text("Sin movimientos aún", fontSize = 14.sp, color = MinTextMute)
+                            Text("Sin movimientos aún", fontSize = 14.sp, color = Movi.colores.textoMedio)
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(MinPrimaryContainer)
+                                    .background(Movi.colores.marca.copy(alpha = 0.16f))
                                     .clickable { onNavigate(Screen.QuickAdd(presetAccountId = accountId)) }
                                     .padding(horizontal = 20.dp, vertical = 10.dp),
                                 contentAlignment = Alignment.Center,
@@ -333,7 +333,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     text = "+ Registrar el primero",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = MinOnPrimaryContainer,
+                                    color = Movi.colores.marca,
                                 )
                             }
                         }
@@ -353,7 +353,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 Text(
                                     text = day.date.uppercase(),
                                     fontSize = 11.sp,
-                                    color = MinTextMute,
+                                    color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                     letterSpacing = 0.4.sp,
                                 )
@@ -364,7 +364,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                         // a formatCOP (F36) duplicaría el "−" cuando el día cierra en rojo.
                                         text = "${if (day.total >= 0) "+" else "−"}${formatCOP(kotlin.math.abs(day.total))}",
                                         fontSize = 11f,
-                                        color = MinTextMute,
+                                        color = Movi.colores.textoMedio,
                                     )
                                 }
                             }
@@ -393,11 +393,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                         text = event.description,
                                                         fontSize = 14.5.sp,
                                                         fontWeight = FontWeight.Medium,
-                                                        color = MinText,
+                                                        color = Movi.colores.texto,
                                                         letterSpacing = (-0.1).sp,
                                                     )
                                                     if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
-                                                        StatusDot(MinWarn)
+                                                        StatusDot(Movi.colores.aviso)
                                                     }
                                                 }
                                                 Spacer(Modifier.height(2.dp))
@@ -405,13 +405,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                 ) {
-                                                    Text(event.category, fontSize = 12.sp, color = MinTextMute)
-                                                    StatusDot(MinTextFaint, 2.dp)
+                                                    Text(event.category, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                                                    StatusDot(Movi.colores.textoApagado, 2.dp)
                                                     Text(
                                                         text = event.source.name,
                                                         fontSize = 11.sp,
                                                         fontFamily = FontFamily.Monospace,
-                                                        color = MinTextMute,
+                                                        color = Movi.colores.textoMedio,
                                                         letterSpacing = 0.3.sp,
                                                     )
                                                 }
@@ -431,7 +431,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                 fontSize = 14.5.sp,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Medium,
-                                                color = if (isIncome) MinIncome else MinText,
+                                                color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
                                                 letterSpacing = (-0.3).sp,
                                             )
                                         }
@@ -460,7 +460,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 text = "Eliminar cuenta",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = MinExpense,
+                                color = Movi.colores.sale,
                             )
                         }
                     }

@@ -116,7 +116,7 @@ fun DeleteAccountSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -142,7 +142,7 @@ fun DeleteAccountSheet(
                     text = "Eliminar cuenta",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-0.2).sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 )
@@ -152,7 +152,7 @@ fun DeleteAccountSheet(
                     text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
                         "Esto no se puede deshacer.",
                     fontSize = 14.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 19.sp,
                 )
 
@@ -181,19 +181,19 @@ fun DeleteAccountSheet(
                     Text(
                         text = avisos.joinToString("\n\n"),
                         fontSize = 14.sp,
-                        color = MinText,
+                        color = Movi.colores.texto,
                         lineHeight = 19.sp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(MinSurfaceContainerLow)
+                            .background(Movi.colores.tarjeta)
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     )
                 }
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
+                    Text(text = error!!, fontSize = 12.sp, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -207,18 +207,18 @@ fun DeleteAccountSheet(
                             .weight(1f)
                             .height(50.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(MinSurfaceContainerLow)
+                            .background(Movi.colores.tarjeta)
                             .clickable(enabled = !deleting, onClick = onDismiss),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
+                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                     }
                     Box(
                         modifier = Modifier
                             .weight(1.4f)
                             .height(50.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(if (!deleting) MinExpenseContainer else MinSurfaceContainerLow)
+                            .background(if (!deleting) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
                             .clickable(enabled = !deleting) { doDelete() },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -226,7 +226,7 @@ fun DeleteAccountSheet(
                             text = if (deleting) "Eliminando…" else "Eliminar cuenta",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = if (!deleting) MinExpense else MinTextFaint,
+                            color = if (!deleting) Movi.colores.sale else Movi.colores.textoApagado,
                         )
                     }
                 }

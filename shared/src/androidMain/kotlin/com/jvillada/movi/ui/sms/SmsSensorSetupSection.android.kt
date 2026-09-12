@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.sensor.InstallSource
 import com.jvillada.movi.sensor.OnResume
@@ -56,14 +57,6 @@ import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.backfillMessage
 import com.jvillada.movi.sms.captureOutageNotice
 import com.jvillada.movi.sms.isBackfillError
-import com.jvillada.movi.theme.MinBg
-import com.jvillada.movi.theme.MinExpense
-import com.jvillada.movi.theme.MinIncome
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinSurfaceContainerHigh
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextMute
-import com.jvillada.movi.theme.MinWarn
 import com.jvillada.movi.ui.auth.noRippleClickable
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
@@ -154,12 +147,12 @@ private fun SensorPermissionsCard(installSource: InstallSource) {
 
     MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Permiso de SMS", fontSize = 14.sp, color = MinText)
+            Text("Permiso de SMS", fontSize = 14.sp, color = Movi.colores.texto)
             Text(
                 if (granted) "Concedido" else "Falta",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (granted) MinIncome else MinExpense,
+                color = if (granted) Movi.colores.entra else Movi.colores.sale,
             )
         }
         when (verdict) {
@@ -177,7 +170,7 @@ private fun SensorPermissionsCard(installSource: InstallSource) {
                 Text(
                     "Android ya no muestra el diálogo: concede SMS en Permisos, dentro de los ajustes de la app.",
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
                 if (shouldHintRestrictedSettings(Build.VERSION.SDK_INT, installSource)) {
                     Spacer(Modifier.height(8.dp))
@@ -191,7 +184,7 @@ private fun SensorPermissionsCard(installSource: InstallSource) {
                             "(arriba a la derecha) → «Permitir ajustes restringidos». Después el " +
                             "interruptor se deja activar.",
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                     )
                 }
             }
@@ -231,13 +224,13 @@ private fun SensorHibernationCard() {
             "Si no abres esta app durante unos meses, Android le revoca los permisos: " +
                 "la captura de SMS se detiene y no avisa.",
             fontSize = 13.sp,
-            color = MinExpense,
+            color = Movi.colores.sale,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Usar Movi en el navegador no cuenta: para Android es otra app.",
             fontSize = 12.sp,
-            color = MinTextMute,
+            color = Movi.colores.textoMedio,
         )
         Spacer(Modifier.height(12.dp))
         SensorButton("Evitar que Android la pause") { openHibernationSettings(context) }
@@ -249,7 +242,7 @@ private fun SensorHibernationCard() {
             "Se abre la ficha de la app: hasta abajo, en «Apps sin usar», apaga el " +
                 "interruptor. Al volver aquí, este aviso desaparece.",
             fontSize = 12.sp,
-            color = MinTextMute,
+            color = Movi.colores.textoMedio,
         )
     }
 }
@@ -328,21 +321,21 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
             // m2: quien fue deslogueado por el Worker aterrizó en un login genérico sin
             // saber que la captura estuvo muda. Este es el único lector de la marca, y el
             // remedio (el historial) está justo abajo.
-            Text(captureOutageNotice(outageSince), fontSize = 12.5.sp, color = MinWarn)
+            Text(captureOutageNotice(outageSince), fontSize = 12.5.sp, color = Movi.colores.aviso)
             Spacer(Modifier.height(10.dp))
         }
         Text(
             "Sube los SMS bancarios de los últimos 30 días que sigan en el teléfono. " +
                 "Sirve para recuperar lo que la captura automática no alcanzó a mandar.",
             fontSize = 13.sp,
-            color = MinTextMute,
+            color = Movi.colores.textoMedio,
         )
         Spacer(Modifier.height(10.dp))
-        Text("Última captura automática: ${formatCaptureDate(lastCaptureAt, "ninguna aún")}", fontSize = 12.sp, color = MinTextMute)
+        Text("Última captura automática: ${formatCaptureDate(lastCaptureAt, "ninguna aún")}", fontSize = 12.sp, color = Movi.colores.textoMedio)
         // Línea separada a propósito: si esta fecha es reciente y la de arriba no, el
         // receiver en tiempo real está mudo aunque el historial esté al día — justo lo que
         // este indicador existe para no esconder.
-        Text("Último historial sincronizado: ${formatCaptureDate(lastBackfillAt)}", fontSize = 12.sp, color = MinTextMute)
+        Text("Último historial sincronizado: ${formatCaptureDate(lastBackfillAt)}", fontSize = 12.sp, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(12.dp))
         SensorButton(
             label = if (toSettings) "Abrir ajustes de la app" else "Sincronizar últimos 30 días",
@@ -361,7 +354,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
         }
         if (running) {
             Spacer(Modifier.height(10.dp))
-            Text("Leyendo el inbox y subiendo…", fontSize = 13.sp, color = MinTextMute)
+            Text("Leyendo el inbox y subiendo…", fontSize = 13.sp, color = Movi.colores.textoMedio)
         }
         if (toSettings) {
             Spacer(Modifier.height(8.dp))
@@ -369,7 +362,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
                 "Falta el permiso de lectura de SMS y Android ya no muestra el diálogo: " +
                     "concédelo en Permisos, dentro de los ajustes de la app.",
                 fontSize = 12.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
             )
             // Sin esto la línea de arriba mandaría a tocar un interruptor que puede estar
             // gris, sin decir cómo destrabarlo. Misma condición y mismo tono condicional que
@@ -380,7 +373,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
                     "Si ese interruptor aparece gris, primero hay que permitir los ajustes " +
                         "restringidos desde el menú de tres puntos de esa misma ficha.",
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
             }
         }
@@ -389,7 +382,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
             Text(
                 backfillMessage(it),
                 fontSize = 13.sp,
-                color = if (isBackfillError(it)) MinExpense else MinIncome,
+                color = if (isBackfillError(it)) Movi.colores.sale else Movi.colores.entra,
             )
         }
     }
@@ -406,18 +399,18 @@ private fun SensorButton(
     Box(
         modifier = Modifier.fillMaxWidth().height(44.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (enabled && !loading) MinPrimary else MinSurfaceContainerHigh)
+            .background(if (enabled && !loading) Movi.colores.marca else Movi.colores.tarjeta)
             .noRippleClickable { if (enabled && !loading) onClick() },
         contentAlignment = Alignment.Center,
     ) {
         if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MinPrimary, strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Movi.colores.marca, strokeWidth = 2.dp)
         } else {
             Text(
                 label,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (enabled) MinBg else MinTextMute,
+                color = if (enabled) Movi.colores.fondo else Movi.colores.textoMedio,
             )
         }
     }

@@ -103,7 +103,7 @@ fun CondicionDeCuentaSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -118,7 +118,7 @@ fun CondicionDeCuentaSheet(
                     text = "¿Esta plata solo sirve para algo?",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-0.2).sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 )
@@ -132,7 +132,7 @@ fun CondicionDeCuentaSheet(
                         "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
                         "Tu patrimonio no cambia: la plata sigue siendo tuya.",
                     fontSize = 13.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 19.sp,
                 )
 
@@ -142,12 +142,12 @@ fun CondicionDeCuentaSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MinSurfaceContainerLow)
-                        .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                        .background(Movi.colores.tarjeta)
+                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                 ) {
                     if (texto.isEmpty()) {
-                        Text("Vivienda", fontSize = 14.sp, color = MinTextFaint, maxLines = 1)
+                        Text("Vivienda", fontSize = 14.sp, color = Movi.colores.textoApagado, maxLines = 1)
                     }
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                     // [esAtajoDeSeleccionarTodo]. El recorte de abajo sigue siendo el de siempre:
@@ -160,8 +160,8 @@ fun CondicionDeCuentaSheet(
                     BasicTextField(
                         value = campo.valor,
                         onValueChange = campo::alCambiar,
-                        textStyle = TextStyle(fontSize = 14.sp, color = MinText),
-                        cursorBrush = SolidColor(MinText),
+                        textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+                        cursorBrush = SolidColor(Movi.colores.texto),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         singleLine = true,
                         enabled = !guardando,
@@ -178,12 +178,12 @@ fun CondicionDeCuentaSheet(
                         "Déjalo vacío si puedes usar esta plata para lo que quieras."
                     },
                     fontSize = 11.5.sp,
-                    color = MinTextFaint,
+                    color = Movi.colores.textoApagado,
                 )
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
+                    Text(text = error!!, fontSize = 12.sp, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -197,18 +197,18 @@ fun CondicionDeCuentaSheet(
                             .weight(1f)
                             .height(50.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(MinSurfaceContainerLow)
+                            .background(Movi.colores.tarjeta)
                             .clickable(enabled = !guardando, onClick = onDismiss),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText)
+                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                     }
                     Box(
                         modifier = Modifier
                             .weight(1.4f)
                             .height(50.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(if (cambio && !guardando) MinPrimaryContainer else MinSurfaceContainerLow)
+                            .background(if (cambio && !guardando) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                             .clickable(enabled = cambio && !guardando) { guardar() },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -216,7 +216,7 @@ fun CondicionDeCuentaSheet(
                             text = if (guardando) "Guardando…" else "Guardar",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = if (cambio && !guardando) MinOnPrimaryContainer else MinTextFaint,
+                            color = if (cambio && !guardando) Movi.colores.marca else Movi.colores.textoApagado,
                         )
                     }
                 }

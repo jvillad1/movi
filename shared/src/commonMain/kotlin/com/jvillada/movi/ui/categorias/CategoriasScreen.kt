@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.CATEGORY_TYPE_BOTH
@@ -54,21 +55,6 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.CategoryScope
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.theme.MinBg
-import com.jvillada.movi.theme.MinBorder
-import com.jvillada.movi.theme.MinExpense
-import com.jvillada.movi.theme.MinHairline
-import com.jvillada.movi.theme.MinIncome
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinSurfaceContainer
-import com.jvillada.movi.theme.MinSurfaceContainerHigh
-import com.jvillada.movi.theme.MinSurfaceContainerHighest
-import com.jvillada.movi.theme.MinSurfaceContainerLow
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextDim
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
-import com.jvillada.movi.theme.MinWarn
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.Hairline
@@ -152,7 +138,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
         filtrarCategorias(categorias, filtro, busqueda)
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
             MinScreenHeader(
                 title = "Categorías",
@@ -199,7 +185,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 Text(
                     error!!,
                     fontSize = 12.5.sp,
-                    color = MinExpense,
+                    color = Movi.colores.sale,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 )
             }
@@ -207,7 +193,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 Text(
                     confirmacion!!,
                     fontSize = 12.5.sp,
-                    color = MinIncome,
+                    color = Movi.colores.entra,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 )
             }
@@ -223,7 +209,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                             if (busqueda.isNotBlank()) "Ninguna categoría se llama así."
                             else "Nada por aquí todavía.",
                             fontSize = 13.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             modifier = Modifier.padding(vertical = 24.dp),
                         )
                     }
@@ -360,10 +346,10 @@ private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
         text = texto,
         fontSize = 12.5.sp,
         fontWeight = FontWeight.Medium,
-        color = if (activa) MinBg else MinTextDim,
+        color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(if (activa) MinPrimary else MinSurfaceContainer)
+            .background(if (activa) Movi.colores.marca else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
@@ -375,8 +361,8 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 11.dp),
     ) {
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
@@ -385,11 +371,11 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
             value = campo.valor,
             onValueChange = campo::alCambiar,
             singleLine = true,
-            cursorBrush = SolidColor(MinText),
-            textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+            cursorBrush = SolidColor(Movi.colores.texto),
+            textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
             decorationBox = { inner ->
-                if (valor.isEmpty()) Text("Buscar categoría", fontSize = 14.sp, color = MinTextFaint)
+                if (valor.isEmpty()) Text("Buscar categoría", fontSize = 14.sp, color = Movi.colores.textoApagado)
                 inner()
             },
         )
@@ -402,7 +388,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MinSurfaceContainer)
+            .background(Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
     ) {
@@ -411,7 +397,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
                 text = categoria.name,
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (categoria.hidden) MinTextMute else MinText,
+                color = if (categoria.hidden) Movi.colores.textoMedio else Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
@@ -420,7 +406,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
                 Icon(
                     Icons.Rounded.Lock,
                     contentDescription = "Reservada de Movi",
-                    tint = MinTextFaint,
+                    tint = Movi.colores.textoApagado,
                     modifier = Modifier.size(13.dp),
                 )
             }
@@ -435,7 +421,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
             Text(
                 text = resumenDeUso(categoria),
                 fontSize = 11.5.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -443,9 +429,9 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
             )
         }
         val etiquetasExtra = buildList {
-            if (categoria.hidden) add("Escondida" to MinWarn)
-            if (categoria.pinnedType != null) add("Tipo fijado" to MinPrimary)
-            if (categoria.scope == CategoryScope.CUSTOM && !categoria.reserved) add("Tuya" to MinTextMute)
+            if (categoria.hidden) add("Escondida" to Movi.colores.aviso)
+            if (categoria.pinnedType != null) add("Tipo fijado" to Movi.colores.marca)
+            if (categoria.scope == CategoryScope.CUSTOM && !categoria.reserved) add("Tuya" to Movi.colores.textoMedio)
         }
         if (etiquetasExtra.isNotEmpty()) {
             Row(
@@ -458,11 +444,12 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
     }
 }
 
+@Composable
 private fun tinteDeTipo(categoria: CategoryUsage): Color = when (etiquetaDeTipo(categoria)) {
-    "Gasto" -> MinExpense
-    "Ingreso" -> MinIncome
-    "Ambos" -> MinPrimary
-    else -> MinTextFaint
+    "Gasto" -> Movi.colores.sale
+    "Ingreso" -> Movi.colores.entra
+    "Ambos" -> Movi.colores.marca
+    else -> Movi.colores.textoApagado
 }
 
 @Composable
@@ -494,7 +481,7 @@ private fun HojaBase(onDismiss: () -> Unit, content: @Composable ColumnScope.() 
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -519,13 +506,13 @@ private fun HojaDetalle(
                 categoria.name,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 modifier = Modifier.padding(top = 4.dp),
             )
             Text(
                 resumenDeUso(categoria),
                 fontSize = 12.5.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier.padding(top = 6.dp),
             )
@@ -533,7 +520,7 @@ private fun HojaDetalle(
                 Text(
                     it,
                     fontSize = 12.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(top = 3.dp),
                 )
@@ -547,7 +534,7 @@ private fun HojaDetalle(
                         "Categoría reservada de Movi",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinWarn,
+                        color = Movi.colores.aviso,
                     )
                     Text(
                         // Sin enumerar cuáles son: la lista ya iba desactualizada (le faltaban
@@ -556,7 +543,7 @@ private fun HojaDetalle(
                         "La escribe Movi sola, y de su nombre exacto dependen las cifras de tu " +
                             "mes. No se puede renombrar, unificar ni esconder.",
                         fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 17.sp,
                         modifier = Modifier.padding(top = 6.dp),
                     )
@@ -568,7 +555,7 @@ private fun HojaDetalle(
             Text(
                 "TIPO",
                 fontSize = 11.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.4.sp,
                 modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
@@ -595,7 +582,7 @@ private fun HojaDetalle(
                         "los que ya la usaste. Fija uno para decidirlo tú."
                 else "Fijado por ti: manda sobre el catálogo y sobre el uso.",
                 fontSize = 11.5.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -615,7 +602,7 @@ private fun HojaDetalle(
                             "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
                             "juntarla con otra, únela; si no la usas, escóndela.",
                         fontSize = 11.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 15.sp,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
@@ -650,14 +637,14 @@ private fun OpcionDeTipo(texto: String, activa: Boolean, modifier: Modifier = Mo
         fontSize = 11.sp,
         letterSpacing = (-0.1).sp,
         fontWeight = FontWeight.Medium,
-        color = if (activa) MinBg else MinTextDim,
+        color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (activa) MinPrimary else MinSurfaceContainerHighest)
+            .background(if (activa) Movi.colores.marca else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp, horizontal = 2.dp),
     )
@@ -671,8 +658,8 @@ private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(vertical = 13.dp),
     ) {
-        Text(titulo, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
-        Text(detalle, fontSize = 11.5.sp, color = MinTextMute, lineHeight = 15.sp, modifier = Modifier.padding(top = 3.dp))
+        Text(titulo, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(detalle, fontSize = 11.5.sp, color = Movi.colores.textoMedio, lineHeight = 15.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
@@ -706,15 +693,15 @@ private fun HojaRenombrar(
                 "Renombrar «${categoria.name}»",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MinSurfaceContainerLow)
-                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                    .background(Movi.colores.tarjeta)
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
@@ -726,12 +713,12 @@ private fun HojaRenombrar(
                     onValueChange = campo::alCambiar,
                     singleLine = true,
                     enabled = !guardando,
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    textStyle = TextStyle(color = Movi.colores.texto, fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.fillMaxWidth()
                         .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     decorationBox = { inner ->
-                        if (nombre.isEmpty()) Text("Nombre nuevo", fontSize = 15.sp, color = MinTextFaint)
+                        if (nombre.isEmpty()) Text("Nombre nuevo", fontSize = 15.sp, color = Movi.colores.textoApagado)
                         inner()
                     },
                 )
@@ -746,7 +733,7 @@ private fun HojaRenombrar(
                         "recurrentes al mismo tiempo. No se borra nada."
                 },
                 fontSize = 11.5.sp,
-                color = if (colision?.reserved == true) MinExpense else MinTextMute,
+                color = if (colision?.reserved == true) Movi.colores.sale else Movi.colores.textoMedio,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
@@ -791,7 +778,7 @@ private fun HojaUnificar(
                 "Unificar «${categoria.name}» en…",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
             )
             CampoDeBusqueda(valor = busqueda, onValorCambia = { busqueda = it })
@@ -812,20 +799,20 @@ private fun HojaUnificar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(c.name, fontSize = 14.sp, color = MinText)
-                            Text(resumenDeUso(c), fontSize = 11.sp, color = MinTextFaint, fontFamily = FontFamily.Monospace)
+                            Text(c.name, fontSize = 14.sp, color = Movi.colores.texto)
+                            Text(resumenDeUso(c), fontSize = 11.sp, color = Movi.colores.textoApagado, fontFamily = FontFamily.Monospace)
                         }
                         if (elegida?.name == c.name) {
-                            Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
                         }
                     }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MinHairline))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Movi.colores.hilo))
                 }
                 if (candidatas.isEmpty()) {
                     Text(
                         "No hay otra categoría con ese nombre.",
                         fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(vertical = 16.dp),
                     )
                 }
@@ -835,7 +822,7 @@ private fun HojaUnificar(
                     ?: "Elige la categoría que se queda. Los movimientos de «${categoria.name}» " +
                     "pasan a decir ese nombre; no se borra ninguno.",
                 fontSize = 11.5.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
@@ -857,7 +844,7 @@ private fun BotonDeHoja(texto: String, habilitado: Boolean, onClick: () -> Unit)
         text = texto,
         fontSize = 14.5.sp,
         fontWeight = FontWeight.Medium,
-        color = if (habilitado) MinBg else MinTextFaint,
+        color = if (habilitado) Movi.colores.fondo else Movi.colores.textoApagado,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
@@ -865,7 +852,7 @@ private fun BotonDeHoja(texto: String, habilitado: Boolean, onClick: () -> Unit)
             .padding(top = 18.dp, bottom = 24.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (habilitado) MinPrimary else MinSurfaceContainerHighest)
+            .background(if (habilitado) Movi.colores.marca else Movi.colores.tarjeta)
             .clickable(enabled = habilitado, onClick = onClick)
             .padding(vertical = 15.dp, horizontal = 16.dp),
     )
