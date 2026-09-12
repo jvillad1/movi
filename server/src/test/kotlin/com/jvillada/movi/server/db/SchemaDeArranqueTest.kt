@@ -77,6 +77,12 @@ class SchemaDeArranqueTest {
      */
     private val columnasDeTextoEnsanchadas = listOf(
         Ensanche("credit_terms", "notes", de = 300, a = 500),   // #TBD — la nota mutilada del Vehículo 8761
+        // La misma trampa, en la tabla hermana y descubierta del mismo modo: cargando los mínimos
+        // de la Master Black (2026-09-12) el UPDATE reventó con «value too long». La nota de una
+        // tarjeta tiene que caber el corte, el pago, el cupo, la tasa y DE QUÉ EXTRACTO salieron —
+        // y esto último es justo lo que se cortaba, o sea lo único que evita leer el mínimo de un
+        // corte viejo como si fuera el de este mes.
+        Ensanche("card_terms", "notes", de = 300, a = 500),
     )
 
     data class Ensanche(val tabla: String, val columna: String, val de: Int, val a: Int)

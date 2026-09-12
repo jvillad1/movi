@@ -496,7 +496,26 @@ object Cards : Table("card_terms") {
      * cinco tarjetas que ya están en producción.
      */
     val pagoMinimo         = long("pago_minimo").nullable()
-    val notes              = varchar("notes", 300).nullable()
+    /**
+     * **500 y no 300**, igual que `credit_terms.notes` — y por la misma razón, descubierta del
+     * mismo modo: escribiendo una nota real.
+     *
+     * La de una tarjeta tiene que caber el corte, el pago, el cupo, la tasa, de qué extracto
+     * salieron y qué le falta todavía. Con 300 caracteres eso se corta a la mitad, y lo que se
+     * corta es justo la parte que explica de cuándo es el dato — o sea, lo único que evita leer
+     * el mínimo de un corte viejo como si fuera el de este mes. Se descubrió cargando los mínimos
+     * de la Master Black (2026-09-12): el `UPDATE` reventó con «value too long».
+     *
+     * 500 y no ilimitado por lo mismo que allá: un campo sin tope invita a pegar un extracto
+     * entero adentro de una fila que la app pinta en una tarjeta.
+     *
+     * **Ensanchar SÍ llega a producción.** `card_terms` ya existe allá, así que el
+     * `SchemaUtils.create` del arranque no hace nada; pero `Cards` está en la lista de
+     * `createMissingTablesAndColumns`, y Exposed 0.55 emite el `ALTER TABLE … ALTER COLUMN notes
+     * TYPE VARCHAR(500)` también cuando lo único que cambió es el largo. Es el mismo camino que ya
+     * recorrió `credit_terms.notes`, verificado contra Postgres 16.
+     */
+    val notes              = varchar("notes", 500).nullable()
     val lastRemindedPeriod = varchar("last_reminded_period", 7).nullable() // "YYYY-MM", server-only
     /** Ver `RecurringRules.remindMe`. */
     val remindMe           = bool("remind_me").default(true)
