@@ -99,7 +99,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     val periodoActual = remember { periodoDe(Clock.System.now().toEpochMilliseconds(), PeriodSettings()) }
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize().background(MinBg)
+            modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)
         ) {
             // F60: encabezado único — avatar en ancho (Créditos está en el rail), flecha a Más
             // en el teléfono (se llega por Más; F22: reserva si no hay historial). Con deudas ya
@@ -129,10 +129,10 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(22.dp),
                     ) {
-                        Text("Deuda total", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                        Text("Deuda total", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(10.dp))
                         // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
-                        Text(formatCOP(totalDebtCop(credits, cards)), fontSize = 36.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
+                        Text(formatCOP(totalDebtCop(credits, cards)), fontSize = 36.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
                         // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                         // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                         // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
@@ -153,7 +153,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                             ) {
                                 Text(
                                     "Sin créditos registrados",
-                                    fontSize = 14.sp, color = MinTextMute,
+                                    fontSize = 14.sp, color = Movi.colores.textoMedio,
                                 )
                             }
                         }
@@ -314,8 +314,8 @@ private fun LoQueCuestaLaDeuda(planes: List<PlanDelCredito>, periodoActual: Peri
         Spacer(Modifier.height(12.dp))
         AvisoDeLaPantalla(
             texto = textoDeLoQueNoSeTermina(resumen.creditosQueNoSeTerminan, resumen.deudaQueNoSeTermina),
-            color = MinWarn,
-            fondo = MinSurfaceContainerHigh,
+            color = Movi.colores.aviso,
+            fondo = Movi.colores.tarjeta,
         )
     }
     // La alerta, arriba de todo y contada en créditos: si hay uno solo en el que la deuda crece
@@ -324,19 +324,19 @@ private fun LoQueCuestaLaDeuda(planes: List<PlanDelCredito>, periodoActual: Peri
         Spacer(Modifier.height(8.dp))
         AvisoDeLaPantalla(
             texto = textoDeLaAmortizacionNegativa(resumen.creditosQueCrecen),
-            color = MinExpense,
-            fondo = MinExpenseContainer,
+            color = Movi.colores.sale,
+            fondo = Movi.colores.sale.copy(alpha = 0.14f),
         )
     }
 
     Spacer(Modifier.height(12.dp))
-    Text(SUPUESTO_DE_LA_PROYECCION, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
+    Text(SUPUESTO_DE_LA_PROYECCION, fontSize = 11.sp, color = Movi.colores.textoApagado, lineHeight = 15.sp)
 }
 
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */
 @Composable
 private fun TituloDelGrupo(titulo: String) {
-    Text(titulo, fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+    Text(titulo, fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
     Spacer(Modifier.height(6.dp))
 }
 
@@ -351,9 +351,9 @@ private fun FilaDelResumen(alcance: String, valor: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(alcance, fontSize = 11.5.sp, color = MinTextFaint, lineHeight = 16.sp, modifier = Modifier.weight(1f))
+        Text(alcance, fontSize = 11.5.sp, color = Movi.colores.textoApagado, lineHeight = 16.sp, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(10.dp))
-        Text(valor, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+        Text(valor, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
     }
 }
 
@@ -408,24 +408,24 @@ private fun LoanCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(credit.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            Text(credit.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+            Text(credit.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
+            Text(credit.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
             EditTermsIcon(onEdit)
         }
-        Text(credit.terms?.bank ?: "Sin términos registrados", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        Text(credit.terms?.bank ?: "Sin términos registrados", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(formatCOP(credit.account.balance), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+            Text(formatCOP(credit.account.balance), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
             // Sin monoespaciada cuando no es una cifra (ver [ProgresoDeCredito.esAviso]).
             Text(
                 progreso.etiqueta,
                 fontSize = 12.sp,
                 fontFamily = if (progreso.esAviso) FontFamily.Default else FontFamily.Monospace,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
             )
         }
         // La barra solo se dibuja cuando hay progreso que dibujar. Una barra vacía sobre una deuda
@@ -439,14 +439,14 @@ private fun LoanCard(
                     .height(2.dp)
                     .testTag(TAG_BARRA_DE_PROGRESO)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(MinHairline)
+                    .background(Movi.colores.hilo)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(pct)
                         .clip(RoundedCornerShape(1.dp))
-                        .background(MinText.copy(alpha = 0.9f))
+                        .background(Movi.colores.texto.copy(alpha = 0.9f))
                 )
             }
         }
@@ -469,9 +469,9 @@ private fun LoanCard(
                         else -> "Cuota · día ${t.dayOfMonth}"
                     },
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
-                Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             }
             // Plazo y fecha de desembolso: son los dos datos que uno compara contra el extracto,
             // y estaban solo dentro de la hoja de edición.
@@ -486,15 +486,15 @@ private fun LoanCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Plazo pactado ${t.termMonths} meses · desde ${t.startDate}", fontSize = 11.5.sp, color = MinTextFaint)
-                Text(t.bank, fontSize = 11.5.sp, color = MinTextFaint)
+                Text("Plazo pactado ${t.termMonths} meses · desde ${t.startDate}", fontSize = 11.5.sp, color = Movi.colores.textoApagado)
+                Text(t.bank, fontSize = 11.5.sp, color = Movi.colores.textoApagado)
             }
             // **Qué parte de esa cuota es alquiler de la plata, y cuándo se termina esta deuda.**
             // Las dos salen del mismo desglose que la app ya calculaba al registrar cada pago y
             // tiraba después de mover el saldo. Ver [PlanDelCredito].
             plan?.let { p ->
                 Spacer(Modifier.height(10.dp))
-                Text(textoDelInteres(p), fontSize = 11.5.sp, color = MinTextMute, lineHeight = 16.sp)
+                Text(textoDelInteres(p), fontSize = 11.5.sp, color = Movi.colores.textoMedio, lineHeight = 16.sp)
                 comoVaEstaDeuda(p, periodoActual)?.let { comoVa ->
                     Spacer(Modifier.height(4.dp))
                     Text(
@@ -502,7 +502,7 @@ private fun LoanCard(
                         fontSize = 11.5.sp,
                         // La alerta va con color y en negrita; el resto no. El Crédito Mamá —cuya
                         // cuota también es interés puro, pero por acuerdo— cae del lado sin color.
-                        color = if (comoVa.esAlerta) MinExpense else MinTextFaint,
+                        color = if (comoVa.esAlerta) Movi.colores.sale else Movi.colores.textoApagado,
                         fontWeight = if (comoVa.esAlerta) FontWeight.Medium else FontWeight.Normal,
                         lineHeight = 16.sp,
                     )
@@ -521,7 +521,7 @@ private fun LoanCard(
                         ACCION_SIMULAR_ABONO,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinPrimary,
+                        color = Movi.colores.marca,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickableSimple(onSimulate)
@@ -538,7 +538,7 @@ private fun LoanCard(
                 Text(
                     text = nota,
                     fontSize = 11.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 16.sp,
                 )
             }
@@ -563,7 +563,7 @@ private fun LoanCard(
                     "Registrar pago de $quienPaga",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinPrimary,
+                    color = Movi.colores.marca,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickableSimple(onPayrollDeduction)
@@ -576,7 +576,7 @@ private fun LoanCard(
                     "Registrar descuento",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinPrimary,
+                    color = Movi.colores.marca,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickableSimple(onPayrollDeduction)
@@ -588,7 +588,7 @@ private fun LoanCard(
                 "Ajustar saldo",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickableSimple(onAdjust)
@@ -619,22 +619,22 @@ private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(card.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
+            Text(card.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
             if (currency != "COP") {
-                Text(currency, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+                Text(currency, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
             }
             EditTermsIcon(onEdit)
         }
-        Text(card.terms?.bank ?: "Sin corte ni pago — edítalos con el lápiz", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        Text(card.terms?.bank ?: "Sin corte ni pago — edítalos con el lápiz", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(formatMoney(debt, currency), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
+            Text(formatMoney(debt, currency), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
             card.available?.let {
-                Text("Disponible ${formatMoney(it, currency)}", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MinTextMute)
+                Text("Disponible ${formatMoney(it, currency)}", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
             }
         }
         card.terms?.let { t ->
@@ -645,8 +645,8 @@ private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> 
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(t.cutoffDay?.let { "Corte · día $it" } ?: "Sin día de corte", fontSize = 12.sp, color = MinTextMute)
-                Text("Pago · día ${t.paymentDay}", fontSize = 12.sp, color = MinTextMute)
+                Text(t.cutoffDay?.let { "Corte · día $it" } ?: "Sin día de corte", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                Text("Pago · día ${t.paymentDay}", fontSize = 12.sp, color = Movi.colores.textoMedio)
             }
         }
     }
@@ -674,7 +674,7 @@ private fun DebtTypeChooserSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -694,7 +694,7 @@ private fun DebtTypeChooserSheet(
                     .verticalScroll(rememberScrollState())
                     .weight(1f, fill = false),
             ) {
-                Text("¿Qué deuda quieres registrar?", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                Text("¿Qué deuda quieres registrar?", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                 Spacer(Modifier.height(14.dp))
                 DebtTypeOption(
                     title = "Préstamo",
@@ -719,13 +719,13 @@ private fun DebtTypeOption(title: String, subtitle: String, onClick: () -> Unit)
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MinSurfaceContainerLow)
+            .background(Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
+        Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
         Spacer(Modifier.height(2.dp))
-        Text(subtitle, fontSize = 12.sp, color = MinTextMute)
+        Text(subtitle, fontSize = 12.sp, color = Movi.colores.textoMedio)
     }
 }
 
@@ -735,7 +735,7 @@ private fun EditTermsIcon(onEdit: () -> Unit) {
     Icon(
         Icons.Rounded.Edit,
         contentDescription = "Editar términos",
-        tint = MinTextMute,
+        tint = Movi.colores.textoMedio,
         modifier = Modifier
             .padding(start = 8.dp)
             .clip(RoundedCornerShape(8.dp))

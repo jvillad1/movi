@@ -24,11 +24,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Scope
-import com.jvillada.movi.theme.MinBg
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinTextMute
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
@@ -138,7 +136,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MinBg),
+            .background(Movi.colores.fondo),
     ) {
         MinScreenHeader(
             title = "Primeros pasos",
@@ -154,7 +152,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                 text = "Lo que conviene tener listo para que las cifras de Movi digan la verdad. " +
                     "Puedes volver aquí cuando quieras.",
                 fontSize = 13.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(horizontal = 18.dp).padding(top = 4.dp, bottom = 14.dp),
             )
             // Esta pantalla existe para contestar «¿me falta algo?», así que no puede contestar
@@ -167,13 +165,13 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                     Text(
                         text = "No pudimos revisar qué te falta. Puede ser la conexión.",
                         fontSize = 13.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                     )
                     Spacer(Modifier.height(10.dp))
                     Text(
                         text = "Reintentar",
                         fontSize = 13.sp,
-                        color = MinPrimary,
+                        color = Movi.colores.marca,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))

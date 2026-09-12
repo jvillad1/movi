@@ -209,21 +209,21 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; el editor se abre desde Perfil (F47/F48) — Perfil como
         // destino de reserva si no hay historial.
         MinScreenHeader(
             title = "Editor de pantallas",
             leading = HeaderLeading.Back(fallback = Screen.Profile),
-            action = { if (saved) Text("Guardado", fontSize = 12.sp, color = MinIncome, fontWeight = FontWeight.Medium) },
+            action = { if (saved) Text("Guardado", fontSize = 12.sp, color = Movi.colores.entra, fontWeight = FontWeight.Medium) },
         )
         Spacer(Modifier.height(12.dp))
 
         if (loading) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                color = MinPrimary,
-                trackColor = MinSurfaceContainerHigh,
+                color = Movi.colores.marca,
+                trackColor = Movi.colores.tarjeta,
             )
             return@Column
         }
@@ -251,7 +251,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
             item {
                 if (showAddTypePicker) {
                     MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Default) {
-                        Text("Tipo de sección", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                        Text("Tipo de sección", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
                         Spacer(Modifier.height(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             ScreenTaxonomy.SECTION_TYPES.forEach { type ->
@@ -265,18 +265,18 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "Cancelar",
-                            fontSize = 13.sp, color = MinTextMute,
+                            fontSize = 13.sp, color = Movi.colores.textoMedio,
                             modifier = Modifier.clickable { showAddTypePicker = false }.padding(vertical = 6.dp),
                         )
                     }
                 } else {
                     Text(
                         "+ Agregar sección",
-                        fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinPrimary,
+                        fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                             .clickable { showAddTypePicker = true }
                             .padding(vertical = 14.dp),
                     )
@@ -284,7 +284,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
             }
 
             error?.let { msg ->
-                item { Text(msg, fontSize = 12.sp, color = MinExpense) }
+                item { Text(msg, fontSize = 12.sp, color = Movi.colores.sale) }
             }
 
             item {
@@ -294,12 +294,12 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (canSave) MinText else MinTextFaint)
+                        .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                         .clickable(enabled = canSave) { save() }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (saving) "Guardando…" else "Guardar", color = MinBg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
 
@@ -311,19 +311,19 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                     ) {
                         Text(
                             "¿Restaurar al original? Sí",
-                            fontSize = 13.sp, color = MinExpense, fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp, color = Movi.colores.sale, fontWeight = FontWeight.Medium,
                             modifier = Modifier.clickable(enabled = !saving) { restore() }.padding(8.dp),
                         )
                         Text(
                             "No",
-                            fontSize = 13.sp, color = MinTextMute,
+                            fontSize = 13.sp, color = Movi.colores.textoMedio,
                             modifier = Modifier.clickable { showRestoreConfirm = false }.padding(8.dp),
                         )
                     }
                 } else {
                     Text(
                         "Restaurar original",
-                        fontSize = 13.sp, color = MinExpense,
+                        fontSize = 13.sp, color = Movi.colores.sale,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { showRestoreConfirm = true }.padding(vertical = 8.dp),
                     )
@@ -344,21 +344,21 @@ private fun SectionHeader(
     onRemove: () -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, modifier = Modifier.weight(1f))
+        Text(label, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, modifier = Modifier.weight(1f))
         // Ola 2 #5 (F11): glifos escritos como texto → íconos Material (salían como ▯ en la web).
         Icon(
             Icons.Rounded.ArrowUpward, contentDescription = "Subir",
-            tint = if (canMoveUp) MinTextDim else MinTextFaint,
+            tint = if (canMoveUp) Movi.colores.textoMedio else Movi.colores.textoApagado,
             modifier = Modifier.size(15.dp).clickable(enabled = canMoveUp, onClick = onMoveUp).padding(6.dp),
         )
         Icon(
             Icons.Rounded.ArrowDownward, contentDescription = "Bajar",
-            tint = if (canMoveDown) MinTextDim else MinTextFaint,
+            tint = if (canMoveDown) Movi.colores.textoMedio else Movi.colores.textoApagado,
             modifier = Modifier.size(15.dp).clickable(enabled = canMoveDown, onClick = onMoveDown).padding(6.dp),
         )
         Icon(
             Icons.Rounded.Close, contentDescription = "Quitar",
-            tint = MinExpense,
+            tint = Movi.colores.sale,
             modifier = Modifier.size(14.dp).clickable(onClick = onRemove).padding(6.dp),
         )
     }
@@ -386,7 +386,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
                 // La cifra de cada tarjeta la calcula el cliente según el destino de su acción
                 // (Cuentas → activos, Créditos → deuda, Presupuestos → gastado del mes…); acá solo
                 // se eligen y ordenan las tarjetas. Un subtítulo escrito acá reemplaza al calculado.
-                Text("La cifra de cada acceso sale de su destino; no se edita.", fontSize = 12.sp, color = MinTextMute)
+                Text("La cifra de cada acceso sale de su destino; no se edita.", fontSize = 12.sp, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(10.dp))
             }
             section.cards.forEachIndexed { cardIndex, card ->
@@ -407,7 +407,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             Spacer(Modifier.height(if (section.cards.isEmpty()) 0.dp else 10.dp))
             Text(
                 "+ Agregar tarjeta",
-                fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MinPrimary,
+                fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
                 modifier = Modifier.clickable { onUpdate(section.copy(cards = section.cards + ScreenCard(title = ""))) }.padding(vertical = 6.dp),
             )
         }
@@ -433,12 +433,12 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
                     else -> "Tu plata, el patrimonio neto, ingresos, gastos y flujo del mes: sin más campos. " +
                         "El título de esta sección no se cambia aquí: viaja en la app, no en la pantalla."
                 },
-                fontSize = 12.sp, color = MinTextMute,
+                fontSize = 12.sp, color = Movi.colores.textoMedio,
             )
         }
 
         else -> {
-            Text("Tipo de sección desconocido: ${section.type}", fontSize = 13.sp, color = MinExpense)
+            Text("Tipo de sección desconocido: ${section.type}", fontSize = 13.sp, color = Movi.colores.sale)
         }
     }
 }
@@ -449,12 +449,12 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
+            .background(Movi.colores.tarjeta)
             .padding(12.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Tarjeta ${index + 1}", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Icon(Icons.Rounded.Close, contentDescription = "Quitar", tint = MinExpense, modifier = Modifier.size(15.dp).clickable(onClick = onRemove).padding(4.dp))
+            Text("Tarjeta ${index + 1}", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.Close, contentDescription = "Quitar", tint = Movi.colores.sale, modifier = Modifier.size(15.dp).clickable(onClick = onRemove).padding(4.dp))
         }
         Spacer(Modifier.height(8.dp))
         FieldBox("Título", card.title, { onUpdate(card.copy(title = it)) })
@@ -470,7 +470,7 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
 @Composable
 private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Unit) {
     Column {
-        Text("ACCIÓN", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+        Text("ACCIÓN", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionModeChip("Ninguna", action == null) { onChange(null) }
@@ -505,7 +505,7 @@ private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Uni
                     Text(
                         "Los enlaces deben empezar con https://",
                         fontSize = 12.sp,
-                        color = MinExpense,
+                        color = Movi.colores.sale,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -520,11 +520,11 @@ private fun ActionModeChip(label: String, selected: Boolean, onClick: () -> Unit
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) MinText else MinSurfaceContainerLow)
+            .background(if (selected) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (selected) MinBg else MinText)
+        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (selected) Movi.colores.fondo else Movi.colores.texto)
     }
 }
 
@@ -539,18 +539,18 @@ private fun FieldBox(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainer)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
-        if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = MinTextFaint)
+        if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = Movi.colores.textoApagado)
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
         val campo = rememberCampoConSeleccion(value, onValueChange)
         BasicTextField(
             value = campo.valor,
             onValueChange = campo::alCambiar,
-            textStyle = TextStyle(fontSize = 14.sp, color = MinText),
-            cursorBrush = SolidColor(MinText),
+            textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+            cursorBrush = SolidColor(Movi.colores.texto),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
@@ -564,12 +564,12 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MinSurfaceContainerLow else androidx.compose.ui.graphics.Color.Transparent)
-            .border(1.dp, if (selected) MinText else MinBorder, RoundedCornerShape(12.dp))
+            .background(if (selected) Movi.colores.tarjeta else androidx.compose.ui.graphics.Color.Transparent)
+            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 13.5.sp, color = MinText, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Text(label, fontSize = 13.5.sp, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }

@@ -109,7 +109,7 @@ fun StatementReviewScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; vuelve a la lista de Extractos si no hay historial.
         MinScreenHeader(
             title = "${result.bankName} · ${result.period}",
@@ -132,11 +132,11 @@ fun StatementReviewScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Destino:", fontSize = 11.sp, color = MinTextMute)
+                Text("Destino:", fontSize = 11.sp, color = Movi.colores.textoMedio)
                 Text(
                     destinationAccount?.name ?: "Elige la cuenta",
                     fontSize = 11.sp,
-                    color = if (sinCuenta) MinAmber else MinPrimary,
+                    color = if (sinCuenta) MinAmber else Movi.colores.marca,
                     fontWeight = FontWeight.Medium,
                     // `fill = false` y no un `Spacer` con peso: un segundo hijo pesado le
                     // recortaría el ancho al chip a la mitad de la fila, y «Bancolombia Ahorros»
@@ -144,20 +144,20 @@ fun StatementReviewScreen(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .clip(RoundedCornerShape(4.dp))
-                        .background((if (sinCuenta) MinAmber else MinPrimary).copy(alpha = 0.12f))
+                        .background((if (sinCuenta) MinAmber else Movi.colores.marca).copy(alpha = 0.12f))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
                 Text(
                     if (eligiendoCuenta) "Cerrar" else "Cambiar",
                     fontSize = 11.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
             }
             // En renglón propio y no al lado del chip: a 375 dp, «Destino: Bancolombia Ahorros La
             // puso Movi Cambiar» no entra en una línea, y lo primero que se recorta es justamente
             // lo que hay que leer.
             avisoDeLaCuentaDelBanco(destino.origen)?.let { aviso ->
-                Text(aviso, fontSize = 11.sp, color = MinTextFaint, modifier = Modifier.padding(top = 3.dp))
+                Text(aviso, fontSize = 11.sp, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 3.dp))
             }
         }
         if (eligiendoCuenta) {
@@ -231,12 +231,12 @@ fun StatementReviewScreen(
                     ) {
                         Text(
                             "NUEVAS TRANSACCIONES",
-                            fontSize = 10.sp, color = MinTextDim, letterSpacing = 1.sp,
+                            fontSize = 10.sp, color = Movi.colores.textoMedio, letterSpacing = 1.sp,
                         )
                         val allSelected = selectedIds.size == result.newTransactions.size
                         Text(
                             if (allSelected) "Deseleccionar todas" else "Seleccionar todas",
-                            fontSize = 11.sp, color = MinPrimary,
+                            fontSize = 11.sp, color = Movi.colores.marca,
                             modifier = Modifier.clickable {
                                 selectedIds = if (allSelected) emptySet()
                                     else result.newTransactions.map { it.id }.toSet()
@@ -265,14 +265,14 @@ fun StatementReviewScreen(
         // Error message
         error?.let {
             Text(
-                it, fontSize = 12.sp, color = MinExpense,
+                it, fontSize = 12.sp, color = Movi.colores.sale,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
         if (imported) {
             Text(
                 "Este extracto ya se importó",
-                fontSize = 12.sp, color = MinTextMute,
+                fontSize = 12.sp, color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
@@ -281,14 +281,14 @@ fun StatementReviewScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MinSurfaceContainer)
+                .background(Movi.colores.tarjeta)
                 .padding(16.dp),
         ) {
             Button(
                 onClick = ::import,
                 enabled = canImport,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MinPrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
                 shape = RoundedCornerShape(10.dp),
             ) {
                 if (working) {
@@ -314,7 +314,7 @@ private fun NewTransactionRow(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(MinSurface)
+            .background(Movi.colores.tarjeta)
             .clickable(onClick = onToggle)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -323,14 +323,14 @@ private fun NewTransactionRow(
         Icon(
             if (checked) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank,
             contentDescription = if (checked) "Seleccionado" else "No seleccionado",
-            tint = if (checked) MinPrimary else MinTextMute,
+            tint = if (checked) Movi.colores.marca else Movi.colores.textoMedio,
             modifier = Modifier.size(20.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(tx.merchant, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MinText)
-            Text("${tx.category} · ${tx.date}", fontSize = 11.sp, color = MinTextMute)
+            Text(tx.merchant, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text("${tx.category} · ${tx.date}", fontSize = 11.sp, color = Movi.colores.textoMedio)
         }
-        val amountColor = if (tx.type == TransactionType.INCOME) MinIncome else MinExpense
+        val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
         Text(
             "$prefix${formatCOP(tx.amount)}",
@@ -352,13 +352,13 @@ private fun ReconciliationCard(
     var merchantSource by remember { mutableStateOf(FieldSource.MANUAL) }
 
     val isDecided = decision != null
-    val borderColor = if (isDecided && decision!!.confirm) MinIncome else MinAmber
+    val borderColor = if (isDecided && decision!!.confirm) Movi.colores.entra else MinAmber
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(MinSurfaceContainerLow)
+            .background(Movi.colores.tarjeta)
             .border(1.dp, borderColor.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -377,7 +377,7 @@ private fun ReconciliationCard(
                     fontSize = 9.sp, color = MinAmber, letterSpacing = 0.5.sp,
                 )
             }
-            val amtColor = if (match.parsed.type == TransactionType.INCOME) MinIncome else MinExpense
+            val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
             val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
             Text(
                 "$prefix${formatCOP(match.parsed.amount)}",
@@ -389,7 +389,7 @@ private fun ReconciliationCard(
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.width(80.dp))
             Text(
-                "MANUAL", fontSize = 9.sp, color = MinPrimary, letterSpacing = 0.8.sp,
+                "MANUAL", fontSize = 9.sp, color = Movi.colores.marca, letterSpacing = 0.8.sp,
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
             )
             Text(
@@ -437,7 +437,7 @@ private fun ReconciliationCard(
         if (!isDecided) {
             Text(
                 "Toca cada campo para cambiar la fuente",
-                fontSize = 9.sp, color = MinTextFaint,
+                fontSize = 9.sp, color = Movi.colores.textoApagado,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -453,7 +453,7 @@ private fun ReconciliationCard(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp),
                 ) {
-                    Text("No son el mismo", fontSize = 11.sp, color = MinTextDim)
+                    Text("No son el mismo", fontSize = 11.sp, color = Movi.colores.textoMedio)
                 }
                 Button(
                     onClick = {
@@ -471,7 +471,7 @@ private fun ReconciliationCard(
                     },
                     modifier = Modifier.weight(2f),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MinPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
                 ) {
                     Text("Confirmar reconciliación", fontSize = 11.sp, color = Color.White)
                 }
@@ -480,14 +480,14 @@ private fun ReconciliationCard(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 // Ola 2 #5 (F11): "✓"/"→" como texto suelto → íconos Material.
                 if (decision!!.confirm) {
-                    Icon(Icons.Rounded.Check, contentDescription = null, tint = MinIncome, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(13.dp))
                 } else {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(13.dp))
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(13.dp))
                 }
                 Text(
                     if (decision.confirm) "Reconciliado" else "Se importará como nuevo",
                     fontSize = 11.sp,
-                    color = if (decision.confirm) MinIncome else MinTextMute,
+                    color = if (decision.confirm) Movi.colores.entra else Movi.colores.textoMedio,
                     fontWeight = FontWeight.Medium,
                 )
             }
@@ -508,7 +508,7 @@ private fun FieldRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 10.sp, color = MinTextMute, modifier = Modifier.width(80.dp))
+        Text(label, fontSize = 10.sp, color = Movi.colores.textoMedio, modifier = Modifier.width(80.dp))
         FieldCell(
             value = manualValue,
             active = selected == FieldSource.MANUAL,
@@ -531,12 +531,12 @@ private fun FieldCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val borderColor = if (active) MinPrimary else Color.Transparent
-    val bgColor = if (active) MinPrimary.copy(alpha = 0.08f) else MinSurfaceContainerHigh
+    val borderColor = if (active) Movi.colores.marca else Color.Transparent
+    val bgColor = if (active) Movi.colores.marca.copy(alpha = 0.08f) else Movi.colores.tarjeta
     Text(
         value,
         fontSize = 10.sp,
-        color = if (active) MinText else MinTextMute,
+        color = if (active) Movi.colores.texto else Movi.colores.textoMedio,
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
             .background(bgColor)

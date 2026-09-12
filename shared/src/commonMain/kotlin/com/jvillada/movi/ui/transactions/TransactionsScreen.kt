@@ -1277,7 +1277,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     Column(modifier = Modifier.fillMaxSize()) {
         // F60: encabezado único — Movimientos es raíz: avatar + rótulo del menú + la lupa.
         MinScreenHeader(
@@ -1287,7 +1287,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = "Buscar",
-                    tint = MinTextDim,
+                    tint = Movi.colores.textoMedio,
                     modifier = Modifier.size(22.dp).clickable {
                         searchActive = !searchActive
                         if (!searchActive) searchQuery = ""
@@ -1306,16 +1306,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 12.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MinSurfaceContainerLow)
-                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                    .background(Movi.colores.tarjeta)
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = MinTextFaint, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Search, contentDescription = null, tint = Movi.colores.textoApagado, modifier = Modifier.size(16.dp))
                 Box(modifier = Modifier.weight(1f)) {
                     if (searchQuery.isEmpty()) {
-                        Text("Descripción, comercio o categoría", fontSize = 14.sp, color = MinTextFaint)
+                        Text("Descripción, comercio o categoría", fontSize = 14.sp, color = Movi.colores.textoApagado)
                     }
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                     // [esAtajoDeSeleccionarTodo].
@@ -1324,8 +1324,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         value = campo.valor,
                         onValueChange = campo::alCambiar,
                         singleLine = true,
-                        textStyle = TextStyle(color = MinText, fontSize = 14.sp),
-                        cursorBrush = SolidColor(MinText),
+                        textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+                        cursorBrush = SolidColor(Movi.colores.texto),
                         modifier = Modifier.fillMaxWidth()
                             .focusRequester(searchFocusRequester)
                             .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
@@ -1334,7 +1334,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
                     contentDescription = "Cerrar búsqueda",
-                    tint = MinTextMute,
+                    tint = Movi.colores.textoMedio,
                     modifier = Modifier.size(16.dp).clickable {
                         searchActive = false
                         searchQuery = ""
@@ -1360,7 +1360,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Icon(
                     imageVector = Icons.Rounded.KeyboardArrowLeft,
                     contentDescription = "Período anterior",
-                    tint = MinTextDim,
+                    tint = Movi.colores.textoMedio,
                     modifier = Modifier.size(22.dp).clickable {
                         periodoVisible = periodoAnterior(periodoVisible)
                     },
@@ -1376,21 +1376,21 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                     )
                     // Con corte 1 esto es `null` y no se pinta: no hay nada que aclarar sobre un
                     // mes de calendario. Con cualquier otro corte es lo único que explica por qué
                     // «septiembre» empieza en agosto.
                     rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
                         Spacer(Modifier.height(2.dp))
-                        Text(text = rango, fontSize = 11.sp, color = MinTextFaint)
+                        Text(text = rango, fontSize = 11.sp, color = Movi.colores.textoApagado)
                     }
                 }
                 val puedeAvanzar = puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)
                 Icon(
                     imageVector = Icons.Rounded.KeyboardArrowRight,
                     contentDescription = "Período siguiente",
-                    tint = if (puedeAvanzar) MinTextDim else MinTextFaint,
+                    tint = if (puedeAvanzar) Movi.colores.textoMedio else Movi.colores.textoApagado,
                     modifier = Modifier.size(22.dp).then(
                         if (puedeAvanzar) Modifier.clickable {
                             periodoVisible = periodoSiguiente(periodoVisible)
@@ -1415,9 +1415,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isActive) MinSurfaceContainerHigh else Color.Transparent)
+                        .background(if (isActive) Movi.colores.tarjeta else Color.Transparent)
                         .then(
-                            if (!isActive) Modifier.border(1.dp, MinBorderStrong, RoundedCornerShape(8.dp))
+                            if (!isActive) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(8.dp))
                             else Modifier
                         )
                         .clickable { activeFilter = chip }
@@ -1426,13 +1426,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     if (isActive) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(14.dp))
                     }
                     Text(
                         text = f,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (isActive) MinText else MinTextDim,
+                        color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
                     )
                 }
             }
@@ -1458,7 +1458,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         text = textoDelAvisoPorConfirmar(porConfirmar),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                     )
                     ChevronRight()
                 }
@@ -1481,13 +1481,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     text = tituloDelModo,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                 )
                 Text(
                     text = "Ver todos",
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinPrimary,
+                    color = Movi.colores.marca,
                     modifier = Modifier.clickable { activeFilter = CHIP_TODO },
                 )
             }
@@ -1513,7 +1513,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                else "${pendingCandidates.size} pagos de tarjeta sin marcar",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                     )
                     ChevronRight()
                 }
@@ -1724,7 +1724,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             Text(
                                 text = "Nada coincide con \"${searchQuery.trim()}\"",
                                 fontSize = 14.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                             )
                         }
                     } else {
@@ -1739,12 +1739,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text(vacio.titulo, fontSize = 14.sp, color = MinTextMute)
+                            Text(vacio.titulo, fontSize = 14.sp, color = Movi.colores.textoMedio)
                             vacio.detalle?.let {
                                 Text(
                                     text = it,
                                     fontSize = 12.sp,
-                                    color = MinTextFaint,
+                                    color = Movi.colores.textoApagado,
                                     textAlign = TextAlign.Center,
                                     lineHeight = 17.sp,
                                 )
@@ -1753,7 +1753,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(999.dp))
-                                        .background(MinPrimaryContainer)
+                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
                                         .clickable {
                                             if (accounts.isNotEmpty() || !accountsLoaded) onNavigate(Screen.QuickAdd())
                                             else showCreateSheet = true
@@ -1765,7 +1765,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                         text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = MinOnPrimaryContainer,
+                                        color = Movi.colores.marca,
                                     )
                                 }
                             }
@@ -1801,14 +1801,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 Icon(
                                     imageVector = if (plegado) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
                                     contentDescription = if (plegado) "Desplegar el día" else "Plegar el día",
-                                    tint = MinTextFaint,
+                                    tint = Movi.colores.textoApagado,
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Text(
                                     // V13: «23 DE AGOSTO» / «HOY», no la clave ISO del server.
                                     text = formatDayHeading(day.date, hoyIso).uppercase(),
                                     fontSize = 11.sp,
-                                    color = MinTextMute,
+                                    color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                     letterSpacing = 0.4.sp,
                                 )
@@ -1818,7 +1818,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                             if (it == 1) "· 1 movimiento" else "· $it movimientos"
                                         },
                                         fontSize = 11.sp,
-                                        color = MinTextFaint,
+                                        color = Movi.colores.textoApagado,
                                     )
                                 }
                             }
@@ -1833,12 +1833,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 Text(
                                     text = "Flujo del día",
                                     fontSize = 11.sp,
-                                    color = MinTextFaint,
+                                    color = Movi.colores.textoApagado,
                                 )
                                 Text(
                                     text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
                                     fontSize = 11.sp,
-                                    color = MinTextMute,
+                                    color = Movi.colores.textoMedio,
                                     fontFamily = FontFamily.Monospace,
                                 )
                             }
@@ -2022,16 +2022,28 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
 }
 
 /**
- * El color de cada tono, con los tokens semánticos del tema — [MinExpense] y [MinIncome] son los
- * mismos que ya usan el resumen de SMS y el error de los formularios, no un hex suelto de esta
- * pantalla. Hoy la app trae un solo esquema (oscuro, ver `Theme.kt`); si algún día llega el
- * claro, se cambia en `Color.kt` y esto lo sigue.
+ * El color de cada tono, tomado de la paleta que esté puesta.
+ *
+ * ### Por qué recibe la paleta en vez de leerla
+ *
+ * La versión anterior devolvía constantes de `Color.kt` y su comentario decía que «si algún día
+ * llega el tema claro, se cambia en Color.kt y esto lo sigue». **Eso era falso, y no por poco:**
+ * los `Min*` son `val` de nivel superior, o sea un valor único por proceso. No hay forma de que
+ * sigan a un tema, porque no pueden leer nada.
+ *
+ * Hacerla `@Composable` la arreglaría a medias y rompería lo que más importa: `ColorYEntreCuentasTest`
+ * afirma que gasto, ingreso y entre-cuentas son **tres colores distintos** —el reporte del dueño
+ * que le dio origen a esta función— y una función composable no se puede llamar desde una prueba
+ * común.
+ *
+ * Recibiendo la paleta es una función pura: la pantalla le pasa `Movi.colores` y la prueba le pasa
+ * las dos paletas, así que ahora la distinción se verifica **en los dos temas**, no en uno.
  */
-fun colorDelTono(tono: TonoDelMonto): Color = when (tono) {
-    TonoDelMonto.GASTO -> MinExpense
-    TonoDelMonto.INGRESO -> MinIncome
-    TonoDelMonto.ENTRE_CUENTAS -> MinTransfer
-    TonoDelMonto.NEUTRO -> MinTextMute
+fun colorDelTono(tono: TonoDelMonto, colores: ColoresDeMovi): Color = when (tono) {
+    TonoDelMonto.GASTO -> colores.sale
+    TonoDelMonto.INGRESO -> colores.entra
+    TonoDelMonto.ENTRE_CUENTAS -> colores.entreCuentas
+    TonoDelMonto.NEUTRO -> colores.textoApagado
 }
 
 /**
@@ -2078,7 +2090,7 @@ private fun TransferRow(
                 text = transferRowTitle(row, accountTypes),
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(2.dp))
@@ -2090,14 +2102,14 @@ private fun TransferRow(
                     Icon(
                         imageVector = Icons.Rounded.Repeat,
                         contentDescription = "Recurrente",
-                        tint = MinTextMute,
+                        tint = Movi.colores.textoMedio,
                         modifier = Modifier.size(11.dp),
                     )
                 }
                 Text(
                     text = transferRowSubtitle(row, accountNames),
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     // Igual que en [MovementSingleRow]: sin el weight, el Row que envuelve al
@@ -2111,7 +2123,7 @@ private fun TransferRow(
             fontSize = 14.5.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
-            color = colorDelTono(tonoDelRenglon(row)),
+            color = colorDelTono(tonoDelRenglon(row), Movi.colores),
             letterSpacing = (-0.3).sp,
         )
     }
@@ -2144,7 +2156,7 @@ private fun RenglonDeAjustes(
                 text = tituloDeLosAjustes(events),
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(3.dp))
@@ -2152,13 +2164,13 @@ private fun RenglonDeAjustes(
                 text = if (events.size == 1) "$ADJUSTMENT_CATEGORY · 1 corrección"
                 else "$ADJUSTMENT_CATEGORY · ${events.size} correcciones",
                 fontSize = 12.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
             )
         }
         Icon(
             imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
             contentDescription = if (abierto) "Ocultar los ajustes" else "Ver los ajustes",
-            tint = MinTextFaint,
+            tint = Movi.colores.textoApagado,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -2175,7 +2187,7 @@ private fun RenglonDeAjustes(
  * lo único que importaba de ahí: que el movimiento entró solo y falta confirmarlo.
  *
  * PR 1 del rediseño de Recurrentes: el mismo ícono de repetición que ya identifica a Recurrentes
- * en el rail y en Más ([Icons.Rounded.Repeat]), chico y sin color propio —el mismo `MinTextMute`
+ * en el rail y en Más ([Icons.Rounded.Repeat]), chico y sin color propio —el mismo `Movi.colores.textoMedio`
  * del subtítulo— junto a la categoría. No es un botón: solo informa: para editar el recurrente
  * hay que abrir el movimiento y usar «¿Se repite todos los meses?» (ver `SeccionEstoSeRepite`).
  */
@@ -2209,11 +2221,11 @@ private fun MovementSingleRow(
                     text = tx.description,
                     fontSize = 14.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-0.1).sp,
                 )
                 if (tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
-                    StatusDot(MinWarn)
+                    StatusDot(Movi.colores.aviso)
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -2225,14 +2237,14 @@ private fun MovementSingleRow(
                     Icon(
                         imageVector = Icons.Rounded.Repeat,
                         contentDescription = "Recurrente",
-                        tint = MinTextMute,
+                        tint = Movi.colores.textoMedio,
                         modifier = Modifier.size(11.dp),
                     )
                 }
                 Text(
                     text = subtitulo,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     // Sin este weight, el Row que ahora envuelve el ícono no le da al texto un
@@ -2254,7 +2266,7 @@ private fun MovementSingleRow(
             fontSize = 14.5.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
-            color = colorDelTono(tono),
+            color = colorDelTono(tono, Movi.colores),
             letterSpacing = (-0.3).sp,
         )
     }
@@ -2291,7 +2303,7 @@ private fun ResumenFlujoLibreCard(
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(20.dp),
     ) {
-        Text("Flujo libre", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+        Text("Flujo libre", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
         // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
@@ -2302,7 +2314,7 @@ private fun ResumenFlujoLibreCard(
             text = cifras?.let { formatCOP(it.disponible) } ?: "—",
             fontSize = 28.sp,
             fontFamily = FontFamily.Monospace,
-            color = MinText,
+            color = Movi.colores.texto,
             letterSpacing = (-1.1).sp,
             lineHeight = 28.sp,
         )
@@ -2310,33 +2322,33 @@ private fun ResumenFlujoLibreCard(
         Text(
             text = cifras?.let { subtituloDelFlujoLibre(it) } ?: "Ingresos recurrentes − Gastos recurrentes",
             fontSize = 12.sp,
-            color = MinTextMute,
+            color = Movi.colores.textoMedio,
         )
         Spacer(Modifier.height(14.dp))
         Hairline()
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Ingresos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                Text("Ingresos recurrentes", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
                     fontSize = 14.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Medium,
-                    color = MinIncome,
+                    color = Movi.colores.entra,
                     letterSpacing = (-0.3).sp,
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text("Gastos recurrentes", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                Text("Gastos recurrentes", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = cifras?.let { formatCOP(it.gastos) } ?: "—",
                     fontSize = 14.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-0.3).sp,
                 )
             }
@@ -2351,7 +2363,7 @@ private fun ResumenFlujoLibreCard(
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(ETIQUETA_MINIMOS_DE_TARJETA, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                    Text(ETIQUETA_MINIMOS_DE_TARJETA, fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         // El signo lo trae el formato, no un prefijo pegado afuera (F36): `formatCOP` ya sabe
@@ -2360,19 +2372,19 @@ private fun ResumenFlujoLibreCard(
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                         letterSpacing = (-0.3).sp,
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Libre sin las tarjetas", fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                    Text("Libre sin las tarjetas", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = formatCOP(cifras.flujoLibre),
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         letterSpacing = (-0.3).sp,
                     )
                 }
@@ -2382,7 +2394,7 @@ private fun ResumenFlujoLibreCard(
         // Ver [avisoDeMinimosQueFaltan].
         cifras?.let { avisoDeMinimosQueFaltan(it) }?.let { aviso ->
             Spacer(Modifier.height(12.dp))
-            Text(aviso, fontSize = 11.sp, color = MinWarn, lineHeight = 15.sp)
+            Text(aviso, fontSize = 11.sp, color = Movi.colores.aviso, lineHeight = 15.sp)
         }
         // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
         // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
@@ -2396,7 +2408,7 @@ private fun ResumenFlujoLibreCard(
                         "convertirlos a pesos."
                 },
                 fontSize = 11.sp,
-                color = MinWarn,
+                color = Movi.colores.aviso,
                 lineHeight = 15.sp,
             )
         } else if (cifras != null && cifras.hayMonedaExtranjera) {
@@ -2405,7 +2417,7 @@ private fun ResumenFlujoLibreCard(
                 text = "Lo que te cobran en dólares entra al total convertido a pesos con la tasa " +
                     "de cambio más reciente que pudimos consultar.",
                 fontSize = 11.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
         }
@@ -2422,7 +2434,7 @@ private fun ResumenFlujoLibreCard(
                 text = "Lo que te cobran una vez al año entra repartido: dividimos el cobro en 12 " +
                     "para que este total sea lo que te cuesta cada mes.",
                 fontSize = 11.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
         }
@@ -2441,7 +2453,7 @@ private fun ResumenFlujoLibreCard(
         // `entraAlBarridoDeAvisos`, porque su salario ya viene neto y contarlas restaría dos
         // veces—. Sin esta frase, la suma de sus cuotas no le va a dar y no va a saber por qué.
         //
-        // En `MinTextMute` y no en `MinWarn`: no hay nada roto ni nada que reintentar (que es lo
+        // En `Movi.colores.textoMedio` y no en `Movi.colores.aviso`: no hay nada roto ni nada que reintentar (que es lo
         // que distingue al aviso de la moneda sin convertir); es el alcance del total, como el
         // aviso del prorrateo de acá arriba.
         if (cifras != null && cifras.cuotasDeCredito > 0L) {
@@ -2451,7 +2463,7 @@ private fun ResumenFlujoLibreCard(
                     "al mes. No contamos las que te descuentan de la nómina ni las que paga otra " +
                     "persona, porque esa plata no sale de tu bolsillo.",
                 fontSize = 11.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
         }
@@ -2475,7 +2487,7 @@ private fun ResumenFlujoLibreCard(
                         "cuotas no entran en este total: no son un gasto de todos los meses."
                 },
                 fontSize = 11.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
         }
@@ -2549,7 +2561,7 @@ private fun SeccionSuscripcionesActivas(
                 Text(
                     text = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
                     fontSize = 13.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                 )
             }
             return@Column
@@ -2567,7 +2579,7 @@ private fun SeccionSuscripcionesActivas(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Box(
-                        modifier = Modifier.size(36.dp).clip(CircleShape).background(MinSurfaceContainerHigh),
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(Movi.colores.tarjeta),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -2575,7 +2587,7 @@ private fun SeccionSuscripcionesActivas(
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -2583,7 +2595,7 @@ private fun SeccionSuscripcionesActivas(
                             text = item.sub.displayName,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             letterSpacing = (-0.1).sp,
                         )
                         Spacer(Modifier.height(2.dp))
@@ -2593,7 +2605,7 @@ private fun SeccionSuscripcionesActivas(
                         Text(
                             contextoDeSuscripcionActiva(item, accountNames),
                             fontSize = 12.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                         // Y, solo en un cobro anual que SÍ suma, cuánto de él entra al total de
                         // este mes: es lo que explica por qué el «Flujo libre» de arriba no es la
@@ -2601,7 +2613,7 @@ private fun SeccionSuscripcionesActivas(
                         // null en todos los casos donde no hay nada que aclarar.
                         notaDeProrrateo(item, usdToCop)?.let { nota ->
                             Spacer(Modifier.height(2.dp))
-                            Text(nota, fontSize = 12.sp, color = MinTextFaint)
+                            Text(nota, fontSize = 12.sp, color = Movi.colores.textoApagado)
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {
@@ -2614,7 +2626,7 @@ private fun SeccionSuscripcionesActivas(
                             fontSize = 14.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             letterSpacing = (-0.3).sp,
                         )
                         Spacer(Modifier.height(2.dp))
@@ -2628,13 +2640,13 @@ private fun SeccionSuscripcionesActivas(
                             Text(
                                 text = "Editar",
                                 fontSize = 12.sp,
-                                color = if (guardando) MinTextMute else MinPrimary,
+                                color = if (guardando) Movi.colores.textoMedio else Movi.colores.marca,
                                 modifier = Modifier.clickable { if (!guardando) onEditar(item.sub) },
                             )
                             Text(
                                 text = if (guardando) "Quitando…" else "Quitar",
                                 fontSize = 12.sp,
-                                color = if (guardando) MinTextMute else MinExpense,
+                                color = if (guardando) Movi.colores.textoMedio else Movi.colores.sale,
                                 modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
                             )
                         }
@@ -2658,7 +2670,7 @@ private fun SeccionSuscripcionesActivas(
                         text = "Total al mes",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                     )
                     if (sinConvertir > 0) {
                         Spacer(Modifier.height(2.dp))
@@ -2669,7 +2681,7 @@ private fun SeccionSuscripcionesActivas(
                                 "No incluye $sinConvertir cobros que no pudimos pasar a pesos."
                             },
                             fontSize = 12.sp,
-                            color = MinWarn,
+                            color = Movi.colores.aviso,
                             lineHeight = 15.sp,
                         )
                     }
@@ -2681,7 +2693,7 @@ private fun SeccionSuscripcionesActivas(
                     fontSize = 14.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-0.3).sp,
                 )
             }
@@ -2717,7 +2729,7 @@ private fun CandidataSuscripcionCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(sub.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText)
+            Text(sub.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Text(
                 // Con su periodicidad, igual que la fila de una activa. Hoy el detector solo
                 // produce cobros mensuales (agrupa por mes, ver `detectSubscriptions`), así que
@@ -2727,7 +2739,7 @@ private fun CandidataSuscripcionCard(
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
             )
         }
         Text(
@@ -2736,14 +2748,14 @@ private fun CandidataSuscripcionCard(
             // normalizado no le dice nada al dueño. Ver [contextoDeCandidata].
             text = contextoDeCandidata(sub, accountNames),
             fontSize = 12.sp,
-            color = MinTextMute,
+            color = Movi.colores.textoMedio,
             modifier = Modifier.padding(top = 4.dp),
         )
         if (yaEsRegla) {
             Text(
                 text = "Ya lo tienes como recurrente",
                 fontSize = 12.sp,
-                color = MinWarn,
+                color = Movi.colores.aviso,
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
@@ -2770,10 +2782,10 @@ private fun AccionCandidataChip(label: String, primary: Boolean, habilitado: Boo
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (primary) MinText else MinSurfaceContainerLow)
+            .background(if (primary) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(enabled = habilitado, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) MinBg else MinText)
+        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
     }
 }

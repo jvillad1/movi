@@ -50,7 +50,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             .onSuccess { accounts = it }
     }
     Box(modifier = Modifier.fillMaxSize()) {
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60: encabezado único — Metas se abre desde Más (flecha, F22) y lleva el mismo
         // rótulo que su acceso («Metas»); el alta compacta a la derecha cuando ya hay (F26).
         MinScreenHeader(
@@ -83,13 +83,18 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         // Donut
+                        // El `Canvas` de abajo DIBUJA, no compone: su lambda no es contexto
+                        // componible y no puede leer los tokens. Se leen acá, una vez por
+                        // composición en vez de una por cuadro.
+                        val colorDelRiel = Movi.colores.hilo
+                        val colorDelArco = Movi.colores.texto
                         Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                             Canvas(modifier = Modifier.size(72.dp)) {
                                 val r = size.minDimension / 2 - 6
                                 val cx = size.width / 2
                                 val cy = size.height / 2
                                 drawArc(
-                                    color = MinHairline,
+                                    color = colorDelRiel,
                                     startAngle = -90f,
                                     sweepAngle = 360f,
                                     useCenter = false,
@@ -98,7 +103,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                     size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
                                 )
                                 drawArc(
-                                    color = MinText,
+                                    color = colorDelArco,
                                     startAngle = -90f,
                                     sweepAngle = overallPct * 360f,
                                     useCenter = false,
@@ -107,13 +112,13 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                     size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
                                 )
                             }
-                            Text(pctLabel, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+                            Text(pctLabel, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                         }
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Total ahorrado", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                            Text("Total ahorrado", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(6.dp))
-                            Text(formatCOP(totalSaved), fontSize = 22.sp, fontFamily = FontFamily.Monospace, color = MinText, letterSpacing = (-0.7).sp)
-                            Text("de ${formatCOP(totalTarget)} · ${goals.size} metas", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 4.dp))
+                            Text(formatCOP(totalSaved), fontSize = 22.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto, letterSpacing = (-0.7).sp)
+                            Text("de ${formatCOP(totalTarget)} · ${goals.size} metas", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
@@ -129,7 +134,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                             variant = MinCardVariant.Elevated,
                             padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
                         ) {
-                            Text("Aún no hay metas de ahorro", fontSize = 14.sp, color = MinTextMute)
+                            Text("Aún no hay metas de ahorro", fontSize = 14.sp, color = Movi.colores.textoMedio)
                         }
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -158,9 +163,9 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            Text(g.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.1).sp)
+                                            Text(g.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp)
                                             if (done) {
-                                                Text("COMPLETADA", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MinIncome, letterSpacing = 0.4.sp)
+                                                Text("COMPLETADA", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.entra, letterSpacing = 0.4.sp)
                                             }
                                         }
                                         // F26: la fecha objetivo es opcional — sin ella no se
@@ -168,13 +173,13 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                         Text(
                                             g.targetDate?.let { "Meta para el $it" } ?: "Sin fecha objetivo",
                                             fontSize = 12.sp,
-                                            color = MinTextMute,
+                                            color = Movi.colores.textoMedio,
                                             modifier = Modifier.padding(top = 2.dp),
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Row {
-                                            Text(formatCOP(g.saved), fontSize = 13.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText, letterSpacing = (-0.3).sp)
-                                            Text(" / ${formatCOP(g.target)}", fontSize = 13.5.sp, fontFamily = FontFamily.Monospace, color = MinTextMute, letterSpacing = (-0.3).sp)
+                                            Text(formatCOP(g.saved), fontSize = 13.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+                                            Text(" / ${formatCOP(g.target)}", fontSize = 13.5.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
                                         }
                                     }
                                 }
@@ -200,14 +205,15 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
 /** Anillo de progreso (saved/target) por tarjeta — versión chica del donut del encabezado. */
 @Composable
 private fun GoalRing(pct: Float, done: Boolean, size: androidx.compose.ui.unit.Dp) {
-    val ringColor = if (done) MinIncome else MinText
+    val ringColor = if (done) Movi.colores.entra else Movi.colores.texto
+    val colorDelRiel = Movi.colores.hilo
     Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(size)) {
             val r = this.size.minDimension / 2 - 4
             val cx = this.size.width / 2
             val cy = this.size.height / 2
             drawArc(
-                color = MinHairline,
+                color = colorDelRiel,
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,
@@ -225,7 +231,7 @@ private fun GoalRing(pct: Float, done: Boolean, size: androidx.compose.ui.unit.D
                 size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
             )
         }
-        Text("${(pct * 100).toInt()}%", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = MinText)
+        Text("${(pct * 100).toInt()}%", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
     }
 }
 

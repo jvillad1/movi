@@ -105,7 +105,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
         if (target > 0) listState.animateScrollToItem(target - 1)
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; Movi AI se abre desde Más — destino de reserva si no
         // hay historial. El «BETA» pasa a la derecha, como marca, no como parte del título.
         MinScreenHeader(
@@ -117,7 +117,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     "BETA",
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 0.6.sp,
                 )
@@ -150,21 +150,21 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (pendingImage != null) {
-                    Icon(Icons.Rounded.Image, contentDescription = null, tint = MinTextMute, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(16.dp))
                     Text(
                         text = pendingImage?.fileName ?: "",
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
                     Icon(
                         Icons.Rounded.Close,
                         contentDescription = "Quitar imagen",
-                        tint = MinTextMute,
+                        tint = Movi.colores.textoMedio,
                         modifier = Modifier.size(16.dp).clickable { pendingImage = null },
                     )
                 } else {
-                    Text(text = attachError ?: "", fontSize = 12.sp, color = MinExpense, modifier = Modifier.weight(1f))
+                    Text(text = attachError ?: "", fontSize = 12.sp, color = Movi.colores.sale, modifier = Modifier.weight(1f))
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -175,7 +175,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(MinSurface)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -184,7 +184,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             Icon(
                 Icons.Rounded.AttachFile,
                 contentDescription = "Adjuntar imagen",
-                tint = MinTextMute,
+                tint = Movi.colores.textoMedio,
                 modifier = Modifier.size(20.dp).clickable(enabled = !loading) { attachError = null; launchPicker() },
             )
             Box(modifier = Modifier.weight(1f)) {
@@ -195,8 +195,8 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
                     enabled = !loading,
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
                     // Ola 8 · V2: mismo agujero que tenía la nota de Agregar. El `Box(weight)`
                     // reserva el ancho, pero el área que responde al toque es la del campo, y
                     // con el texto vacío mide cero: se tocaba «Pregúntale a Movi…» y no pasaba
@@ -209,7 +209,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                             Text(
                                 "Pregúntale a Movi…",
                                 fontSize = 13.5.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                             )
                         }
                         inner()
@@ -221,18 +221,18 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(if (canSend) MinText else MinSurfaceContainerHigh)
+                    .background(if (canSend) Movi.colores.texto else Movi.colores.tarjeta)
                     .clickable(enabled = canSend) { send() },
                 contentAlignment = Alignment.Center,
             ) {
                 if (loading) {
-                    Text(text = "…", fontSize = 20.sp, color = if (canSend) MinBg else MinTextMute, fontWeight = FontWeight.Bold)
+                    Text(text = "…", fontSize = 20.sp, color = if (canSend) Movi.colores.fondo else Movi.colores.textoMedio, fontWeight = FontWeight.Bold)
                 } else {
                     // Ola 2 #5 (F11): "›" como texto suelto salía roto en la web, igual que "‹".
                     Icon(
                         Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                         contentDescription = "Enviar",
-                        tint = if (canSend) MinBg else MinTextMute,
+                        tint = if (canSend) Movi.colores.fondo else Movi.colores.textoMedio,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -251,19 +251,19 @@ private fun AIMsgUser(text: String, hasImage: Boolean = false) {
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(MinText)
+                .background(Movi.colores.texto)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             Column {
                 if (hasImage) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Rounded.Image, contentDescription = null, tint = MinBg, modifier = Modifier.size(13.dp))
-                        Text("Imagen adjunta", fontSize = 11.sp, color = MinBg)
+                        Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.fondo, modifier = Modifier.size(13.dp))
+                        Text("Imagen adjunta", fontSize = 11.sp, color = Movi.colores.fondo)
                     }
                     if (text.isNotBlank()) Spacer(Modifier.height(4.dp))
                 }
                 if (text.isNotBlank()) {
-                    Text(text = text, fontSize = 13.5.sp, color = MinBg, lineHeight = 20.sp)
+                    Text(text = text, fontSize = 13.5.sp, color = Movi.colores.fondo, lineHeight = 20.sp)
                 }
             }
         }
@@ -281,14 +281,14 @@ private fun AIMsgAI(text: String) {
             modifier = Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(MinSurfaceContainerHigh),
+                .background(Movi.colores.tarjeta),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MinText, modifier = Modifier.size(12.dp))
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(12.dp))
         }
         Spacer(Modifier.width(10.dp))
         Box(modifier = Modifier.widthIn(max = 290.dp)) {
-            Text(text = text, fontSize = 13.5.sp, color = MinText, lineHeight = 20.sp)
+            Text(text = text, fontSize = 13.5.sp, color = Movi.colores.texto, lineHeight = 20.sp)
         }
     }
 }

@@ -74,7 +74,7 @@ fun SimuladorDeAbonoSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -83,7 +83,7 @@ fun SimuladorDeAbonoSheet(
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SectionLabel(TITULO_DEL_SIMULADOR)
                 Spacer(Modifier.height(8.dp))
-                Text(credit.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                Text(credit.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                 Spacer(Modifier.height(16.dp))
 
                 Row(
@@ -91,13 +91,13 @@ fun SimuladorDeAbonoSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Deuda hoy", fontSize = 13.sp, color = MinTextMute)
+                    Text("Deuda hoy", fontSize = 13.sp, color = Movi.colores.textoMedio)
                     Text(
                         formatCOP(saldo),
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                     )
                 }
 
@@ -110,7 +110,7 @@ fun SimuladorDeAbonoSheet(
                     Text(
                         aviso.texto,
                         fontSize = 11.5.sp,
-                        color = if (aviso.esAdvertencia) MinWarn else MinTextMute,
+                        color = if (aviso.esAdvertencia) Movi.colores.aviso else Movi.colores.textoMedio,
                         lineHeight = 16.sp,
                     )
                 }
@@ -140,18 +140,18 @@ fun SimuladorDeAbonoSheet(
 
                 Spacer(Modifier.height(14.dp))
                 if (resultado == null) {
-                    Text(PIDE_UN_MONTO, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+                    Text(PIDE_UN_MONTO, fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
                 } else {
                     Text(
                         resultado.titular,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (resultado.esAlerta) MinExpense else MinText,
+                        color = if (resultado.esAlerta) Movi.colores.sale else Movi.colores.texto,
                         lineHeight = 19.sp,
                     )
                     resultado.detalle?.let {
                         Spacer(Modifier.height(6.dp))
-                        Text(it, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+                        Text(it, fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
                     }
                 }
 
@@ -164,11 +164,11 @@ fun SimuladorDeAbonoSheet(
                 // él tiene que pedir; y el de la estimación —que el interés que Movi calcula se
                 // queda corto contra el extracto— es el único que habla de la cifra misma y no del
                 // futuro. Ver [SUPUESTO_DE_LA_ESTIMACION].
-                Text(SUPUESTO_DEL_ABONO, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
+                Text(SUPUESTO_DEL_ABONO, fontSize = 11.sp, color = Movi.colores.textoApagado, lineHeight = 15.sp)
                 Spacer(Modifier.height(6.dp))
-                Text(SUPUESTO_DE_LA_PROYECCION, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
+                Text(SUPUESTO_DE_LA_PROYECCION, fontSize = 11.sp, color = Movi.colores.textoApagado, lineHeight = 15.sp)
                 Spacer(Modifier.height(6.dp))
-                Text(SUPUESTO_DE_LA_ESTIMACION, fontSize = 11.sp, color = MinTextFaint, lineHeight = 15.sp)
+                Text(SUPUESTO_DE_LA_ESTIMACION, fontSize = 11.sp, color = Movi.colores.textoApagado, lineHeight = 15.sp)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -176,12 +176,12 @@ fun SimuladorDeAbonoSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(MinSurfaceContainerLow)
+                    .background(Movi.colores.tarjeta)
                     .clickable(onClick = onDismiss)
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Cerrar", color = MinText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text("Cerrar", color = Movi.colores.texto, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -199,10 +199,10 @@ private fun ChipDeMonto(etiqueta: String, seleccionado: Boolean, onClick: () -> 
         etiqueta,
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
-        color = if (seleccionado) MinBg else MinText,
+        color = if (seleccionado) Movi.colores.fondo else Movi.colores.texto,
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (seleccionado) MinText else MinSurfaceContainerLow)
+            .background(if (seleccionado) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     )

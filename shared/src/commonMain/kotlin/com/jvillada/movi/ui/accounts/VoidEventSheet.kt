@@ -143,7 +143,7 @@ fun VoidEventSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -181,20 +181,20 @@ fun VoidEventSheet(
                                 text = event.description,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = MinText,
+                                color = Movi.colores.texto,
                             )
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 text = "${event.category} · ${event.source.name}",
                                 fontSize = 11.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                             )
                         }
                         Spacer(Modifier.width(12.dp))
                         Cifra(
                             text = signedAmount,
                             fontSize = 14f,
-                            color = if (isIncome) MinIncome else MinText,
+                            color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
                         )
                     }
                 }
@@ -209,7 +209,7 @@ fun VoidEventSheet(
                     Text(
                         text = "AL ANULAR",
                         fontSize = 11.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         letterSpacing = 0.4.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -225,7 +225,7 @@ fun VoidEventSheet(
                             Icon(
                                 imageVector = Icons.Rounded.Check,
                                 contentDescription = null,
-                                tint = MinTextMute,
+                                tint = Movi.colores.textoMedio,
                                 modifier = Modifier.size(15.dp),
                             )
                             Spacer(Modifier.width(8.dp))
@@ -236,7 +236,7 @@ fun VoidEventSheet(
                                     formatMoney(efecto.monto, efecto.currency),
                                 ),
                                 fontSize = 13.5.sp,
-                                color = MinText,
+                                color = Movi.colores.texto,
                                 lineHeight = 18.sp,
                             )
                         }
@@ -247,7 +247,7 @@ fun VoidEventSheet(
                     Text(
                         text = ANULAR_DESHACE_LAS_DOS_MITADES,
                         fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 17.sp,
                     )
                 }
@@ -267,7 +267,7 @@ fun VoidEventSheet(
                     Text(
                         text = avisoDeLaEspera,
                         fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 17.sp,
                     )
                 }
@@ -278,7 +278,7 @@ fun VoidEventSheet(
                 Text(
                     text = "MOTIVO (OPCIONAL)",
                     fontSize = 11.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     letterSpacing = 0.4.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -289,8 +289,8 @@ fun VoidEventSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MinSurfaceContainerLow)
-                        .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                        .background(Movi.colores.tarjeta)
+                        .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                 ) {
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
@@ -299,14 +299,14 @@ fun VoidEventSheet(
                     BasicTextField(
                         value = campo.valor,
                         onValueChange = campo::alCambiar,
-                        cursorBrush = SolidColor(MinText),
-                        textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                        cursorBrush = SolidColor(Movi.colores.texto),
+                        textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                             .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                         decorationBox = { inner ->
                             if (reason.isEmpty()) {
-                                Text("Ej: Movimiento duplicado", fontSize = 14.sp, color = MinTextMute)
+                                Text("Ej: Movimiento duplicado", fontSize = 14.sp, color = Movi.colores.textoMedio)
                             }
                             inner()
                         },
@@ -321,7 +321,7 @@ fun VoidEventSheet(
                         .fillMaxWidth()
                         .height(54.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(if (!voiding) MinExpenseContainer else MinSurfaceContainerLow)
+                        .background(if (!voiding) Movi.colores.sale.copy(alpha = 0.14f) else Movi.colores.tarjeta)
                         .clickable(enabled = !voiding) { doVoid() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -329,7 +329,7 @@ fun VoidEventSheet(
                         text = if (voiding) "Anulando…" else "Anular movimiento",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (!voiding) MinExpense else MinTextFaint,
+                        color = if (!voiding) Movi.colores.sale else Movi.colores.textoApagado,
                     )
                 }
 

@@ -7,8 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.repository.ApiException
-import com.jvillada.movi.theme.MinExpense
 
 fun Throwable.toUserMessage(): String {
     // Cuando el server explicó el rechazo en el cuerpo, eso gana: es más específico que
@@ -103,7 +103,7 @@ fun BarraDeError(mensaje: String?) {
     Text(
         text = mensaje,
         fontSize = 12.5.sp,
-        color = MinExpense,
+        color = Movi.colores.sale,
         lineHeight = 17.sp,
         modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
     )

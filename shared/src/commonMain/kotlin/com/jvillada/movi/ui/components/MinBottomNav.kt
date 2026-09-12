@@ -119,7 +119,7 @@ private fun NavItem(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                // La píldora del activo era un morado sólido propio (`MinPrimaryContainer`), un
+                // La píldora del activo era un morado sólido propio (`Movi.colores.marca.copy(alpha = 0.16f)`), un
                 // color que existía solo para esto. Ahora es la MARCA lavada: el sistema tiene un
                 // lavanda, no dos, y el ícono encima va del mismo lavanda a plena fuerza.
                 .background(

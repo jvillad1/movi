@@ -100,7 +100,7 @@ fun ChangePasswordSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -113,13 +113,13 @@ fun ChangePasswordSheet(
                 ) {
                     Text(
                         "Listo, tu contraseña quedó actualizada.",
-                        fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinIncome,
+                        fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.entra,
                         textAlign = TextAlign.Center,
                     )
                 }
             } else {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                    Text("Contraseña actual", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Contraseña actual", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
                     AuthField(
                         value = current,
                         onChange = { current = it },
@@ -128,7 +128,7 @@ fun ChangePasswordSheet(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                     )
                     Spacer(Modifier.height(14.dp))
-                    Text("Contraseña nueva", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Contraseña nueva", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
                     AuthField(
                         value = new,
                         onChange = { new = it },
@@ -137,7 +137,7 @@ fun ChangePasswordSheet(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                     )
                     Spacer(Modifier.height(14.dp))
-                    Text("Repetir la nueva", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Repetir la nueva", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
                     AuthField(
                         value = repeat,
                         onChange = { repeat = it },
@@ -149,7 +149,7 @@ fun ChangePasswordSheet(
 
                     error?.let {
                         Spacer(Modifier.height(10.dp))
-                        Text(it, fontSize = 12.sp, color = MinExpense)
+                        Text(it, fontSize = 12.sp, color = Movi.colores.sale)
                     }
                 }
 
@@ -158,19 +158,19 @@ fun ChangePasswordSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (canSave) MinText else MinTextFaint)
+                        .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                         .clickable(enabled = canSave) { save() }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = MinBg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 if (!canSave && !saving && missingFieldMessage != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = missingFieldMessage,
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )

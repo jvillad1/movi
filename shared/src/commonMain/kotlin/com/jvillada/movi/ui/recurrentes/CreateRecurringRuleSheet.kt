@@ -405,7 +405,7 @@ fun CreateRecurringRuleSheet(
                     .fillMaxWidth()
                     .heightIn(max = altoMaximoDeLaHoja)
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(MinSurfaceContainerHigh)
+                    .background(Movi.colores.tarjeta)
                     .padding(horizontal = 20.dp)
                     .clickable(enabled = false) {},
             ) {
@@ -432,7 +432,7 @@ fun CreateRecurringRuleSheet(
                             },
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             modifier = Modifier.weight(1f),
                         )
                         // `existing != null` y no `isEditMode`: desde que editar una
@@ -445,7 +445,7 @@ fun CreateRecurringRuleSheet(
                             Text(
                                 text = if (saving) "…" else "Eliminar",
                                 fontSize = 13.sp,
-                                color = MinExpense,
+                                color = Movi.colores.sale,
                                 modifier = Modifier.clickable(enabled = !saving) { delete() },
                             )
                         }
@@ -461,14 +461,14 @@ fun CreateRecurringRuleSheet(
                         BasicTextField(
                             value = campo.valor,
                             onValueChange = campo::alCambiar,
-                            cursorBrush = SolidColor(MinText),
-                            textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                            cursorBrush = SolidColor(Movi.colores.texto),
+                            textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                                 .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                             decorationBox = { inner ->
                                 if (name.isEmpty()) {
-                                    Text("Ej: Arriendo, Netflix, Gym", fontSize = 14.sp, color = MinTextMute)
+                                    Text("Ej: Arriendo, Netflix, Gym", fontSize = 14.sp, color = Movi.colores.textoMedio)
                                 }
                                 inner()
                             },
@@ -628,7 +628,7 @@ fun CreateRecurringRuleSheet(
                                 text = "Cambiamos el tipo a Gasto: esto se guarda como suscripción, " +
                                     "y una suscripción es siempre un cobro.",
                                 fontSize = 12.sp,
-                                color = MinWarn,
+                                color = Movi.colores.aviso,
                                 lineHeight = 17.sp,
                             )
                             Spacer(Modifier.height(8.dp))
@@ -641,7 +641,7 @@ fun CreateRecurringRuleSheet(
                             text = "Guardamos el nombre, el monto, el día y la cuenta que lo paga: " +
                                 "sin categoría y sin recordatorio.",
                             fontSize = 12.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             lineHeight = 17.sp,
                         )
                         if (enDolares) {
@@ -650,7 +650,7 @@ fun CreateRecurringRuleSheet(
                                 text = "Para el total del mes lo convertimos a pesos con la tasa de " +
                                     "cambio más reciente que pudimos consultar.",
                                 fontSize = 12.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                                 lineHeight = 17.sp,
                             )
                         }
@@ -665,7 +665,7 @@ fun CreateRecurringRuleSheet(
                                     "dividimos en 12. Guardamos el día, pero no el mes, así que este " +
                                     "cobro no te va a generar un recordatorio.",
                                 fontSize = 12.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                                 lineHeight = 17.sp,
                             )
                         }
@@ -785,7 +785,7 @@ fun CreateRecurringRuleSheet(
                                 text = "Los recordatorios son para lo que tienes que pagar, así que un " +
                                     "ingreso no lleva aviso.",
                                 fontSize = 12.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                                 lineHeight = 17.sp,
                             )
                         }
@@ -804,7 +804,7 @@ fun CreateRecurringRuleSheet(
                     Text(
                         text = error!!,
                         fontSize = 12.sp,
-                        color = MinExpense,
+                        color = Movi.colores.sale,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
@@ -815,7 +815,7 @@ fun CreateRecurringRuleSheet(
                         .fillMaxWidth()
                         .height(54.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                         .clickable(enabled = canSave) { save() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -827,7 +827,7 @@ fun CreateRecurringRuleSheet(
                         },
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                        color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
                 if (!canSave && !saving && missingFieldMessage != null) {
@@ -835,7 +835,7 @@ fun CreateRecurringRuleSheet(
                     Text(
                         text = missingFieldMessage,
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -906,8 +906,8 @@ private fun AccountPickerField(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .clickable(enabled = enabled && sePuedeElegir, onClick = onToggle)
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
@@ -925,11 +925,11 @@ private fun AccountPickerField(
                     else -> "Sin cuenta"
                 },
                 fontSize = 14.sp,
-                color = if (selected != null) MinText else MinTextMute,
+                color = if (selected != null) Movi.colores.texto else Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )
             if (sePuedeElegir) {
-                Text(if (open) "Cerrar" else "Elegir", fontSize = 12.sp, color = MinTextMute)
+                Text(if (open) "Cerrar" else "Elegir", fontSize = 12.sp, color = Movi.colores.textoMedio)
             }
         }
     }
@@ -939,8 +939,8 @@ private fun AccountPickerField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(MinSurfaceContainerHigh)
-                .border(1.dp, MinBorder, RoundedCornerShape(12.dp)),
+                .background(Movi.colores.tarjeta)
+                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)),
         ) {
             AccountPickerRow(label = "Sin cuenta", selected = selectedId == null) { onPick(null) }
             val visibles = if (verTodas) cuentas.todas else cuentas.principales
@@ -973,10 +973,10 @@ private fun AccountPickerRow(label: String, selected: Boolean, onClick: () -> Un
         text = label,
         fontSize = 14.sp,
         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-        color = if (selected) MinOnPrimaryContainer else MinText,
+        color = if (selected) Movi.colores.marca else Movi.colores.texto,
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (selected) Modifier.background(MinPrimaryContainer) else Modifier)
+            .then(if (selected) Modifier.background(Movi.colores.marca.copy(alpha = 0.16f)) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     )
@@ -987,7 +987,7 @@ private fun SheetSectionLabel(text: String) {
     Text(
         text = text,
         fontSize = 11.sp,
-        color = MinTextMute,
+        color = Movi.colores.textoMedio,
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
@@ -999,8 +999,8 @@ private fun SheetInputBox(content: @Composable BoxScope.() -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 14.dp),
         content = content,
     )
@@ -1017,9 +1017,9 @@ private fun RowScope.SheetChip(
         modifier = Modifier
             .weight(1f)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
+                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(10.dp)) else Modifier,
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 12.dp),
@@ -1030,9 +1030,9 @@ private fun RowScope.SheetChip(
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = when {
-                !enabled -> MinTextFaint
-                selected -> MinOnPrimaryContainer
-                else     -> MinTextDim
+                !enabled -> Movi.colores.textoApagado
+                selected -> Movi.colores.marca
+                else     -> Movi.colores.textoMedio
             },
         )
     }
@@ -1104,7 +1104,7 @@ private fun DayOfMonthPicker(
         // cuadrícula: arriba movería la cuadrícula misma bajo el dedo al elegir un 29, 30 o 31.
         diaCortoHint(selected)?.let { nota ->
             Spacer(Modifier.height(8.dp))
-            Text(text = nota, fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp)
+            Text(text = nota, fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
         }
     }
 }
@@ -1127,7 +1127,7 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
             .weight(1f)
             .height(44.dp)
             .clip(RoundedCornerShape(9.dp))
-            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
             .clickable(enabled = enabled) { onPick(day) },
         contentAlignment = Alignment.Center,
     ) {
@@ -1136,9 +1136,9 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = when {
-                !enabled -> MinTextFaint
-                selected -> MinOnPrimaryContainer
-                else -> MinTextDim
+                !enabled -> Movi.colores.textoApagado
+                selected -> Movi.colores.marca
+                else -> Movi.colores.textoMedio
             },
         )
     }

@@ -499,7 +499,7 @@ fun QuickAddScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(MinSurfaceContainerHigh)
+                    .background(Movi.colores.tarjeta)
                     .padding(horizontal = 20.dp)
                     .clickable(enabled = false) {},
             ) {
@@ -883,8 +883,8 @@ internal fun TypeSegments(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(999.dp))
-            .background(MinSurfaceContainerLow)
-            .border(1.dp, MinBorder, RoundedCornerShape(999.dp))
+            .background(Movi.colores.tarjeta)
+            .border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
             .padding(3.dp),
     ) {
         labels.forEachIndexed { i, label ->
@@ -893,7 +893,7 @@ internal fun TypeSegments(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(if (isActive) MinSurfaceContainerHigh else Color.Transparent)
+                    .background(if (isActive) Movi.colores.tarjeta else Color.Transparent)
                     .clickable(enabled = enabled) { onSelect(i) }
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center,
@@ -902,7 +902,7 @@ internal fun TypeSegments(
                     text = label,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isActive) MinText else MinTextDim,
+                    color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
                     letterSpacing = 0.1.sp,
                     // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp
                     // en un teléfono de 375 px: «Traspaso» a 13 sp mide ~55, pero con la escala de
@@ -976,7 +976,7 @@ private fun EditorBody(
             fontSize = 56.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Normal,
-            color = MinText,
+            color = Movi.colores.texto,
             letterSpacing = (-2.2).sp,
             lineHeight = 56.sp,
         )
@@ -985,8 +985,8 @@ private fun EditorBody(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("COP", fontSize = 12.sp, color = MinTextMute, letterSpacing = 0.4.sp)
-            Text("·", fontSize = 12.sp, color = MinTextFaint)
+            Text("COP", fontSize = 12.sp, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
+            Text("·", fontSize = 12.sp, color = Movi.colores.textoApagado)
             // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
             // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
             // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
@@ -994,7 +994,7 @@ private fun EditorBody(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
-                    .background(MinSurfaceContainerLow)
+                    .background(Movi.colores.tarjeta)
                     .clickable(onClick = onPickDate)
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1004,13 +1004,13 @@ private fun EditorBody(
                     text = dateLabel,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     maxLines = 1,
                 )
                 Icon(
                     Icons.Rounded.ChevronRight,
                     contentDescription = "Cambiar la fecha",
-                    tint = MinTextMute,
+                    tint = Movi.colores.textoMedio,
                     modifier = Modifier.size(13.dp),
                 )
             }
@@ -1025,12 +1025,12 @@ private fun EditorBody(
         padding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
     ) {
         CardRow(
-            left = { Text("Categoría", fontSize = 14.5.sp, color = MinTextMute) },
+            left = { Text("Categoría", fontSize = 14.5.sp, color = Movi.colores.textoMedio) },
             right = {
                 Text(
                     text = category,
                     fontSize = 14.5.sp,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1044,7 +1044,7 @@ private fun EditorBody(
         )
         CardRow(
             left = {
-                Text("Cuenta", fontSize = 14.5.sp, color = MinTextMute)
+                Text("Cuenta", fontSize = 14.5.sp, color = Movi.colores.textoMedio)
                 // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
                 // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
                 //
@@ -1071,7 +1071,7 @@ private fun EditorBody(
                 Text(
                     text = walletLabel,
                     fontSize = 14.5.sp,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1085,12 +1085,12 @@ private fun EditorBody(
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
         CardRow(
-            left = { Text("Nota", fontSize = 14.5.sp, color = MinTextMute) },
+            left = { Text("Nota", fontSize = 14.5.sp, color = Movi.colores.textoMedio) },
             right = {
                 Text(
                     text = note.ifBlank { "Agregar nota…" },
                     fontSize = 14.5.sp,
-                    color = if (note.isBlank()) MinTextFaint else MinText,
+                    color = if (note.isBlank()) Movi.colores.textoApagado else Movi.colores.texto,
                     fontWeight = if (note.isBlank()) FontWeight.Normal else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1119,7 +1119,7 @@ private fun EditorBody(
     Spacer(Modifier.height(8.dp))
     Box(modifier = Modifier.fillMaxWidth().height(32.dp)) {
         if (error != null) {
-            Text(error, fontSize = 12.sp, color = MinExpense)
+            Text(error, fontSize = 12.sp, color = Movi.colores.sale)
         }
     }
 
@@ -1144,14 +1144,14 @@ private fun EditorBody(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (key == "⌫") {
-                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = MinText, modifier = Modifier.size(22.dp))
+                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
                         } else {
                             Text(
                                 text = key,
                                 fontSize = 22.sp,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Normal,
-                                color = MinText,
+                                color = Movi.colores.texto,
                             )
                         }
                     }
@@ -1171,7 +1171,7 @@ private fun EditorBody(
             Text(
                 "Primero crea una cuenta donde anotar este movimiento",
                 fontSize = 13.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             Box(
@@ -1179,7 +1179,7 @@ private fun EditorBody(
                     .fillMaxWidth()
                     .height(54.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(MinPrimaryContainer)
+                    .background(Movi.colores.marca.copy(alpha = 0.16f))
                     .clickable { onCreateAccount() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -1187,7 +1187,7 @@ private fun EditorBody(
                     "+ Crear cuenta",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinOnPrimaryContainer,
+                    color = Movi.colores.marca,
                 )
             }
         }
@@ -1200,18 +1200,18 @@ private fun EditorBody(
                 modifier = Modifier
                     .size(56.dp, 54.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, MinBorderStrong, RoundedCornerShape(16.dp))
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
                     .clickable { onOcr() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(imageVector = Icons.Filled.CameraAlt, contentDescription = "Escanear recibo", tint = MinText, modifier = Modifier.size(22.dp))
+                Icon(imageVector = Icons.Filled.CameraAlt, contentDescription = "Escanear recibo", tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
             }
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(54.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                    .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                     .clickable(enabled = canSave) { onSave() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -1219,7 +1219,7 @@ private fun EditorBody(
                     text = if (saving) "Guardando…" else "Guardar movimiento",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                    color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                 )
             }
         }
@@ -1241,7 +1241,7 @@ private fun EditorBody(
                 Text(
                     text = missingFieldMessage,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1267,7 +1267,7 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
                 text = aviso,
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
-                color = MinTextFaint,
+                color = Movi.colores.textoApagado,
                 // Una sola línea, y con puntos suspensivos si no entra.
                 //
                 // **Esto solo no alcanzaba, y el comentario que estaba acá antes mentía.** El
@@ -1291,7 +1291,7 @@ internal fun PickerHeader(title: String, onClose: () -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MinText)
+        Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
         Box(modifier = Modifier.weight(1f))
         Box(
             modifier = Modifier
@@ -1304,11 +1304,11 @@ internal fun PickerHeader(title: String, onClose: () -> Unit) {
                 // teclado no se mueve.
                 .testTag(TAG_CERRAR_SUB_PICKER)
                 .clip(CircleShape)
-                .background(MinSurfaceContainerLow)
+                .background(Movi.colores.tarjeta)
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = MinText, modifier = Modifier.size(16.dp))
+            Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = Movi.colores.texto, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -1358,7 +1358,7 @@ internal fun WalletPicker(
         if (cuentas.vacio) {
             // F10: este picker ya no debería ser alcanzable sin cuentas (ver el onClick de la
             // fila "Cuenta" en EditorBody), pero el texto no miente si de todos modos se llega.
-            Text("No tienes cuentas todavía.", fontSize = 14.sp, color = MinTextMute, modifier = Modifier.padding(vertical = 18.dp))
+            Text("No tienes cuentas todavía.", fontSize = 14.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(vertical = 18.dp))
         } else {
             val visibles = if (verTodas) cuentas.todas else cuentas.principales
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
@@ -1374,16 +1374,16 @@ internal fun WalletPicker(
                             Text(
                                 account.name,
                                 fontSize = 15.sp,
-                                color = MinText,
+                                color = Movi.colores.texto,
                                 fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                             )
                             Text(
                                 saldoDeLaCuenta(account),
                                 fontSize = 12.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                             )
                         }
-                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = MinText, modifier = Modifier.size(16.dp))
+                        if (account.id == selectedId) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(16.dp))
                     }
                 }
                 // Va DENTRO del LazyColumn y no debajo: con muchas cuentas la lista llega a su
@@ -1461,14 +1461,14 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(MinSurfaceContainerLow)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 14.dp, vertical = 14.dp),
         ) {
             BasicTextField(
                 value = value,
                 onValueChange = { value = it },
-                cursorBrush = SolidColor(MinText),
-                textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                cursorBrush = SolidColor(Movi.colores.texto),
+                textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
                 // Ola 8 · V2: **sin `fillMaxWidth` el campo no se podía tocar.** El área
                 // sensible de un BasicTextField es la que mide su contenido, y con el texto
                 // vacío eso son cero píxeles de ancho: la caja gris se ve grande, pero el
@@ -1503,7 +1503,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                     },
                 decorationBox = { inner ->
                     if (value.text.isEmpty()) {
-                        Text("Concepto del movimiento", fontSize = 14.sp, color = MinTextMute)
+                        Text("Concepto del movimiento", fontSize = 14.sp, color = Movi.colores.textoMedio)
                     }
                     inner()
                 },
@@ -1515,11 +1515,11 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 .fillMaxWidth()
                 .height(48.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(MinPrimaryContainer)
+                .background(Movi.colores.marca.copy(alpha = 0.16f))
                 .clickable { onSave(value.text.trim()) },
             contentAlignment = Alignment.Center,
         ) {
-            Text("Guardar nota", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinOnPrimaryContainer)
+            Text("Guardar nota", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
         }
     }
 }

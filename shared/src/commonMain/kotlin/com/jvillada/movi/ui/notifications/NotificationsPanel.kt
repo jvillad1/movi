@@ -47,7 +47,7 @@ fun NotificationsPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -72,7 +72,7 @@ fun NotificationsPanel(
                     text = "Notificaciones",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
 
@@ -82,14 +82,14 @@ fun NotificationsPanel(
                     Text(
                         text = "No tienes notificaciones por ahora",
                         fontSize = 13.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(bottom = 24.dp),
                     )
                 } else {
                     Column(modifier = Modifier.padding(bottom = 8.dp)) {
                         rows.forEachIndexed { index, row ->
                             CardRow(
-                                left = { Text(row.text, fontSize = 14.sp, color = MinText) },
+                                left = { Text(row.text, fontSize = 14.sp, color = Movi.colores.texto) },
                                 showChevron = true,
                                 isLast = index == rows.lastIndex,
                                 onClick = { onDismiss(); onRowClick(row.target) },

@@ -104,7 +104,7 @@ fun InicioDelPeriodoSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -116,14 +116,14 @@ fun InicioDelPeriodoSheet(
                     text = "¿Cuándo empezó ${nombreDe(periodo)}?",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MinText,
+                    color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = "Normalmente arranca el ${natural.dayOfMonth}. Si este mes tu sueldo entró " +
                         "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
                     fontSize = 12.5.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 17.sp,
                 )
                 Spacer(Modifier.height(16.dp))
@@ -140,7 +140,7 @@ fun InicioDelPeriodoSheet(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(if (esElElegido) MinPrimary else MinSurfaceContainer)
+                                    .background(if (esElElegido) Movi.colores.marca else Movi.colores.tarjeta)
                                     .clickable(enabled = !saving) { dia = d },
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -148,7 +148,7 @@ fun InicioDelPeriodoSheet(
                                     text = d.toString(),
                                     fontSize = 13.sp,
                                     fontWeight = if (esElElegido) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (esElElegido) MinBg else MinText,
+                                    color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
                                     textAlign = TextAlign.Center,
                                 )
                             }
@@ -159,11 +159,11 @@ fun InicioDelPeriodoSheet(
 
                 previsualizacion?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(text = it, fontSize = 12.5.sp, color = MinTextMute)
+                    Text(text = it, fontSize = 12.5.sp, color = Movi.colores.textoMedio)
                 }
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(text = it, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
+                    Text(text = it, fontSize = 12.5.sp, color = Movi.colores.sale, lineHeight = 17.sp)
                 }
 
                 Spacer(Modifier.height(18.dp))
@@ -172,7 +172,7 @@ fun InicioDelPeriodoSheet(
                         .fillMaxWidth()
                         .height(46.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(if (!saving) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .background(if (!saving) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                         .clickable(enabled = !saving) { onSave(elegido.toString()) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -180,7 +180,7 @@ fun InicioDelPeriodoSheet(
                         text = if (saving) "Guardando…" else "Este mes empezó el $dia",
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (!saving) MinOnPrimaryContainer else MinTextFaint,
+                        color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
 
@@ -193,7 +193,7 @@ fun InicioDelPeriodoSheet(
                         text = if (saving) "Guardando…" else "Volver al día ${natural.dayOfMonth} de siempre",
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (saving) MinTextFaint else MinPrimary,
+                        color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
                         modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
                     )
                 }

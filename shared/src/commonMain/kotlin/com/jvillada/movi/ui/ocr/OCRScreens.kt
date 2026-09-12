@@ -43,7 +43,7 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                StatusDot(MinIncome)
+                StatusDot(Movi.colores.entra)
                 Text("Detectando recibo…", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium)
             }
         }
@@ -93,7 +93,7 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
                         .size(24.dp)
                         .border(
                             width = 1.5.dp,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             shape = when {
                                 isLeft && isTop  -> RoundedCornerShape(topStart = 2.dp)
                                 !isLeft && isTop  -> RoundedCornerShape(topEnd = 2.dp)
@@ -129,7 +129,7 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
     val goBack = LocalGoBack.current
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: normalmente vuelve a la cámara (paso anterior real); si entraste directo a
         // confirmar (poco probable, pero por si acaso) cae a Inicio.
         MinScreenHeader(
@@ -146,10 +146,10 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                     padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = MinIncome, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(16.dp))
                         Row {
-                            Text("Recibo leído. ", fontSize = 13.sp, color = MinText)
-                            Text("Revisa antes de guardar.", fontSize = 13.sp, color = MinTextMute)
+                            Text("Recibo leído. ", fontSize = 13.sp, color = Movi.colores.texto)
+                            Text("Revisa antes de guardar.", fontSize = 13.sp, color = Movi.colores.textoMedio)
                         }
                     }
                 }
@@ -162,11 +162,11 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(22.dp),
                 ) {
-                    Text("Total a registrar", fontSize = 12.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
+                    Text("Total a registrar", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(10.dp))
-                    Text("−\$312.400", fontSize = 38.sp, fontFamily = FontFamily.Monospace, color = MinExpense, letterSpacing = (-1.4).sp, lineHeight = 38.sp)
+                    Text("−\$312.400", fontSize = 38.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.sale, letterSpacing = (-1.4).sp, lineHeight = 38.sp)
                     Spacer(Modifier.height(12.dp))
-                    Text("OCR · 5 ítems detectados", fontSize = 12.sp, color = MinTextMute, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
+                    Text("OCR · 5 ítems detectados", fontSize = 12.sp, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
                 }
             }
 
@@ -179,10 +179,10 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                     ) {
-                        CardRow(left = { Text("Comercio", fontSize = 14.5.sp, color = MinTextMute) }, right = { Text("Éxito Country", fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) }, showChevron = true)
-                        CardRow(left = { Text("Fecha", fontSize = 14.5.sp, color = MinTextMute) }, right = { Text("27 abr · 18:42", fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) }, showChevron = true)
-                        CardRow(left = { Text("Categoría", fontSize = 14.5.sp, color = MinTextMute) }, right = { Text("Mercado", fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) }, showChevron = true)
-                        CardRow(left = { Text("Cuenta", fontSize = 14.5.sp, color = MinTextMute) }, right = { Text("Bancolombia ···· 4821", fontSize = 14.5.sp, color = MinText, fontWeight = FontWeight.Medium) }, showChevron = true, isLast = true)
+                        CardRow(left = { Text("Comercio", fontSize = 14.5.sp, color = Movi.colores.textoMedio) }, right = { Text("Éxito Country", fontSize = 14.5.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium) }, showChevron = true)
+                        CardRow(left = { Text("Fecha", fontSize = 14.5.sp, color = Movi.colores.textoMedio) }, right = { Text("27 abr · 18:42", fontSize = 14.5.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium) }, showChevron = true)
+                        CardRow(left = { Text("Categoría", fontSize = 14.5.sp, color = Movi.colores.textoMedio) }, right = { Text("Mercado", fontSize = 14.5.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium) }, showChevron = true)
+                        CardRow(left = { Text("Cuenta", fontSize = 14.5.sp, color = Movi.colores.textoMedio) }, right = { Text("Bancolombia ···· 4821", fontSize = 14.5.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium) }, showChevron = true, isLast = true)
                     }
                 }
             }
@@ -202,15 +202,15 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Text(name, fontSize = 13.5.sp, color = MinText)
-                                    Text(formatCOP(value), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = MinTextDim, letterSpacing = (-0.3).sp)
+                                    Text(name, fontSize = 13.5.sp, color = Movi.colores.texto)
+                                    Text(formatCOP(value), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
                                 }
                                 if (i < 4) Hairline()
                             }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("+ Agregar ítem", fontSize = 13.sp, color = MinText, fontWeight = FontWeight.Medium)
+                    Text("+ Agregar ítem", fontSize = 13.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -220,15 +220,15 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(
-                modifier = Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(14.dp)).border(1.dp, MinBorderStrong, RoundedCornerShape(14.dp)).clickable { onNavigate(Screen.OCRCapture) },
+                modifier = Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(14.dp)).border(1.dp, Movi.colores.borde, RoundedCornerShape(14.dp)).clickable { onNavigate(Screen.OCRCapture) },
                 contentAlignment = Alignment.Center,
-            ) { Text("Reescanear", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText) }
+            ) { Text("Reescanear", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto) }
             Box(
                 // Ola 2 #1: pop, no push — coherente con SMS/Extractos (evita que un segundo
                 // tap desde Inicio vuelva a este "guardado" y lo repita).
-                modifier = Modifier.weight(1.7f).height(50.dp).clip(RoundedCornerShape(14.dp)).background(MinText).clickable { goBack(Screen.Dashboard) },
+                modifier = Modifier.weight(1.7f).height(50.dp).clip(RoundedCornerShape(14.dp)).background(Movi.colores.texto).clickable { goBack(Screen.Dashboard) },
                 contentAlignment = Alignment.Center,
-            ) { Text("Guardar movimiento", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinBg) }
+            ) { Text("Guardar movimiento", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.fondo) }
         }
     }
 }
