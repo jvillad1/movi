@@ -104,6 +104,8 @@ private sealed class Sheet {
 fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var budgets by remember { mutableStateOf<List<Budget>>(emptyList()) }
     var cutoffDay by remember { mutableStateOf(1) }
+    /** Los meses que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
+    var iniciosPropios by remember { mutableStateOf(emptyMap<String, String>()) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
     // Se incrementa al asociar un gasto, para volver a leer con el movimiento ya movido.
     var refreshKeyLocal by remember { mutableStateOf(0) }
@@ -149,7 +151,8 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         runCatching { Repositories.wallets.getDashboardSummary(Scope.SELF) }.onSuccess { serverSpent = it.spentByCategory }
         // El corte del período: define qué ventana usa el cálculo local de respaldo. Si falla,
         // queda en 1 —mes de calendario— que es el comportamiento de siempre.
-        runCatching { Repositories.wallets.getUserProfile() }.onSuccess { cutoffDay = it.periodCutoffDay }
+        runCatching { Repositories.wallets.getUserProfile() }
+            .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts }
         loading = false
     }
 
@@ -170,8 +173,10 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    val ventanaDelPeriodo = remember(cutoffDay) {
-        val settings = PeriodSettings(cutoffDay = cutoffDay)
+    val ventanaDelPeriodo = remember(cutoffDay, iniciosPropios) {
+        // El período entero, no solo el corte: si el dueño declaró que este mes arrancó otro día,
+        // Presupuestos tiene que contar la misma ventana que Movimientos le está mostrando.
+        val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
         ventanaDe(periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings), settings)
     }
     val gastoPorCategoria = remember(days, serverSpent, ventanaDelPeriodo) {

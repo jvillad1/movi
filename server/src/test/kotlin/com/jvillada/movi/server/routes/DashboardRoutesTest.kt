@@ -59,6 +59,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import com.jvillada.movi.shared.model.ventanaDe
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.PeriodSettings
 
 /**
  * `GET /api/dashboard/summary`: el Inicio deja de bajarse colecciones enteras (todos los SMS,
@@ -508,7 +511,7 @@ class DashboardRoutesTest {
         transaction {
             Users.update({ Users.id eq userId }) { it[periodCutoffDay] = 25 }
         }
-        val inicioDelPeriodo = currentPeriodWindow(25).startMillis
+        val inicioDelPeriodo = currentPeriodWindow(PeriodSettings(cutoffDay = 25)).startMillis
         event("ev-dentro", savings, "EXPENSE", 40_000L, category = "Fútbol", timestamp = inicioDelPeriodo)
         event("ev-fuera", savings, "EXPENSE", 999_000L, category = "Fútbol", timestamp = inicioDelPeriodo - 1)
 
@@ -517,5 +520,46 @@ class DashboardRoutesTest {
 
         assertEquals(mapOf("Fútbol" to 40_000L), body.spentByCategory())
         assertEquals(40_000L, body.long("monthSpent"))
+    }
+
+    /**
+     * **El arranque propio de un período también llega al Inicio.**
+     *
+     * Desde que un período puede empezar antes o después del corte, leer solo `period_cutoff_day`
+     * dejaba a cada pantalla con su propia ventana: Movimientos respetando la excepción y el Inicio
+     * ignorándola, sobre la misma plata y el mismo mes. Es la contradicción que el período vino a
+     * eliminar, reaparecida un nivel más abajo.
+     *
+     * El caso es el suyo: corte 25, pero este mes el sueldo entró el 24 y él lo declaró. El gasto
+     * del 24 pertenece al período nuevo, y el Inicio tiene que contarlo.
+     */
+    @Test
+    fun `el Inicio respeta el periodo que arranco otro dia`() = testApplication {
+        val ajustes = PeriodSettings(cutoffDay = 25)
+        val periodoEnCurso = periodoDe(AppClock.now().toInstant().toEpochMilli(), ajustes)
+        // El período arranca un día ANTES de lo que manda el corte.
+        val inicioNatural = ventanaDe(periodoEnCurso, ajustes).first
+        // `java.time` y no `kotlinx.datetime`: esta suite corre del lado del server, donde el
+        // segundo no está en el classpath.
+        val unDiaAntes = java.time.Instant.ofEpochMilli(inicioNatural)
+            .atZone(AppClock.zone).toLocalDate().minusDays(1)
+
+        transaction {
+            Users.update({ Users.id eq userId }) {
+                it[periodCutoffDay] = 25
+                it[periodStarts] = """{"${periodoEnCurso.prefijo}":"$unDiaAntes"}"""
+            }
+        }
+        // Un gasto justo en el día que la excepción sumó al período.
+        event("ev-del-dia-ganado", savings, "EXPENSE", 40_000L, category = "Fútbol", timestamp = inicioNatural - 1)
+
+        wireApp()
+        val body = summary()
+
+        assertEquals(
+            40_000L,
+            body.long("monthSpent"),
+            "sin leer los arranques propios, este gasto caía en el período anterior y el Inicio decía 0",
+        )
     }
 }

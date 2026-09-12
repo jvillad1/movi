@@ -13,6 +13,9 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.builtins.MapSerializer
 
 /**
  * Zona horaria civil del server, en java.time.
@@ -72,8 +75,7 @@ fun currentMonthWindow(zone: ZoneId = AppClock.zone): MonthWindow = monthWindowO
  * función**. Que Inicio diga un mes y Presupuestos otro es la contradicción que esto viene a
  * eliminar, y tener dos implementaciones es cómo se llega ahí.
  */
-fun currentPeriodWindow(cutoffDay: Int, zone: ZoneId = AppClock.zone): MonthWindow {
-    val settings = PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31))
+fun currentPeriodWindow(settings: PeriodSettings, zone: ZoneId = AppClock.zone): MonthWindow {
     val ahora = AppClock.now(zone).toInstant().toEpochMilli()
     val ventana = ventanaDe(periodoDe(ahora, settings), settings)
     return MonthWindow(
@@ -88,4 +90,33 @@ fun currentPeriodWindow(cutoffDay: Int, zone: ZoneId = AppClock.zone): MonthWind
 /** El día de corte del usuario, o 1 (mes de calendario) si nunca lo eligió. */
 suspend fun cutoffDayOf(uid: String): Int = dbQuery {
     Users.selectAll().where { Users.id eq uid }.firstOrNull()?.get(Users.periodCutoffDay) ?: 1
+}
+
+/**
+ * **El período del usuario completo**: su día de corte y los meses que arrancaron otro día.
+ *
+ * Existe porque [cutoffDayOf] sola dejó de alcanzar. Cuando un período puede empezar antes o
+ * después del corte (ver `PeriodSettings.iniciosPropios`), leer solo el día deja a cada pantalla
+ * calculando una ventana distinta: Movimientos respetando la excepción y el Inicio ignorándola,
+ * sobre la misma plata y el mismo mes. Esa es exactamente la contradicción que el período vino a
+ * eliminar, reaparecida un nivel más abajo.
+ *
+ * **Una sola consulta**, y la fila trae las dos columnas: pedir el corte por un lado y las
+ * excepciones por otro es cómo se termina mezclando el corte de hoy con las excepciones de hace
+ * un segundo.
+ *
+ * Un JSON que no se entienda se lee como «ninguna excepción». Ver `leerIniciosPropios` en
+ * `UserRoutes`: el mismo criterio, y por el mismo motivo — un dato roto no puede dejar sin
+ * contestar una pantalla entera.
+ */
+suspend fun ajustesDePeriodoDe(uid: String): PeriodSettings = dbQuery {
+    val fila = Users.selectAll().where { Users.id eq uid }.firstOrNull()
+    PeriodSettings(
+        cutoffDay = (fila?.get(Users.periodCutoffDay) ?: 1).coerceIn(1, 31),
+        iniciosPropios = fila?.get(Users.periodStarts)?.let { json ->
+            runCatching {
+                Json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), json)
+            }.getOrElse { emptyMap() }
+        } ?: emptyMap(),
+    )
 }

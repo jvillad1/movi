@@ -31,6 +31,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 
 fun Route.financeRoutes() {
     // F50: ya no tiene consumidor — Inversiones (:shared) pasó a mostrar cuentas tipo
@@ -151,7 +152,7 @@ fun Route.financeRoutes() {
         // 9 pm del 31 sigue siendo de este mes.
         // La ventana del PERÍODO del usuario (ver PeriodSettings en :core), no el mes de
         // calendario. Con corte 1 —el default— da exactamente lo mismo que antes.
-        val (monthStart, monthEnd) = currentPeriodWindow(cutoffDayOf(uid))
+        val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
 
         val rate = FxRateService.usdToCop()
         val accountRows = dbQuery {
