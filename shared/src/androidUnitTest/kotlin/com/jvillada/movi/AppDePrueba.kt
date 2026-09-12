@@ -3,6 +3,7 @@ package com.jvillada.movi
 import android.app.Application
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.TemaStore
 import java.lang.reflect.Method
 import org.robolectric.TestLifecycleApplication
 
@@ -47,6 +48,11 @@ import org.robolectric.TestLifecycleApplication
  * media docena de clases de esta suite y hoy todas lo devuelven en su `@After`. Esto es para que
  * un olvido ajeno no se cobre en la clase siguiente.
  *
+ * Y [TemaStore] va aparte por el motivo contrario: el tema es del APARATO, no del usuario, así que
+ * a propósito **no** lo limpia el logout —cerrar sesión no tiene por qué devolverte el tema que no
+ * elegiste—. Pero entre dos pruebas sí tiene que volver al default: una que corriera después de
+ * otra que puso el claro estaría midiendo otra paleta.
+ *
  * ## Lo que esto NO hace, y hay que decirlo
  *
  * - **No alcanza a las pruebas que no son de Robolectric.** `commonTest` corre en la JVM pelada,
@@ -62,6 +68,7 @@ class AppDePrueba : Application(), TestLifecycleApplication {
     override fun beforeTest(method: Method) {
         SessionManager.clear()
         Repositories.sustitutoDePrueba = null
+        TemaStore.clear()
     }
 
     override fun prepareTest(test: Any) = Unit

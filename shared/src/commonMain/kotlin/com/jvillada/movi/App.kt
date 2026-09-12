@@ -19,7 +19,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.RecurringOfferGate
+import com.jvillada.movi.platform.AjustarBarrasDelSistema
 import com.jvillada.movi.platform.BackHandlerEffect
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -75,7 +77,11 @@ import kotlinx.serialization.json.Json
 
 @Composable
 fun App() {
-    MoviTheme {
+    // El único lugar de la app que lee el tema elegido. Es `mutableStateOf`, así que tocar el
+    // interruptor de Perfil recompone desde acá para abajo — o sea, todo.
+    MoviTheme(oscuro = TemaStore.oscuro) {
+        // La barra de estado la pinta el sistema, no Movi: hay que decirle de qué color va.
+        AjustarBarrasDelSistema(TemaStore.oscuro)
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f)

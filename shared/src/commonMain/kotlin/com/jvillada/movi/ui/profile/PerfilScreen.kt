@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.Repositories
 import kotlinx.coroutines.launch
 import com.jvillada.movi.data.SessionManager
@@ -172,6 +175,59 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             showChevron = true,
                             isLast = true,
                             onClick = { errorPeriodo = null; showPeriodo = true },
+                        )
+                    }
+                }
+            }
+
+            // Cómo se ve la app. Sección propia y no una fila de «Cuenta» porque no es una
+            // propiedad del dueño: es de ESTE aparato. Ver el KDoc de TemaStore — el mismo día
+            // puede querer oscuro en el teléfono de noche y claro en el navegador de día.
+            item {
+                Spacer(Modifier.height(14.dp))
+                Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
+                    MinSectionHeader(title = "Cómo se ve")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        CardRow(
+                            left = {
+                                Column {
+                                    Text(
+                                        "Tema oscuro",
+                                        style = Movi.textos.titulo,
+                                        color = Movi.colores.texto,
+                                    )
+                                    Text(
+                                        text = if (TemaStore.oscuro) {
+                                            "Como lo tuviste siempre"
+                                        } else {
+                                            "Estás en el tema claro"
+                                        },
+                                        style = Movi.textos.apoyo,
+                                        color = Movi.colores.textoMedio,
+                                    )
+                                }
+                            },
+                            right = {
+                                Switch(
+                                    checked = TemaStore.oscuro,
+                                    onCheckedChange = { TemaStore.poner(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Movi.colores.sobreMarca,
+                                        checkedTrackColor = Movi.colores.marca,
+                                        uncheckedThumbColor = Movi.colores.textoApagado,
+                                        uncheckedTrackColor = Movi.colores.tarjeta,
+                                        uncheckedBorderColor = Movi.colores.borde,
+                                    ),
+                                )
+                            },
+                            isLast = true,
+                            // Toda la fila alterna, no solo el interruptor: un blanco de 44 dp
+                            // de alto es más fácil de acertar que uno de 32 de ancho.
+                            onClick = { TemaStore.alternar() },
                         )
                     }
                 }
