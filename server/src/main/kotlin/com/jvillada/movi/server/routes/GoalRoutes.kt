@@ -28,6 +28,7 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.SortOrder
 import java.util.UUID
 
 /**
@@ -41,7 +42,19 @@ fun Route.goalRoutes() {
         get {
             val uid = call.userId()
             val rows = dbQuery {
-                Goals.selectAll().where { Goals.userId eq uid }.map { it.toGoal() }
+                Goals.selectAll().where { Goals.userId eq uid }
+                // **La más cercana primero, y las sin fecha al final.**
+                //
+                // Sin un orden, esta lista salía en el orden físico de la tabla y podía cambiar
+                // entre dos lecturas — el mismo bug que tenía la bandeja de SMS. Y una meta es
+                // justamente algo con fecha: ordenar por ella pone arriba la que urge, que es la
+                // pregunta que uno le hace a esta pantalla. Las que no tienen plazo no compiten
+                // por ese lugar y van al final, alfabéticas entre ellas para no bailar.
+                .orderBy(
+                    Goals.targetDate to SortOrder.ASC_NULLS_LAST,
+                    Goals.name to SortOrder.ASC,
+                )
+                .map { it.toGoal() }
             }
             if (rows.isEmpty()) return@get call.respond(emptyList<Goal>())
 

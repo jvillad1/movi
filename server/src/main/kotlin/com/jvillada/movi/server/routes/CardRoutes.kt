@@ -34,6 +34,8 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.upsert
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.lowerCase
 
 /**
  * F20 — tarjetas de crédito como deuda de primera clase: cupo, corte, día de pago.
@@ -46,6 +48,13 @@ fun Route.cardRoutes() {
             val cards = dbQuery {
                 Accounts.selectAll()
                     .where { (Accounts.userId eq uid) and (Accounts.type eq AccountType.CREDIT_CARD.name) }
+                    // **El mismo orden que `GET /api/accounts`**, que ya ordenaba por nombre.
+                    // Sin esto, las mismas cuentas llegaban ordenadas por un endpoint y en el
+                    // orden físico de la tabla por este otro — el que un UPDATE o un VACUUM cambia
+                    // sin avisar. Con doce créditos y cinco tarjetas eso es una lista que se
+                    // reordena sola entre dos visitas. El `id` desempata para que dos cuentas con
+                    // el mismo nombre tampoco bailen.
+                    .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
                     .map { it.toAccount() }
             }
             if (cards.isEmpty()) return@get call.respond(emptyList<com.jvillada.movi.shared.model.CardSummary>())

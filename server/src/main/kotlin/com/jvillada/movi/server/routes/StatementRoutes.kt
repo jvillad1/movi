@@ -23,6 +23,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.*
+import com.jvillada.movi.shared.model.masRecientePrimero
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
@@ -387,6 +388,16 @@ fun Route.statementRoutes() {
             Events.selectAll()
                 .where { (Events.statementImportId eq importId) and (Events.userId eq uid) }
                 .map { it.toFinancialEvent().withCashFlowFlag(types) }
+                // **El mismo orden que el resto de la app**, no el que devuelva la base.
+                //
+                // Sin esto, la pantalla de revisión listaba los movimientos importados en el
+                // orden físico de la tabla — el que un UPDATE o un VACUUM cambia sin avisar — y el
+                // dueño los repasa uno por uno contra el PDF. Es el mismo bug que tenía la bandeja
+                // de SMS con 96 mensajes adentro: invisible con cuatro filas, arbitrario con
+                // cuarenta. `MAS_RECIENTE_PRIMERO` es el criterio que ya usan `/by-day` y la
+                // lista de Movimientos, así que revisar un extracto y mirarlo después en la app
+                // muestran las mismas filas en el mismo orden.
+                .masRecientePrimero()
         }
 
         call.respond(StatementImportDetail(rowToStatementImport(importRow), events))
