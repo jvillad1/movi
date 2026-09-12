@@ -225,6 +225,74 @@ class UserRoutesTest {
         Users.selectAll().where { Users.id eq userId }.single()[Users.smsAlertMuted]
     }
 
+    // ── Los períodos que arrancaron otro día ─────────────────────────────────
+    //
+    // El dueño: «puede indicar el comienzo de un nuevo periodo que implícitamente indica el cierre
+    // del anterior en cualquier momento, esto porque no siempre los pagos suceden misma fecha».
+
+    @Test
+    fun `PUT guarda un arranque propio y lo devuelve en el perfil`() = testApplication {
+        wireApp()
+        // Sin declarar nada, no hay excepciones: todos los períodos salen del día de corte.
+        assertEquals(
+            emptyMap(),
+            Json.parseToJsonElement(getProfile().bodyAsText()).jsonObject["periodStarts"]
+                ?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap<String, String>(),
+        )
+
+        // Septiembre arrancó el 24 porque el 25 cayó domingo y el sueldo entró antes.
+        val guardar = putProfile("""{"periodStarts":{"2026-09":"2026-08-24"}}""")
+        assertEquals(HttpStatusCode.OK, guardar.status)
+        assertEquals(
+            "2026-08-24",
+            Json.parseToJsonElement(guardar.bodyAsText()).jsonObject["periodStarts"]!!
+                .jsonObject["2026-09"]!!.jsonPrimitive.content,
+        )
+        assertEquals("""{"2026-09":"2026-08-24"}""", dbPeriodStarts())
+    }
+
+    /**
+     * **Mandar el mapa vacío es cómo se dice «ninguno arranca distinto»**, y tiene que funcionar:
+     * quitar una excepción es tan necesario como ponerla. Con un formato incremental habría que
+     * inventar cómo se escribe «borrá esta clave».
+     */
+    @Test
+    fun `PUT con el mapa vacio quita las excepciones`() = testApplication {
+        wireApp()
+        putProfile("""{"periodStarts":{"2026-09":"2026-08-24"}}""")
+
+        val vaciar = putProfile("""{"periodStarts":{}}""")
+        assertEquals(HttpStatusCode.OK, vaciar.status)
+        assertEquals("{}", dbPeriodStarts())
+    }
+
+    @Test
+    fun `PUT rechaza un periodo o una fecha mal escritos`() = testApplication {
+        wireApp()
+
+        assertEquals(HttpStatusCode.BadRequest, putProfile("""{"periodStarts":{"septiembre":"2026-08-24"}}""").status)
+        assertEquals(HttpStatusCode.BadRequest, putProfile("""{"periodStarts":{"2026-09":"24 de agosto"}}""").status)
+        // Y no se guardó nada a medias.
+        assertEquals(null, dbPeriodStarts())
+    }
+
+    /**
+     * No mandar el campo es «no tocar», que es distinto de mandarlo vacío. Sin esta diferencia,
+     * cualquier cambio de alias o de color borraría las excepciones sin decirlo.
+     */
+    @Test
+    fun `cambiar otra cosa no borra los arranques propios`() = testApplication {
+        wireApp()
+        putProfile("""{"periodStarts":{"2026-09":"2026-08-24"}}""")
+
+        assertEquals(HttpStatusCode.OK, putProfile("""{"name":"Juan Camilo"}""").status)
+        assertEquals("""{"2026-09":"2026-08-24"}""", dbPeriodStarts())
+    }
+
+    private fun dbPeriodStarts(): String? = transaction {
+        Users.selectAll().where { Users.id eq userId }.single()[Users.periodStarts]
+    }
+
     // ── PUT /api/users/me/password ───────────────────────────────────────────
 
     @Test

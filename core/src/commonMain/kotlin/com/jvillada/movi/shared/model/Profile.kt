@@ -26,6 +26,15 @@ data class UserProfile(
      */
     val periodCutoffDay: Int = 1,
     /**
+     * **Los períodos que arrancaron otro día**: `"2026-09"` → la fecha ISO en que empezó de verdad.
+     * Ver `PeriodSettings.iniciosPropios`, que es donde está el porqué completo.
+     *
+     * Vacío casi siempre, y vacío significa «todos salen del día de corte». Viaja en el perfil y no
+     * en una ruta propia porque es parte de la misma pregunta que [periodCutoffDay] contesta —
+     * cuándo empieza tu mes— y separarlos dejaría a un cliente capaz de leer una mitad sin la otra.
+     */
+    val periodStarts: Map<String, String> = emptyMap(),
+    /**
      * Días de anticipación del aviso de vencimiento. Nunca `null` en la respuesta: cae al default
      * del lado del server, igual que [avatarColor] y [periodCutoffDay].
      */
@@ -48,6 +57,15 @@ data class UpdateProfileRequest(
     val avatarColor: String? = null,
     /** Día de corte del período, 1..31. `null` = no tocar. */
     val periodCutoffDay: Int? = null,
+    /**
+     * Los períodos con arranque propio, **el mapa completo**: lo que venga reemplaza lo que había.
+     * `null` = no tocar.
+     *
+     * Se manda entero y no de a una entrada porque quitar un arranque propio —«este mes sí empezó
+     * cuando siempre»— es tan necesario como ponerlo, y con un formato incremental habría que
+     * inventar cómo se dice «borrá esta clave». Un mapa vacío es exactamente eso: ninguno.
+     */
+    val periodStarts: Map<String, String>? = null,
     /** Días de aviso, 0..30. `null` = no tocar. */
     val reminderLeadDays: Int? = null,
     /**

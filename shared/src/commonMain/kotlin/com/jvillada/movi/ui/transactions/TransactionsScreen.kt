@@ -72,7 +72,9 @@ import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDeLaFecha
 import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.rangoLegibleDe
+import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.showsInMovements
+import com.jvillada.movi.ui.profile.InicioDelPeriodoSheet
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -896,6 +898,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      * lectura falla queda en 1 —mes de calendario—, que es el comportamiento de siempre.
      */
     var cutoffDay by remember { mutableStateOf(1) }
+    /** Los períodos que el dueño declaró que arrancaron otro día. Ver `PeriodSettings.iniciosPropios`. */
+    var iniciosPropios by remember { mutableStateOf(emptyMap<String, String>()) }
+    /** Está en vuelo el guardado de un arranque propio. */
+    var guardandoInicio by remember { mutableStateOf(false) }
+    var errorDelInicio by remember { mutableStateOf<String?>(null) }
+    var editandoElInicio by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -944,7 +952,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getUserProfile() }
-            .onSuccess { cutoffDay = it.periodCutoffDay }
+            .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts }
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess {
                 allDays = it
@@ -1247,7 +1255,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    val ajustesDelPeriodo = remember(cutoffDay) { PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31)) }
+    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios) {
+        PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31), iniciosPropios = iniciosPropios)
+    }
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
     }
@@ -1355,7 +1365,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         periodoVisible = periodoAnterior(periodoVisible)
                     },
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Tocar el mes abre «¿cuándo empezó este?». Va acá y no en Perfil a propósito: la
+                // pregunta aparece justo cuando el dueño está mirando las cifras de ESE mes y nota
+                // que el sueldo cayó del lado equivocado. Ver [InicioDelPeriodoSheet].
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable { editandoElInicio = true },
+                ) {
                     Text(
                         text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
                         fontSize = 13.5.sp,
@@ -1954,6 +1970,36 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 recurrentesReloadKey++
             },
             existingSub = suscripcion,
+        )
+    }
+
+    if (editandoElInicio) {
+        InicioDelPeriodoSheet(
+            periodo = periodoVisible,
+            ajustes = ajustesDelPeriodo,
+            saving = guardandoInicio,
+            error = errorDelInicio,
+            onDismiss = { editandoElInicio = false; errorDelInicio = null },
+            onSave = { inicio ->
+                if (!guardandoInicio) {
+                    guardandoInicio = true
+                    errorDelInicio = null
+                    // `null` = quitar la excepción. El mapa viaja entero, que es cómo la ruta
+                    // distingue «no tocar» (no mandarlo) de «ninguno» (mandarlo vacío).
+                    val nuevo =
+                        if (inicio == null) iniciosPropios - periodoVisible.prefijo
+                        else iniciosPropios + (periodoVisible.prefijo to inicio)
+                    coroutineRecurrentes.launch {
+                        runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(periodStarts = nuevo)) }
+                            .onSuccess {
+                                iniciosPropios = it.periodStarts
+                                editandoElInicio = false
+                            }
+                            .onFailure { errorDelInicio = it.toUserMessage() }
+                        guardandoInicio = false
+                    }
+                }
+            },
         )
     }
 

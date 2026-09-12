@@ -23,6 +23,19 @@ object Users : Table("users") {
      */
     val periodCutoffDay = integer("period_cutoff_day").nullable()
     /**
+     * **Los períodos que arrancaron otro día**, como JSON: `{"2026-09":"2026-08-24"}`. Ver
+     * `PeriodSettings.iniciosPropios` en :core.
+     *
+     * Una columna de texto y no una tabla aparte: son excepciones que se cuentan con los dedos, se
+     * leen siempre enteras junto con el resto del perfil y nunca se filtran ni se ordenan por
+     * ellas. Una tabla costaría un JOIN en cada lectura de perfil para no ganar nada.
+     *
+     * Nullable, por el mismo motivo que [periodCutoffDay]: es lo único que
+     * `createMissingTablesAndColumns` puede agregar sin riesgo sobre una tabla con filas, dentro de
+     * la transacción de arranque. Se lee como mapa vacío cuando falta.
+     */
+    val periodStarts = text("period_starts").nullable()
+    /**
      * Con cuántos días de anticipación avisar un vencimiento.
      *
      * Antes solo existía como variable de entorno del server (`REMINDER_LEAD_DAYS`): global para
