@@ -83,13 +83,18 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         // Donut
+                        // El `Canvas` de abajo DIBUJA, no compone: su lambda no es contexto
+                        // componible y no puede leer los tokens. Se leen acá, una vez por
+                        // composición en vez de una por cuadro.
+                        val colorDelRiel = Movi.colores.hilo
+                        val colorDelArco = Movi.colores.texto
                         Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                             Canvas(modifier = Modifier.size(72.dp)) {
                                 val r = size.minDimension / 2 - 6
                                 val cx = size.width / 2
                                 val cy = size.height / 2
                                 drawArc(
-                                    color = Movi.colores.hilo,
+                                    color = colorDelRiel,
                                     startAngle = -90f,
                                     sweepAngle = 360f,
                                     useCenter = false,
@@ -98,7 +103,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                     size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
                                 )
                                 drawArc(
-                                    color = Movi.colores.texto,
+                                    color = colorDelArco,
                                     startAngle = -90f,
                                     sweepAngle = overallPct * 360f,
                                     useCenter = false,
@@ -201,13 +206,14 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 private fun GoalRing(pct: Float, done: Boolean, size: androidx.compose.ui.unit.Dp) {
     val ringColor = if (done) Movi.colores.entra else Movi.colores.texto
+    val colorDelRiel = Movi.colores.hilo
     Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(size)) {
             val r = this.size.minDimension / 2 - 4
             val cx = this.size.width / 2
             val cy = this.size.height / 2
             drawArc(
-                color = Movi.colores.hilo,
+                color = colorDelRiel,
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,
