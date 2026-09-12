@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Martian+Mono:wght@300;400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #B9A0FF; } a:hover { color: #A688FF; }
+    .n { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+    .mono { font-family: 'Martian Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.055em; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 980px; box-sizing: border-box; background: #07090C; color: #EAEEF2; font-family: 'Space Grotesk', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="padding: 52px 20px 0; display: flex; align-items: center; justify-content: space-between;">
+    <div style="font-size: 19px; font-weight: 600; letter-spacing: -0.025em;">Movimientos</div>
+    <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; border: 1px solid #26303B;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#B4BEC9" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+    </div>
+  </div>
+
+  <!-- El período manda y se navega -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin: 16px 20px 0; padding: 10px 14px; background: #161D25; border: 1px solid #26303B; border-radius: 11px;">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#B4BEC9" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg>
+    <div style="text-align: center;">
+      <div style="font-size: 14px; font-weight: 600; letter-spacing: -0.02em;">Septiembre</div>
+      <div class="mono" style="font-size: 10px; color: #95A0AD; margin-top: 1px;">25.08 &rarr; 24.09</div>
+    </div>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#3D4752" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg>
+  </div>
+
+  <!-- Cuatro filtros, no seis -->
+  <div style="display: flex; gap: 6px; padding: 14px 20px 0;">
+    <div style="padding: 6px 12px; border-radius: 8px; background: #B9A0FF; color: #140F26; font-size: 12px; font-weight: 600;">Todo</div>
+    <div style="padding: 6px 12px; border-radius: 8px; border: 1px solid #26303B; font-size: 12px; color: #B4BEC9;">Gastos</div>
+    <div style="padding: 6px 12px; border-radius: 8px; border: 1px solid #26303B; font-size: 12px; color: #B4BEC9;">Ingresos</div>
+    <div style="padding: 6px 12px; border-radius: 8px; border: 1px solid #26303B; font-size: 12px; color: #B4BEC9;">Recurrentes</div>
+  </div>
+
+  <!-- La bandeja: solo cuando hay algo -->
+  <div style="margin: 12px 20px 0; padding: 11px 14px; background: #161D25; border: 1px solid #3A2E1E; border-radius: 11px; display: flex; align-items: center; gap: 10px;">
+    <div style="width: 6px; height: 6px; border-radius: 999px; background: #E8C06A;"></div>
+    <span style="flex-grow: 1; font-size: 12.5px; font-weight: 500;">96 movimientos entraron solos</span>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95A0AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg>
+  </div>
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 20px 20px 8px;">
+    <span style="font-size: 10.5px; letter-spacing: 0.16em; color: #95A0AD;">HOY</span>
+    <span class="n" style="font-size: 11.5px; color: #95A0AD;">&minus;$28.500</span>
+  </div>
+
+  <div style="margin: 0 20px; display: flex; flex-direction: column; gap: 1px; background: #26303B; border-radius: 11px; overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 13.5px; font-weight: 500;">Carnes y Legumbres Santa Elena</div>
+        <div style="font-size: 11.5px; color: #95A0AD;">Gastado &middot; Bancolombia Ahorros</div>
+      </div>
+      <div class="n" style="font-size: 13.5px; color: #F08A7C;">18.500<span style="font-size: 0.72em; color: #95A0AD; margin-left: 0.25em;">COP</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 13.5px; font-weight: 500;">Pago QR Mora Soccer</div>
+        <div style="font-size: 11.5px; color: #95A0AD;">Gastado &middot; segunda vez este mes</div>
+      </div>
+      <div class="n" style="font-size: 13.5px; color: #F08A7C;">10.000<span style="font-size: 0.72em; color: #95A0AD; margin-left: 0.25em;">COP</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 13.5px; font-weight: 500; color: #B4BEC9;">Ajustaste el saldo de 2 cuentas</div>
+        <div style="font-size: 11.5px; color: #95A0AD;">Ajuste de saldo &middot; 3 correcciones</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#95A0AD" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 20px 20px 8px;">
+    <span style="font-size: 10.5px; letter-spacing: 0.16em; color: #95A0AD;">AYER</span>
+    <span class="n" style="font-size: 11.5px; color: #95A0AD;">&minus;$1.789.049</span>
+  </div>
+
+  <div style="margin: 0 20px; display: flex; flex-direction: column; gap: 1px; background: #26303B; border-radius: 11px; overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 13.5px; font-weight: 500;">Cuota Libre inversión 9695</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#95A0AD" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8"/><path d="M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/></svg>
+        </div>
+        <div class="n" style="font-size: 11.5px; color: #95A0AD;">abona $312.559 a capital &middot; $891.505 es interés</div>
+      </div>
+      <div class="n" style="font-size: 13.5px; color: #F08A7C;">1.204.064<span style="font-size: 0.72em; color: #95A0AD; margin-left: 0.25em;">COP</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 13.5px; font-weight: 500;">Coomeva Familiar</div>
+        <div style="font-size: 11.5px; color: #95A0AD;">Gastado &middot; sube $6.600 desde agosto</div>
+      </div>
+      <div class="n" style="font-size: 13.5px; color: #F08A7C;">138.600<span style="font-size: 0.72em; color: #95A0AD; margin-left: 0.25em;">COP</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 13.5px; font-weight: 500;">Pago de Nu &mdash; deja la tarjeta en 0</div>
+        <div style="font-size: 11.5px; color: #95A0AD;">Entre tus cuentas &middot; no cuenta como gasto</div>
+      </div>
+      <div class="n" style="font-size: 13.5px; color: #8FB8E8;">115.113<span style="font-size: 0.72em; color: #95A0AD; margin-left: 0.25em;">COP</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #161D25;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 13.5px; font-weight: 500;">Salario Septiembre</div>
+        <div style="font-size: 11.5px; color: #95A0AD;">Recibido &middot; abre el período de septiembre</div>
+      </div>
+      <div class="n" style="font-size: 13.5px; color: #7FD4A8;">+20.308.659<span style="font-size: 0.72em; color: #95A0AD; margin-left: 0.25em;">COP</span></div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+
+  <div style="display: flex; align-items: center; justify-content: space-around; padding: 11px 12px 26px; border-top: 1px solid #161D25; background: #0A0D11;">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 56px; min-height: 44px; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#95A0AD" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+      <span style="font-size: 10px; color: #95A0AD;">Inicio</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 56px; min-height: 44px; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9A0FF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16"/><path d="M4 7l3-3 3 3"/><path d="M17 20V4"/><path d="M20 17l-3 3-3-3"/></svg>
+      <span style="font-size: 10px; font-weight: 600; color: #B9A0FF;">Movimientos</span>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 13px; background: #B9A0FF;">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#140F26" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 56px; min-height: 44px; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#95A0AD" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>
+      <span style="font-size: 10px; color: #95A0AD;">Cuentas</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 56px; min-height: 44px; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#95A0AD" stroke-width="1.7" stroke-linecap="round"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg>
+      <span style="font-size: 10px; color: #95A0AD;">Más</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

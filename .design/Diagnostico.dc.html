@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Instrument+Serif:ital@0;1&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #1B4D3E; } a:hover { color: #123529; }
+    .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  </style>
+</helmet>
+
+<div style="width: 1100px; min-height: 1360px; box-sizing: border-box; padding: 56px 60px; background: #16171B; color: #E8E6E1; font-family: 'Instrument Sans', system-ui, sans-serif;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 44px;">
+    <div style="font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #8D8A83;">Punto de partida</div>
+    <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-size: 56px; font-weight: 400; line-height: 1.04; letter-spacing: -0.01em; text-wrap: balance;">Movi tiene un sistema de color.<br>No tiene un sistema de diseño.</h1>
+    <p style="margin: 10px 0 0; max-width: 62ch; font-size: 16px; line-height: 1.6; color: #B3B0A9;">Todo lo demás &mdash; tipografía, espaciado, formas, jerarquía &mdash; se decide de nuevo en cada pantalla. Por eso se ve correcto y anónimo a la vez: no hay un sistema dándole carácter, hay 83 archivos poniéndose de acuerdo por casualidad.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 44px;">
+    <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 22px;">
+      <div class="num" style="font-family: 'Instrument Serif', Georgia, serif; font-size: 52px; line-height: 1; color: #E8E6E1;">25</div>
+      <div style="margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: #B3B0A9;">tamaños de fuente distintos, escritos a mano</div>
+    </div>
+    <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 22px;">
+      <div class="num" style="font-family: 'Instrument Serif', Georgia, serif; font-size: 52px; line-height: 1; color: #E8E6E1;">13</div>
+      <div style="margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: #B3B0A9;">radios de esquina distintos</div>
+    </div>
+    <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 22px;">
+      <div class="num" style="font-family: 'Instrument Serif', Georgia, serif; font-size: 52px; line-height: 1; color: #E8E6E1;">55</div>
+      <div style="margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: #B3B0A9;">valores de espaciado distintos</div>
+    </div>
+    <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 22px;">
+      <div class="num" style="font-family: 'Instrument Serif', Georgia, serif; font-size: 52px; line-height: 1; color: #E8E6E1;">1</div>
+      <div style="margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: #B3B0A9;">tema, y es oscuro. No hay modo claro.</div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px;">
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #8D8A83;">Lo que está roto, medido</div>
+
+      <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; overflow: hidden;">
+        <div style="padding: 18px 20px 14px; border-bottom: 1px solid #2B2E36;">
+          <div style="font-size: 15px; font-weight: 600; color: #E8E6E1;">El texto tenue no pasa accesibilidad</div>
+          <div style="margin-top: 5px; font-size: 13px; line-height: 1.5; color: #B3B0A9;">Y no es decorativo: lo usan los subtítulos, las pistas y la línea del rango del período.</div>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; border-bottom: 1px solid #23262D;">
+            <span style="font-size: 13.5px; color: #E8E6E1;">Texto principal</span>
+            <span class="num" style="font-size: 13.5px; color: #B3B0A9;">14,68:1</span>
+            <span style="font-size: 12px; font-weight: 600; color: #6FCF97; min-width: 74px; text-align: right;">pasa</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; border-bottom: 1px solid #23262D;">
+            <span style="font-size: 13.5px; color: #BCB9B2;">Texto atenuado</span>
+            <span class="num" style="font-size: 13.5px; color: #B3B0A9;">8,26:1</span>
+            <span style="font-size: 12px; font-weight: 600; color: #6FCF97; min-width: 74px; text-align: right;">pasa</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; border-bottom: 1px solid #23262D;">
+            <span style="font-size: 13.5px; color: #8D8A83;">Texto apagado</span>
+            <span class="num" style="font-size: 13.5px; color: #B3B0A9;">4,96:1</span>
+            <span style="font-size: 12px; font-weight: 600; color: #6FCF97; min-width: 74px; text-align: right;">pasa apenas</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 20px; background: rgba(224,110,96,0.08);">
+            <span style="font-size: 13.5px; color: #56534D;">Texto tenue</span>
+            <span class="num" style="font-size: 13.5px; font-weight: 600; color: #E8A99F;">2,51:1</span>
+            <span style="font-size: 12px; font-weight: 600; color: #E06E60; min-width: 74px; text-align: right;">no pasa</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 18px 20px;">
+        <div style="font-size: 15px; font-weight: 600; color: #E8E6E1;">Las tarjetas casi no existen</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.5; color: #B3B0A9;">Entre el fondo y una tarjeta hay 1,15:1 de separación. No son dos planos: es un plano con un borde dibujado encima. Eso es lo que hace que todo se vea aplanado.</div>
+        <div style="display: flex; gap: 0; margin-top: 16px; border-radius: 8px; overflow: hidden;">
+          <div style="flex-grow: 1; height: 46px; background: #0F1115;"></div>
+          <div style="flex-grow: 1; height: 46px; background: #15171C;"></div>
+          <div style="flex-grow: 1; height: 46px; background: #191B20;"></div>
+          <div style="flex-grow: 1; height: 46px; background: #1D1F25;"></div>
+          <div style="flex-grow: 1; height: 46px; background: #22252B;"></div>
+          <div style="flex-grow: 1; height: 46px; background: #2A2D34;"></div>
+        </div>
+        <div style="margin-top: 8px; font-size: 12px; color: #8D8A83;">Las seis superficies del tema actual, una al lado de la otra.</div>
+      </div>
+
+      <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 18px 20px;">
+        <div style="font-size: 15px; font-weight: 600; color: #E8E6E1;">Lo que sí está bien</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.5; color: #B3B0A9;">Los colores del dinero pasan todos con holgura: ingreso 11,56:1, gasto 11,13:1, aviso 13,45:1, traspaso 8,97:1. El problema no es la paleta semántica. Es la estructura.</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #8D8A83;">Y lo que se ve en tu propia pantalla</div>
+
+      <div style="background: #0F1115; border: 1px solid #2B2E36; border-radius: 14px; padding: 22px 20px;">
+        <div style="font-size: 12.5px; color: #8A8790;">Tu plata</div>
+        <div class="num" style="margin-top: 6px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 40px; letter-spacing: -0.02em; color: #E6E1E9;">$132.294.475</div>
+        <div style="display: flex; justify-content: space-between; margin-top: 16px; padding-top: 14px; border-top: 1px solid #23262D;">
+          <span style="font-size: 13px; color: #8A8790;">Patrimonio neto</span>
+          <span class="num" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 15px; color: #8A8790;">&minus;$1.602,3M</span>
+        </div>
+      </div>
+
+      <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 18px 20px;">
+        <div style="font-size: 15px; font-weight: 600; color: #E8E6E1;">El número más grande es el menos accionable</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.55; color: #B3B0A9;">&laquo;Tu plata&raquo; incluye $106M de pensión voluntaria que no podés tocar. Debajo, más chico y más apagado, está el hecho que de verdad describe tu situación: debés $1.602,3 millones más de lo que tenés.</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.55; color: #B3B0A9;">La pantalla le está dando el protagonismo tipográfico al dato equivocado.</div>
+      </div>
+
+      <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 18px 20px;">
+        <div style="font-size: 15px; font-weight: 600; color: #E8E6E1;">Tres formatos de plata en una tarjeta</div>
+        <div style="display: flex; flex-direction: column; gap: 7px; margin-top: 12px;">
+          <div class="num" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 14px; color: #E8E6E1;">$13.525.167 <span style="font-family: 'Instrument Sans', sans-serif; font-size: 12.5px; color: #8D8A83;">&mdash; completo</span></div>
+          <div class="num" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 14px; color: #E8E6E1;">&minus;$1.602,3M <span style="font-family: 'Instrument Sans', sans-serif; font-size: 12.5px; color: #8D8A83;">&mdash; abreviado con coma</span></div>
+          <div class="num" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 14px; color: #E8E6E1;">$1.734,6M <span style="font-family: 'Instrument Sans', sans-serif; font-size: 12.5px; color: #8D8A83;">&mdash; abreviado, sin signo</span></div>
+        </div>
+      </div>
+
+      <div style="background: #1E2026; border: 1px solid #2B2E36; border-radius: 14px; padding: 18px 20px;">
+        <div style="font-size: 15px; font-weight: 600; color: #E8E6E1;">Todos los números son monoespaciados</div>
+        <div style="margin-top: 5px; font-size: 13px; line-height: 1.55; color: #B3B0A9;">Monoespaciado y tabular no son lo mismo. Para que una columna de montos alinee alcanza con cifras tabulares, que casi toda tipografía moderna trae. Usar monoespaciada para todo le da a la app un aire de terminal, no de producto de plata.</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

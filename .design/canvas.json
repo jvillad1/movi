@@ -1,0 +1,58 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Dirección B" },
+    { "id": "page-2", "name": "Exploración" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html",        "page": "page-1", "x": 0,    "y": 0,    "w": 390,  "h": 1240, "title": "Inicio" },
+    { "file": "Claro.dc.html",       "page": "page-1", "x": 490,  "y": 0,    "w": 390,  "h": 1240, "title": "Inicio · tema claro" },
+    { "file": "Movimientos.dc.html", "page": "page-1", "x": 980,  "y": 0,    "w": 390,  "h": 980,  "title": "Movimientos" },
+    { "file": "Sistema.dc.html",     "page": "page-1", "x": 0,    "y": 1400, "w": 1120, "h": 1580, "title": "El sistema" },
+    { "file": "Diagnostico.dc.html", "page": "page-2", "x": 0,    "y": 0,    "w": 1100, "h": 1360, "title": "De dónde venimos" },
+    { "file": "DireccionA.dc.html",  "page": "page-2", "x": 0,    "y": 1560, "w": 390,  "h": 844,  "title": "Dirección A · Papel (no elegida)" },
+    { "file": "DireccionC.dc.html",  "page": "page-2", "x": 490,  "y": 1560, "w": 390,  "h": 844,  "title": "Dirección C · Bloques (no elegida)" }
+  ],
+  "annotations": [
+    {
+      "id": "elegida",
+      "x": 1450,
+      "y": 0,
+      "w": 310,
+      "page": "page-1",
+      "text": "Dirección B · Instrumento\n\nOscuro denso, tipografía precisa, los datos primero. Es Movi como es hoy, pero hecho de verdad.\n\nSpace Grotesk lleva la interfaz. Martian Mono aparece solo en las cifras grandes: a ese tamaño su ancho es carácter, en una fila sería estorbo."
+    },
+    {
+      "id": "dos-temas",
+      "x": 1450,
+      "y": 380,
+      "w": 310,
+      "page": "page-1",
+      "text": "Los dos tableros de la izquierda son el MISMO archivo con los tokens invertidos.\n\nEso es lo que prueba que es un sistema y no dos diseños. Movi hoy no tiene tema claro: esto lo resuelve sin rediseñar nada."
+    },
+    {
+      "id": "la-apuesta",
+      "x": 1450,
+      "y": 760,
+      "w": 310,
+      "page": "page-1",
+      "text": "Lo que cambia de fondo\n\nEl número grande deja de ser «Tu plata» ($132M, con $106M de pensión que no podés tocar) y pasa a ser lo que te queda libre este período.\n\nY aparece lo que ninguna app del benchmark hace: a dónde va tu sueldo, cuánto de cada cuota es interés, y cuándo termina cada deuda."
+    },
+    {
+      "id": "medido",
+      "x": 1200,
+      "y": 1400,
+      "w": 310,
+      "page": "page-1",
+      "text": "Todo medido, dos veces\n\nMi primera paleta para B tenía la tarjeta más plana que la de hoy (1,05:1 contra 1,15:1) y un cuarto nivel de texto que no pasaba.\n\nLa tarjeta subió a 1,17:1 y el cuarto nivel lo saqué. Tres que dicen la verdad valen más que cuatro donde uno miente."
+    },
+    {
+      "id": "descartadas",
+      "x": 980,
+      "y": 1560,
+      "w": 300,
+      "page": "page-2",
+      "text": "Quedan acá para referencia.\n\nSi algo de A o C te gustaba —el serif en las cifras, el bloque de color— decilo y lo traigo a B sin cambiar la dirección."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}
