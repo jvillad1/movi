@@ -43,6 +43,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 
 private fun resolveApiKey(): String? {
     System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() && it != "x" }?.let { return it }
@@ -266,7 +267,7 @@ internal suspend fun buildUserContext(uid: String): String {
 
     // Ventana del PERÍODO del usuario (ver PeriodSettings en :core), la misma que usa
     // finance-summary. Con corte 1 —el default— es el mes de calendario de siempre.
-    val (monthStart, monthEnd) = currentPeriodWindow(cutoffDayOf(uid))
+    val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
 
     // Income and expense sums — filter ResultRows directly, same as finance-summary
     val (ingresos, egresos) = dbQuery {
