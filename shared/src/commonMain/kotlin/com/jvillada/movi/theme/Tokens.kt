@@ -32,11 +32,12 @@ import androidx.compose.ui.unit.sp
  *
  * Cuatro escalas cortas y dos temas. Una pantalla nueva **no decide nada**: elige de una lista.
  *
- * ## Qué NO cambia todavía, a propósito
+ * ## Y ya no hay otro juego de colores
  *
- * Los `Min*` de `Color.kt` siguen existiendo y siguen valiendo lo mismo. Esta entrega agrega el
- * sistema y lo deja **provisto** por [MoviTheme]; migrar las pantallas es lo que viene después,
- * pantalla por pantalla. Meter las dos cosas en un solo cambio sería mover 83 archivos a ciegas.
+ * `Color.kt` —los 23 `Min*` de nivel superior— **se borró**. No por prolijidad: mientras
+ * existiera, el tema claro era imposible. Un `val` de nivel superior es un valor por proceso, así
+ * que ningún tema puede moverlo, y cualquier pantalla que siguiera usándolos habría quedado oscura
+ * adentro de una app clara.
  *
  * ## La parte que se defiende sola
  *
@@ -45,7 +46,7 @@ import androidx.compose.ui.unit.sp
  * Nadie puede agregar acá un color que no se lea, ni bajarle el contraste a uno existente sin que
  * el build se caiga.
  *
- * Hace falta porque el tema actual **ya tiene un color que no pasa**: `MinTextFaint` da 2,51:1
+ * Hace falta porque el tema actual **ya tiene un color que no pasa**: `MinTextFaint` (el de antes) da 2,51:1
  * contra el fondo, y no es decorativo — lo usan los subtítulos, las pistas y la línea del rango del
  * período. Un sistema sin esa prueba habría repetido el error; de hecho las dos primeras versiones
  * de esta paleta lo repitieron, y la prueba es lo que las atrapó.

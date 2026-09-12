@@ -18,9 +18,10 @@ import kotlin.test.fail
  *
  * ## Por qué hace falta
  *
- * **El tema que Movi tiene hoy ya falla.** `MinTextFaint` da 2,51:1 contra el fondo, contra el
- * mínimo de 4,5:1 — y no es un color decorativo: lo usan los subtítulos, las pistas y la línea del
- * rango del período. Nadie lo notó nunca porque nada lo medía.
+ * **El tema que Movi tenía ya fallaba.** `MinTextFaint` daba 2,51:1 contra el fondo, contra el
+ * mínimo de 4,5:1 — y no era un color decorativo: lo usaban los subtítulos, las pistas, la flecha
+ * de «esto se toca» y la manija de las hojas, en 103 lugares de 39 archivos. Nadie lo notó nunca
+ * porque nada lo medía. Ese archivo ya no existe; esta prueba es lo que impide que vuelva.
  *
  * Y no es un problema ajeno que esta prueba viene a señalar desde afuera. Las dos primeras
  * versiones de esta paleta lo repitieron:
