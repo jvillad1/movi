@@ -31,3 +31,5 @@ gradle/gradle-daemon-jvm.properties
 /*.png
 /.snapshots/
 iosApp/buildServer.json
+# Generado por el ayudante de Claude Design (2,5 MB: lleva el editor adentro)
+/.design/rediseno-movi.html
