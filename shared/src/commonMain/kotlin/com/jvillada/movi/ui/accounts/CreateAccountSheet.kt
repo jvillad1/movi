@@ -170,7 +170,7 @@ fun CreateAccountSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -184,8 +184,8 @@ fun CreateAccountSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MinSurfaceContainerLow)
-                    .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                    .background(Movi.colores.tarjeta)
+                    .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 14.dp),
             ) {
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
@@ -194,14 +194,14 @@ fun CreateAccountSheet(
                 BasicTextField(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
-                    cursorBrush = SolidColor(MinText),
-                    textStyle = TextStyle(color = MinText, fontSize = 14.sp),
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                         .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     decorationBox = { inner ->
                         if (name.isEmpty()) {
-                            Text("Ej: Bancolombia Ahorros", fontSize = 14.sp, color = MinTextMute)
+                            Text("Ej: Bancolombia Ahorros", fontSize = 14.sp, color = Movi.colores.textoMedio)
                         }
                         inner()
                     },
@@ -234,7 +234,7 @@ fun CreateAccountSheet(
             Text(
                 text = "¿Tarjetas o préstamos? Se cargan en Créditos",
                 fontSize = 12.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
             )
 
             Spacer(Modifier.height(18.dp))
@@ -254,7 +254,7 @@ fun CreateAccountSheet(
                 Text(
                     text = error!!,
                     fontSize = 12.sp,
-                    color = MinExpense,
+                    color = Movi.colores.sale,
                 )
             }
 
@@ -266,7 +266,7 @@ fun CreateAccountSheet(
                     .fillMaxWidth()
                     .height(54.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                    .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                     .clickable(enabled = canSave) { save() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -274,7 +274,7 @@ fun CreateAccountSheet(
                     text = if (saving) "Creando…" else "Crear cuenta",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                    color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                 )
             }
             if (!canSave && !saving && missingFieldMessage != null) {
@@ -282,7 +282,7 @@ fun CreateAccountSheet(
                 Text(
                     text = missingFieldMessage,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
@@ -297,7 +297,7 @@ private fun SectionLabel(text: String) {
     Text(
         text = text,
         fontSize = 11.sp,
-        color = MinTextMute,
+        color = Movi.colores.textoMedio,
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
     )
@@ -310,9 +310,9 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
         modifier = Modifier
             .weight(1f)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
+                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(10.dp)) else Modifier,
             )
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp),
@@ -326,14 +326,14 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (selected) MinOnPrimaryContainer else MinTextDim,
+                    tint = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
                     text = label,
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (selected) MinOnPrimaryContainer else MinTextDim,
+                    color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
                 )
             }
         } else {
@@ -341,7 +341,7 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
                 text = label,
                 fontSize = 13.sp,
                 fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                color = if (selected) MinOnPrimaryContainer else MinTextDim,
+                color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
             )
         }
     }
@@ -358,9 +358,9 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(12.dp)) else Modifier,
+                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp)) else Modifier,
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -372,21 +372,21 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
             Icon(
                 imageVector = option.icon,
                 contentDescription = null,
-                tint = if (selected) MinOnPrimaryContainer else MinTextDim,
+                tint = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
                 modifier = Modifier.size(18.dp),
             )
             Text(
                 text = option.label,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (selected) MinOnPrimaryContainer else MinText,
+                color = if (selected) Movi.colores.marca else Movi.colores.texto,
             )
         }
         Spacer(Modifier.height(3.dp))
         Text(
             text = option.description,
             fontSize = 12.sp,
-            color = if (selected) MinOnPrimaryContainer else MinTextMute,
+            color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
         )
     }
 }

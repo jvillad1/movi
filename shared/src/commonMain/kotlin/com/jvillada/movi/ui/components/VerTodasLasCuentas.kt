@@ -16,9 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.UsoDeCuenta
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
 
 /**
  * **El pie de todo selector de cuentas: «Ver todas las cuentas».**
@@ -62,13 +61,13 @@ fun VerTodasLasCuentas(
             Text(
                 text = if (expandido) "Ver solo las de siempre" else "Ver todas las cuentas ($cuantas más)",
                 fontSize = 14.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )
             Icon(
                 imageVector = if (expandido) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
                 contentDescription = null,
-                tint = MinTextMute,
+                tint = Movi.colores.textoMedio,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -77,7 +76,7 @@ fun VerTodasLasCuentas(
                 text = explicacionDeLasOtrasCuentas(uso),
                 fontSize = 11.5.sp,
                 lineHeight = 15.sp,
-                color = MinTextFaint,
+                color = Movi.colores.textoApagado,
                 modifier = Modifier.padding(bottom = 10.dp),
             )
         }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.theme.Movi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -34,11 +35,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.theme.MinBorder
-import com.jvillada.movi.theme.MinSurfaceContainerLow
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
 
 /**
  * F14 · F23 · F34 · F53: un solo campo de monto para toda la app — antes cada formulario
@@ -168,7 +164,7 @@ fun MoneyField(
             Text(
                 text = label,
                 fontSize = 11.sp,
-                color = MinTextMute,
+                color = Movi.colores.textoMedio,
                 letterSpacing = 0.4.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -245,8 +241,8 @@ fun MoneyField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(MinSurfaceContainerLow)
-                .border(1.dp, MinBorder, RoundedCornerShape(12.dp))
+                .background(Movi.colores.tarjeta)
+                .border(1.dp, Movi.colores.borde, RoundedCornerShape(12.dp))
                 .padding(horizontal = 14.dp, vertical = 14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -258,7 +254,7 @@ fun MoneyField(
                     text = prefix,
                     fontSize = 14.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = if (digits.isEmpty()) MinTextFaint else MinTextMute,
+                    color = if (digits.isEmpty()) Movi.colores.textoApagado else Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.width(6.dp))
                 Box(modifier = Modifier.weight(1f)) {
@@ -270,7 +266,7 @@ fun MoneyField(
                         Text(
                             text = placeholder.removePrefix(prefix).trim().ifEmpty { "0" },
                             fontSize = 14.sp,
-                            color = MinTextFaint,
+                            color = Movi.colores.textoApagado,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis,
@@ -289,10 +285,10 @@ fun MoneyField(
                         },
                         textStyle = TextStyle(
                             fontSize = 14.sp,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             fontFamily = FontFamily.Monospace,
                         ),
-                        cursorBrush = SolidColor(MinText),
+                        cursorBrush = SolidColor(Movi.colores.texto),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver

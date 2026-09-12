@@ -65,7 +65,7 @@ fun DiasDeAvisoSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -90,13 +90,13 @@ fun DiasDeAvisoSheet(
                     text = "¿Con cuánta anticipación te avisamos?",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
                 )
                 Text(
                     text = reminderLeadHint(dias),
                     fontSize = 13.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 18.sp,
                     modifier = Modifier.padding(bottom = 18.dp),
                 )
@@ -109,7 +109,7 @@ fun DiasDeAvisoSheet(
                                 .weight(1f)
                                 .height(46.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (elegido) MinPrimary else MinSurfaceContainer)
+                                .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
                                 .clickable(enabled = !saving) { dias = d },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -117,7 +117,7 @@ fun DiasDeAvisoSheet(
                                 text = d.toString(),
                                 fontSize = 14.sp,
                                 fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (elegido) MinBg else MinText,
+                                color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
                             )
                         }
                     }
@@ -125,7 +125,7 @@ fun DiasDeAvisoSheet(
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
+                    Text(text = error, fontSize = 12.5.sp, color = Movi.colores.sale, lineHeight = 17.sp)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -134,14 +134,14 @@ fun DiasDeAvisoSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (saving) MinSurfaceContainerHighest else MinPrimary)
+                        .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
                         .clickable(enabled = !saving) { onSave(dias) }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (saving) "Guardando…" else "Guardar",
-                        color = if (saving) MinTextMute else MinBg,
+                        color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )

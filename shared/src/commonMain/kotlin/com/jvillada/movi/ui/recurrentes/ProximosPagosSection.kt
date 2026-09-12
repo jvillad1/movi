@@ -64,11 +64,12 @@ private fun dueDateDay(dueDate: String): Int =
             ?: 0
     }
 
+@Composable
 private fun statusColor(status: PaymentStatus): Color = when (status) {
-    PaymentStatus.OVERDUE   -> MinExpense
-    PaymentStatus.DUE_TODAY -> MinWarn
-    PaymentStatus.DUE_SOON  -> MinWarn
-    PaymentStatus.UPCOMING  -> MinTextMute
+    PaymentStatus.OVERDUE   -> Movi.colores.sale
+    PaymentStatus.DUE_TODAY -> Movi.colores.aviso
+    PaymentStatus.DUE_SOON  -> Movi.colores.aviso
+    PaymentStatus.UPCOMING  -> Movi.colores.textoMedio
 }
 
 /**
@@ -123,7 +124,7 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
                 text = rule.name,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(2.dp))
@@ -136,9 +137,9 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
                     modifier = Modifier
                         .size(3.dp)
                         .clip(CircleShape)
-                        .background(MinTextFaint),
+                        .background(Movi.colores.textoApagado),
                 )
-                Text(rule.category, fontSize = 11.sp, color = MinTextMute)
+                Text(rule.category, fontSize = 11.sp, color = Movi.colores.textoMedio)
             }
         }
 
@@ -147,7 +148,7 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
             fontSize = 14.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
-            color = if (isIncome) MinIncome else MinText,
+            color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
             letterSpacing = (-0.3).sp,
         )
     }
@@ -192,7 +193,7 @@ internal fun PropuestaOcurrencia(
             text = tituloPropuesta(rule.type, estado.period),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = MinText,
+            color = Movi.colores.texto,
         )
         if (propuesta != null) {
             Spacer(Modifier.height(4.dp))
@@ -207,7 +208,7 @@ internal fun PropuestaOcurrencia(
                 Text(
                     text = descripcionPropuesta(propuesta),
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 16.sp,
                     modifier = Modifier.weight(1f),
                 )
@@ -215,7 +216,7 @@ internal fun PropuestaOcurrencia(
                     text = formatMoney(propuesta.amount, propuesta.currency),
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     lineHeight = 16.sp,
                 )
             }
@@ -230,7 +231,7 @@ internal fun PropuestaOcurrencia(
                     text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +
                         "Puede ser: revísalo antes de confirmar.",
                     fontSize = 11.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 15.sp,
                 )
             }
@@ -256,7 +257,7 @@ internal fun PropuestaOcurrencia(
             Text(
                 text = etiquetaCierreManual(rule.type) + ", sin emparejar ningún movimiento",
                 fontSize = 11.sp,
-                color = MinPrimary,
+                color = Movi.colores.marca,
                 modifier = Modifier.clickable { if (!enVuelo) onCerrarSinMovimiento() },
             )
         }
@@ -269,11 +270,11 @@ internal fun ActionChip(label: String, primary: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (primary) MinText else MinSurfaceContainerLow)
+            .background(if (primary) Movi.colores.texto else Movi.colores.tarjeta)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) MinBg else MinText)
+        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
     }
 }
 
@@ -324,7 +325,7 @@ fun SeccionProximosPagos(
                 variant = MinCardVariant.Elevated,
                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
             ) {
-                Text("Nada vence en los próximos días", fontSize = 14.sp, color = MinTextMute)
+                Text("Nada vence en los próximos días", fontSize = 14.sp, color = Movi.colores.textoMedio)
             }
         } else {
             MinCard(
@@ -394,14 +395,14 @@ fun SeccionSinConfirmar(
                             text = rule.name,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             letterSpacing = (-0.1).sp,
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = "Día ${rule.dayOfMonth} · sin confirmar",
                             fontSize = 11.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                         )
                     }
                     Text(
@@ -409,7 +410,7 @@ fun SeccionSinConfirmar(
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
-                        color = if (rule.type == TransactionType.INCOME) MinIncome else MinText,
+                        color = if (rule.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto,
                         letterSpacing = (-0.3).sp,
                     )
                 }
@@ -474,11 +475,11 @@ fun SeccionYaOcurrieron(
                             text = rule.name,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MinText,
+                            color = Movi.colores.texto,
                             letterSpacing = (-0.1).sp,
                         )
                         Spacer(Modifier.height(2.dp))
-                        Text(textoYaOcurrio(estado), fontSize = 11.sp, color = MinTextMute)
+                        Text(textoYaOcurrio(estado), fontSize = 11.sp, color = Movi.colores.textoMedio)
                     }
                     // El «Deshacer» solo existe donde hay un sello que borrar. Una cuota o un pago
                     // de tarjeta llega acá **derivado del movimiento** que bajó la deuda, y eso no
@@ -489,7 +490,7 @@ fun SeccionYaOcurrieron(
                         Text(
                             text = if (rule.id in marcando) "Guardando…" else "Deshacer",
                             fontSize = 12.sp,
-                            color = MinPrimary,
+                            color = Movi.colores.marca,
                             modifier = Modifier.clickable {
                                 if (rule.id !in marcando) onDeshacer(rule.id, estado.period)
                             },
@@ -498,7 +499,7 @@ fun SeccionYaOcurrieron(
                         Text(
                             text = "Se quita borrando\nel movimiento",
                             fontSize = 10.sp,
-                            color = MinTextMute,
+                            color = Movi.colores.textoMedio,
                             lineHeight = 13.sp,
                         )
                     }

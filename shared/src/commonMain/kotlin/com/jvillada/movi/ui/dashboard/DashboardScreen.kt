@@ -323,7 +323,7 @@ fun DashboardScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MinBg)
+            .background(Movi.colores.fondo)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // F60: encabezado único — Inicio es raíz: avatar + el rótulo del menú + la campana.
@@ -337,12 +337,12 @@ fun DashboardScreen(
                         Icon(
                             Icons.Rounded.Notifications,
                             contentDescription = "Notificaciones",
-                            tint = MinText,
+                            tint = Movi.colores.texto,
                             modifier = Modifier.size(22.dp).clickable { showNotifications = true },
                         )
                         if (notifications.isNotEmpty()) {
                             StatusDot(
-                                color = MinExpense,
+                                color = Movi.colores.sale,
                                 modifier = Modifier.align(Alignment.TopEnd),
                             )
                         }
@@ -445,8 +445,8 @@ internal fun PrimerosPasosCard(
         padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Primeros pasos", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MinText, modifier = Modifier.weight(1f))
-            Text("${steps.count { it }} de ${steps.size}", fontSize = 12.sp, color = MinTextMute)
+            Text("Primeros pasos", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto, modifier = Modifier.weight(1f))
+            Text("${steps.count { it }} de ${steps.size}", fontSize = 12.sp, color = Movi.colores.textoMedio)
         }
         Spacer(Modifier.height(2.dp))
 
@@ -473,7 +473,7 @@ internal fun PrimerosPasosCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Deja que la app se llene sola", fontSize = 12.5.sp, color = MinTextMute, modifier = Modifier.weight(1f))
+            Text("Deja que la app se llene sola", fontSize = 12.5.sp, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
             AccesoLink("Extractos") { onNavigate(Screen.Extractos) }
             if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.SMSInbox) }
         }
@@ -498,7 +498,7 @@ private fun PasoRow(
         Icon(
             imageVector = if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
             contentDescription = if (done) "Hecho" else "Pendiente",
-            tint = if (done) MinIncome else MinTextFaint,
+            tint = if (done) Movi.colores.entra else Movi.colores.textoApagado,
             modifier = Modifier.size(18.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -506,10 +506,10 @@ private fun PasoRow(
                 text = title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (done) MinTextMute else MinText,
+                color = if (done) Movi.colores.textoMedio else Movi.colores.texto,
             )
             if (subtitle != null) {
-                Text(text = subtitle, fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(top = 1.dp))
+                Text(text = subtitle, fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 1.dp))
             }
         }
         if (!done) ChevronRight()
@@ -522,7 +522,7 @@ private fun AccesoLink(label: String, onClick: () -> Unit) {
         text = label,
         fontSize = 12.5.sp,
         fontWeight = FontWeight.Medium,
-        color = MinPrimary,
+        color = Movi.colores.marca,
         modifier = Modifier.clickable(onClick = onClick).padding(vertical = 4.dp),
     )
 }

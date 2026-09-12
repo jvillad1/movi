@@ -140,7 +140,7 @@ fun CardTermsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -150,7 +150,7 @@ fun CardTermsSheet(
                 if (editing != null) {
                     SectionLabel("TARJETA")
                     Spacer(Modifier.height(8.dp))
-                    Text(editing.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MinText)
+                    Text(editing.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                     Spacer(Modifier.height(16.dp))
                 } else {
                     FieldBox("Nombre (p.ej. Visa Bancolombia)", name, { name = it })
@@ -206,7 +206,7 @@ fun CardTermsSheet(
                 Text(
                     text = TEXTO_DE_AYUDA_DEL_MINIMO,
                     fontSize = 11.sp,
-                    color = MinTextFaint,
+                    color = Movi.colores.textoApagado,
                     lineHeight = 15.sp,
                 )
 
@@ -228,7 +228,7 @@ fun CardTermsSheet(
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.sp, color = MinExpense)
+                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
                 }
             }
 
@@ -237,19 +237,19 @@ fun CardTermsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) MinText else MinTextFaint)
+                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                     .clickable(enabled = canSave) { save() }
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (saving) "Guardando…" else "Guardar tarjeta", color = MinBg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(if (saving) "Guardando…" else "Guardar tarjeta", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
             if (!canSave && !saving && missingFieldMessage != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = missingFieldMessage,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -259,7 +259,7 @@ fun CardTermsSheet(
                 Text(
                     "Eliminar términos",
                     fontSize = 13.sp,
-                    color = MinExpense,
+                    color = Movi.colores.sale,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { deleteTerms() }.padding(vertical = 8.dp),
                 )
@@ -276,9 +276,9 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
         modifier = Modifier
             .weight(1f)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) MinPrimaryContainer else MinSurfaceContainerLow)
+            .background(if (selected) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
             .then(
-                if (!selected) Modifier.border(1.dp, MinBorder, RoundedCornerShape(10.dp)) else Modifier,
+                if (!selected) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(10.dp)) else Modifier,
             )
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp),
@@ -288,7 +288,7 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
             text = label,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) MinOnPrimaryContainer else MinTextDim,
+            color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
         )
     }
 }

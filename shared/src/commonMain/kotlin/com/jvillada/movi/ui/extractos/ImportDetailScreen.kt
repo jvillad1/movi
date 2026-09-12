@@ -49,7 +49,7 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
             }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; el detalle vuelve a la lista de Extractos si no hay historial.
         MinScreenHeader(
             title = "Detalle de importación",
@@ -60,12 +60,12 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
         when {
             loading -> LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                color = MinPrimary,
-                trackColor = MinSurfaceContainerHigh,
+                color = Movi.colores.marca,
+                trackColor = Movi.colores.tarjeta,
             )
             error != null -> Text(
                 error!!,
-                fontSize = 13.sp, color = MinExpense,
+                fontSize = 13.sp, color = Movi.colores.sale,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
             )
@@ -90,7 +90,7 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
             item(key = "empty") {
                 Text(
                     "No se encontraron movimientos",
-                    fontSize = 13.sp, color = MinTextMute,
+                    fontSize = 13.sp, color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                 )
@@ -99,7 +99,7 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
             item(key = "section-label") {
                 Text(
                     "MOVIMIENTOS",
-                    fontSize = 11.sp, color = MinTextDim,
+                    fontSize = 11.sp, color = Movi.colores.textoMedio,
                     letterSpacing = 0.8.sp,
                 )
             }
@@ -127,13 +127,13 @@ private fun ImportSummaryHeader(imp: StatementImport) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MinSurfaceContainerLow)
+            .background(Movi.colores.tarjeta)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             "${imp.bankName.uppercase()} · ${imp.period.uppercase()}",
-            fontSize = 11.sp, color = MinTextDim, letterSpacing = 0.8.sp,
+            fontSize = 11.sp, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -142,11 +142,11 @@ private fun ImportSummaryHeader(imp: StatementImport) {
         ) {
             Text(
                 "${imp.importedCount} importadas · ${imp.reconciledCount} reconciliadas",
-                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MinText,
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto,
             )
             Text(
                 epochToShortDate(imp.importedAt),
-                fontSize = 12.sp, color = MinTextMute,
+                fontSize = 12.sp, color = Movi.colores.textoMedio,
             )
         }
     }
@@ -165,18 +165,18 @@ private fun ImportEventRow(event: FinancialEvent) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 event.description.ifBlank { event.merchant ?: "Sin descripción" },
-                fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinText,
+                fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto,
             )
             Spacer(Modifier.height(2.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(event.category, fontSize = 12.sp, color = MinTextMute)
-                StatusDot(MinTextFaint, 2.dp)
+                Text(event.category, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                StatusDot(Movi.colores.textoApagado, 2.dp)
                 Text(
                     epochToShortDate(event.timestamp),
-                    fontSize = 11.sp, color = MinTextMute,
+                    fontSize = 11.sp, color = Movi.colores.textoMedio,
                     fontFamily = FontFamily.Monospace,
                 )
             }
@@ -184,7 +184,7 @@ private fun ImportEventRow(event: FinancialEvent) {
         Cifra(
             text = "${if (isIncome) "+" else "−"}${formatCOP(event.amount)}",
             fontSize = 14f,
-            color = if (isIncome) MinIncome else MinExpense,
+            color = if (isIncome) Movi.colores.entra else Movi.colores.sale,
         )
     }
 }

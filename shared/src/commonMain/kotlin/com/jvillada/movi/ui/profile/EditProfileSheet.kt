@@ -83,14 +83,14 @@ fun EditProfileSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
             SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                Text("ALIAS", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = 0.5.sp)
+                Text("ALIAS", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
                 Spacer(Modifier.height(8.dp))
                 FieldBox(
                     placeholder = "Tu nombre",
@@ -100,7 +100,7 @@ fun EditProfileSheet(
                 )
 
                 Spacer(Modifier.height(20.dp))
-                Text("COLOR DEL AVATAR", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = 0.5.sp)
+                Text("COLOR DEL AVATAR", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
                 Spacer(Modifier.height(10.dp))
                 for (row in AvatarPalette.COLORS.chunked(4)) {
                     Row(
@@ -116,7 +116,7 @@ fun EditProfileSheet(
 
                 error?.let {
                     Spacer(Modifier.height(6.dp))
-                    Text(it, fontSize = 12.sp, color = MinExpense)
+                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
                 }
             }
 
@@ -125,19 +125,19 @@ fun EditProfileSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) MinText else MinTextFaint)
+                    .background(if (canSave) Movi.colores.texto else Movi.colores.textoApagado)
                     .clickable(enabled = canSave) { save() }
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (saving) "Guardando…" else "Guardar", color = MinBg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
             if (!canSave && !saving && missingFieldMessage != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = missingFieldMessage,
                     fontSize = 12.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -154,7 +154,7 @@ private fun ColorSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
             .size(44.dp)
             .clip(CircleShape)
             .background(avatarColorOrDefault(hex))
-            .then(if (selected) Modifier.border(2.dp, MinText, CircleShape) else Modifier)
+            .then(if (selected) Modifier.border(2.dp, Movi.colores.texto, CircleShape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

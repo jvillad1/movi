@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.fecha
 
+import com.jvillada.movi.theme.Movi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,13 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.theme.MinBorderStrong
-import com.jvillada.movi.theme.MinOnPrimaryContainer
-import com.jvillada.movi.theme.MinPrimaryContainer
-import com.jvillada.movi.theme.MinSurfaceContainerLow
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -120,7 +114,7 @@ fun SelectorDeFecha(
                 text = etiquetaDeMes(mesVisible),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = MinText,
+                color = Movi.colores.texto,
                 modifier = Modifier.weight(1f),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
@@ -138,7 +132,7 @@ fun SelectorDeFecha(
             // abreviatura de una letra que usa todo el mundo acá.
             listOf("L", "M", "M", "J", "V", "S", "D").forEach { dia ->
                 Box(modifier = Modifier.weight(1f).height(20.dp), contentAlignment = Alignment.Center) {
-                    Text(dia, fontSize = 11.sp, color = MinTextFaint)
+                    Text(dia, fontSize = 11.sp, color = Movi.colores.textoApagado)
                 }
             }
         }
@@ -177,8 +171,8 @@ private fun AtajoDeFecha(
         modifier = modifier
             .height(44.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(if (activo) MinPrimaryContainer else MinSurfaceContainerLow)
-            .then(if (activo) Modifier else Modifier.border(1.dp, MinBorderStrong, RoundedCornerShape(999.dp)))
+            .background(if (activo) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .then(if (activo) Modifier else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp)))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -186,7 +180,7 @@ private fun AtajoDeFecha(
             text = texto,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = if (activo) MinOnPrimaryContainer else MinText,
+            color = if (activo) Movi.colores.marca else Movi.colores.texto,
         )
     }
 }
@@ -197,14 +191,14 @@ private fun FlechaDeMes(izquierda: Boolean, enabled: Boolean, onClick: () -> Uni
         modifier = Modifier
             .size(36.dp)
             .clip(CircleShape)
-            .background(if (enabled) MinSurfaceContainerLow else Color.Transparent)
+            .background(if (enabled) Movi.colores.tarjeta else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = if (izquierda) Icons.Rounded.ChevronLeft else Icons.Rounded.ChevronRight,
             contentDescription = if (izquierda) "Mes anterior" else "Mes siguiente",
-            tint = if (enabled) MinText else MinTextFaint,
+            tint = if (enabled) Movi.colores.texto else Movi.colores.textoApagado,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -230,9 +224,9 @@ private fun CasillaDeDia(
             modifier = Modifier
                 .size(34.dp)
                 .clip(CircleShape)
-                .background(if (seleccionada) MinPrimaryContainer else Color.Transparent)
+                .background(if (seleccionada) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
                 .then(
-                    if (esHoy && !seleccionada) Modifier.border(1.dp, MinBorderStrong, CircleShape)
+                    if (esHoy && !seleccionada) Modifier.border(1.dp, Movi.colores.borde, CircleShape)
                     else Modifier,
                 )
                 .clickable(enabled = habilitado, onClick = onClick),
@@ -243,9 +237,9 @@ private fun CasillaDeDia(
                 fontSize = 13.sp,
                 fontWeight = if (seleccionada) FontWeight.Medium else FontWeight.Normal,
                 color = when {
-                    seleccionada -> MinOnPrimaryContainer
-                    !habilitado -> MinTextFaint
-                    else -> MinTextMute
+                    seleccionada -> Movi.colores.marca
+                    !habilitado -> Movi.colores.textoApagado
+                    else -> Movi.colores.textoMedio
                 },
             )
         }

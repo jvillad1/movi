@@ -133,7 +133,7 @@ fun GoalSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -162,14 +162,14 @@ fun GoalSheet(
                         text = if (isEditMode) "Editar meta" else "Nueva meta",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                         modifier = Modifier.weight(1f),
                     )
                     if (isEditMode) {
                         Text(
                             text = if (saving) "…" else "Eliminar",
                             fontSize = 13.sp,
-                            color = MinExpense,
+                            color = Movi.colores.sale,
                             modifier = Modifier.clickable(enabled = !saving) { delete() },
                         )
                     }
@@ -193,7 +193,7 @@ fun GoalSheet(
                     Text(
                         "No tienes cuentas de Dinero o Inversión — crea una en Cuentas primero",
                         fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -224,7 +224,7 @@ fun GoalSheet(
 
                 if (error != null) {
                     Spacer(Modifier.height(8.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = MinExpense)
+                    Text(text = error!!, fontSize = 12.sp, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -234,7 +234,7 @@ fun GoalSheet(
                         .fillMaxWidth()
                         .height(54.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(if (canSave) MinPrimaryContainer else MinSurfaceContainerLow)
+                        .background(if (canSave) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
                         .clickable(enabled = canSave) { save() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -246,7 +246,7 @@ fun GoalSheet(
                         },
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (canSave) MinOnPrimaryContainer else MinTextFaint,
+                        color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
                 if (!canSave && !saving && missingFieldMessage != null) {
@@ -254,7 +254,7 @@ fun GoalSheet(
                     Text(
                         text = missingFieldMessage,
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -271,12 +271,12 @@ private fun GoalAccountRow(label: String, selected: Boolean, onClick: () -> Unit
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MinSurfaceContainerLow else Color.Transparent)
-            .border(1.dp, if (selected) MinText else MinBorder, RoundedCornerShape(12.dp))
+            .background(if (selected) Movi.colores.tarjeta else Color.Transparent)
+            .border(1.dp, if (selected) Movi.colores.texto else Movi.colores.borde, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 13.5.sp, color = MinText, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Text(label, fontSize = 13.5.sp, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }

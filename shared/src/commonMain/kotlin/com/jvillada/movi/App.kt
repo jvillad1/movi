@@ -18,11 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.platform.BackHandlerEffect
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.theme.MinBg
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.documentos.DocumentosScreen
 import com.jvillada.movi.ui.LocalGoBack
@@ -190,7 +190,7 @@ fun App() {
             // MinNavRail on the left with the same capped column centered in the
             // remaining space. Both read the active tab from navTabFor().
             BoxWithConstraints(
-                modifier = Modifier.fillMaxSize().background(MinBg),
+                modifier = Modifier.fillMaxSize().background(Movi.colores.fondo),
             ) {
                 val widthClass = if (maxWidth < 840.dp) WindowWidthClass.Compact else WindowWidthClass.Expanded
                 val activeTab = navTabFor(currentScreen)

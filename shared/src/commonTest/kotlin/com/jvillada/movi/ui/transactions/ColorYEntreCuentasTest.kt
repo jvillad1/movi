@@ -12,6 +12,8 @@ import com.jvillada.movi.shared.model.THIRD_PARTY_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.theme.COLORES_CLAROS
+import com.jvillada.movi.theme.COLORES_OSCUROS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -124,19 +126,25 @@ class ColorYEntreCuentasTest {
         }
     }
 
+    /**
+     * Ahora corre en **los dos temas**. Antes solo podía correr en uno, porque `colorDelTono`
+     * devolvía constantes de nivel superior y no existía otro tema que probar.
+     */
     @Test
     fun `gasto, ingreso y entre cuentas son tres colores distintos`() {
-        val gastoColor = colorDelTono(TonoDelMonto.GASTO)
-        val ingresoColor = colorDelTono(TonoDelMonto.INGRESO)
-        val entreCuentasColor = colorDelTono(TonoDelMonto.ENTRE_CUENTAS)
-        val neutroColor = colorDelTono(TonoDelMonto.NEUTRO)
+        for ((tema, colores) in listOf("oscuro" to COLORES_OSCUROS, "claro" to COLORES_CLAROS)) {
+            val gastoColor = colorDelTono(TonoDelMonto.GASTO, colores)
+            val ingresoColor = colorDelTono(TonoDelMonto.INGRESO, colores)
+            val entreCuentasColor = colorDelTono(TonoDelMonto.ENTRE_CUENTAS, colores)
+            val neutroColor = colorDelTono(TonoDelMonto.NEUTRO, colores)
 
-        assertTrue(gastoColor != ingresoColor, "gasto e ingreso no pueden ser el mismo color")
-        assertTrue(gastoColor != entreCuentasColor, "gasto y entre-cuentas no pueden ser el mismo color")
-        assertTrue(ingresoColor != entreCuentasColor, "ingreso y entre-cuentas no pueden ser el mismo color")
-        // Y de paso, que «entre cuentas» dejó de reusar el gris de un NEUTRO real — que es
-        // justo el problema que el dueño reportó.
-        assertTrue(entreCuentasColor != neutroColor, "entre-cuentas ya no puede ser el mismo gris que neutro")
+            assertTrue(gastoColor != ingresoColor, "$tema: gasto e ingreso no pueden ser el mismo color")
+            assertTrue(gastoColor != entreCuentasColor, "$tema: gasto y entre-cuentas no pueden ser el mismo color")
+            assertTrue(ingresoColor != entreCuentasColor, "$tema: ingreso y entre-cuentas no pueden ser el mismo color")
+            // Y de paso, que «entre cuentas» dejó de reusar el gris de un NEUTRO real — que es
+            // justo el problema que el dueño reportó.
+            assertTrue(entreCuentasColor != neutroColor, "$tema: entre-cuentas ya no puede ser el mismo gris que neutro")
+        }
     }
 
     @Test

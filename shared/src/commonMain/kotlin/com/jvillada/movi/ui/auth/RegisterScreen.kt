@@ -76,16 +76,16 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(MinBg).padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Crear cuenta", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = MinText)
-        Text("Ingresa tus datos para empezar", fontSize = 14.sp, color = MinTextMute)
+        Text("Crear cuenta", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
+        Text("Ingresa tus datos para empezar", fontSize = 14.sp, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(32.dp))
 
         MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
-            Text("Nombre", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Nombre", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = name,
                 onChange = { name = it },
@@ -97,7 +97,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 keyboardActions = KeyboardActions(onNext = { emailFocus.requestFocus() }),
             )
             Spacer(Modifier.height(14.dp))
-            Text("Correo", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Correo", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = email,
                 onChange = { email = it },
@@ -110,7 +110,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier.focusRequester(emailFocus),
             )
             Spacer(Modifier.height(14.dp))
-            Text("Contraseña", fontSize = 12.sp, color = MinTextMute, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Contraseña", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = password,
                 onChange = { password = it },
@@ -126,35 +126,35 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
 
             error?.let {
                 Spacer(Modifier.height(12.dp))
-                Text(it, fontSize = 12.sp, color = MinExpense)
+                Text(it, fontSize = 12.sp, color = Movi.colores.sale)
             }
 
             Spacer(Modifier.height(20.dp))
             Box(
                 modifier = Modifier.fillMaxWidth().height(48.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (loading) MinSurfaceContainerHigh else MinPrimary)
+                    .background(if (loading) Movi.colores.tarjeta else Movi.colores.marca)
                     .noRippleClickable { submit() },
                 contentAlignment = Alignment.Center,
             ) {
                 if (loading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
-                        color = MinPrimary,
+                        color = Movi.colores.marca,
                         strokeWidth = 2.dp,
                     )
                 } else {
                     Text(
                         "Crear cuenta",
                         fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                        color = MinBg,
+                        color = Movi.colores.fondo,
                     )
                 }
             }
         }
 
         Spacer(Modifier.height(16.dp))
-        Text("¿Ya tienes cuenta? Entra", fontSize = 13.sp, color = MinPrimary,
+        Text("¿Ya tienes cuenta? Entra", fontSize = 13.sp, color = Movi.colores.marca,
             modifier = Modifier.noRippleClickable { onNavigate(Screen.Login) })
     }
 }
