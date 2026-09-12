@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.theme.MinTextMute
+import com.jvillada.movi.theme.Movi
 
 /**
  * Currency-aware money text: COP -> "$222.933", USD -> "US$181", other -> "EUR 50".
@@ -152,7 +152,7 @@ private fun BreakdownRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = label, fontSize = 12.sp, color = MinTextMute)
-        MonoText(text = value, fontSize = 12f, color = MinTextMute)
+        Text(text = label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Cifra(text = value, fontSize = 12f, color = Movi.colores.textoMedio)
     }
 }

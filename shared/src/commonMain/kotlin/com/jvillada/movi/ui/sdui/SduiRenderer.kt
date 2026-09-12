@@ -30,7 +30,7 @@ import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
-import com.jvillada.movi.ui.components.MonoText
+import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -193,27 +193,30 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
     val flujo = ingresos - egresos
 
     MinCard(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Movi.espacios.amplio),
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(22.dp),
     ) {
         // `section.title` NO se lee acá: el rótulo del hero es [HERO_BALANCE_TITLE], que viaja
         // en el binario. Ver su KDoc — es la única forma de que cada cliente rotule lo que él
         // mismo calcula, sin ventana de desalineación con la fila del server.
-        Text(text = heroBalanceTitle(section), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MinTextMute)
+        Text(
+            text = heroBalanceTitle(section),
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+        )
         Spacer(Modifier.height(10.dp))
         // Antes de que las cuentas contesten, un «$0» de 44 sp es la afirmación más fuerte que
         // hace esta pantalla, y es falsa mientras carga: en la web (sin caché que sobreviva a
         // recargar) el dueño veía «Tu plata $0» durante segundos. Un guion no miente.
+        // **El número más visible de la app**, y hasta acá el que peor se veía: 44 sp de
+        // monoespaciada, que a ese tamaño no es un dato, es una terminal. `Movi.textos.cifra`
+        // son 42 sp semibold con cifras tabulares — el mismo alineado, sin el disfraz.
         Text(
             text = if (data.accounts == null) "—" else formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
-            fontSize = 44.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Normal,
+            style = Movi.textos.cifra,
             // Una cuenta en descubierto SÍ es una alarma del día: eso se queda en rojo.
-            color = if (balance.tuPlata < 0) MinExpense else MinText,
-            letterSpacing = (-1.6).sp,
-            lineHeight = 44.sp,
+            color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
         )
         // La plata condicionada, dicha con su condición.
         //
@@ -230,8 +233,8 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                 text = balance.condicionadoA
                     ?.let { "Además ${formatMoneyCompact(balance.condicionado)} solo para $it" }
                     ?: "Además ${formatMoneyCompact(balance.condicionado)} de uso condicionado",
-                fontSize = 11.5.sp,
-                color = MinTextMute,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
             )
         }
         // El dueño, viendo esta tarjeta: «realmente me gustaría ver no el total sino el
@@ -253,13 +256,13 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                     ) {
                         Text(
                             text = cuenta.nombre,
-                            fontSize = 11.5.sp,
-                            color = MinTextMute,
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
                             maxLines = 1,
                             modifier = Modifier.weight(1f),
                         )
-                        Spacer(Modifier.width(8.dp))
-                        MonoText(cuenta.monto, 11.5f, color = MinTextMute)
+                        Spacer(Modifier.width(Movi.espacios.corto))
+                        Cifra(cuenta.monto, 11.5f, color = Movi.colores.textoMedio)
                     }
                 }
             }
@@ -285,17 +288,21 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                     Text(
                         "Patrimonio neto",
                         modifier = Modifier.weight(1f),
-                        fontSize = 12.sp,
-                        color = MinTextMute,
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.textoMedio,
+                    )
+                    Cifra(
+                        formatMoneyCompact(balance.patrimonio),
+                        15f,
+                        color = Movi.colores.texto,
                         fontWeight = FontWeight.Medium,
                     )
-                    MonoText(formatMoneyCompact(balance.patrimonio), 15f, color = MinTextDim, fontWeight = FontWeight.Medium)
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(Movi.espacios.minimo))
                 Text(
                     text = patrimonioExplicacion(balance),
-                    fontSize = 11.sp,
-                    color = MinTextMute,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoApagado,
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -311,15 +318,27 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         fun cifra(v: Long) = if (sinResumen) "—" else formatMoneyCompact(v)
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf(
-                Triple("Ingresos", cifra(ingresos), MinText),
-                Triple("Gastos", cifra(egresos), MinText),
-                // F36: un mes en rojo se ve en rojo.
-                Triple("Flujo del mes", cifra(flujo), if (!sinResumen && flujo < 0) MinExpense else MinText),
+                // **Ingresos en verde, gastos en coral.** Antes las tres cifras eran del mismo
+                // gris y el color de plata quedaba reservado al caso malo: un mes en rojo. O sea
+                // el color solo aparecía como alarma. Ahora cada cifra dice de qué lado está,
+                // que es lo que los colores del sistema significan.
+                Triple("Ingresos", cifra(ingresos), Movi.colores.entra),
+                Triple("Gastos", cifra(egresos), Movi.colores.sale),
+                // F36: un mes en rojo se ve en rojo. Y uno en verde, en verde.
+                Triple(
+                    "Flujo del mes",
+                    cifra(flujo),
+                    when {
+                        sinResumen -> Movi.colores.texto
+                        flujo < 0 -> Movi.colores.sale
+                        else -> Movi.colores.entra
+                    },
+                ),
             ).forEach { (label, value, color) ->
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(label, fontSize = 11.sp, color = MinTextMute, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(6.dp))
-                    Text(value, fontSize = 14.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = color, letterSpacing = (-0.3).sp)
+                    Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    Spacer(Modifier.height(Movi.espacios.minimo + 2.dp))
+                    Cifra(value, 14.5f, color = color)
                 }
             }
         }
@@ -331,7 +350,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
 @Composable
 private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
     val rows = upcomingPaymentsWithin(data.upcoming.orEmpty())
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(
             title = section.title ?: "Próximos pagos",
             action = "Ver todos",
@@ -350,7 +369,7 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                 val isCredit = p.rule.id.startsWith(CREDIT_RULE_PREFIX) || p.rule.id.startsWith(CARD_RULE_PREFIX)
                 val urgent = p.daysUntil <= 0
                 CardRow(
-                    left = { Text(p.rule.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                    left = { Text(p.rule.name, style = Movi.textos.titulo, color = Movi.colores.texto) },
                     sub = dueLabel(p.daysUntil),
                     // Una tarjeta no tiene cuota: su monto es el SALDO. Mostrarlo bajo «Próximos
                     // pagos» anunciaba $27.501.150 como el próximo pago del dueño cuando el mínimo
@@ -361,9 +380,9 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                         // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
                         // chico porque no es una cifra que vaya a salir de la cuenta.
                         if (p.rule.montoEsSaldo) {
-                            MonoText(textoDelMonto(p.rule), 12.5f, color = MinTextMute)
+                            Cifra(textoDelMonto(p.rule), 12.5f, color = Movi.colores.textoApagado)
                         } else {
-                            MonoText(textoDelMonto(p.rule), 14.5f, color = if (urgent) MinExpense else MinText)
+                            Cifra(textoDelMonto(p.rule), 14.5f, color = if (urgent) Movi.colores.sale else Movi.colores.texto)
                         }
                     },
                     isLast = i == rows.lastIndex,
@@ -386,7 +405,7 @@ private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigat
         overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
         data.captura, data.capturaSilenciada,
     )
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(title = section.title ?: "Alertas", count = alerts.size)
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -395,7 +414,7 @@ private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigat
         ) {
             alerts.forEachIndexed { i, alert ->
                 CardRow(
-                    left = { Text(alert.text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinExpense) },
+                    left = { Text(alert.text, style = Movi.textos.titulo, color = Movi.colores.aviso) },
                     showChevron = true,
                     isLast = i == alerts.lastIndex,
                     onClick = { onNavigate(alert.target) },
@@ -409,7 +428,7 @@ private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigat
 
 @Composable
 private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let { MinSectionHeader(title = it) }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -420,11 +439,11 @@ private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNav
                 val target = card.action?.takeIf { it.type == "NAVIGATE" }?.target
                 val figure = target?.let { quickLinkFigure(it, data) } ?: LinkFigure()
                 CardRow(
-                    left = { Text(card.title, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                    left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
                     // El subtítulo escrito en el Editor manda sobre el calculado.
                     sub = card.subtitle ?: figure.sub,
                     right = figure.value?.let { value ->
-                        { MonoText(value, 14.5f, color = if (figure.isAlert) MinExpense else MinText) }
+                        { Cifra(value, 14.5f, color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
                     },
                     showChevron = card.action != null,
                     isLast = i == section.cards.lastIndex,
@@ -443,7 +462,7 @@ private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNav
 private fun CardRowSection(section: ScreenSection, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
     Column {
         section.title?.let {
-            Box(Modifier.padding(horizontal = 16.dp)) { MinSectionHeader(title = it) }
+            Box(Modifier.padding(horizontal = Movi.espacios.amplio)) { MinSectionHeader(title = it) }
         }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -456,7 +475,7 @@ private fun CardRowSection(section: ScreenSection, onNavigate: (Screen) -> Unit,
 
 @Composable
 private fun CardListSection(section: ScreenSection, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let { MinSectionHeader(title = it) }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -465,9 +484,9 @@ private fun CardListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
         ) {
             section.cards.forEachIndexed { i, card ->
                 CardRow(
-                    left = { Text(card.title, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                    left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
                     sub = card.subtitle,
-                    right = card.badge?.let { badge -> { Text(badge, fontSize = 12.sp, color = MinTextMute) } },
+                    right = card.badge?.let { badge -> { Text(badge, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) } },
                     showChevron = card.action != null,
                     isLast = i == section.cards.size - 1,
                     onClick = clickHandler(card.action, onNavigate, uriHandler),
@@ -479,7 +498,7 @@ private fun CardListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
 
 @Composable
 private fun LinkListSection(section: ScreenSection, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let {
             MinSectionHeader(title = it)
         }
@@ -490,7 +509,7 @@ private fun LinkListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
         ) {
             section.cards.forEachIndexed { i, card ->
                 CardRow(
-                    left = { Text(card.title, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = MinText) },
+                    left = { Text(card.title, style = Movi.textos.titulo, color = Movi.colores.texto) },
                     showChevron = true,
                     isLast = i == section.cards.size - 1,
                     onClick = clickHandler(card.action, onNavigate, uriHandler),
@@ -508,7 +527,7 @@ private fun LinkListSection(section: ScreenSection, onNavigate: (Screen) -> Unit
 @Composable
 private fun BannerSection(section: ScreenSection, onNavigate: (Screen) -> Unit, uriHandler: UriHandler) {
     val action = section.cards.firstOrNull()?.action
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         section.title?.let { MinSectionHeader(title = it) }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -521,7 +540,7 @@ private fun BannerSection(section: ScreenSection, onNavigate: (Screen) -> Unit, 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    section.text?.let { Text(it, fontSize = 14.sp, color = MinTextMute) }
+                    section.text?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio) }
                 }
                 if (action != null) ChevronRight()
             }
@@ -537,14 +556,14 @@ private fun SduiCardTile(card: ScreenCard, onClick: (() -> Unit)?) {
         variant = MinCardVariant.Default,
         padding = PaddingValues(14.dp),
     ) {
-        Text(card.title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = MinText, maxLines = 2)
+        Text(card.title, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 2)
         card.subtitle?.let {
             Spacer(Modifier.height(4.dp))
-            Text(it, fontSize = 11.5.sp, color = MinTextMute, maxLines = 2)
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 2)
         }
         card.badge?.let {
             Spacer(Modifier.height(6.dp))
-            Text(it, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = MinPrimary)
+            Text(it, style = Movi.textos.rotulo, color = Movi.colores.marca)
         }
     }
 }
