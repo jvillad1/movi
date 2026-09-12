@@ -20,9 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.jvillada.movi.theme.MinBg
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinText
+import com.jvillada.movi.theme.Movi
 
 /**
  * F18: el "+" chiquito arriba a la derecha era la única forma de crear en Presupuestos,
@@ -42,27 +40,35 @@ fun NewItemButton(
         Row(
             modifier = modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(MinPrimary)
+                .clip(RoundedCornerShape(Movi.formas.amplia))
+                .background(Movi.colores.marca)
                 .clickable(onClick = onClick)
                 .padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = MinBg, modifier = Modifier.size(18.dp).padding(end = 6.dp))
-            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MinBg)
+            // El ícono y el rótulo iban en `MinBg` —el color del FONDO de la app— usado como
+            // «lo que va encima del lavanda». Funcionaba de casualidad: nadie había nombrado ese
+            // rol. Ahora se llama `sobreMarca` y la prueba de contraste lo vigila.
+            Icon(
+                Icons.Rounded.Add,
+                contentDescription = null,
+                tint = Movi.colores.sobreMarca,
+                modifier = Modifier.size(18.dp).padding(end = Movi.espacios.minimo + 2.dp),
+            )
+            Text(label, style = Movi.textos.cuerpo, color = Movi.colores.sobreMarca)
         }
     } else {
         Row(
             modifier = modifier
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(Movi.formas.pleno))
                 .clickable(onClick = onClick)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = Movi.espacios.minimo, vertical = Movi.espacios.minimo),
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.minimo),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = MinPrimary, modifier = Modifier.size(16.dp))
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MinPrimary)
+            Icon(Icons.Rounded.Add, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
+            Text(label, style = Movi.textos.cuerpo, color = Movi.colores.marca)
         }
     }
 }
