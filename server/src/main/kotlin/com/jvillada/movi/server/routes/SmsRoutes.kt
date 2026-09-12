@@ -33,9 +33,62 @@ private val amountRegex = Regex("""\$\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]
 private val merchantInRegex = Regex("""en\s+(.+?)(?:\s+el\s|\s+a\s+las|\.|$)""", RegexOption.IGNORE_CASE)
 private val merchantOfRegex = Regex("""de\s+(.+?)(?:\.|$)""", RegexOption.IGNORE_CASE)
 
+/**
+ * **Cuánta plata dice un SMS**, sin importar si el banco escribió a la colombiana o a la gringa.
+ *
+ * ### El bug que esto arregla, y por qué era peor de lo que parecía
+ *
+ * Antes acá había una línea: `raw.replace(".", "").replace(",", ".")` — o sea, dar por sentado que
+ * el punto separa miles y la coma decimales. Bancolombia manda **las dos formas**, y con las de
+ * coma esa línea no fallaba: mentía.
+ *
+ * | SMS | De verdad | Lo que se leía |
+ * |---|---|---|
+ * | `$3,500,000.00` | 3.500.000 | nada: `null`, «no pude parsear» |
+ * | `$20,417` | 20.417 | **20,42** |
+ * | `$24,000.00` | 24.000 | **24** |
+ * | `$80.894` | 80.894 | 80.894 |
+ *
+ * El único que se notaba era el primero. Los otros dos entraban como sugerencia mil veces más
+ * chica, y el dueño los tenía a la vista en una bandeja de 96 mensajes esperando confirmación.
+ *
+ * ### Cómo se decide cuál separador es cuál
+ *
+ * 1. **Si aparecen los dos caracteres**, el ÚLTIMO es el decimal y el otro es de miles. Cubre
+ *    `1.234.567,89` y `3,500,000.00` sin saber de qué país viene ninguno.
+ * 2. **Si aparece uno solo y más de una vez**, es de miles: `3,500,000`.
+ * 3. **Si aparece una sola vez**, decide cuántos dígitos lo siguen: exactamente tres son miles
+ *    (`20,417`, `80.894`), cualquier otra cantidad son decimales (`3,5`, `1.50`).
+ *
+ * La regla 3 es la única con una zona gris de verdad —`1,234` podría ser mil doscientos treinta y
+ * cuatro o uno con doscientos treinta y cuatro milésimos— y se resuelve del lado de los miles a
+ * propósito: estos mensajes hablan de pesos colombianos, donde tres decimales no existen y los
+ * montos de cuatro cifras son el pan de cada día.
+ */
+internal fun montoDelSms(raw: String): Double? {
+    val ultimaComa = raw.lastIndexOf(',')
+    val ultimoPunto = raw.lastIndexOf('.')
+    if (ultimaComa < 0 && ultimoPunto < 0) return raw.toDoubleOrNull()
+
+    val separadorDecimal: Char? = when {
+        // Los dos están: manda el último.
+        ultimaComa >= 0 && ultimoPunto >= 0 -> if (ultimaComa > ultimoPunto) ',' else '.'
+        else -> {
+            val cual = if (ultimaComa >= 0) ',' else '.'
+            val veces = raw.count { it == cual }
+            val digitosDespues = raw.length - raw.lastIndexOf(cual) - 1
+            // Repetido = miles. Una sola vez = miles solo si separa un grupo de tres.
+            if (veces > 1 || digitosDespues == 3) null else cual
+        }
+    }
+    val entero = raw.filter { it.isDigit() || it == separadorDecimal }
+    return (if (separadorDecimal == null) entero else entero.replace(separadorDecimal, '.'))
+        .toDoubleOrNull()
+}
+
 internal fun parseSms(text: String): ParsedSms? {
     val rawAmount = amountRegex.find(text)?.groupValues?.get(1) ?: return null
-    val amount = rawAmount.replace(".", "").replace(",", ".").toDoubleOrNull() ?: return null
+    val amount = montoDelSms(rawAmount) ?: return null
 
     val type = when {
         text.contains("Recibiste", ignoreCase = true) -> TransactionType.INCOME
