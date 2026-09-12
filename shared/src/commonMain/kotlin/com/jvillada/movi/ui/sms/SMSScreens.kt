@@ -333,6 +333,9 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         uso = usoDeCuenta,
         banco = currentSms?.bank.orEmpty(),
         elegidaAMano = cuentaElegida,
+        // El SMS entero: adentro está el número de cuenta que el banco escribió, y ese es el único
+        // dato duro de toda esta pantalla sobre a qué cuenta va el movimiento.
+        textoDelMensaje = currentSms?.text.orEmpty(),
     )
     val resolvedAccount = cuentaDelSms.cuenta
 
