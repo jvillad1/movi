@@ -23,6 +23,7 @@ import io.ktor.server.response.respond
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.periodoDe
 import io.ktor.server.routing.Route
@@ -70,8 +71,12 @@ fun Route.dashboardRoutes() {
         // renglón «este dispositivo tiene $121.210 que el total de arriba todavía no cuenta»
         // culpando a una desincronización que no existía: las dos mitades miraban meses
         // distintos. Es exactamente la contradicción que `currentPeriodWindow` vino a eliminar.
-        val periodo = PeriodSettings(cutoffDay = cutoffDayOf(uid).coerceIn(1, 31))
-        val (monthStart, monthEnd) = currentPeriodWindow(periodo.cutoffDay)
+        // El período ENTERO —el corte y los meses que arrancaron otro día—, leído una sola vez y
+        // usado para las dos cosas: la ventana que suma y el rótulo que la nombra. Antes acá se
+        // leía solo el corte, así que un período con arranque propio movía Movimientos y dejaba
+        // al Inicio contando otra ventana sobre la misma plata.
+        val periodo = ajustesDePeriodoDe(uid)
+        val (monthStart, monthEnd) = currentPeriodWindow(periodo)
         // Segunda lectura del reloj (`currentPeriodWindow` hace la suya): entre las dos podría
         // cruzarse la medianoche del corte y dejar el rótulo nombrando un período distinto del
         // que se sumó. Es una ventana de microsegundos una vez al mes y el rótulo hoy no lo lee
