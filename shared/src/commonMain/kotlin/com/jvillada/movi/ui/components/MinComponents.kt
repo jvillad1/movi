@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -22,24 +23,50 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 
-enum class MinCardVariant { Default, Elevated, High }
+/**
+ * Las tres alturas de tarjeta que **ya no son tres colores**.
+ *
+ * Eran `#191B20`, `#1D1F25` y `#22252B`: tres grises a 1,10 · 1,15 · 1,23 de contraste contra el
+ * fondo, o sea tres planos separados por casi nada, que en un teléfono al sol no se distinguen.
+ *
+ * Ahora las tres pintan `Movi.colores.tarjeta` y la que necesita despegarse suma **borde**. Es la
+ * decisión de la dirección B: en una paleta de poco contraste la profundidad la dan la superficie
+ * y el borde juntos, no la superficie sola. Un borde a 1,27:1 se ve; un gris a 1,05 de distancia
+ * del anterior, no.
+ *
+ * El enum sobrevive porque lo nombran 69 llamadas, y en los hechos ya era uno solo: [Elevated] en
+ * 60, [Default] en 8 y [High] en **una**.
+ */
+enum class MinCardVariant {
+    /** Lo normal. Sin borde. */
+    Default,
+
+    /** Lo normal también. Se conserva porque es el default histórico y lo dicen 60 llamadas. */
+    Elevated,
+
+    /** La que va ENCIMA de otra tarjeta: misma superficie, con borde para despegarse. */
+    High,
+}
 
 @Composable
 fun MinCard(
     modifier: Modifier = Modifier,
     variant: MinCardVariant = MinCardVariant.Elevated,
-    padding: PaddingValues = PaddingValues(20.dp),
+    padding: PaddingValues = PaddingValues(Movi.espacios.margen),
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val bg = when (variant) {
-        MinCardVariant.Default  -> MinSurfaceContainerLow
-        MinCardVariant.Elevated -> MinSurfaceContainer
-        MinCardVariant.High     -> MinSurfaceContainerHigh
-    }
+    val forma = RoundedCornerShape(Movi.formas.amplia)
     val baseModifier = modifier
-        .clip(RoundedCornerShape(16.dp))
-        .background(bg)
+        .clip(forma)
+        .background(Movi.colores.tarjeta)
+        .then(
+            if (variant == MinCardVariant.High) {
+                Modifier.border(1.dp, Movi.colores.borde, forma)
+            } else {
+                Modifier
+            },
+        )
         .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
         .padding(padding)
     Column(modifier = baseModifier, content = content)
@@ -50,7 +77,7 @@ fun Hairline(insetStart: Dp = 0.dp, insetEnd: Dp = 0.dp) {
     HorizontalDivider(
         modifier = Modifier.padding(start = insetStart, end = insetEnd),
         thickness = 1.dp,
-        color = MinHairline,
+        color = Movi.colores.hilo,
     )
 }
 
@@ -64,32 +91,31 @@ fun MinSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
+            .padding(start = Movi.espacios.corto, end = Movi.espacios.corto, bottom = Movi.espacios.medio),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row {
+            // El rótulo del sistema espacia 1,7.sp contra los 0,5 de antes. En mayúsculas el
+            // espaciado no es adorno: sin él las versales se leen como una palabra apretada.
             Text(
                 text = title.uppercase(),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinTextMute,
-                letterSpacing = 0.5.sp,
+                style = Movi.textos.rotulo,
+                color = Movi.colores.textoMedio,
             )
             if (count != null) {
                 Text(
                     text = " · $count",
-                    fontSize = 11.sp,
-                    color = MinTextFaint,
+                    style = Movi.textos.rotulo,
+                    color = Movi.colores.textoApagado,
                 )
             }
         }
         if (action != null) {
             Text(
                 text = action,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MinPrimary,
+                style = Movi.textos.cuerpo,
+                color = Movi.colores.marca,
                 modifier = if (onAction != null) Modifier.clickable(onClick = onAction) else Modifier,
             )
         }
@@ -137,15 +163,15 @@ fun CardRow(
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 left()
                 if (sub != null) {
                     Text(
                         text = sub,
-                        fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
@@ -168,20 +194,41 @@ fun CardRow(
     }
 }
 
+/**
+ * Una cifra. **Tabular, no monoespaciada** — y ahí está todo el cambio.
+ *
+ * Se llamaba `MonoText` y ponía `FontFamily.Monospace`, que es lo que le da a Movi aire de
+ * terminal en vez de producto de plata. Los dos efectos no son el mismo: para que una columna de
+ * montos alinee alcanza con **cifras tabulares** (`tnum`), que trae casi toda tipografía moderna y
+ * solo le da ancho fijo a los dígitos. La monoespaciada además le cambia la forma a todo, y de
+ * paso arrastra las letras del símbolo y del sufijo «M».
+ *
+ * Copilot Money, el referente de oficio del sector, declara `tnum` explícitamente. De las otras
+ * tres apps de finanzas personales del benchmark ninguna lo hace, ni siquiera YNAB, cuya pantalla
+ * central es literalmente una tabla de montos.
+ *
+ * Quedan 78 `FontFamily.Monospace` sueltos en el resto de la app; se van con sus pantallas.
+ *
+ * @param fontSize en sp, como `Float`, tal cual lo pedían las 18 llamadas que ya existían. Es el
+ *   único parámetro que no sale del sistema todavía: el tamaño de una cifra depende de si es el
+ *   número protagonista o un renglón, y eso lo sabe la pantalla, no el componente.
+ */
 @Composable
-fun MonoText(
+fun Cifra(
     text: String,
     fontSize: Float,
-    color: Color = MinText,
+    color: Color = Movi.colores.texto,
     fontWeight: FontWeight = FontWeight.Medium,
 ) {
     Text(
         text = text,
-        fontSize = fontSize.sp,
-        fontFamily = FontFamily.Monospace,
-        fontWeight = fontWeight,
+        style = Movi.textos.monto.copy(
+            fontSize = fontSize.sp,
+            lineHeight = (fontSize * 1.33f).sp,
+            fontWeight = fontWeight,
+            letterSpacing = (-0.3).sp,
+        ),
         color = color,
-        letterSpacing = (-0.3).sp,
     )
 }
 
@@ -192,7 +239,9 @@ fun ChevronRight() {
     Icon(
         Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
-        tint = MinTextFaint,
+        // Era MinTextFaint: 2,51:1 contra el fondo. Una flecha que dice «esto se toca» y no se
+        // ve no dice nada. textoApagado da 7,51:1.
+        tint = Movi.colores.textoApagado,
         modifier = Modifier.size(18.dp),
     )
 }

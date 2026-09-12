@@ -204,7 +204,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(8.dp))
-                            MonoText(
+                            Cifra(
                                 text = formatCOP(balance.patrimonio), // formatCOP ya trae el signo (F36) — no duplicarlo acá
                                 fontSize = 28f,
                                 // Ola 9: **neutro en los dos signos**, como el patrimonio del Inicio.
@@ -229,7 +229,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // que la cifra grande del Inicio, y compartir la palabra es lo
                                 // que hace obvio que son la misma cosa vista dos veces.
                                 Text("Tu plata", fontSize = 12.sp, color = MinTextMute)
-                                MonoText(formatCOP(balance.tuPlata), 12f, color = MinIncome)
+                                Cifra(formatCOP(balance.tuPlata), 12f, color = MinIncome)
                             }
                             // El renglón que faltaba: sin él, tu plata − deudas no daba el
                             // patrimonio de arriba y el lector no tenía forma de cerrar la resta.
@@ -244,7 +244,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                         fontSize = 12.sp,
                                         color = MinTextMute,
                                     )
-                                    MonoText(formatCOP(balance.condicionado), 12f, color = MinTextDim)
+                                    Cifra(formatCOP(balance.condicionado), 12f, color = MinTextDim)
                                 }
                             }
                             if (balance.deudas > 0) {
@@ -254,7 +254,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text("Deudas", fontSize = 12.sp, color = MinTextMute)
-                                    MonoText("−${formatCOP(balance.deudas)}", 12f, color = MinExpense)
+                                    Cifra("−${formatCOP(balance.deudas)}", 12f, color = MinExpense)
                                 }
                             }
                         }
@@ -363,7 +363,7 @@ private fun AccountsGroup(
                 Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = 0.5.sp)
                 Text(" · ${accounts.size}", fontSize = 11.sp, color = MinTextFaint)
             }
-            MonoText(formatCOP(accounts.sumOf { it.balance }), 12f, color = MinTextDim)
+            Cifra(formatCOP(accounts.sumOf { it.balance }), 12f, color = MinTextDim)
         }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -401,7 +401,7 @@ private fun AccountsGroup(
                     },
                     sub = typeLabel,
                     right = {
-                        MonoText(
+                        Cifra(
                             text = formatCOP(account.balance),
                             fontSize = 14.5f,
                             color = MinIncome,

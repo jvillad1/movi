@@ -51,12 +51,15 @@ fun MinBottomNav(
     // ninguna pantalla la llama por su cuenta.
     if (LocalWindowWidthClass.current == WindowWidthClass.Expanded) return
     val highlighted = active?.asBottomBarTab()
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MinSurfaceContainer)
+            .background(Movi.colores.tarjeta)
             .navigationBarsPadding(),
     ) {
+        // La barra se despega del contenido con un BORDE, no con otro gris. Es la misma decisión
+        // que la de las tarjetas: con planos tan cercanos, el borde es el que hace el trabajo.
+        Hairline()
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -74,13 +77,16 @@ fun MinBottomNav(
                     .size(52.dp)
                     .shadow(6.dp, CircleShape)
                     .clip(CircleShape)
-                    .background(MinPrimary)
+                    .background(Movi.colores.marca)
                     .clickable { onTabSelected(NavTab.ADD) },
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
                     contentDescription = "Agregar",
-                    tint = Color(0xFF1A1040),
+                    // Era un `Color(0xFF1A1040)` escrito a mano acá, el único lugar de la app que
+                    // lo decía. Ese valor ES el rol `sobreMarca`, y ahora se llama así: da 8,47:1
+                    // contra el lavanda, y la prueba de contraste no deja que baje.
+                    tint = Movi.colores.sobreMarca,
                     modifier = Modifier.size(26.dp),
                 )
             }
@@ -112,23 +118,29 @@ private fun NavItem(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .background(if (isActive) MinPrimaryContainer else Color.Transparent)
+                .clip(RoundedCornerShape(Movi.formas.pleno))
+                // La píldora del activo era un morado sólido propio (`MinPrimaryContainer`), un
+                // color que existía solo para esto. Ahora es la MARCA lavada: el sistema tiene un
+                // lavanda, no dos, y el ícono encima va del mismo lavanda a plena fuerza.
+                .background(
+                    if (isActive) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent,
+                )
                 .padding(horizontal = 14.dp, vertical = 3.dp),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isActive) MinOnPrimaryContainer else MinTextMute,
+                tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
                 modifier = Modifier.size(22.dp),
             )
         }
         Text(
             text = label,
-            fontSize = 10.sp,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isActive) MinText else MinTextMute,
-            letterSpacing = 0.2.sp,
+            style = Movi.textos.rotulo.copy(
+                letterSpacing = 0.2.sp,
+                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
         )
     }
 }

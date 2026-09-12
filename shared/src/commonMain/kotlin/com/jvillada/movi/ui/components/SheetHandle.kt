@@ -17,8 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.jvillada.movi.theme.MinTextFaint
-import com.jvillada.movi.theme.MinTextMute
+import com.jvillada.movi.theme.Movi
 
 /**
  * F37: manija (32×4.dp, centrada) + X para cerrar (44.dp de área tocable, arriba a la derecha),
@@ -47,7 +46,9 @@ fun SheetHandleWithClose(
                 .width(32.dp)
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(MinTextFaint),
+                // La manija iba en `MinTextFaint` (2,51:1): la pista de «esto se arrastra» era
+                // justo lo que menos se veía. `borde` es el rol de una línea, no de un texto.
+                .background(Movi.colores.borde),
         )
         Box(
             modifier = Modifier
@@ -60,7 +61,7 @@ fun SheetHandleWithClose(
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = "Cerrar",
-                tint = MinTextMute,
+                tint = Movi.colores.textoMedio,
                 modifier = Modifier.size(20.dp),
             )
         }
