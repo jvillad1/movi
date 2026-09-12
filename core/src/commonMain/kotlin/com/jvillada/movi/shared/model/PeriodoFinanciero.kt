@@ -46,13 +46,51 @@ data class PeriodSettings(
      * no lo toque no ve ningún cambio.
      */
     val cutoffDay: Int = 1,
+    /**
+     * **Los períodos que arrancaron otro día**, por excepción y uno por uno: `"2026-09"` → la
+     * fecha ISO en que ese período empezó de verdad.
+     *
+     * ### Por qué un día fijo no alcanza
+     *
+     * El dueño lo pidió con todas las letras: *«puede indicar el comienzo de un nuevo periodo que
+     * implícitamente indica el cierre del anterior en cualquier momento, esto porque no siempre
+     * los pagos suceden misma fecha y puede que un mes dure más o menos el periodo»*.
+     *
+     * Y es cierto para él: [cutoffDay] vale 25 porque ahí le suele caer el salario, pero un 25 que
+     * cae domingo se paga el 24 o el 26. Con un día fijo, el mes que se corrió arrastra el error a
+     * todas las cifras de dos períodos — el salario queda del lado equivocado del corte, que es
+     * exactamente el problema que el corte vino a resolver.
+     *
+     * ### Es una excepción, no un modo
+     *
+     * El mapa está **vacío casi siempre**, y lo que no está en él sale de [cutoffDay] como antes.
+     * Eso importa: no hay dos maneras de calcular un período compitiendo, hay una regla y una
+     * lista de excepciones declaradas a mano. Un período con inicio propio **mueve también el
+     * final del anterior**, porque el final de uno es el arranque del que sigue — que es
+     * literalmente lo que el dueño describió: «el comienzo de un nuevo periodo implícitamente
+     * indica el cierre del anterior».
+     *
+     * ### Qué pasa con un valor imposible
+     *
+     * Una fecha que no se entiende, o que caería fuera del mes que le da nombre, **se ignora** y
+     * ese período vuelve a la regla del corte. Ver [inicioDelPeriodo]. Es a propósito: un dato
+     * roto no puede hacer desaparecer movimientos de la vista ni partir la línea de tiempo en dos.
+     */
+    val iniciosPropios: Map<String, String> = emptyMap(),
 ) {
     init {
         require(cutoffDay in 1..31) { "El día de corte va de 1 a 31" }
     }
 
-    /** `true` cuando el corte es el default y todo se comporta como el mes de calendario. */
-    val esMesDeCalendario: Boolean get() = cutoffDay == 1
+    /**
+     * `true` cuando el corte es el default **y nadie movió ningún período a mano**: ahí todo se
+     * comporta exactamente como el mes de calendario.
+     *
+     * El segundo término no es cosmético. Con un inicio propio declarado, la ventana ya no es la
+     * del mes civil aunque el corte siga siendo 1, y quien lea solo `cutoffDay` para decidir
+     * «esto es el mes de siempre» se saltearía la excepción.
+     */
+    val esMesDeCalendario: Boolean get() = cutoffDay == 1 && iniciosPropios.isEmpty()
 }
 
 /**
@@ -88,6 +126,41 @@ private fun inicioDe(year: Int, month: Int, cutoffDay: Int): LocalDate =
     LocalDate(year, month, minOf(cutoffDay, diasDelMes(year, month)))
 
 /**
+ * **El día en que arrancó un período**: el del corte, salvo que el dueño haya dicho otro.
+ *
+ * Es el único lugar donde la excepción de [PeriodSettings.iniciosPropios] se mira, y por eso todo
+ * lo demás —la ventana, en qué período cae una fecha, el rango que se lee en pantalla— la respeta
+ * sin saber que existe.
+ *
+ * **Un inicio propio que no se entiende se ignora**, y son dos casos: una cadena que no es fecha, y
+ * una fecha que cae fuera del mes en que ese período podría arrancar. Lo segundo importa más de lo
+ * que parece: con corte 25, «septiembre» arranca en agosto, así que declararle un inicio en octubre
+ * no es correr un borde, es partir la línea de tiempo — dejaría días sin período y días en dos.
+ * Ante un dato así se vuelve a la regla del corte, que siempre da una ventana sana.
+ */
+fun inicioDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): LocalDate {
+    val porCorte = inicioPorCorte(periodo, settings.cutoffDay)
+    val declarado = settings.iniciosPropios[periodo.prefijo]
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        ?: return porCorte
+    // El mes en el que ese período puede arrancar es el de `porCorte` y ningún otro.
+    return if (declarado.year == porCorte.year && declarado.month == porCorte.month) declarado
+    else porCorte
+}
+
+/** El arranque que le tocaría por la regla del corte, sin mirar excepciones. */
+private fun inicioPorCorte(periodo: PeriodoFinanciero, cutoffDay: Int): LocalDate {
+    // Con corte 1 el período se llama por su propio mes; con cualquier otro arranca en el mes
+    // ANTERIOR al que le da nombre (26 de agosto → «septiembre»).
+    val (y, m) = if (cutoffDay == 1) {
+        periodo.year to periodo.month
+    } else {
+        if (periodo.month == 1) (periodo.year - 1) to 12 else periodo.year to (periodo.month - 1)
+    }
+    return inicioDe(y, m, cutoffDay)
+}
+
+/**
  * La ventana `[inicio, fin)` del período, en instantes epoch-ms.
  *
  * El fin es **exclusivo** a propósito: el instante que abre el período siguiente no pertenece a
@@ -96,21 +169,13 @@ private fun inicioDe(year: Int, month: Int, cutoffDay: Int): LocalDate =
  */
 fun ventanaDe(periodo: PeriodoFinanciero, settings: PeriodSettings): LongRange {
     val zona = AppTimeZone.zone
-    val (year, month) = periodo.year to periodo.month
-    // Con corte 1 el período se llama por su propio mes; con cualquier otro corte arranca en el
-    // mes ANTERIOR al que le da nombre (26 de agosto → «septiembre»).
-    val (yInicio, mInicio) = if (settings.esMesDeCalendario) {
-        year to month
-    } else {
-        if (month == 1) (year - 1) to 12 else year to (month - 1)
-    }
-    val (yFin, mFin) = if (settings.esMesDeCalendario) {
-        if (month == 12) (year + 1) to 1 else year to (month + 1)
-    } else {
-        year to month
-    }
-    val inicio = inicioDe(yInicio, mInicio, settings.cutoffDay).atStartOfDayIn(zona)
-    val fin = inicioDe(yFin, mFin, settings.cutoffDay).atStartOfDayIn(zona)
+    // **El final de un período ES el arranque del siguiente.** Escrito así, un inicio propio mueve
+    // los dos bordes a la vez y no hay forma de que queden días sin período o días en dos — que es
+    // lo que pasaba cuando cada borde se calculaba por su cuenta. Es también, literalmente, lo que
+    // pidió el dueño: «el comienzo de un nuevo periodo implícitamente indica el cierre del
+    // anterior».
+    val inicio = inicioDelPeriodo(periodo, settings).atStartOfDayIn(zona)
+    val fin = inicioDelPeriodo(periodoSiguiente(periodo), settings).atStartOfDayIn(zona)
     return inicio.toEpochMilliseconds() until fin.toEpochMilliseconds()
 }
 
@@ -123,9 +188,28 @@ fun periodoDe(epochMillis: Long, settings: PeriodSettings): PeriodoFinanciero {
     val fecha = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(AppTimeZone.zone).date
     if (settings.esMesDeCalendario) return PeriodoFinanciero(fecha.year, fecha.month.number)
 
+    val porElCorte = periodoPorElCorte(fecha, settings.cutoffDay)
+    if (settings.iniciosPropios.isEmpty()) return porElCorte
+
+    // **Con inicios propios, el candidato del corte puede estar corrido.** Un período que arrancó
+    // antes se lleva días del anterior; uno que arrancó después se los devuelve. El desplazamiento
+    // no puede pasar de un mes —un inicio propio vive en el mismo mes que su arranque natural, ver
+    // [inicioDelPeriodo]— así que alcanza con mirar al vecino de cada lado y quedarse con el que de
+    // verdad contiene la fecha.
+    //
+    // Se pregunta por la VENTANA en vez de recalcular la regla: así esta función y [ventanaDe]
+    // nunca pueden discrepar sobre dónde está un borde.
+    val millis = fecha.atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds()
+    val candidatos = listOf(periodoAnterior(porElCorte), porElCorte, periodoSiguiente(porElCorte))
+    return candidatos.firstOrNull { millis in ventanaDe(it, settings) } ?: porElCorte
+}
+
+/** En qué período cae [fecha] por la regla del corte, sin mirar excepciones. */
+private fun periodoPorElCorte(fecha: LocalDate, cutoffDay: Int): PeriodoFinanciero {
+    if (cutoffDay == 1) return PeriodoFinanciero(fecha.year, fecha.month.number)
     // Antes del corte todavía se está en el período que arrancó el mes pasado, y ese período se
     // llama por el mes en curso. A partir del corte empieza el que se llama por el mes siguiente.
-    val corteDeEsteMes = inicioDe(fecha.year, fecha.month.number, settings.cutoffDay)
+    val corteDeEsteMes = inicioDe(fecha.year, fecha.month.number, cutoffDay)
     return if (fecha < corteDeEsteMes) {
         PeriodoFinanciero(fecha.year, fecha.month.number)
     } else {

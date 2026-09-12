@@ -21,6 +21,9 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.server.reminders.ReminderConfig
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 
 /**
  * F42 · F46 — editar perfil. Hasta la Ola 6 el usuario tenía id, correo, nombre y contraseña, y
@@ -82,8 +85,32 @@ fun Route.userRoutes() {
             if (req.reminderLeadDays != null && req.reminderLeadDays !in 0..30) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Los días de aviso van de 0 a 30")
             }
+            // Los arranques propios: cada clave un período «AAAA-MM» y cada valor una fecha ISO
+            // real. **No se valida que la fecha caiga en el mes correcto acá**, y es a propósito:
+            // esa regla vive en `inicioDelPeriodo` (:core), que ante un valor imposible vuelve al
+            // corte en vez de romper. Duplicarla acá obligaría a mantener dos copias de la misma
+            // decisión — y la del cliente ya la respeta.
+            val periodosMalFormados = req.periodStarts.orEmpty().filterNot { (periodo, inicio) ->
+                PERIODO_VALIDO.matches(periodo) && FECHA_VALIDA.matches(inicio)
+            }
+            if (periodosMalFormados.isNotEmpty()) {
+                return@put call.respond(
+                    HttpStatusCode.BadRequest,
+                    "Un período se escribe «AAAA-MM» y su arranque «AAAA-MM-DD»: " +
+                        periodosMalFormados.keys.joinToString(", "),
+                )
+            }
+            // Un tope, porque esto se guarda entero en una columna y crece solo si alguien lo
+            // llena: diez años de excepciones mensuales son 120, y nadie declara más que eso.
+            val iniciosPedidos = req.periodStarts
+            if (iniciosPedidos != null && iniciosPedidos.size > MAX_INICIOS_PROPIOS) {
+                return@put call.respond(
+                    HttpStatusCode.BadRequest,
+                    "Son demasiados períodos con arranque propio (máximo $MAX_INICIOS_PROPIOS)",
+                )
+            }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
-                req.reminderLeadDays == null && req.smsAlertMuted == null
+                req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
             }
@@ -93,6 +120,11 @@ fun Route.userRoutes() {
                     trimmedName?.let { stmt[Users.name] = it }
                     req.avatarColor?.let { stmt[Users.avatarColor] = it }
                     req.periodCutoffDay?.let { stmt[Users.periodCutoffDay] = it }
+                    // Reemplaza el mapa entero, incluido el vacío: mandar `{}` es cómo se dice
+                    // «ninguno arranca distinto». Ver [UpdateProfileRequest.periodStarts].
+                    iniciosPedidos?.let {
+                        stmt[Users.periodStarts] = Json.encodeToString(MapSerializer(String.serializer(), String.serializer()), it)
+                    }
                     req.reminderLeadDays?.let { stmt[Users.reminderLeadDays] = it }
                     // Sin rango que validar: es un sí o un no. Mandar `false` es tan válido como
                     // mandar `true` — así se vuelve a mostrar el aviso del Inicio.
@@ -151,8 +183,32 @@ private fun ResultRow.toProfile() = UserProfile(
     avatarColor = this[Users.avatarColor] ?: AvatarPalette.DEFAULT,
     // Sin elegir = mes de calendario, que es como se comportó Movi siempre.
     periodCutoffDay = this[Users.periodCutoffDay] ?: 1,
+    // Sin excepciones declaradas = todos los períodos salen del día de corte. Un JSON que no se
+    // pueda leer se trata igual que uno vacío: el perfil tiene que poder responderse siempre, y
+    // un mapa roto no puede dejar al dueño sin app.
+    periodStarts = this[Users.periodStarts]?.let { leerIniciosPropios(it) } ?: emptyMap(),
     // Sin elegir = lo que el server tenga configurado, que a su vez cae al default de :core.
     reminderLeadDays = this[Users.reminderLeadDays] ?: ReminderConfig.leadDays(),
     // Sin tocar = no silenciado: el aviso de captura se muestra hasta que alguien pida callarlo.
     smsAlertMuted = this[Users.smsAlertMuted] ?: false,
 )
+
+/** Un período se escribe «AAAA-MM». */
+private val PERIODO_VALIDO = Regex("""\d{4}-(0[1-9]|1[0-2])""")
+
+/** Y su arranque, «AAAA-MM-DD». El día real lo valida :core al calcular la ventana. */
+private val FECHA_VALIDA = Regex("""\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])""")
+
+/** Diez años de excepciones mensuales. Nadie declara más, y el tope evita que la columna crezca sola. */
+private const val MAX_INICIOS_PROPIOS = 120
+
+/**
+ * El JSON de la columna, o un mapa vacío si no se entiende.
+ *
+ * **Nunca lanza**, y ese es el punto: este valor se lee en cada respuesta de perfil, y un JSON roto
+ * —escrito a mano, migrado a medias— dejaría al dueño sin poder abrir la app por una excepción que
+ * se puede escribir como «no hay ninguno».
+ */
+private fun leerIniciosPropios(json: String): Map<String, String> = runCatching {
+    Json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), json)
+}.getOrElse { emptyMap() }
