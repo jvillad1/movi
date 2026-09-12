@@ -115,13 +115,13 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                 Column {
                     Text("Familiar", fontSize = 11.sp, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(6.dp))
-                    Text("$4.870.000", fontSize = 22.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto, letterSpacing = (-0.6).sp)
+                    Text("$4.870.000", fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.6).sp)
                     Spacer(Modifier.height(12.dp))
                     Hairline()
                     Spacer(Modifier.height(10.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("3 miembros", fontSize = 11.sp, color = Movi.colores.textoMedio)
-                        Text("+12,4%", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
+                        Text("+12,4%", fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
                     }
                 }
             }
@@ -140,7 +140,7 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                 Column {
                     Text("Balance · abril", fontSize = 11.sp, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(6.dp))
-                    Text("$1.840.000", fontSize = 28.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto, letterSpacing = (-1.0).sp)
+                    Text("$1.840.000", fontSize = 28.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-1.0).sp)
                     Spacer(Modifier.height(10.dp))
                     SimpleSparkline(
                         modifier = Modifier.fillMaxWidth().height(32.dp),
@@ -212,7 +212,7 @@ fun OnboardingProfileScreen(onNavigate: (Screen) -> Unit) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
             OnboardingDots(step = 6)
             Spacer(Modifier.weight(1f))
-            Text("6/6", fontSize = 12.sp, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace)
+            Text("6/6", fontSize = 12.sp, color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
         }
 
         Column(

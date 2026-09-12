@@ -116,9 +116,8 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 Text(
                     "BETA",
                     fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
                     color = Movi.colores.textoMedio,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.rotulo,
                     letterSpacing = 0.6.sp,
                 )
             },

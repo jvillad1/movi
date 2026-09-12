@@ -249,7 +249,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                                 SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
                                 else -> sms.state.uppercase() to Movi.colores.textoMedio
                             }
-                            Text(label, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = color, letterSpacing = 0.4.sp)
+                            Text(label, fontSize = 10.5.sp, style = Movi.textos.rotulo, color = color, letterSpacing = 0.4.sp)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
@@ -423,7 +423,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(sms!!.bank, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text("SMS", fontSize = 11.sp, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
+                            Text("SMS", fontSize = 11.sp, color = Movi.colores.textoMedio, style = Movi.textos.rotulo, letterSpacing = 0.4.sp)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
                             Text(sms!!.time, fontSize = 11.sp, color = Movi.colores.textoMedio)
                         }
@@ -434,7 +434,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                 "\"${sms!!.text}\"",
                                 fontSize = 13.sp,
                                 color = Movi.colores.textoMedio,
-                                fontFamily = FontFamily.Monospace,
+                                style = Movi.textos.monto,
                                 lineHeight = 19.sp,
                                 modifier = Modifier.padding(start = 12.dp),
                             )
@@ -472,7 +472,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             Text(
                                 "$sign\$${formatThousands(p.amount.toLong())}",
                                 fontSize = 17.sp,
-                                fontFamily = FontFamily.Monospace,
+                                style = Movi.textos.monto,
                                 fontWeight = FontWeight.Medium,
                                 color = color,
                                 letterSpacing = (-0.4).sp,

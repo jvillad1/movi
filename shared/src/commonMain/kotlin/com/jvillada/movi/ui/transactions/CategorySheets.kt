@@ -696,7 +696,7 @@ fun CardPaymentCandidatesSheet(
                     Text(
                         formatCOP(event.amount),
                         fontSize = 13.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = Movi.textos.monto,
                         color = Movi.colores.texto,
                         modifier = Modifier.padding(end = 10.dp),
                     )
@@ -850,7 +850,7 @@ private fun SeccionDelMovimiento(
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                fontFamily = FontFamily.Monospace,
+                style = Movi.textos.monto,
             )
             // El nombre de la cuenta y no su id: si la lista todavía no llegó no se inventa nada.
             cuentaActual?.let {

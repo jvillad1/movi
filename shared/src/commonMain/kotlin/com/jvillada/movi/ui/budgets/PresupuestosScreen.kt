@@ -254,7 +254,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                         Text(
                             text = formatCOP(totalSpent),
                             fontSize = 36.sp,
-                            fontFamily = FontFamily.Monospace,
+                            style = Movi.textos.monto,
                             color = Movi.colores.texto,
                             letterSpacing = (-1.4).sp,
                             lineHeight = 36.sp,
@@ -264,7 +264,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                             text = "de ${formatCOP(totalLimit)}",
                             fontSize = 13.sp,
                             color = Movi.colores.textoMedio,
-                            fontFamily = FontFamily.Monospace,
+                            style = Movi.textos.monto,
                         )
                         if (warnCount + overCount > 0) {
                             Spacer(Modifier.height(14.dp))
@@ -397,7 +397,7 @@ private fun AlertBadge(label: String, count: Int, color: Color) {
         Text(
             text = "$count",
             fontSize = 22.sp,
-            fontFamily = FontFamily.Monospace,
+            style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = color,
             letterSpacing = (-0.4).sp,
@@ -464,7 +464,7 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                 Text(
                     text = "${p.pct}%",
                     fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     color = pctColor,
                     fontWeight = FontWeight.Medium,
                 )
@@ -478,10 +478,10 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row {
-                Text(formatCOP(p.spent), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+                Text(formatCOP(p.spent), fontSize = 13.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
                 // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
                 // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
-                Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
+                Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", fontSize = 13.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
             }
             val tail = when (p.state) {
                 EstadoDePresupuesto.EXCEDIDO_MUCHO,
@@ -672,7 +672,7 @@ private fun BudgetSheet(
                                     Text(ev.description, fontSize = 13.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                                     Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", fontSize = 11.sp, color = Movi.colores.textoMedio)
                                 }
-                                Text(formatCOP(ev.amount), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto)
+                                Text(formatCOP(ev.amount), fontSize = 13.sp, style = Movi.textos.monto, color = Movi.colores.texto)
                             }
                         }
                     }
@@ -761,7 +761,7 @@ private fun BudgetSheet(
                     Text(
                         text = formatCOP(movimientos.sumOf { it.amount }),
                         fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = Movi.textos.monto,
                         color = Movi.colores.textoMedio,
                     )
                 }
@@ -802,7 +802,7 @@ private fun BudgetSheet(
                         Text(
                             text = formatCOP(ev.amount),
                             fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
+                            style = Movi.textos.monto,
                             color = Movi.colores.texto,
                         )
                     }
@@ -820,7 +820,7 @@ private fun BudgetSheet(
                     // F14: separador de miles mientras se escribe, no solo al guardar.
                     text = "$" + formatAmountKeypadDisplay(amount),
                     fontSize = 48.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     fontWeight = FontWeight.Normal,
                     color = Movi.colores.texto,
                     letterSpacing = (-1.8).sp,
@@ -857,7 +857,7 @@ private fun BudgetSheet(
                                     Text(
                                         text = key,
                                         fontSize = 20.sp,
-                                        fontFamily = FontFamily.Monospace,
+                                        style = Movi.textos.monto,
                                         fontWeight = FontWeight.Normal,
                                         color = Movi.colores.texto,
                                     )

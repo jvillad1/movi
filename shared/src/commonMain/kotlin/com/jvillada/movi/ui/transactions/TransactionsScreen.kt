@@ -1831,7 +1831,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                     text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
                                     fontSize = 11.sp,
                                     color = Movi.colores.textoMedio,
-                                    fontFamily = FontFamily.Monospace,
+                                    style = Movi.textos.monto,
                                 )
                             }
                         }
@@ -2113,7 +2113,7 @@ private fun TransferRow(
         Text(
             text = formatCOP(row.amount),
             fontSize = 14.5.sp,
-            fontFamily = FontFamily.Monospace,
+            style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tonoDelRenglon(row), Movi.colores),
             letterSpacing = (-0.3).sp,
@@ -2256,7 +2256,7 @@ private fun MovementSingleRow(
                 TonoDelMonto.NEUTRO, TonoDelMonto.ENTRE_CUENTAS -> formatCOP(tx.amount)
             },
             fontSize = 14.5.sp,
-            fontFamily = FontFamily.Monospace,
+            style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tono, Movi.colores),
             letterSpacing = (-0.3).sp,
@@ -2305,7 +2305,7 @@ private fun ResumenFlujoLibreCard(
         Text(
             text = cifras?.let { formatCOP(it.disponible) } ?: "—",
             fontSize = 28.sp,
-            fontFamily = FontFamily.Monospace,
+            style = Movi.textos.monto,
             color = Movi.colores.texto,
             letterSpacing = (-1.1).sp,
             lineHeight = 28.sp,
@@ -2326,7 +2326,7 @@ private fun ResumenFlujoLibreCard(
                 Text(
                     text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
                     fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.entra,
                     letterSpacing = (-0.3).sp,
@@ -2338,7 +2338,7 @@ private fun ResumenFlujoLibreCard(
                 Text(
                     text = cifras?.let { formatCOP(it.gastos) } ?: "—",
                     fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                     letterSpacing = (-0.3).sp,
@@ -2362,7 +2362,7 @@ private fun ResumenFlujoLibreCard(
                         // escribir un negativo, y duplicarlo daría «− −$…» el día que alguien pase otra cifra.
                         text = formatCOP(-cifras.minimosDeTarjeta),
                         fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                         letterSpacing = (-0.3).sp,
@@ -2374,7 +2374,7 @@ private fun ResumenFlujoLibreCard(
                     Text(
                         text = formatCOP(cifras.flujoLibre),
                         fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.textoMedio,
                         letterSpacing = (-0.3).sp,
@@ -2577,7 +2577,7 @@ private fun SeccionSuscripcionesActivas(
                         Text(
                             text = "${item.dayOfMonth}",
                             fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
+                            style = Movi.textos.monto,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                         )
@@ -2616,7 +2616,7 @@ private fun SeccionSuscripcionesActivas(
                             // [textoDelMontoDeSuscripcion].
                             text = textoDelMontoDeSuscripcion(item.sub, conSigno = true),
                             fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace,
+                            style = Movi.textos.monto,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                             letterSpacing = (-0.3).sp,
@@ -2683,7 +2683,7 @@ private fun SeccionSuscripcionesActivas(
                     // totales de gasto y se leen en la misma pantalla, uno debajo del otro.
                     text = formatCOP(totalMensual),
                     fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                     letterSpacing = (-0.3).sp,
@@ -2729,7 +2729,7 @@ private fun CandidataSuscripcionCard(
                 // una candidata pueda ser anual no haya un renderer al que se le olvidó.
                 text = textoDelMontoDeSuscripcion(sub),
                 fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace,
+                style = Movi.textos.monto,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
             )

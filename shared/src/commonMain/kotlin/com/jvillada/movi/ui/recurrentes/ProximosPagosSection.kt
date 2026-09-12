@@ -146,7 +146,7 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
         Text(
             text = textoDelMonto(rule, conSigno = true),
             fontSize = 14.sp,
-            fontFamily = FontFamily.Monospace,
+            style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
             letterSpacing = (-0.3).sp,
@@ -215,7 +215,7 @@ internal fun PropuestaOcurrencia(
                 Text(
                     text = formatMoney(propuesta.amount, propuesta.currency),
                     fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     color = Movi.colores.texto,
                     lineHeight = 16.sp,
                 )
@@ -408,7 +408,7 @@ fun SeccionSinConfirmar(
                     Text(
                         text = textoDelMonto(rule, conSigno = true),
                         fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = if (rule.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto,
                         letterSpacing = (-0.3).sp,

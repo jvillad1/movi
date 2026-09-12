@@ -253,7 +253,7 @@ fun MoneyField(
                 Text(
                     text = prefix,
                     fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     color = if (digits.isEmpty()) Movi.colores.textoApagado else Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.width(6.dp))
@@ -286,7 +286,7 @@ fun MoneyField(
                         textStyle = TextStyle(
                             fontSize = 14.sp,
                             color = Movi.colores.texto,
-                            fontFamily = FontFamily.Monospace,
+                            fontFeatureSettings = "tnum",
                         ),
                         cursorBrush = SolidColor(Movi.colores.texto),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

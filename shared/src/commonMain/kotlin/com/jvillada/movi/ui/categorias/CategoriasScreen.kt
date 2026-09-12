@@ -422,7 +422,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
                 text = resumenDeUso(categoria),
                 fontSize = 11.5.sp,
                 color = Movi.colores.textoMedio,
-                fontFamily = FontFamily.Monospace,
+                style = Movi.textos.monto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
@@ -513,7 +513,7 @@ private fun HojaDetalle(
                 resumenDeUso(categoria),
                 fontSize = 12.5.sp,
                 color = Movi.colores.textoMedio,
-                fontFamily = FontFamily.Monospace,
+                style = Movi.textos.monto,
                 modifier = Modifier.padding(top = 6.dp),
             )
             resumenDelMes(categoria)?.let {
@@ -521,7 +521,7 @@ private fun HojaDetalle(
                     it,
                     fontSize = 12.5.sp,
                     color = Movi.colores.textoMedio,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                     modifier = Modifier.padding(top = 3.dp),
                 )
             }
@@ -798,7 +798,7 @@ private fun HojaUnificar(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(c.name, fontSize = 14.sp, color = Movi.colores.texto)
-                            Text(resumenDeUso(c), fontSize = 11.sp, color = Movi.colores.textoApagado, fontFamily = FontFamily.Monospace)
+                            Text(resumenDeUso(c), fontSize = 11.sp, color = Movi.colores.textoApagado, style = Movi.textos.rotulo)
                         }
                         if (elegida?.name == c.name) {
                             Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))

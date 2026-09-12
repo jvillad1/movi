@@ -177,7 +177,7 @@ private fun ImportEventRow(event: FinancialEvent) {
                 Text(
                     epochToShortDate(event.timestamp),
                     fontSize = 11.sp, color = Movi.colores.textoMedio,
-                    fontFamily = FontFamily.Monospace,
+                    style = Movi.textos.monto,
                 )
             }
         }

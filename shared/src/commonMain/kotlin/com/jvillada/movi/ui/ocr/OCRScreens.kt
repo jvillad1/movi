@@ -164,9 +164,9 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                 ) {
                     Text("Total a registrar", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(10.dp))
-                    Text("−\$312.400", fontSize = 38.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.sale, letterSpacing = (-1.4).sp, lineHeight = 38.sp)
+                    Text("−\$312.400", fontSize = 38.sp, style = Movi.textos.monto, color = Movi.colores.sale, letterSpacing = (-1.4).sp, lineHeight = 38.sp)
                     Spacer(Modifier.height(12.dp))
-                    Text("OCR · 5 ítems detectados", fontSize = 12.sp, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
+                    Text("OCR · 5 ítems detectados", fontSize = 12.sp, color = Movi.colores.textoMedio, style = Movi.textos.monto, letterSpacing = 0.4.sp)
                 }
             }
 
@@ -203,7 +203,7 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text(name, fontSize = 13.5.sp, color = Movi.colores.texto)
-                                    Text(formatCOP(value), fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
+                                    Text(formatCOP(value), fontSize = 13.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
                                 }
                                 if (i < 4) Hairline()
                             }

@@ -410,7 +410,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                     Text(
                                                         text = event.source.name,
                                                         fontSize = 11.sp,
-                                                        fontFamily = FontFamily.Monospace,
+                                                        style = Movi.textos.monto,
                                                         color = Movi.colores.textoMedio,
                                                         letterSpacing = 0.3.sp,
                                                     )
@@ -429,7 +429,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                             Text(
                                                 text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
                                                 fontSize = 14.5.sp,
-                                                fontFamily = FontFamily.Monospace,
+                                                style = Movi.textos.monto,
                                                 fontWeight = FontWeight.Medium,
                                                 color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
                                                 letterSpacing = (-0.3).sp,

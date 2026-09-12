@@ -100,7 +100,7 @@ fun CreditBalanceSheet(
                     Text(
                         formatCOP(current),
                         fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )

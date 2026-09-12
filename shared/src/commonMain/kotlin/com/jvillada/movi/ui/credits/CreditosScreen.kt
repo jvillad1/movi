@@ -132,7 +132,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         Text("Deuda total", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(10.dp))
                         // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
-                        Text(formatCOP(totalDebtCop(credits, cards)), fontSize = 36.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
+                        Text(formatCOP(totalDebtCop(credits, cards)), fontSize = 36.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-1.4).sp, lineHeight = 36.sp)
                         // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                         // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                         // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
@@ -353,7 +353,7 @@ private fun FilaDelResumen(alcance: String, valor: String) {
     ) {
         Text(alcance, fontSize = 11.5.sp, color = Movi.colores.textoApagado, lineHeight = 16.sp, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(10.dp))
-        Text(valor, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(valor, fontSize = 13.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
     }
 }
 
@@ -409,7 +409,7 @@ private fun LoanCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(credit.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            Text(credit.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
+            Text(credit.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
             EditTermsIcon(onEdit)
         }
         Text(credit.terms?.bank ?: "Sin términos registrados", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
@@ -419,7 +419,7 @@ private fun LoanCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(formatCOP(credit.account.balance), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+            Text(formatCOP(credit.account.balance), fontSize = 13.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
             // Sin monoespaciada cuando no es una cifra (ver [ProgresoDeCredito.esAviso]).
             Text(
                 progreso.etiqueta,
@@ -471,7 +471,7 @@ private fun LoanCard(
                     fontSize = 12.sp,
                     color = Movi.colores.textoMedio,
                 )
-                Text(formatCOP(t.installment), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text(formatCOP(t.installment), fontSize = 13.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             }
             // Plazo y fecha de desembolso: son los dos datos que uno compara contra el extracto,
             // y estaban solo dentro de la hoja de edición.
@@ -621,7 +621,7 @@ private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> 
         ) {
             Text(card.account.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
             if (currency != "COP") {
-                Text(currency, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
+                Text(currency, fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
             }
             EditTermsIcon(onEdit)
         }
@@ -632,9 +632,9 @@ private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(formatMoney(debt, currency), fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+            Text(formatMoney(debt, currency), fontSize = 13.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
             card.available?.let {
-                Text("Disponible ${formatMoney(it, currency)}", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio)
+                Text("Disponible ${formatMoney(it, currency)}", fontSize = 12.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
             }
         }
         card.terms?.let { t ->

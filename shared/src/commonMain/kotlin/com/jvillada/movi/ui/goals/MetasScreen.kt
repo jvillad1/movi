@@ -112,12 +112,12 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                     size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
                                 )
                             }
-                            Text(pctLabel, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                            Text(pctLabel, fontSize = 13.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Total ahorrado", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(6.dp))
-                            Text(formatCOP(totalSaved), fontSize = 22.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.texto, letterSpacing = (-0.7).sp)
+                            Text(formatCOP(totalSaved), fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.7).sp)
                             Text("de ${formatCOP(totalTarget)} · ${goals.size} metas", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
@@ -165,7 +165,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                         ) {
                                             Text(g.name, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp)
                                             if (done) {
-                                                Text("COMPLETADA", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.entra, letterSpacing = 0.4.sp)
+                                                Text("COMPLETADA", fontSize = 10.sp, style = Movi.textos.rotulo, color = Movi.colores.entra, letterSpacing = 0.4.sp)
                                             }
                                         }
                                         // F26: la fecha objetivo es opcional — sin ella no se
@@ -178,8 +178,8 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Row {
-                                            Text(formatCOP(g.saved), fontSize = 13.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
-                                            Text(" / ${formatCOP(g.target)}", fontSize = 13.5.sp, fontFamily = FontFamily.Monospace, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
+                                            Text(formatCOP(g.saved), fontSize = 13.5.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+                                            Text(" / ${formatCOP(g.target)}", fontSize = 13.5.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
                                         }
                                     }
                                 }
@@ -231,7 +231,7 @@ private fun GoalRing(pct: Float, done: Boolean, size: androidx.compose.ui.unit.D
                 size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
             )
         }
-        Text("${(pct * 100).toInt()}%", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text("${(pct * 100).toInt()}%", fontSize = 10.sp, style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
     }
 }
 

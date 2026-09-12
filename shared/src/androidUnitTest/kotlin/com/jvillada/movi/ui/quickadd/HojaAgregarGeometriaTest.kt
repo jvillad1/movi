@@ -133,13 +133,16 @@ class HojaAgregarGeometriaTest {
     }
 
     /**
-     * **1b — en el AVD el botón NO entra, pero se alcanza.** Y eso hay que sostenerlo.
+     * **1b — en el AVD el botón casi entra, y se alcanza.** Y eso hay que sostenerlo.
      *
-     * Medido acá, hoy, a 411×731 con la barra inferior puesta: sin tocar nada se ven 23 dp de los
-     * 54 del botón — **31 dp recortados**. O sea que la afirmación de arriba **no vale** a este
-     * tamaño, y decir lo contrario sería la clase de promesa de más que esta clase vino a evitar.
-     * Lo que sí vale, y es la promesa que hizo la Ola 12, es que se pueda LLEGAR: en el APK 1.7
-     * el botón quedaba entero afuera y no había ningún gesto que lo trajera.
+     * Medido a 411×731 con la barra inferior puesta, **antes** del sistema de diseño: se veían 23
+     * de los 54 dp del botón, o sea **31 dp recortados**. Vuelto a medir el 2026-09-12, con la
+     * tipografía del sistema puesta: **0,5 dp**. La hoja se acortó unos 30 dp sola, porque la
+     * escala trae `lineHeight` explícitos donde antes cada `Text` se inventaba el suyo.
+     *
+     * Sigue sin afirmarse que entra: 0,5 dp es medio dp, y la promesa que importa es otra y es la
+     * misma de siempre — que se pueda LLEGAR. En el APK 1.7 el botón quedaba entero afuera y no
+     * había ningún gesto que lo trajera.
      *
      * No se afirma «está recortado»: esa prueba se pondría roja el día que alguien lo arregle,
      * que es exactamente al revés de lo que queremos.
@@ -169,15 +172,30 @@ class HojaAgregarGeometriaTest {
      * Los tres sub-pickers se abren desde tres filas distintas: el embudo `pasarA` existe
      * justamente porque basta que UNO se olvide de grabar el desplazamiento para que el teclado
      * se mueva en ese camino y nada más.
+     *
+     * ### Por qué se mudó a la ventana con el teclado abierto (2026-09-12)
+     *
+     * Corría a 411×731 y ahí **dejó de ejercitar nada**: la tipografía del sistema le sacó unos
+     * 30 dp a la hoja, así que «Guardar» pasó de quedar recortado por 31 dp a 0,5 dp y
+     * `performScrollTo()` ya no mueve nada. La propia afirmación de arriba lo cazó — está puesta
+     * justo para eso.
+     *
+     * La salida NO es bajarle el listón: es medir donde el desborde sigue siendo real, que es la
+     * ventana de 411×520 (el mismo teléfono con el teclado del sistema abierto), exactamente el
+     * razonamiento que ya usa [elTecladoNoSeMueveAunqueSeDesplaceLaListaDelSubPicker]. Y ahí hay
+     * que medir **sin recortar**, porque a esa altura el teclado numérico cae fuera de la ventana
+     * y dos rectángulos recortados contra el mismo borde se ven iguales aunque el contenido se
+     * haya movido.
      */
     @Test
+    @Config(qualifiers = TELEFONO_CON_TECLADO)
     fun elTecladoNoSeMueveAlAbrirYCerrarUnSubPicker() {
         montarHoja()
-        val enReposo = tecla9()
+        val enReposo = tecla9SinRecortar()
 
         composeRule.onNodeWithText(GUARDAR).performScrollTo()
         composeRule.waitForIdle()
-        val desplazado = tecla9()
+        val desplazado = tecla9SinRecortar()
         assertTrue(
             "La hoja no se desplazó, así que esta prueba no está probando nada. " +
                 "¿Se agrandó la ventana de la prueba? (ver la regla del teléfono chico)",
@@ -187,7 +205,7 @@ class HojaAgregarGeometriaTest {
         SUB_PICKERS.forEach { (fila, titulo) ->
             tocar(fila)
             cerrarSubPicker()
-            val despues = tecla9()
+            val despues = tecla9SinRecortar()
             assertTrue(
                 "La tecla «9» se movió al ir y volver del sub-picker «$titulo»: " +
                     "antes $desplazado, después $despues. Ese es el «escribías 0 y salía 8».",

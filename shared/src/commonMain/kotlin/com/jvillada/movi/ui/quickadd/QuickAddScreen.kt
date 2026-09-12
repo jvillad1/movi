@@ -974,7 +974,7 @@ private fun EditorBody(
             // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
             text = "$" + formatAmountKeypadDisplay(amount),
             fontSize = 56.sp,
-            fontFamily = FontFamily.Monospace,
+            style = Movi.textos.monto,
             fontWeight = FontWeight.Normal,
             color = Movi.colores.texto,
             letterSpacing = (-2.2).sp,
@@ -1149,7 +1149,7 @@ private fun EditorBody(
                             Text(
                                 text = key,
                                 fontSize = 22.sp,
-                                fontFamily = FontFamily.Monospace,
+                                style = Movi.textos.monto,
                                 fontWeight = FontWeight.Normal,
                                 color = Movi.colores.texto,
                             )
