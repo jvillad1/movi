@@ -19,6 +19,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -233,7 +237,10 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 title = "Presupuestos",
                 leading = leadingFor(Screen.Budgets, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
                 action = if (budgets.isNotEmpty() && !noSeLeyo) {
-                    { NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add }) }
+                    // «Nuevo» y no «Nuevo presupuesto»: con el rótulo largo, el título de la
+                    // pantalla quedaba cortado en «Presupues…» a 390 dp. Visto en la web. En esta
+                    // pantalla no hay otra cosa que se pueda crear, así que la palabra alcanza.
+                    { NewItemButton(label = "Nuevo", onClick = { sheet = Sheet.Add }) }
                 } else null,
             )
             if (noSeLeyo) {
@@ -481,17 +488,29 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
+        // **Cada lado con su parte del ancho.** Antes los dos iban sin peso: con «Sobrepasado ·
+        // $50.000» a la derecha, ese texto se partía en tres renglones y se dibujaba ENCIMA de
+        // «este mes». Visto en la web a 390 dp. Ahora el monto se lleva más ancho, el aviso menos,
+        // y los dos parten renglón adentro de su espacio en vez de pisarse.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row {
-                Text(formatCOP(p.spent), style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
-                // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
-                // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
-                Text(" de ${formatCOP(p.budget.monthlyLimit)} este mes", style = Movi.textos.monto, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
-            }
+            // F16: "de $2.000.000 este mes" en vez de "/ $2.000.000" — deja explícito que el
+            // límite es mensual sin depender solo del texto chico bajo el monto en la hoja.
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = Movi.colores.texto)) {
+                        append(formatCOP(p.spent))
+                    }
+                    append(" de ${formatCOP(p.budget.monthlyLimit)} este mes")
+                },
+                style = Movi.textos.monto,
+                color = Movi.colores.textoMedio,
+                letterSpacing = (-0.3).sp,
+                modifier = Modifier.weight(1.4f),
+            )
             val tail = when (p.state) {
                 EstadoDePresupuesto.EXCEDIDO_MUCHO,
                 EstadoDePresupuesto.EXCEDIDO_POCO -> "Sobrepasado · ${formatCOP(-p.remaining)}"
@@ -500,7 +519,13 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                 EstadoDePresupuesto.CERCA -> "Cerca del límite"
                 else -> "${formatCOP(p.remaining)} disponibles"
             }
-            Text(tail, style = Movi.textos.apoyo, color = pctColor)
+            Text(
+                tail,
+                style = Movi.textos.apoyo,
+                color = pctColor,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f),
+            )
         }
         Spacer(Modifier.height(8.dp))
         Box(

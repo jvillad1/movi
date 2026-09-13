@@ -110,7 +110,7 @@ class PresupuestosNoFallanCalladosTest {
                 throw ApiException(409, "Ya hay un presupuesto para Salud")
         })
         esperarTexto("Mercado")
-        composeRule.onAllNodesWithText("Nuevo presupuesto", useUnmergedTree = true).onFirst().performClick()
+        composeRule.onAllNodesWithText("Nuevo", useUnmergedTree = true).onFirst().performClick()
         esperarTexto("Mercado, Salud, Restaurantes")
 
         composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextInput("Salud")
