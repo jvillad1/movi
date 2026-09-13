@@ -265,6 +265,39 @@ class CreditRoutesTest {
         assertTrue(summary["paidPct"] is JsonNull)
     }
 
+    /**
+     * **Los créditos llegan ordenados por nombre, igual que `GET /api/accounts`.**
+     *
+     * Las mismas cuentas se leían ordenadas por un endpoint y en el orden físico de la tabla por
+     * este otro — el que un UPDATE o un VACUUM cambia sin avisar. Con doce créditos, eso es una
+     * pantalla que se reordena sola entre dos visitas.
+     *
+     * Se insertan **al revés del alfabeto** para que el test no pueda pasar por accidente de
+     * inserción.
+     */
+    @Test
+    fun `GET devuelve los creditos ordenados por nombre`() = testApplication {
+        transaction {
+            listOf("Vehículo 8761", "Hipoteca 1254", "Crediágil 3090").forEachIndexed { i, nombre ->
+                Accounts.insert {
+                    it[id]       = "acc-orden-$i"
+                    it[userId]   = userAId
+                    it[name]     = nombre
+                    it[type]     = "LOAN"
+                    it[currency] = "COP"
+                }
+            }
+        }
+        wireApp()
+
+        val nombres = Json.parseToJsonElement(
+            client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
+        ).jsonArray.map { it.jsonObject["account"]!!.jsonObject["name"]!!.jsonPrimitive.content }
+
+        assertEquals(nombres.sortedBy { it.lowercase() }, nombres)
+        assertTrue(nombres.indexOf("Crediágil 3090") < nombres.indexOf("Vehículo 8761"))
+    }
+
     @Test
     fun `DELETE removes terms and is 404 the second time`() = testApplication {
         wireApp()

@@ -51,6 +51,8 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.vendors.ForUpdateOption
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.lowerCase
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -81,6 +83,13 @@ fun Route.creditRoutes() {
             val loans = dbQuery {
                 Accounts.selectAll()
                     .where { (Accounts.userId eq uid) and (Accounts.type eq AccountType.LOAN.name) }
+                    // **El mismo orden que `GET /api/accounts`**, que ya ordenaba por nombre.
+                    // Sin esto, las mismas cuentas llegaban ordenadas por un endpoint y en el
+                    // orden físico de la tabla por este otro — el que un UPDATE o un VACUUM cambia
+                    // sin avisar. Con doce créditos y cinco tarjetas eso es una lista que se
+                    // reordena sola entre dos visitas. El `id` desempata para que dos cuentas con
+                    // el mismo nombre tampoco bailen.
+                    .orderBy(Accounts.name.lowerCase() to SortOrder.ASC, Accounts.id to SortOrder.ASC)
                     .map { it.toAccount() }
             }
             if (loans.isEmpty()) return@get call.respond(emptyList<CreditSummary>())

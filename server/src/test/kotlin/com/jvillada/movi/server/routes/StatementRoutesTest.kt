@@ -182,6 +182,48 @@ class StatementRoutesTest {
         assertEquals("CANDIDATE", netflix["status"]!!.jsonPrimitive.content)
     }
 
+    /**
+     * **Los movimientos de un extracto llegan en el mismo orden que el resto de la app.**
+     *
+     * Sin `ORDER BY`, esta lista salía en el orden físico de la tabla — el que un UPDATE o un
+     * VACUUM cambia sin avisar — y es la pantalla donde el dueño repasa fila por fila contra el
+     * PDF. Es el mismo bug que tenía la bandeja de SMS: invisible con cuatro filas, arbitrario con
+     * cuarenta.
+     *
+     * Se importan **en desorden a propósito**: si el orden desapareciera, lo más probable es que
+     * salgan como entraron y el test pasaría sin haber probado nada.
+     */
+    @Test
+    fun `los movimientos de un extracto llegan del mas reciente al mas viejo`() = testApplication {
+        wireApp()
+        val txs = listOf(
+            parsedTx("p1", "2026-06-14", "DEL MEDIO", 20_000),
+            parsedTx("p2", "2026-06-02", "EL MAS VIEJO", 30_000),
+            parsedTx("p3", "2026-06-28", "EL MAS NUEVO", 10_000),
+        ).joinToString(",")
+        client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(importBody(txs))
+        }
+
+        val importId = Json.parseToJsonElement(
+            client.get("/api/statements/imports") {
+                header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            }.bodyAsText()
+        ).jsonArray.first().jsonObject["id"]!!.jsonPrimitive.content
+
+        val detalle = Json.parseToJsonElement(
+            client.get("/api/statements/imports/$importId") {
+                header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            }.bodyAsText()
+        ).jsonObject
+        val conceptos = detalle["events"]!!.jsonArray
+            .map { it.jsonObject["description"]!!.jsonPrimitive.content }
+
+        assertEquals(listOf("EL MAS NUEVO", "DEL MEDIO", "EL MAS VIEJO"), conceptos)
+    }
+
     @Test
     fun `import without recurring patterns creates no subscriptions`() = testApplication {
         wireApp()

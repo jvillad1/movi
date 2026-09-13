@@ -43,6 +43,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 /**
  * HTTP-level tests for GET/POST/PUT/DELETE /api/goals (F26, Ola 6).
@@ -197,6 +198,43 @@ class GoalRoutesTest {
         val res = client.get("/api/goals") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
         assertEquals(HttpStatusCode.OK, res.status)
         assertTrue(Json.parseToJsonElement(res.bodyAsText()).jsonArray.isEmpty())
+    }
+
+    /**
+     * **Las metas llegan ordenadas: la más cercana primero.**
+     *
+     * Sin `ORDER BY`, esta lista salía en el orden físico de la tabla — el que un UPDATE o un
+     * VACUUM cambia sin avisar— y podía verse distinta entre dos lecturas. Es el mismo bug que
+     * tenía la bandeja de SMS, invisible con tres filas y arbitrario con treinta.
+     *
+     * Y el orden no es cualquiera: una meta es justamente algo con fecha, así que arriba va la que
+     * urge. Las que no tienen plazo no compiten por ese lugar y van al final, alfabéticas entre
+     * ellas para que tampoco bailen.
+     *
+     * Se crean **en desorden a propósito**: si el `ORDER BY` desapareciera, lo más probable es que
+     * salgan como entraron y el test pasaría sin haber probado nada.
+     */
+    @Test
+    fun `GET devuelve las metas por fecha, y las sin fecha al final`() = testApplication {
+        wireApp()
+        fun crear(nombre: String, fecha: String?) = runBlocking {
+            val plazo = fecha?.let { """"$it"""" } ?: "null"
+            client.post("/api/goals") {
+                header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody("""{"name":"$nombre","target":5000000,"accountId":"$cashAccountId","targetDate":$plazo}""")
+            }
+        }
+        crear("Sin plazo B", null)
+        crear("Casa", "2028-06-01")
+        crear("Sin plazo A", null)
+        crear("Viaje", "2027-01-01")
+
+        val res = client.get("/api/goals") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val nombres = Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject["name"]!!.jsonPrimitive.content }
+
+        assertEquals(listOf("Viaje", "Casa", "Sin plazo A", "Sin plazo B"), nombres)
     }
 
     @Test
