@@ -694,9 +694,7 @@ private fun HojaRenombrar(
     var nombre by remember { mutableStateOf(categoria.name) }
     var guardando by remember { mutableStateOf(false) }
     val limpio = nombre.trim()
-    val colision = existentes.firstOrNull {
-        it.name != categoria.name && it.name.equals(limpio, ignoreCase = true)
-    }
+    val colision = colisionAlRenombrar(categoria, limpio, existentes)
     val sinCambio = limpio == categoria.name
     val puedeGuardar = limpio.isNotEmpty() && !sinCambio && !guardando && colision?.reserved != true
 

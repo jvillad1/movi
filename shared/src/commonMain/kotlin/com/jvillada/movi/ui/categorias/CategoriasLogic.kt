@@ -145,6 +145,26 @@ fun resumenDelMes(c: CategoryUsage): String? {
 }
 
 /**
+ * La categoría que ya existe con el nombre que el dueño escribió al renombrar — otra, no la que
+ * está renombrando —, o `null` si el nombre está libre. Con una colisión la hoja ofrece unificar
+ * en vez de chocar contra un 409.
+ *
+ * **Compara como el campo de categoría al anotar un movimiento** ([normalizarParaBuscar]: sin
+ * mayúsculas, sin tildes, sin espacios de más). Antes solo ignoraba mayúsculas, así que renombrar
+ * «Transporte» a «Alimentacion» cuando ya existía «Alimentación» no avisaba nada y dejaba dos
+ * categorías que al anotar un gasto se ven como una sola.
+ */
+fun colisionAlRenombrar(
+    categoria: CategoryUsage,
+    nombreEscrito: String,
+    existentes: List<CategoryUsage>,
+): CategoryUsage? {
+    val buscado = normalizarParaBuscar(nombreEscrito)
+    if (buscado.isEmpty()) return null
+    return existentes.firstOrNull { it.name != categoria.name && normalizarParaBuscar(it.name) == buscado }
+}
+
+/**
  * Lo que hay que decirle antes de unificar, con números. Se calcula acá y no en la hoja para
  * poder fijarlo por test: es el aviso de una operación que reescribe la historia del dueño, y no
  * puede quedar dependiendo de que alguien no rompa una interpolación.
