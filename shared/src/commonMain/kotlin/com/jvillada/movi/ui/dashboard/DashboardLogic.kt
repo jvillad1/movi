@@ -31,7 +31,6 @@ import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.credits.totalDebtCop
-import com.jvillada.movi.shared.time.currentMonthPrefix
 
 /**
  * Todo lo que el Inicio carga del server, junto, para que el renderer SDUI reciba un solo
@@ -75,7 +74,7 @@ data class DashboardData(
      */
     val upcoming: List<UpcomingPayment>? = null,
     val budgets: List<Budget> = emptyList(),
-    /** Gasto del mes en curso por categoría (ver [spentByCategoryForMonth]). */
+    /** Gasto del mes en curso por categoría (ver [spentByCategoryForPeriod]). */
     val spentByCategory: Map<String, Long> = emptyMap(),
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
@@ -368,28 +367,6 @@ fun dueLabel(daysUntil: Int): String = when {
     else -> "Vence en $daysUntil días"
 }
 
-// ── Gasto del mes ──────────────────────────────────────────────────────────────────
-
-/**
- * Gasto por categoría del mes [monthPrefix] ("2026-08"). Misma regla que el resumen del
- * server: solo egresos en COP que cuentan como flujo de caja (un ajuste de deuda o un pago
- * de tarjeta no es gasto del mes).
- */
-fun spentByCategoryForMonth(days: List<EventDay>, monthPrefix: String): Map<String, Long> =
-    days.filter { it.date.startsWith(monthPrefix) }
-        .flatMap { it.items }
-        .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow && it.currency == "COP" }
-        .groupBy { it.category }
-        .mapValues { (_, txs) -> txs.sumOf { it.amount } }
-
-/**
- * "2026-08" del día de hoy en la zona de la app (Bogotá, ver [com.jvillada.movi.shared.time.AppTimeZone])
- * — la misma zona con la que el server fecha `EventDay.date`. Antes era UTC de los dos lados:
- * entre las 7 pm y la medianoche del último día del mes, Inicio y Presupuestos ya mostraban
- * el mes siguiente (vacío) mientras el dueño seguía en el mes viejo.
- */
-fun currentMonthPrefixApp(): String = currentMonthPrefix()
-
 // ── Alertas ────────────────────────────────────────────────────────────────────────
 
 data class DashboardAlert(val text: String, val target: Screen)
@@ -673,10 +650,14 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
 /**
  * Gasto por categoría del **período** [ventana], en vez del mes de calendario.
  *
- * Es la misma regla que [spentByCategoryForMonth] —solo egresos en COP que cuentan como flujo—
- * cambiando el criterio de pertenencia: el prefijo de fecha («2026-08») no sirve cuando el
- * período cruza dos meses de calendario, que es justo lo que pasa con cualquier corte que no sea
- * el día 1.
+ * Solo egresos en COP que cuentan como flujo, y la pertenencia se decide por la **ventana del
+ * período**, no por un prefijo de fecha («2026-08»): el prefijo no sirve cuando el período cruza
+ * dos meses de calendario, que es justo lo que pasa con cualquier corte que no sea el día 1.
+ *
+ * Había una hermana, `spentByCategoryForMonth`, que decidía por ese prefijo. Ninguna pantalla la
+ * usaba ya —solo una prueba—, y se borró: una función del mes de calendario que compila y está a
+ * mano es la forma más fácil de reintroducir el desacuerdo entre Inicio y Presupuestos que el
+ * período vino a cerrar.
  *
  * El filtro va por `timestamp` contra la ventana, que es exactamente lo que hace el server
  * (`currentPeriodWindow`). Las dos mitades tienen que coincidir o Inicio y Presupuestos vuelven a

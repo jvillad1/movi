@@ -109,7 +109,7 @@ interface WalletRepository {
      * F17: la categoría es la PK de un presupuesto, así que renombrarlo no es un campo más de
      * [updateBudget] — es su propia operación server-side (borra e inserta conservando el
      * límite, ver `PUT /api/budgets/{category}/rename`). El gasto se cruza por NOMBRE de
-     * categoría con los movimientos (`spentByCategoryForMonth`), así que renombrar acá deja de
+     * categoría con los movimientos (`spentByCategoryForPeriod`), así que renombrar acá deja de
      * contar los movimientos que llevaban el nombre viejo — la hoja de edición avisa esto antes
      * de guardar.
      */

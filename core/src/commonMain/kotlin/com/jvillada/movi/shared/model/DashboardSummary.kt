@@ -26,7 +26,7 @@ data class DashboardSummary(
     val monthSpent: Long = 0,
     /**
      * Gasto del mes por categoría (egresos COP que son flujo de caja). Reemplaza al
-     * `spentByCategoryForMonth(getEventsByDay(), mes)` que el Inicio calculaba del lado del
+     * cálculo por mes de calendario que el Inicio calculaba del lado del
      * cliente; alimenta las alertas de presupuesto superado y la cifra del acceso «Presupuestos».
      */
     val spentByCategory: Map<String, Long> = emptyMap(),
