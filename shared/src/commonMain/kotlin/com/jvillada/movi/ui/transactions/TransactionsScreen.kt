@@ -1307,7 +1307,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 Icon(Icons.Filled.Search, contentDescription = null, tint = Movi.colores.textoApagado, modifier = Modifier.size(16.dp))
                 Box(modifier = Modifier.weight(1f)) {
                     if (searchQuery.isEmpty()) {
-                        Text("Descripción, comercio o categoría", fontSize = 14.sp, color = Movi.colores.textoApagado)
+                        Text("Descripción, comercio o categoría", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
                     }
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                     // [esAtajoDeSeleccionarTodo].
@@ -1316,7 +1316,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         value = campo.valor,
                         onValueChange = campo::alCambiar,
                         singleLine = true,
-                        textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+                        textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                         cursorBrush = SolidColor(Movi.colores.texto),
                         modifier = Modifier.fillMaxWidth()
                             .focusRequester(searchFocusRequester)
@@ -1366,7 +1366,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 ) {
                     Text(
                         text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
-                        fontSize = 13.5.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
@@ -1375,7 +1375,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     // «septiembre» empieza en agosto.
                     rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
                         Spacer(Modifier.height(2.dp))
-                        Text(text = rango, fontSize = 11.sp, color = Movi.colores.textoApagado)
+                        Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                     }
                 }
                 val puedeAvanzar = puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)
@@ -1422,7 +1422,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     }
                     Text(
                         text = f,
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                         color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
                     )
@@ -1448,7 +1448,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 ) {
                     Text(
                         text = textoDelAvisoPorConfirmar(porConfirmar),
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
@@ -1471,13 +1471,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             ) {
                 Text(
                     text = tituloDelModo,
-                    fontSize = 13.sp,
+                    style = Movi.textos.cuerpo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                 )
                 Text(
                     text = "Ver todos",
-                    fontSize = 12.5.sp,
+                    style = Movi.textos.apoyo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.marca,
                     modifier = Modifier.clickable { activeFilter = CHIP_TODO },
@@ -1503,7 +1503,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     Text(
                         text = if (pendingCandidates.size == 1) "1 pago de tarjeta sin marcar"
                                else "${pendingCandidates.size} pagos de tarjeta sin marcar",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
@@ -1715,7 +1715,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         ) {
                             Text(
                                 text = "Nada coincide con \"${searchQuery.trim()}\"",
-                                fontSize = 14.sp,
+                                style = Movi.textos.cuerpo,
                                 color = Movi.colores.textoMedio,
                             )
                         }
@@ -1731,11 +1731,11 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text(vacio.titulo, fontSize = 14.sp, color = Movi.colores.textoMedio)
+                            Text(vacio.titulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                             vacio.detalle?.let {
                                 Text(
                                     text = it,
-                                    fontSize = 12.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoApagado,
                                     textAlign = TextAlign.Center,
                                     lineHeight = 17.sp,
@@ -1755,7 +1755,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 ) {
                                     Text(
                                         text = if (accounts.isNotEmpty() || !accountsLoaded) "+ Registrar el primero" else "Crear una cuenta primero",
-                                        fontSize = 13.sp,
+                                        style = Movi.textos.cuerpo,
                                         fontWeight = FontWeight.Medium,
                                         color = Movi.colores.marca,
                                     )
@@ -1799,7 +1799,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 Text(
                                     // V13: «23 DE AGOSTO» / «HOY», no la clave ISO del server.
                                     text = formatDayHeading(day.date, hoyIso).uppercase(),
-                                    fontSize = 11.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                     letterSpacing = 0.4.sp,
@@ -1809,7 +1809,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                         text = cuantosMovimientosDice(rows).let {
                                             if (it == 1) "· 1 movimiento" else "· $it movimientos"
                                         },
-                                        fontSize = 11.sp,
+                                        style = Movi.textos.apoyo,
                                         color = Movi.colores.textoApagado,
                                     )
                                 }
@@ -1824,7 +1824,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 // dos palabras y evita que la cifra parezca una suma mal hecha.
                                 Text(
                                     text = "Flujo del día",
-                                    fontSize = 11.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoApagado,
                                 )
                                 Text(
@@ -2080,7 +2080,7 @@ private fun TransferRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = transferRowTitle(row, accountTypes),
-                fontSize = 14.5.sp,
+                style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
@@ -2100,7 +2100,7 @@ private fun TransferRow(
                 }
                 Text(
                     text = transferRowSubtitle(row, accountNames),
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2146,7 +2146,7 @@ private fun RenglonDeAjustes(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = tituloDeLosAjustes(events),
-                fontSize = 14.5.sp,
+                style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
@@ -2155,7 +2155,7 @@ private fun RenglonDeAjustes(
             Text(
                 text = if (events.size == 1) "$ADJUSTMENT_CATEGORY · 1 corrección"
                 else "$ADJUSTMENT_CATEGORY · ${events.size} correcciones",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
         }
@@ -2211,7 +2211,7 @@ private fun MovementSingleRow(
             ) {
                 Text(
                     text = tx.description,
-                    fontSize = 14.5.sp,
+                    style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                     letterSpacing = (-0.1).sp,
@@ -2235,7 +2235,7 @@ private fun MovementSingleRow(
                 }
                 Text(
                     text = subtitulo,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2295,7 +2295,7 @@ private fun ResumenFlujoLibreCard(
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(20.dp),
     ) {
-        Text("Flujo libre", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+        Text("Flujo libre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         // **La cifra grande es [ResumenRecurrentes.disponible], no `flujoLibre`.** El mínimo de una
         // tarjeta no es un gasto del mes —eso sigue igual, ver `cuentaComoCompromisoMensual`— pero
@@ -2313,7 +2313,7 @@ private fun ResumenFlujoLibreCard(
         Spacer(Modifier.height(4.dp))
         Text(
             text = cifras?.let { subtituloDelFlujoLibre(it) } ?: "Ingresos recurrentes − Gastos recurrentes",
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
         Spacer(Modifier.height(14.dp))
@@ -2321,11 +2321,10 @@ private fun ResumenFlujoLibreCard(
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Ingresos recurrentes", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                Text("Ingresos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = cifras?.let { formatCOP(it.ingresos) } ?: "—",
-                    fontSize = 14.sp,
                     style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.entra,
@@ -2333,11 +2332,10 @@ private fun ResumenFlujoLibreCard(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text("Gastos recurrentes", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                Text("Gastos recurrentes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = cifras?.let { formatCOP(it.gastos) } ?: "—",
-                    fontSize = 14.sp,
                     style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
@@ -2355,13 +2353,12 @@ private fun ResumenFlujoLibreCard(
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(ETIQUETA_MINIMOS_DE_TARJETA, fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Text(ETIQUETA_MINIMOS_DE_TARJETA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         // El signo lo trae el formato, no un prefijo pegado afuera (F36): `formatCOP` ya sabe
                         // escribir un negativo, y duplicarlo daría «− −$…» el día que alguien pase otra cifra.
                         text = formatCOP(-cifras.minimosDeTarjeta),
-                        fontSize = 14.sp,
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
@@ -2369,11 +2366,10 @@ private fun ResumenFlujoLibreCard(
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Libre sin las tarjetas", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Text("Libre sin las tarjetas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = formatCOP(cifras.flujoLibre),
-                        fontSize = 14.sp,
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.textoMedio,
@@ -2386,7 +2382,7 @@ private fun ResumenFlujoLibreCard(
         // Ver [avisoDeMinimosQueFaltan].
         cifras?.let { avisoDeMinimosQueFaltan(it) }?.let { aviso ->
             Spacer(Modifier.height(12.dp))
-            Text(aviso, fontSize = 11.sp, color = Movi.colores.aviso, lineHeight = 15.sp)
+            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 15.sp)
         }
         // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
         // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
@@ -2399,7 +2395,7 @@ private fun ResumenFlujoLibreCard(
                     "Este total no incluye ${cifras.sinConvertir} cobros en otra moneda: no pudimos " +
                         "convertirlos a pesos."
                 },
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.aviso,
                 lineHeight = 15.sp,
             )
@@ -2408,7 +2404,7 @@ private fun ResumenFlujoLibreCard(
             Text(
                 text = "Lo que te cobran en dólares entra al total convertido a pesos con la tasa " +
                     "de cambio más reciente que pudimos consultar.",
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
@@ -2425,7 +2421,7 @@ private fun ResumenFlujoLibreCard(
             Text(
                 text = "Lo que te cobran una vez al año entra repartido: dividimos el cobro en 12 " +
                     "para que este total sea lo que te cuesta cada mes.",
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
@@ -2454,7 +2450,7 @@ private fun ResumenFlujoLibreCard(
                 text = "Las cuotas de tus créditos entran en este total: ${formatCOP(cifras.cuotasDeCredito)} " +
                     "al mes. No contamos las que te descuentan de la nómina ni las que paga otra " +
                     "persona, porque esa plata no sale de tu bolsillo.",
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
@@ -2478,7 +2474,7 @@ private fun ResumenFlujoLibreCard(
                     "${cifras.pagosUnicosFuera} créditos tuyos se pagan de una sola vez, así que sus " +
                         "cuotas no entran en este total: no son un gasto de todos los meses."
                 },
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
             )
@@ -2552,7 +2548,7 @@ private fun SeccionSuscripcionesActivas(
             ) {
                 Text(
                     text = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
-                    fontSize = 13.sp,
+                    style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                 )
             }
@@ -2576,7 +2572,6 @@ private fun SeccionSuscripcionesActivas(
                     ) {
                         Text(
                             text = "${item.dayOfMonth}",
-                            fontSize = 13.sp,
                             style = Movi.textos.monto,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
@@ -2585,7 +2580,7 @@ private fun SeccionSuscripcionesActivas(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = item.sub.displayName,
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                             letterSpacing = (-0.1).sp,
@@ -2596,7 +2591,7 @@ private fun SeccionSuscripcionesActivas(
                         // también quien se calla la cuenta cuando no hay ninguna que nombrar.
                         Text(
                             contextoDeSuscripcionActiva(item, accountNames),
-                            fontSize = 12.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                         // Y, solo en un cobro anual que SÍ suma, cuánto de él entra al total de
@@ -2605,7 +2600,7 @@ private fun SeccionSuscripcionesActivas(
                         // null en todos los casos donde no hay nada que aclarar.
                         notaDeProrrateo(item, usdToCop)?.let { nota ->
                             Spacer(Modifier.height(2.dp))
-                            Text(nota, fontSize = 12.sp, color = Movi.colores.textoApagado)
+                            Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {
@@ -2615,7 +2610,6 @@ private fun SeccionSuscripcionesActivas(
                             // año". Solo el total de arriba pasa por la TRM, y lo dice. Ver
                             // [textoDelMontoDeSuscripcion].
                             text = textoDelMontoDeSuscripcion(item.sub, conSigno = true),
-                            fontSize = 14.sp,
                             style = Movi.textos.monto,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
@@ -2631,13 +2625,13 @@ private fun SeccionSuscripcionesActivas(
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(
                                 text = "Editar",
-                                fontSize = 12.sp,
+                                style = Movi.textos.apoyo,
                                 color = if (guardando) Movi.colores.textoMedio else Movi.colores.marca,
                                 modifier = Modifier.clickable { if (!guardando) onEditar(item.sub) },
                             )
                             Text(
                                 text = if (guardando) "Quitando…" else "Quitar",
-                                fontSize = 12.sp,
+                                style = Movi.textos.apoyo,
                                 color = if (guardando) Movi.colores.textoMedio else Movi.colores.sale,
                                 modifier = Modifier.clickable { if (!guardando) onQuitar(item.sub) },
                             )
@@ -2660,7 +2654,7 @@ private fun SeccionSuscripcionesActivas(
                         // «al mes» no es decoración: es lo único que distingue este número de la
                         // suma de los montos que se ven arriba, que da otra cosa.
                         text = "Total al mes",
-                        fontSize = 13.sp,
+                        style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
                     )
@@ -2672,7 +2666,7 @@ private fun SeccionSuscripcionesActivas(
                             } else {
                                 "No incluye $sinConvertir cobros que no pudimos pasar a pesos."
                             },
-                            fontSize = 12.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.aviso,
                             lineHeight = 15.sp,
                         )
@@ -2682,7 +2676,6 @@ private fun SeccionSuscripcionesActivas(
                     // Sin signo, igual que «Gastos recurrentes» en el card de arriba: los dos son
                     // totales de gasto y se leen en la misma pantalla, uno debajo del otro.
                     text = formatCOP(totalMensual),
-                    fontSize = 14.sp,
                     style = Movi.textos.monto,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
@@ -2721,14 +2714,13 @@ private fun CandidataSuscripcionCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(sub.displayName, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text(sub.displayName, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Text(
                 // Con su periodicidad, igual que la fila de una activa. Hoy el detector solo
                 // produce cobros mensuales (agrupa por mes, ver `detectSubscriptions`), así que
                 // acá esto no cambia nada — se usa la misma función igual, para que el día que
                 // una candidata pueda ser anual no haya un renderer al que se le olvidó.
                 text = textoDelMontoDeSuscripcion(sub),
-                fontSize = 13.sp,
                 style = Movi.textos.monto,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
@@ -2739,14 +2731,14 @@ private fun CandidataSuscripcionCard(
             // el cargo. Esa última parte es la que vuelve reconocible un comercio cuyo nombre
             // normalizado no le dice nada al dueño. Ver [contextoDeCandidata].
             text = contextoDeCandidata(sub, accountNames),
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             modifier = Modifier.padding(top = 4.dp),
         )
         if (yaEsRegla) {
             Text(
                 text = "Ya lo tienes como recurrente",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.aviso,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -2778,6 +2770,6 @@ private fun AccionCandidataChip(label: String, primary: Boolean, habilitado: Boo
             .clickable(enabled = habilitado, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
+        Text(label, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
     }
 }
