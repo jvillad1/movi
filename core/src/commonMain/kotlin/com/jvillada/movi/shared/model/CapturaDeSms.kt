@@ -1,5 +1,10 @@
 package com.jvillada.movi.shared.model
 
+import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+
 /**
  * # Qué se sabe —de verdad— de la captura de SMS del banco
  *
@@ -74,6 +79,26 @@ fun capturaDeSms(tiempos: List<String>): CapturaDeSms = CapturaDeSms(
  * Un `time` que no tenga esa forma se devuelve tal cual, recortado. Es un varchar libre: antes
  * que inventar una fecha o mostrar un guion, se muestra lo que la fila dice.
  */
+/**
+ * **Cuándo se movió la plata de un SMS**, en epoch-ms — no cuándo el dueño lo confirmó.
+ *
+ * Confirmar un mensaje de la bandeja creaba el movimiento con `Clock.System.now()`. Con captura en
+ * tiempo real la diferencia son minutos, pero la bandeja también trae el historial del teléfono:
+ * confirmar hoy un cobro del 10 de septiembre lo anotaba hoy, en el período equivocado y fuera del
+ * día en que el banco lo cobró. El resto de la app fecha cada movimiento cuando pasó.
+ *
+ * `time` es la hora de pared de Bogotá que escribe el teléfono (`yyyy-MM-dd HH:mm`, ver `SmsSync`).
+ * Si no se entiende, o cae en el futuro (reloj del teléfono adelantado), se usa [ahora]: un
+ * movimiento no puede fecharse después de hoy.
+ */
+fun momentoDelSms(time: String, ahora: Long, zona: TimeZone = AppTimeZone.zone): Long {
+    val texto = claveDeTiempoDeSms(time)
+    val completo = if (texto.length == 16) "$texto:00" else texto
+    val millis = runCatching { LocalDateTime.parse(completo).toInstant(zona).toEpochMilliseconds() }.getOrNull()
+        ?: return ahora
+    return minOf(millis, ahora)
+}
+
 fun fechaLegibleDeSms(time: String): String {
     val normalizado = time.trim().replace('T', ' ')
     return if (normalizado.length >= 16) normalizado.take(16) else normalizado

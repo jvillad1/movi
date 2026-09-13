@@ -333,7 +333,7 @@ private fun NewTransactionRow(
         val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
         Text(
-            "$prefix${formatCOP(tx.amount)}",
+            "$prefix${formatMoney(tx.amount, tx.currency)}",
             fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = amountColor,
         )
     }
@@ -380,7 +380,7 @@ private fun ReconciliationCard(
             val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
             val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
             Text(
-                "$prefix${formatCOP(match.parsed.amount)}",
+                "$prefix${formatMoney(match.parsed.amount, match.parsed.currency)}",
                 fontSize = 12.sp, fontWeight = FontWeight.Bold, color = amtColor,
             )
         }

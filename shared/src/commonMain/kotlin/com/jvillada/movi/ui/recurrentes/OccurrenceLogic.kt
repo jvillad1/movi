@@ -277,5 +277,8 @@ fun difiereDelEsperado(esperado: Long, real: Long): Boolean = esperado != real
  * que el resto de esta pantalla desde que el «Flujo libre» mintió dos veces: sin el dato, no se
  * dice.
  */
-fun avisaMontoDistinto(rule: RecurringRule, real: Long): Boolean =
-    !rule.montoEsSaldo && difiereDelEsperado(rule.amount, real)
+fun avisaMontoDistinto(rule: RecurringRule, real: Long, monedaReal: String = "COP"): Boolean =
+    // Una regla no tiene moneda: su monto es en pesos. Comparar 20 dólares contra $80.000 daba
+    // «no es el monto que anotaste» sobre un pago en dólares normal — mismo criterio que la
+    // tarjeta: sin un esperado comparable, no se afirma nada.
+    monedaReal == "COP" && !rule.montoEsSaldo && difiereDelEsperado(rule.amount, real)

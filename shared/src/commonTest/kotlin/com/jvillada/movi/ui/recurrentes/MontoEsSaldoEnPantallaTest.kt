@@ -97,6 +97,13 @@ class MontoEsSaldoEnPantallaTest {
     }
 
     @Test
+    fun una_propuesta_en_dolares_no_se_compara_contra_un_monto_en_pesos() {
+        // La regla no tiene moneda (es en pesos); US$20 contra $12.000.000 no es «otro monto».
+        assertFalse(avisaMontoDistinto(sueldo, real = 20, monedaReal = "USD"))
+        assertTrue(avisaMontoDistinto(sueldo, real = 20, monedaReal = "COP"))
+    }
+
+    @Test
     fun y_la_propuesta_se_sigue_ofreciendo_igual() {
         // Lo que se apaga es la ADVERTENCIA, no la pregunta: el dueño sigue pudiendo confirmar
         // qué movimiento fue el pago de la tarjeta.

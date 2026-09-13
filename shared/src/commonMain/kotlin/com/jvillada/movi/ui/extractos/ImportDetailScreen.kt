@@ -182,7 +182,7 @@ private fun ImportEventRow(event: FinancialEvent) {
             }
         }
         Cifra(
-            text = "${if (isIncome) "+" else "−"}${formatCOP(event.amount)}",
+            text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
             fontSize = 14f,
             color = if (isIncome) Movi.colores.entra else Movi.colores.sale,
         )

@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -175,5 +176,17 @@ class CapturaDeSmsTest {
     fun `silenciar el Inicio no puede cambiar lo que dice la bandeja`() {
         assertTrue(avisoDeCaptura(CapturaDeSms()).esAlerta)
         assertNull(alertaDeCapturaEnInicio(CapturaDeSms(), silenciada = true))
+    }
+
+    @Test
+    fun `el movimiento de un SMS se fecha cuando llego el mensaje, no cuando se confirma`() {
+        val bogota = kotlinx.datetime.TimeZone.of("America/Bogota")
+        val ahora = kotlinx.datetime.LocalDateTime(2026, 9, 13, 9, 0).toInstant(bogota).toEpochMilliseconds()
+        val esperado = kotlinx.datetime.LocalDateTime(2026, 9, 10, 13, 35).toInstant(bogota).toEpochMilliseconds()
+        kotlin.test.assertEquals(esperado, momentoDelSms("2026-09-10 13:35", ahora, bogota))
+        // Un reloj de teléfono adelantado no fecha en el futuro, y un texto raro cae en ahora.
+        kotlin.test.assertEquals(ahora, momentoDelSms("2026-09-14 08:00", ahora, bogota))
+        kotlin.test.assertEquals(ahora, momentoDelSms("10/09/2026", ahora, bogota))
+        kotlin.test.assertEquals(ahora, momentoDelSms("", ahora, bogota))
     }
 }
