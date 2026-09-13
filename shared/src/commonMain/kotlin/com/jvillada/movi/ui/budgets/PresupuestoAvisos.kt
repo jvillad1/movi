@@ -13,7 +13,7 @@ import com.jvillada.movi.shared.model.isReservedCategory
  * categoría es «Comida», que ese mes ya llevaba $2.113.575 — por encima del límite que estaba
  * poniendo.
  *
- * El cruce presupuesto↔gasto es por **nombre de categoría** (ver `spentByCategoryForMonth`), así
+ * El cruce presupuesto↔gasto es por **nombre de categoría** (ver `spentByCategoryForPeriod`), así
  * que ese presupuesto iba a decir «$0 gastado» para siempre. La app tenía todo para avisarle y lo
  * dejó crear un presupuesto ciego, en silencio.
  *

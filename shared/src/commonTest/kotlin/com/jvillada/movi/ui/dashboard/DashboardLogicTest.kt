@@ -48,9 +48,9 @@ class DashboardLogicTest {
     private fun upcoming(id: String, name: String, amount: Long, daysUntil: Int, type: TransactionType = TransactionType.EXPENSE) =
         UpcomingPayment(rule(id, name, amount, type), dueDate = "2026-08-2${daysUntil.coerceIn(0, 9)}", daysUntil = daysUntil, status = PaymentStatus.UPCOMING)
 
-    private fun event(category: String, amount: Long, type: TransactionType = TransactionType.EXPENSE, cashFlow: Boolean = true, currency: String = "COP") =
+    private fun event(category: String, amount: Long, type: TransactionType = TransactionType.EXPENSE, cashFlow: Boolean = true, currency: String = "COP", timestamp: Long = 0L) =
         FinancialEvent(id = "e-$category-$amount", accountId = "a", type = type, amount = amount, currency = currency,
-            category = category, description = "", timestamp = 0L, countsAsCashFlow = cashFlow)
+            category = category, description = "", timestamp = timestamp, countsAsCashFlow = cashFlow)
 
     // ── Próximos pagos ─────────────────────────────────────────────────────────
 
@@ -79,14 +79,27 @@ class DashboardLogicTest {
 
     // ── Gasto del mes por categoría ────────────────────────────────────────────
 
+    /**
+     * Lo que esta prueba cuidaba sigue cuidado —**tipo, flujo de caja y moneda**— sobre la función
+     * que de verdad usan Inicio y Presupuestos. Antes medía `spentByCategoryForMonth`, que decidía
+     * la pertenencia por el prefijo del mes de calendario y ya no la llamaba ninguna pantalla.
+     */
     @Test
-    fun `gasto del mes por categoria filtra mes, tipo, flujo de caja y moneda`() {
+    fun `gasto del periodo por categoria filtra ventana, tipo, flujo de caja y moneda`() {
+        val dentro = 1_000L
         val days = listOf(
-            EventDay("2026-08-03", 0, listOf(event("Mercado", 100_000), event("Mercado", 50_000), event("Sueldo", 3_000_000, TransactionType.INCOME))),
-            EventDay("2026-08-10", 0, listOf(event("Créditos", 900_000, cashFlow = false), event("Viajes", 200, currency = "USD"))),
-            EventDay("2026-07-28", 0, listOf(event("Mercado", 999_999))), // mes anterior
+            EventDay("2026-08-03", 0, listOf(
+                event("Mercado", 100_000, timestamp = dentro),
+                event("Mercado", 50_000, timestamp = dentro),
+                event("Sueldo", 3_000_000, TransactionType.INCOME, timestamp = dentro),
+            )),
+            EventDay("2026-08-10", 0, listOf(
+                event("Créditos", 900_000, cashFlow = false, timestamp = dentro),
+                event("Viajes", 200, currency = "USD", timestamp = dentro),
+            )),
+            EventDay("2026-07-28", 0, listOf(event("Mercado", 999_999, timestamp = 500L))), // fuera de la ventana
         )
-        val spent = spentByCategoryForMonth(days, monthPrefix = "2026-08")
+        val spent = spentByCategoryForPeriod(days, ventana = dentro..2_000L)
         assertEquals(mapOf("Mercado" to 150_000L), spent)
     }
 

@@ -30,7 +30,6 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
-import com.jvillada.movi.ui.dashboard.currentMonthPrefixApp
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -188,7 +187,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
         // saldo de un crédito caía en la categoría "Otros" y ponía en OVER al instante a un
         // presupuesto con ese nombre.
         // Misma regla que el acceso «Presupuestos» del Inicio y que la alerta de sobrepasado
-        // (spentByCategoryForMonth): solo el mes en curso y solo COP. Antes esta pantalla sumaba
+        // (spentByCategoryForPeriod): solo el período en curso y solo COP. Antes esta pantalla sumaba
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
         budgets.map { b -> BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L) }
@@ -589,7 +588,7 @@ private fun BudgetSheet(
                 // lo manda null) — ahí es donde "cambiar el nombre" significa renombrar una
                 // categoría que ya tiene gasto acumulado, así que solo ahí hace falta la
                 // advertencia. El cruce presupuesto↔gasto es por NOMBRE de categoría
-                // (spentByCategoryForMonth), no por un id estable — renombrar corta ese cruce
+                // (spentByCategoryForPeriod), no por un id estable — renombrar corta ese cruce
                 // para los movimientos viejos.
                 if (onDelete != null) {
                     Spacer(Modifier.height(8.dp))
