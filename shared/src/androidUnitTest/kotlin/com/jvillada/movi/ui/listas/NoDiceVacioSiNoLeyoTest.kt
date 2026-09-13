@@ -24,6 +24,11 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.goals.MetasScreen
+import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.ui.sms.SMSInboxScreen
+import com.jvillada.movi.ui.documentos.DocumentosScreen
+import com.jvillada.movi.ui.categorias.CategoriasScreen
+import com.jvillada.movi.ui.transactions.TransactionsScreen
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -116,5 +121,44 @@ class NoDiceVacioSiNoLeyoTest {
         reintentar()
         composeRule.waitUntil(5_000) { lecturas > antes }
         assertEquals(antes + 1, lecturas)
+    }
+
+    // ── Segunda tanda: lo que no tiene botón de crear pero sí afirmaba «no hay» ────────────────
+    // `RepositorioDePrueba` tira en todo lo que no se sobrescribe, así que un repo vacío es una
+    // lectura caída en cada llamada.
+
+    @Test
+    fun `Movimientos sin respuesta no ofrece registrar el primero`() {
+        montar(object : RepositorioDePrueba() {}) { TransactionsScreen(onNavigate = {}) }
+        esperar("No pudimos cargar tus movimientos")
+        assertTrue(!hay("Sin movimientos aún"))
+        assertTrue(!hay("Registrar el primero"))
+    }
+
+    @Test
+    fun `Categorias sin respuesta no dice cero categorias`() {
+        montar(object : RepositorioDePrueba() {}) { CategoriasScreen(onNavigate = {}) }
+        esperar("No pudimos cargar tus categorías")
+        assertTrue(!hay("Nada por aquí todavía"))
+        assertTrue(!hay("0 categorías"))
+    }
+
+    @Test
+    fun `Documentos sin respuesta no queda en blanco y se puede reintentar`() {
+        var hayRed = false
+        montar(object : RepositorioDePrueba() {
+            override suspend fun getDocuments(): List<Documento> = if (hayRed) emptyList() else throw caida
+        }) { DocumentosScreen(onNavigate = {}) }
+        esperar("No pudimos cargar tus documentos")
+        hayRed = true
+        reintentar()
+        esperar("Aquí se guardan tus extractos")
+    }
+
+    @Test
+    fun `la bandeja de SMS sin respuesta no dice cero por confirmar`() {
+        montar(object : RepositorioDePrueba() {}) { SMSInboxScreen(onNavigate = {}) }
+        esperar("No pudimos cargar tus mensajes")
+        assertTrue(!hay("0 por confirmar"))
     }
 }

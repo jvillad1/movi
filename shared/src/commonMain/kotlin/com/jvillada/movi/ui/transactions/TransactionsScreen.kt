@@ -896,9 +896,12 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     var guardandoInicio by remember { mutableStateOf(false) }
     var errorDelInicio by remember { mutableStateOf<String?>(null) }
     var editandoElInicio by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    // Se prende solo cuando `getEventsByDay` contestó de verdad (ver [NoSePudoLeer]). Sin esto, una
+    // lectura caída dejaba «Sin movimientos aún · + Registrar el primero» a quien tiene cientos.
+    var diasLeidos by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // F10: el estado vacío necesita saber si hay cuentas para elegir entre "+ Registrar el
@@ -948,6 +951,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess {
                 allDays = it
+                diasLeidos = true
                 // F35: de paso, alimenta el caché de "categorías ya usadas" que lee
                 // CategoryField — esta pantalla ya carga los movimientos. Ola 9 · A3: con el
                 // tipo de cada uno, para poder ofrecerlas del lado correcto.
@@ -1000,7 +1004,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     var buscandoCobros by remember { mutableStateOf(false) }
     val coroutineRecurrentes = rememberCoroutineScope()
 
-    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick) {
+    // `refreshKey` también: es la clave del «Reintentar» del snackbar y de anular/editar un
+    // movimiento desde su hoja. Sin ella, reintentar después de un fallo acá no volvía a pedir
+    // nada y «Próximos» quedaba cargando para siempre.
+    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
         if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
         runCatching { Repositories.wallets.getSubscriptions() }
             .onSuccess {
@@ -1055,7 +1062,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // detectada eso ni siquiera funcionaba: «Quitar» la marca DISMISSED, no la borra.
     var suscripcionAEditar by remember { mutableStateOf<Subscription?>(null) }
 
-    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick) {
+    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
         if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
         ReminderChannelsCache.cargar()
         // En paralelo, como las hace la pantalla vieja: en serie son dos viajes encadenados y la
@@ -1706,7 +1713,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             val hayListaDeDias = mostrarLaListaDeDias(activeFilter, searchQuery)
             if (!loading && visibleDays.isEmpty() && hayListaDeDias) {
                 item {
-                    if (searchQuery.isNotBlank()) {
+                    if (!diasLeidos) {
+                        NoSePudoLeer(
+                            "No pudimos cargar tus movimientos",
+                            onReintentar = { refreshKey++ },
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(top = 40.dp),
+                        )
+                    } else if (searchQuery.isNotBlank()) {
                         // F13: nada que ver acá con "no hay dónde anotar" — la búsqueda no dio
                         // resultados, así que el texto buscado es la pista que hace falta.
                         Column(

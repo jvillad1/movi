@@ -45,6 +45,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.MinScreenHeader
@@ -94,7 +95,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     var documentos by remember { mutableStateOf<List<Documento>?>(null) }
-    var cargando by remember { mutableStateOf(false) }
+    var cargando by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
     var subiendo by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -187,7 +188,15 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             when {
                 // «Todavía no guardaste nada» es una afirmación sobre lo que el dueño tiene, y no
                 // se hace antes de que la lectura conteste. Misma regla que el Inicio.
-                lista == null -> Spacer(Modifier.height(1.dp))
+                // Mientras lee, nada. Si ya terminó y sigue sin lista, la lectura falló: se dice eso
+                // con un reintento, en vez de dejar la pantalla en blanco sin salida (el snackbar
+                // del error se va solo). Ver [NoSePudoLeer].
+                lista == null && cargando -> Spacer(Modifier.height(1.dp))
+                lista == null -> NoSePudoLeer(
+                    "No pudimos cargar tus documentos",
+                    onReintentar = { refreshKey++ },
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp),
+                )
 
                 lista.isEmpty() -> Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     Spacer(Modifier.height(14.dp))

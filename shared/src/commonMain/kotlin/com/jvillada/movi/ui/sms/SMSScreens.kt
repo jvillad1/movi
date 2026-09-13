@@ -82,9 +82,12 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
     /** `null` = el perfil todavía no contestó; hasta entonces no se ofrece silenciar ni no. */
     var silenciada by remember { mutableStateOf<Boolean?>(null) }
 
+    var leyendo by remember { mutableStateOf(true) }
     LaunchedEffect(refreshKey) {
+        leyendo = true
         runCatching { Repositories.wallets.getSmsMessages() }
             .onSuccess { smsItems = it }
+        leyendo = false
     }
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getUserProfile() }
@@ -101,7 +104,8 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
         MinScreenHeader(
             title = "Mensajes del banco",
             leading = HeaderLeading.Back(fallback = Screen.Mas),
-            subtitle = "$pendingCount por confirmar",
+            // Sin respuesta no se sabe cuántos hay: «0 por confirmar» sería afirmar algo que no se leyó.
+            subtitle = if (smsItems == null) null else "$pendingCount por confirmar",
             action = {
                 Icon(
                     Icons.Rounded.Refresh,
@@ -224,7 +228,10 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
 
                 Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = "Bandeja", count = mensajes.size)
+                MinSectionHeader(title = "Bandeja", count = if (smsItems == null) null else mensajes.size)
+                if (smsItems == null && !leyendo) {
+                    NoSePudoLeer("No pudimos cargar tus mensajes", onReintentar = { refreshKey++ })
+                }
             }
 
             mensajes.forEach { sms ->
