@@ -576,6 +576,29 @@ class DashboardLogicTest {
         assertNull(quickLinkFigure("aichat", empty).sub)
     }
 
+    /**
+     * Presupuestos, metas y suscripciones tampoco afirman «Sin …» si la lectura no llegó: antes
+     * arrancaban en `emptyList()` y una lectura caída se pintaba igual que no tener ninguno.
+     */
+    @Test
+    fun `presupuestos, metas y suscripciones sin respuesta no dicen que no hay`() {
+        val empty = DashboardData()
+        for (acceso in listOf("budgets", "goals", "subscriptions")) {
+            assertNull(quickLinkFigure(acceso, empty).value, acceso)
+            assertNull(quickLinkFigure(acceso, empty).sub, acceso)
+        }
+        assertEquals("Sin presupuestos", quickLinkFigure("budgets", DashboardData(budgets = emptyList())).sub)
+        assertEquals("Sin metas", quickLinkFigure("goals", DashboardData(goals = emptyList())).sub)
+        assertEquals(
+            "Sin suscripciones",
+            quickLinkFigure("subscriptions", DashboardData(subscriptions = SubscriptionsResult(emptyList(), 0L))).sub,
+        )
+        // Con presupuestos pero sin el gasto, «$0 de $X» sería inventado: tampoco se pinta.
+        val sinGasto = quickLinkFigure("budgets", DashboardData(budgets = listOf(Budget("Mercado", 400_000))))
+        assertNull(sinGasto.value)
+        assertEquals(emptyList(), overBudgetCategories(listOf(Budget("Mercado", 1)), null))
+    }
+
     // ── El acceso «Recurrentes» (Ola 8) ────────────────────────────────────────
 
     @Test

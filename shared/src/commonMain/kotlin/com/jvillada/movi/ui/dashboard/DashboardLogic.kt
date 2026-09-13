@@ -73,9 +73,13 @@ data class DashboardData(
      * plausible, equivocado y sin nada que avisara. Ver `quickLinkFigure("recurrentes")`.
      */
     val upcoming: List<UpcomingPayment>? = null,
-    val budgets: List<Budget> = emptyList(),
-    /** Gasto del mes en curso por categoría (ver [spentByCategoryForPeriod]). */
-    val spentByCategory: Map<String, Long> = emptyMap(),
+    /**
+     * `null` = todavía no llegó (o su lectura falló), igual que [accounts], [credits] y [upcoming].
+     * Con `emptyList()` por defecto, una lectura caída pintaba «Sin presupuestos» a quien sí tiene.
+     */
+    val budgets: List<Budget>? = null,
+    /** Gasto del período en curso por categoría (ver [spentByCategoryForPeriod]). `null` = no llegó. */
+    val spentByCategory: Map<String, Long>? = null,
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
     /**
@@ -91,7 +95,8 @@ data class DashboardData(
     val captura: CapturaDeSms? = null,
     /** El dueño pidió no ver el aviso de captura en el Inicio (`users.sms_alert_muted`). */
     val capturaSilenciada: Boolean = false,
-    val goals: List<Goal> = emptyList(),
+    /** `null` = no llegó; ver [budgets]. */
+    val goals: List<Goal>? = null,
     val subscriptions: SubscriptionsResult? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
@@ -380,8 +385,9 @@ data class DashboardAlert(val text: String, val target: Screen)
  * Inicio y «Sin margen · gastaste justo el límite» al entrar. Ahora las dos llaman a
  * [estadoDePresupuesto], en `:core`, que es donde vive una regla sobre su plata.
  */
-fun overBudgetCategories(budgets: List<Budget>, spentByCategory: Map<String, Long>): List<String> =
-    budgets.filter { estadoDePresupuesto(spentByCategory[it.category] ?: 0L, it.monthlyLimit).estaSuperado }
+fun overBudgetCategories(budgets: List<Budget>?, spentByCategory: Map<String, Long>?): List<String> =
+    // Sin alguna de las dos respuestas no se puede afirmar que un presupuesto se pasó.
+    if (budgets == null || spentByCategory == null) emptyList() else budgets.filter { estadoDePresupuesto(spentByCategory[it.category] ?: 0L, it.monthlyLimit).estaSuperado }
         .map { it.category }
 
 /**
@@ -484,10 +490,16 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else LinkFigure(formatCOP(totalDebtCop(data.credits.orEmpty(), data.cards.orEmpty())), plural(count, "crédito", "créditos"))
     }
     "budgets" -> {
-        if (data.budgets.isEmpty()) LinkFigure(sub = "Sin presupuestos")
+        val budgets = data.budgets
+        val gastado = data.spentByCategory
+        // Mismo criterio que «credits» y «accounts»: sin respuesta no se afirma vacío. Y sin el
+        // gasto, «$0 de $X» sería una cifra inventada, así que tampoco se pinta.
+        if (budgets == null) LinkFigure()
+        else if (budgets.isEmpty()) LinkFigure(sub = "Sin presupuestos")
+        else if (gastado == null) LinkFigure()
         else {
-            val limit = data.budgets.sumOf { it.monthlyLimit }
-            val spent = data.budgets.sumOf { data.spentByCategory[it.category] ?: 0L }
+            val limit = budgets.sumOf { it.monthlyLimit }
+            val spent = budgets.sumOf { gastado[it.category] ?: 0L }
             // **La tercera regla, y estaba 70 líneas debajo de la segunda.** Esta línea comparaba
             // `spent >= limit` sobre los TOTALES, así que fallaba de dos maneras a la vez:
             //
@@ -503,13 +515,15 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
             LinkFigure(
                 formatCOP(spent),
                 "de ${formatCOP(limit)} este mes",
-                isAlert = overBudgetCategories(data.budgets, data.spentByCategory).isNotEmpty(),
+                isAlert = overBudgetCategories(budgets, gastado).isNotEmpty(),
             )
         }
     }
     "goals" -> {
-        if (data.goals.isEmpty()) LinkFigure(sub = "Sin metas")
-        else LinkFigure(formatCOP(data.goals.sumOf { it.saved }), plural(data.goals.size, "meta", "metas"))
+        val goals = data.goals
+        if (goals == null) LinkFigure()
+        else if (goals.isEmpty()) LinkFigure(sub = "Sin metas")
+        else LinkFigure(formatCOP(goals.sumOf { it.saved }), plural(goals.size, "meta", "metas"))
     }
     "investments" -> {
         // F50: cuentas tipo INVESTMENT, no el modelo de "posiciones" (holdings) que el server
@@ -582,7 +596,8 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         val active = subs?.subscriptions?.count { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED } ?: 0
         val candidates = subs?.subscriptions?.count { it.status == SubStatus.CANDIDATE } ?: 0
         when {
-            subs == null || (active == 0 && candidates == 0) -> LinkFigure(sub = "Sin suscripciones")
+            subs == null -> LinkFigure()
+            active == 0 && candidates == 0 -> LinkFigure(sub = "Sin suscripciones")
             active == 0 -> LinkFigure(sub = plural(candidates, "por confirmar", "por confirmar"))
             else -> LinkFigure(formatCOP(subs.monthlyTotalCop), plural(active, "suscripción", "suscripciones") + " al mes")
         }
