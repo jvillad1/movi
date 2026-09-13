@@ -135,3 +135,12 @@ android {
         disable += "NullSafeMutableLiveData"
     }
 }
+
+// Las tipografías de Movi viven en commonMain/composeResources/font. El paquete de `Res` se fija a
+// mano: el que Compose arma solo sale del nombre del módulo, y si algún día el módulo se renombra
+// —ya pasó una vez, de `shared` a `core`— cambiarían todos los imports sin que nadie lo pidiera.
+compose.resources {
+    publicResClass = false
+    packageOfResClass = "com.jvillada.movi.resources"
+    generateResClass = always
+}

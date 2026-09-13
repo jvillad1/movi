@@ -60,14 +60,17 @@ private fun esquemaDe(c: ColoresDeMovi, oscuro: Boolean): ColorScheme {
 @Composable
 fun MoviTheme(oscuro: Boolean = true, content: @Composable () -> Unit) {
     val colores = if (oscuro) COLORES_OSCUROS else COLORES_CLAROS
+    val interfaz = familiaDeLaInterfaz()
+    val cifras = familiaDeLasCifras()
     CompositionLocalProvider(
         LocalColores provides colores,
         LocalEspacios provides EspaciosDeMovi(),
         LocalFormas provides FormasDeMovi(),
-        LocalTextos provides TextosDeMovi(),
+        LocalTextos provides TextosDeMovi().conFamilias(interfaz, cifras),
     ) {
         MaterialTheme(
             colorScheme = esquemaDe(colores, oscuro),
+            typography = tipografiaDeMaterial(interfaz),
             content = content,
         )
     }

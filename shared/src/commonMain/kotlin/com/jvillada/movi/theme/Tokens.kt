@@ -264,12 +264,11 @@ data class FormasDeMovi(
  * apps de finanzas personales del benchmark, **ninguna** lo hace, incluida YNAB, cuya pantalla
  * central es literalmente una tabla de montos.
  *
- * ### Todavía sin tipografía propia
+ * ### La familia se pone en el tema, no acá
  *
- * Estos estilos no fijan `fontFamily`: heredan la del sistema. Empaquetar Space Grotesk y Martian
- * Mono para Android, iOS y wasm es su propia entrega, y no tiene sentido bloquear la escala
- * esperándola. Cinco de los seis neobancos del benchmark tienen fuente propia con ejes Display y
- * Text separados, así que es a dónde va esto — pero después.
+ * Estos estilos no fijan `fontFamily` porque cargar una fuente es `@Composable`. `MoviTheme` se
+ * las pone con `conFamilias` (ver `Tipografia.kt`): Space Grotesk en todos, Martian Mono en
+ * [cifra]. Leídos fuera del tema —una prueba pura— no tienen familia, y es a propósito.
  */
 @Immutable
 data class TextosDeMovi(
