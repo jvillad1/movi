@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
@@ -312,4 +314,28 @@ fun formatMoneyCompact(amount: Long): String {
     val frac = tenths % 10
     // «$12M», no «$12,0M»: el decimal solo aparece cuando dice algo.
     return if (frac == 0L) "$sign$${groupThousands(intPart)}M" else "$sign$${groupThousands(intPart)},${frac}M"
+}
+
+/**
+ * **La cifra protagonista de una pantalla**: «Tu plata» en el Inicio, «Deuda total» en Créditos.
+ * Una por pantalla, o ninguna. Va en `Movi.textos.cifra`, que es Martian Mono a 42 sp.
+ *
+ * **Un renglón siempre, achicándose si hace falta.** Martian Mono es ancha: a 42 sp «$8.550.000» no
+ * entraba en un teléfono de 390 dp y se partía en «$8.550.00» con un «0» solo abajo. Visto en la
+ * web, no deducido. Una deuda como la del dueño son catorce caracteres. El tamaño baja de a un sp
+ * hasta que entra, con piso en 24: más chico que eso deja de ser la protagonista.
+ *
+ * Es un componente y no un estilo porque el achique vive en `BasicText`, no en un `TextStyle`.
+ */
+@Composable
+fun CifraProtagonista(text: String, color: Color, modifier: Modifier = Modifier) {
+    val estilo = Movi.textos.cifra
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = estilo.copy(color = color),
+        maxLines = 1,
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(minFontSize = 24.sp, maxFontSize = estilo.fontSize, stepSize = 1.sp),
+    )
 }
