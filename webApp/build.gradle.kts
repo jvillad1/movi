@@ -7,11 +7,12 @@ plugins {
 }
 
 kotlin {
-    // moduleName/outputFileName stay "composeApp"/"composeApp.js" so the existing
+    // outputModuleName/outputFileName stay "composeApp"/"composeApp.js" so the existing
     // index.html script reference and the Dockerfile copy path keep working.
+    // (`moduleName` became an error in Kotlin 2.2; `outputModuleName` is its Provider-API twin.)
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        moduleName = "composeApp"
+        outputModuleName = "composeApp"
         browser {
             commonWebpackConfig {
                 outputFileName = "composeApp.js"
