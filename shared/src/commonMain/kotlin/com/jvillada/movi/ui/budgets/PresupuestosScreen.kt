@@ -122,11 +122,16 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
+    // Ver [NoSePudoLeer]: sin esto una lectura caída pintaba «Gastado $0 de $0» y el botón de
+    // crear, a quien ya tiene presupuestos.
+    var presupuestosLeidos by remember { mutableStateOf(false) }
+
     suspend fun reload() {
         // F35: de paso, alimenta el caché de "categorías ya usadas" que lee CategoryField —
         // esta pantalla ya carga presupuestos y movimientos, no hace falta un fetch nuevo.
         runCatching { Repositories.wallets.getBudgets() }.onSuccess {
             budgets = it
+            presupuestosLeidos = true
             // Ola 9 · A3: un presupuesto es, por definición, un límite de GASTO — así que sus
             // categorías se anotan con ese tipo y no como "no se sabe".
             UsedCategoriesCache.recordAll(it.map { b -> b.category to TransactionType.EXPENSE })
@@ -203,11 +208,14 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             .sortedByDescending { it.pct }
     }
 
-    // F16: "Gastado del mes" no decía CUÁL mes — el nombre del mes en curso lo hace explícito.
-    // Misma zona que el prefijo del mes (AppTimeZone): el título y la suma no pueden discrepar.
-    val monthName = remember {
-        Clock.System.now().toLocalDateTime(AppTimeZone.zone).month.spanishName()
+    // F16: "Gastado del mes" no decía CUÁL mes — el nombre lo hace explícito. Es el nombre del
+    // **período** (el mismo que suma `ventanaDelPeriodo`), no del mes de calendario: con corte 25,
+    // el 26 de septiembre ya es octubre en Movimientos, y el título tiene que decir lo mismo.
+    val monthName = remember(cutoffDay, iniciosPropios) {
+        val settings = PeriodSettings(cutoffDay = cutoffDay, iniciosPropios = iniciosPropios)
+        Month(periodoDe(Clock.System.now().toEpochMilliseconds(), settings).month).spanishName()
     }
+    val noSeLeyo = !loading && !presupuestosLeidos
 
     val totalLimit = budgets.sumOf { it.monthlyLimit }
     val totalSpent = progresses.sumOf { it.spent }
@@ -224,11 +232,18 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Presupuestos",
                 leading = leadingFor(Screen.Budgets, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
-                action = if (budgets.isNotEmpty()) {
+                action = if (budgets.isNotEmpty() && !noSeLeyo) {
                     { NewItemButton(label = "Nuevo presupuesto", onClick = { sheet = Sheet.Add }) }
                 } else null,
             )
-            if (budgets.isEmpty() && !loading) {
+            if (noSeLeyo) {
+                Spacer(Modifier.height(14.dp))
+                NoSePudoLeer(
+                    "No pudimos cargar tus presupuestos",
+                    onReintentar = { refreshKeyLocal++ },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            } else if (budgets.isEmpty() && !loading) {
                 NewItemButton(
                     label = "Nuevo presupuesto",
                     onClick = { sheet = Sheet.Add },
@@ -239,7 +254,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(14.dp))
             }
 
-            LazyColumn(
+            if (!noSeLeyo) LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 80.dp),
             ) {
