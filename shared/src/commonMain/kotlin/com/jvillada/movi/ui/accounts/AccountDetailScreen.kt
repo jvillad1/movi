@@ -54,9 +54,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     val goBack = LocalGoBack.current
     var account by remember { mutableStateOf<Account?>(null) }
     var days by remember { mutableStateOf<List<EventDay>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    // Ver [NoSePudoLeer]: «Sin movimientos aún» solo si la lectura contestó.
+    var leida by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     /**
      * Las cuentas del dueño, **para poder mover un movimiento de cuenta desde esta pantalla**.
@@ -116,6 +118,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 .sortedByDescending { it.date }
             account = acc
             days = grouped
+            leida = true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -308,7 +311,15 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 }
 
                 // Empty state
-                if (!loading && days.isEmpty()) {
+                if (!loading && days.isEmpty() && !leida) {
+                    item(key = "no-se-pudo-leer") {
+                        NoSePudoLeer(
+                            "No pudimos cargar los movimientos de esta cuenta",
+                            onReintentar = { refreshKey++ },
+                            modifier = Modifier.padding(top = 40.dp),
+                        )
+                    }
+                } else if (!loading && days.isEmpty()) {
                     item(key = "empty-state") {
                         // F10: la acción registra directo en esta cuenta — no en la primera de
                         // la lista, que es lo que pasaba antes de que QuickAdd aceptara un

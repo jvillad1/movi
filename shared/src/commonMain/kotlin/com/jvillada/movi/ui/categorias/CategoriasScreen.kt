@@ -57,6 +57,7 @@ import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.MinScreenHeader
@@ -112,9 +113,12 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     var confirmacion by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
+    // Ver [NoSePudoLeer]: «0 categorías · Nada por aquí todavía» solo si la lectura contestó.
+    var leidas by remember { mutableStateOf(false) }
+
     suspend fun recargar() {
         runCatching { Repositories.wallets.getCategories() }
-            .onSuccess { categorias = it; error = null }
+            .onSuccess { categorias = it; error = null; leidas = true }
             .onFailure { error = it.toUserMessage() }
     }
 
@@ -148,7 +152,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     fallback = Screen.Mas,
                 ),
                 subtitle = when {
-                    loading -> null
+                    loading || !leidas -> null
                     escondidas == 1 -> "${categorias.size} categorías · 1 escondida"
                     escondidas > 1 -> "${categorias.size} categorías · $escondidas escondidas"
                     else -> "${categorias.size} categorías"
@@ -203,7 +207,15 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (visibles.isEmpty() && !loading) {
+                if (!leidas && !loading) {
+                    item {
+                        NoSePudoLeer(
+                            "No pudimos cargar tus categorías",
+                            onReintentar = { scope.launch { loading = true; recargar(); loading = false } },
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
+                } else if (visibles.isEmpty() && !loading) {
                     item {
                         Text(
                             if (busqueda.isNotBlank()) "Ninguna categoría se llama así."
