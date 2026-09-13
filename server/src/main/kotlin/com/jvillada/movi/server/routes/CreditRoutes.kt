@@ -129,6 +129,7 @@ fun Route.creditRoutes() {
             // sin ninguna fila que después haya que corregir. Mismo criterio que ya usaba
             // `POST /api/cards`, que acepta 0 desde siempre.
             if (body.initialDebt < 0L) return@post call.respond(HttpStatusCode.BadRequest, "La deuda no puede ser negativa")
+            if (body.initialDebt > MAX_CREDIT_DEBT_COP) return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisa el monto")
 
             // ── Ola 16 — el desembolso nace CON el crédito, o no nace ─────────────────────
             //

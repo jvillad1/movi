@@ -464,6 +464,30 @@ class SubscriptionRoutesTest {
         }.status)
     }
 
+    /** El PUT revisa lo mismo que el alta: antes aceptaba un monto negativo y un nombre vacío. */
+    @Test
+    fun `PUT rechaza lo mismo que el alta y recorta el nombre`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = Json.parseToJsonElement(
+            crearSuscripcion(token, """{"displayName":"Gimnasio","amount":90000,"currency":"COP","dayOfMonth":3}""").bodyAsText()
+        ).jsonObject
+        val id = creada["id"]!!.jsonPrimitive.content
+        suspend fun editar(cambios: Map<String, JsonPrimitive>) = client.put("/api/subscriptions/$id") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(Json.encodeToString(JsonObject.serializer(), JsonObject(creada + cambios)))
+        }
+        assertEquals(HttpStatusCode.BadRequest, editar(mapOf("amount" to JsonPrimitive(-50_000))).status)
+        assertEquals(HttpStatusCode.BadRequest, editar(mapOf("amount" to JsonPrimitive(0))).status)
+        assertEquals(HttpStatusCode.BadRequest, editar(mapOf("displayName" to JsonPrimitive("   "))).status)
+        assertEquals(90_000L, listar(token)["monthlyTotalCop"]!!.jsonPrimitive.long, "un PUT rechazado no toca nada")
+
+        val ok = editar(mapOf("displayName" to JsonPrimitive("  Gimnasio Bodytech  ")))
+        assertEquals(HttpStatusCode.OK, ok.status)
+        assertEquals("Gimnasio Bodytech", Json.parseToJsonElement(ok.bodyAsText()).jsonObject["displayName"]!!.jsonPrimitive.content)
+    }
+
     @Test
     fun `POST with a repeated name and currency is 409`() = testApplication {
         wireApp()

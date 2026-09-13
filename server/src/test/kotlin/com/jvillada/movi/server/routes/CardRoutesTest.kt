@@ -249,6 +249,28 @@ class CardRoutesTest {
     }
 
     @Test
+    fun `un cupo negativo o una deuda absurda se rechazan al crear y al editar`() = testApplication {
+        wireApp()
+        suspend fun crear(cuerpo: String) = client.post("/api/cards") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpo)
+        }
+        assertEquals(HttpStatusCode.BadRequest, crear(
+            """{"name":"Visa","initialDebt":0,"currency":"COP","terms":{"accountId":"","bank":"X","creditLimit":-1,"paymentDay":15}}""",
+        ).status)
+        assertEquals(HttpStatusCode.BadRequest, crear(
+            """{"name":"Visa","initialDebt":5000000000000,"currency":"COP","terms":{"accountId":"","bank":"X","creditLimit":1000,"paymentDay":15}}""",
+        ).status)
+        val put = client.put("/api/cards/$cardAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"accountId":"","bank":"X","creditLimit":-5,"paymentDay":15}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, put.status)
+    }
+
+    @Test
     fun `POST creates account, terms and opening debt atomically`() = testApplication {
         wireApp()
         val post = client.post("/api/cards") {

@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.MAX_CREDIT_DEBT_COP
 import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.toAccount
@@ -80,9 +81,13 @@ fun Route.cardRoutes() {
             if (name.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Nombre de la tarjeta requerido")
             // A diferencia de un préstamo, 0 es válido: una tarjeta recién sacada no debe nada.
             if (body.initialDebt < 0L) return@post call.respond(HttpStatusCode.BadRequest, "La deuda no puede ser negativa")
+            // Mismo techo que `balance-adjustment` de créditos: un saldo inicial absurdo es un dedo
+            // que se fue, y se rechaza igual por cualquiera de las dos puertas.
+            if (body.initialDebt > MAX_CREDIT_DEBT_COP) return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisa el monto")
             if (body.currency !in setOf("COP", "USD")) {
                 return@post call.respond(HttpStatusCode.BadRequest, "Moneda no soportada — usa COP o USD")
             }
+            rechazoDelCupo(body.terms.creditLimit)?.let { motivo -> return@post call.respond(HttpStatusCode.BadRequest, motivo) }
 
             val account = Account(
                 id       = "acc_${System.currentTimeMillis()}",
@@ -156,6 +161,7 @@ fun Route.cardRoutes() {
                 // día de pago le devolvía el recordatorio a una tarjeta silenciada.
                 .let { if ("remindMe" in crudo) it else it.copy(remindMe = previo?.remindMe ?: true) }
                 .sanitized()
+            rechazoDelCupo(body.creditLimit)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
             // upsert atómico por PK (accountId), igual que en creditRoutes: lastRemindedPeriod
             // no está en el upsert, así que se conserva — un cambio de día aplica desde el mes
             // siguiente.
@@ -180,6 +186,15 @@ fun Route.cardRoutes() {
 }
 
 /** Días acotados a 1–31 (mismo criterio que dayOfMonth en creditRoutes); el corte solo si vino. */
+/**
+ * El cupo es opcional, pero si viene tiene que ser un número de plata posible, y con la misma
+ * regla al crear la tarjeta que al editarle los términos: antes ninguna de las dos puertas lo
+ * miraba, así que un cupo negativo inventaba «disponible» negativo. Cero sí vale (una tarjeta
+ * bloqueada), por eso no es `rechazoDelMonto`.
+ */
+private fun rechazoDelCupo(cupo: Long?): String? =
+    if (cupo != null && (cupo < 0L || cupo > MAX_CREDIT_DEBT_COP)) "Cupo fuera de rango — revisa el monto" else null
+
 private fun CardTerms.sanitized(): CardTerms = copy(
     paymentDay = paymentDay.coerceIn(1, 31),
     cutoffDay  = cutoffDay?.coerceIn(1, 31),

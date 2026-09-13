@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
@@ -105,7 +106,7 @@ fun Route.subscriptionRoutes() {
             val body = call.receive<CreateSubscriptionRequest>()
             val name = body.displayName.trim()
             if (name.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
-            if (body.amount <= 0L) return@post call.respond(HttpStatusCode.BadRequest, "Falta el monto")
+            rechazoDelMonto(body.amount)?.let { motivo -> return@post call.respond(HttpStatusCode.BadRequest, motivo) }
             if (body.currency != "COP" && body.currency != "USD") {
                 return@post call.respond(HttpStatusCode.BadRequest, "Moneda inválida — usa COP o USD")
             }
@@ -206,6 +207,13 @@ fun Route.subscriptionRoutes() {
             // siquiera escribe `merchantKey`, así que el origen de la fila lo dice la clave
             // GUARDADA. Si se validara contra la del body, mandar `merchantKey: "netflix"`
             // sobre una fila `manual_*` saltearía la guarda de abajo.
+            // Las mismas reglas que el alta (arriba). Antes el PUT no revisaba nada: un monto
+            // negativo o un nombre vacío entraban por la edición aunque el alta los rechazara, y
+            // un cobro negativo suma al revés en «Flujo libre».
+            val nombre = body.displayName.trim()
+            if (nombre.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
+            rechazoDelMonto(body.amount)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
+
             val stored = dbQuery {
                 Subscriptions.selectAll()
                     .where { (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }
@@ -234,7 +242,7 @@ fun Route.subscriptionRoutes() {
             val updated = dbQuery {
                 Subscriptions.update({ (Subscriptions.id eq id) and (Subscriptions.userId eq uid) }) {
                     it[status]      = body.status.name
-                    it[displayName] = body.displayName
+                    it[displayName] = nombre
                     it[amount]      = body.amount
                     if (corrigioElMonto) it[montoCorregidoAMano] = true
                     it[dayOfMonth]  = body.dayOfMonth.coerceIn(1, 31)

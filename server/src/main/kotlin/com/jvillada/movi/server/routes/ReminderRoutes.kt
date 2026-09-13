@@ -121,6 +121,7 @@ fun Route.reminderRoutes() {
         val body = call.receive<RecurringRule>()
         // Una regla con monto en cero o negativo suma al revés en «Flujo libre» y en «Próximos
         // pagos». Misma regla que un movimiento, ver `rechazoDelMonto`.
+        if (body.name.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
         rechazoDelMonto(body.amount)?.let { motivo ->
             return@post call.respond(HttpStatusCode.BadRequest, motivo)
         }
@@ -163,6 +164,7 @@ fun Route.reminderRoutes() {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
         val body = call.receive<RecurringRule>()
+        if (body.name.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
         rechazoDelMonto(body.amount)?.let { motivo ->
             return@put call.respond(HttpStatusCode.BadRequest, motivo)
         }

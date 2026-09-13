@@ -281,6 +281,30 @@ class GoalRoutesTest {
     }
 
     @Test
+    fun `una meta con un objetivo absurdo se rechaza al crear y al editar`() = testApplication {
+        wireApp()
+        val absurdo = """{"name":"Viaje","target":5000000000000,"accountId":"$cashAccountId","targetDate":null}"""
+        val post = client.post("/api/goals") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(absurdo)
+        }
+        assertEquals(HttpStatusCode.BadRequest, post.status)
+        val creada = client.post("/api/goals") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validGoalJson(cashAccountId))
+        }
+        val id = Json.parseToJsonElement(creada.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+        val put = client.put("/api/goals/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(absurdo)
+        }
+        assertEquals(HttpStatusCode.BadRequest, put.status)
+    }
+
+    @Test
     fun `PUT updates name and target, and re-derives saved`() = testApplication {
         wireApp()
         val post = client.post("/api/goals") {

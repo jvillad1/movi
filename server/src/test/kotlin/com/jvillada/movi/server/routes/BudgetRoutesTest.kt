@@ -142,6 +142,26 @@ class BudgetRoutesTest {
             client.get("/api/budgets") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
         ).jsonArray.map { it.jsonObject }
 
+    /** Crear y editar un límite siguen la misma regla que el monto de un movimiento. */
+    @Test
+    fun `crear o editar con limite en cero, negativo o sin categoria es 400`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, postBudget("Mercado", 0).status)
+        assertEquals(HttpStatusCode.BadRequest, postBudget("Mercado", -1).status)
+        assertEquals(HttpStatusCode.BadRequest, postBudget("   ", 500_000).status)
+        assertEquals(0, budgets().size)
+
+        assertEquals(HttpStatusCode.Created, postBudget("  Mercado  ", 500_000).status)
+        assertEquals("Mercado", budgets()[0]["category"]!!.jsonPrimitive.content, "se guarda recortada, como al renombrar")
+        val put = client.put("/api/budgets/Mercado") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"category":"Mercado","monthlyLimit":0}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, put.status)
+        assertEquals(500_000L, budgets()[0]["monthlyLimit"]!!.jsonPrimitive.long)
+    }
+
     @Test
     fun `rename borra el nombre viejo, crea el nuevo y conserva el limite`() = testApplication {
         wireApp()

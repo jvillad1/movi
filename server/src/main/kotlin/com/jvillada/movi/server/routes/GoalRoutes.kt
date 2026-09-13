@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.server.balance.accountCopValue
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
@@ -81,7 +82,7 @@ fun Route.goalRoutes() {
             val body = call.receive<Goal>()
             val name = body.name.trim()
             if (name.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
-            if (body.target <= 0L) return@post call.respond(HttpStatusCode.BadRequest, "El monto objetivo debe ser mayor a 0")
+            rechazoDelMonto(body.target)?.let { motivo -> return@post call.respond(HttpStatusCode.BadRequest, motivo) }
 
             val accountRow = dbQuery {
                 Accounts.selectAll()
@@ -116,7 +117,7 @@ fun Route.goalRoutes() {
             val body = call.receive<Goal>()
             val name = body.name.trim()
             if (name.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Falta el nombre")
-            if (body.target <= 0L) return@put call.respond(HttpStatusCode.BadRequest, "El monto objetivo debe ser mayor a 0")
+            rechazoDelMonto(body.target)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
 
             val accountRow = dbQuery {
                 Accounts.selectAll()

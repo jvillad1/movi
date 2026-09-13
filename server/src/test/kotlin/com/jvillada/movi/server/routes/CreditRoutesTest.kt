@@ -359,6 +359,13 @@ class CreditRoutesTest {
             setBody("""{"name":"Préstamo","initialDebt":-1,$terms}""")
         }
         assertEquals(HttpStatusCode.BadRequest, negativeDebt.status)
+        // El mismo techo que el ajuste de saldo: un dedo que se fue no entra por la apertura.
+        val absurda = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Préstamo","initialDebt":5000000000000,$terms}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, absurda.status)
     }
 
     /**
