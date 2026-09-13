@@ -640,6 +640,11 @@ class ReminderRoutesTest {
             header(HttpHeaders.Authorization, "Bearer $tokenA")
         }
         assertEquals(HttpStatusCode.NoContent, deshecho.status)
+        // Un periodo mal escrito es 400, igual que al marcar — no un 404 de «nada que deshacer».
+        val malEscrito = client.delete("/api/recurring-rules/${regla.id}/occurrence/2026-13") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }
+        assertEquals(HttpStatusCode.BadRequest, malEscrito.status)
         val reabierto = client.get("/api/payments/occurrences") {
             header(HttpHeaders.Authorization, "Bearer $tokenA")
         }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }

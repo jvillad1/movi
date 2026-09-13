@@ -6,6 +6,7 @@ import com.jvillada.movi.server.plugins.configureCORS
 import com.jvillada.movi.server.plugins.configureMonitoring
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.server.plugins.configureStatusPages
 import com.jvillada.movi.server.reminders.startReminderScheduler
 import com.jvillada.movi.server.time.AppClock
 import io.ktor.server.application.Application
@@ -25,6 +26,7 @@ fun Application.module() {
     DatabaseFactory.init()
     configureCORS()
     configureSerialization()
+    configureStatusPages()
     configureMonitoring()
     configureAuth()
     configureRouting()

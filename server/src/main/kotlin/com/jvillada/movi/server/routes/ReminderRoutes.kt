@@ -462,10 +462,8 @@ fun Route.reminderRoutes() {
     post("/api/recurring-rules/{id}/occurrence") {
         val uid = call.userId()
         val ruleId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
-        // Este proyecto no tiene StatusPages, así que un body malformado sale como 500 sin
-        // atrapar. Un 500 le dice al cliente «el server se rompió» y lo invita a reintentar algo
-        // que nunca va a funcionar; un 400 dice la verdad. (Solo se arregla acá: cambiarlo para
-        // todos los endpoints es otra rama.)
+        // Esta ruta atrapa el body sola desde antes de `configureStatusPages`, que hoy hace lo
+        // mismo para toda la API; se deja porque su mensaje nombra qué no se pudo leer.
         val body = try {
             call.receive<MarkOccurrenceRequest>()
         } catch (e: Exception) {
@@ -577,6 +575,11 @@ fun Route.reminderRoutes() {
         val uid = call.userId()
         val ruleId = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
         val period = call.parameters["period"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+        // Mismo chequeo que al marcar: un periodo mal escrito es un pedido mal hecho (400), no
+        // «no había nada que deshacer» (404).
+        if (!PERIOD_REGEX.matches(period)) {
+            return@delete call.respond(HttpStatusCode.BadRequest, "Periodo inválido: usa \"YYYY-MM\".")
+        }
         val borrados = dbQuery {
             RecurringOccurrences.deleteWhere {
                 (RecurringOccurrences.userId eq uid) and
