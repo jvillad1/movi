@@ -18,11 +18,15 @@
 # de las suites (45 min) ni puede tumbar el workflow que verifica los PRs — incluido este mismo.
 name: Despliegue
 
+# **Solo a mano desde 2026-09-13.** El dueño apagó el auto-deploy de Railway para ahorrar: un
+# merge a master ya no dispara un build, así que esperar `/version` en cada push fallaría siempre
+# (y gastaría 35 minutos de Actions en cada merge). Se corre después de desplegar a mano
+# (`railway up`), con el commit que se subió:
+#
+#   gh workflow run despliegue.yml -f commit=<sha>
 on:
-  push:
-    branches: [master]
-  # Para poder correrlo a mano contra cualquier commit — incluido uno que producción nunca va a
-  # reportar, que es la forma de comprobar que la alarma sigue sonando.
+  # También sirve contra un commit que producción nunca va a reportar, que es la forma de
+  # comprobar que la alarma sigue sonando.
   workflow_dispatch:
     inputs:
       commit:
@@ -65,9 +69,8 @@ jobs:
       # sabe leer se termina ignorando.
       - name: Esperar a que producción reporte este commit
         env:
-          # Vacío en un push a master: `github.event.inputs` solo existe en workflow_dispatch. El
-          # fallback se resuelve en bash y no en una expresión de GitHub, para poder correr el
-          # comando EXACTO fuera de CI y ver qué hace.
+          # Vacío = el commit actual de master. El fallback se resuelve en bash y no en una
+          # expresión de GitHub, para poder correr el comando EXACTO fuera de CI y ver qué hace.
           SHA_PEDIDO: ${{ github.event.inputs.commit }}
           SHA_DEL_PUSH: ${{ github.sha }}
         run: ./scripts/esperar-despliegue.sh "${SHA_PEDIDO:-$SHA_DEL_PUSH}" 35
