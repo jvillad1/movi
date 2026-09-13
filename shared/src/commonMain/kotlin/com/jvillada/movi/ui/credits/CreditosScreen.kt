@@ -53,6 +53,10 @@ import kotlinx.datetime.Clock
 fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     var credits by remember { mutableStateOf<List<CreditSummary>>(emptyList()) }
     var cards by remember { mutableStateOf<List<CardSummary>>(emptyList()) }
+    // Se prenden solo cuando una lectura contestó de verdad (ver [NoSePudoLeer]). Una vez leídos se
+    // quedan prendidos: si un reintento posterior falla se sigue mostrando lo último que se supo.
+    var creditosLeidos by remember { mutableStateOf(false) }
+    var tarjetasLeidas by remember { mutableStateOf(false) }
     var showTypeChooser by remember { mutableStateOf(false) }
     var showLoanSheet by remember { mutableStateOf(false) }
     var editingLoan by remember { mutableStateOf<CreditSummary?>(null) }
@@ -83,13 +87,16 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     val refreshTick = LocalRefreshTick.current
     LaunchedEffect(reloadKey, refreshTick) {
         loading = true
-        val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it } }
-        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it } }
+        val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it; creditosLeidos = true } }
+        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it; tarjetasLeidas = true } }
         loans.join()
         tarjetas.join()
         loading = false
     }
-    val isEmpty = credits.isEmpty() && cards.isEmpty()
+    // Sin las DOS respuestas no se sabe si hay deudas: «Deuda total $0 · Sin créditos» con el botón
+    // de crear uno era mentirle a quien sí debe, e invitarlo a duplicar. Ver [NoSePudoLeer].
+    val noSeLeyo = !loading && (!creditosLeidos || !tarjetasLeidas)
+    val isEmpty = credits.isEmpty() && cards.isEmpty() && !noSeLeyo
     // El plan de cada préstamo (interés de la cuota, si amortiza, cuándo termina). Se calcula acá
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
@@ -108,11 +115,18 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             MinScreenHeader(
                 title = "Créditos",
                 leading = leadingFor(Screen.Credits, onProfile = { onNavigate(Screen.Profile) }, fallback = Screen.Mas),
-                action = if (!isEmpty) {
+                action = if (!isEmpty && !noSeLeyo) {
                     { NewItemButton(label = "Nuevo crédito", onClick = { showTypeChooser = true }) }
                 } else null,
             )
-            if (isEmpty && !loading) {
+            if (noSeLeyo) {
+                Spacer(Modifier.height(14.dp))
+                NoSePudoLeer(
+                    "No pudimos cargar tus créditos",
+                    onReintentar = { reloadKey++ },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            } else if (isEmpty && !loading) {
                 NewItemButton(
                     label = "Nuevo crédito",
                     onClick = { showTypeChooser = true },
@@ -123,7 +137,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(14.dp))
             }
 
-            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+            if (!noSeLeyo) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
                 item {
                     MinCard(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),

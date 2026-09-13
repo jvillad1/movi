@@ -29,6 +29,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 
@@ -43,12 +44,22 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
     var sheetGoal by remember { mutableStateOf<Goal?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
 
-    LaunchedEffect(loadKey) {
+    // Ver [NoSePudoLeer]: «Aún no hay metas» solo si la lectura contestó.
+    var metasLeidas by remember { mutableStateOf(false) }
+    var cargando by remember { mutableStateOf(true) }
+    // `refreshTick`: la hoja de Agregar es una modal que se abre encima de Metas, y un ingreso a
+    // la cuenta de una meta mueve su «ahorrado». Sin esto la cifra quedaba vieja hasta salir y
+    // volver. Mismo mecanismo que Cuentas, Créditos y Presupuestos. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    LaunchedEffect(loadKey, refreshTick) {
+        cargando = true
         runCatching { Repositories.wallets.getGoals() }
-            .onSuccess { goals = it }
+            .onSuccess { goals = it; metasLeidas = true }
         runCatching { Repositories.wallets.getAccounts() }
             .onSuccess { accounts = it }
+        cargando = false
     }
+    val noSeLeyo = !cargando && !metasLeidas
     Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60: encabezado único — Metas se abre desde Más (flecha, F22) y lleva el mismo
@@ -56,11 +67,18 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
         MinScreenHeader(
             title = "Metas",
             leading = HeaderLeading.Back(fallback = Screen.Mas),
-            action = if (goals.isNotEmpty()) {
+            action = if (goals.isNotEmpty() && !noSeLeyo) {
                 { NewItemButton(label = "Nueva meta", onClick = { sheetGoal = null; sheetOpen = true }) }
             } else null,
         )
-        if (goals.isEmpty()) {
+        if (noSeLeyo) {
+            Spacer(Modifier.height(14.dp))
+            NoSePudoLeer(
+                "No pudimos cargar tus metas",
+                onReintentar = { loadKey++ },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        } else if (goals.isEmpty() && !cargando) {
             NewItemButton(
                 label = "Nueva meta",
                 onClick = { sheetGoal = null; sheetOpen = true },
@@ -74,7 +92,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
         val overallPct  = if (totalTarget > 0) (totalSaved.toFloat() / totalTarget.toFloat()).coerceIn(0f, 1f) else 0f
         val pctLabel    = "${(overallPct * 100).toInt()}%"
 
-        LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+        if (!noSeLeyo) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
                 MinCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),

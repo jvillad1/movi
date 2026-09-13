@@ -110,39 +110,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // botón acá sería «Reintentar», no «Crear primera cuenta» — proponer crear
                     // una cuenta sin saber si ya existe es como se fabrican los duplicados.
                     item {
-                        MinCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            variant = MinCardVariant.Elevated,
-                            padding = PaddingValues(32.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                            ) {
-                                Text(
-                                    text = "No pudimos cargar tus cuentas",
-                                    fontSize = 15.sp,
-                                    color = Movi.colores.textoMedio,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
-                                        .clickable { refreshKey++ }
-                                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = "Reintentar",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Movi.colores.marca,
-                                    )
-                                }
-                            }
-                        }
+                        NoSePudoLeer("No pudimos cargar tus cuentas", onReintentar = { refreshKey++ })
                     }
                 } else if (accounts.isEmpty() && !loading) {
                     item {
