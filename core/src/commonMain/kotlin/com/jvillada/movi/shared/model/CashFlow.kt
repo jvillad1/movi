@@ -189,3 +189,29 @@ const val PAYROLL_DEDUCTION_CATEGORY = "Descuento de nómina"
  * eso esto excluye del flujo y de los avisos, no del balance.
  */
 const val THIRD_PARTY_PAYMENT_CATEGORY = "Pago de un tercero"
+
+/**
+ * **Lo que suma el «Flujo del día»**, con un signo: lo que entró suma, lo que salió resta.
+ *
+ * ### Por qué vive acá y no en cada pantalla
+ *
+ * El mismo número se calculaba en dos lados y con dos reglas distintas. El server
+ * (`GET /api/events/by-day`) sumaba solo los movimientos **en pesos** que cuentan como flujo; el
+ * cliente (`diasVisibles`, en Movimientos) lo recalculaba sobre lo que dejan los filtros y **no
+ * miraba la moneda**. Hoy eso no se nota en los datos del dueño —sus movimientos en dólares son
+ * ajustes y aperturas, que no son flujo—, pero la primera compra real en la Master Black en
+ * dólares haría que un cobro de US$20 restara **veinte pesos** del día en la pantalla mientras el
+ * server no lo contaba. Dos totales distintos para el mismo día, sin que ninguno de los dos
+ * estuviera mal por su cuenta.
+ *
+ * ### Por qué los dólares quedan afuera y no se convierten
+ *
+ * Es la regla que ya tenían el Inicio, el resumen financiero y el contexto de Movi AI: todos
+ * suman solo pesos. Convertir acá con una tasa haría del «Flujo del día» la única cifra de la app
+ * que cambia de valor sin que se mueva ni un peso, cada vez que cambia la TRM.
+ */
+fun aporteAlFlujoDelDia(evento: FinancialEvent): Long = when {
+    evento.currency != "COP" || !evento.countsAsCashFlow -> 0L
+    evento.type == TransactionType.INCOME -> evento.amount
+    else -> -evento.amount
+}
