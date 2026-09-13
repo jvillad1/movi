@@ -111,6 +111,9 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     // «Borrar» vive a milímetros de «Abrir» dentro de una fila que además es clickable entera: un
     // toque gordo en el teléfono se llevaba la escritura del apartamento, sin vuelta atrás.
     var aBorrar by remember { mutableStateOf<Documento?>(null) }
+    // Un segundo toque en «Borrar» mientras el primero está en vuelo mandaba otro DELETE, que
+    // volvía 404 y mostraba «no encontrado» sobre un borrado que sí se hizo.
+    var borrando by remember { mutableStateOf(false) }
     var aEditar by remember { mutableStateOf<Documento?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
@@ -161,10 +164,13 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     }
 
     fun borrar(doc: Documento) {
+        if (borrando) return
+        borrando = true
         coroutine.launch {
             runCatching { Repositories.wallets.deleteDocument(doc.id) }
                 .onSuccess { refreshKey++; aBorrar = null }
                 .onFailure { error = it.toUserMessage(); aBorrar = null }
+            borrando = false
         }
     }
 
