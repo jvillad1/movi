@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.netWorth
@@ -54,7 +55,11 @@ fun Route.financeRoutes() {
 
     post("/api/budgets") {
         val uid = call.userId()
-        val body = call.receive<Budget>()
+        // Mismas reglas que renombrar (nombre recortado y no vacío) y que un movimiento (el
+        // límite, ver `rechazoDelMonto`): un límite en cero pintaba todo gasto como sobrepasado.
+        val body = call.receive<Budget>().let { it.copy(category = it.category.trim()) }
+        if (body.category.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Falta la categoría")
+        rechazoDelMonto(body.monthlyLimit)?.let { motivo -> return@post call.respond(HttpStatusCode.BadRequest, motivo) }
         val exists = dbQuery {
             Budgets.selectAll()
                 .where { (Budgets.userId eq uid) and (Budgets.category eq body.category) }
@@ -75,6 +80,7 @@ fun Route.financeRoutes() {
         val uid = call.userId()
         val cat = call.parameters["category"] ?: return@put call.respond(HttpStatusCode.BadRequest)
         val body = call.receive<Budget>()
+        rechazoDelMonto(body.monthlyLimit)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
         val updated = dbQuery {
             Budgets.update({ (Budgets.userId eq uid) and (Budgets.category eq cat) }) {
                 it[monthlyLimit] = body.monthlyLimit
@@ -104,7 +110,7 @@ fun Route.financeRoutes() {
     // UPDATE — es borrar la fila vieja e insertar una con el nombre nuevo, conservando el
     // límite. Todo en una transacción para que un fallo a mitad de camino no deje ni el
     // presupuesto viejo ni el nuevo. A propósito NO toca `financial_event`: el cruce entre
-    // presupuesto y gasto es por nombre de categoría (ver `spentByCategoryForMonth` del lado
+    // presupuesto y gasto es por nombre de categoría (ver `spentByCategoryForPeriod` del lado
     // del cliente), así que renombrar acá deja de "ver" los movimientos con el nombre viejo —
     // es la advertencia que la hoja de edición le muestra al dueño antes de guardar.
     put("/api/budgets/{category}/rename") {

@@ -180,6 +180,30 @@ class ReminderRoutesTest {
         }
     }
 
+    @Test
+    fun `una regla recurrente sin nombre se rechaza al crear y al editar`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val sinNombre = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(RecurringRule("ignored", "  ", "Suscripción", 50_000, 15, TransactionType.EXPENSE))
+        }
+        assertEquals(HttpStatusCode.BadRequest, sinNombre.status)
+        val creada = client.post("/api/recurring-rules") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(RecurringRule("ignored", "Netflix", "Suscripción", 50_000, 15, TransactionType.EXPENSE))
+        }.body<RecurringRule>()
+        val put = client.put("/api/recurring-rules/${creada.id}") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+            contentType(ContentType.Application.Json)
+            setBody(creada.copy(name = ""))
+        }
+        assertEquals(HttpStatusCode.BadRequest, put.status)
+    }
+
     /** User A POSTs a rule; User B PUT on A's id → 404 */
     @Test
     fun `user B cannot update user A's recurring rule`() = testApplication {
