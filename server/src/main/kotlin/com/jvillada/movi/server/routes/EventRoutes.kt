@@ -204,9 +204,8 @@ fun Route.eventRoutes() {
                         // la cuenta— pero un ajuste de $60.000.000 no puede encabezar el día
                         // como "+$60.000.000", que es el mismo número engañoso del Dashboard.
                         date  = date,
-                        total = items.filter { it.currency == "COP" && it.countsAsCashFlow }.sumOf { e ->
-                            if (e.type == TransactionType.INCOME) e.amount else -e.amount
-                        },
+                        // La misma función que usa el cliente: ver `aporteAlFlujoDelDia`.
+                        total = items.sumOf { aporteAlFlujoDelDia(it) },
                         items = items,
                     )
                 }

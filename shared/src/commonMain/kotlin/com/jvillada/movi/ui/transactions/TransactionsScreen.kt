@@ -81,6 +81,7 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_MINIMOS_DE_TARJETA
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -224,9 +225,9 @@ fun diasVisibles(
         if (filtered.isEmpty()) null
         else day.copy(
             items = filtered,
-            total = filtered.filter { it.countsAsCashFlow }.sumOf {
-                if (it.type == TransactionType.EXPENSE) -it.amount else it.amount
-            },
+            // La misma función que usa el server en `/by-day`. Antes acá se recalculaba sin mirar
+            // la moneda, y un cobro en dólares habría restado su monto como si fueran pesos.
+            total = filtered.sumOf { aporteAlFlujoDelDia(it) },
         )
     }
 
