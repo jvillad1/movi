@@ -14,7 +14,7 @@ import kotlinx.serialization.json.Json
  * de distinguir «el cliente mandó este campo» de «el cliente no lo conoce»— y después lo decodifican
  * ellas mismas. Con la instancia por defecto de `Json` eso quedaba **más estricto que el resto de
  * la API**: una clave desconocida (un cliente más nuevo que el server, que es el sentido normal de
- * un despliegue) tira excepción, y sin `StatusPages` eso llega como un 500 sin mensaje.
+ * un despliegue) tiraba excepción, y antes de `configureStatusPages` eso llegaba como un 500 sin mensaje.
  *
  * `ignoreUnknownKeys` no debilita la guarda de claves: esa mira el `JsonObject` crudo, que sigue
  * teniendo todas las claves que llegaron.
