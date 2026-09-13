@@ -504,12 +504,14 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = Movi.colores.texto)) {
                         append(formatCOP(p.spent))
                     }
-                    append(" de ${formatCOP(p.budget.monthlyLimit)} este mes")
+                    // Espacios que no cortan: si hace falta partir, se parte antes de «de» y no
+                    // entre «este» y «mes», que quedaba «este» arriba y «mes» solo abajo.
+                    append(" de\u00A0${formatCOP(p.budget.monthlyLimit)} este\u00A0mes")
                 },
                 style = Movi.textos.monto,
                 color = Movi.colores.textoMedio,
                 letterSpacing = (-0.3).sp,
-                modifier = Modifier.weight(1.4f),
+                modifier = Modifier.weight(1.7f),
             )
             val tail = when (p.state) {
                 EstadoDePresupuesto.EXCEDIDO_MUCHO,
