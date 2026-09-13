@@ -50,6 +50,7 @@ import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.shared.model.EventOccurrenceMark
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.ui.fecha.avisoDeCambioDeMes
 import com.jvillada.movi.ui.fecha.avisoDeSelloSuelto
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -1331,6 +1332,16 @@ private fun SeccionDeFecha(
             sello = runCatching { Repositories.wallets.getEventOccurrenceMark(event.id) }.getOrNull()
         }
     }
+    // El período del dueño, para que el aviso de «cambia de mes» hable del mismo mes que muestran
+    // Movimientos y Presupuestos (con corte 25, el 27 de septiembre ya es octubre). Se pide al
+    // abrir, igual que el sello; si falla queda el mes de calendario y el aviso sigue funcionando.
+    var periodo by remember { mutableStateOf(PeriodSettings()) }
+    LaunchedEffect(abierto) {
+        if (abierto) {
+            runCatching { Repositories.wallets.getUserProfile() }
+                .onSuccess { periodo = PeriodSettings(cutoffDay = it.periodCutoffDay, iniciosPropios = it.periodStarts) }
+        }
+    }
 
     fun guardar() {
         if (guardando || elegida == actual) return
@@ -1385,7 +1396,7 @@ private fun SeccionDeFecha(
         // costo es plata (un pago que deja de recordarse), y el del mes lo acompaña.
         val avisos = listOfNotNull(
             avisoDeSelloSuelto(sello, elegida),
-            avisoDeCambioDeMes(actual, elegida, hoy),
+            avisoDeCambioDeMes(actual, elegida, hoy, periodo),
         )
         avisos.forEach { aviso ->
             Spacer(Modifier.height(12.dp))

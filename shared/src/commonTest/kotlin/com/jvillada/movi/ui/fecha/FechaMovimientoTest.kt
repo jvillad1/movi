@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.fecha
 
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.Clock
@@ -209,6 +210,32 @@ class FechaMovimientoTest {
             avisoDeCambioDeMes(LocalDate(2026, 1, 3), LocalDate(2025, 12, 30), LocalDate(2026, 1, 15)),
         )
         assertTrue(aviso.contains("de enero de 2026 a diciembre de 2025"), aviso)
+    }
+
+    /**
+     * **Con corte 25 el «mes» es el período.** Del 20 al 27 de septiembre se sale del período
+     * (pasa a octubre) y tiene que avisar; del 26 de septiembre al 3 de octubre no se sale de
+     * nada y no puede avisar. Con el mes de calendario pasaba exactamente al revés.
+     */
+    @Test
+    fun `con corte 25 el aviso sigue el periodo y no el calendario`() {
+        val corte25 = PeriodSettings(cutoffDay = 25)
+        val hoyEnOctubre = LocalDate(2026, 9, 30)
+        val aviso = assertNotNull(
+            avisoDeCambioDeMes(LocalDate(2026, 9, 20), LocalDate(2026, 9, 27), hoyEnOctubre, corte25),
+        )
+        assertTrue(aviso.contains("de septiembre a octubre"), aviso)
+        assertTrue(aviso.contains("empieza a contar"), aviso)
+        assertNull(avisoDeCambioDeMes(LocalDate(2026, 9, 26), LocalDate(2026, 10, 3), hoyEnOctubre, corte25))
+    }
+
+    /** Un período que el dueño hizo arrancar otro día también manda en el aviso. */
+    @Test
+    fun `un inicio propio mueve el borde del aviso`() {
+        // Octubre arrancó el 22 de septiembre en vez del 25.
+        val settings = PeriodSettings(cutoffDay = 25, iniciosPropios = mapOf("2026-10" to "2026-09-22"))
+        assertNotNull(avisoDeCambioDeMes(LocalDate(2026, 9, 21), LocalDate(2026, 9, 23), LocalDate(2026, 9, 30), settings))
+        assertNull(avisoDeCambioDeMes(LocalDate(2026, 9, 23), LocalDate(2026, 10, 10), LocalDate(2026, 9, 30), settings))
     }
 
     // ── el aviso del sello de recurrente ─────────────────────────────────────

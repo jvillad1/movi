@@ -1,6 +1,9 @@
 package com.jvillada.movi.ui.fecha
 
 import com.jvillada.movi.shared.model.EventOccurrenceMark
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -140,15 +143,33 @@ fun esFutura(fecha: LocalDate, hoy: LocalDate): Boolean = fecha > hoy
  * la fecha y todo vuelve a donde estaba. Por eso el aviso no dice «no se puede deshacer» —decirlo
  * sería mentir— y por eso alcanza con un renglón y no hace falta una confirmación aparte.
  *
- * @param enCurso el mes que la app muestra hoy (cualquier día de ese mes). Se recibe y no se lee
- *   acá para poder fijarlo por test.
+ * ## «Mes» es el período del dueño, no el del calendario
+ *
+ * Con corte 25, el 27 de septiembre ya es «octubre» en Movimientos, Presupuestos e Inicio. Antes
+ * este aviso comparaba meses de calendario: mover un gasto del 20 al 27 de septiembre lo sacaba del
+ * período sin decir nada, y moverlo del 26 de septiembre al 3 de octubre avisaba un cambio que no
+ * existía. Ahora cada fecha se ubica con [periodoDe] y [settings] —la misma regla que usan esas
+ * pantallas— y los nombres del aviso son los de los períodos.
+ *
+ * @param enCurso hoy (cualquier día del período en curso). Se recibe y no se lee acá para poder
+ *   fijarlo por test.
+ * @param settings el corte y los inicios propios del dueño. El default es el mes de calendario,
+ *   que es lo que se usa mientras el perfil no contestó.
  */
-fun avisoDeCambioDeMes(anterior: LocalDate, nueva: LocalDate, enCurso: LocalDate): String? {
-    if (mismoMes(anterior, nueva)) return null
-    val desde = etiquetaDeMesEnAviso(anterior, nueva)
-    val hasta = etiquetaDeMesEnAviso(nueva, anterior)
-    val salia = mismoMes(anterior, enCurso)
-    val llega = mismoMes(nueva, enCurso)
+fun avisoDeCambioDeMes(
+    anterior: LocalDate,
+    nueva: LocalDate,
+    enCurso: LocalDate,
+    settings: PeriodSettings = PeriodSettings(),
+): String? {
+    val periodoAnterior = periodoDelDia(anterior, settings)
+    val periodoNuevo = periodoDelDia(nueva, settings)
+    if (periodoAnterior == periodoNuevo) return null
+    val desde = etiquetaDePeriodoEnAviso(periodoAnterior, periodoNuevo)
+    val hasta = etiquetaDePeriodoEnAviso(periodoNuevo, periodoAnterior)
+    val periodoEnCurso = periodoDelDia(enCurso, settings)
+    val salia = periodoAnterior == periodoEnCurso
+    val llega = periodoNuevo == periodoEnCurso
     return when {
         // Se va del mes que la app muestra: la plata desaparece de Inicio, Análisis y del
         // presupuesto de su categoría, y no hay ninguna pantalla donde volver a verla sumada.
@@ -187,9 +208,9 @@ fun avisoDeSelloSuelto(mark: EventOccurrenceMark?, nueva: LocalDate): String? {
         "recordar hasta que lo marques otra vez."
 }
 
-/** ¿Las dos fechas caen en el mismo mes civil? */
-private fun mismoMes(a: LocalDate, b: LocalDate): Boolean =
-    a.year == b.year && a.monthNumber == b.monthNumber
+/** El período en que cae un día civil de Bogotá, por la misma regla que el resto de la app. */
+private fun periodoDelDia(dia: LocalDate, settings: PeriodSettings): PeriodoFinanciero =
+    periodoDe(dia.atTime(12, 0).toInstant(AppTimeZone.zone).toEpochMilliseconds(), settings)
 
 /** «2026-08» → «agosto de 2026», o `null` si el periodo no se puede leer. */
 fun etiquetaDePeriodo(period: String): String? {
@@ -206,9 +227,9 @@ fun etiquetaDePeriodo(period: String): String? {
  * años distintos («de diciembre de 2025 a enero de 2026»). Dentro del mismo año, «de agosto a
  * julio» se lee mejor y no pierde nada.
  */
-private fun etiquetaDeMesEnAviso(mes: LocalDate, otro: LocalDate): String =
-    if (mes.year == otro.year) MESES_DEL_ANIO[mes.monthNumber - 1]
-    else "${MESES_DEL_ANIO[mes.monthNumber - 1]} de ${mes.year}"
+private fun etiquetaDePeriodoEnAviso(periodo: PeriodoFinanciero, otro: PeriodoFinanciero): String =
+    if (periodo.year == otro.year) MESES_DEL_ANIO[periodo.month - 1]
+    else "${MESES_DEL_ANIO[periodo.month - 1]} de ${periodo.year}"
 
 /**
  * Las 42 casillas de la grilla de un mes (6 semanas × 7 días), con `null` en los huecos de antes
