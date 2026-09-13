@@ -124,6 +124,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
  * F13: filtro puro detrás de la búsqueda de Movimientos, separado del `@Composable` para poder
@@ -133,11 +134,11 @@ import com.jvillada.movi.ui.LocalRefreshTick
  * mientras el campo de búsqueda está vacío.
  */
 fun matchesQuery(event: FinancialEvent, query: String): Boolean {
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     if (q.isEmpty()) return true
-    return normalizeForMatch(event.description).contains(q) ||
-        event.merchant?.let { normalizeForMatch(it).contains(q) } == true ||
-        normalizeForMatch(event.category).contains(q)
+    return normalizarParaBuscar(event.description).contains(q) ||
+        event.merchant?.let { normalizarParaBuscar(it).contains(q) } == true ||
+        normalizarParaBuscar(event.category).contains(q)
 }
 
 /**
@@ -845,16 +846,6 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
  * tarea (Ola 4 la reserva para otro trabajo en paralelo), así que se duplica el normalizador en
  * vez de extraerlo a un helper compartido.
  */
-private fun normalizeForMatch(s: String): String = buildString(s.length) {
-    for (c in s.lowercase()) {
-        append(
-            when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ñ' -> 'n'
-                else -> c
-            },
-        )
-    }
-}
 
 @Composable
 fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
