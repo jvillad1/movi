@@ -207,7 +207,9 @@ fun CardRow(
  * tres apps de finanzas personales del benchmark ninguna lo hace, ni siquiera YNAB, cuya pantalla
  * central es literalmente una tabla de montos.
  *
- * Quedan 78 `FontFamily.Monospace` sueltos en el resto de la app; se van con sus pantallas.
+ * En el resto de la app quedan **siete** `FontFamily.Monospace`, y los siete son a propósito:
+ * seis arman la maqueta de un tiquete de caja —ahí la monoespaciada no es estilo, es el papel
+ * térmico que imita— y el séptimo es el cuerpo crudo de un SMS del banco, citado tal cual.
  *
  * @param fontSize en sp, como `Float`, tal cual lo pedían las 18 llamadas que ya existían. Es el
  *   único parámetro que no sale del sistema todavía: el tamaño de una cifra depende de si es el
@@ -239,7 +241,7 @@ fun ChevronRight() {
     Icon(
         Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
-        // Era MinTextFaint: 2,51:1 contra el fondo. Una flecha que dice «esto se toca» y no se
+        // Era Movi.colores.textoApagado: 2,51:1 contra el fondo. Una flecha que dice «esto se toca» y no se
         // ve no dice nada. textoApagado da 7,51:1.
         tint = Movi.colores.textoApagado,
         modifier = Modifier.size(18.dp),

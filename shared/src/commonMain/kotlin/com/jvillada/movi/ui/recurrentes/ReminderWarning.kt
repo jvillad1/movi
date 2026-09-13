@@ -30,19 +30,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.shared.model.ReminderChannels
-import com.jvillada.movi.theme.MinBorder
-import com.jvillada.movi.theme.MinOnPrimaryContainer
-import com.jvillada.movi.theme.MinPrimary
-import com.jvillada.movi.theme.MinPrimaryContainer
-import com.jvillada.movi.theme.MinSurfaceContainerLow
-import com.jvillada.movi.theme.MinText
-import com.jvillada.movi.theme.MinTextDim
-import com.jvillada.movi.theme.MinTextMute
-import com.jvillada.movi.theme.MinWarn
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 
@@ -230,7 +222,7 @@ fun ReminderOptInField(
                 Text(
                     text = "Recordarme unos días antes",
                     fontSize = 14.sp,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.height(2.dp))
@@ -245,7 +237,7 @@ fun ReminderOptInField(
                     Text(
                         text = linea,
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 16.sp,
                     )
                 }
@@ -273,8 +265,8 @@ private fun CheckBox(checked: Boolean) {
         modifier = Modifier
             .size(20.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(if (checked) MinPrimaryContainer else MinSurfaceContainerLow)
-            .then(if (checked) Modifier else Modifier.border(1.dp, MinBorder, RoundedCornerShape(6.dp))),
+            .background(if (checked) Movi.colores.marca.copy(alpha = 0.16f) else Movi.colores.tarjeta)
+            .then(if (checked) Modifier else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(6.dp))),
         contentAlignment = Alignment.Center,
     ) {
         if (checked) {
@@ -284,7 +276,7 @@ private fun CheckBox(checked: Boolean) {
             Icon(
                 imageVector = Icons.Rounded.Check,
                 contentDescription = null,
-                tint = MinOnPrimaryContainer,
+                tint = Movi.colores.marca,
                 modifier = Modifier.size(14.dp),
             )
         }
@@ -327,14 +319,14 @@ fun ReminderWarningBanner(
                     .padding(top = 3.dp)
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(MinWarn),
+                    .background(Movi.colores.aviso),
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (optIn) "Este recordatorio no te va a llegar" else "Tus recordatorios no te van a llegar",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     letterSpacing = (-0.1).sp,
                 )
                 Spacer(Modifier.height(4.dp))
@@ -350,7 +342,7 @@ fun ReminderWarningBanner(
                             "Tienes pagos próximos, pero las notificaciones están apagadas y no hay otro canal activo para avisarte. Actívalas para no perderte un vencimiento."
                     },
                     fontSize = 12.5.sp,
-                    color = MinTextDim,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 17.sp,
                 )
                 if (!denied) {
@@ -359,7 +351,7 @@ fun ReminderWarningBanner(
                         text = "Activar notificaciones",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinPrimary,
+                        color = Movi.colores.marca,
                         modifier = Modifier.clickable(onClick = onEnable),
                     )
                 }

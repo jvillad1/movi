@@ -47,7 +47,7 @@ fun NewItemButton(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // El ícono y el rótulo iban en `MinBg` —el color del FONDO de la app— usado como
+            // El ícono y el rótulo iban en `Movi.colores.fondo` —el color del FONDO de la app— usado como
             // «lo que va encima del lavanda». Funcionaba de casualidad: nadie había nombrado ese
             // rol. Ahora se llama `sobreMarca` y la prueba de contraste lo vigila.
             Icon(

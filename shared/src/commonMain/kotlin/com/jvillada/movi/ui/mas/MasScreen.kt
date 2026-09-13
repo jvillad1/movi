@@ -95,7 +95,7 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MinBg),
+            .background(Movi.colores.fondo),
     ) {
         MinScreenHeader(
             title = "Más",
@@ -126,7 +126,7 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
             // que la fila quedaba con tarjetas de anchos distintos.
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MinSurfaceContainer)
+            .background(Movi.colores.tarjeta)
             .clickable { onNavigate(item.screen) }
             .padding(vertical = 16.dp, horizontal = 8.dp),
     ) {
@@ -148,7 +148,7 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
             text = item.label,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
-            color = MinTextDim,
+            color = Movi.colores.textoMedio,
             // V13: «Mensajes del banco» ocupa dos renglones y su ficha quedaba más alta que
             // las demás, desalineando la fila entera. Reservando SIEMPRE dos renglones, todas
             // las fichas miden lo mismo — y el rótulo que se parte se centra en vez de

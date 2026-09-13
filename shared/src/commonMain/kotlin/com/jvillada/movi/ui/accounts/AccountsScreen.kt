@@ -75,7 +75,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         if (result == SnackbarResult.ActionPerformed) refreshKey++
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // F60: encabezado único — Cuentas es raíz (está en la barra y en el rail), así que
             // lleva avatar y el MISMO rótulo que el menú («Cuentas», ya no «Mis cuentas»).
@@ -89,8 +89,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
             if (loading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
-                    color = MinPrimaryContainer,
-                    trackColor = MinSurfaceContainerHigh,
+                    color = Movi.colores.marca.copy(alpha = 0.16f),
+                    trackColor = Movi.colores.tarjeta,
                 )
             } else {
                 Spacer(Modifier.height(4.dp))
@@ -123,13 +123,13 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 Text(
                                     text = "No pudimos cargar tus cuentas",
                                     fontSize = 15.sp,
-                                    color = MinTextDim,
+                                    color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                 )
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(999.dp))
-                                        .background(MinPrimaryContainer)
+                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
                                         .clickable { refreshKey++ }
                                         .padding(horizontal = 20.dp, vertical = 10.dp),
                                     contentAlignment = Alignment.Center,
@@ -138,7 +138,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                         text = "Reintentar",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = MinOnPrimaryContainer,
+                                        color = Movi.colores.marca,
                                     )
                                 }
                             }
@@ -159,13 +159,13 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 Text(
                                     text = "Sin cuentas aún",
                                     fontSize = 15.sp,
-                                    color = MinTextDim,
+                                    color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                 )
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(999.dp))
-                                        .background(MinPrimaryContainer)
+                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
                                         .clickable { showCreateSheet = true }
                                         .padding(horizontal = 20.dp, vertical = 10.dp),
                                     contentAlignment = Alignment.Center,
@@ -174,7 +174,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                         text = "Crear primera cuenta",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = MinOnPrimaryContainer,
+                                        color = Movi.colores.marca,
                                     )
                                 }
                             }
@@ -199,7 +199,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             Text(
                                 text = "PATRIMONIO NETO",
                                 fontSize = 11.sp,
-                                color = MinTextMute,
+                                color = Movi.colores.textoMedio,
                                 letterSpacing = 0.4.sp,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -217,7 +217,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // por hipotecas es estructura de largo plazo, no una pérdida — y el
                                 // desglose de acá abajo (Activos en verde, Deudas en rojo) es el que
                                 // carga la lectura de signo, con más información que un solo color.
-                                color = MinText,
+                                color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(12.dp))
@@ -228,8 +228,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // «Tu plata» y no «Activos»: es el mismo número y el mismo rótulo
                                 // que la cifra grande del Inicio, y compartir la palabra es lo
                                 // que hace obvio que son la misma cosa vista dos veces.
-                                Text("Tu plata", fontSize = 12.sp, color = MinTextMute)
-                                Cifra(formatCOP(balance.tuPlata), 12f, color = MinIncome)
+                                Text("Tu plata", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                                Cifra(formatCOP(balance.tuPlata), 12f, color = Movi.colores.entra)
                             }
                             // El renglón que faltaba: sin él, tu plata − deudas no daba el
                             // patrimonio de arriba y el lector no tenía forma de cerrar la resta.
@@ -242,9 +242,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     Text(
                                         text = balance.condicionadoA?.let { "Solo para $it" } ?: "De uso condicionado",
                                         fontSize = 12.sp,
-                                        color = MinTextMute,
+                                        color = Movi.colores.textoMedio,
                                     )
-                                    Cifra(formatCOP(balance.condicionado), 12f, color = MinTextDim)
+                                    Cifra(formatCOP(balance.condicionado), 12f, color = Movi.colores.textoMedio)
                                 }
                             }
                             if (balance.deudas > 0) {
@@ -253,8 +253,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Text("Deudas", fontSize = 12.sp, color = MinTextMute)
-                                    Cifra("−${formatCOP(balance.deudas)}", 12f, color = MinExpense)
+                                    Text("Deudas", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                                    Cifra("−${formatCOP(balance.deudas)}", 12f, color = Movi.colores.sale)
                                 }
                             }
                         }
@@ -302,13 +302,13 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                         text = "Movimientos entre cuentas",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = MinText,
+                                        color = Movi.colores.texto,
                                     )
                                     Spacer(Modifier.height(3.dp))
                                     Text(
                                         text = "Traspasos, cuotas de crédito y pagos de tarjeta",
                                         fontSize = 12.sp,
-                                        color = MinTextMute,
+                                        color = Movi.colores.textoMedio,
                                     )
                                 }
                                 ChevronRight()
@@ -353,17 +353,17 @@ private fun AccountsGroup(
 ) {
     Column {
         // Mismo lenguaje que MinSectionHeader (rótulo en mayúsculas + conteo), con el subtotal
-        // del grupo a la derecha en mono — no es una acción, así que no va en MinPrimary.
+        // del grupo a la derecha en mono — no es una acción, así que no va en Movi.colores.marca.
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row {
-                Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MinTextMute, letterSpacing = 0.5.sp)
-                Text(" · ${accounts.size}", fontSize = 11.sp, color = MinTextFaint)
+                Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
+                Text(" · ${accounts.size}", fontSize = 11.sp, color = Movi.colores.textoApagado)
             }
-            Cifra(formatCOP(accounts.sumOf { it.balance }), 12f, color = MinTextDim)
+            Cifra(formatCOP(accounts.sumOf { it.balance }), 12f, color = Movi.colores.textoMedio)
         }
         MinCard(
             modifier = Modifier.fillMaxWidth(),
@@ -374,7 +374,7 @@ private fun AccountsGroup(
                 Text(
                     text = "Sin cuentas de ${title.lowercase()} aún",
                     fontSize = 13.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     modifier = Modifier.padding(vertical = 14.dp),
                 )
             }
@@ -390,12 +390,12 @@ private fun AccountsGroup(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(imageVector = icon, contentDescription = typeLabel, tint = MinTextDim, modifier = Modifier.size(20.dp))
+                            Icon(imageVector = icon, contentDescription = typeLabel, tint = Movi.colores.textoMedio, modifier = Modifier.size(20.dp))
                             Text(
                                 text = account.name,
                                 fontSize = 14.5.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = MinText,
+                                color = Movi.colores.texto,
                             )
                         }
                     },
@@ -404,7 +404,7 @@ private fun AccountsGroup(
                         Cifra(
                             text = formatCOP(account.balance),
                             fontSize = 14.5f,
-                            color = MinIncome,
+                            color = Movi.colores.entra,
                         )
                     },
                     isLast = index == accounts.size - 1,

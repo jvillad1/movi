@@ -74,7 +74,7 @@ fun PeriodoSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(MinSurfaceContainerHigh)
+                .background(Movi.colores.tarjeta)
                 .padding(horizontal = 20.dp)
                 .clickable(enabled = false) {},
         ) {
@@ -99,14 +99,14 @@ fun PeriodoSheet(
                     text = "¿Qué día empieza tu mes?",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MinText,
+                    color = Movi.colores.texto,
                     modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
                 )
                 Text(
                     text = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
                         "Si te pagan el 26, elige 26 y el mes te va a cuadrar con el sueldo.",
                     fontSize = 13.sp,
-                    color = MinTextMute,
+                    color = Movi.colores.textoMedio,
                     lineHeight = 18.sp,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
@@ -116,27 +116,27 @@ fun PeriodoSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(MinSurfaceContainer)
+                        .background(Movi.colores.tarjeta)
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
                     Text(
                         text = "Hoy estarías en ${nombreDe(hoy)}",
                         fontSize = 14.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MinText,
+                        color = Movi.colores.texto,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = rangoLegibleDe(hoy, settings) ?: "Del 1 al último día del mes",
                         fontSize = 12.5.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                     )
                     if (settings.esMesDeCalendario) {
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = "Es el mes de calendario, como viene por defecto.",
                             fontSize = 11.5.sp,
-                            color = MinTextFaint,
+                            color = Movi.colores.textoApagado,
                         )
                     }
                 }
@@ -171,7 +171,7 @@ fun PeriodoSheet(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(if (elegido) MinPrimary else MinSurfaceContainer)
+                                    .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
                                     .clickable(enabled = !saving) { dia = d },
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -179,7 +179,7 @@ fun PeriodoSheet(
                                     text = d.toString(),
                                     fontSize = 13.sp,
                                     fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (elegido) MinBg else MinText,
+                                    color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
                                     textAlign = TextAlign.Center,
                                 )
                             }
@@ -195,14 +195,14 @@ fun PeriodoSheet(
                     Text(
                         text = "En los meses que no tienen día $dia, el corte cae el último día del mes.",
                         fontSize = 12.sp,
-                        color = MinTextMute,
+                        color = Movi.colores.textoMedio,
                         lineHeight = 16.sp,
                     )
                 }
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error, fontSize = 12.5.sp, color = MinExpense, lineHeight = 17.sp)
+                    Text(text = error, fontSize = 12.5.sp, color = Movi.colores.sale, lineHeight = 17.sp)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -211,14 +211,14 @@ fun PeriodoSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (saving) MinSurfaceContainerHighest else MinPrimary)
+                        .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
                         .clickable(enabled = !saving) { onSave(dia) }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (saving) "Guardando…" else "Guardar",
-                        color = if (saving) MinTextMute else MinBg,
+                        color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )

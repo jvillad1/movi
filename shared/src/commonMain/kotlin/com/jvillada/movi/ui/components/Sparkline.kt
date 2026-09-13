@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.theme.Movi
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -8,7 +9,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import com.jvillada.movi.theme.MinText
 
 // Ola 4: acá vivía `Sparkline`, la curva del Balance del Inicio. Se borró porque dibujaba
 // una serie FIJA inventada (no salía de ningún dato) — "el sparkline de mentira" (F9).
@@ -16,7 +16,7 @@ import com.jvillada.movi.theme.MinText
 @Composable
 fun SimpleSparkline(
     modifier: Modifier,
-    color: Color = MinText,
+    color: Color = Movi.colores.texto,
 ) {
     // Simple upward curve for smaller contexts
     Canvas(modifier = modifier) {

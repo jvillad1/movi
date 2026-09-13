@@ -46,7 +46,7 @@ fun SheetHandleWithClose(
                 .width(32.dp)
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp))
-                // La manija iba en `MinTextFaint` (2,51:1): la pista de «esto se arrastra» era
+                // La manija iba en `Movi.colores.textoApagado` (2,51:1): la pista de «esto se arrastra» era
                 // justo lo que menos se veía. `borde` es el rol de una línea, no de un texto.
                 .background(Movi.colores.borde),
         )

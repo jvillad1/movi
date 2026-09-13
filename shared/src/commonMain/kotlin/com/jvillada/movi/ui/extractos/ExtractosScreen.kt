@@ -74,7 +74,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MinBg)) {
+    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60: encabezado único — Extractos se abre desde Más (flecha, F22).
         MinScreenHeader(
             title = "Extractos",
@@ -92,21 +92,21 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MinSurfaceContainer)
+                        .background(Movi.colores.tarjeta)
                         .padding(14.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
                     Icon(
                         Icons.Rounded.Description, null,
-                        tint = MinPrimary,
+                        tint = Movi.colores.marca,
                         modifier = Modifier.size(20.dp).padding(top = 2.dp),
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Fuente de verdad", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MinText)
+                        Text("Fuente de verdad", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto)
                         Text(
                             "Los extractos bancarios reconcilian automáticamente tus movimientos. Sube PDF, CSV o XLS de cualquier banco colombiano.",
-                            fontSize = 12.sp, color = MinTextMute, lineHeight = 17.sp,
+                            fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp,
                         )
                     }
                 }
@@ -120,7 +120,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MinSurfaceContainerLow)
+                            .background(Movi.colores.tarjeta)
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
@@ -129,15 +129,15 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(uploadingFileName, fontSize = 12.sp, color = MinText)
-                            Text("Parseando…", fontSize = 11.sp, color = MinPrimary)
+                            Text(uploadingFileName, fontSize = 12.sp, color = Movi.colores.texto)
+                            Text("Parseando…", fontSize = 11.sp, color = Movi.colores.marca)
                         }
                         LinearProgressIndicator(
                             modifier = Modifier.fillMaxWidth(),
-                            color = MinPrimary,
-                            trackColor = MinSurfaceContainerHigh,
+                            color = Movi.colores.marca,
+                            trackColor = Movi.colores.tarjeta,
                         )
-                        Text("Claude está leyendo el extracto", fontSize = 11.sp, color = MinTextMute)
+                        Text("Claude está leyendo el extracto", fontSize = 11.sp, color = Movi.colores.textoMedio)
                     }
                 } else {
                     Box(
@@ -146,17 +146,17 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                             .fillMaxWidth()
                             .height(180.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(MinSurfaceContainerLow)
-                            .border(1.dp, MinBorderStrong, RoundedCornerShape(16.dp))
+                            .background(Movi.colores.tarjeta)
+                            .border(1.dp, Movi.colores.borde, RoundedCornerShape(16.dp))
                             .clickable { launchPicker() },
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Icon(Icons.Rounded.UploadFile, null, tint = MinPrimary, modifier = Modifier.size(40.dp))
-                            Text("Subir extracto", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MinText)
-                            Text("PDF · CSV · XLS", fontSize = 12.sp, color = MinTextMute)
+                            Icon(Icons.Rounded.UploadFile, null, tint = Movi.colores.marca, modifier = Modifier.size(40.dp))
+                            Text("Subir extracto", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto)
+                            Text("PDF · CSV · XLS", fontSize = 12.sp, color = Movi.colores.textoMedio)
                         }
                     }
                 }
@@ -167,7 +167,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                 item(key = "upload-error") {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        msg, fontSize = 12.sp, color = MinExpense,
+                        msg, fontSize = 12.sp, color = Movi.colores.sale,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -179,7 +179,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(24.dp))
                 Text(
                     "Bancos soportados",
-                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MinTextDim,
+                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.textoMedio,
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
             }
@@ -190,10 +190,10 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
                             row.forEach { banco ->
                                 Text(
-                                    banco, fontSize = 11.sp, color = MinTextMute,
+                                    banco, fontSize = 11.sp, color = Movi.colores.textoMedio,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(MinSurfaceContainerHigh)
+                                        .background(Movi.colores.tarjeta)
                                         .padding(horizontal = 10.dp, vertical = 5.dp),
                                 )
                             }
@@ -207,7 +207,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                 Spacer(Modifier.height(28.dp))
                 Text(
                     "IMPORTACIONES ANTERIORES",
-                    fontSize = 11.sp, color = MinTextDim, letterSpacing = 0.8.sp,
+                    fontSize = 11.sp, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
             }
@@ -216,7 +216,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                 importsError != null -> item(key = "imports-error") {
                     Text(
                         importsError!!,
-                        fontSize = 12.sp, color = MinExpense,
+                        fontSize = 12.sp, color = Movi.colores.sale,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     )
@@ -224,7 +224,7 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                 imports.isEmpty() -> item(key = "imports-empty") {
                     Text(
                         "Aún no hay importaciones",
-                        fontSize = 13.sp, color = MinTextMute,
+                        fontSize = 13.sp, color = Movi.colores.textoMedio,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     )
@@ -261,16 +261,16 @@ private fun ImportCard(imp: StatementImport, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 "${imp.bankName.uppercase()} · ${imp.period.uppercase()}",
-                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MinText,
+                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto,
             )
             Text(
                 "${imp.importedCount} importadas · ${imp.reconciledCount} reconciliadas",
-                fontSize = 12.sp, color = MinTextMute,
+                fontSize = 12.sp, color = Movi.colores.textoMedio,
             )
         }
         Text(
             importEpochToShortDate(imp.importedAt),
-            fontSize = 12.sp, color = MinTextMute,
+            fontSize = 12.sp, color = Movi.colores.textoMedio,
         )
     }
 }
