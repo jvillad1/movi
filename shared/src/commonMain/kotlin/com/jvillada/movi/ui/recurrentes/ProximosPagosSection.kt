@@ -225,7 +225,7 @@ internal fun PropuestaOcurrencia(
             // los meses y esta advertencia salía siempre — repitiéndole al dueño como «lo que
             // anotaste» justamente la cifra que el resto de la pantalla dejó de mostrar como su
             // pago. Ver `RecurringRule.montoEsSaldo`.
-            if (avisaMontoDistinto(rule, propuesta.amount)) {
+            if (avisaMontoDistinto(rule, propuesta.amount, propuesta.currency)) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +

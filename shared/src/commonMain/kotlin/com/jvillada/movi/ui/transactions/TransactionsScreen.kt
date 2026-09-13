@@ -2124,7 +2124,8 @@ private fun TransferRow(
             }
         }
         Text(
-            text = formatCOP(row.amount),
+            // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos.
+            text = formatMoney(row.amount, row.out.currency),
             fontSize = 14.5.sp,
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
@@ -2260,13 +2261,15 @@ private fun MovementSingleRow(
         }
         Text(
             text = when (tono) {
-                TonoDelMonto.INGRESO -> "+${formatCOP(tx.amount)}"
-                TonoDelMonto.GASTO -> "−${formatCOP(tx.amount)}"
+                // En la moneda del movimiento, como la hoja de anular y el detalle de la cuenta:
+                // un cargo de US$20 en la tarjeta en dólares se leía «−$20».
+                TonoDelMonto.INGRESO -> "+${formatMoney(tx.amount, tx.currency)}"
+                TonoDelMonto.GASTO -> "−${formatMoney(tx.amount, tx.currency)}"
                 // `tonoDelEvento` (lo único que alimenta `tono` acá) nunca devuelve
                 // ENTRE_CUENTAS — ese tono es solo de [tonoDelRenglon], para el par de
                 // [MovementRow.Transfer] que se pinta en TransferRow, no acá. Rama exhaustiva
                 // igual, con el mismo criterio de NEUTRO: sin signo.
-                TonoDelMonto.NEUTRO, TonoDelMonto.ENTRE_CUENTAS -> formatCOP(tx.amount)
+                TonoDelMonto.NEUTRO, TonoDelMonto.ENTRE_CUENTAS -> formatMoney(tx.amount, tx.currency)
             },
             fontSize = 14.5.sp,
             style = Movi.textos.monto,

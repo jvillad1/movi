@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -374,7 +375,8 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     description = p.merchant,
                     merchant = p.merchant,
                     source = EventSource.SMS,
-                    timestamp = Clock.System.now().toEpochMilliseconds(),
+                    // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms].
+                    timestamp = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
                 )
                 Repositories.wallets.postEvent(event)
                 Repositories.wallets.confirmSms(smsId)
