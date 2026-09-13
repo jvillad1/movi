@@ -52,6 +52,7 @@ import com.jvillada.movi.theme.MinText
 import com.jvillada.movi.theme.MinTextFaint
 import com.jvillada.movi.theme.MinTextMute
 import kotlinx.coroutines.delay
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
  * F35: filtra y ordena las sugerencias de categoría para [CategoryField]. Separada del
@@ -134,8 +135,8 @@ private fun categoriasQueCoinciden(
     // El caché guarda los nombres tal cual los escribió el dueño; las preferencias vienen del
     // server con el mismo nombre. Se cruzan sin distinguir mayúsculas ni tildes para que una
     // diferencia de tipeo no haga que una categoría escondida reaparezca.
-    val prefsNormalizadas = prefs.entries.associate { (name, pref) -> normalizeForMatch(name.trim()) to pref }
-    fun prefDe(name: String): CategoryPref? = prefsNormalizadas[normalizeForMatch(name.trim())]
+    val prefsNormalizadas = prefs.entries.associate { (name, pref) -> normalizarParaBuscar(name.trim()) to pref }
+    fun prefDe(name: String): CategoryPref? = prefsNormalizadas[normalizarParaBuscar(name.trim())]
 
     fun seOfrece(name: String, tiposUsados: Set<TransactionType>): Boolean {
         val pref = prefDe(name)
@@ -165,8 +166,8 @@ private fun categoriasQueCoinciden(
         // hacer.)
         .filterNot { isReservedCategory(it) }
         .filter { seOfrece(it, emptySet()) }
-    val q = normalizeForMatch(query)
-    val predefinedMatches = predefined.filter { normalizeForMatch(it).contains(q) }
+    val q = normalizarParaBuscar(query)
+    val predefinedMatches = predefined.filter { normalizarParaBuscar(it).contains(q) }
     val usedMatches = usedCategories.entries
         .mapNotNull { (name, types) ->
             val clean = name.trim()
@@ -177,7 +178,7 @@ private fun categoriasQueCoinciden(
         .map { (name, _) -> name }
         .distinct()
         .filterNot { used -> todasLasDelCatalogo.any { it.equals(used, ignoreCase = true) } }
-        .filter { normalizeForMatch(it).contains(q) }
+        .filter { normalizarParaBuscar(it).contains(q) }
     return predefinedMatches to usedMatches
 }
 
@@ -190,9 +191,9 @@ private fun categoriasQueCoinciden(
  * lista alfabética, que es como se ve el panel apenas se abre el campo.
  */
 private fun ordenarSugerencias(nombres: List<String>, query: String): List<String> {
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     return nombres.sortedWith(
-        compareBy<String> { if (q.isEmpty() || normalizeForMatch(it).startsWith(q)) 0 else 1 }
+        compareBy<String> { if (q.isEmpty() || normalizarParaBuscar(it).startsWith(q)) 0 else 1 }
             .then(CATEGORY_NAME_ORDER),
     )
 }
@@ -218,10 +219,10 @@ fun categoriasParaElPanel(
     prefs: Map<String, CategoryPref> = emptyMap(),
 ): List<String> {
     val todas = suggestCategoryMatches("", type, usedCategories, prefs)
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     val conocidas = usedCategories.keys + PREDEFINED_CATEGORIES.map { it.name } + prefs.keys
-    val esNombreConocido = q.isNotEmpty() && conocidas.any { normalizeForMatch(it.trim()) == q }
-    val mostrarTodas = query.isBlank() || esNombreConocido || todas.any { normalizeForMatch(it) == q }
+    val esNombreConocido = q.isNotEmpty() && conocidas.any { normalizarParaBuscar(it.trim()) == q }
+    val mostrarTodas = query.isBlank() || esNombreConocido || todas.any { normalizarParaBuscar(it) == q }
     return if (mostrarTodas) todas else suggestCategoryMatches(query, type, usedCategories, prefs)
 }
 
@@ -250,7 +251,7 @@ fun categoriaSirveParaTipo(
     val limpio = name.trim()
     if (limpio.isEmpty()) return false
     if (isReservedCategory(limpio)) return false
-    val pref = prefs.entries.firstOrNull { normalizeForMatch(it.key.trim()) == normalizeForMatch(limpio) }?.value
+    val pref = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(limpio) }?.value
     if (pref?.hidden == true) return false
     val esDelCatalogo = PREDEFINED_CATEGORIES.any { it.name.equals(limpio, ignoreCase = true) }
     if (!esDelCatalogo && pref?.pinnedType == null) return true
@@ -309,10 +310,10 @@ fun shouldOfferCreateCategory(
      */
     conocidas: Collection<String> = emptyList(),
 ): Boolean {
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     if (q.isEmpty()) return false
-    if (conocidas.any { normalizeForMatch(it.trim()) == q }) return false
-    return matches.none { normalizeForMatch(it) == q }
+    if (conocidas.any { normalizarParaBuscar(it.trim()) == q }) return false
+    return matches.none { normalizarParaBuscar(it) == q }
 }
 
 /**
@@ -331,10 +332,10 @@ fun shouldOfferKnownFromOtherSide(
     matches: List<String>,
     conocidas: Collection<String> = emptyList(),
 ): Boolean {
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     if (q.isEmpty()) return false
-    if (matches.any { normalizeForMatch(it) == q }) return false
-    return conocidas.any { normalizeForMatch(it.trim()) == q }
+    if (matches.any { normalizarParaBuscar(it) == q }) return false
+    return conocidas.any { normalizarParaBuscar(it.trim()) == q }
 }
 
 /**
@@ -349,21 +350,21 @@ fun ladoConocidoDeCategoria(
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     prefs: Map<String, CategoryPref> = emptyMap(),
 ): String? {
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     if (q.isEmpty()) return null
     val tiposUsados = mutableSetOf<TransactionType>()
     var nombre = query.trim()
     for ((name, types) in usedCategories) {
-        if (normalizeForMatch(name.trim()) == q) {
+        if (normalizarParaBuscar(name.trim()) == q) {
             tiposUsados += types
             nombre = name.trim()
         }
     }
-    PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { nombre = it.name }
+    PREDEFINED_CATEGORIES.firstOrNull { normalizarParaBuscar(it.name) == q }?.let { nombre = it.name }
     // Ola 10: la misma regla única que las sugerencias — lo fijado por el dueño gana sobre el
     // catálogo. Sin esto, «Otros» fijada en «Ambos» seguiría diciendo «Ya la tienes en Gastos»
     // al anotar un ingreso, contradiciendo lo que él mismo acababa de decidir.
-    val pinned = prefs.entries.firstOrNull { normalizeForMatch(it.key.trim()) == q }?.value?.pinnedType
+    val pinned = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == q }?.value?.pinnedType
     val tipos = effectiveCategoryTypes(nombre, pinned, tiposUsados)
     val delOtroLado = tipos - setOfNotNull(type)
     return when {
@@ -392,11 +393,11 @@ fun nombreCanonicoConocido(
      */
     prefs: Map<String, CategoryPref> = emptyMap(),
 ): String? {
-    val q = normalizeForMatch(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     if (q.isEmpty()) return null
-    PREDEFINED_CATEGORIES.firstOrNull { normalizeForMatch(it.name) == q }?.let { return it.name }
-    usedCategories.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }?.let { return it }
-    return prefs.keys.map { it.trim() }.firstOrNull { normalizeForMatch(it) == q }
+    PREDEFINED_CATEGORIES.firstOrNull { normalizarParaBuscar(it.name) == q }?.let { return it.name }
+    usedCategories.keys.map { it.trim() }.firstOrNull { normalizarParaBuscar(it) == q }?.let { return it }
+    return prefs.keys.map { it.trim() }.firstOrNull { normalizarParaBuscar(it) == q }
 }
 
 /**
@@ -409,16 +410,6 @@ fun nombreCanonicoConocido(
  * La `ü` estaba de más acá hasta esta ola: «Pingüinos» ya ordenaba como «pinguinos» pero **no se
  * encontraba** escribiendo «pinguinos», que es justo como se teclea sin pensarlo.
  */
-private fun normalizeForMatch(s: String): String = buildString(s.length) {
-    for (c in s.lowercase()) {
-        append(
-            when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
-                else -> c
-            },
-        )
-    }
-}
 
 /**
  * Campo de categoría compartido: texto libre con sugerencias, en vez de un picker de lista
@@ -547,7 +538,7 @@ fun CategoryField(
     // ¿Está escondida? Entonces el renglón «Usar…» no puede decir «ya la tienes en Gastos» y
     // callarse lo único que explica por qué no aparece en la lista de abajo.
     val estaEscondida = prefs.entries
-        .firstOrNull { normalizeForMatch(it.key.trim()) == normalizeForMatch(value.trim()) }?.value?.hidden == true
+        .firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(value.trim()) }?.value?.hidden == true
     val ladoConocido = when {
         !ofrecerConocida -> null
         estaEscondida -> "La escondiste en Categorías; puedes usarla igual"

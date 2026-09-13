@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
  * Las reglas puras de «Más → Categorías», separadas del `@Composable` para poder probarlas en
@@ -65,7 +66,7 @@ fun filtrarCategorias(
     filtro: CategoryFilter,
     query: String = "",
 ): List<CategoryUsage> {
-    val q = normalizar(query.trim())
+    val q = normalizarParaBuscar(query.trim())
     return todas
         .filter { c ->
             when (filtro) {
@@ -79,10 +80,10 @@ fun filtrarCategorias(
                 }
             }
         }
-        .filter { q.isEmpty() || normalizar(it.name).contains(q) }
+        .filter { q.isEmpty() || normalizarParaBuscar(it.name).contains(q) }
         .sortedWith(
             compareBy<CategoryUsage> { it.reserved }
-                .thenBy { if (q.isEmpty() || normalizar(it.name).startsWith(q)) 0 else 1 }
+                .thenBy { if (q.isEmpty() || normalizarParaBuscar(it.name).startsWith(q)) 0 else 1 }
                 .thenBy(CATEGORY_NAME_ORDER) { it.name },
         )
 }
@@ -189,13 +190,3 @@ fun etiquetaDeTipoFijado(pinned: String?): String = when (pinned) {
  * `normalizeForMatch`), y **distinta de [CATEGORY_NAME_ORDER] en un solo punto**: para BUSCAR, la
  * `ñ` se aplasta contra la `n`; para ORDENAR va justo después de la n.
  */
-private fun normalizar(s: String): String = buildString(s.length) {
-    for (c in s.lowercase()) {
-        append(
-            when (c) {
-                'á' -> 'a'; 'é' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú' -> 'u'; 'ü' -> 'u'; 'ñ' -> 'n'
-                else -> c
-            },
-        )
-    }
-}
