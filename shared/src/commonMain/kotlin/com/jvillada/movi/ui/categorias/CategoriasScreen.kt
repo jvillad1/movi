@@ -113,6 +113,11 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
     var confirmacion by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
+    // Lo que falló dentro de una hoja de renombrar/unificar, y si hay una en vuelo. Viven acá y no
+    // en la hoja porque es acá donde termina la llamada: antes un fallo cerraba la hoja y el dueño
+    // tenía que volver a escribir el nombre. Mismo criterio que presupuestos, metas y recurrentes.
+    var errorDeHoja by remember { mutableStateOf<String?>(null) }
+    var guardandoHoja by remember { mutableStateOf(false) }
     // Ver [NoSePudoLeer]: «0 categorías · Nada por aquí todavía» solo si la lectura contestó.
     var leidas by remember { mutableStateOf(false) }
 
@@ -290,8 +295,13 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             is Hoja.Renombrar -> HojaRenombrar(
                 categoria = h.categoria,
                 existentes = categorias,
-                onDismiss = { hoja = null },
+                error = errorDeHoja,
+                guardando = guardandoHoja,
+                onDismiss = { hoja = null; errorDeHoja = null },
                 onConfirmar = { nuevoNombre, esUnificacion ->
+                    if (guardandoHoja) return@HojaRenombrar
+                    guardandoHoja = true
+                    errorDeHoja = null
                     scope.launch {
                         runCatching {
                             if (esUnificacion) Repositories.wallets.mergeCategory(h.categoria.name, nuevoNombre)
@@ -304,7 +314,8 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                             error = null
                             hoja = null
                             recargar()
-                        }.onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                        }.onFailure { errorDeHoja = it.toUserMessage() }
+                        guardandoHoja = false
                     }
                 },
             )
@@ -312,8 +323,13 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             is Hoja.Unificar -> HojaUnificar(
                 categoria = h.categoria,
                 existentes = categorias,
-                onDismiss = { hoja = null },
+                error = errorDeHoja,
+                guardando = guardandoHoja,
+                onDismiss = { hoja = null; errorDeHoja = null },
                 onConfirmar = { destino ->
+                    if (guardandoHoja) return@HojaUnificar
+                    guardandoHoja = true
+                    errorDeHoja = null
                     scope.launch {
                         runCatching { Repositories.wallets.mergeCategory(h.categoria.name, destino) }
                             .onSuccess { r ->
@@ -325,7 +341,8 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                                 hoja = null
                                 recargar()
                             }
-                            .onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                            .onFailure { errorDeHoja = it.toUserMessage() }
+                        guardandoHoja = false
                     }
                 },
             )
@@ -687,11 +704,12 @@ private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit) {
 private fun HojaRenombrar(
     categoria: CategoryUsage,
     existentes: List<CategoryUsage>,
+    error: String?,
+    guardando: Boolean,
     onDismiss: () -> Unit,
     onConfirmar: (String, Boolean) -> Unit,
 ) {
     var nombre by remember { mutableStateOf(categoria.name) }
-    var guardando by remember { mutableStateOf(false) }
     val limpio = nombre.trim()
     val colision = colisionAlRenombrar(categoria, limpio, existentes)
     val sinCambio = limpio == categoria.name
@@ -748,16 +766,14 @@ private fun HojaRenombrar(
                 modifier = Modifier.padding(top = 10.dp),
             )
 
+            MensajeDeErrorDeHoja(error)
             BotonDeHoja(
                 texto = when {
                     colision != null && colision.reserved != true -> "Unificar en «${colision.name}»"
                     else -> "Renombrar"
                 },
                 habilitado = puedeGuardar,
-                onClick = {
-                    guardando = true
-                    onConfirmar(colision?.name ?: limpio, colision != null)
-                },
+                onClick = { onConfirmar(colision?.name ?: limpio, colision != null) },
             )
         }
     }
@@ -768,6 +784,8 @@ private fun HojaRenombrar(
 private fun HojaUnificar(
     categoria: CategoryUsage,
     existentes: List<CategoryUsage>,
+    error: String?,
+    guardando: Boolean,
     onDismiss: () -> Unit,
     onConfirmar: (String) -> Unit,
 ) {
@@ -775,7 +793,6 @@ private fun HojaUnificar(
     // La categoría destino ENTERA, no su nombre: el aviso previo necesita saber si ella también
     // tiene presupuesto para poder avisar de la suma antes de aplicarla (ver [avisoDeUnificacion]).
     var elegida by remember { mutableStateOf<CategoryUsage?>(null) }
-    var guardando by remember { mutableStateOf(false) }
 
     val candidatas = remember(existentes, busqueda, categoria) {
         filtrarCategorias(existentes, CategoryFilter.TODAS, busqueda)
@@ -836,16 +853,27 @@ private fun HojaUnificar(
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
+            MensajeDeErrorDeHoja(error)
             BotonDeHoja(
                 texto = elegida?.let { "Unificar en «${it.name}»" } ?: "Unificar",
                 habilitado = elegida != null && !guardando,
-                onClick = {
-                    guardando = true
-                    onConfirmar(elegida!!.name)
-                },
+                onClick = { elegida?.let { onConfirmar(it.name) } },
             )
         }
     }
+}
+
+/** El motivo de un fallo, dentro de la hoja y arriba del botón: la hoja no se cierra al fallar. */
+@Composable
+private fun MensajeDeErrorDeHoja(error: String?) {
+    if (error == null) return
+    Text(
+        error,
+        fontSize = 12.5.sp,
+        color = Movi.colores.sale,
+        lineHeight = 17.sp,
+        modifier = Modifier.padding(top = 10.dp),
+    )
 }
 
 @Composable
