@@ -114,6 +114,10 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     // Error de guardar/renombrar que la hoja tiene que mostrar (409 del server, red).
     var sheetError by remember { mutableStateOf<String?>(null) }
+    // Mientras una llamada de la hoja está en vuelo no sale otra: un doble toque en «Guardar»
+    // mandaba el rename dos veces, y el segundo volvía 404 con un error sobre algo que sí se hizo.
+    // Mismo `!saving` que las hojas de metas, recurrentes, tarjetas y créditos.
+    var guardando by remember { mutableStateOf(false) }
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
     // parpadeaba un instante antes de que llegaran los presupuestos reales.
     var loading by remember { mutableStateOf(true) }
@@ -316,14 +320,23 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 categoryEditable = true,
                 initialAmount = s.current.monthlyLimit,
                 onDismiss = { sheet = null; sheetError = null },
+                guardando = guardando,
                 onDelete = {
+                    if (guardando) return@BudgetSheet
+                    guardando = true
                     scope.launch {
+                        // Igual que guardar: si el borrado falla, la hoja queda abierta con el
+                        // motivo. Antes se tragaba el error, recargaba y cerraba — el presupuesto
+                        // seguía ahí y nada decía por qué.
                         runCatching { Repositories.wallets.deleteBudget(s.current.category) }
-                        reload()
-                        sheet = null
+                            .onSuccess { reload(); sheet = null; sheetError = null }
+                            .onFailure { sheetError = it.toUserMessage() }
+                        guardando = false
                     }
                 },
                 onSave = { cat, amt ->
+                    if (guardando) return@BudgetSheet
+                    guardando = true
                     scope.launch {
                         val result = runCatching {
                             // F17: renombrar y cambiar el monto son dos llamadas separadas
@@ -342,8 +355,9 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                         // El 409 del server («Ya existe un presupuesto llamado…») tiene que
                         // llegarle a la persona: cerrar la hoja en silencio era decirle que se
                         // guardó cuando no. La hoja queda abierta con el mensaje; reintenta o cierra.
-                        result.onSuccess { reload(); sheet = null }
+                        result.onSuccess { reload(); sheet = null; sheetError = null }
                             .onFailure { sheetError = it.toUserMessage() }
+                        guardando = false
                     }
                 },
             )
@@ -359,12 +373,17 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 onAsociar = ::asociarGasto,
                 onDismiss = { sheet = null; sheetError = null },
                 onDelete = null,
+                guardando = guardando,
                 onSave = { cat, amt ->
-                    if (cat.isBlank() || amt <= 0L) return@BudgetSheet
+                    if (cat.isBlank() || amt <= 0L || guardando) return@BudgetSheet
+                    guardando = true
                     scope.launch {
+                        // Lo mismo que editar: sin red o con un 409 («ya hay un presupuesto para
+                        // esa categoría») la hoja no se cierra como si se hubiera guardado.
                         runCatching { Repositories.wallets.createBudget(Budget(cat.trim(), amt)) }
-                        reload()
-                        sheet = null
+                            .onSuccess { reload(); sheet = null; sheetError = null }
+                            .onFailure { sheetError = it.toUserMessage() }
+                        guardando = false
                     }
                 },
             )
@@ -510,6 +529,7 @@ private fun BudgetSheet(
     onDelete: (() -> Unit)?,
     onSave: (String, Long) -> Unit,
     error: String? = null,
+    guardando: Boolean = false,
 ) {
     var category by remember { mutableStateOf(initialCategory) }
     var amount by remember { mutableStateOf(if (initialAmount > 0L) initialAmount.toString() else "") }
@@ -522,7 +542,7 @@ private fun BudgetSheet(
     }
 
     val parsedAmount = amount.toLongOrNull() ?: 0L
-    val canSave = category.isNotBlank() && parsedAmount > 0L
+    val canSave = category.isNotBlank() && parsedAmount > 0L && !guardando
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta.
     val missingFieldMessage = when {
         category.isBlank() -> "Falta la categoría"
