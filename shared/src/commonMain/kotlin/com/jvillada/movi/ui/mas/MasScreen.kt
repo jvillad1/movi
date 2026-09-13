@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
@@ -104,9 +103,9 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
 
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(Movi.espacios.amplio),
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+            verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
             modifier = Modifier.weight(1f),
         ) {
             items(visibleItems) { item ->
@@ -120,21 +119,21 @@ fun MasScreen(onNavigate: (Screen) -> Unit) {
 private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
         modifier = Modifier
             // Ola 8 · V13: sin `fillMaxWidth` cada ficha medía lo que midiera su rótulo, así
             // que la fila quedaba con tarjetas de anchos distintos.
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Movi.formas.amplia))
             .background(Movi.colores.tarjeta)
             .clickable { onNavigate(item.screen) }
-            .padding(vertical = 16.dp, horizontal = 8.dp),
+            .padding(vertical = Movi.espacios.amplio, horizontal = Movi.espacios.corto),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(Movi.formas.normal))
                 .background(item.bg),
         ) {
             Icon(
@@ -146,7 +145,12 @@ private fun MasCard(item: MasItem, onNavigate: (Screen) -> Unit) {
         }
         Text(
             text = item.label,
-            fontSize = 11.sp,
+            // `apoyo` y no un `fontSize` suelto, y no por prolijidad: sin estilo, el texto
+            // heredaba el alto de línea de `bodyLarge`, 24 sp para una letra de 11. Con los dos
+            // renglones reservados de abajo, cada ficha llevaba 48 sp de rótulo: «Cuentas» quedaba
+            // flotando con un renglón vacío abajo y «Mensajes del banco» con los dos renglones
+            // separados como en un poema. Visto en la web a 390 dp.
+            style = Movi.textos.apoyo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.textoMedio,
             // V13: «Mensajes del banco» ocupa dos renglones y su ficha quedaba más alta que
