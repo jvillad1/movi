@@ -223,6 +223,22 @@ class CategoriasLogicTest {
     // ── El aviso antes de unificar ────────────────────────────────────────────
 
     @Test
+    fun `renombrar choca con otra categoria aunque cambien las tildes o las mayusculas`() {
+        val transporte = cat("Transporte")
+        val existentes = listOf(transporte, cat("Alimentación", scope = CategoryScope.PREDEFINED))
+        assertEquals("Alimentación", colisionAlRenombrar(transporte, "alimentacion", existentes)?.name)
+        assertEquals("Alimentación", colisionAlRenombrar(transporte, "  ALIMENTACIÓN ", existentes)?.name)
+        assertEquals(null, colisionAlRenombrar(transporte, "Mercado", existentes))
+        assertEquals(null, colisionAlRenombrar(transporte, "   ", existentes))
+    }
+
+    @Test
+    fun `corregir la tilde de la propia categoria no es una colision`() {
+        val propia = cat("Alimentacion")
+        assertEquals(null, colisionAlRenombrar(propia, "Alimentación", listOf(propia, cat("Mercado"))))
+    }
+
+    @Test
     fun `el aviso de unificar dice cuantos movimientos cambian de nombre`() {
         val aviso = avisoDeUnificacion(
             cat("Trasnporte", movements = 2, budgets = 1, recurringRules = 1),
