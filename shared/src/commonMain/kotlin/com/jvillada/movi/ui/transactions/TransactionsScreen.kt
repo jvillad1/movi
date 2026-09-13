@@ -614,6 +614,10 @@ fun matchesChip(
     else -> true
 }
 
+/** El aviso de cuando no se pudo leer el corte del perfil y Movimientos cae al mes de calendario. */
+const val PERIODO_NO_LEIDO: String =
+    "No pudimos leer el día en que empieza tu mes: te mostramos el mes del calendario."
+
 /**
  * Lo que dice la lista cuando **no quedó nada que mostrar**, según por qué no quedó nada.
  *
@@ -948,6 +952,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         error = null
         runCatching { Repositories.wallets.getUserProfile() }
             .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts }
+            // Sin el perfil la pantalla cae al mes de calendario, y con corte 25 eso es mostrar
+            // otro período con otro total. Se dice, con el mismo «Reintentar» de siempre; si
+            // además fallan los movimientos, ese error (abajo) es el que manda.
+            .onFailure { error = PERIODO_NO_LEIDO }
         runCatching { Repositories.wallets.getEventsByDay() }
             .onSuccess {
                 allDays = it

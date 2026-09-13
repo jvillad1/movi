@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.ui.sms.SMSInboxScreen
 import com.jvillada.movi.ui.documentos.DocumentosScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
+import com.jvillada.movi.ui.transactions.PERIODO_NO_LEIDO
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import org.junit.After
 import org.junit.Rule
@@ -160,5 +161,15 @@ class NoDiceVacioSiNoLeyoTest {
         montar(object : RepositorioDePrueba() {}) { SMSInboxScreen(onNavigate = {}) }
         esperar("No pudimos cargar tus mensajes")
         assertTrue(!hay("0 por confirmar"))
+    }
+
+    /** Sin el perfil, Movimientos cae al mes de calendario; eso se dice en vez de callarlo. */
+    @Test
+    fun `Movimientos avisa cuando no pudo leer el periodo`() {
+        montar(object : RepositorioDePrueba() {
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getAccounts(): List<Account> = emptyList()
+        }) { TransactionsScreen(onNavigate = {}) }
+        esperar(PERIODO_NO_LEIDO)
     }
 }
