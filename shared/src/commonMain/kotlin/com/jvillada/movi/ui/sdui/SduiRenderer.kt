@@ -1,8 +1,6 @@
 package com.jvillada.movi.ui.sdui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,6 +31,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.Cifra
+import com.jvillada.movi.ui.components.CifraProtagonista
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -211,26 +210,11 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
         // Antes de que las cuentas contesten, un «$0» de 44 sp es la afirmación más fuerte que
         // hace esta pantalla, y es falsa mientras carga: en la web (sin caché que sobreviva a
         // recargar) el dueño veía «Tu plata $0» durante segundos. Un guion no miente.
-        // **El número más visible de la app**, en `Movi.textos.cifra`: 42 sp de Martian Mono.
-        //
-        // **Un renglón siempre, achicándose si hace falta.** Martian Mono es ancha, y a 42 sp
-        // «$8.550.000» no entra en un teléfono de 390 dp: se partía en «$8.550.00» y un «0»
-        // solo abajo. Visto en la web a ancho de teléfono, no deducido. Con el saldo real del
-        // dueño —nueve cifras— partía peor. El tamaño baja de a un sp hasta que entra, con piso
-        // en 24: más chico que eso deja de ser el número protagonista.
-        BasicText(
+        // **El número más visible de la app.** Un renglón siempre: ver [CifraProtagonista].
+        CifraProtagonista(
             text = if (data.accounts == null) "—" else formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
             // Una cuenta en descubierto SÍ es una alarma del día: eso se queda en rojo.
-            style = Movi.textos.cifra.copy(
-                color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-            ),
-            maxLines = 1,
-            softWrap = false,
-            autoSize = TextAutoSize.StepBased(
-                minFontSize = 24.sp,
-                maxFontSize = Movi.textos.cifra.fontSize,
-                stepSize = 1.sp,
-            ),
+            color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
         )
         // La plata condicionada, dicha con su condición.
         //
