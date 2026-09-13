@@ -150,6 +150,9 @@ class SyncEngine(
                         // «creado» dos días más tarde y saltaría al tope de su día. Ver
                         // FinancialEvent.createdAt.
                         createdAt = row.createdAt,
+                        // «Este no se repite» marcado sin señal. No viajaba: el POST llegaba con el
+                        // default y la marca se perdía al sincronizar.
+                        noSeRepite = row.noSeRepite != 0L,
                     )
                 )
                 db.financialEventQueries.markSyncedIfUnchanged(
@@ -157,7 +160,7 @@ class SyncEngine(
                     // Y el monto, la cuenta y el concepto desde que se pueden corregir (ver
                     // `LocalRepository.updateEvent`): el mismo agujero que la categoría y la
                     // fecha ya tenían tapado, abierto por tres campos más.
-                    row.amount, row.accountId, row.description,
+                    row.amount, row.accountId, row.description, row.noSeRepite,
                 )
             } catch (e: Exception) {
                 logSyncFailure("syncEvents", e, id = row.id)

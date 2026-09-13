@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import org.jetbrains.exposed.sql.update
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
@@ -95,9 +97,20 @@ fun Route.eventRoutes() {
             //   `SMSReconcileScreen`). Ahí la categoría reservada es exactamente la correcta.
             //
             // O sea: lo que se rechaza es escribir a mano una reservada que no sea la apertura.
+            //
+            // Y una tercera, más angosta: **Pago de tarjeta sobre un movimiento que el server YA
+            // tiene.** «Marcar» un candidato a pago de tarjeta (que siempre viene del server) sobre
+            // un movimiento que el teléfono todavía no selló lo escribe en local, y el reenvío llega
+            // MANUAL con esa categoría. Es exactamente lo que `PUT /{id}/category` deja hacer; por
+            // esta puerta rebotaba con 422 en cada ciclo de sync. Un alta NUEVA en «Pago de tarjeta»
+            // escrita a mano se sigue rechazando.
+            val yaExiste = body.id.isNotBlank() && dbQuery {
+                Events.selectAll().where { (Events.id eq body.id) and (Events.userId eq uid) }.count() > 0
+            }
             if (body.source == EventSource.MANUAL &&
                 isReservedCategory(body.category) &&
-                body.category.trim() != OPENING_CATEGORY
+                body.category.trim() != OPENING_CATEGORY &&
+                !(yaExiste && body.category.trim() == CARD_PAYMENT_CATEGORY)
             ) {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, CATEGORY_RESERVED_NOT_MANUAL)
             }
@@ -152,6 +165,48 @@ fun Route.eventRoutes() {
             }
             if (!accountExists) return@post call.respond(HttpStatusCode.NotFound, "Account not found")
 
+            // **Un id que ya existe no es un error: es el mismo movimiento que vuelve.**
+            //
+            // El teléfono sube cada movimiento pendiente y lo sella solo si nadie lo tocó mientras
+            // el POST viajaba (`SyncEngine.syncEvents`, `markSyncedIfUnchanged`). Si el dueño lo
+            // corrige en esa ventana —de $50.000 a $5.000—, el POST ya insertó $50.000 pero la fila
+            // local queda sin sellar, y el ciclo siguiente reenvía el MISMO id con $5.000. Antes eso
+            // chocaba contra la clave primaria (500) en cada ciclo, para siempre: la web y el Inicio
+            // decían $50.000 y el teléfono $5.000.
+            //
+            // Ahora el reenvío se toma como la versión vigente de lo que el dueño escribió: se
+            // actualizan los campos que el teléfono deja corregir mientras está pendiente (los
+            // mismos que compara `markSyncedIfUnchanged`, más «no se repite»). Solo para un
+            // movimiento suelto del mismo dueño: una pata de traspaso o de cuota nunca sale por
+            // esta ruta (ver arriba), y un id de otro usuario es un choque real (409).
+            val reenvio = dbQuery {
+                val existente = Events.selectAll().where { Events.id eq event.id }.firstOrNull()
+                    ?: return@dbQuery null
+                if (existente[Events.userId] != uid) return@dbQuery HttpStatusCode.Conflict to null
+                if (existente[Events.transferId] == null) {
+                    val cambioLaFecha = existente[Events.timestamp] != event.timestamp
+                    Events.update({ (Events.id eq event.id) and (Events.userId eq uid) }) {
+                        it[accountId]   = event.accountId
+                        it[amount]      = event.amount
+                        it[category]    = event.category
+                        it[description] = event.description
+                        it[merchant]    = event.merchant
+                        it[timestamp]   = event.timestamp
+                        it[Events.noSeRepite] = event.noSeRepite
+                    }
+                    // Mismo criterio que `PUT /{id}/timestamp`: si la fecha se movió, un «ya
+                    // ocurrió» sellado con este movimiento se suelta cuando ya no le corresponde.
+                    if (cambioLaFecha) soltarOcurrenciasSinEvidencia(uid, listOf(event.id), fechaDelEvento)
+                }
+                HttpStatusCode.OK to Events.selectAll().where { Events.id eq event.id }.first()
+                    .toFinancialEvent().withCashFlowFlag(accountTypesFor(uid))
+            }
+            if (reenvio != null) {
+                val (estado, guardado) = reenvio
+                return@post if (guardado == null) call.respond(estado, "Ese id ya existe")
+                else call.respond(estado, guardado)
+            }
+
             dbQuery {
                 Events.insert {
                     it[id]                   = event.id
@@ -169,6 +224,9 @@ fun Route.eventRoutes() {
                     it[reconciliationStatus] = event.reconciliationStatus.name
                     it[syncedAt]             = event.syncedAt
                     it[createdAt]            = event.createdAt
+                    // Faltaba: el teléfono guarda «no se repite» en un movimiento pendiente y el
+                    // POST que lo sube lo perdía, así que volvía a aparecer en Recurrentes.
+                    it[Events.noSeRepite]    = event.noSeRepite
                 }
             }
             // El eco lleva la bandera derivada, no la que mandó el cliente: countsAsCashFlow
@@ -306,6 +364,18 @@ fun Route.eventRoutes() {
             // (cerrado también en esta ola, ver `ofreceCategoriaEscritaAMano`).
             if (category == OPENING_CATEGORY) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, OPENING_CATEGORY_RESERVED)
+            }
+            // **Y todas las demás, sin distinguir mayúsculas.** Las guardas de arriba nombran cada
+            // reservada una por una y comparan exacto, así que «Ajuste de saldo» (la séptima) y
+            // «traspaso» en minúscula pasaban: un gasto real de $200.000 recategorizado así salía de
+            // «Gastos del mes» sin decir nada. El teléfono ya lo cerraba recorriendo
+            // RESERVED_CATEGORIES con la única excepción de «Pago de tarjeta»; esto es lo mismo, para
+            // que la próxima reservada quede cerrada acá el día que nazca.
+            if (category != CARD_PAYMENT_CATEGORY && isReservedCategory(category)) {
+                return@put call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "«$category» la escribe Movi sola: no se puede poner a mano",
+                )
             }
             // Y nadie sale tampoco: sacar una pata de la categoría reservada la devolvería al
             // flujo de caja del mes —el gasto fantasma que esta feature vino a matar— y dejaría

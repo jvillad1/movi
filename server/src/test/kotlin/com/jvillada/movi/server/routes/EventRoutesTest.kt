@@ -267,6 +267,64 @@ class EventRoutesTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, res.status, res.bodyAsText())
     }
 
+    // ── El reenvío del teléfono: mismo id, la versión corregida ─────────────────
+
+    private fun gasto(id: String, monto: Long, categoria: String = "Mercado", noSeRepite: Boolean = false) =
+        """{"id":"$id","accountId":"$savingsAccountId","type":"EXPENSE","amount":$monto,
+            "category":"$categoria","description":"D1","source":"MANUAL","timestamp":1757000000000,
+            "noSeRepite":$noSeRepite}"""
+
+    /**
+     * El teléfono subió $50.000, el dueño lo corrigió a $5.000 antes de que se sellara, y el ciclo
+     * siguiente reenvía el mismo id. Antes: 500 en cada ciclo y los dos montos para siempre.
+     */
+    @Test
+    fun `reenviar un movimiento con el mismo id lo actualiza en vez de fallar`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gasto("evt-reenvio", 50_000)).status)
+        val res = postEvent(userAId, gasto("evt-reenvio", 5_000))
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals(5_000L, Json.parseToJsonElement(res.bodyAsText()).jsonObject["amount"]!!.jsonPrimitive.long)
+        val filas = transaction { Events.selectAll().where { Events.id eq "evt-reenvio" }.toList() }
+        assertEquals(1, filas.size)
+        assertEquals(5_000L, filas.single()[Events.amount])
+    }
+
+    @Test
+    fun `un id de otro usuario no se pisa`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gasto("evt-ajeno", 50_000)).status)
+        val choque = postEvent(userBId, gasto("evt-ajeno", 1))
+        assertTrue(choque.status == HttpStatusCode.Conflict || choque.status == HttpStatusCode.NotFound, choque.status.toString())
+        assertEquals(50_000L, transaction { Events.selectAll().where { Events.id eq "evt-ajeno" }.single()[Events.amount] })
+    }
+
+    /** «Marcar» un pago de tarjeta sobre un movimiento no sellado reenvía con esa categoría. */
+    @Test
+    fun `el reenvio marcado como pago de tarjeta se acepta, un alta nueva no`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gasto("evt-marcado", 900_000)).status)
+        assertEquals(HttpStatusCode.OK, postEvent(userAId, gasto("evt-marcado", 900_000, "Pago de tarjeta")).status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, postEvent(userAId, gasto("evt-nuevo-pt", 900_000, "Pago de tarjeta")).status)
+    }
+
+    @Test
+    fun `no se repite viaja en el alta`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gasto("evt-nsr", 10_000, noSeRepite = true)).status)
+        assertEquals(true, transaction { Events.selectAll().where { Events.id eq "evt-nsr" }.single()[Events.noSeRepite] })
+    }
+
+    /** «Ajuste de saldo» y «traspaso» en minúscula pasaban la guarda de recategorizar. */
+    @Test
+    fun `recategorizar a cualquier reservada se rechaza, sin distinguir mayusculas`() = testApplication {
+        wireApp()
+        seedEvent(id = "evt-recat", userId = userAId, accountId = savingsAccountId, type = "EXPENSE", description = "Algo", category = "Mercado")
+        assertEquals(HttpStatusCode.UnprocessableEntity, putCategory("evt-recat", "Ajuste de saldo", userAId).status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, putCategory("evt-recat", "traspaso", userAId).status)
+        assertEquals(HttpStatusCode.OK, putCategory("evt-recat", "Pago de tarjeta", userAId).status)
+    }
+
     // ── El monto: la misma regla al crear que al corregir ──────────────────────
     //
     // La regla estaba en la edición, en los traspasos, en el pago de cuota y en las suscripciones,
