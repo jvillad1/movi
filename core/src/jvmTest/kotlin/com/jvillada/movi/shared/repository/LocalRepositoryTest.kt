@@ -1485,6 +1485,32 @@ class LocalRepositoryTest {
         assertEquals(350_000L, repo.getAccount("acc-tc").balance, "en una tarjeta el gasto SUBE la deuda")
     }
 
+    /** Lo que el alta del server rechaza, el teléfono tampoco lo guarda (quedaría rebotando en el sync). */
+    @Test
+    fun postEvent_rechaza_una_reservada_a_mano_y_una_fecha_de_otro_siglo() = runBlocking {
+        repo.createAccount(Account("acc-guardas", "Ahorros", AccountType.SAVINGS, 1_000_000L))
+        val reservada = runCatching {
+            repo.postEvent(event("evt-ajuste", "acc-guardas", TransactionType.EXPENSE, 10_000L).copy(category = "Ajuste de saldo", source = EventSource.MANUAL))
+        }.exceptionOrNull()
+        assertTrue(reservada is ApiException && reservada.status == 422, "esperaba 422, fue $reservada")
+        val vieja = runCatching {
+            repo.postEvent(event("evt-1970", "acc-guardas", TransactionType.EXPENSE, 10_000L).copy(timestamp = 1_000L))
+        }.exceptionOrNull()
+        assertTrue(vieja is ApiException && vieja.status == 400, "esperaba 400, fue $vieja")
+        assertEquals(1_000_000L, repo.getAccount("acc-guardas").balance, "ninguna tocó el saldo")
+    }
+
+    /** Anular dos veces restaba el saldo dos veces en el teléfono. */
+    @Test
+    fun voidEvent_dos_veces_no_revierte_el_saldo_dos_veces() = runBlocking {
+        repo.createAccount(Account("acc-doble", "Ahorros", AccountType.SAVINGS, 100_000L))
+        repo.postEvent(event("evt-doble", "acc-doble", TransactionType.EXPENSE, 30_000L))
+        repo.voidEvent("evt-doble")
+        val segunda = runCatching { repo.voidEvent("evt-doble") }.exceptionOrNull()
+        assertTrue(segunda is ApiException && segunda.status == 409, "esperaba 409, fue $segunda")
+        assertEquals(100_000L, repo.getAccount("acc-doble").balance)
+    }
+
     /** Las guardas de `:core` corren también en el camino local — igual que con la fecha. */
     @Test
     fun updateEvent_rechaza_un_monto_de_cero_sin_llamar_al_server() = runBlocking {
