@@ -1,5 +1,9 @@
 package com.jvillada.movi.shared.repository
 
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.Instant
+import com.jvillada.movi.shared.time.AppTimeZone
+import com.jvillada.movi.shared.model.CATEGORY_RESERVED_NOT_MANUAL
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
@@ -404,6 +408,21 @@ class LocalRepository(
         // teléfono, el `SyncEngine` la empujaría, el server contestaría 400 y se reintentaría cada
         // 30 segundos para siempre. Misma regla y mismo texto que el server: `rechazoDelMonto`.
         rechazoDelMonto(event.amount)?.let { motivo -> throw ApiException(400, motivo) }
+        // Las otras dos guardas del alta del server, por el mismo motivo (escribir primero): una
+        // reservada escrita a mano —salvo la apertura de una cuenta— es un 422 allá, y un epoch
+        // fuera de 2000..2100 un 400. Hoy la UI no deja llegar a ninguna de las dos, pero si una
+        // llegara quedaría rebotando en el sync para siempre, fuera del mes en el teléfono.
+        if (event.source == EventSource.MANUAL &&
+            isReservedCategory(event.category) &&
+            event.category.trim() != OPENING_CATEGORY
+        ) {
+            throw ApiException(422, CATEGORY_RESERVED_NOT_MANUAL)
+        }
+        if (event.timestamp != 0L &&
+            Instant.fromEpochMilliseconds(event.timestamp).toLocalDateTime(AppTimeZone.zone).year !in 2000..2100
+        ) {
+            throw ApiException(400, "Esa fecha no es de este siglo.")
+        }
         // Red de seguridad, no la vía principal: la UI ya manda `id = newId("ev")` en los tres
         // call sites (QuickAddScreen, SMSScreens; CreateAccountSheet es para cuentas, no
         // eventos). Nunca insertar con PK "" — con INSERT OR REPLACE, un segundo evento sin id
@@ -714,6 +733,11 @@ class LocalRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         val voidId = "${now}_${id.take(8)}"
         val uid = userId()
+        // Anular dos veces restaba el saldo dos veces en el teléfono, mientras el server contesta
+        // 409 (y el sync lo sella como éxito): el saldo local quedaba corrido para siempre.
+        if (db.voidEventQueries.countFor(id).executeAsOne() > 0L) {
+            throw ApiException(409, "Ese movimiento ya está anulado")
+        }
         db.transaction {
             val event = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
             val hermanas = event?.transferId
