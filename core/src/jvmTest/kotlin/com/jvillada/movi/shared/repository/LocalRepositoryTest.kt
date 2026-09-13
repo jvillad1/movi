@@ -68,6 +68,25 @@ class LocalRepositoryTest {
         assertEquals(5_000L, account.balance)
     }
 
+    /**
+     * **El espejo local rechaza lo mismo que el server, ANTES de guardar.** Si aceptara acá un monto
+     * que `POST /api/events` rechaza, la fila quedaría en el teléfono, el `SyncEngine` la empujaría,
+     * el server contestaría 400 y se reintentaría cada 30 segundos para siempre. Y el saldo local
+     * se movería por una plata que nunca existió.
+     */
+    @Test
+    fun postEvent_rechaza_un_monto_que_no_es_plata_y_no_toca_el_saldo() = runBlocking {
+        repo.createAccount(Account("acc-monto", "Cash", AccountType.CASH, 10_000L))
+
+        for (monto in listOf(0L, -3_000L)) {
+            val error = runCatching {
+                repo.postEvent(event("evt-monto$monto", "acc-monto", TransactionType.EXPENSE, monto))
+            }.exceptionOrNull()
+            assertEquals(400, (error as? ApiException)?.status, "monto $monto")
+        }
+        assertEquals(10_000L, repo.getAccount("acc-monto").balance, "el saldo no se movió")
+    }
+
     @Test
     fun voidEvent_reverses_account_balance() = runBlocking {
         repo.createAccount(Account("acc2", "Checking", AccountType.CHECKING, 10_000L))

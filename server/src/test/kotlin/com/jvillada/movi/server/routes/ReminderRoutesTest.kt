@@ -158,6 +158,28 @@ class ReminderRoutesTest {
         configureRouting()
     }
 
+    /**
+     * **Una regla con monto en cero o negativo no se guarda**, igual que un movimiento.
+     *
+     * Suma al revés en «Flujo libre» y en «Próximos pagos»: una cuota de −$50.000 aparece como
+     * plata que entra todos los meses. Ver `rechazoDelMonto`.
+     */
+    @Test
+    fun `una regla recurrente con monto en cero se rechaza`() = testApplication {
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+
+        for (monto in listOf(0L, -50_000L)) {
+            val res = client.post("/api/recurring-rules") {
+                header(HttpHeaders.Authorization, "Bearer $tokenA")
+                contentType(ContentType.Application.Json)
+                setBody(RecurringRule("ignored", "Netflix", "Suscripción", monto, 15, TransactionType.EXPENSE))
+            }
+            assertEquals(HttpStatusCode.BadRequest, res.status, "monto $monto")
+        }
+    }
+
     /** User A POSTs a rule; User B PUT on A's id → 404 */
     @Test
     fun `user B cannot update user A's recurring rule`() = testApplication {

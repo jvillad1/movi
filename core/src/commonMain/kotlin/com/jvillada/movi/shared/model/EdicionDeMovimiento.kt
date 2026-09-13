@@ -59,6 +59,29 @@ const val MONTO_MAXIMO: Long = 1_000_000_000_000L
 const val MONTO_DEMASIADO_GRANDE: String =
     "Ese monto es demasiado grande. Revisa el número que escribiste."
 
+/**
+ * **Si un monto es plata**, para cualquier cosa que se guarde con uno: un movimiento nuevo, una
+ * regla recurrente, una corrección. Devuelve el mensaje del rechazo, o `null` si está bien.
+ *
+ * ### Por qué existe
+ *
+ * La regla estaba escrita en cuatro lugares —editar un movimiento, un traspaso, un pago de cuota y
+ * una suscripción— y **faltaba justo en la puerta de entrada**: `POST /api/events` y las reglas
+ * recurrentes aceptaban un monto en cero, negativo o de un billón. O sea que un movimiento que no
+ * se podía *corregir* a $0 sí se podía *crear* en $0.
+ *
+ * Un negativo no es un detalle: la dirección de la plata la dice `type`, y un gasto con monto
+ * negativo **suma** al flujo y al saldo en vez de restar, sin que nada se vea raro.
+ *
+ * Se usan los mismos textos que ya mostraba la edición, para que el dueño lea lo mismo esté donde
+ * esté.
+ */
+fun rechazoDelMonto(amount: Long): String? = when {
+    amount <= 0L -> MONTO_INVALIDO
+    amount > MONTO_MAXIMO -> MONTO_DEMASIADO_GRANDE
+    else -> null
+}
+
 /** Largo de `financial_events.description` en el server, y de su espejo local. */
 const val MAX_CONCEPTO_LENGTH: Int = 255
 

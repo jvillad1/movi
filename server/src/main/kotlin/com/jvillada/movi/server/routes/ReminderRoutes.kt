@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.rechazoDelMonto
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -118,6 +119,11 @@ fun Route.reminderRoutes() {
     post("/api/recurring-rules") {
         val uid = call.userId()
         val body = call.receive<RecurringRule>()
+        // Una regla con monto en cero o negativo suma al revés en «Flujo libre» y en «Próximos
+        // pagos». Misma regla que un movimiento, ver `rechazoDelMonto`.
+        rechazoDelMonto(body.amount)?.let { motivo ->
+            return@post call.respond(HttpStatusCode.BadRequest, motivo)
+        }
         val newId = "rr_${UUID.randomUUID()}"
         val storedAccountId = dbQuery {
             val safeAccountId = accountIdIfOwned(uid, body.accountId)
@@ -157,6 +163,9 @@ fun Route.reminderRoutes() {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
         val body = call.receive<RecurringRule>()
+        rechazoDelMonto(body.amount)?.let { motivo ->
+            return@put call.respond(HttpStatusCode.BadRequest, motivo)
+        }
         var storedAccountId: String? = null
         var storedActiveFrom: String? = null
         val updated = dbQuery {

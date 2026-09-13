@@ -79,6 +79,7 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
+import com.jvillada.movi.shared.model.rechazoDelMonto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
@@ -398,6 +399,11 @@ class LocalRepository(
         if (event.category == TRANSFER_CATEGORY || event.transferId != null) {
             throw ApiException(422, TRANSFER_LEG_NOT_STANDALONE)
         }
+        // Y el monto, por el mismo motivo que la guarda de arriba: este espejo escribe PRIMERO. Si
+        // aceptara acá un monto que `POST /api/events` rechaza, la fila quedaría guardada en el
+        // teléfono, el `SyncEngine` la empujaría, el server contestaría 400 y se reintentaría cada
+        // 30 segundos para siempre. Misma regla y mismo texto que el server: `rechazoDelMonto`.
+        rechazoDelMonto(event.amount)?.let { motivo -> throw ApiException(400, motivo) }
         // Red de seguridad, no la vía principal: la UI ya manda `id = newId("ev")` en los tres
         // call sites (QuickAddScreen, SMSScreens; CreateAccountSheet es para cuentas, no
         // eventos). Nunca insertar con PK "" — con INSERT OR REPLACE, un segundo evento sin id
