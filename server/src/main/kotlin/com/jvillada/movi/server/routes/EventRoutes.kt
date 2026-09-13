@@ -69,6 +69,13 @@ fun Route.eventRoutes() {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_LEG_NOT_STANDALONE)
             }
 
+            // La forma del dato, antes que cualquier otra cosa: la misma regla que ya aplicaba la
+            // edición (ver `rechazoDelMonto`). Sin esto se podía CREAR en $0 lo que no se podía
+            // CORREGIR a $0.
+            rechazoDelMonto(body.amount)?.let { motivo ->
+                return@post call.respond(HttpStatusCode.BadRequest, motivo)
+            }
+
             // Ola 10: **una categoría reservada no se anota A MANO.** `isCashFlow` las excluye por
             // nombre, así que un gasto real escrito como «Pago de tarjeta» se guardaba y
             // desaparecía de «Gastos del mes» sin que nada lo dijera. El campo de categoría avisa,

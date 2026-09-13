@@ -17,6 +17,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
+import com.jvillada.movi.shared.model.MONTO_INVALIDO
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -264,6 +265,41 @@ class EventRoutesTest {
                 "category":"Pago de tarjeta","description":"a mano","source":"MANUAL","timestamp":0}""",
         )
         assertEquals(HttpStatusCode.UnprocessableEntity, res.status, res.bodyAsText())
+    }
+
+    // ── El monto: la misma regla al crear que al corregir ──────────────────────
+    //
+    // La regla estaba en la edición, en los traspasos, en el pago de cuota y en las suscripciones,
+    // y faltaba justo en la puerta de entrada. Se podía CREAR en $0 un movimiento que no se podía
+    // CORREGIR a $0. Ver `rechazoDelMonto`.
+
+    private fun conMonto(monto: Long) =
+        """{"id":"evt-monto-$monto","accountId":"$savingsAccountId","type":"EXPENSE","amount":$monto,
+            "category":"Comida","description":"Carnes y Legumbres","source":"MANUAL","timestamp":0}"""
+
+    @Test
+    fun `crear un movimiento en cero se rechaza`() = testApplication {
+        wireApp()
+        val res = postEvent(userAId, conMonto(0))
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        assertEquals(MONTO_INVALIDO, res.bodyAsText())
+        assertEquals(0L, transaction { Events.selectAll().where { Events.id eq "evt-monto-0" }.count() })
+    }
+
+    /**
+     * **El que hace daño sin que se vea.** La dirección de la plata la dice `type`: un gasto con
+     * monto negativo sumaría al flujo y al saldo en vez de restar.
+     */
+    @Test
+    fun `crear un movimiento negativo se rechaza`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, postEvent(userAId, conMonto(-18_500)).status)
+    }
+
+    @Test
+    fun `un monto normal se sigue aceptando`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, conMonto(18_500)).status)
     }
 
     @Test
