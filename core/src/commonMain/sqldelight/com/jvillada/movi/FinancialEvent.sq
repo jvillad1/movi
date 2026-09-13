@@ -116,7 +116,8 @@ UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;
 markSyncedIfUnchanged:
 UPDATE financial_event SET syncedAt = :syncedAt
 WHERE id = :id AND category = :category AND timestamp = :timestamp
-  AND amount = :amount AND accountId = :accountId AND description = :description;
+  AND amount = :amount AND accountId = :accountId AND description = :description
+  AND noSeRepite = :noSeRepite;
 
 updateCategory:
 UPDATE financial_event SET category = :category WHERE id = :id AND userId = :userId;
@@ -128,8 +129,9 @@ UPDATE financial_event SET timestamp = :timestamp WHERE id = :id AND userId = :u
 
 -- «Este se repite» / «este no» (ver LocalRepository.updateEventRepeats). Espejo local de
 -- PUT /api/events/{id}/repeats, y camino único cuando el evento todavía no llegó al server.
--- No entra en la condición de markSyncedIfUnchanged a propósito: no viaja en el POST de creación
--- —el server lo deja en su default— así que no puede quedar desincronizado por un POST en vuelo.
+-- Entra en la condición de markSyncedIfUnchanged: desde 2026-09-13 viaja en el POST de creación
+-- (antes el SyncEngine no lo mandaba y el server no lo guardaba, así que la marca hecha sin señal
+-- se perdía al subir), y entonces puede quedar desincronizado por un POST en vuelo como los demás.
 updateNoSeRepite:
 UPDATE financial_event SET noSeRepite = :noSeRepite WHERE id = :id AND userId = :userId;
 

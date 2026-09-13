@@ -142,7 +142,7 @@ private suspend fun processUser(
     if (selected.isEmpty()) return
 
     val emailSent = if (!apiKey.isNullOrBlank()) {
-        val html = buildHtmlEmail(selected, today, leadDays)
+        val html = buildHtmlEmail(selected, today, leadDays, occurredBy)
         ResendClient.sendEmail(
             to = userEmail, subject = "Pagos próximos en movi",
             html = html, apiKey = apiKey, from = from,
@@ -150,7 +150,7 @@ private suspend fun processUser(
     } else false
 
     val pushSent = if (WebPushSender.isConfigured()) {
-        runCatching { WebPushSender.sendToUser(userId, buildPushPayload(selected, today, leadDays)) }
+        runCatching { WebPushSender.sendToUser(userId, buildPushPayload(selected, today, leadDays, occurredBy)) }
             .getOrElse { logger.warn("push sweep falló para $userId: ${it.message}"); false }
     } else false
 
@@ -201,9 +201,15 @@ internal fun buildHtmlEmail(
     rules: List<RecurringRule>,
     today: LocalDate,
     leadDays: Int,
+    /**
+     * Los periodos ya dados por ocurridos, los MISMOS con los que [selectDueForReminder] eligió
+     * qué avisar. Sin ellos el texto calculaba otra fecha: con septiembre marcado pagado se
+     * elegía avisar el 5 de octubre y el correo decía «vence el 5 de septiembre · vencido».
+     */
+    occurredBy: Map<String, Set<String>> = emptyMap(),
 ): String {
     val items = rules.joinToString(separator = "") { rule ->
-        val due     = dueDateFor(rule, today)
+        val due     = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
         val status  = statusFor(due, today, leadDays)
         // Con la ventana de gracia, una regla de día<=leadDays puede vencer legítimamente el
         // mes PASADO (p.ej. el 29 de julio, un día 1 vence "el 1 de agosto"). Mostrar solo el

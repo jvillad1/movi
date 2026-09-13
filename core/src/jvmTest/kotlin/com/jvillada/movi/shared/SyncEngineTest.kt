@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.repository.NoOpRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -275,6 +276,44 @@ class SyncEngineTest {
             fila.syncedAt,
             "sin sellar: el próximo ciclo la vuelve a empujar con el monto corregido",
         )
+    }
+
+    /** «Este no se repite» marcado sin señal tiene que llegar marcado al server. */
+    @Test
+    fun syncEvents_sube_la_marca_de_no_se_repite() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-nsr", "Efectivo", AccountType.CASH, 100_000L))
+        local.postEvent(event("ev-nsr", "acc-nsr", TransactionType.EXPENSE, 20_000L).copy(noSeRepite = true))
+
+        var subido: FinancialEvent? = null
+        val remote = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent { subido = event; return event }
+        }
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        assertEquals(true, subido?.noSeRepite)
+        assertNotNull(db.financialEventQueries.selectById("ev-nsr", testUserId).executeAsOne().syncedAt)
+        Unit
+    }
+
+    /** Y marcarlo mientras el POST viaja no sella la fila con la marca vieja. */
+    @Test
+    fun syncEvents_no_sella_si_la_marca_de_no_se_repite_cambio_en_vuelo() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-nsr2", "Efectivo", AccountType.CASH, 100_000L))
+        local.postEvent(event("ev-nsr2", "acc-nsr2", TransactionType.EXPENSE, 20_000L))
+
+        val remote = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+                db.financialEventQueries.updateNoSeRepite(1L, event.id, testUserId)
+                return event
+            }
+        }
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        assertNull(db.financialEventQueries.selectById("ev-nsr2", testUserId).executeAsOne().syncedAt)
     }
 
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =

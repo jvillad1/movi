@@ -38,6 +38,19 @@ class PushPayloadTest {
         assertEquals("Internet — ${'$'}90.000 (vence hoy)", lines[1])
     }
 
+    /**
+     * El aviso se elige con los periodos ya pagados, así que el texto tiene que usar los mismos.
+     * Regla del 18 con julio marcado pagado: se avisa la de agosto, no «vencido hace 2 días».
+     */
+    @Test
+    fun `con el mes ya pagado el texto habla del siguiente vencimiento`() {
+        val r = rule("Celular", 53_000, 18)
+        val sinMarca = body(buildPushPayload(listOf(r), today, leadDays = 30))
+        assertEquals("Celular — ${'$'}53.000 (vencido hace 2 días)", sinMarca)
+        val pagado = body(buildPushPayload(listOf(r), today, leadDays = 30, occurredBy = mapOf(r.id to setOf("2026-07"))))
+        assertEquals("Celular — ${'$'}53.000 (vence en 29 días)", pagado)
+    }
+
     @Test
     fun `more than three payments collapse into a suffix`() {
         val rules = (1..5).map { rule("Pago $it", 10_000L * it, 20) }

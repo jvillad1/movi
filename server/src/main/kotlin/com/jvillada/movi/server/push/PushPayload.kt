@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.push
 
+import com.jvillada.movi.server.reminders.DEFAULT_GRACE_DAYS
 import com.jvillada.movi.server.reminders.dueDateFor
 import com.jvillada.movi.server.reminders.statusFor
 import com.jvillada.movi.shared.model.ParsedSms
@@ -14,9 +15,15 @@ import kotlin.math.roundToLong
 private const val MAX_LINES = 3
 
 /** JSON {title, body, url} para la notificación. Mismo copy de estado que el email. */
-fun buildPushPayload(selected: List<RecurringRule>, today: LocalDate, leadDays: Int): String {
+fun buildPushPayload(
+    selected: List<RecurringRule>,
+    today: LocalDate,
+    leadDays: Int,
+    // Los mismos periodos ocurridos con los que se eligió qué avisar; ver `buildHtmlEmail`.
+    occurredBy: Map<String, Set<String>> = emptyMap(),
+): String {
     val lines = selected.take(MAX_LINES).map { rule ->
-        val due = dueDateFor(rule, today)
+        val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
         val daysAgo = ChronoUnit.DAYS.between(due, today).toInt()
         val daysUntil = ChronoUnit.DAYS.between(today, due).toInt()
         val estado = when (statusFor(due, today, leadDays)) {
