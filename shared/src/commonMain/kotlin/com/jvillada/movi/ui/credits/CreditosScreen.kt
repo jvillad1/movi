@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -484,12 +485,26 @@ private fun LoanCard(
             // error de la app; con el rótulo son dos hechos distintos —lo que se firmó y lo que
             // pasa a este ritmo— y la diferencia es justamente la información.
             Spacer(Modifier.height(6.dp))
+            // El plazo se lleva el ancho que sobre y el banco se corta con «…». Con los dos sin peso,
+            // un banco de nombre largo se quedaba sin lugar y se partía una letra por renglón:
+            // visto en la web a 390 dp con «Banco de ejemplo».
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
             ) {
-                Text("Plazo pactado ${t.termMonths} meses · desde ${t.startDate}", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-                Text(t.bank, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                Text(
+                    "Plazo pactado ${t.termMonths} meses · desde ${t.startDate}",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoApagado,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    t.bank,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoApagado,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             // **Qué parte de esa cuota es alquiler de la plata, y cuándo se termina esta deuda.**
             // Las dos salen del mismo desglose que la app ya calculaba al registrar cada pago y
