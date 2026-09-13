@@ -62,15 +62,15 @@ fun MinNavRail(
         modifier = Modifier
             .width(216.dp)
             .fillMaxHeight()
-            .background(MinSurfaceContainer)
-            .padding(horizontal = 12.dp, vertical = 20.dp),
+            .background(Movi.colores.tarjeta)
+            .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.margen),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             "movi",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = MinPrimary,
+            color = Movi.colores.marca,
             letterSpacing = 1.5.sp,
             modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
         )
@@ -88,21 +88,23 @@ fun MinNavRail(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(999.dp))
-                .background(MinPrimary)
+                .background(Movi.colores.marca)
                 .clickable { onTabSelected(NavTab.ADD) }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = Movi.espacios.amplio, vertical = 10.dp),
         ) {
+            // El mismo `Color(0xFF1A1040)` a mano que estaba en la barra del teléfono, repetido
+            // dos veces más acá. Tres copias de un color sin nombre: ahora es `sobreMarca`.
             Icon(
                 imageVector = Icons.Rounded.Add,
                 contentDescription = "Agregar",
-                tint = Color(0xFF1A1040),
+                tint = Movi.colores.sobreMarca,
                 modifier = Modifier.size(20.dp),
             )
             Text(
                 "Agregar",
-                fontSize = 13.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF1A1040),
+                color = Movi.colores.sobreMarca,
             )
         }
     }
@@ -122,22 +124,22 @@ private fun RailItem(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isActive) MinPrimaryContainer else Color.Transparent)
+            .clip(RoundedCornerShape(Movi.formas.normal))
+            .background(if (isActive) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
             .clickable { onTabSelected(tab) }
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (isActive) MinOnPrimaryContainer else MinTextMute,
+            tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
             modifier = Modifier.size(20.dp),
         )
         Text(
             text = label,
             fontSize = 13.sp,
             fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isActive) MinText else MinTextMute,
+            color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
             letterSpacing = 0.2.sp,
         )
     }

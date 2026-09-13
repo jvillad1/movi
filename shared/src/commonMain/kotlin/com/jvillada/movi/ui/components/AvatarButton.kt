@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AvatarPalette
-import com.jvillada.movi.theme.MinBorderStrong
+import com.jvillada.movi.theme.Movi
 
 /**
  * F41: el avatar con la inicial ya abría Perfil desde el encabezado del Dashboard, pero nada
@@ -37,13 +37,17 @@ fun AvatarButton(onClick: () -> Unit) {
             .size(32.dp)
             .clip(CircleShape)
             .background(avatarColorOrDefault(SessionManager.avatarColor))
-            .border(1.dp, MinBorderStrong, CircleShape)
+            .border(1.dp, Movi.colores.borde, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = SessionManager.userName?.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
-            fontSize = 13.sp,
+            // Blanco literal y a propósito, no un token: la paleta de avatares está construida
+            // entera para contrastar contra blanco (ver AvatarPalette.kt), y el color del círculo
+            // lo elige el dueño, no el tema. Un token de texto acá se rompería con la mitad de
+            // los colores de la paleta.
+            style = Movi.textos.cuerpo,
             fontWeight = FontWeight.SemiBold,
             color = Color.White,
         )

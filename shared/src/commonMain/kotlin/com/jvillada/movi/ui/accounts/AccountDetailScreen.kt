@@ -236,14 +236,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 // qué significa el menos era exactamente cómo se llegaba a un
                                 // «Debes −$50.000» en la otra pantalla.
                                 val saldo = saldoDeDeuda(debt)
-                                MonoText(
+                                Cifra(
                                     text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
                                     fontSize = 28f,
                                     color = if (saldo.aFavor) MinIncome else MinExpense,
                                     fontWeight = FontWeight.Medium,
                                 )
                             } else {
-                                MonoText(
+                                Cifra(
                                     text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
                                     fontSize = 28f,
                                     color = if (acc.balance >= 0) MinIncome else MinExpense,
@@ -358,7 +358,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     letterSpacing = 0.4.sp,
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
-                                    MonoText(
+                                    Cifra(
                                         // Se pasa el valor absoluto: el signo ya lo pone el if de acá
                                         // (siempre "+" o "−", incluso en 0) — pasarle el total con signo
                                         // a formatCOP (F36) duplicaría el "−" cuando el día cierra en rojo.

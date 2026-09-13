@@ -191,7 +191,7 @@ fun VoidEventSheet(
                             )
                         }
                         Spacer(Modifier.width(12.dp))
-                        MonoText(
+                        Cifra(
                             text = signedAmount,
                             fontSize = 14f,
                             color = if (isIncome) MinIncome else MinText,
