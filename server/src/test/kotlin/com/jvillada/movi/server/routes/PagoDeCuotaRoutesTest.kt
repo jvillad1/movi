@@ -705,4 +705,24 @@ class PagoDeCuotaRoutesTest {
         assertEquals(701_973L, montoDeLaPataEn(libre, "tr-1"))
         assertEquals(598_027L, noAmortizaDeLaPataEn(libre, "tr-1"), "lo que no amortiza no se toca")
     }
+
+    /**
+     * **La cuota pagada en dos partes baja la deuda igual que pagada entera.** Antes cada abono se
+     * cobraba el interés del mes completo: con $2.000.000 + $2.215.223 las dos quedaban en capital
+     * 0 (o casi) y la deuda no bajaba lo que baja la cuota entera.
+     */
+    @Test
+    fun `pagar la cuota en dos partes el mismo mes baja la deuda lo mismo que entera`() = testApplication {
+        condicionesDelCarro(rateEa = 18.16)
+        wireApp()
+        val antes = saldoDe(carro)
+        val entera = com.jvillada.movi.shared.model.desglosarCuota(
+            4_215_223L, com.jvillada.movi.shared.model.AccountType.LOAN, antes, 18.16, null, null, yaCobradoEnElMes = 0L,
+        )
+
+        assertEquals(HttpStatusCode.Created, pagar(duenoId, cuerpo(ahorros, carro, 2_000_000L, tr = "tr-a", ev1 = "a1", ev2 = "a2")).status)
+        assertEquals(HttpStatusCode.Created, pagar(duenoId, cuerpo(ahorros, carro, 2_215_223L, tr = "tr-b", ev1 = "b1", ev2 = "b2")).status)
+
+        assertEquals(entera.capital, antes - saldoDe(carro), "dos abonos del mismo mes = una cuota")
+    }
 }

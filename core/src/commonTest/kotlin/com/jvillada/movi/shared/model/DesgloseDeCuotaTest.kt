@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class DesgloseDeCuotaTest {
 
     private fun deUnCredito(cuota: Long, saldo: Long, rateEa: Double, seguro: Long? = null, otros: Long? = null) =
-        desglosarCuota(cuota, AccountType.LOAN, saldo, rateEa, seguro, otros)
+        desglosarCuota(cuota, AccountType.LOAN, saldo, rateEa, seguro, otros, yaCobradoEnElMes = 0L)
 
     // ── Los créditos reales del dueño ──────────────────────────────────────────
 
@@ -167,7 +167,7 @@ class DesgloseDeCuotaTest {
         // conserva el comportamiento de siempre —la deuda baja por el monto completo— pero el
         // motivo lo dice, y de ahí la pantalla saca el aviso. Inventar un interés plausible acá
         // sería el mismo error que esta ola vino a matar, con otro disfraz.
-        val d = desglosarCuota(1_000_000, AccountType.LOAN, 50_000_000, rateEa = null, seguroMensual = null, otrosCargosMensuales = null)
+        val d = desglosarCuota(1_000_000, AccountType.LOAN, 50_000_000, rateEa = null, seguroMensual = null, otrosCargosMensuales = null, yaCobradoEnElMes = 0L)
 
         assertEquals(MotivoDelDesglose.SIN_TASA, d.motivo)
         assertEquals(1_000_000L, d.capital)
@@ -190,7 +190,7 @@ class DesgloseDeCuotaTest {
         // no escondidos adentro del pago. Este test existe para que nadie "arregle" la tarjeta por
         // simetría con el crédito — se le pasan tasa, seguro y otros cargos a propósito, y tiene
         // que ignorarlos los tres.
-        val d = desglosarCuota(1_008_902, AccountType.CREDIT_CARD, 19_818_701, rateEa = 32.0, seguroMensual = 50_000, otrosCargosMensuales = 25_000)
+        val d = desglosarCuota(1_008_902, AccountType.CREDIT_CARD, 19_818_701, rateEa = 32.0, seguroMensual = 50_000, otrosCargosMensuales = 25_000, yaCobradoEnElMes = 0L)
 
         assertEquals(MotivoDelDesglose.TARJETA, d.motivo)
         assertEquals(1_008_902L, d.capital)

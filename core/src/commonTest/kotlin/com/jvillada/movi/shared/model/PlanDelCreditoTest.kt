@@ -67,7 +67,7 @@ class PlanDelCreditoTest {
         // vida y los $25.000 de «otros conceptos» del Banco de Occidente.
         val saldo = 177_052_715L
         val plan = planDeUnaDeuda(saldo, 18.16, 4_101_123L, 89_100L, 25_000L, saleDeTuBolsillo = true)
-        val desglose = desglosarCuota(4_101_123L, AccountType.LOAN, saldo, 18.16, 89_100L, 25_000L)
+        val desglose = desglosarCuota(4_101_123L, AccountType.LOAN, saldo, 18.16, 89_100L, 25_000L, yaCobradoEnElMes = 0L)
 
         assertEquals(desglose.interes, plan.interes)
         assertEquals(desglose.seguro, plan.seguro)
@@ -234,7 +234,7 @@ class PlanDelCreditoTest {
         var interesAcumulado = 0L
         var cuotas = 0
         while (saldo > 0L) {
-            val desglose = desglosarCuota(1_204_064L, AccountType.LOAN, saldo, 11.27, 124_800L, null)
+            val desglose = desglosarCuota(1_204_064L, AccountType.LOAN, saldo, 11.27, 124_800L, null, yaCobradoEnElMes = 0L)
             interesAcumulado += desglose.interes
             saldo -= desglose.capital
             cuotas++

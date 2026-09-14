@@ -40,7 +40,7 @@ class InteresRealTest {
     @Test
     fun la_estimacion_del_9695_es_la_que_se_queda_corta() {
         // Lo que Movi estimaba, para que el tamaño del error quede escrito y no en una anécdota.
-        val estimado = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, null)
+        val estimado = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, null, yaCobradoEnElMes = 0L)
 
         assertEquals(363_905L, estimado.interes)
         assertEquals(473_227L - 363_905L, 109_322L, "la diferencia contra el extracto")
@@ -56,6 +56,7 @@ class InteresRealTest {
             seguroMensual = 124_800L,
             otrosCargosMensuales = null,
             interesReal = 473_227L,
+            yaCobradoEnElMes = 0L,
         )
 
         assertEquals(473_227L, d.interes, "el interés es el del extracto, no la estimación")
@@ -67,8 +68,8 @@ class InteresRealTest {
 
     @Test
     fun sin_interes_real_se_estima_exactamente_como_antes() {
-        val conNull = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, otrosCargosMensuales = null, interesReal = null)
-        val directo = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, null)
+        val conNull = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, otrosCargosMensuales = null, interesReal = null, yaCobradoEnElMes = 0L)
+        val directo = desglosarCuota(1_204_064L, AccountType.LOAN, 40_710_555L, 11.27, 124_800L, null, yaCobradoEnElMes = 0L)
 
         assertEquals(directo, conNull, "null es «estímalo», y estimar es lo mismo de siempre")
     }
@@ -156,7 +157,7 @@ class InteresRealTest {
     fun un_credito_sin_tasa_acepta_el_interes_del_extracto() {
         // Sin tasa la estimación no puede separar nada y baja la deuda por todo. Con el extracto
         // en la mano sí se puede, y eso es mejor que las condiciones incompletas.
-        val d = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, rateEa = null, seguroMensual = null, otrosCargosMensuales = null, interesReal = 473_227L)
+        val d = desglosarCuotaRegistrada(1_204_064L, AccountType.LOAN, 40_710_555L, rateEa = null, seguroMensual = null, otrosCargosMensuales = null, interesReal = 473_227L, yaCobradoEnElMes = 0L)
 
         assertEquals(MotivoDelDesglose.INTERES_REAL, d.motivo)
         assertEquals(1_204_064L - 473_227L, d.capital)

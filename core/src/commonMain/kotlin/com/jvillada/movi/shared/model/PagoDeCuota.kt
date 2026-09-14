@@ -272,6 +272,17 @@ fun desglosarCuota(
      * agregue. Sin default, olvidarlo no compila.
      */
     otrosCargosMensuales: Long?,
+    /**
+     * **Lo que ya se cobró de interés, seguro y cargos este mes** con pagos anteriores del mismo
+     * crédito (la suma de sus `noAmortiza`). Sin valor por defecto, por lo mismo que los otros
+     * cargos.
+     *
+     * Existe por el pago en dos partes: la libranza (cuota $6.040.259, interés ~$3,4M) pagada como
+     * $3.000.000 + $3.040.259 le cobraba el interés del mes **a cada parte**, las dos quedaban en
+     * capital 0 y la deuda no bajaba nada, cuando la cuota entera baja ~$2,39M. El interés del mes
+     * es uno solo: lo ya cobrado se descuenta de lo que falta cobrar.
+     */
+    yaCobradoEnElMes: Long,
 ): DesgloseDeCuota {
     // Una tarjeta no amortiza nada: lo que se paga baja la deuda tal cual. Ver [MotivoDelDesglose].
     if (tipoDeLaDeuda != AccountType.LOAN) {
@@ -284,9 +295,17 @@ fun desglosarCuota(
         return DesgloseDeCuota(cuota, interes = 0L, seguro = 0L, capital = cuota, motivo = MotivoDelDesglose.SIN_TASA)
     }
     val saldo = saldoDeLaDeuda.coerceAtLeast(0L)
-    val interes = round(saldo.toDouble() * tasaMensualDeUnaEA(rateEa)).toLong().coerceAtLeast(0L)
-    val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
-    val otros = (otrosCargosMensuales ?: 0L).coerceAtLeast(0L)
+    var faltaDescontar = yaCobradoEnElMes.coerceAtLeast(0L)
+    fun menosLoYaCobrado(cargo: Long): Long {
+        val descontado = minOf(cargo, faltaDescontar)
+        faltaDescontar -= descontado
+        return cargo - descontado
+    }
+    // El orden en que se descuenta lo ya cobrado (interés, seguro, otros) solo cambia el rótulo de
+    // cada parte; el capital es el mismo.
+    val interes = menosLoYaCobrado(round(saldo.toDouble() * tasaMensualDeUnaEA(rateEa)).toLong().coerceAtLeast(0L))
+    val seguro = menosLoYaCobrado((seguroMensual ?: 0L).coerceAtLeast(0L))
+    val otros = menosLoYaCobrado((otrosCargosMensuales ?: 0L).coerceAtLeast(0L))
     // Clampado a 0 y no negativo: una cuota que no alcanza a cubrir interés + seguro no *sube* la
     // deuda por esta puerta. Sube sola, cuando el banco capitaliza, y eso se anota con «Ajustar
     // saldo» — que es un hecho del banco, no una deducción nuestra.
@@ -428,11 +447,13 @@ fun desglosarCuotaRegistrada(
     /** Ver [desglosarCuota]: sin default, olvidarlo no compila. */
     otrosCargosMensuales: Long?,
     interesReal: Long?,
+    /** Ver [desglosarCuota]. Con el interés real no se usa: ese número ya es el de ESTE pago. */
+    yaCobradoEnElMes: Long,
 ): DesgloseDeCuota =
     if (interesReal != null) {
         desglosarCuotaConInteresReal(cuota, tipoDeLaDeuda, interesReal, seguroMensual, otrosCargosMensuales)
     } else {
-        desglosarCuota(cuota, tipoDeLaDeuda, saldoDeLaDeuda, rateEa, seguroMensual, otrosCargosMensuales)
+        desglosarCuota(cuota, tipoDeLaDeuda, saldoDeLaDeuda, rateEa, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes)
     }
 
 /** Lo que se le dice a quien intenta pagar desde una deuda. */

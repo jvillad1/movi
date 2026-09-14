@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.routes
 
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
@@ -162,6 +165,21 @@ fun Route.pagoDeCuotaRoutes() {
                 seguroMensual = terms?.insuranceMonthly,
                 otrosCargosMensuales = terms?.otrosCargosMensuales,
                 interesReal = body.interesReal,
+                // Los otros pagos de esta deuda en el mismo mes que este (sin sus propias patas).
+                yaCobradoEnElMes = run {
+                    val delMes = loadNonVoidedEvents(uid, debt.id)
+                        .filter { it.transferId != body.transferId && it.currency == debt.currency && it.noAmortiza != null }
+                    // La plata que salió de la cuenta en cada pago de antes: la otra pata de su par.
+                    val pares = delMes.mapNotNull { it.transferId }.toSet()
+                    val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
+                        Events.selectAll()
+                            .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debt.id) }
+                            .associate { it[Events.transferId]!! to it[Events.amount] }
+                    }
+                    cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp)) { fila ->
+                        fila.transferId?.let { pagadoPorPar[it] }
+                    }
+                },
             )
 
             val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt, desglose)

@@ -46,7 +46,7 @@ class PagoDeCuotaTest {
             peticion(from.id, debt.id, monto),
             from,
             debt,
-            desglosarCuota(monto, debt.type, debt.balance, rateEa, seguro, null),
+            desglosarCuota(monto, debt.type, debt.balance, rateEa, seguro, null, yaCobradoEnElMes = 0L),
         )
 
     // ── La decisión del dueño ──────────────────────────────────────────────────
