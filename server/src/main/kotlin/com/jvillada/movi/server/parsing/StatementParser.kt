@@ -24,6 +24,21 @@ object StatementParser {
         }
     }
 
+    /**
+     * Los últimos cuatro dígitos que nombra un extracto. Primero el **nombre del archivo** —la
+     * convención del dueño lo trae (`TC_Master_3684_09_2026.pdf`)—, sin los años; después los
+     * números **enmascarados** del texto («**** 3684», «XXXX3684», «terminada en 3684»). Un número
+     * suelto del texto no cuenta: en un extracto hay montos, fechas y teléfonos de cuatro cifras.
+     */
+    fun numerosDeCuenta(fileName: String, text: String = ""): List<String> {
+        val delArchivo = Regex("""(?<!\d)\d{4}(?!\d)""").findAll(fileName.substringBeforeLast('.'))
+            .map { it.value }
+            .filterNot { it.toInt() in 1990..2100 }
+        val enmascarados = Regex("""(?:[*xX•]{2,}[\s-]*|terminad[ao]\s+en\s+)(\d{4})(?!\d)""", RegexOption.IGNORE_CASE)
+            .findAll(text).map { it.groupValues[1] }
+        return (delArchivo + enmascarados).distinct().toList()
+    }
+
     fun detectBankName(fileName: String, text: String = ""): String {
         val base = fileName.substringBeforeLast('.')
         val firstSegment = base.split('_', '-', ' ').firstOrNull { it.isNotBlank() } ?: base

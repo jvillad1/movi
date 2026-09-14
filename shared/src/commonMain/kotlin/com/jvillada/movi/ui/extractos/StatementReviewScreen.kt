@@ -73,6 +73,9 @@ fun StatementReviewScreen(
             uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
             banco = result.bankName,
             elegidaAMano = cuentaElegida,
+            // El número de la tarjeta o cuenta que nombra el extracto, con la misma regla que un SMS:
+            // un extracto de la Master Black ya no cae por defecto en «Bancolombia Ahorros».
+            textoDelMensaje = result.numerosDeCuenta.joinToString(" ") { "*$it" },
         )
     }
     val destinationAccount = destino.cuenta

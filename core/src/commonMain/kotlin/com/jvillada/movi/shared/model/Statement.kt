@@ -30,6 +30,13 @@ data class StatementParseResult(
     val period: String,
     val newTransactions: List<ParsedTransaction>,
     val matches: List<ReconciliationMatch>,
+    /**
+     * Los últimos cuatro dígitos de tarjeta o cuenta que nombra el extracto (del nombre del archivo
+     * y de los números enmascarados del PDF), del más confiable al menos. La app los usa para elegir
+     * la cuenta de destino por el número, como ya hace con los SMS, en vez de adivinar por el nombre
+     * del banco — que proponía «Bancolombia Ahorros» para el extracto de la Master Black.
+     */
+    val numerosDeCuenta: List<String> = emptyList(),
 )
 
 @Serializable
