@@ -339,6 +339,17 @@ open class NoOpRepository(
      * Mismo criterio que [updateEventTimestamp]: 404 para un evento que no está en
      * [knownEventIds], y para el que sí conoce, el evento que ya tenía con la marca aplicada.
      */
+    override suspend fun confirmEvent(id: String): FinancialEvent {
+        if (id !in knownEventIds) throw ApiException(404)
+        val previo = eventosDelServer.firstOrNull { it.id == id }
+            ?: FinancialEvent(
+                id = id, accountId = "acc-stub", type = TransactionType.EXPENSE, amount = 50_000L,
+                category = "Comida", description = "stub", timestamp = 0L, source = EventSource.MANUAL,
+                reconciliationStatus = ReconciliationStatus.UNCONFIRMED,
+            )
+        return previo.copy(reconciliationStatus = ReconciliationStatus.RECONCILED).also { recordarEnElServer(it) }
+    }
+
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
         if (id !in knownEventIds) throw ApiException(404)
         val previo = eventosDelServer.firstOrNull { it.id == id }

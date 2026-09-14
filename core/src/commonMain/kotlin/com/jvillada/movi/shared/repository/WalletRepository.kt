@@ -258,6 +258,19 @@ interface WalletRepository {
     suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent
 
     /**
+     * **Confirmar un movimiento que entró solo** (`PUT /api/events/{id}/confirm`): pasa de
+     * «Por confirmar» a confirmado.
+     *
+     * Hasta esto no había ninguna forma de hacerlo: lo que llegaba como `UNCONFIRMED` (un extracto,
+     * una carga del banco) quedaba en «Por confirmar» para siempre, fuera de «Gastos» e
+     * «Ingresos», y la hoja solo dejaba mirarlo. Idempotente: confirmar uno ya confirmado lo
+     * devuelve igual. Una pata de traspaso confirma también a su par.
+     *
+     * Lanza [ApiException] con 404 si el movimiento no existe, es de otro usuario o está anulado.
+     */
+    suspend fun confirmEvent(id: String): FinancialEvent
+
+    /**
      * **Corrige el monto, la cuenta y el concepto de un movimiento ya registrado**
      * (`PUT /api/events/{id}`).
      *

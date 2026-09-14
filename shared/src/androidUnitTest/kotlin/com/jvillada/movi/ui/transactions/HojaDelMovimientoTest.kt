@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.transactions
 
+import kotlin.test.assertEquals
+import androidx.compose.ui.test.hasAnyChild
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -340,6 +343,46 @@ class HojaDelMovimientoTest {
         lastSeen = 0L,
         occurrences = 3,
     )
+
+    /** «Por confirmar» tiene salida: el botón está y llama a confirmar ese movimiento. */
+    @Test
+    fun unMovimientoPorConfirmarSePuedeConfirmar() {
+        var confirmado: String? = null
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun confirmEvent(id: String): FinancialEvent {
+                confirmado = id
+                return gasto.copy(reconciliationStatus = ReconciliationStatus.RECONCILED)
+            }
+            override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = null
+        }
+        montar(gasto.copy(reconciliationStatus = ReconciliationStatus.UNCONFIRMED))
+        composeRule.onNodeWithText("POR CONFIRMAR", useUnmergedTree = true).assertExists()
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Confirmar")), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { confirmado != null }
+        assertEquals("ev-hija", confirmado)
+    }
+
+    /** Uno ya confirmado no ofrece confirmar. */
+    @Test
+    fun unMovimientoConfirmadoNoOfreceConfirmar() {
+        montar(gasto.copy(reconciliationStatus = ReconciliationStatus.RECONCILED))
+        assertEquals(0, composeRule.onAllNodesWithText("POR CONFIRMAR", useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    /**
+     * **Tocar el nombre abre el editor del concepto.** El dueño: «sigo sin poder editar los nombres
+     * de los movimientos» — lo que se toca para renombrar es el nombre, no el «Cambiar» del monto.
+     */
+    @Test
+    fun tocarElNombreAbreElEditorDelConcepto() {
+        montar()
+        assertEquals(0, composeRule.onAllNodesWithText("CONCEPTO", useUnmergedTree = true).fetchSemanticsNodes().size)
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText("Hija")), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("CONCEPTO", useUnmergedTree = true).assertExists()
+    }
 }
 
 /** El AVD `Movi_Sensor`: 411×731 dp. Mismo tamaño que usa `HojaAgregarGeometriaTest`. */

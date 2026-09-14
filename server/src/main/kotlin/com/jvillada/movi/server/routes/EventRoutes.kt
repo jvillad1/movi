@@ -664,6 +664,43 @@ fun Route.eventRoutes() {
          * `PUT /{id}/timestamp`: ningún GET lo vuelve a mostrar, así que lo que devolviéramos acá
          * no se vería en ninguna pantalla.
          */
+        /**
+         * **Confirmar un movimiento que entró solo** —de «Por confirmar» a confirmado—.
+         *
+         * No existía: un movimiento `UNCONFIRMED` no tenía ninguna salida y quedaba fuera de
+         * «Gastos» e «Ingresos» para siempre. Idempotente. Si es una pata de un traspaso se confirma
+         * el par entero, dentro de la misma transacción: medio traspaso confirmado contaría la plata
+         * de un lado y no del otro. 404 si no existe, es de otro o está anulado.
+         */
+        put("/{id}/confirm") {
+            val id = call.parameters["id"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val updated: FinancialEvent? = dbQuery {
+                val event = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                val isVoided = event != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (event == null || isVoided) {
+                    null
+                } else {
+                    val par = event.transferId
+                    Events.update({
+                        (Events.userId eq uid) and
+                            (if (par != null) (Events.transferId eq par) else (Events.id eq id))
+                    }) {
+                        it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
+                    }
+                    event.copy(reconciliationStatus = ReconciliationStatus.RECONCILED)
+                        .withCashFlowFlag(accountTypesFor(uid))
+                }
+            }
+            if (updated == null) call.respond(HttpStatusCode.NotFound)
+            else call.respond(updated)
+        }
+
         put("/{id}/repeats") {
             val id = call.parameters["id"]
                 ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")

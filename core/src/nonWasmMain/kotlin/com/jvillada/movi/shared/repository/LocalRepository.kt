@@ -998,6 +998,32 @@ class LocalRepository(
      * monto es el caso inverso: que la fila se selle con un valor que el POST no llevaba. Acá el
      * POST lleva el valor del momento en que se arma, así que no hay ventana.
      */
+    /**
+     * **Confirmar un movimiento**, espejado en el teléfono. Mismo esqueleto que
+     * [updateEventRepeats]: si todavía no llegó al server se confirma acá y el POST del
+     * `SyncEngine` ya sube el estado nuevo; si ya está sincronizado manda el server y se copia lo
+     * que contestó. Tampoco mueve plata de lugar —solo decide si la fila cuenta en «Gastos» e
+     * «Ingresos» o espera en «Por confirmar»—, así que no lleva guardas propias.
+     */
+    override suspend fun confirmEvent(id: String): FinancialEvent {
+        val uid = userId()
+        val types = accountTypes(uid)
+        val resolvedLocally = db.transactionWithResult {
+            val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            if (local != null && local.syncedAt == null) {
+                db.financialEventQueries.updateReconciliationStatus(ReconciliationStatus.RECONCILED.name, id, uid)
+                local.toModel(types).copy(reconciliationStatus = ReconciliationStatus.RECONCILED)
+            } else {
+                null
+            }
+        }
+        if (resolvedLocally != null) return resolvedLocally
+
+        val updated = remote.confirmEvent(id)
+        db.financialEventQueries.updateReconciliationStatus(updated.reconciliationStatus.name, updated.id, uid)
+        return updated
+    }
+
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
         val uid = userId()
         val types = accountTypes(uid)

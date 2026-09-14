@@ -135,6 +135,10 @@ UPDATE financial_event SET timestamp = :timestamp WHERE id = :id AND userId = :u
 updateNoSeRepite:
 UPDATE financial_event SET noSeRepite = :noSeRepite WHERE id = :id AND userId = :userId;
 
+-- Confirmar un movimiento que entró solo (ver LocalRepository.confirmEvent).
+updateReconciliationStatus:
+UPDATE financial_event SET reconciliationStatus = :reconciliationStatus WHERE id = :id AND userId = :userId;
+
 -- Corregir el monto, la cuenta y el concepto de un movimiento (ver LocalRepository.updateEvent).
 -- Espejo local de PUT /api/events/{id}, y camino único cuando el evento todavía no llegó al
 -- server. Los tres campos se escriben siempre juntos: quien llama ya resolvió cuáles cambian y
