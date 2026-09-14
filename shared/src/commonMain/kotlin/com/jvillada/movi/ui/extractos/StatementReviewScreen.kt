@@ -84,7 +84,11 @@ fun StatementReviewScreen(
     // Las coincidencias que el dueño no tocó: no se importan ni se concilian. Antes eso pasaba en
     // silencio, y una coincidencia falsa sin revisar era una compra real que nunca entraba.
     val sinRevisar = result.matches.count { it.parsed.id !in reconciliations }
-    val importCount = selectedIds.size + confirmedCount
+    // Las coincidencias marcadas «No son el mismo» TAMBIÉN entran (como movimientos nuevos): antes no
+    // contaban, y si el dueño rechazaba todas y desmarcaba las nuevas el botón quedaba apagado con
+    // filas por importar.
+    val rechazadas = reconciliations.values.count { !it.confirm }
+    val importCount = selectedIds.size + confirmedCount + rechazadas
     val canImport = importCount > 0 && !working && !imported && destinationAccount != null
 
     fun import() {

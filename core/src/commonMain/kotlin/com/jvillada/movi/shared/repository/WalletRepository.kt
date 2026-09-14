@@ -403,6 +403,12 @@ interface WalletRepository {
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail
+
+    /**
+     * **Deshacer un importe** (`DELETE /api/statements/imports/{id}`): anula lo que el importe creó,
+     * suelta lo que solo concilió y borra el registro. 404 si no existe.
+     */
+    suspend fun deleteStatementImport(id: String)
     suspend fun getScreen(slug: String, cachedVersion: Int? = null): ScreenDefinition?
     suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition
     suspend fun restoreScreen(slug: String): ScreenDefinition

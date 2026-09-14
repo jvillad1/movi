@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.EventSource
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.deleteWhere
+import io.ktor.server.routing.delete
 import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
@@ -164,7 +168,7 @@ fun Route.statementRoutes() {
         val yaEmparejados = mutableSetOf<String>()
         for (tx in parsed) {
             val parsedEpoch = runCatching {
-                appDateToEpochMillis(LocalDate.parse(tx.date))
+                appDateToEpochMillis(fechaDelExtracto(tx.date)!!)
             }.getOrNull()
 
             val match = if (parsedEpoch != null) {
@@ -198,10 +202,10 @@ fun Route.statementRoutes() {
         }
 
         val period = if (isFamirios) {
-            val years = parsed.mapNotNull { runCatching { LocalDate.parse(it.date).year }.getOrNull() }
+            val years = parsed.mapNotNull { fechaDelExtracto(it.date)?.year }
             if (years.isEmpty()) "" else "${years.min()}–${years.max()}"
         } else runCatching {
-            val date = LocalDate.parse(parsed.firstOrNull()?.date ?: "2025-01-01")
+            val date = parsed.firstNotNullOfOrNull { fechaDelExtracto(it.date) } ?: LocalDate.parse("2025-01-01")
             "${monthName(date.monthValue)} ${date.year}"
         }.getOrDefault("")
 
@@ -287,9 +291,9 @@ fun Route.statementRoutes() {
         var importedCount = 0
         var reconciledCount = 0
 
+        var sinFecha = 0
         for (tx in decision.imports) {
-            createEventFromParsed(tx, decision.accountId, uid, importId)
-            importedCount++
+            if (createEventFromParsed(tx, decision.accountId, uid, importId)) importedCount++ else sinFecha++
         }
 
         // Dos filas confirmadas contra el MISMO movimiento: la segunda es otra compra real.
@@ -328,12 +332,13 @@ fun Route.statementRoutes() {
                                 description = it[Events.description],
                                 merchant   = it[Events.merchant],
                                 isTransferLeg = it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY,
+                                importeAnterior = it[Events.statementImportId],
                             )
                         }
                 }
 
                 if (existingEvent != null) {
-                    val (existCat, existDesc, existMerchant, esPataDeTraspaso) = existingEvent
+                    val (existCat, existDesc, existMerchant, esPataDeTraspaso, importeAnterior) = existingEvent
                     // La categoría de una pata de traspaso NO se toca por esta puerta. Esta
                     // reconciliación escribe con un `Events.update` directo, sin pasar por la
                     // guarda de `PUT /api/events/{id}/category` — y el matcher empareja por monto
@@ -358,7 +363,9 @@ fun Route.statementRoutes() {
                             it[category]          = finalCategory
                             it[description]       = finalDescription
                             it[merchant]          = finalMerchant
-                            it[statementImportId] = importId
+                            // Si otro importe ya lo concilió, se queda con ese: reimportar el mismo
+                            // extracto le quitaba las filas al detalle del primero.
+                            if (importeAnterior == null) it[statementImportId] = importId
                             // El extracto del banco prueba el movimiento: deja de estar «Por
                             // confirmar». Antes un SMS conciliado seguía pendiente, y descartarlo
                             // ahí como duplicado borraba el único registro de la compra.
@@ -377,12 +384,10 @@ fun Route.statementRoutes() {
                 } else {
                     // No es el mismo movimiento (otra cuenta, o ya usado en este importe): la fila
                     // del extracto es un movimiento real y entra como nuevo en vez de perderse.
-                    createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
-                    importedCount++
+                    if (createEventFromParsed(dec.parsed, decision.accountId, uid, importId)) importedCount++ else sinFecha++
                 }
             } else {
-                createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
-                importedCount++
+                if (createEventFromParsed(dec.parsed, decision.accountId, uid, importId)) importedCount++ else sinFecha++
             }
         }
 
@@ -407,7 +412,7 @@ fun Route.statementRoutes() {
                 call.application.log.warn("detect-on-import falló para $uid", it)
             }
 
-        call.respond(HttpStatusCode.OK, mapOf("imported" to importedCount + reconciledCount))
+        call.respond(HttpStatusCode.OK, mapOf("imported" to importedCount + reconciledCount, "sinFecha" to sinFecha))
     }
 
     get("/api/statements/imports") {
@@ -419,6 +424,49 @@ fun Route.statementRoutes() {
                 .map { rowToStatementImport(it) }
         }
         call.respond(imports)
+    }
+
+    /**
+     * **Deshacer un importe.** Antes no existía: un extracto importado en la cuenta equivocada solo se
+     * arreglaba anulando fila por fila.
+     *
+     * - Lo que el importe **creó** (`source = STATEMENT` con su id) se **anula** —no se borra—, igual
+     *   que un movimiento suelto: queda el rastro y el saldo vuelve a donde estaba.
+     * - Lo que el importe solo **concilió** (un SMS o algo anotado a mano) se queda: era un
+     *   movimiento real antes del extracto. Solo se le suelta el vínculo con el importe.
+     * - El registro del importe se borra.
+     *
+     * Todo en una transacción. 404 si no existe o es de otro usuario.
+     */
+    delete("/api/statements/imports/{id}") {
+        val uid = call.userId()
+        val importId = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing id")
+        val existia = dbQuery {
+            val fila = StatementImports.selectAll()
+                .where { (StatementImports.id eq importId) and (StatementImports.userId eq uid) }
+                .firstOrNull() ?: return@dbQuery false
+            val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
+            val delImporte = Events.selectAll()
+                .where { (Events.userId eq uid) and (Events.statementImportId eq importId) }
+                .map { it[Events.id] to it[Events.eventSource] }
+            val ahora = System.currentTimeMillis()
+            delImporte.filter { (id, origen) -> origen == EventSource.STATEMENT.name && id !in anulados }.forEach { (id, _) ->
+                VoidEvents.insert {
+                    it[VoidEvents.id] = "void_${UUID.randomUUID()}"
+                    it[VoidEvents.userId] = uid
+                    it[VoidEvents.originalEventId] = id
+                    it[VoidEvents.reason] = "Se deshizo el importe del extracto"
+                    it[VoidEvents.timestamp] = ahora
+                }
+            }
+            val conciliados = delImporte.filter { (_, origen) -> origen != EventSource.STATEMENT.name }.map { it.first }
+            if (conciliados.isNotEmpty()) {
+                Events.update({ (Events.userId eq uid) and (Events.id inList conciliados) }) { it[statementImportId] = null }
+            }
+            StatementImports.deleteWhere { (StatementImports.id eq fila[StatementImports.id]) and (StatementImports.userId eq uid) }
+            true
+        }
+        if (existia) call.respond(HttpStatusCode.NoContent) else call.respond(HttpStatusCode.NotFound)
     }
 
     get("/api/statements/imports/{id}") {
@@ -459,13 +507,15 @@ fun Route.statementRoutes() {
     }
 }
 
-private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String, importId: String) {
+private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String, importId: String): Boolean {
+    // **Sin fecha no se inventa hoy.** Una fila cuya fecha no se entiende caía en el día del
+    // importe: otro mes, y fuera del emparejamiento de duplicados. Se salta y se cuenta, para que
+    // la respuesta diga cuántas quedaron afuera.
+    val dia = fechaDelExtracto(tx.date) ?: return false
     val eventId = "ev_${UUID.randomUUID()}"
     // La fecha del extracto es un día civil de Bogotá: se sella a SU medianoche (no a la de
     // UTC), para que al agrupar por día/mes vuelva a caer en el mismo día.
-    val ts = runCatching {
-        appDateToEpochMillis(LocalDate.parse(tx.date))
-    }.getOrElse { System.currentTimeMillis() }
+    val ts = appDateToEpochMillis(dia)
     dbQuery {
         Events.insert {
             it[id]                   = eventId
@@ -532,6 +582,7 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[createdAt]            = System.currentTimeMillis()
         }
     }
+    return true
 }
 
 private fun rowToStatementImport(row: ResultRow) = StatementImport(
@@ -560,6 +611,8 @@ private data class ExistingEventFields(
     val description: String,
     val merchant: String?,
     val isTransferLeg: Boolean,
+    /** El importe que ya concilió este movimiento, si alguno: reimportar no se lo quita. */
+    val importeAnterior: String? = null,
 )
 
 /** A dónde va una fila del extracto cuya categoría no se puede usar (ver `createEventFromParsed`). */
@@ -576,7 +629,7 @@ private fun parejaEnLaCuenta(
     fila: ParsedTransaction,
     yaUsados: Set<String>,
 ): String? {
-    val cuando = runCatching { appDateToEpochMillis(LocalDate.parse(fila.date)) }.getOrNull() ?: return null
+    val cuando = fechaDelExtracto(fila.date)?.let { appDateToEpochMillis(it) } ?: return null
     val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
     return Events.selectAll()
         .where {
@@ -588,4 +641,21 @@ private fun parejaEnLaCuenta(
         .filter { (id, ts) -> id !in anulados && id !in yaUsados && abs(cuando - ts) <= 2 * 86_400_000L }
         .minByOrNull { (_, ts) -> abs(cuando - ts) }
         ?.first
+}
+
+/**
+ * La fecha de una fila de extracto, en los formatos que de verdad llegan: el ISO que pide el parser
+ * (`2026-05-28`), el ISO sin ceros que a veces devuelve (`2026-5-28`) y el colombiano (`28/05/2026`).
+ * `null` si no es ninguno: quien llama no inventa una.
+ */
+internal fun fechaDelExtracto(texto: String): LocalDate? {
+    val t = texto.trim()
+    runCatching { return LocalDate.parse(t) }
+    Regex("""^(\d{4})-(\d{1,2})-(\d{1,2})$""").matchEntire(t)?.let { m ->
+        return runCatching { LocalDate.of(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt()) }.getOrNull()
+    }
+    Regex("""^(\d{1,2})/(\d{1,2})/(\d{4})$""").matchEntire(t)?.let { m ->
+        return runCatching { LocalDate.of(m.groupValues[3].toInt(), m.groupValues[2].toInt(), m.groupValues[1].toInt()) }.getOrNull()
+    }
+    return null
 }

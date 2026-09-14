@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import org.jetbrains.exposed.sql.and
+import kotlin.test.assertTrue
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
+import io.ktor.client.request.delete
 import org.jetbrains.exposed.sql.selectAll
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -339,5 +343,69 @@ class StatementRoutesTest {
         }
         assertEquals("Pago de tarjeta", categorias[9_809_799L])
         assertEquals("Otros", categorias[80_000L], "una compra real mal etiquetada no se esconde del mes")
+    }
+
+    // ── Deshacer, reimportar y fechas ─────────────────────────────────────────────────────────
+
+    private suspend fun io.ktor.server.testing.ApplicationTestBuilder.importar(body: String) =
+        client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+
+    private fun ultimoImporte() = transaction {
+        StatementImports.selectAll().orderBy(StatementImports.importedAt, org.jetbrains.exposed.sql.SortOrder.DESC).first()[StatementImports.id]
+    }
+
+    @Test
+    fun `deshacer un importe anula lo que creo, suelta lo que concilio y borra el registro`() = testApplication {
+        wireApp()
+        val dia = com.jvillada.movi.server.time.appDateToEpochMillis(java.time.LocalDate.parse("2026-06-14"))
+        sembrar("ev-sms-real", accountAId, 50_000, cuando = dia)
+        val body = """{"statementId":"st-undo","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[${parsedTx("n1", "2026-06-10", "CAFE", 12_000)}],"reconciliations":[${reconciliacion("r1", "ev-sms-real", 50_000)}],"skipped":[]}"""
+        assertEquals(HttpStatusCode.OK, importar(body).status)
+        val importe = ultimoImporte()
+        val creado = transaction { Events.selectAll().where { (Events.statementImportId eq importe) and (Events.id neq "ev-sms-real") }.single()[Events.id] }
+
+        val res = client.delete("/api/statements/imports/$importe") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        assertEquals(HttpStatusCode.NoContent, res.status)
+
+        transaction {
+            assertEquals(1L, VoidEvents.selectAll().where { VoidEvents.originalEventId eq creado }.count(), "lo creado queda anulado")
+            assertEquals(0L, VoidEvents.selectAll().where { VoidEvents.originalEventId eq "ev-sms-real" }.count(), "lo conciliado no se anula")
+            assertEquals(null, Events.selectAll().where { Events.id eq "ev-sms-real" }.single()[Events.statementImportId])
+            assertEquals(0L, StatementImports.selectAll().where { StatementImports.id eq importe }.count())
+        }
+        assertEquals(HttpStatusCode.NotFound, client.delete("/api/statements/imports/$importe") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.status)
+    }
+
+    @Test
+    fun `reimportar no le quita al primer importe lo que ya habia conciliado`() = testApplication {
+        wireApp()
+        val dia = com.jvillada.movi.server.time.appDateToEpochMillis(java.time.LocalDate.parse("2026-06-14"))
+        sembrar("ev-conciliado", accountAId, 70_000, cuando = dia)
+        val body = """{"statementId":"st-re","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[],"reconciliations":[${reconciliacion("r1", "ev-conciliado", 70_000)}],"skipped":[]}"""
+        assertEquals(HttpStatusCode.OK, importar(body).status)
+        val primero = ultimoImporte()
+        Thread.sleep(5)
+        assertEquals(HttpStatusCode.OK, importar(body).status)
+        assertEquals(primero, transaction { Events.selectAll().where { Events.id eq "ev-conciliado" }.single()[Events.statementImportId] })
+    }
+
+    @Test
+    fun `una fecha en otro formato se entiende y una ilegible no cae en hoy`() = testApplication {
+        wireApp()
+        assertEquals(java.time.LocalDate.of(2026, 5, 28), fechaDelExtracto("2026-5-28"))
+        assertEquals(java.time.LocalDate.of(2026, 5, 28), fechaDelExtracto("28/05/2026"))
+        assertEquals(null, fechaDelExtracto("mayo 28"))
+        val res = importar(importBody("${parsedTx("f1", "2026-5-28", "UNO", 11_000)},${parsedTx("f2", "ayer", "DOS", 22_000)}"))
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertTrue("\"sinFecha\"" in res.bodyAsText() && "1" in res.bodyAsText(), res.bodyAsText())
+        val filas = transaction { Events.selectAll().where { Events.accountId eq accountAId }.map { it[Events.amount] to it[Events.timestamp] } }
+        assertEquals(listOf(11_000L), filas.map { it.first }, "la ilegible no se importa")
+        assertEquals(java.time.LocalDate.of(2026, 5, 28), com.jvillada.movi.server.time.epochMillisToAppDate(filas.single().second))
     }
 }

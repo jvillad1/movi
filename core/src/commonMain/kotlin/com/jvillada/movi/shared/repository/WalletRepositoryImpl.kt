@@ -676,6 +676,13 @@ class WalletRepositoryImpl(
         }
     }
 
+    override suspend fun deleteStatementImport(id: String) {
+        val response = client.delete("$baseUrl/api/statements/imports/$id")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
+
     override suspend fun getStatementImports(): List<StatementImport> =
         client.get("$baseUrl/api/statements/imports").body()
 
