@@ -69,6 +69,17 @@ data class CreatePagoDeCuotaRequest(
     val fromEventId: String,
     val toEventId: String,
     /**
+     * **Cuánto bajó la deuda, en la moneda de la deuda**, cuando la cuenta de la que sale la plata
+     * está en otra moneda: pagar la Master Black en dólares desde la cuenta en pesos. [amount] es lo
+     * que salió de la cuenta (pesos) y este campo lo que bajó la tarjeta (dólares); la app no
+     * convierte nada, porque el tipo de cambio que aplicó el banco solo lo sabe el banco.
+     *
+     * Antes no había forma correcta de anotar ese pago: el pago y el traspaso rechazaban monedas
+     * distintas, y cualquier atajo dejaba la deuda en dólares sin bajar o el pago contado como gasto.
+     * `null` con la misma moneda (lo de siempre). Solo tarjetas: ver [validarPagoDeCuota].
+     */
+    val montoEnLaMonedaDeLaDeuda: Long? = null,
+    /**
      * **El interés que el banco cobró de verdad en esta cuota, si el dueño lo tiene a mano.**
      *
      * ### Por qué existe
@@ -464,6 +475,11 @@ const val PAGO_DESDE_DEUDA_BLOQUEADO =
 const val PAGO_A_NO_DEUDA_BLOQUEADO =
     "Elige el crédito o la tarjeta que estás pagando."
 
+/** Lo que se le dice a quien paga una tarjeta en otra moneda sin decir cuánto bajó la deuda. */
+fun faltaElMontoEnLaDeuda(monedaDeLaDeuda: String): String =
+    "Escribe cuánto bajó la deuda en ${if (monedaDeLaDeuda == "USD") "dólares" else monedaDeLaDeuda}: " +
+        "es lo que el banco abonó a la tarjeta, que no sale del monto en pesos."
+
 /** Lo que se le dice a quien intenta pagar entre monedas distintas. */
 const val PAGO_MONEDAS_DISTINTAS =
     "La cuenta y la deuda están en monedas distintas. Anota el pago en la moneda de la deuda."
@@ -480,10 +496,13 @@ fun validarPagoDeCuota(request: CreatePagoDeCuotaRequest, from: Account?, debt: 
     from.id == debt.id -> PAGO_A_NO_DEUDA_BLOQUEADO
     from.type.group == AccountGroup.DEUDA -> PAGO_DESDE_DEUDA_BLOQUEADO
     debt.type != AccountType.LOAN && debt.type != AccountType.CREDIT_CARD -> PAGO_A_NO_DEUDA_BLOQUEADO
-    // Sin conversión automática: mezclar monedas acá haría que el saldo de una de las dos cuentas
-    // quedara mal por el tipo de cambio del día, en silencio. La tarjeta en dólares del dueño se
-    // paga con la cuenta en dólares, o se anota aparte.
-    from.currency != debt.currency -> PAGO_MONEDAS_DISTINTAS
+    // Sin conversión automática: la app nunca adivina un tipo de cambio. Entre monedas distintas
+    // se puede pagar UNA TARJETA diciendo los dos montos (lo que salió y lo que bajó la deuda). Un
+    // crédito no: su pago se reparte en interés y capital sobre el saldo en su moneda, y sin saber
+    // cuánto de los pesos fue a cada parte ese reparto sería inventado.
+    from.currency != debt.currency && debt.type != AccountType.CREDIT_CARD -> PAGO_MONEDAS_DISTINTAS
+    from.currency != debt.currency && (request.montoEnLaMonedaDeLaDeuda ?: 0L) <= 0L ->
+        faltaElMontoEnLaDeuda(debt.currency)
     else -> null
 }
 
@@ -521,7 +540,9 @@ fun pagoDeCuotaLegs(
             accountId = accountId,
             type = tipo,
             amount = monto,
-            currency = debt.currency,
+            // Cada pata en la moneda de SU cuenta: pagar la tarjeta en dólares desde pesos deja
+            // pesos saliendo de la cuenta y dólares bajando la deuda. Con la misma moneda es igual.
+            currency = if (accountId == debt.id) debt.currency else from.currency,
             category = categoria,
             description = texto,
             timestamp = request.timestamp,
