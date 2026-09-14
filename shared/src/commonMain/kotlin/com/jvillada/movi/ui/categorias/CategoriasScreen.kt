@@ -40,7 +40,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -193,7 +192,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             if (error != null) {
                 Text(
                     error!!,
-                    fontSize = 12.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.sale,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 )
@@ -201,7 +200,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             if (confirmacion != null) {
                 Text(
                     confirmacion!!,
-                    fontSize = 12.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.entra,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 )
@@ -225,7 +224,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                         Text(
                             if (busqueda.isNotBlank()) "Ninguna categoría se llama así."
                             else "Nada por aquí todavía.",
-                            fontSize = 13.sp,
+                            style = Movi.textos.cuerpo,
                             color = Movi.colores.textoMedio,
                             modifier = Modifier.padding(vertical = 24.dp),
                         )
@@ -373,7 +372,7 @@ private fun textoDeResultado(
 private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
     Text(
         text = texto,
-        fontSize = 12.5.sp,
+        style = Movi.textos.apoyo,
         fontWeight = FontWeight.Medium,
         color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
         modifier = Modifier
@@ -401,10 +400,10 @@ private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modi
             onValueChange = campo::alCambiar,
             singleLine = true,
             cursorBrush = SolidColor(Movi.colores.texto),
-            textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
             decorationBox = { inner ->
-                if (valor.isEmpty()) Text("Buscar categoría", fontSize = 14.sp, color = Movi.colores.textoApagado)
+                if (valor.isEmpty()) Text("Buscar categoría", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
                 inner()
             },
         )
@@ -424,12 +423,17 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = categoria.name,
-                fontSize = 14.5.sp,
+                style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = if (categoria.hidden) Movi.colores.textoMedio else Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                // **Todo el ancho que sobra es del nombre.** Antes el nombre (`weight(1f, fill =
+                // false)`) y un separador (`weight(1f)`) se repartían el espacio en partes iguales:
+                // el nombre nunca pasaba de la mitad del renglón —«Restaurantes y domicilios a la
+                // casa» quedaba en «Restaurantes …» con espacio vacío al lado— y la etiqueta no
+                // llegaba al borde. Visto en la web a 390 dp.
+                modifier = Modifier.weight(1f),
             )
             if (categoria.reserved) {
                 Icon(
@@ -439,7 +443,6 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
                     modifier = Modifier.size(13.dp),
                 )
             }
-            Box(modifier = Modifier.weight(1f))
             Etiqueta(etiquetaDeTipo(categoria), tinteDeTipo(categoria))
         }
         Row(
@@ -449,9 +452,8 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
         ) {
             Text(
                 text = resumenDeUso(categoria),
-                fontSize = 11.5.sp,
                 color = Movi.colores.textoMedio,
-                style = Movi.textos.monto,
+                style = Movi.textos.apoyo,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
@@ -485,7 +487,7 @@ private fun tinteDeTipo(categoria: CategoryUsage): Color = when (etiquetaDeTipo(
 private fun Etiqueta(texto: String, color: Color) {
     Text(
         text = texto,
-        fontSize = 10.5.sp,
+        style = Movi.textos.apoyo,
         fontWeight = FontWeight.Medium,
         color = color,
         modifier = Modifier
@@ -533,24 +535,22 @@ private fun HojaDetalle(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 categoria.name,
-                fontSize = 18.sp,
+                style = Movi.textos.titular,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = 4.dp),
             )
             Text(
                 resumenDeUso(categoria),
-                fontSize = 12.5.sp,
                 color = Movi.colores.textoMedio,
-                style = Movi.textos.monto,
+                style = Movi.textos.apoyo,
                 modifier = Modifier.padding(top = 6.dp),
             )
             resumenDelMes(categoria)?.let {
                 Text(
                     it,
-                    fontSize = 12.5.sp,
                     color = Movi.colores.textoMedio,
-                    style = Movi.textos.monto,
+                    style = Movi.textos.apoyo,
                     modifier = Modifier.padding(top = 3.dp),
                 )
             }
@@ -561,7 +561,7 @@ private fun HojaDetalle(
                 Column(modifier = Modifier.padding(top = 18.dp, bottom = 24.dp)) {
                     Text(
                         "Categoría reservada de Movi",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.aviso,
                     )
@@ -571,7 +571,7 @@ private fun HojaDetalle(
                         // mostrando CUÁL es. Lo que hace falta decir es por qué tiene candado.
                         "La escribe Movi sola, y de su nombre exacto dependen las cifras de tu " +
                             "mes. No se puede renombrar, unificar ni esconder.",
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         lineHeight = 17.sp,
                         modifier = Modifier.padding(top = 6.dp),
@@ -583,7 +583,7 @@ private fun HojaDetalle(
             // ── Tipo ──────────────────────────────────────────────────────────
             Text(
                 "TIPO",
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.4.sp,
@@ -610,7 +610,7 @@ private fun HojaDetalle(
                     "«Automático» usa lo que dice el catálogo de Movi o, si es tuya, los tipos con " +
                         "los que ya la usaste. Fija uno para decidirlo tú."
                 else "Fijado por ti: manda sobre el catálogo y sobre el uso.",
-                fontSize = 11.5.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 8.dp),
@@ -630,7 +630,7 @@ private fun HojaDetalle(
                         "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
                             "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
                             "juntarla con otra, únela; si no la usas, escóndela.",
-                        fontSize = 11.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         lineHeight = 15.sp,
                         modifier = Modifier.padding(vertical = 12.dp),
@@ -663,7 +663,7 @@ private fun OpcionDeTipo(texto: String, activa: Boolean, modifier: Modifier = Mo
         // 11.sp y casi sin padding lateral: son cuatro opciones repartidas a partes iguales, y a
         // 390 dp de ancho «Automático» se cortaba en «Automáti…» — un rótulo cortado en el
         // control que decide el tipo de la categoría es justo donde no se puede adivinar.
-        fontSize = 11.sp,
+        style = Movi.textos.apoyo,
         letterSpacing = (-0.1).sp,
         fontWeight = FontWeight.Medium,
         color = if (activa) Movi.colores.fondo else Movi.colores.textoMedio,
@@ -687,8 +687,8 @@ private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(vertical = 13.dp),
     ) {
-        Text(titulo, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-        Text(detalle, fontSize = 11.5.sp, color = Movi.colores.textoMedio, lineHeight = 15.sp, modifier = Modifier.padding(top = 3.dp))
+        Text(titulo, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 15.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
@@ -719,7 +719,7 @@ private fun HojaRenombrar(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text(
                 "Renombrar «${categoria.name}»",
-                fontSize = 16.sp,
+                style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
@@ -742,11 +742,11 @@ private fun HojaRenombrar(
                     singleLine = true,
                     enabled = !guardando,
                     cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = TextStyle(color = Movi.colores.texto, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    textStyle = Movi.textos.titulo.copy(color = Movi.colores.texto),
                     modifier = Modifier.fillMaxWidth()
                         .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     decorationBox = { inner ->
-                        if (nombre.isEmpty()) Text("Nombre nuevo", fontSize = 15.sp, color = Movi.colores.textoApagado)
+                        if (nombre.isEmpty()) Text("Nombre nuevo", style = Movi.textos.titulo, color = Movi.colores.textoApagado)
                         inner()
                     },
                 )
@@ -760,7 +760,7 @@ private fun HojaRenombrar(
                     else -> "El cambio se aplica a tus movimientos, a tu presupuesto y a tus " +
                         "recurrentes al mismo tiempo. No se borra nada."
                 },
-                fontSize = 11.5.sp,
+                style = Movi.textos.apoyo,
                 color = if (colision?.reserved == true) Movi.colores.sale else Movi.colores.textoMedio,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
@@ -803,7 +803,7 @@ private fun HojaUnificar(
         Column(modifier = Modifier.weight(1f, fill = false)) {
             Text(
                 "Unificar «${categoria.name}» en…",
-                fontSize = 16.sp,
+                style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
@@ -826,8 +826,8 @@ private fun HojaUnificar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(c.name, fontSize = 14.sp, color = Movi.colores.texto)
-                            Text(resumenDeUso(c), fontSize = 11.sp, color = Movi.colores.textoApagado, style = Movi.textos.rotulo)
+                            Text(c.name, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                            Text(resumenDeUso(c), color = Movi.colores.textoApagado, style = Movi.textos.apoyo)
                         }
                         if (elegida?.name == c.name) {
                             Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
@@ -838,7 +838,7 @@ private fun HojaUnificar(
                 if (candidatas.isEmpty()) {
                     Text(
                         "No hay otra categoría con ese nombre.",
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(vertical = 16.dp),
                     )
@@ -848,7 +848,7 @@ private fun HojaUnificar(
                 text = elegida?.let { avisoDeUnificacion(categoria, it) }
                     ?: "Elige la categoría que se queda. Los movimientos de «${categoria.name}» " +
                     "pasan a decir ese nombre; no se borra ninguno.",
-                fontSize = 11.5.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 10.dp),
@@ -869,7 +869,7 @@ private fun MensajeDeErrorDeHoja(error: String?) {
     if (error == null) return
     Text(
         error,
-        fontSize = 12.5.sp,
+        style = Movi.textos.apoyo,
         color = Movi.colores.sale,
         lineHeight = 17.sp,
         modifier = Modifier.padding(top = 10.dp),
@@ -880,7 +880,7 @@ private fun MensajeDeErrorDeHoja(error: String?) {
 private fun BotonDeHoja(texto: String, habilitado: Boolean, onClick: () -> Unit) {
     Text(
         text = texto,
-        fontSize = 14.5.sp,
+        style = Movi.textos.titulo,
         fontWeight = FontWeight.Medium,
         color = if (habilitado) Movi.colores.fondo else Movi.colores.textoApagado,
         maxLines = 1,
