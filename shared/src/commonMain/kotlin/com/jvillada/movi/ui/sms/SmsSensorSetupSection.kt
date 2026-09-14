@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
  * (menos su login, redundante con el de la app): estado de los permisos RECEIVE/READ
  * con su ruta a ajustes (incluidos los ajustes restringidos de Android 15 para
  * instalaciones fuera de tienda), el aviso de hibernación con el botón para eximir a la
- * app, y la sincronización manual del historial de los últimos 30 días.
+ * app, y la sincronización manual del historial del período actual y el anterior.
  *
  * En iOS y la web el actual no pinta nada: ahí los SMS "los lee tu teléfono", como ya
  * dice la tarjeta de arriba en [SMSInboxScreen].

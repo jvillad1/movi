@@ -272,3 +272,15 @@ fun rangoLegibleDe(periodo: PeriodoFinanciero, settings: PeriodSettings): String
     return "Del ${inicio.dayOfMonth} de ${MESES[inicio.month.number - 1]} " +
         "al ${ultimo.dayOfMonth} de ${MESES[ultimo.month.number - 1]}"
 }
+
+/**
+ * **Desde cuándo recupera el teléfono los SMS del banco**: el arranque del período ANTERIOR al que
+ * contiene [ahoraMillis], o sea el período en curso entero y el último completo.
+ *
+ * Antes eran 30 días fijos, y el dueño lo pidió por período: *«que puedan escanear el período entero
+ * y no una cantidad de días fija»*. Solo el período en curso no alcanza: el 26 de septiembre, con
+ * corte 25, sería un día de historial. Con el anterior incluido siempre se recupera al menos un
+ * período completo, y el que se está cerrando llega entero.
+ */
+fun desdeDondeRecuperarSms(ahoraMillis: Long, settings: PeriodSettings): Long =
+    ventanaDe(periodoAnterior(periodoDe(ahoraMillis, settings)), settings).first

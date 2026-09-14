@@ -119,4 +119,13 @@ class CuentaPorElNumeroTest {
         assertEquals(ahorros, resuelta.cuenta)
         assertEquals(OrigenDeLaCuentaDelBanco.POR_EL_BANCO, resuelta.origen)
     }
+
+    @Test
+    fun `dos cuentas con el mismo numero se desempatan por la moneda del mensaje`() {
+        val pesos = Account("mb", "Master Black 3684", AccountType.CREDIT_CARD, 0, "COP")
+        val dolares = Account("mbu", "Master Black 3684 USD", AccountType.CREDIT_CARD, 0, "USD")
+        val candidatas = listOf(pesos, dolares)
+        assertEquals(dolares, cuentaPorElNumero("Compraste USD20,00 en ANTHROPIC, asociada a T.Cred *3684.", candidatas))
+        assertEquals(pesos, cuentaPorElNumero("Compraste COP249.000,00 en PAYPAL con tu T.Cred *3684.", candidatas))
+    }
 }
