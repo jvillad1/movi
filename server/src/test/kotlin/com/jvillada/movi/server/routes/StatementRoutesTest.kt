@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import org.jetbrains.exposed.sql.selectAll
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
@@ -237,5 +238,78 @@ class StatementRoutesTest {
             client.get("/api/subscriptions") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.bodyAsText()
         ).jsonObject["subscriptions"]!!.jsonArray
         assertEquals(0, subs.size)
+    }
+
+    // ── Conciliar: solo contra lo que de verdad es el mismo movimiento ────────────────────────
+
+    private fun sembrar(id: String, cuenta: String, monto: Long, estado: String = "UNCONFIRMED") = transaction {
+        Events.insert {
+            it[Events.id] = id
+            it[Events.userId] = userAId
+            it[Events.accountId] = cuenta
+            it[Events.type] = "EXPENSE"
+            it[Events.amount] = monto
+            it[Events.currency] = "COP"
+            it[Events.category] = "Comida"
+            it[Events.description] = "anotado"
+            it[Events.timestamp] = System.currentTimeMillis()
+            it[Events.reconciliationStatus] = estado
+        }
+    }
+
+    private fun reconciliacion(parsedId: String, existente: String, monto: Long) =
+        """{"parsedId":"$parsedId","existingEventId":"$existente","confirm":true,"categorySource":"MANUAL",
+            "descriptionSource":"MANUAL","merchantSource":"MANUAL","parsed":${parsedTx(parsedId, "2026-06-14", "COMPRA", monto)}}"""
+
+    private fun eventosDeLaTarjeta() = transaction {
+        Events.selectAll().where { Events.accountId eq accountAId }.map { it[Events.id] to it[Events.reconciliationStatus] }
+    }
+
+    @Test
+    fun `conciliar confirma el movimiento, y dos filas contra el mismo o contra otra cuenta entran como nuevas`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert {
+                it[id] = "acc-ahorros-a"; it[userId] = userAId; it[name] = "Ahorros"; it[type] = "SAVINGS"; it[currency] = "COP"
+            }
+        }
+        sembrar("ev-sms", accountAId, 50_000)
+        sembrar("ev-ahorros", "acc-ahorros-a", 5_000_000, estado = "RECONCILED")
+
+        val body = """{"statementId":"st-rec","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[],"reconciliations":[${reconciliacion("r1", "ev-sms", 50_000)},${reconciliacion("r2", "ev-sms", 50_000)},${reconciliacion("r3", "ev-ahorros", 5_000_000)}],"skipped":[]}"""
+        val res = client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+
+        val tarjeta = eventosDeLaTarjeta()
+        // El SMS quedó confirmado por el extracto.
+        assertEquals("RECONCILED", tarjeta.single { it.first == "ev-sms" }.second)
+        // La segunda compra de $50.000 y la de $5.000.000 (que no era la pata de ahorros) entraron nuevas.
+        assertEquals(3, tarjeta.size, "ev-sms + 2 filas nuevas: $tarjeta")
+        val ahorros = transaction { Events.selectAll().where { Events.id eq "ev-ahorros" }.single()[Events.statementImportId] }
+        assertEquals(null, ahorros, "el movimiento de otra cuenta no se toca")
+    }
+
+    @Test
+    fun `el pago de la tarjeta del extracto de ahorros no se vuelve gasto del mes`() = testApplication {
+        wireApp()
+        val pago = """{"id":"pt","date":"2026-06-10","merchant":"PAGO AUTOM TC","amount":9809799,"currency":"COP",
+            "type":"EXPENSE","category":"Pago de tarjeta","description":"PAGO AUTOM TC 1234","rawText":""}"""
+        val compra = """{"id":"pc","date":"2026-06-11","merchant":"EXITO","amount":80000,"currency":"COP",
+            "type":"EXPENSE","category":"Pago de tarjeta","description":"EXITO COUNTRY","rawText":""}"""
+        client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(importBody("$pago,$compra"))
+        }
+        val categorias = transaction {
+            Events.selectAll().where { Events.userId eq userAId }.associate { it[Events.amount] to it[Events.category] }
+        }
+        assertEquals("Pago de tarjeta", categorias[9_809_799L])
+        assertEquals("Otros", categorias[80_000L], "una compra real mal etiquetada no se esconde del mes")
     }
 }

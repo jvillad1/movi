@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.looksLikeCardPayment
+import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
@@ -150,18 +154,30 @@ fun Route.statementRoutes() {
         val matches = mutableListOf<ReconciliationMatch>()
         val newTransactions = mutableListOf<ParsedTransaction>()
 
+        // Cada movimiento anotado puede ser la pareja de UNA sola fila. Antes el mismo movimiento
+        // se proponía para todas las filas iguales: dos compras de $50.000 en días seguidos
+        // quedaban emparejadas con el único SMS, y al confirmar las dos la segunda compra real no
+        // se importaba nunca.
+        val yaEmparejados = mutableSetOf<String>()
         for (tx in parsed) {
             val parsedEpoch = runCatching {
                 appDateToEpochMillis(LocalDate.parse(tx.date))
             }.getOrNull()
 
             val match = if (parsedEpoch != null) {
-                existing.firstOrNull { ev ->
-                    ev.amount == tx.amount &&
-                        ev.currency == tx.currency &&
-                        abs(parsedEpoch - ev.timestamp) <= 2 * 86_400_000L
-                }
+                existing
+                    .filter { ev ->
+                        ev.id !in yaEmparejados &&
+                            ev.amount == tx.amount &&
+                            ev.currency == tx.currency &&
+                            // Un reembolso de $80.000 no es la compra de $80.000.
+                            ev.type == tx.type &&
+                            abs(parsedEpoch - ev.timestamp) <= 2 * 86_400_000L
+                    }
+                    // El más cercano en fecha, no el primero que devolvió la base.
+                    .minByOrNull { abs(parsedEpoch - it.timestamp) }
             } else null
+            match?.let { yaEmparejados += it.id }
 
             if (match != null) {
                 // Mismo día civil de Bogotá, no mismo bucket de 24 h desde la época (UTC).
@@ -272,12 +288,21 @@ fun Route.statementRoutes() {
             importedCount++
         }
 
+        // Dos filas confirmadas contra el MISMO movimiento: la segunda es otra compra real.
+        val reconciliadosEnEsteImporte = mutableSetOf<String>()
         for (dec in decision.reconciliations) {
             if (dec.confirm) {
                 val existingEvent = dbQuery {
                     Events.selectAll()
                         .where { (Events.id eq dec.existingEventId) and (Events.userId eq uid) }
-                        .firstOrNull()?.let {
+                        .firstOrNull()
+                        // **Solo es el mismo movimiento si está en la cuenta del extracto.** El
+                        // emparejador no conoce la cuenta (se elige después), así que una compra de
+                        // la tarjeta podía quedar «conciliada» contra una pata de traspaso de la
+                        // cuenta de ahorros por el mismo monto: la tarjeta se quedaba sin la compra
+                        // y su deuda $X más baja. Si no coincide la cuenta, la fila entra como nueva.
+                        ?.takeIf { it[Events.accountId] == decision.accountId && dec.existingEventId !in reconciliadosEnEsteImporte }
+                        ?.let {
                             ExistingEventFields(
                                 category   = it[Events.category],
                                 description = it[Events.description],
@@ -314,8 +339,13 @@ fun Route.statementRoutes() {
                             it[description]       = finalDescription
                             it[merchant]          = finalMerchant
                             it[statementImportId] = importId
+                            // El extracto del banco prueba el movimiento: deja de estar «Por
+                            // confirmar». Antes un SMS conciliado seguía pendiente, y descartarlo
+                            // ahí como duplicado borraba el único registro de la compra.
+                            it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
                         }
                     }
+                    reconciliadosEnEsteImporte += dec.existingEventId
 
                     if (dec.parsed.category != existCat) {
                         Stores.merchantRules.saveRule(uid, MerchantRule(
@@ -324,6 +354,11 @@ fun Route.statementRoutes() {
                         ))
                     }
                     reconciledCount++
+                } else {
+                    // No es el mismo movimiento (otra cuenta, o ya usado en este importe): la fila
+                    // del extracto es un movimiento real y entra como nuevo en vez de perderse.
+                    createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
+                    importedCount++
                 }
             } else {
                 createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
@@ -434,7 +469,17 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             // nada. La que de verdad muerde es «Pago de tarjeta»: es una frase que un extracto
             // colombiano SÍ trae, y el parser la copia como categoría. Un gasto real importado
             // así desaparece de «Gastos del mes» en silencio.
-            it[category]             = if (isReservedCategory(tx.category)) FALLBACK_CATEGORY else tx.category
+            // Con UNA excepción: el pago de la tarjeta de verdad. El parser etiqueta así la fila
+            // «PAGO AUTOM TC …» del extracto de ahorros, y convertirla en «Otros» inflaba el gasto
+            // del mes con plata cuyas compras ya contaron en la tarjeta ($9.809.799 de una vez). Se
+            // respeta solo si la DESCRIPCIÓN lo dice con las mismas frases que usa el detector de
+            // pagos de tarjeta: una compra real mal etiquetada sigue cayendo en «Otros».
+            it[category]             = when {
+                tx.category == CARD_PAYMENT_CATEGORY && tx.type == TransactionType.EXPENSE &&
+                    looksLikeCardPayment(tx.description + " " + tx.rawText, category = "") -> CARD_PAYMENT_CATEGORY
+                isReservedCategory(tx.category) -> FALLBACK_CATEGORY
+                else -> tx.category
+            }
             it[description]          = tx.description
             it[merchant]             = tx.merchant
             it[timestamp]            = ts

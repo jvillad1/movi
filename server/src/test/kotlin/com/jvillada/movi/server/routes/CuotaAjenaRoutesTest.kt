@@ -252,4 +252,51 @@ class CuotaAjenaRoutesTest {
         assertNull(noAmortiza)
         assertEquals("Cuota descontada de la nómina", concepto)
     }
+
+    // ── De qué mes es la cuota, y volver a registrarla ────────────────────────────────────────
+
+    @Test
+    fun `la cuota que se registra es la ultima que ya vencio, no la del mes de hoy`() {
+        val dia30 = 30
+        assertEquals("2026-08", mesDeLaCuotaVencida(java.time.LocalDate.of(2026, 9, 2), dia30))
+        assertEquals("2026-09", mesDeLaCuotaVencida(java.time.LocalDate.of(2026, 9, 30), dia30))
+        // Febrero no tiene 30: la cuota vence el último día y ese día ya cuenta.
+        assertEquals("2026-02", mesDeLaCuotaVencida(java.time.LocalDate.of(2026, 2, 28), dia30))
+    }
+
+    @Test
+    fun `registrar dos veces el mismo mes avisa sin tocar la deuda, y una anulada se puede rehacer`() = testApplication {
+        condiciones()
+        wireApp()
+        assertEquals(HttpStatusCode.OK, registrarSinCuerpo().status)
+        val tras1 = deuda()
+
+        val otraVez = registrarSinCuerpo()
+        assertEquals(HttpStatusCode.Conflict, otraVez.status)
+        assertTrue("Ya está registrada" in otraVez.bodyAsText())
+        assertEquals(tras1, deuda(), "el segundo toque no baja la deuda")
+
+        // Anular la del mes y volver a registrarla: antes el id seguía ocupado y daba 500.
+        val id = transaction {
+            Events.selectAll().where { (Events.accountId eq libranza) and (Events.id neq "ev-apertura-libranza") }.single()[Events.id]
+        }
+        transaction {
+            VoidEvents.insert {
+                it[VoidEvents.id] = "void-$id"
+                it[VoidEvents.userId] = duenoId
+                it[VoidEvents.originalEventId] = id
+                it[VoidEvents.timestamp] = System.currentTimeMillis()
+            }
+        }
+        assertEquals(HttpStatusCode.OK, registrarSinCuerpo().status)
+    }
+
+    @Test
+    fun `un mes futuro o mal escrito se rechaza`() = testApplication {
+        condiciones()
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, registrarCon("""{"periodo":"2999-01"}""").status)
+        assertEquals(HttpStatusCode.BadRequest, registrarCon("""{"periodo":"agosto"}""").status)
+        assertTrue(filasDeLaCuota().isEmpty())
+    }
 }
