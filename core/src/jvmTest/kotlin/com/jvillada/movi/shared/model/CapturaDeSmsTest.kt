@@ -189,4 +189,18 @@ class CapturaDeSmsTest {
         kotlin.test.assertEquals(ahora, momentoDelSms("10/09/2026", ahora, bogota))
         kotlin.test.assertEquals(ahora, momentoDelSms("", ahora, bogota))
     }
+
+    @Test
+    fun `un SMS de antes del primer movimiento de la cuenta ya esta en el saldo inicial`() {
+        val zona = com.jvillada.movi.shared.time.AppTimeZone.zone
+        fun dia(d: Int, h: Int = 12) = kotlinx.datetime.LocalDateTime(2026, 8, d, h, 0).toInstant(zona).toEpochMilliseconds()
+        val cuenta = listOf(
+            FinancialEvent(id = "apertura", accountId = "a", type = TransactionType.INCOME, amount = 1, category = "Saldo inicial", description = "", timestamp = dia(25)),
+            FinancialEvent(id = "gasto", accountId = "a", type = TransactionType.EXPENSE, amount = 1, category = "Comida", description = "", timestamp = dia(27)),
+        )
+        kotlin.test.assertEquals(kotlinx.datetime.LocalDate(2026, 8, 25), inicioDeLaCuentaSiElSmsEsAnterior(dia(11), cuenta))
+        kotlin.test.assertEquals(null, inicioDeLaCuentaSiElSmsEsAnterior(dia(25, 8), cuenta), "el mismo día no se da por incluido")
+        kotlin.test.assertEquals(null, inicioDeLaCuentaSiElSmsEsAnterior(dia(28), cuenta))
+        kotlin.test.assertEquals(null, inicioDeLaCuentaSiElSmsEsAnterior(dia(1), emptyList()))
+    }
 }

@@ -1,5 +1,10 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.plugins.jsonDeLaApi
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.JsonObject
+import com.jvillada.movi.shared.model.MONTO_DE_UN_PAGO_ENTRE_MONEDAS
+import com.jvillada.movi.shared.model.RechazoDeEdicion
 import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import org.jetbrains.exposed.sql.update
@@ -61,7 +66,12 @@ fun Route.eventRoutes() {
     route("/api/events") {
 
         post {
-            val body = call.receive<FinancialEvent>()
+            // El JSON crudo además del objeto, para saber si el cliente MANDÓ la moneda: un APK
+            // anterior al arreglo no la guardaba en el teléfono, así que sus movimientos llegan sin
+            // la clave (el default "COP" no se serializa) aunque sean de una cuenta en dólares.
+            val crudo = call.receive<JsonObject>()
+            val body = jsonDeLaApi.decodeFromJsonElement<FinancialEvent>(crudo)
+            val mandoLaMoneda = "currency" in crudo
             val uid = call.userId()
             val now = System.currentTimeMillis()
 
@@ -116,7 +126,7 @@ fun Route.eventRoutes() {
             ) {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, CATEGORY_RESERVED_NOT_MANUAL)
             }
-            val event = body.copy(
+            var event = body.copy(
                 id        = body.id.ifBlank { "ev_${java.util.UUID.randomUUID()}" },
                 timestamp = if (body.timestamp == 0L) now else body.timestamp,
                 // **Cuándo lo anotó** (ver FinancialEvent.createdAt): lo manda el cliente, porque
@@ -160,12 +170,15 @@ fun Route.eventRoutes() {
                 return@post call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
             }
 
-            val accountExists = dbQuery {
+            val monedaDeLaCuenta = dbQuery {
                 Accounts.selectAll()
                     .where { (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }
-                    .count() > 0
-            }
-            if (!accountExists) return@post call.respond(HttpStatusCode.NotFound, "Account not found")
+                    .firstOrNull()?.get(Accounts.currency)
+            } ?: return@post call.respond(HttpStatusCode.NotFound, "Account not found")
+            // Sin moneda en el pedido, la de la cuenta: es la única que un movimiento de esa cuenta
+            // puede tener si nadie dijo otra cosa. Un US$120 anotado en el teléfono sobre la Master
+            // Black USD se guardaba como $120 pesos.
+            if (!mandoLaMoneda) event = event.copy(currency = monedaDeLaCuenta)
 
             // **Un id que ya existe no es un error: es el mismo movimiento que vuelve.**
             //
@@ -576,6 +589,12 @@ fun Route.eventRoutes() {
                             (Events.userId eq uid) and (Events.transferId eq transferId) and (Events.id neq id)
                         }
                         .map { it.toFinancialEvent() }
+                    // Un pago entre monedas (tarjeta en dólares pagada desde pesos): las dos cifras no
+                    // se deducen una de la otra —el tipo de cambio lo puso el banco—, así que corregir
+                    // una no puede recalcular la otra. Se rechaza en vez de inventarla.
+                    if (hermanas.any { it.currency != fila.currency }) {
+                        return@dbQuery ResultadoDeEdicion.Rechazado(RechazoDeEdicion(422, MONTO_DE_UN_PAGO_ENTRE_MONEDAS))
+                    }
                     hermanas.forEach { hermana ->
                         val montoNuevoDeLaHermana = montoDeLaHermanaAlCorregir(
                             montoViejo = fila.amount,

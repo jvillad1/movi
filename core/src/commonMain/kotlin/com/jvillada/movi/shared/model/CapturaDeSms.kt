@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.datetime.toLocalDateTime
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -97,6 +98,26 @@ fun momentoDelSms(time: String, ahora: Long, zona: TimeZone = AppTimeZone.zone):
     val millis = runCatching { LocalDateTime.parse(completo).toInstant(zona).toEpochMilliseconds() }.getOrNull()
         ?: return ahora
     return minOf(millis, ahora)
+}
+
+/**
+ * **¿Este SMS es de antes de que la cuenta empezara en Movi?** Devuelve el primer día de la cuenta
+ * (su movimiento más viejo) si el mensaje es anterior a ese día, o `null` si no lo es.
+ *
+ * El primer movimiento de una cuenta es su saldo inicial (o el ajuste con que arrancó), y ese número
+ * **ya incluye** todo lo que pasó antes. La bandeja trae el historial del teléfono —hoy, 44 SMS de
+ * agosto de cuentas que arrancaron en Movi el 25 o el 30—, y confirmar uno de esos contaría la misma
+ * plata dos veces: en el saldo inicial y en el movimiento nuevo.
+ *
+ * Se compara por día civil: un SMS del mismo día del saldo inicial no se da por incluido, porque no
+ * se sabe si fue antes o después de la foto del saldo.
+ */
+fun inicioDeLaCuentaSiElSmsEsAnterior(momentoDelSms: Long, eventosDeLaCuenta: List<FinancialEvent>): kotlinx.datetime.LocalDate? {
+    val primero = eventosDeLaCuenta.minOfOrNull { it.timestamp } ?: return null
+    val zona = AppTimeZone.zone
+    val diaDelSms = kotlinx.datetime.Instant.fromEpochMilliseconds(momentoDelSms).toLocalDateTime(zona).date
+    val diaDeInicio = kotlinx.datetime.Instant.fromEpochMilliseconds(primero).toLocalDateTime(zona).date
+    return if (diaDelSms < diaDeInicio) diaDeInicio else null
 }
 
 fun fechaLegibleDeSms(time: String): String {

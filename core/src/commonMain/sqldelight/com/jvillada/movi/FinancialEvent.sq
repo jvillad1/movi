@@ -55,7 +55,10 @@ CREATE TABLE financial_event (
     -- NOT NULL con DEFAULT 0, a diferencia de transferId/createdAt/noAmortiza: acá el default SÍ
     -- describe bien lo que ya está en el teléfono —nadie marcó nada— así que todo lo que hoy se
     -- reconoce se sigue reconociendo. Sin índice: nunca se filtra ni se ordena por ella en SQL.
-    noSeRepite              INTEGER NOT NULL DEFAULT 0
+    noSeRepite              INTEGER NOT NULL DEFAULT 0,
+    -- La moneda del movimiento. No estaba: el SyncEngine armaba el POST sin ella y todo lo anotado
+    -- en el teléfono sobre una cuenta en dólares llegaba al server como pesos. Migración 8.sqm.
+    currency                TEXT    NOT NULL DEFAULT 'COP'
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -92,8 +95,8 @@ insert:
 INSERT OR REPLACE INTO financial_event(
     id, accountId, type, amount, category, description, merchant,
     timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId,
-    createdAt, noAmortiza, noSeRepite
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    createdAt, noAmortiza, noSeRepite, currency
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;

@@ -158,7 +158,9 @@ fun Route.pagoDeCuotaRoutes() {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
             }
             val desglose = desglosarCuotaRegistrada(
-                cuota = body.amount,
+                // Entre monedas (solo tarjetas, ver `validarPagoDeCuota`), la «cuota» que baja la
+                // deuda es lo que el dueño dijo en la moneda de la deuda, no los pesos que salieron.
+                cuota = if (from.currency != debt.currency) body.montoEnLaMonedaDeLaDeuda ?: body.amount else body.amount,
                 tipoDeLaDeuda = debt.type,
                 saldoDeLaDeuda = saldoAntesDelPago,
                 rateEa = terms?.rateEa,
@@ -176,7 +178,8 @@ fun Route.pagoDeCuotaRoutes() {
                             .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debt.id) }
                             .associate { it[Events.transferId]!! to it[Events.amount] }
                     }
-                    cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp)) { fila ->
+                    // Por CUOTA, no por mes de calendario: ver `cuotaMasCercana`.
+                    cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp), terms?.dayOfMonth) { fila ->
                         fila.transferId?.let { pagadoPorPar[it] }
                     }
                 },

@@ -1,0 +1,13 @@
+-- Migración 8 → 9: agrega financial_event.currency — **la moneda del movimiento**.
+--
+-- El teléfono no la guardaba, así que el SyncEngine subía cada movimiento anotado sin señal con el
+-- default "COP": un gasto de US$120 en la Master Black USD llegaba al server como $120 pesos, su
+-- saldo en dólares no se movía y ningún extracto en dólares lo podía emparejar.
+--
+-- NOT NULL con DEFAULT 'COP', como 7.sqm. Y las filas que ya están en el teléfono toman la moneda
+-- de su cuenta: es lo que habrían tenido si se hubiera guardado — hasta hoy el teléfono no dejaba
+-- anotar en otra moneda que la de la cuenta.
+ALTER TABLE financial_event ADD COLUMN currency TEXT NOT NULL DEFAULT 'COP';
+UPDATE financial_event
+SET currency = (SELECT account.currency FROM account WHERE account.id = financial_event.accountId)
+WHERE EXISTS (SELECT 1 FROM account WHERE account.id = financial_event.accountId);

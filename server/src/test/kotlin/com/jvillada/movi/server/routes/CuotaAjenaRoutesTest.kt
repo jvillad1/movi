@@ -299,4 +299,34 @@ class CuotaAjenaRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, registrarCon("""{"periodo":"agosto"}""").status)
         assertTrue(filasDeLaCuota().isEmpty())
     }
+
+    /**
+     * **Dos cuotas atrasadas registradas el mismo día no se comen el interés entre sí.** Antes las dos
+     * filas quedaban fechadas hoy y la segunda veía el interés de la primera como «ya cobrado este
+     * mes»: su capital salía con la cuota entera y la deuda bajaba ~$3,6M de más.
+     */
+    @Test
+    fun `registrar hoy dos meses atrasados cobra el interes de cada cuota`() = testApplication {
+        condiciones()
+        wireApp()
+        val hoy = com.jvillada.movi.server.time.AppClock.today()
+        val haceDos = java.time.YearMonth.from(hoy).minusMonths(2).toString()
+        val haceUno = java.time.YearMonth.from(hoy).minusMonths(1).toString()
+        assertEquals(HttpStatusCode.OK, registrarCon("""{"periodo":"$haceDos"}""").status)
+        val res = registrarCon("""{"periodo":"$haceUno"}""")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val filas = filasDeLaCuota()
+        assertEquals(2, filas.size)
+        filas.forEach { (capital, noAmortiza, _) ->
+            assertTrue(capital < 6_040_259L, "cada cuota abona solo su capital, no la cuota entera: $capital")
+            assertTrue((noAmortiza ?: 0L) > 3_000_000L, "y cobra su propio interés: $noAmortiza")
+        }
+        // Y cada fila queda en el mes de su cuota, no en el de hoy.
+        val meses = transaction {
+            Events.selectAll().where { (Events.accountId eq libranza) and (Events.id neq "ev-apertura-libranza") }
+                .map { java.time.YearMonth.from(com.jvillada.movi.server.time.epochMillisToAppDate(it[Events.timestamp])).toString() }
+                .toSet()
+        }
+        assertEquals(setOf(haceDos, haceUno), meses)
+    }
 }

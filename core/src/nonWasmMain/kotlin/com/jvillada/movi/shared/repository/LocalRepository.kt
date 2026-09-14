@@ -453,6 +453,7 @@ class LocalRepository(
                 // La columna es INTEGER: el booleano del modelo se guarda como 0/1, igual que
                 // lo haría SQLDelight si el tipo estuviera mapeado.
                 siNoSeRepite(resolved.noSeRepite),
+                resolved.currency,
             )
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
@@ -846,6 +847,7 @@ class LocalRepository(
                     leg.createdAt ?: now,
                     leg.noAmortiza,
                     siNoSeRepite(leg.noSeRepite),
+                    leg.currency,
                 )
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
@@ -1443,6 +1445,7 @@ class LocalRepository(
                     // La pata de la deuda de una cuota trae lo que NO amortizó; la del dinero, null.
                     leg.noAmortiza,
                     siNoSeRepite(leg.noSeRepite),
+                    leg.currency,
                 )
                 if (leg.accountId == loanAccountId) return@forEach
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
@@ -1516,6 +1519,7 @@ class LocalRepository(
             event.timestamp, event.source.name, event.rawPayload,
             event.reconciliationStatus.name, event.syncedAt ?: ahora, uid,
             event.transferId, event.createdAt, event.noAmortiza, siNoSeRepite(event.noSeRepite),
+            event.currency,
         )
     }
     /**
@@ -1557,6 +1561,7 @@ class LocalRepository(
                     event.createdAt ?: Clock.System.now().toEpochMilliseconds(),
                     event.noAmortiza,
                     siNoSeRepite(event.noSeRepite),
+                    event.currency,
                 )
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
@@ -1831,6 +1836,7 @@ class LocalRepository(
         createdAt = createdAt,
         noAmortiza = noAmortiza,
         noSeRepite = noSeRepite != 0L,
+        currency = currency,
         countsAsCashFlow = typeByAccount[accountId]
             ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,

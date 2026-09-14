@@ -725,4 +725,37 @@ class PagoDeCuotaRoutesTest {
 
         assertEquals(entera.capital, antes - saldoDe(carro), "dos abonos del mismo mes = una cuota")
     }
+
+    /**
+     * **Pagar la tarjeta en dólares desde pesos, con los dos montos.** Antes no había camino: el
+     * pago rechazaba monedas distintas. Cada pata queda en su moneda, la deuda en dólares baja por
+     * los dólares y la cuenta en pesos por los pesos; y corregir el monto después se rechaza, porque
+     * una cifra no se deduce de la otra.
+     */
+    @Test
+    fun `pagar la tarjeta en dolares desde pesos con los dos montos`() = testApplication {
+        transaction { cuenta("acc-mb-usd", duenoId, "Master Black USD", "CREDIT_CARD", "USD") }
+        wireApp()
+        val sinDolares = pagar(duenoId, cuerpo(ahorros, "acc-mb-usd", 1_008_902L, tr = "tr-u0", ev1 = "u0a", ev2 = "u0b"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, sinDolares.status)
+
+        val cuerpoConDolares = cuerpo(ahorros, "acc-mb-usd", 1_008_902L, tr = "tr-u1", ev1 = "u1a", ev2 = "u1b")
+            .replace("}", ",\"montoEnLaMonedaDeLaDeuda\":250}")
+        val res = pagar(duenoId, cuerpoConDolares)
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+
+        val patas = transaction {
+            Events.selectAll().where { Events.transferId eq "tr-u1" }
+                .associate { it[Events.accountId] to (it[Events.amount] to it[Events.currency]) }
+        }
+        assertEquals(1_008_902L to "COP", patas[ahorros])
+        assertEquals(250L to "USD", patas["acc-mb-usd"])
+
+        val editar = client.put("/api/events/u1b") {
+            header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"amount":300}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, editar.status)
+    }
 }
