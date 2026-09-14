@@ -89,6 +89,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = noUsado("updateEventCategory")
     override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent = noUsado("updateEventTimestamp")
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent = noUsado("updateEventRepeats")
+    override suspend fun confirmEvent(id: String): FinancialEvent = noUsado("confirmEvent")
     override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent = noUsado("updateEvent")
     override suspend fun getEventOccurrenceMark(id: String): EventOccurrenceMark? = noUsado("getEventOccurrenceMark")
     override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = noUsado("getCardPaymentCandidates")

@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.update
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
@@ -534,6 +536,44 @@ class EventRoutesTest {
     // que además hay una suscripción quedaba marcada como recurrente y no había forma de
     // desmarcarla: la app solo ofrecía «Sí, se repite todos los meses». El dueño lo dijo así:
     // «una vez recurrente no puedo hacerlo no recurrente».
+
+    /**
+     * «Por confirmar» no tenía salida: no existía ninguna ruta para confirmar un movimiento que
+     * entró solo. Confirma, es idempotente, arrastra al par de un traspaso y no toca lo ajeno.
+     */
+    @Test
+    fun `PUT confirm confirma el movimiento, a su par, y no lo ajeno`() = testApplication {
+        wireApp()
+        seedEvent(id = "evt-pend", userId = userAId, accountId = savingsAccountId, type = "EXPENSE", description = "Wompi", category = "Otros")
+        seedEvent(id = "evt-pata-a", userId = userAId, accountId = savingsAccountId, type = "EXPENSE", description = "Traslado", category = "Traspaso")
+        seedEvent(id = "evt-pata-b", userId = userAId, accountId = savingsAccountId, type = "INCOME", description = "Traslado", category = "Traspaso")
+        transaction {
+            Events.update({ Events.id inList listOf("evt-pend", "evt-pata-a", "evt-pata-b") }) {
+                it[Events.reconciliationStatus] = "UNCONFIRMED"
+            }
+            Events.update({ Events.id inList listOf("evt-pata-a", "evt-pata-b") }) { it[Events.transferId] = "tr-1" }
+        }
+        fun estado(id: String) = transaction { Events.selectAll().where { Events.id eq id }.single()[Events.reconciliationStatus] }
+
+        val res = client.put("/api/events/evt-pend/confirm") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("RECONCILED", Json.parseToJsonElement(res.bodyAsText()).jsonObject["reconciliationStatus"]!!.jsonPrimitive.content)
+        assertEquals("RECONCILED", estado("evt-pend"))
+        // Idempotente.
+        assertEquals(HttpStatusCode.OK, client.put("/api/events/evt-pend/confirm") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.status)
+
+        // Una pata confirma el par entero.
+        client.put("/api/events/evt-pata-a/confirm") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        assertEquals("RECONCILED", estado("evt-pata-b"))
+
+        // Otro usuario no confirma lo ajeno, y lo anulado no se confirma.
+        seedEvent(id = "evt-otro", userId = userAId, accountId = savingsAccountId, type = "EXPENSE", description = "x", category = "Otros")
+        transaction { Events.update({ Events.id eq "evt-otro" }) { it[Events.reconciliationStatus] = "UNCONFIRMED" } }
+        assertEquals(HttpStatusCode.NotFound, client.put("/api/events/evt-otro/confirm") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}") }.status)
+        assertEquals("UNCONFIRMED", estado("evt-otro"))
+        voidEvent("evt-otro", userAId)
+        assertEquals(HttpStatusCode.NotFound, client.put("/api/events/evt-otro/confirm") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }.status)
+    }
 
     @Test
     fun `PUT repeats false marca el movimiento como que no se repite`() = testApplication {

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
@@ -270,6 +271,8 @@ fun ChangeCategorySheet(
      * donde estaba mirando el dueño, o sea en un lugar donde no existe.
      */
     var errorDeEdicion by remember(event.id) { mutableStateOf<String?>(null) }
+    // Ver [SeccionDelMovimiento]: tocar el nombre abre el editor, así que el estado vive acá.
+    var edicionAbierta by remember(event.id) { mutableStateOf(false) }
     // Ola 2 #7: el campo libre de abajo no comete nada al tipear — recién se guarda con el
     // botón "Usar esta categoría" (mismo criterio que la lista de arriba, que sí guarda al
     // toque porque ahí elegir ES la acción completa).
@@ -326,7 +329,9 @@ fun ChangeCategorySheet(
                     },
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                NombreQueSeEdita(event.description) { edicionAbierta = true }
+                Spacer(Modifier.height(12.dp))
+                PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
                 Spacer(Modifier.height(16.dp))
                 Text(TRANSFER_RECATEGORIZE_BLOCKED, fontSize = 13.5.sp, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(20.dp))
@@ -342,6 +347,8 @@ fun ChangeCategorySheet(
                     cuentas = cuentas,
                     onError = { errorDeEdicion = it },
                     onGuardado = onEventChanged,
+                    abierto = edicionAbierta,
+                    onAbiertoChange = { edicionAbierta = it },
                 )
                 Spacer(Modifier.height(20.dp))
                 Hairline()
@@ -436,7 +443,9 @@ fun ChangeCategorySheet(
 
     BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-            Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            NombreQueSeEdita(event.description) { edicionAbierta = true }
+            Spacer(Modifier.height(12.dp))
+            PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
             Spacer(Modifier.height(18.dp))
             // Ola 15 · la pata huérfana se explica sola, acá y no en la fila.
             //
@@ -464,6 +473,8 @@ fun ChangeCategorySheet(
                 cuentas = cuentas,
                 onError = { errorDeEdicion = it },
                 onGuardado = onEventChanged,
+                abierto = edicionAbierta,
+                onAbiertoChange = { edicionAbierta = it },
             )
             // «Esto se repite todos los meses» — solo si quien abrió la hoja tiene dónde poner el
             // formulario, y solo sobre un movimiento al que la pregunta le aplica (ver
@@ -783,17 +794,89 @@ fun CardPaymentCandidatesSheet(
  * El error de guardado NO se pinta acá: sube al padre y se dibuja fuera del scroll (ver
  * [BarraDeError]).
  */
+/** El nombre del movimiento, tocable: abre el editor del concepto. */
+@Composable
+private fun NombreQueSeEdita(nombre: String, onEditar: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onEditar),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            nombre,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = Movi.colores.texto,
+            modifier = Modifier.weight(1f),
+        )
+        Text("Editar", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+    }
+}
+
+/**
+ * **«Por confirmar» con salida.** Un movimiento que entró solo (extracto, carga del banco) llegaba
+ * acá desde el chip «Por confirmar» y la hoja solo dejaba mirarlo: no había forma de confirmarlo, así
+ * que seguía pendiente y fuera de «Gastos» e «Ingresos». Solo aparece si está pendiente.
+ */
+@Composable
+private fun PorConfirmar(event: FinancialEvent, onError: (String?) -> Unit, onConfirmado: (FinancialEvent) -> Unit) {
+    if (event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED) return
+    val coroutine = rememberCoroutineScope()
+    var confirmando by remember(event.id) { mutableStateOf(false) }
+    SheetLabel("POR CONFIRMAR")
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "Entró solo y todavía no cuenta en tus gastos ni ingresos. Revisa el monto, la categoría y el " +
+            "nombre, y confírmalo.",
+        fontSize = 13.sp,
+        color = Movi.colores.textoMedio,
+        lineHeight = 18.sp,
+    )
+    Spacer(Modifier.height(10.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(Movi.colores.marca.copy(alpha = 0.16f))
+            .clickable(enabled = !confirmando) {
+                confirmando = true
+                onError(null)
+                coroutine.launch {
+                    runCatching { Repositories.wallets.confirmEvent(event.id) }
+                        .onSuccess { onConfirmado(it) }
+                        .onFailure { onError(it.toUserMessage()) }
+                    confirmando = false
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (confirmando) "Confirmando…" else "Confirmar",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = Movi.colores.marca,
+        )
+    }
+}
+
 @Composable
 private fun SeccionDelMovimiento(
     event: FinancialEvent,
     cuentas: List<Account>,
     onError: (String?) -> Unit,
     onGuardado: (FinancialEvent) -> Unit,
+    /**
+     * Si el editor está abierto. **Izado a la hoja** para que tocar el NOMBRE de arriba lo abra:
+     * el dueño volvió a decir «sigo sin poder editar los nombres de los movimientos» después de que
+     * el rótulo ya nombraba el concepto. Lo que se toca para renombrar es el nombre, no un «Cambiar»
+     * al lado del monto.
+     */
+    abierto: Boolean,
+    onAbiertoChange: (Boolean) -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     val esPataDeUnPar = event.transferId != null
 
-    var abierto by remember(event.id) { mutableStateOf(false) }
     var selectorDeCuenta by remember(event.id) { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var monto by remember(event.amount) { mutableStateOf<Long?>(event.amount) }
@@ -842,7 +925,7 @@ private fun SeccionDelMovimiento(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !guardando) { abierto = !abierto },
+            .clickable(enabled = !guardando) { onAbiertoChange(!abierto) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {

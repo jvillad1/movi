@@ -499,6 +499,15 @@ class WalletRepositoryImpl(
     // Mismo idioma que updateEventTimestamp: el server rechaza con 404 (movimiento inexistente,
     // de otro usuario o anulado) y ese texto es lo único que le explica al dueño por qué no se
     // guardó.
+    // Mismo idioma que updateEventRepeats: el 404 (inexistente, de otro o anulado) viaja con su texto.
+    override suspend fun confirmEvent(id: String): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/confirm")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
         val response = client.put("$baseUrl/api/events/$id/repeats") {
             contentType(ContentType.Application.Json)

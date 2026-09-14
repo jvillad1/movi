@@ -86,6 +86,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = trasEscribir { delegado.updateEventCategory(id, category) }
     override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent = trasEscribir { delegado.updateEventTimestamp(id, timestamp) }
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent = trasEscribir { delegado.updateEventRepeats(id, repeats) }
+    override suspend fun confirmEvent(id: String): FinancialEvent = trasEscribir { delegado.confirmEvent(id) }
     override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent = trasEscribir { delegado.updateEvent(id, cambios) }
     override suspend fun dismissCardPaymentCandidate(id: String): Unit = trasEscribir { delegado.dismissCardPaymentCandidate(id) }
     override suspend fun register(request: RegisterRequest): AuthResponse = trasEscribir { delegado.register(request) }
