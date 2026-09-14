@@ -130,6 +130,10 @@ fun CreditTermsSheet(
     // F23: la tasa aceptaba "12%" y no se leía como número — el filtro de abajo (solo dígitos y
     // un único punto) hace que el "%" nunca llegue a este estado; el campo lo pinta aparte.
     var rateEa by remember { mutableStateOf(existingTerms?.rateEa?.toString() ?: "") }
+    // «No cobra intereses»: un préstamo de la familia. Tasa 0 SIN esta casilla sigue queriendo decir
+    // «no sé la tasa» (el Techo Gardenera), y así la diferencia la declara el dueño. Con la casilla
+    // marcada la tasa no se pide y se guarda en 0. Ver `CreditTerms.sinIntereses`.
+    var sinIntereses by remember { mutableStateOf(existingTerms?.sinIntereses ?: false) }
     var termMonths by remember { mutableStateOf(existingTerms?.termMonths?.toString() ?: "") }
     var installment by remember { mutableStateOf(existingTerms?.installment) }
     // El seguro de vida deudor va DENTRO de la cuota y **no baja la deuda**. Sin este campo, la
@@ -161,7 +165,7 @@ fun CreditTermsSheet(
 
     val termsValid = bank.isNotBlank() &&
         (principal ?: 0L) > 0L &&
-        (rateEa.toDoubleOrNull() != null) &&
+        (sinIntereses || rateEa.toDoubleOrNull() != null) &&
         (termMonths.toIntOrNull() ?: 0) > 0 &&
         (installment ?: 0L) > 0L &&
         (dayOfMonth.toIntOrNull() in 1..31) &&
@@ -229,7 +233,7 @@ fun CreditTermsSheet(
         editing == null && !newAccountMode && selectedAccountId == null -> "Elige una cuenta"
         bank.isBlank() -> "Falta el banco"
         (principal ?: 0L) <= 0L -> "Falta el capital original"
-        rateEa.toDoubleOrNull() == null -> "Falta la tasa"
+        !sinIntereses && rateEa.toDoubleOrNull() == null -> "Falta la tasa"
         (termMonths.toIntOrNull() ?: 0) <= 0 -> "Falta el plazo en meses"
         (installment ?: 0L) <= 0L -> "Falta la cuota mensual"
         dayOfMonth.toIntOrNull() !in 1..31 -> "El día de pago tiene que estar entre 1 y 31"
@@ -251,7 +255,9 @@ fun CreditTermsSheet(
                     accountId = "",
                     bank = bank.trim(),
                     principal = principal!!,
-                    rateEa = rateEa.toDouble(),
+                    // Con la casilla marcada la tasa es 0 aunque el campo tuviera algo escrito de
+                    // antes: es lo que exige `validarTasaDelCredito`, igual en el server.
+                    rateEa = if (sinIntereses) 0.0 else rateEa.toDouble(),
                     termMonths = termMonths.toInt(),
                     installment = installment!!,
                     dayOfMonth = dayOfMonth.toInt(),
@@ -269,6 +275,7 @@ fun CreditTermsSheet(
                     insuranceMonthly = seguroMensual?.takeIf { it > 0L },
                     // Mismo criterio que el seguro: 0 y «no hay» son lo mismo.
                     otrosCargosMensuales = otrosCargos?.takeIf { it > 0L },
+                    sinIntereses = sinIntereses,
                 )
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
@@ -453,13 +460,30 @@ fun CreditTermsSheet(
                 MoneyField(principal, { principal = it }, placeholder = "Capital original (COP)")
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) {
-                        // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
-                        // nunca lo escribe la persona.
-                        RateFieldBox("Tasa % EA", rateEa, { rateEa = filterRateInput(it) })
+                    // Sin intereses no hay tasa que pedir: el campo se va y el plazo ocupa la fila.
+                    if (!sinIntereses) {
+                        Box(Modifier.weight(1f)) {
+                            // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
+                            // nunca lo escribe la persona.
+                            RateFieldBox("Tasa % EA", rateEa, { rateEa = filterRateInput(it) })
+                        }
                     }
                     Box(Modifier.weight(1f)) { FieldBox("Plazo (meses)", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
                 }
+                // Pegada a la tasa, que es lo que reemplaza.
+                CasillaConExplicacion(
+                    marcada = sinIntereses,
+                    titulo = "No cobra intereses",
+                    explicacion = if (sinIntereses) {
+                        "Toda la cuota, menos el seguro y otros cargos, baja la deuda, y Movi te " +
+                            "muestra cuándo terminas de pagarla."
+                    } else {
+                        "Márcalo si es un préstamo sin intereses, por ejemplo de tu familia. Si no " +
+                            "sabes la tasa, déjalo sin marcar: no es lo mismo."
+                    },
+                    habilitada = !saving,
+                    alCambiar = { sinIntereses = !sinIntereses },
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, placeholder = "Cuota mensual (COP)") }
@@ -582,59 +606,15 @@ fun CreditTermsSheet(
                 Spacer(Modifier.height(16.dp))
                 // Libranza. Va ANTES del recordatorio porque lo desactiva: a una cuota que el
                 // empleador ya descontó no tiene sentido recordarla.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = !saving) { esLibranza = !esLibranza }
-                        .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (esLibranza) Movi.colores.marca else Movi.colores.tarjeta)
-                            // **Sin marcar, la casilla no se veía.** Se pintaba del color de la
-                            // tarjeta encima de una hoja del mismo color: quedaban el texto y su
-                            // sangría, sin el cuadro que dice que eso se marca. Visto en la web.
-                            // Lleva borde como la de «Recordarme», que siempre se vio.
-                            .then(
-                                if (esLibranza) Modifier
-                                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(6.dp)),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        // Ícono, no el carácter «✓».
-                        //
-                        // La fuente que usa Compose en el navegador no trae U+2713, así que la
-                        // casilla marcada salía como un rectángulo vacío — el dueño mandó la foto.
-                        // Es el mismo problema que ya está documentado en `CategoryRow` con los
-                        // emojis del catálogo («en la web sale como ▯»), y la misma solución: un
-                        // ícono de Material, que viaja en el binario y se ve igual en las tres
-                        // plataformas.
-                        if (esLibranza) {
-                            Icon(
-                                Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = Movi.colores.fondo,
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Se descuenta de mi nómina", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-                        Text(
-                            text = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
-                                "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
-                                "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            lineHeight = 16.sp,
-                        )
-                    }
-                }
+                CasillaConExplicacion(
+                    marcada = esLibranza,
+                    titulo = "Se descuenta de mi nómina",
+                    explicacion = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
+                        "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
+                        "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
+                    habilitada = !saving,
+                    alCambiar = { esLibranza = !esLibranza },
+                )
 
                 // ¿La paga otro? Va justo debajo de la libranza porque contesta la MISMA pregunta
                 // —«¿esta cuota sale de tu cuenta?»— con la otra respuesta posible, y se esconde
@@ -1019,6 +999,70 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+    }
+}
+
+/**
+ * Una casilla con su título y la frase que explica qué cambia. La usan «Se descuenta de mi nómina» y
+ * «No cobra intereses», con el mismo dibujo.
+ */
+@Composable
+private fun CasillaConExplicacion(
+    marcada: Boolean,
+    titulo: String,
+    explicacion: String,
+    habilitada: Boolean,
+    alCambiar: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = habilitada) { alCambiar() }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (marcada) Movi.colores.marca else Movi.colores.tarjeta)
+                // **Sin marcar, la casilla no se veía.** Se pintaba del color de la tarjeta encima
+                // de una hoja del mismo color: quedaban el texto y su sangría, sin el cuadro que
+                // dice que eso se marca. Visto en la web. Lleva borde como la de «Recordarme», que
+                // siempre se vio.
+                .then(
+                    if (marcada) Modifier
+                    else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(6.dp)),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            // Ícono, no el carácter «✓».
+            //
+            // La fuente que usa Compose en el navegador no trae U+2713, así que la casilla marcada
+            // salía como un rectángulo vacío — el dueño mandó la foto. Es el mismo problema que ya
+            // está documentado en `CategoryRow` con los emojis del catálogo («en la web sale como
+            // ▯»), y la misma solución: un ícono de Material, que viaja en el binario y se ve igual
+            // en las tres plataformas.
+            if (marcada) {
+                Icon(
+                    Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = Movi.colores.fondo,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(titulo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text(
+                text = explicacion,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                lineHeight = 16.sp,
+            )
+        }
     }
 }
 

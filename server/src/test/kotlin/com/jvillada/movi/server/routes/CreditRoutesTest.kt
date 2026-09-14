@@ -1304,6 +1304,85 @@ class CreditRoutesTest {
         assertEquals(12_400_000L, corriente["balance"]!!.jsonPrimitive.long)
     }
 
+    // ── «No cobra intereses» ─────────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.ponerTerminos(terms: CreditTerms) =
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(terms))
+        }
+
+    private fun sinInteresesGuardado(): Boolean? = transaction {
+        Credits.selectAll().where { Credits.accountId eq loanAccountId }.single()[Credits.sinIntereses]
+    }
+
+    @Test
+    fun `la casilla sin intereses se guarda, vuelve en el GET y se puede desmarcar`() = testApplication {
+        wireApp()
+        val sinIntereses = terminosDelCliente.copy(rateEa = 0.0, sinIntereses = true)
+        val put = ponerTerminos(sinIntereses)
+        assertEquals(HttpStatusCode.OK, put.status)
+        assertEquals(true, sinInteresesGuardado())
+
+        val lista = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val terms = Json.parseToJsonElement(lista.bodyAsText()).jsonArray
+            .map { it.jsonObject }.first { it["account"]!!.jsonObject["id"]!!.jsonPrimitive.content == loanAccountId }["terms"]!!.jsonObject
+        assertEquals(true, terms["sinIntereses"]!!.jsonPrimitive.boolean)
+
+        // Desmarcar la apaga: la clave viaja con `false` y el server no repone el `true` guardado.
+        assertEquals(HttpStatusCode.OK, ponerTerminos(sinIntereses.copy(sinIntereses = false)).status)
+        assertEquals(false, sinInteresesGuardado())
+    }
+
+    @Test
+    fun `un cliente viejo que edita un credito sin intereses no le borra la casilla`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, ponerTerminos(terminosDelCliente.copy(rateEa = 0.0, sinIntereses = true)).status)
+
+        val cuerpoViejo = Json.parseToJsonElement(cuerpoDelCliente(terminosDelCliente.copy(rateEa = 0.0, notes = "nota")))
+            .jsonObject.filterKeys { it != "sinIntereses" }
+        val put = client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(JsonObject(cuerpoViejo).toString())
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+        assertEquals(true, sinInteresesGuardado())
+    }
+
+    @Test
+    fun `una tasa positiva con la casilla marcada es 400, al crear y al editar`() = testApplication {
+        wireApp()
+        val put = ponerTerminos(terminosDelCliente.copy(rateEa = 12.0, sinIntereses = true))
+        assertEquals(HttpStatusCode.BadRequest, put.status)
+        assertEquals(com.jvillada.movi.shared.model.TASA_EN_CREDITO_SIN_INTERESES, put.bodyAsText())
+
+        val terms = cuerpoDelCliente(terminosDelCliente.copy(accountId = "", rateEa = 12.0, sinIntereses = true))
+        val antes = huellaDe(userAId)
+        val post = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Préstamo papá","initialDebt":10000000,"terms":$terms}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, post.status)
+        assertEquals(antes, huellaDe(userAId), "un alta rechazada no deja nada escrito")
+    }
+
+    @Test
+    fun `un alta sin intereses con tasa cero se crea con la casilla puesta`() = testApplication {
+        wireApp()
+        val terms = cuerpoDelCliente(terminosDelCliente.copy(accountId = "", rateEa = 0.0, sinIntereses = true))
+        val post = client.post("/api/credits") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"Préstamo papá","initialDebt":10000000,"terms":$terms}""")
+        }
+        assertEquals(HttpStatusCode.Created, post.status)
+        val creado = Json.parseToJsonElement(post.bodyAsText()).jsonObject
+        assertEquals(true, creado["terms"]!!.jsonObject["sinIntereses"]!!.jsonPrimitive.boolean)
+    }
+
     /**
      * **Todo lo que un alta puede dejar escrito: la cuenta, sus eventos y sus términos.**
      *

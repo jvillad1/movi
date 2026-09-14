@@ -33,4 +33,6 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     insuranceMonthly = this[Credits.insuranceMonthly]?.takeIf { it > 0L },
     // Mismo criterio que el seguro, por lo mismo.
     otrosCargosMensuales = this[Credits.otrosCargosMensuales]?.takeIf { it > 0L },
+    // Nullable en la base, `false` en el wire: las filas viejas no la tienen.
+    sinIntereses = this[Credits.sinIntereses] ?: false,
 )

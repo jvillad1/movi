@@ -281,6 +281,7 @@ fun desgloseDelPago(
         seguroMensual = terms?.insuranceMonthly,
         otrosCargosMensuales = terms?.otrosCargosMensuales,
         interesReal = interesValido,
+        sinIntereses = terms?.sinIntereses ?: false,
         // La hoja no tiene los pagos del mes a mano: estima como si fuera el primero. Si ya hubo
         // otro pago parcial, el server descuenta lo cobrado y devuelve el desglose que escribió.
         yaCobradoEnElMes = 0L,
@@ -305,6 +306,7 @@ fun interesEstimadoDelMes(deuda: Account?, terms: CreditTerms?): Long? {
         seguroMensual = terms?.insuranceMonthly,
         otrosCargosMensuales = terms?.otrosCargosMensuales,
         yaCobradoEnElMes = 0L,
+        sinIntereses = terms?.sinIntereses ?: false,
     )
     return d.interes.takeIf { d.motivo == MotivoDelDesglose.AMORTIZA }
 }
@@ -360,7 +362,18 @@ fun textoDelDesglose(desglose: DesgloseDeCuota, moneda: String): String? {
             // subestimando la deuda. Estaba anotado solo en el KDoc de `DesgloseDeCuota`, o sea en
             // ningún lado que él pueda leer.
             val sobreHoy = " Calculado sobre tu deuda de hoy."
-            if (desglose.capital <= 0L) {
+            if (desglose.interes == 0L) {
+                // Sin interés que nombrar —un crédito que no cobra intereses (`CreditTerms.sinIntereses`)—
+                // no se dice «$0 son intereses» ni «calculado sobre tu deuda de hoy»: el saldo no
+                // entró en ninguna cuenta.
+                when {
+                    desglose.capital <= 0L ->
+                        "Tus ${plata(desglose.cuota)} se van enteros en${fijos.removePrefix(",")}: " +
+                            "nada de este pago baja la deuda."
+                    fijos.isEmpty() -> "Tus ${plata(desglose.cuota)} bajan la deuda completos."
+                    else -> "De tus ${plata(desglose.cuota)}$fijos, y ${plata(desglose.capital)} bajan la deuda."
+                }
+            } else if (desglose.capital <= 0L) {
                 // Existe de verdad: un pago parcial a la libranza ·4818 del dueño —$3.000.000
                 // contra un interés de $3.646.011— es 100 % interés.
                 "Tus ${plata(desglose.cuota)} no alcanzan a cubrir los ${plata(desglose.interes)} " +

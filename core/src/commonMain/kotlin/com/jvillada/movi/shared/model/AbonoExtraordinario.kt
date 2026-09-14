@@ -124,8 +124,10 @@ fun simularAbonoUnico(
     otrosCargosMensuales: Long?,
     saleDeTuBolsillo: Boolean,
     abono: Long,
+    /** Ver [planDeUnaDeuda]. */
+    sinIntereses: Boolean = false,
 ): SimulacionDeAbono {
-    val antes = planDeUnaDeuda(saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, saleDeTuBolsillo)
+    val antes = planDeUnaDeuda(saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, saleDeTuBolsillo, sinIntereses)
     // El abono no puede llevarse la deuda a negativo: lo que pase del saldo no ahorra intereses,
     // sobra. Ver [SimulacionDeAbono.sobrante].
     val aplicado = abono.coerceIn(0L, saldoDeLaDeuda.coerceAtLeast(0L))
@@ -136,6 +138,7 @@ fun simularAbonoUnico(
         seguroMensual,
         otrosCargosMensuales,
         saleDeTuBolsillo,
+        sinIntereses,
     )
     val logro = when {
         abono <= 0L || !antes.comoVa.seProyecta -> QueLograElAbono.NO_SE_PUEDE_SIMULAR
@@ -189,6 +192,7 @@ fun simularAbonoUnico(credit: CreditSummary, abono: Long): SimulacionDeAbono? {
         otrosCargosMensuales = terms.otrosCargosMensuales,
         saleDeTuBolsillo = saleDeTuBolsillo(terms),
         abono = abono,
+        sinIntereses = terms.sinIntereses,
     )
 }
 
@@ -230,6 +234,8 @@ fun abonoMinimoParaQueSeTermine(
     cuota: Long,
     seguroMensual: Long?,
     otrosCargosMensuales: Long?,
+    /** Ver [planDeUnaDeuda]. */
+    sinIntereses: Boolean = false,
 ): Long? {
     fun seTermina(abono: Long): Boolean =
         planDeUnaDeuda(
@@ -240,9 +246,10 @@ fun abonoMinimoParaQueSeTermine(
             otrosCargosMensuales,
             // Da igual quién pague: no entra en la aritmética, solo rotula el resultado.
             saleDeTuBolsillo = true,
+            sinIntereses = sinIntereses,
         ).mesesHastaLaUltimaCuota != null
 
-    val hoy = planDeUnaDeuda(saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, true)
+    val hoy = planDeUnaDeuda(saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, true, sinIntereses)
     // Ya se termina, o no hay nada cargado con qué preguntarlo. En los dos casos la pregunta no
     // aplica, y contestar un monto sería contestar otra cosa.
     if (!hoy.comoVa.seProyecta || hoy.mesesHastaLaUltimaCuota != null) return null
@@ -270,5 +277,6 @@ fun abonoMinimoParaQueSeTermine(credit: CreditSummary): Long? {
         cuota = terms.installment,
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
+        sinIntereses = terms.sinIntereses,
     )
 }

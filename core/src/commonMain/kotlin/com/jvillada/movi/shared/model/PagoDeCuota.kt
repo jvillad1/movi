@@ -294,6 +294,17 @@ fun desglosarCuota(
      * es uno solo: lo ya cobrado se descuenta de lo que falta cobrar.
      */
     yaCobradoEnElMes: Long,
+    /**
+     * [CreditTerms.sinIntereses]: la tasa es cero **sabido**. El interés es 0 y lo que la cuota no
+     * gasta en seguro y otros cargos baja la deuda, con [MotivoDelDesglose.AMORTIZA] — no
+     * [MotivoDelDesglose.SIN_TASA], que es «no se pudo separar».
+     *
+     * Con default `false` por lo mismo que en [planDeUnaDeuda]: el default es el comportamiento
+     * prudente de antes. Los call sites de producción lo pasan explícito. No se agregó un motivo
+     * nuevo al enum a propósito: viaja en la respuesta del server, y un APK instalado que no lo
+     * conociera no podría leerla.
+     */
+    sinIntereses: Boolean = false,
 ): DesgloseDeCuota {
     // Una tarjeta no amortiza nada: lo que se paga baja la deuda tal cual. Ver [MotivoDelDesglose].
     if (tipoDeLaDeuda != AccountType.LOAN) {
@@ -302,9 +313,10 @@ fun desglosarCuota(
     // Sin tasa no se puede separar, y **no se inventa**: la deuda baja por todo, como hasta hoy, y
     // la pantalla lo anuncia. El seguro y los otros cargos tampoco se restan acá: restar solo esa
     // parte daría un capital igual de desconocido pero con pinta de calculado.
-    if (rateEa == null || rateEa <= 0.0 || !rateEa.isFinite()) {
+    if (!sinIntereses && (rateEa == null || rateEa <= 0.0 || !rateEa.isFinite())) {
         return DesgloseDeCuota(cuota, interes = 0L, seguro = 0L, capital = cuota, motivo = MotivoDelDesglose.SIN_TASA)
     }
+    val tasaMensual = if (sinIntereses) 0.0 else tasaMensualDeUnaEA(rateEa!!)
     val saldo = saldoDeLaDeuda.coerceAtLeast(0L)
     var faltaDescontar = yaCobradoEnElMes.coerceAtLeast(0L)
     fun menosLoYaCobrado(cargo: Long): Long {
@@ -314,7 +326,7 @@ fun desglosarCuota(
     }
     // El orden en que se descuenta lo ya cobrado (interés, seguro, otros) solo cambia el rótulo de
     // cada parte; el capital es el mismo.
-    val interes = menosLoYaCobrado(round(saldo.toDouble() * tasaMensualDeUnaEA(rateEa)).toLong().coerceAtLeast(0L))
+    val interes = menosLoYaCobrado(round(saldo.toDouble() * tasaMensual).toLong().coerceAtLeast(0L))
     val seguro = menosLoYaCobrado((seguroMensual ?: 0L).coerceAtLeast(0L))
     val otros = menosLoYaCobrado((otrosCargosMensuales ?: 0L).coerceAtLeast(0L))
     // Clampado a 0 y no negativo: una cuota que no alcanza a cubrir interés + seguro no *sube* la
@@ -460,11 +472,13 @@ fun desglosarCuotaRegistrada(
     interesReal: Long?,
     /** Ver [desglosarCuota]. Con el interés real no se usa: ese número ya es el de ESTE pago. */
     yaCobradoEnElMes: Long,
+    /** Ver [desglosarCuota]. Con el interés real no se usa: manda lo que dice el extracto. */
+    sinIntereses: Boolean = false,
 ): DesgloseDeCuota =
     if (interesReal != null) {
         desglosarCuotaConInteresReal(cuota, tipoDeLaDeuda, interesReal, seguroMensual, otrosCargosMensuales)
     } else {
-        desglosarCuota(cuota, tipoDeLaDeuda, saldoDeLaDeuda, rateEa, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes)
+        desglosarCuota(cuota, tipoDeLaDeuda, saldoDeLaDeuda, rateEa, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes, sinIntereses)
     }
 
 /** Lo que se le dice a quien intenta pagar desde una deuda. */

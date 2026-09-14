@@ -96,6 +96,14 @@ data class PlanDelCredito(
      * precedente.
      */
     val saleDeTuBolsillo: Boolean,
+    /**
+     * ¿El dueño declaró que este crédito **no cobra intereses** ([CreditTerms.sinIntereses])?
+     *
+     * Con `true` el interés es cero porque se sabe que es cero, no porque falte la tasa: la
+     * pantalla dice «No cobra intereses» en vez de «$0 de interés · 0 % de la cuota», que se leería
+     * como una estimación. Default `false` para que un cliente viejo siga deserializando.
+     */
+    val sinIntereses: Boolean = false,
 ) {
     /**
      * Qué fracción de la cuota es **interés**, de 0 a 1, o `null` cuando no se puede saber (sin
@@ -186,14 +194,15 @@ enum class ComoVaLaDeuda {
     LA_DEUDA_CRECE,
 
     /**
-     * **Sin tasa registrada** (sin condiciones, o con `rateEa` en 0): no hay nada que separar y no
-     * se inventa.
+     * **Sin tasa registrada** (sin condiciones, o con `rateEa` en 0 **sin** la casilla
+     * [CreditTerms.sinIntereses]): no hay nada que separar y no se inventa.
      *
      * Misma postura que [MotivoDelDesglose.SIN_TASA], y por el mismo motivo, con el signo
      * invertido: allá el riesgo era inventar un interés plausible, acá sería inventar que **no hay**
      * interés y proyectar `saldo / cuota` meses. El Crédito Techo Gardenera del dueño está así
      * (tasa 0, un solo pago de $10.000.000), y es la diferencia entre «no cobra intereses» y «no
-     * sabemos cuánto cobra».
+     * sabemos cuánto cobra». Desde que existe [CreditTerms.sinIntereses], «no cobra intereses» lo
+     * declara el dueño con esa casilla, y entonces el crédito sí se proyecta.
      */
     SIN_TASA,
 
@@ -308,6 +317,16 @@ fun planDeUnaDeuda(
      */
     otrosCargosMensuales: Long?,
     saleDeTuBolsillo: Boolean,
+    /**
+     * [CreditTerms.sinIntereses]: con `true` la tasa se toma como cero **sabido**, no como
+     * desconocida, y el crédito se proyecta con la cuota entera menos seguro y otros cargos.
+     *
+     * Este sí tiene default, a diferencia de los otros cargos: el `false` es exactamente el
+     * comportamiento de antes de que existiera la casilla, así que olvidarlo en un call site no
+     * inventa plata — deja el crédito en «sin tasa», que es la postura prudente. Los call sites de
+     * producción (el de [planDelCredito] y los de `AbonoExtraordinario.kt`) lo pasan explícito.
+     */
+    sinIntereses: Boolean = false,
 ): PlanDelCredito {
     val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
     val otros = (otrosCargosMensuales ?: 0L).coerceAtLeast(0L)
@@ -324,15 +343,21 @@ fun planDeUnaDeuda(
         mesesHastaLaUltimaCuota = null,
         interesPorPagar = null,
         saleDeTuBolsillo = saleDeTuBolsillo,
+        sinIntereses = sinIntereses,
     )
 
     // **Primero el saldo**: sin deuda no hay interés que estimar ni plazo que proyectar, y el
     // motivo es más informativo que «sin tasa». Ver [ComoVaLaDeuda.SIN_DEUDA].
     if (saldoDeLaDeuda <= 0L) return mudo(ComoVaLaDeuda.SIN_DEUDA)
-    val sinTasa = rateEa == null || rateEa <= 0.0 || !rateEa.isFinite()
-    if (sinTasa) return mudo(ComoVaLaDeuda.SIN_TASA)
-
-    val tasaMensual = tasaMensualDeUnaEA(rateEa)
+    // Tasa 0 **declarada** no es «sin tasa»: es una tasa que se conoce y vale cero. Ver
+    // [CreditTerms.sinIntereses].
+    val tasaMensual = if (sinIntereses) {
+        0.0
+    } else {
+        val sinTasa = rateEa == null || rateEa <= 0.0 || !rateEa.isFinite()
+        if (sinTasa) return mudo(ComoVaLaDeuda.SIN_TASA)
+        tasaMensualDeUnaEA(rateEa)
+    }
     val saldo = saldoDeLaDeuda
     val interes = interesDelPeriodo(saldo, tasaMensual)
     // Con tasa pero sin cuota el interés del mes SÍ se sabe, y decirlo no cuesta nada. Lo que no
@@ -362,6 +387,7 @@ fun planDeUnaDeuda(
         mesesHastaLaUltimaCuota = proyeccion?.meses,
         interesPorPagar = proyeccion?.interes,
         saleDeTuBolsillo = saleDeTuBolsillo,
+        sinIntereses = sinIntereses,
     )
 }
 
@@ -393,6 +419,7 @@ fun planDelCredito(credit: CreditSummary): PlanDelCredito? {
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
         saleDeTuBolsillo = saleDeTuBolsillo(terms),
+        sinIntereses = terms.sinIntereses,
     )
 }
 
