@@ -33,7 +33,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -900,7 +899,7 @@ internal fun TypeSegments(
             ) {
                 Text(
                     text = label,
-                    fontSize = 13.sp,
+                    style = Movi.textos.cuerpo,
                     fontWeight = FontWeight.Medium,
                     color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
                     letterSpacing = 0.1.sp,
@@ -969,24 +968,20 @@ private fun EditorBody(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
-            // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
-            text = "$" + formatAmountKeypadDisplay(amount),
-            fontSize = 56.sp,
-            style = Movi.textos.monto,
-            fontWeight = FontWeight.Normal,
-            color = Movi.colores.texto,
-            letterSpacing = (-2.2).sp,
-            lineHeight = 56.sp,
-        )
+        // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
+        // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
+        //
+        // La protagonista de la hoja, como «Tu plata» y lo gastado en Presupuestos. Antes iba a
+        // 56 sp en una sola línea sin achique: un monto de nueve cifras se salía del ancho del
+        // teléfono. CifraProtagonista baja de tamaño hasta que entra.
+        CifraProtagonista("$" + formatAmountKeypadDisplay(amount), color = Movi.colores.texto)
         Spacer(Modifier.height(2.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("COP", fontSize = 12.sp, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
-            Text("·", fontSize = 12.sp, color = Movi.colores.textoApagado)
+            Text("COP", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
+            Text("·", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
             // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
             // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
@@ -1002,7 +997,7 @@ private fun EditorBody(
             ) {
                 Text(
                     text = dateLabel,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                     maxLines = 1,
@@ -1025,11 +1020,11 @@ private fun EditorBody(
         padding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
     ) {
         CardRow(
-            left = { Text("Categoría", fontSize = 14.5.sp, color = Movi.colores.textoMedio) },
+            left = { Text("Categoría", style = Movi.textos.titulo, color = Movi.colores.textoMedio) },
             right = {
                 Text(
                     text = category,
-                    fontSize = 14.5.sp,
+                    style = Movi.textos.titulo,
                     color = Movi.colores.texto,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -1044,7 +1039,7 @@ private fun EditorBody(
         )
         CardRow(
             left = {
-                Text("Cuenta", fontSize = 14.5.sp, color = Movi.colores.textoMedio)
+                Text("Cuenta", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
                 // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
                 // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
                 //
@@ -1070,7 +1065,7 @@ private fun EditorBody(
             right = {
                 Text(
                     text = walletLabel,
-                    fontSize = 14.5.sp,
+                    style = Movi.textos.titulo,
                     color = Movi.colores.texto,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -1085,11 +1080,11 @@ private fun EditorBody(
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
         CardRow(
-            left = { Text("Nota", fontSize = 14.5.sp, color = Movi.colores.textoMedio) },
+            left = { Text("Nota", style = Movi.textos.titulo, color = Movi.colores.textoMedio) },
             right = {
                 Text(
                     text = note.ifBlank { "Agregar nota…" },
-                    fontSize = 14.5.sp,
+                    style = Movi.textos.titulo,
                     color = if (note.isBlank()) Movi.colores.textoApagado else Movi.colores.texto,
                     fontWeight = if (note.isBlank()) FontWeight.Normal else FontWeight.Medium,
                     maxLines = 1,
@@ -1119,7 +1114,7 @@ private fun EditorBody(
     Spacer(Modifier.height(8.dp))
     Box(modifier = Modifier.fillMaxWidth().height(32.dp)) {
         if (error != null) {
-            Text(error, fontSize = 12.sp, color = Movi.colores.sale)
+            Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
     }
 
@@ -1170,7 +1165,7 @@ private fun EditorBody(
         ) {
             Text(
                 "Primero crea una cuenta donde anotar este movimiento",
-                fontSize = 13.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
@@ -1185,7 +1180,7 @@ private fun EditorBody(
             ) {
                 Text(
                     "+ Crear cuenta",
-                    fontSize = 15.sp,
+                    style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.marca,
                 )
@@ -1217,7 +1212,7 @@ private fun EditorBody(
             ) {
                 Text(
                     text = if (saving) "Guardando…" else "Guardar movimiento",
-                    fontSize = 15.sp,
+                    style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                 )
@@ -1240,7 +1235,7 @@ private fun EditorBody(
             if (!canSave && !saving && missingFieldMessage != null) {
                 Text(
                     text = missingFieldMessage,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -1265,7 +1260,7 @@ internal fun AvisoDeCuentaRow(aviso: String?, reservado: Boolean) {
         if (aviso != null) {
             Text(
                 text = aviso,
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 lineHeight = 14.sp,
                 color = Movi.colores.textoApagado,
                 // Una sola línea, y con puntos suspensivos si no entra.
@@ -1291,7 +1286,7 @@ internal fun PickerHeader(title: String, onClose: () -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(title, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
         Box(modifier = Modifier.weight(1f))
         Box(
             modifier = Modifier
@@ -1358,7 +1353,7 @@ internal fun WalletPicker(
         if (cuentas.vacio) {
             // F10: este picker ya no debería ser alcanzable sin cuentas (ver el onClick de la
             // fila "Cuenta" en EditorBody), pero el texto no miente si de todos modos se llega.
-            Text("No tienes cuentas todavía.", fontSize = 14.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(vertical = 18.dp))
+            Text("No tienes cuentas todavía.", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.padding(vertical = 18.dp))
         } else {
             val visibles = if (verTodas) cuentas.todas else cuentas.principales
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
@@ -1373,13 +1368,13 @@ internal fun WalletPicker(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 account.name,
-                                fontSize = 15.sp,
+                                style = Movi.textos.titulo,
                                 color = Movi.colores.texto,
                                 fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                             )
                             Text(
                                 saldoDeLaCuenta(account),
-                                fontSize = 12.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                             )
                         }
@@ -1468,7 +1463,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 value = value,
                 onValueChange = { value = it },
                 cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                 // Ola 8 · V2: **sin `fillMaxWidth` el campo no se podía tocar.** El área
                 // sensible de un BasicTextField es la que mide su contenido, y con el texto
                 // vacío eso son cero píxeles de ancho: la caja gris se ve grande, pero el
@@ -1503,7 +1498,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                     },
                 decorationBox = { inner ->
                     if (value.text.isEmpty()) {
-                        Text("Concepto del movimiento", fontSize = 14.sp, color = Movi.colores.textoMedio)
+                        Text("Concepto del movimiento", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     }
                     inner()
                 },
@@ -1519,7 +1514,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 .clickable { onSave(value.text.trim()) },
             contentAlignment = Alignment.Center,
         ) {
-            Text("Guardar nota", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+            Text("Guardar nota", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
         }
     }
 }
