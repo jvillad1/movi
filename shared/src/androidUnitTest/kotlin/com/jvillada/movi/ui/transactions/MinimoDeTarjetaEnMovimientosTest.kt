@@ -85,10 +85,11 @@ class MinimoDeTarjetaEnMovimientosTest {
             override suspend fun getRecurringRules(): List<RecurringRule> = listOf(sueldo, arriendo)
             override suspend fun getSubscriptions(): SubscriptionsResult =
                 SubscriptionsResult(emptyList(), monthlyTotalCop = 0L)
-            // Las sintéticas llegan SOLO por acá — las cuotas de sus créditos y el pago de la
-            // tarjeta. Ver `reglasSinteticas`.
+            // Como el server: TODAS las reglas —las del dueño y las sintéticas (cuotas de sus
+            // créditos y el pago de la tarjeta)—. El «Flujo libre» del chip sale de esta lista, igual
+            // que el del Inicio.
             override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
-                listOf(vence(vehiculo), vence(libreInversion), vence(masterBlack(minimoDelMaster)))
+                listOf(vence(sueldo), vence(arriendo), vence(vehiculo), vence(libreInversion), vence(masterBlack(minimoDelMaster)))
             override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
         }
         composeRule.setContent {
