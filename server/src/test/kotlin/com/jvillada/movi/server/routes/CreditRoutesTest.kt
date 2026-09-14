@@ -1352,6 +1352,22 @@ class CreditRoutesTest {
     }
 
     @Test
+    fun `un cliente viejo que le pone tasa a un credito sin intereses lo desmarca`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, ponerTerminos(terminosDelCliente.copy(rateEa = 0.0, sinIntereses = true)).status)
+
+        val cuerpoViejo = Json.parseToJsonElement(cuerpoDelCliente(terminosDelCliente.copy(rateEa = 2.0)))
+            .jsonObject.filterKeys { it != "sinIntereses" }
+        val put = client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(JsonObject(cuerpoViejo).toString())
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+        assertEquals(false, sinInteresesGuardado())
+    }
+
+    @Test
     fun `una tasa positiva con la casilla marcada es 400, al crear y al editar`() = testApplication {
         wireApp()
         val put = ponerTerminos(terminosDelCliente.copy(rateEa = 12.0, sinIntereses = true))

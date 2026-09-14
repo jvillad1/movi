@@ -316,7 +316,16 @@ fun Route.creditRoutes() {
                 // «No cobra intereses» entra al club por el mismo agujero: un APK anterior a la
                 // casilla manda la tasa en 0 sin la clave, y sin esta línea editar la nota de un
                 // préstamo familiar lo devolvería a «sin tasa registrada».
-                .let { if ("sinIntereses" in crudo) it else it.copy(sinIntereses = previo?.sinIntereses ?: false) }
+                // Salvo que ese cliente viejo mande una tasa positiva: no tiene la casilla para
+                // desmarcarla, y escribir una tasa ya dice que el crédito sí cobra. Reponer el `true`
+                // lo rechazaba con un 400 que le pide desmarcar algo que su pantalla no muestra.
+                .let {
+                    when {
+                        "sinIntereses" in crudo -> it
+                        it.rateEa > 0.0 -> it.copy(sinIntereses = false)
+                        else -> it.copy(sinIntereses = previo?.sinIntereses ?: false)
+                    }
+                }
                 // El tope de la columna es varchar(60): un nombre más largo hacía fallar el
                 // INSERT en Postgres y se caía el guardado ENTERO del crédito con un 500 sin
                 // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
