@@ -29,9 +29,28 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 
-private val amountRegex = Regex("""\$\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)""")
-private val merchantInRegex = Regex("""en\s+(.+?)(?:\s+el\s|\s+a\s+las|\.|$)""", RegexOption.IGNORE_CASE)
-private val merchantOfRegex = Regex("""de\s+(.+?)(?:\.|$)""", RegexOption.IGNORE_CASE)
+/**
+ * El monto y su moneda. Bancolombia escribe **tres prefijos**: `$132.347,00`, `COP249.000,00` y
+ * `USD20,00` —estos dos en las compras con tarjeta de crédito—, y la regex de antes solo conocía el
+ * `$`: 23 de los 98 SMS pendientes del dueño no se leían (sep-2026), entre ellos todos sus cobros de
+ * Microsoft, Uber, Google, Anthropic y Railway.
+ */
+private val amountRegex = Regex("""(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
+/** «Recibimos pago por 9.809.799 a tu tarjeta»: sin prefijo, pero con separador de miles. */
+private val amountPorRegex = Regex("""\bpor\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
+private val merchantInRegex = Regex("""\ben\s+(.+?)(?:\s+el\s|\s+a\s+las|\s+con\s+tu\s|\s+de\s+tu\s|,|\.|$)""", RegexOption.IGNORE_CASE)
+private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\.|$)""", RegexOption.IGNORE_CASE)
+/** «Pagaste $138,600.00 a Coomeva Medicina Prepagada S A desde tu producto 8133». */
+private val destinatarioDesdeRegex = Regex("""\ba\s+(?!la\s|las\s|tu\s)(.+?)\s+desde\s""", RegexOption.IGNORE_CASE)
+/** «… desde tu cuenta *8133 a DANIEL LEONETT el 10/09/26». */
+private val destinatarioElRegex = Regex("""\ba\s+(?!la\s|las\s|tu\s)([^*@\d].+?)\s+el\s""", RegexOption.IGNORE_CASE)
+
+/**
+ * Avisos del banco que traen plata en el texto pero **no son un movimiento**: confirmarlos crearía
+ * uno falso. La ampliación de plazo es el caso caro («por USD 1,202.49»): no salió ni entró un peso,
+ * se refinanció una deuda.
+ */
+private val NO_SON_MOVIMIENTOS = listOf("ampliacion de plazo", "ampliación de plazo", "bienvenido", "inscribiste")
 
 /**
  * **Cuánta plata dice un SMS**, sin importar si el banco escribió a la colombiana o a la gringa.
@@ -87,8 +106,12 @@ internal fun montoDelSms(raw: String): Double? {
 }
 
 internal fun parseSms(text: String): ParsedSms? {
-    val rawAmount = amountRegex.find(text)?.groupValues?.get(1) ?: return null
+    val minusculas = text.lowercase()
+    if (NO_SON_MOVIMIENTOS.any { it in minusculas }) return null
+    val conPrefijo = amountRegex.find(text)
+    val rawAmount = conPrefijo?.groupValues?.get(2) ?: amountPorRegex.find(text)?.groupValues?.get(1) ?: return null
     val amount = montoDelSms(rawAmount) ?: return null
+    val currency = if (conPrefijo?.groupValues?.get(1)?.equals("USD", ignoreCase = true) == true) "USD" else "COP"
 
     val type = when {
         text.contains("Recibiste", ignoreCase = true) -> TransactionType.INCOME
@@ -99,14 +122,20 @@ internal fun parseSms(text: String): ParsedSms? {
         else -> TransactionType.EXPENSE
     }
 
+    fun limpio(m: String?) = m?.trim()?.trimEnd(',', '.')?.trim()?.takeIf { it.isNotEmpty() }
     val merchant = when {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
-        type == TransactionType.INCOME -> merchantOfRegex.find(text)?.groupValues?.get(1)?.trim() ?: "Transferencia recibida"
-        else -> merchantInRegex.find(text)?.groupValues?.get(1)?.trim() ?: "Movimiento"
+        type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
+        looksLikeCardPayment(text, category = "") -> "Pago de tarjeta"
+        "codigo qr" in minusculas || "código qr" in minusculas -> "Pago QR"
+        else -> limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
+            ?: limpio(destinatarioElRegex.find(text)?.groupValues?.get(1))
+            ?: limpio(merchantInRegex.find(text)?.groupValues?.get(1))
+            ?: if ("transferiste" in minusculas) "Transferencia" else "Movimiento"
     }
 
     val category = categoryFor(text, merchant, type)
-    return ParsedSms(amount, merchant, type, category)
+    return ParsedSms(amount, merchant, type, category, currency)
 }
 
 /**

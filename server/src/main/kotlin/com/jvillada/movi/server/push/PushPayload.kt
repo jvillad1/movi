@@ -54,7 +54,10 @@ fun buildPushPayload(
 
 /** Push para SMS bancarios recién capturados. Los montos de SMS COP son enteros → roundToLong. */
 fun buildSmsPushPayload(parsed: List<ParsedSms>): String {
-    val lines = parsed.take(MAX_LINES).map { "$${formatMiles(it.amount.roundToLong())} en ${it.merchant}" }
+    val lines = parsed.take(MAX_LINES).map {
+        val signo = if (it.currency == "USD") "US$" else "$"
+        "$signo${formatMiles(it.amount.roundToLong())} en ${it.merchant}"
+    }
     val extra = parsed.size - MAX_LINES
     val allLines = lines + if (extra > 0) listOf("…y $extra más") else emptyList()
     val single = parsed.size == 1

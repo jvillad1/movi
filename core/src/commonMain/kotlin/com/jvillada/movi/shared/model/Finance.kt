@@ -605,6 +605,11 @@ data class ParsedSms(
     val merchant: String,
     val type: TransactionType,
     val category: String,
+    /**
+     * La moneda que dice el SMS: `"USD"` en «Compraste USD20,00 en …», `"COP"` en todo lo demás.
+     * Antes no existía y una compra en dólares no se leía (o se hubiera anotado como pesos).
+     */
+    val currency: String = "COP",
 )
 
 @Serializable
