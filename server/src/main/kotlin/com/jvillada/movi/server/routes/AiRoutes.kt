@@ -29,6 +29,7 @@ import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.normalizarCondicion
 import io.ktor.http.HttpStatusCode
@@ -281,6 +282,9 @@ internal suspend fun buildUserContext(uid: String): String {
             (Events.timestamp greaterEq monthStart) and
             (Events.timestamp less monthEnd)
         }.filterNot { it[Events.id] in voidedIds }
+            // Tampoco lo que espera en «Por confirmar»: el asistente dice los mismos Ingresos y
+            // Gastos que el Inicio.
+            .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
 
         // Mismo filtro que /api/finance-summary: los movimientos de cuentas de deuda no son
         // ingreso ni gasto del mes (ver isCashFlow). Sin esto, un ajuste de deuda de $60M

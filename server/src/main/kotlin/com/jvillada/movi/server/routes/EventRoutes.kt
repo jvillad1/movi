@@ -62,6 +62,13 @@ private sealed interface ResultadoDeEdicion {
     class Ok(val evento: FinancialEvent) : ResultadoDeEdicion
 }
 
+/**
+ * Los orígenes que, al llegar por `POST /api/events`, ya pasaron por los ojos del dueño: lo que
+ * anotó a mano y lo que confirmó desde la bandeja de SMS. Llegan confirmados aunque el cliente
+ * mande el default `UNCONFIRMED` del modelo. OCR y extracto sí entran solos y esperan.
+ */
+internal val ORIGENES_YA_REVISADOS = setOf(EventSource.MANUAL, EventSource.SMS)
+
 fun Route.eventRoutes() {
     route("/api/events") {
 
@@ -147,7 +154,13 @@ fun Route.eventRoutes() {
                 // Esto es la red de seguridad del server, no solo de QuickAdd: cualquier cliente
                 // (viejo, o uno que no aplique el fix del lado UI) que mande MANUAL+UNCONFIRMED
                 // queda corregido acá, para que no le pase lo mismo por otra puerta.
-                reconciliationStatus = if (body.source == EventSource.MANUAL && body.reconciliationStatus == ReconciliationStatus.UNCONFIRMED)
+                //
+                // **Un SMS tampoco**: por esta ruta un `source = SMS` solo llega desde la bandeja de
+                // mensajes, cuando el dueño leyó el aviso del banco y tocó «Confirmar» (la captura
+                // del teléfono sube MENSAJES a `/api/sms/sync`, no movimientos). Dejarlo en «por
+                // confirmar» lo sacaba de «Gastos» después de que el dueño lo confirmó con sus
+                // propios dedos, y hasta el APK 1.22 el cliente no mandaba el estado.
+                reconciliationStatus = if (body.source in ORIGENES_YA_REVISADOS && body.reconciliationStatus == ReconciliationStatus.UNCONFIRMED)
                     ReconciliationStatus.RECONCILED
                 else
                     body.reconciliationStatus,

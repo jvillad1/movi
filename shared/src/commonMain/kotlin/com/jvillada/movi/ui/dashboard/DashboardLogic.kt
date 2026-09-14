@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.alertaDeCapturaEnInicio
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -685,10 +686,13 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
  * El filtro va por `timestamp` contra la ventana, que es exactamente lo que hace el server
  * (`currentPeriodWindow`). Las dos mitades tienen que coincidir o Inicio y Presupuestos vuelven a
  * decir cifras distintas del mismo presupuesto.
+ *
+ * Lo que espera en «Por confirmar» no suma ([cuentaEnGastosEIngresos]), igual que en el chip
+ * «Gastos» y en `monthCashFlow` del server.
  */
 fun spentByCategoryForPeriod(days: List<EventDay>, ventana: LongRange): Map<String, Long> =
     days.flatMap { it.items }
         .filter { it.timestamp in ventana }
-        .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow && it.currency == "COP" }
+        .filter { it.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(it) && it.currency == "COP" }
         .groupBy { it.category }
         .mapValues { (_, txs) -> txs.sumOf { it.amount } }

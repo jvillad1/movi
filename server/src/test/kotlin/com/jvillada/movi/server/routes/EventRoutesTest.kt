@@ -963,17 +963,37 @@ class EventRoutesTest {
     }
 
     /**
-     * El contraste que prueba que la corrección es específica de MANUAL: un SMS que todavía no
-     * se revisó SÍ debe quedar "por confirmar" — esa es la razón de ser del estado. Corregirlo acá
-     * también rompería el flujo de revisión de SMS/OCR/extracto.
+     * Un SMS llega por esta ruta solo desde la bandeja, cuando el dueño lo leyó y tocó «Confirmar»
+     * (la captura del teléfono sube mensajes a `/api/sms/sync`, no movimientos). Nace confirmado
+     * aunque el cliente —el APK 1.22 y anteriores— mande el default UNCONFIRMED: si no, lo que el
+     * dueño confirmó quedaba esperando en «Por confirmar» y fuera de «Gastos».
      */
     @Test
-    fun `evento de SMS con UNCONFIRMED se mantiene UNCONFIRMED`() = testApplication {
+    fun `confirmar un SMS desde la bandeja crea el movimiento RECONCILED`() = testApplication {
         wireApp()
         val res = postEvent(
             userAId,
             """{"id":"","accountId":"$savingsAccountId","type":"EXPENSE","amount":25000,
                 "category":"Comida","description":"Almuerzo","source":"SMS",
+                "reconciliationStatus":"UNCONFIRMED","timestamp":0}""",
+        )
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("RECONCILED", body["reconciliationStatus"]!!.jsonPrimitive.content)
+        val row = transaction { Events.selectAll().where { Events.accountId eq savingsAccountId }.single() }
+        assertEquals("RECONCILED", row[Events.reconciliationStatus])
+    }
+
+    /**
+     * El contraste: lo que entra solo sin que nadie lo revise (un extracto, OCR) SÍ queda «por
+     * confirmar» — esa es la razón de ser del estado.
+     */
+    @Test
+    fun `evento de extracto con UNCONFIRMED se mantiene UNCONFIRMED`() = testApplication {
+        wireApp()
+        val res = postEvent(
+            userAId,
+            """{"id":"","accountId":"$savingsAccountId","type":"EXPENSE","amount":25000,
+                "category":"Comida","description":"Almuerzo","source":"STATEMENT",
                 "reconciliationStatus":"UNCONFIRMED","timestamp":0}""",
         )
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject

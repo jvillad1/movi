@@ -144,6 +144,33 @@ fun isCashFlow(accountType: AccountType, type: TransactionType, category: String
 }
 
 /**
+ * **¿Este movimiento espera en «Por confirmar»?** Lo que entró solo (un extracto, una carga) y
+ * nadie revisó todavía.
+ *
+ * El estado decide UNA cosa: si la fila cuenta en «Gastos» e «Ingresos» del período —y en el
+ * gastado de un presupuesto— o espera en «Por confirmar» hasta que el dueño la confirme. **No toca
+ * los saldos**: la plata se movió igual, confirmada o no, y `signedDelta`/`computeBalances` no
+ * pasan por acá.
+ *
+ * Antes la regla vivía solo en los chips de Movimientos, y el Inicio, Presupuestos y el resumen
+ * del server seguían sumando lo pendiente: el mismo gasto de $80.000 estaba fuera del chip
+ * «Gastos» y dentro de «Gastos del mes». Las dos mitades —server ([String]) y cliente
+ * ([ReconciliationStatus])— preguntan acá para no volver a separarse.
+ */
+fun esperaEnPorConfirmar(estado: ReconciliationStatus): Boolean = estado == ReconciliationStatus.UNCONFIRMED
+
+/** Lo mismo que la otra, para las filas del server, que traen el estado como texto. */
+fun esperaEnPorConfirmar(estado: String): Boolean = estado == ReconciliationStatus.UNCONFIRMED.name
+
+/**
+ * **Si la fila entra en «Gastos» e «Ingresos» del período** (y en el gastado de un presupuesto):
+ * cuenta como flujo ([isCashFlow], ya derivado en `countsAsCashFlow`) y no espera en «Por
+ * confirmar» ([esperaEnPorConfirmar]). No mira la moneda: eso lo decide cada total.
+ */
+fun cuentaEnGastosEIngresos(evento: FinancialEvent): Boolean =
+    evento.countsAsCashFlow && !esperaEnPorConfirmar(evento.reconciliationStatus)
+
+/**
  * El descuento de una **libranza**: la cuota que el empleador retiene del sueldo **antes** de
  * depositarlo.
  *

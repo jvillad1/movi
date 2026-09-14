@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.budgets
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 
 /**
  * Los movimientos que **componen** el gastado de un presupuesto, en el período que se está
@@ -34,13 +35,14 @@ fun gastosDelPresupuesto(
     val buscada = categoria.trim()
     if (buscada.isEmpty()) return emptyList()
 
-    // Filtro CALCADO de spentByCategoryForPeriod, `countsAsCashFlow` incluido — es esa bandera
+    // Filtro CALCADO de spentByCategoryForPeriod, `cuentaEnGastosEIngresos` incluido (flujo y
+    // «Por confirmar») — es esa bandera
     // (no una lista de nombres reservados) la que decide si un movimiento entra en las cifras
     // del período, y la calcula el server. Copiarla mal acá haría que la lista y el número de
     // arriba hablaran de plata distinta.
     return dias.flatMap { it.items }
         .filter { it.timestamp in ventana }
-        .filter { it.type == TransactionType.EXPENSE && it.countsAsCashFlow && it.currency == "COP" }
+        .filter { it.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(it) && it.currency == "COP" }
         .filter { it.category == buscada }
         // Lo más reciente primero: es el orden en que uno reconoce sus propios gastos.
         .sortedByDescending { it.timestamp }

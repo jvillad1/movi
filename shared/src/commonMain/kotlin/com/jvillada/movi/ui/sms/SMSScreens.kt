@@ -32,6 +32,7 @@ import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.EventSource
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
@@ -409,21 +410,14 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         error = null
         coroutine.launch {
             runCatching {
-                val event = FinancialEvent(
+                val event = movimientoConfirmadoDelSms(
                     // Mismo motivo que en QuickAddScreen — ver newId().
                     id = newId("ev"),
-                    accountId = acct.id,
-                    type = p.type,
-                    // Redondeado y no truncado (US$15,44 → 15), y en la moneda que dice el SMS: una
-                    // compra en dólares no se anota como pesos.
-                    amount = p.amount.roundToLong(),
-                    currency = p.currency,
-                    category = cat,
-                    description = p.merchant,
-                    merchant = p.merchant,
-                    source = EventSource.SMS,
+                    cuentaId = acct.id,
+                    leido = p,
+                    categoria = cat,
                     // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms].
-                    timestamp = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
+                    momento = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
                 )
                 Repositories.wallets.postEvent(event)
                 Repositories.wallets.confirmSms(smsId)
@@ -825,4 +819,35 @@ private fun formatThousands(amount: Long): String {
 
 private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(
     Modifier.clickable(onClick = onClick),
+)
+
+/**
+ * El movimiento que nace de **confirmar un SMS en la bandeja**.
+ *
+ * Nace `RECONCILED`: el dueño leyó el aviso del banco y tocó «Confirmar», así que no vuelve a
+ * esperar en «Por confirmar» — que lo dejaba fuera de «Gastos» e «Ingresos» justo después de
+ * confirmarlo. El server lo corrige igual (`ORIGENES_YA_REVISADOS` en `EventRoutes`), pero el
+ * teléfono lo guarda local antes de subirlo, y sin señal esa fila es la que se ve.
+ *
+ * El monto va redondeado y no truncado (US$15,44 → 15), y en la moneda que dice el SMS: una
+ * compra en dólares no se anota como pesos.
+ */
+internal fun movimientoConfirmadoDelSms(
+    id: String,
+    cuentaId: String,
+    leido: ParsedSms,
+    categoria: String,
+    momento: Long,
+): FinancialEvent = FinancialEvent(
+    id = id,
+    accountId = cuentaId,
+    type = leido.type,
+    amount = leido.amount.roundToLong(),
+    currency = leido.currency,
+    category = categoria,
+    description = leido.merchant,
+    merchant = leido.merchant,
+    source = EventSource.SMS,
+    reconciliationStatus = ReconciliationStatus.RECONCILED,
+    timestamp = momento,
 )

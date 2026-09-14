@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.budgets
 
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.dashboard.spentByCategoryForPeriod
 import kotlin.test.Test
@@ -26,6 +27,7 @@ class GastosDelPresupuestoTest {
         flujo: Boolean = true,
         tipo: TransactionType = TransactionType.EXPENSE,
         moneda: String = "COP",
+        estado: ReconciliationStatus = ReconciliationStatus.RECONCILED,
     ) = FinancialEvent(
         id = id,
         accountId = "acc1",
@@ -36,6 +38,7 @@ class GastosDelPresupuestoTest {
         timestamp = ts,
         currency = moneda,
         countsAsCashFlow = flujo,
+        reconciliationStatus = estado,
     )
 
     private val dias = listOf(
@@ -99,5 +102,19 @@ class GastosDelPresupuestoTest {
     fun categoria_vacia_no_devuelve_todo() {
         // Un `filter` mal escrito acá vaciaría el nombre y traería la lista entera.
         assertTrue(gastosDelPresupuesto("   ", dias, ventana).isEmpty())
+    }
+
+    /** Un gasto que espera en «Por confirmar» no está en la lista ni en la barra: las dos lo dejan fuera. */
+    @Test
+    fun `lo que espera en Por confirmar no entra en la lista ni en la barra`() {
+        val conPendiente = listOf(
+            EventDay("2026-08-27", 0L, listOf(
+                gasto("ok", "Mercado", 60_000),
+                gasto("pend", "Mercado", 90_000, estado = ReconciliationStatus.UNCONFIRMED),
+            )),
+        )
+        val lista = gastosDelPresupuesto("Mercado", conPendiente, ventana)
+        assertEquals(listOf("ok"), lista.map { it.id })
+        assertEquals(spentByCategoryForPeriod(conPendiente, ventana)["Mercado"], lista.sumOf { it.amount })
     }
 }

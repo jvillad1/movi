@@ -143,8 +143,12 @@ class DashboardRoutesTest {
         currency: String = "COP",
         timestamp: Long = System.currentTimeMillis(),
         uid: String = userId,
+        // Confirmado por default: la columna nace «UNCONFIRMED» y eso lo dejaría fuera de todas
+        // las cifras. Lo pendiente se pide explícito (ver el test de «Por confirmar»).
+        estado: String = "RECONCILED",
     ) = transaction {
         Events.insert {
+            it[Events.reconciliationStatus] = estado
             it[Events.id]          = id
             it[Events.userId]      = uid
             it[Events.accountId]   = accountId
@@ -291,6 +295,26 @@ class DashboardRoutesTest {
         assertEquals(setOf("EXPENSE", "INCOME"), usadas["Ajustes"])
         assertEquals(setOf("EXPENSE"), usadas["Colegio"], "el mes viejo también cuenta")
         assertFalse("Ajeno" in usadas.keys, "las categorías de otro usuario no se filtran acá")
+    }
+
+    /**
+     * Lo que espera en «Por confirmar» no suma en el Inicio ni en el gastado de los presupuestos
+     * (que leen este mismo `spentByCategory`): misma regla que el chip «Gastos» de Movimientos y que
+     * `spentByCategoryForPeriod` del cliente. Antes el chip lo sacaba y el Inicio lo sumaba.
+     */
+    @Test
+    fun `lo que espera en Por confirmar no suma en el gasto ni en el ingreso del mes`() = testApplication {
+        wireApp()
+        event("e-ok", savings, "EXPENSE", 40_000L, category = "Comida")
+        event("e-pend", savings, "EXPENSE", 80_000L, category = "Comida", estado = "UNCONFIRMED")
+        event("e-pend-cat", savings, "EXPENSE", 15_000L, category = "Ropa", estado = "UNCONFIRMED")
+        event("e-sueldo", savings, "INCOME", 2_000_000L, category = "Sueldo")
+        event("e-sueldo-pend", savings, "INCOME", 500_000L, category = "Sueldo", estado = "UNCONFIRMED")
+
+        val body = summary()
+        assertEquals(40_000L, body.long("monthSpent"))
+        assertEquals(mapOf("Comida" to 40_000L), body.spentByCategory())
+        assertEquals(2_000_000L, body.long("monthIncome"))
     }
 
     @Test

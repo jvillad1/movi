@@ -17,6 +17,7 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -143,13 +144,18 @@ class FinanceRoutesTest {
             setBody("""{"id":"$id","name":"Cuenta","type":"$type","balance":$balance}""")
         }
 
-    private suspend fun ApplicationTestBuilder.postEvent(accountId: String, type: String, amount: Long) =
+    private suspend fun ApplicationTestBuilder.postEvent(
+        accountId: String,
+        type: String,
+        amount: Long,
+        source: String = "MANUAL",
+    ) =
         client.post("/api/events") {
             header(HttpHeaders.Authorization, "Bearer $token")
             header(HttpHeaders.ContentType, "application/json")
             setBody(
                 """{"id":"","accountId":"$accountId","type":"$type","amount":$amount,
-                    "category":"Comida","description":"Almuerzo","timestamp":0}""",
+                    "category":"Comida","description":"Almuerzo","source":"$source","timestamp":0}""",
             )
         }
 
@@ -211,5 +217,29 @@ class FinanceRoutesTest {
             summary().eventCount(),
             "un gasto anotado por el usuario sí debería apagar la guía de primeros pasos",
         )
+    }
+
+    /**
+     * Un movimiento de extracto que nadie confirmó espera en «Por confirmar» y no entra en
+     * ingresos ni egresos del período — misma regla que el Inicio y los chips. Al confirmarlo,
+     * entra. El saldo no depende de esto.
+     */
+    @Test
+    fun `lo que espera en Por confirmar no entra en ingresos ni egresos hasta confirmarlo`() = testApplication {
+        wireApp()
+        createAccount("acc-savings", "SAVINGS", 0L)
+        postEvent("acc-savings", "EXPENSE", 25_000L)
+        val pendiente = postEvent("acc-savings", "EXPENSE", 70_000L, source = "STATEMENT")
+        assertEquals(HttpStatusCode.Created, pendiente.status)
+        postEvent("acc-savings", "INCOME", 300_000L, source = "STATEMENT")
+
+        val antes = summary()
+        assertEquals(25_000L, antes["egresos"]!!.jsonPrimitive.long)
+        assertEquals(0L, antes["ingresos"]?.jsonPrimitive?.long ?: 0L)
+
+        val id = Json.parseToJsonElement(pendiente.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+        val confirmado = client.put("/api/events/$id/confirm") { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.OK, confirmado.status)
+        assertEquals(95_000L, summary()["egresos"]!!.jsonPrimitive.long)
     }
 }

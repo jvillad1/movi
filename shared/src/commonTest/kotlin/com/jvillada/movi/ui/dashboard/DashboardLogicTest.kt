@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
 import com.jvillada.movi.shared.model.PaymentStatus
+import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenSection
@@ -48,9 +49,18 @@ class DashboardLogicTest {
     private fun upcoming(id: String, name: String, amount: Long, daysUntil: Int, type: TransactionType = TransactionType.EXPENSE) =
         UpcomingPayment(rule(id, name, amount, type), dueDate = "2026-08-2${daysUntil.coerceIn(0, 9)}", daysUntil = daysUntil, status = PaymentStatus.UPCOMING)
 
-    private fun event(category: String, amount: Long, type: TransactionType = TransactionType.EXPENSE, cashFlow: Boolean = true, currency: String = "COP", timestamp: Long = 0L) =
+    private fun event(
+        category: String,
+        amount: Long,
+        type: TransactionType = TransactionType.EXPENSE,
+        cashFlow: Boolean = true,
+        currency: String = "COP",
+        timestamp: Long = 0L,
+        estado: ReconciliationStatus = ReconciliationStatus.RECONCILED,
+    ) =
         FinancialEvent(id = "e-$category-$amount", accountId = "a", type = type, amount = amount, currency = currency,
-            category = category, description = "", timestamp = timestamp, countsAsCashFlow = cashFlow)
+            category = category, description = "", timestamp = timestamp, countsAsCashFlow = cashFlow,
+            reconciliationStatus = estado)
 
     // ── Próximos pagos ─────────────────────────────────────────────────────────
 
@@ -101,6 +111,22 @@ class DashboardLogicTest {
         )
         val spent = spentByCategoryForPeriod(days, ventana = dentro..2_000L)
         assertEquals(mapOf("Mercado" to 150_000L), spent)
+    }
+
+    /**
+     * Lo que espera en «Por confirmar» no suma en el gastado del período, igual que en el chip
+     * «Gastos» y en `monthCashFlow` del server. Antes el chip lo sacaba y el Inicio lo sumaba.
+     */
+    @Test
+    fun `gasto del periodo deja fuera lo que espera en Por confirmar`() {
+        val days = listOf(
+            EventDay("2026-08-03", 0, listOf(
+                event("Mercado", 100_000, timestamp = 1_000L),
+                event("Mercado", 80_000, timestamp = 1_000L, estado = ReconciliationStatus.UNCONFIRMED),
+                event("Ropa", 40_000, timestamp = 1_000L, estado = ReconciliationStatus.UNCONFIRMED),
+            )),
+        )
+        assertEquals(mapOf("Mercado" to 100_000L), spentByCategoryForPeriod(days, ventana = 0L..2_000L))
     }
 
     // ── Alertas ────────────────────────────────────────────────────────────────

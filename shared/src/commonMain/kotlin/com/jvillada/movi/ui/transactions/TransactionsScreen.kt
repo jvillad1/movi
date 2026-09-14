@@ -83,6 +83,8 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
+import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_MINIMOS_DE_TARJETA
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -617,14 +619,10 @@ fun matchesChip(
     reglas: List<RecurringRule> = emptyList(),
     nombresDeSuscripcionesActivas: List<String> = emptyList(),
 ): Boolean = when (chip) {
-    CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
-        event.countsAsCashFlow &&
-        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED
+    CHIP_GASTOS -> event.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(event)
     // Igual que Gastos: lo que entró solo espera en «Por confirmar» y no se suma hasta confirmarlo.
-    CHIP_INGRESOS -> event.type == TransactionType.INCOME &&
-        event.countsAsCashFlow &&
-        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED
-    CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
+    CHIP_INGRESOS -> event.type == TransactionType.INCOME && cuentaEnGastosEIngresos(event)
+    CHIP_POR_CONFIRMAR -> esperaEnPorConfirmar(event.reconciliationStatus)
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
     CHIP_RECURRENTES -> nombreRecurrenteDe(event, reglas, nombresDeSuscripcionesActivas) != null
     else -> true

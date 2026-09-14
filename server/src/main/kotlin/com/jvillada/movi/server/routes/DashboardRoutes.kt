@@ -17,6 +17,7 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.shared.model.capturaDeSms
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
@@ -148,7 +149,7 @@ private fun Transaction.monthCashFlow(
     voidedIds: Set<String>,
     accountTypeById: Map<String, AccountType>,
 ): Pair<Long, Map<String, Long>> {
-    val rows = Events.select(Events.id, Events.accountId, Events.type, Events.amount, Events.category)
+    val rows = Events.select(Events.id, Events.accountId, Events.type, Events.amount, Events.category, Events.reconciliationStatus)
         .where {
             (Events.userId eq uid) and
                 (Events.currency eq "COP") and
@@ -156,6 +157,10 @@ private fun Transaction.monthCashFlow(
                 (Events.timestamp less monthEnd)
         }
         .filterNot { it[Events.id] in voidedIds }
+        // Lo que espera en «Por confirmar» no suma — ni en el Inicio ni en las barras de
+        // Presupuestos, que leen este mismo `spentByCategory`. Misma regla que el chip «Gastos» y
+        // que `spentByCategoryForPeriod` del cliente: las dos mitades tienen que coincidir.
+        .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
         .filter { row ->
             val accountType = accountTypeById[row[Events.accountId]]
             accountType == null ||
