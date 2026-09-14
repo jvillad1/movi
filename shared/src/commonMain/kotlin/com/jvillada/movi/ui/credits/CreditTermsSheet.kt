@@ -309,6 +309,8 @@ fun CreditTermsSheet(
         }
     }
 
+    var pidiendoBorrar by remember { mutableStateOf(false) }
+
     fun deleteTerms() {
         if (editing == null || saving) return
         saving = true
@@ -751,13 +753,25 @@ fun CreditTermsSheet(
             }
             if (editing?.terms != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Eliminar términos",
-                    fontSize = 13.sp,
-                    color = Movi.colores.sale,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { deleteTerms() }.padding(vertical = 8.dp),
-                )
+                if (pidiendoBorrar) {
+                    // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
+                    ConfirmacionEnLinea(
+                        pregunta = "¿Eliminar los términos de «${editing.account.name}»?",
+                        detalle = "Se borran la tasa, el plazo, la cuota y el día de pago. La cuenta, su deuda y sus movimientos no se tocan. No se puede deshacer.",
+                        textoConfirmar = "Eliminar",
+                        ocupado = saving,
+                        onConfirmar = { deleteTerms() },
+                        onCancelar = { pidiendoBorrar = false },
+                    )
+                } else {
+                    Text(
+                        "Eliminar términos",
+                        fontSize = 13.sp,
+                        color = Movi.colores.sale,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
+                    )
+                }
             }
             Spacer(Modifier.height(20.dp))
         }

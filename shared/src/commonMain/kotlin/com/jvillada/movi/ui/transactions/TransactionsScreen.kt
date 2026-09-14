@@ -1069,6 +1069,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // que corregirle el monto a un cobro era quitarlo y volver a escribirlo entero — y en una
     // detectada eso ni siquiera funcionaba: «Quitar» la marca DISMISSED, no la borra.
     var suscripcionAEditar by remember { mutableStateOf<Subscription?>(null) }
+    /** La suscripción que el dueño tocó «Quitar» y todavía no confirmó. */
+    var suscripcionPorQuitar by remember { mutableStateOf<Subscription?>(null) }
 
     LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
         if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
@@ -1705,7 +1707,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             // El mismo mapa que usan las filas de movimientos de esta pantalla.
                             accountNames = accountNames,
                             enVuelo = suscripcionesEnVuelo,
-                            onQuitar = { quitarSuscripcion(it) },
+                            // Pregunta antes (ver [ConfirmarEnHoja]); quitar se decide abajo.
+                            onQuitar = { suscripcionPorQuitar = it },
                             onEditar = { suscripcionAEditar = it },
                             abierta = suscripcionesAbiertas,
                             onAlternar = { suscripcionesAbiertas = !suscripcionesAbiertas },
@@ -1930,6 +1933,17 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         hostState = snackbarHostState,
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
     )
+
+    suscripcionPorQuitar?.let { sub ->
+        ConfirmarEnHoja(
+            pregunta = "¿Quitar «${sub.displayName}»?",
+            detalle = "Deja de contar en tus recurrentes y en el flujo libre. Los cobros que ya anotaste no se tocan.",
+            textoConfirmar = "Quitar",
+            ocupado = sub.id in suscripcionesEnVuelo,
+            onConfirmar = { quitarSuscripcion(sub); suscripcionPorQuitar = null },
+            onCancelar = { suscripcionPorQuitar = null },
+        )
+    }
 
     selectedEvent?.let { event ->
         // El mismo juego de hojas que abre el detalle de la cuenta — categoría, fecha, monto,

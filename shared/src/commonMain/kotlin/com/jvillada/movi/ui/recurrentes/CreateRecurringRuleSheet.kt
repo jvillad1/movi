@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -117,6 +118,8 @@ fun CreateRecurringRuleSheet(
 
     // Prefill state from existing rule when in edit mode
     var name by remember { mutableStateOf(existingSub?.displayName ?: existing?.name ?: prefill?.name ?: "") }
+    // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
+    var pidiendoBorrar by remember { mutableStateOf(false) }
     // El cobro REAL, sin prorratear: un anual llega como sus $369.900, que es lo que el dueño
     // reconoce del extracto y lo que la hoja tiene que dejarle corregir. Ver Subscription.amount.
     var amount by remember { mutableStateOf(existingSub?.amount ?: existing?.amount ?: prefill?.amount) }
@@ -446,9 +449,20 @@ fun CreateRecurringRuleSheet(
                                 text = if (saving) "…" else "Eliminar",
                                 fontSize = 13.sp,
                                 color = Movi.colores.sale,
-                                modifier = Modifier.clickable(enabled = !saving) { delete() },
+                                modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
                             )
                         }
+                    }
+                    if (pidiendoBorrar && existing != null) {
+                        ConfirmacionEnLinea(
+                            pregunta = "¿Eliminar el recurrente «${existing.name}»?",
+                            detalle = "Deja de avisarte y de contar en el flujo libre. Los movimientos que ya anotaste no se tocan. No se puede deshacer.",
+                            textoConfirmar = "Eliminar",
+                            ocupado = saving,
+                            onConfirmar = { delete() },
+                            onCancelar = { pidiendoBorrar = false },
+                            modifier = Modifier.padding(bottom = 18.dp),
+                        )
                     }
 
                     // --- NOMBRE ---

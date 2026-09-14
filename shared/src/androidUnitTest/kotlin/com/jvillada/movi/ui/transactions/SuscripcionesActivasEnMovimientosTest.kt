@@ -189,9 +189,20 @@ class SuscripcionesActivasEnMovimientosTest {
         }
     }
 
-    /** El «Quitar» de la fila N, en el orden por día del mes de [suscripciones]. */
+    /**
+     * El «Quitar» de la fila N, en el orden por día del mes de [suscripciones] — y la confirmación
+     * que desde ahora pide antes de escribir (ver `ConfirmarEnHoja`).
+     */
     private fun quitarDeLaFila(indice: Int) {
+        val filas = composeRule.onAllNodesWithText("Quitar", useUnmergedTree = true).fetchSemanticsNodes().size
         composeRule.onAllNodesWithText("Quitar", useUnmergedTree = true)[indice].performClick()
+        // Aparece la hoja de confirmar: su botón «Quitar» es el último nodo con ese texto.
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("Quitar", useUnmergedTree = true).fetchSemanticsNodes().size > filas
+        }
+        val todos = composeRule.onAllNodesWithText("Quitar", useUnmergedTree = true)
+        todos[todos.fetchSemanticsNodes().size - 1].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
     }
 
     // ── La etiqueta que el dueño pidió reponer ────────────────────────────────
