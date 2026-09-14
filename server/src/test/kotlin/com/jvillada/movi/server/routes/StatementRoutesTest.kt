@@ -14,6 +14,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
+import com.jvillada.movi.server.db.StatementImportMatches
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
@@ -77,11 +78,11 @@ class StatementRoutesTest {
         transaction {
             SchemaUtils.drop(
                 Subscriptions, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
-                StatementImports, Budgets, Accounts, Users,
+                StatementImportMatches, StatementImports, Budgets, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, SmsMessages, Credits, Subscriptions,
+                Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, StatementImportMatches,
             )
 
             // ── User A ────────────────────────────────────────────────────────
@@ -393,6 +394,79 @@ class StatementRoutesTest {
         Thread.sleep(5)
         assertEquals(HttpStatusCode.OK, importar(body).status)
         assertEquals(primero, transaction { Events.selectAll().where { Events.id eq "ev-conciliado" }.single()[Events.statementImportId] })
+    }
+
+    private fun conciliacionDelDia(parsedId: String, existente: String, fecha: String, monto: Long) =
+        """{"parsedId":"$parsedId","existingEventId":"$existente","confirm":true,"categorySource":"MANUAL",
+            "descriptionSource":"MANUAL","merchantSource":"MANUAL","parsed":${parsedTx(parsedId, fecha, "UBER", monto)}}"""
+
+    /**
+     * Dos Uber de $15.000 el mismo día en la tarjeta, y uno solo anotado en Nequi. La vista previa
+     * empareja la fila 1 con el de Nequi y deja la 2 como nueva. Al importar, la 2 se crea primero
+     * en la tarjeta, y la búsqueda de pareja de la 1 (su propuesta era de otra cuenta) caía justo
+     * sobre ese evento recién creado: entraba un solo viaje.
+     */
+    @Test
+    fun `lo que crea el mismo importe nunca se toma como pareja de otra fila`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert {
+                it[id] = "acc-nequi-a"; it[userId] = userAId; it[name] = "Nequi"; it[type] = "SAVINGS"; it[currency] = "COP"
+            }
+        }
+        val dia = com.jvillada.movi.server.time.appDateToEpochMillis(java.time.LocalDate.parse("2026-09-03"))
+        sembrar("ev-uber-nequi", "acc-nequi-a", 15_000, estado = "RECONCILED", cuando = dia)
+
+        val body = """{"statementId":"st-uber","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-09",
+            "imports":[${parsedTx("u2", "2026-09-03", "UBER", 15_000)}],
+            "reconciliations":[${conciliacionDelDia("u1", "ev-uber-nequi", "2026-09-03", 15_000)}],"skipped":[]}"""
+        assertEquals(HttpStatusCode.OK, importar(body).status)
+
+        val tarjeta = eventosDeLaTarjeta()
+        assertEquals(2, tarjeta.size, "los dos viajes quedan en la tarjeta: $tarjeta")
+        val nequi = transaction { Events.selectAll().where { Events.id eq "ev-uber-nequi" }.single()[Events.statementImportId] }
+        assertEquals(null, nequi, "el de Nequi no se toca")
+    }
+
+    /**
+     * Importe A crea las compras de agosto; el mismo PDF otra vez (importe B) las concilia todas.
+     * Deshacer A anulaba todas las compras aunque B todavía las reclamara.
+     */
+    @Test
+    fun `deshacer un importe no anula lo que otro importe vivo concilio`() = testApplication {
+        wireApp()
+        val filas = "${parsedTx("a1", "2026-08-05", "EXITO", 80_000)},${parsedTx("a2", "2026-08-12", "CINE", 30_000)}"
+        val cuerpoA = """{"statementId":"st-a","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-08",
+            "imports":[$filas],"reconciliations":[],"skipped":[]}"""
+        assertEquals(HttpStatusCode.OK, importar(cuerpoA).status)
+        val importeA = ultimoImporte()
+        val creados = transaction {
+            Events.selectAll().where { Events.statementImportId eq importeA }.associate { it[Events.amount] to it[Events.id] }
+        }
+        assertEquals(2, creados.size)
+
+        Thread.sleep(5)
+        val cuerpoB = """{"statementId":"st-b","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-08",
+            "imports":[],"reconciliations":[${conciliacionDelDia("b1", creados.getValue(80_000L), "2026-08-05", 80_000)},${conciliacionDelDia("b2", creados.getValue(30_000L), "2026-08-12", 30_000)}],"skipped":[]}"""
+        assertEquals(HttpStatusCode.OK, importar(cuerpoB).status)
+        val importeB = ultimoImporte()
+        assertTrue(importeA != importeB)
+        assertEquals(2, eventosDeLaTarjeta().size, "reimportar no duplica")
+
+        val auth = "Bearer ${tokenFor(userAId)}"
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/statements/imports/$importeA") { header(HttpHeaders.Authorization, auth) }.status)
+        transaction {
+            assertEquals(0L, VoidEvents.selectAll().count(), "B todavía reclama las compras: no se anulan")
+            creados.values.forEach { id ->
+                assertEquals(importeB, Events.selectAll().where { Events.id eq id }.single()[Events.statementImportId], "pasan al importe que sigue vivo")
+            }
+        }
+
+        // Y deshacer B, que ya es el último que las reclama, sí las anula.
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/statements/imports/$importeB") { header(HttpHeaders.Authorization, auth) }.status)
+        transaction {
+            assertEquals(creados.values.toSet(), VoidEvents.selectAll().map { it[VoidEvents.originalEventId] }.toSet())
+        }
     }
 
     @Test

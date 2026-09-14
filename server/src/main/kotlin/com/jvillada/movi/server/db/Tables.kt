@@ -119,6 +119,24 @@ object StatementImports : Table("statement_imports") {
 }
 
 /**
+ * **Un importe que concilió un movimiento que ya pertenecía a OTRO importe.**
+ *
+ * Reimportar el mismo extracto deja `Events.statementImportId` apuntando al primer importe (así el
+ * detalle del primero no pierde filas), y sin esta tabla ese vínculo no quedaba en ningún lado:
+ * deshacer el primero anulaba todas las compras aunque el segundo todavía las reclamara. Con esto,
+ * deshacer un importe le pasa el movimiento al que sigue vivo en vez de anularlo.
+ *
+ * Tabla NUEVA, con la clave primaria compuesta dentro del CREATE TABLE: ningún CREATE INDEX suelto
+ * que pueda fallar sobre una base con datos.
+ */
+object StatementImportMatches : Table("statement_import_matches") {
+    val importId = varchar("import_id", 50)
+    val eventId  = varchar("event_id", 50)
+    val userId   = varchar("user_id", 50)
+    override val primaryKey = PrimaryKey(importId, eventId)
+}
+
+/**
  * Los archivos que el dueño guarda en Movi: extractos, nóminas, contratos.
  *
  * El contenido va en la MISMA tabla y no en un bucket aparte, a propósito. Movi corre en un
