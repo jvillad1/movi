@@ -207,16 +207,29 @@ class PagoDeCuotaTest {
         )
     }
 
+    /**
+     * **Entre monedas, una tarjeta se paga diciendo los dos montos; un crédito no se paga.** La app
+     * no convierte nunca: sin el monto en dólares que abonó el banco, se pide; con él, vale. Un
+     * crédito en otra moneda sigue rechazado: su reparto interés/capital sería inventado.
+     */
     @Test
-    fun no_se_mezclan_monedas() {
-        // La tarjeta en dólares del dueño se paga con dólares. Convertir acá dejaría el saldo de
-        // una de las dos cuentas mal por el tipo de cambio del día, en silencio.
-        val amexUsd = Account("c2", "Master Black USD", AccountType.CREDIT_CARD, 1_257, currency = "USD")
+    fun entre_monedas_la_tarjeta_pide_los_dos_montos_y_el_credito_no_se_paga() {
+        val tarjetaUsd = Account("c2", "Master Black USD", AccountType.CREDIT_CARD, 1_257, currency = "USD")
+        val creditoUsd = Account("l2", "Crédito USD", AccountType.LOAN, 10_000, currency = "USD")
 
-        assertEquals(
-            PAGO_MONEDAS_DISTINTAS,
-            validarPagoDeCuota(peticion("a1", "c2", 100), ahorros, amexUsd),
-        )
+        assertEquals(faltaElMontoEnLaDeuda("USD"), validarPagoDeCuota(peticion("a1", "c2", 1_008_902), ahorros, tarjetaUsd))
+        assertEquals(null, validarPagoDeCuota(peticion("a1", "c2", 1_008_902).copy(montoEnLaMonedaDeLaDeuda = 250), ahorros, tarjetaUsd))
+        assertEquals(PAGO_MONEDAS_DISTINTAS, validarPagoDeCuota(peticion("a1", "l2", 100).copy(montoEnLaMonedaDeLaDeuda = 1), ahorros, creditoUsd))
+    }
+
+    @Test
+    fun el_pago_entre_monedas_deja_cada_pata_en_su_moneda() {
+        val tarjetaUsd = Account("c2", "Master Black USD", AccountType.CREDIT_CARD, 1_257, currency = "USD")
+        val pedido = peticion("a1", "c2", 1_008_902).copy(montoEnLaMonedaDeLaDeuda = 250)
+        val desglose = desglosarCuota(250, AccountType.CREDIT_CARD, 1_257, null, null, null, yaCobradoEnElMes = 0L)
+        val (dinero, deuda) = pagoDeCuotaLegs(pedido, ahorros, tarjetaUsd, desglose)
+        assertEquals(1_008_902L to "COP", dinero.amount to dinero.currency)
+        assertEquals(250L to "USD", deuda.amount to deuda.currency)
     }
 
     @Test

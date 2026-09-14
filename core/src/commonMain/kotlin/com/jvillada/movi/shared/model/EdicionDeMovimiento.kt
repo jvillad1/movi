@@ -123,6 +123,11 @@ const val PATA_NO_CAMBIA_DE_CUENTA: String =
         "registrarlo desde Agregar. El monto y el concepto sí se pueden corregir aquí."
 
 /** Lo que la hoja le avisa al dueño antes de tocar el monto de una pata de un **traspaso**. */
+/** Por qué no se corrige el monto de un pago entre monedas (ver `PUT /api/events/{id}`). */
+const val MONTO_DE_UN_PAGO_ENTRE_MONEDAS: String =
+    "Es un pago entre monedas: los pesos y los dólares no se calculan uno del otro. Anúlalo y " +
+        "vuelve a registrarlo con los dos montos."
+
 const val MONTO_DE_UN_PAR_SE_MUEVE_JUNTO: String =
     "Es la mitad de un par: el monto se corrige en las dos mitades a la vez, para que la plata " +
         "que sale sea la misma que entra."

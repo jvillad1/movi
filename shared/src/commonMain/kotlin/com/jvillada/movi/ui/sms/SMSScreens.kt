@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.shared.model.inicioDeLaCuentaSiElSmsEsAnterior
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlin.math.roundToLong
 import androidx.compose.foundation.background
@@ -419,6 +420,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
         }
     }
 
+    // ¿El SMS es de antes de que la cuenta elegida arrancara en Movi? Se recalcula al cambiar de cuenta.
+    var antesDeLaCuenta by remember { mutableStateOf<kotlinx.datetime.LocalDate?>(null) }
+    LaunchedEffect(resolvedAccount?.id, currentSms?.time) {
+        val cuenta = resolvedAccount ?: run { antesDeLaCuenta = null; return@LaunchedEffect }
+        val cuando = currentSms?.time ?: return@LaunchedEffect
+        antesDeLaCuenta = runCatching { Repositories.wallets.getEvents(cuenta.id) }
+            .map { inicioDeLaCuentaSiElSmsEsAnterior(momentoDelSms(cuando, ahora = Clock.System.now().toEpochMilliseconds()), it) }
+            .getOrNull()
+    }
+
     fun ignore() {
         working = true
         error = null
@@ -474,6 +485,42 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                 modifier = Modifier.padding(start = 12.dp),
                             )
                         }
+                    }
+                }
+
+                antesDeLaCuenta?.let { inicio ->
+                    Spacer(Modifier.height(14.dp))
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(18.dp),
+                    ) {
+                        Text(
+                            "Este mensaje es de antes de que empezaras a llevar «${resolvedAccount?.name}» en Movi (desde el $inicio).",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Movi.colores.aviso,
+                            lineHeight = 18.sp,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Esa plata ya está dentro del saldo con el que arrancó la cuenta. Si lo confirmas, se cuenta dos veces.",
+                            fontSize = 12.5.sp,
+                            color = Movi.colores.textoMedio,
+                            lineHeight = 17.sp,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Ignorar este mensaje",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Movi.colores.marca,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Movi.colores.marca.copy(alpha = 0.16f))
+                                .clickable(enabled = !working) { ignore() }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
                     }
                 }
 
