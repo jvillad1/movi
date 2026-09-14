@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.MovimientoRechazado
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.Instant
 import com.jvillada.movi.shared.time.AppTimeZone
@@ -1000,6 +1001,17 @@ class LocalRepository(
      * monto es el caso inverso: que la fila se selle con un valor que el POST no llevaba. Acá el
      * POST lleva el valor del momento en que se arma, así que no hay ventana.
      */
+    /**
+     * **Lo que el server rechazó**: filas que nunca subieron y tienen el motivo que marcó el
+     * `SyncEngine` ante un 4xx. Un traspaso rechazado aparece por cada pata.
+     */
+    override suspend fun getMovimientosRechazados(): List<MovimientoRechazado> {
+        val uid = userId()
+        val types = accountTypes(uid)
+        return db.financialEventQueries.selectRechazados(uid).executeAsList()
+            .map { MovimientoRechazado(it.toModel(types), it.syncError.orEmpty()) }
+    }
+
     /**
      * **Confirmar un movimiento**, espejado en el teléfono. Mismo esqueleto que
      * [updateEventRepeats]: si todavía no llegó al server se confirma acá y el POST del

@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
@@ -427,11 +428,19 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
-    override suspend fun postEvent(event: FinancialEvent): FinancialEvent =
-        client.post("$baseUrl/api/events") {
+    // Sin `expectSuccess`, un 404/422 se intentaba deserializar como evento y reventaba con un error
+    // de JSON sin el código ni el motivo: el SyncEngine no podía distinguir «el server lo rechaza»
+    // de «no hubo red». Ahora el rechazo viaja como [ApiException] con el texto del server.
+    override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+        val response = client.post("$baseUrl/api/events") {
             contentType(ContentType.Application.Json)
             setBody(event)
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
 
     override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
         val url = if (accountId != null) "$baseUrl/api/events?accountId=$accountId"
@@ -502,6 +511,9 @@ class WalletRepositoryImpl(
     // Mismo idioma que updateEventTimestamp: el server rechaza con 404 (movimiento inexistente,
     // de otro usuario o anulado) y ese texto es lo único que le explica al dueño por qué no se
     // guardó.
+    // En la web no hay cola de subida: nada puede quedar rechazado.
+    override suspend fun getMovimientosRechazados(): List<MovimientoRechazado> = emptyList()
+
     // Mismo idioma que updateEventRepeats: el 404 (inexistente, de otro o anulado) viaja con su texto.
     override suspend fun confirmEvent(id: String): FinancialEvent {
         val response = client.put("$baseUrl/api/events/$id/confirm")

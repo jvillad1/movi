@@ -49,6 +49,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.platform.PushOptIn
+import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
@@ -432,6 +433,19 @@ fun cuantosPorConfirmar(days: List<EventDay>): Int =
  * aviso sería un botón que lleva a donde uno ya está. Ahí lo que corresponde es el encabezado que
  * dice en qué modo está y cómo salir (ver [MODO_POR_CONFIRMAR_TITULO]).
  */
+/**
+ * **El aviso de lo que no subió**, o `null` si todo subió. Lo que el server rechaza (la cuenta se
+ * borró desde la web, una categoría que no se puede anotar) se queda solo en este teléfono: se ve en
+ * Movimientos pero no llega al Inicio ni a la web. Antes el SyncEngine lo reintentaba en silencio
+ * para siempre; ahora se dice, con el motivo del server y el nombre del movimiento.
+ */
+fun textoDeRechazados(rechazados: List<MovimientoRechazado>): String? {
+    val primero = rechazados.firstOrNull() ?: return null
+    val cabeza = if (rechazados.size == 1) "«${primero.evento.description}» no se pudo subir"
+    else "${rechazados.size} movimientos no se pudieron subir"
+    return "$cabeza: ${primero.motivo} Solo está en este teléfono; corrígelo o anúlalo."
+}
+
 fun avisoDePorConfirmar(chip: Int, cuantos: Int): Boolean =
     cuantos > 0 && chip != CHIP_POR_CONFIRMAR
 
@@ -905,6 +919,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // Se prende solo cuando `getEventsByDay` contestó de verdad (ver [NoSePudoLeer]). Sin esto, una
     // lectura caída dejaba «Sin movimientos aún · + Registrar el primero» a quien tiene cientos.
     var diasLeidos by remember { mutableStateOf(false) }
+    /** Lo anotado en este teléfono que el server rechazó (ver [textoDeRechazados]). */
+    var rechazados by remember { mutableStateOf<List<MovimientoRechazado>>(emptyList()) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // F10: el estado vacío necesita saber si hay cuentas para elegir entre "+ Registrar el
@@ -966,6 +982,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             }
             .onFailure { e -> error = e.toUserMessage() }
         loading = false
+    }
+
+    LaunchedEffect(refreshKey, refreshTick) {
+        runCatching { Repositories.wallets.getMovimientosRechazados() }.onSuccess { rechazados = it }
     }
 
     LaunchedEffect(refreshKey, refreshTick) {
@@ -1457,6 +1477,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         // «Por confirmar» dejó de ser un chip y es esto: un aviso que **solo existe cuando hay
         // algo que confirmar**. Ver [CHIPS_VISIBLES] para el porqué, y [avisoDePorConfirmar] para
         // cuándo se pinta. Mismo camino que los candidatos de pago de tarjeta, acá abajo.
+        textoDeRechazados(rechazados)?.let { texto ->
+            MinCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                variant = MinCardVariant.Default,
+                padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text(text = texto, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
+            }
+        }
         val porConfirmar = cuantosPorConfirmar(allDays)
         if (avisoDePorConfirmar(activeFilter, porConfirmar)) {
             MinCard(

@@ -1,0 +1,9 @@
+-- Migración 9 → 10: agrega financial_event.syncError — **por qué el server rechazó este movimiento**.
+--
+-- El SyncEngine reintentaba cada 30 segundos, para siempre, un movimiento que el server rechazaba
+-- (la cuenta se borró desde la web, una categoría que no se puede anotar) y solo lo escribía en el
+-- log: el movimiento se veía en Movimientos del teléfono pero nunca llegaba al Inicio ni a la web, y
+-- nadie se enteraba. Con el motivo guardado, la pantalla lo dice.
+--
+-- Nullable y sin default: `null` es «no hubo rechazo», que es lo que vale para todo lo que ya está.
+ALTER TABLE financial_event ADD COLUMN syncError TEXT;

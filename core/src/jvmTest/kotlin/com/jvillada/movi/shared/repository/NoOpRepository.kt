@@ -340,6 +340,8 @@ open class NoOpRepository(
      * Mismo criterio que [updateEventTimestamp]: 404 para un evento que no está en
      * [knownEventIds], y para el que sí conoce, el evento que ya tenía con la marca aplicada.
      */
+    override suspend fun getMovimientosRechazados(): List<com.jvillada.movi.shared.model.MovimientoRechazado> = emptyList()
+
     override suspend fun confirmEvent(id: String): FinancialEvent {
         if (id !in knownEventIds) throw ApiException(404)
         val previo = eventosDelServer.firstOrNull { it.id == id }

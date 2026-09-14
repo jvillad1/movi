@@ -58,7 +58,11 @@ CREATE TABLE financial_event (
     noSeRepite              INTEGER NOT NULL DEFAULT 0,
     -- La moneda del movimiento. No estaba: el SyncEngine armaba el POST sin ella y todo lo anotado
     -- en el teléfono sobre una cuenta en dólares llegaba al server como pesos. Migración 8.sqm.
-    currency                TEXT    NOT NULL DEFAULT 'COP'
+    currency                TEXT    NOT NULL DEFAULT 'COP',
+    -- Por qué el server rechazó este movimiento al subirlo (un 4xx), o NULL. Lo escribe el
+    -- SyncEngine y lo lee Movimientos para avisar. Un INSERT OR REPLACE (cualquier corrección local)
+    -- lo limpia, y el próximo ciclo vuelve a intentar. Migración 9.sqm.
+    syncError               TEXT
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -83,6 +87,14 @@ ORDER BY timestamp DESC;
 -- LocalRepository.createTransfer), así que nunca deberían salir por acá. La condición es la red
 -- de seguridad de esa promesa — este ciclo empuja de a un evento, y subir una pata sin la otra
 -- dejaría medio traspaso en el server. Ver SyncEngine.syncEvents.
+markSyncError:
+UPDATE financial_event SET syncError = :syncError WHERE id = :id AND userId = :userId;
+
+-- Lo que el server rechazó y todavía no subió (ver migración 9.sqm).
+selectRechazados:
+SELECT * FROM financial_event
+WHERE syncedAt IS NULL AND length(syncError) > 0 AND userId = :userId;
+
 selectUnsynced:
 SELECT * FROM financial_event
 WHERE syncedAt IS NULL AND userId = :userId AND transferId IS NULL;

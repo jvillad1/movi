@@ -132,6 +132,49 @@ class SyncEngineTest {
         assertEquals("USD", remote.pushedEvents.single { it.id == "ev-usd" }.currency, "y la sube")
     }
 
+    /** Un 422 del server se reintentaba cada 30 s para siempre sin avisar. Ahora queda el motivo. */
+    @Test
+    fun syncEvents_guarda_el_motivo_cuando_el_server_rechaza_el_movimiento() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-rechazo", "Efectivo", AccountType.CASH, 0L))
+        val remote = object : NoOpRepository() {
+            var fallo = true
+            override suspend fun createAccount(account: Account): Account = account
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent =
+                if (fallo) throw ApiException(422, "Esa categoría no se puede anotar.") else event
+        }
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+        local.postEvent(event("ev-rechazado", "acc-rechazo", TransactionType.EXPENSE, 9_000L))
+
+        engine.syncEvents()
+        val rechazado = local.getMovimientosRechazados().single()
+        assertEquals("ev-rechazado", rechazado.evento.id)
+        assertEquals("Esa categoría no se puede anotar.", rechazado.motivo)
+
+        // Cuando por fin sube, deja de mostrarse.
+        remote.fallo = false
+        engine.syncEvents()
+        assertTrue(local.getMovimientosRechazados().isEmpty())
+    }
+
+    /** Sin red no es un rechazo, y el 404 de una cuenta que todavía no subió tampoco. */
+    @Test
+    fun syncEvents_no_marca_rechazo_por_red_ni_por_cuenta_sin_subir() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-offline", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-offline", "acc-offline", TransactionType.EXPENSE, 9_000L))
+
+        SyncEngine(db = db, remote = OrderSensitiveRemote(), userId = { testUserId }).syncEvents()
+        SyncEngine(db = db, remote = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent = throw IllegalStateException("sin red")
+        }, userId = { testUserId }).syncEvents()
+
+        assertTrue(local.getMovimientosRechazados().isEmpty())
+    }
+
     @Test
     fun syncAccounts_antes_que_syncEvents_permite_que_el_evento_de_una_cuenta_offline_llegue() = runBlocking {
         val db = createDatabase("sync-test.db")

@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
@@ -278,6 +279,12 @@ interface WalletRepository {
      * Lanza [ApiException] con 404 si el movimiento no existe, es de otro usuario o está anulado.
      */
     suspend fun confirmEvent(id: String): FinancialEvent
+
+    /**
+     * **Los movimientos anotados en este teléfono que el server rechazó** y por qué. En la web no hay
+     * nada que subir: lista vacía. Ver migración 9.sqm.
+     */
+    suspend fun getMovimientosRechazados(): List<MovimientoRechazado>
 
     /**
      * **Corrige el monto, la cuenta y el concepto de un movimiento ya registrado**
