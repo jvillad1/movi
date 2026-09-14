@@ -521,6 +521,9 @@ fun Route.creditRoutes() {
             // El saldo ANTES de esta cuota, por moneda y sin la fila de este mismo mes: igual que
             // en la ruta del pago, un reintento no puede calcular el interés sobre la deuda ya
             // bajada.
+            val vencimientoDelPeriodo = java.time.YearMonth.parse(periodo).let { m ->
+                m.atDay(terms.dayOfMonth.coerceIn(1, m.lengthOfMonth()))
+            }
             val saldoAntes = loadNonVoidedEvents(uid, accountId)
                 .filter { it.id != idDelMes && it.currency == cuenta.currency }
                 .sumOf { signedDelta(AccountType.LOAN, it.type, it.amount) }
@@ -532,9 +535,12 @@ fun Route.creditRoutes() {
                 seguroMensual = terms.insuranceMonthly,
                 otrosCargosMensuales = terms.otrosCargosMensuales,
                 interesReal = pedido.interesReal,
+                // La cuota de [periodo], no la del mes de hoy: registrar el 2 de septiembre la cuota de
+                // agosto no puede descontar lo que ya cobró… septiembre.
                 yaCobradoEnElMes = cargosYaCobradosEnElMes(
                     loadNonVoidedEvents(uid, accountId).filter { it.id != idDelMes && it.currency == cuenta.currency },
-                    AppClock.today(),
+                    vencimientoDelPeriodo,
+                    terms.dayOfMonth,
                 ) { null },
             )
             val amortiza = desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL
@@ -555,7 +561,9 @@ fun Route.creditRoutes() {
                 } else {
                     base
                 },
-                timestamp = ahora,
+                // En el día de SU cuota, no en el de hoy: la de agosto registrada el 2 de septiembre
+                // aparecía en septiembre en Movimientos y contaba como cargo ya cobrado de septiembre.
+                timestamp = minOf(ahora, appDateToEpochMillis(vencimientoDelPeriodo) + MEDIODIA_MILLIS),
                 source = EventSource.MANUAL,
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
                 createdAt = ahora,

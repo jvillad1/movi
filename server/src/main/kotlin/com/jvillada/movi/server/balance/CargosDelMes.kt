@@ -22,14 +22,42 @@ import java.time.YearMonth
 fun cargosYaCobradosEnElMes(
     eventosDeLaDeuda: List<FinancialEvent>,
     fecha: LocalDate,
+    /**
+     * El día de pago del crédito, si se conoce. Con él, «el mismo mes» pasa a ser **la misma cuota**
+     * ([cuotaMasCercana]) y no el mismo mes de calendario. Sin él (un crédito sin términos), el mes.
+     */
+    diaDePago: Int? = null,
     montoPagadoDelPar: (FinancialEvent) -> Long?,
 ): Long {
-    val mes = YearMonth.from(fecha)
+    val claveDe: (LocalDate) -> String =
+        if (diaDePago == null) { d -> YearMonth.from(d).toString() } else { d -> cuotaMasCercana(d, diaDePago) }
+    val clave = claveDe(fecha)
     return eventosDeLaDeuda
-        .filter { it.noAmortiza != null && YearMonth.from(epochMillisToAppDate(it.timestamp)) == mes }
+        .filter { it.noAmortiza != null && claveDe(epochMillisToAppDate(it.timestamp)) == clave }
         .sumOf { fila ->
             val guardado = fila.noAmortiza ?: 0L
             val pagado = montoPagadoDelPar(fila)
             if (pagado == null) guardado else minOf(guardado, pagado)
         }
+}
+
+/**
+ * **A qué cuota corresponde un pago hecho el [fecha]**: la del vencimiento más cercano, antes o
+ * después (`"AAAA-MM"` del mes de ese vencimiento). Empate: la que viene.
+ *
+ * Existe porque agrupar por mes de calendario rompía el interés de los créditos que vencen cerca de
+ * fin de mes o se pagan tarde: la cuota de julio (día 30) pagada el 2 de agosto quedaba «en agosto»,
+ * y la de agosto pagada el 28 veía ese interés como ya cobrado — capital de más, deuda de menos. Un
+ * pago entre dos vencimientos es ambiguo por naturaleza (atrasado o adelantado); el más cercano
+ * acierta en los dos casos reales —unos días tarde o unos días antes— y solo duda a mitad de mes.
+ */
+fun cuotaMasCercana(fecha: LocalDate, diaDePago: Int): String {
+    val mes = YearMonth.from(fecha)
+    fun venc(m: YearMonth) = m.atDay(diaDePago.coerceIn(1, m.lengthOfMonth()))
+    val candidatos = listOf(venc(mes.minusMonths(1)), venc(mes), venc(mes.plusMonths(1)))
+    val masCercano = candidatos.minWith(
+        compareBy<LocalDate> { kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(fecha, it)) }
+            .thenByDescending { it },
+    )
+    return YearMonth.from(masCercano).toString()
 }

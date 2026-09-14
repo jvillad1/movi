@@ -178,7 +178,8 @@ fun Route.pagoDeCuotaRoutes() {
                             .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debt.id) }
                             .associate { it[Events.transferId]!! to it[Events.amount] }
                     }
-                    cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp)) { fila ->
+                    // Por CUOTA, no por mes de calendario: ver `cuotaMasCercana`.
+                    cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp), terms?.dayOfMonth) { fila ->
                         fila.transferId?.let { pagadoPorPar[it] }
                     }
                 },
