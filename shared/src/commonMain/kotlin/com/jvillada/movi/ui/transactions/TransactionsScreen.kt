@@ -106,7 +106,6 @@ import com.jvillada.movi.ui.recurrentes.ocurrenciasAbiertasSinUrgencia
 import com.jvillada.movi.ui.recurrentes.ocurrenciasSelladas
 import com.jvillada.movi.ui.recurrentes.proximosQueUrgen
 import com.jvillada.movi.ui.recurrentes.quitarBorraLaSuscripcion
-import com.jvillada.movi.ui.recurrentes.reglasSinteticas
 import com.jvillada.movi.ui.recurrentes.resumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.shouldShowReminderWarning
 import com.jvillada.movi.ui.recurrentes.subtituloDelFlujoLibre
@@ -1114,8 +1113,16 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // cambio entran al «Flujo libre». Quién de ellas suma lo decide `cuentaComoCompromisoMensual`
     // adentro de `resumenRecurrentes` —la de una tarjeta no, la de un crédito de pago único
     // tampoco—, no este llamado. Ver [reglasSinteticas].
-    val reglasParaElResumen = remember(reglasRecurrentes, upcomingRecurrentes) {
-        reglasRecurrentes + reglasSinteticas(upcomingRecurrentes)
+    //
+    // **Y las del dueño también salen de ahí**, no de `reglasRecurrentes`. Esa lista viene del
+    // cache de sesión de `RecurringOfferGate`: no se refresca si la regla cambió en otro dispositivo
+    // y, si su lectura falló, queda VACÍA en silencio — el chip perdía el sueldo y mostraba «libre al
+    // mes» en −$4.398.426 mientras el Inicio decía +$601.574. `/api/payments/upcoming` trae todas las
+    // reglas (reales y sintéticas), fresco cada vez que se activa el chip, y es exactamente lo que
+    // usa el Inicio (`quickLinkFigure("recurrentes")`): misma fuente, misma cifra. La cifra ya espera
+    // a `vencimientosOk`, así que sin esa respuesta no se pinta.
+    val reglasParaElResumen = remember(upcomingRecurrentes) {
+        upcomingRecurrentes.map { it.rule }
     }
     val resumenRecurrentesDelChip = if (subsParaRecurrentesOk) {
         resumenRecurrentes(reglasParaElResumen, subsParaRecurrentes)
