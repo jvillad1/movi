@@ -515,23 +515,19 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     ) {
                         Text(
                             "Este mensaje es de antes de que empezaras a llevar «${resolvedAccount?.name}» en Movi (desde el $inicio).",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium,
+                            style = Movi.textos.cuerpo,
                             color = Movi.colores.aviso,
-                            lineHeight = 18.sp,
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
                             "Esa plata ya está dentro del saldo con el que arrancó la cuenta. Si lo confirmas, se cuenta dos veces.",
-                            fontSize = 12.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            lineHeight = 17.sp,
                         )
                         Spacer(Modifier.height(10.dp))
                         Text(
                             "Ignorar este mensaje",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium,
+                            style = Movi.textos.cuerpo,
                             color = Movi.colores.marca,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
