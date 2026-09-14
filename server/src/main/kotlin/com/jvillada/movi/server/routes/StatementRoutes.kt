@@ -13,6 +13,7 @@ import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.StatementImports
+import com.jvillada.movi.server.db.StatementImportMatches
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.Documento
@@ -292,12 +293,19 @@ fun Route.statementRoutes() {
         var reconciledCount = 0
 
         var sinFecha = 0
+        // Dos filas confirmadas contra el MISMO movimiento: la segunda es otra compra real.
+        //
+        // **Y lo que este mismo importe CREA tampoco es pareja de nadie.** Las filas nuevas se crean
+        // antes que las conciliaciones, y una conciliación cuya propuesta era de otra cuenta busca
+        // su pareja en la del extracto: con dos Uber de $15.000 el mismo día (uno anotado en Nequi),
+        // la búsqueda de la fila 1 caía sobre el evento que la fila 2 acababa de crear, y entraba
+        // un solo viaje. Por eso cada id creado entra al mismo conjunto de «ya usados».
+        val reconciliadosEnEsteImporte = mutableSetOf<String>()
         for (tx in decision.imports) {
-            if (createEventFromParsed(tx, decision.accountId, uid, importId)) importedCount++ else sinFecha++
+            val creado = createEventFromParsed(tx, decision.accountId, uid, importId)
+            if (creado != null) { importedCount++; reconciliadosEnEsteImporte += creado } else sinFecha++
         }
 
-        // Dos filas confirmadas contra el MISMO movimiento: la segunda es otra compra real.
-        val reconciliadosEnEsteImporte = mutableSetOf<String>()
         for (dec in decision.reconciliations) {
             if (dec.confirm) {
                 // **La pareja tiene que estar en la cuenta del extracto.** Si la propuesta era de otra
@@ -371,6 +379,15 @@ fun Route.statementRoutes() {
                             // ahí como duplicado borraba el único registro de la compra.
                             it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
                         }
+                        // Pero el vínculo de ESTE importe queda escrito: si no, deshacer el
+                        // anterior anulaba el movimiento aunque este importe todavía lo reclamara.
+                        if (importeAnterior != null && importeAnterior != importId) {
+                            StatementImportMatches.insert {
+                                it[StatementImportMatches.importId] = importId
+                                it[StatementImportMatches.eventId]  = parejaId!!
+                                it[StatementImportMatches.userId]   = uid
+                            }
+                        }
                     }
                     reconciliadosEnEsteImporte += parejaId!!
 
@@ -384,10 +401,12 @@ fun Route.statementRoutes() {
                 } else {
                     // No es el mismo movimiento (otra cuenta, o ya usado en este importe): la fila
                     // del extracto es un movimiento real y entra como nuevo en vez de perderse.
-                    if (createEventFromParsed(dec.parsed, decision.accountId, uid, importId)) importedCount++ else sinFecha++
+                    val creado = createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
+                    if (creado != null) { importedCount++; reconciliadosEnEsteImporte += creado } else sinFecha++
                 }
             } else {
-                if (createEventFromParsed(dec.parsed, decision.accountId, uid, importId)) importedCount++ else sinFecha++
+                val creado = createEventFromParsed(dec.parsed, decision.accountId, uid, importId)
+                if (creado != null) { importedCount++; reconciliadosEnEsteImporte += creado } else sinFecha++
             }
         }
 
@@ -449,8 +468,27 @@ fun Route.statementRoutes() {
             val delImporte = Events.selectAll()
                 .where { (Events.userId eq uid) and (Events.statementImportId eq importId) }
                 .map { it[Events.id] to it[Events.eventSource] }
+            // **Lo que otro importe vivo también concilió no se anula: pasa a ese importe.**
+            // Reimportar el mismo extracto deja el movimiento apuntando al primero; sin esto,
+            // deshacer el primero anulaba compras que el segundo todavía reclamaba. Solo quedan
+            // filas de importes vivos: deshacer uno borra las suyas (abajo).
+            StatementImportMatches.deleteWhere {
+                (StatementImportMatches.importId eq importId) and (StatementImportMatches.userId eq uid)
+            }
+            val idsDelImporte = delImporte.map { it.first }
+            val heredero = if (idsDelImporte.isEmpty()) emptyMap() else StatementImportMatches.selectAll()
+                .where { (StatementImportMatches.userId eq uid) and (StatementImportMatches.eventId inList idsDelImporte) }
+                .map { it[StatementImportMatches.eventId] to it[StatementImportMatches.importId] }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, importes) -> importes.max() }
+            heredero.forEach { (eventId, otroImporte) ->
+                Events.update({ (Events.userId eq uid) and (Events.id eq eventId) }) { it[statementImportId] = otroImporte }
+                StatementImportMatches.deleteWhere {
+                    (StatementImportMatches.importId eq otroImporte) and (StatementImportMatches.eventId eq eventId)
+                }
+            }
             val ahora = System.currentTimeMillis()
-            delImporte.filter { (id, origen) -> origen == EventSource.STATEMENT.name && id !in anulados }.forEach { (id, _) ->
+            delImporte.filter { (id, origen) -> origen == EventSource.STATEMENT.name && id !in anulados && id !in heredero }.forEach { (id, _) ->
                 VoidEvents.insert {
                     it[VoidEvents.id] = "void_${UUID.randomUUID()}"
                     it[VoidEvents.userId] = uid
@@ -459,7 +497,7 @@ fun Route.statementRoutes() {
                     it[VoidEvents.timestamp] = ahora
                 }
             }
-            val conciliados = delImporte.filter { (_, origen) -> origen != EventSource.STATEMENT.name }.map { it.first }
+            val conciliados = delImporte.filter { (id, origen) -> origen != EventSource.STATEMENT.name && id !in heredero }.map { it.first }
             if (conciliados.isNotEmpty()) {
                 Events.update({ (Events.userId eq uid) and (Events.id inList conciliados) }) { it[statementImportId] = null }
             }
@@ -507,11 +545,12 @@ fun Route.statementRoutes() {
     }
 }
 
-private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String, importId: String): Boolean {
+/** El id del evento creado, o `null` si la fila no tenía una fecha legible y se saltó. */
+private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: String, uid: String, importId: String): String? {
     // **Sin fecha no se inventa hoy.** Una fila cuya fecha no se entiende caía en el día del
     // importe: otro mes, y fuera del emparejamiento de duplicados. Se salta y se cuenta, para que
     // la respuesta diga cuántas quedaron afuera.
-    val dia = fechaDelExtracto(tx.date) ?: return false
+    val dia = fechaDelExtracto(tx.date) ?: return null
     val eventId = "ev_${UUID.randomUUID()}"
     // La fecha del extracto es un día civil de Bogotá: se sella a SU medianoche (no a la de
     // UTC), para que al agrupar por día/mes vuelva a caer en el mismo día.
@@ -582,7 +621,7 @@ private suspend fun createEventFromParsed(tx: ParsedTransaction, accountId: Stri
             it[createdAt]            = System.currentTimeMillis()
         }
     }
-    return true
+    return eventId
 }
 
 private fun rowToStatementImport(row: ResultRow) = StatementImport(
