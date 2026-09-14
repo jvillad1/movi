@@ -427,13 +427,6 @@ fun cuantosPorConfirmar(days: List<EventDay>): Int =
     days.sumOf { dia -> dia.items.count { it.reconciliationStatus == ReconciliationStatus.UNCONFIRMED } }
 
 /**
- * ¿Se pinta el aviso de «por confirmar» arriba de la lista?
- *
- * Solo si hay algo que confirmar **y** no se está mirando ya esa bandeja: adentro de ella el
- * aviso sería un botón que lleva a donde uno ya está. Ahí lo que corresponde es el encabezado que
- * dice en qué modo está y cómo salir (ver [MODO_POR_CONFIRMAR_TITULO]).
- */
-/**
  * **El aviso de lo que no subió**, o `null` si todo subió. Lo que el server rechaza (la cuenta se
  * borró desde la web, una categoría que no se puede anotar) se queda solo en este teléfono: se ve en
  * Movimientos pero no llega al Inicio ni a la web. Antes el SyncEngine lo reintentaba en silencio
@@ -446,6 +439,13 @@ fun textoDeRechazados(rechazados: List<MovimientoRechazado>): String? {
     return "$cabeza: ${primero.motivo} Solo está en este teléfono; corrígelo o anúlalo."
 }
 
+/**
+ * ¿Se pinta el aviso de «por confirmar» arriba de la lista?
+ *
+ * Solo si hay algo que confirmar **y** no se está mirando ya esa bandeja: adentro de ella el
+ * aviso sería un botón que lleva a donde uno ya está. Ahí lo que corresponde es el encabezado que
+ * dice en qué modo está y cómo salir (ver [MODO_POR_CONFIRMAR_TITULO]).
+ */
 fun avisoDePorConfirmar(chip: Int, cuantos: Int): Boolean =
     cuantos > 0 && chip != CHIP_POR_CONFIRMAR
 
@@ -620,7 +620,10 @@ fun matchesChip(
     CHIP_GASTOS -> event.type == TransactionType.EXPENSE &&
         event.countsAsCashFlow &&
         event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED
-    CHIP_INGRESOS -> event.type == TransactionType.INCOME && event.countsAsCashFlow
+    // Igual que Gastos: lo que entró solo espera en «Por confirmar» y no se suma hasta confirmarlo.
+    CHIP_INGRESOS -> event.type == TransactionType.INCOME &&
+        event.countsAsCashFlow &&
+        event.reconciliationStatus != ReconciliationStatus.UNCONFIRMED
     CHIP_POR_CONFIRMAR -> event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
     CHIP_RECURRENTES -> nombreRecurrenteDe(event, reglas, nombresDeSuscripcionesActivas) != null

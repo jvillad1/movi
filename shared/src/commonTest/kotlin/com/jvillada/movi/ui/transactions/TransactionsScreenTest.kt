@@ -119,6 +119,8 @@ class TransactionsScreenTest {
             category = "Salario",
             description = "Nomina agosto",
             timestamp = 0L,
+            // Como la guarda el server: lo anotado a mano llega confirmado (EventRoutes POST).
+            reconciliationStatus = com.jvillada.movi.shared.model.ReconciliationStatus.RECONCILED,
         )
         assertTrue(matchesChip(nomina, CHIP_INGRESOS))
     }
