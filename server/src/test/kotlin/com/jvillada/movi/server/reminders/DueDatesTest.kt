@@ -137,9 +137,10 @@ class DueDatesTest {
     }
 
     @Test fun `con corte 25 un pago del 28 sin registrar sigue vencido dentro de la gracia al cambiar de mes`() {
-        // Por calendario, el 2-sep ya saltaba al 28-sep y el 28-ago se daba por hecho en silencio.
+        // Por calendario, el 2-sep saltaba al 28-sep y el 28-ago se daba por hecho en silencio.
+        // Desde `ocurrenciaEnGracia` tampoco pasa por calendario: los dos dicen 28-ago.
         val hoy = LocalDate.of(2026, 9, 2)
-        assertEquals(LocalDate.of(2026, 9, 28), dueDateFor(rule(28), hoy))
+        assertEquals(LocalDate.of(2026, 8, 28), dueDateFor(rule(28), hoy))
         val due = dueDateFor(rule(28), hoy, settings = corte25)
         assertEquals(LocalDate.of(2026, 8, 28), due)
         assertEquals(PaymentStatus.OVERDUE, statusFor(due, hoy, 3))
@@ -164,6 +165,86 @@ class DueDatesTest {
         // Octubre arrancó el 22-sep: el 23-sep ya es octubre, y el pago del 23 en juego es el 23-sep.
         val settings = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25, iniciosPropios = mapOf("2026-10" to "2026-09-22"))
         assertEquals(LocalDate.of(2026, 9, 23), ocurrenciaEnJuego(LocalDate.of(2026, 9, 23), 23, settings))
+    }
+
+    // ── La ocurrencia del período anterior sigue en gracia ────────────────────
+
+    @Test fun `con corte 25 un pago del 24 sin registrar sigue vencido del 25 al 29`() {
+        // El 25-sep arranca «octubre» (25-sep a 24-oct), pero el 24-sep todavía está en gracia.
+        for (dia in 25..29) {
+            val hoy = LocalDate.of(2026, 9, dia)
+            val due = dueDateFor(rule(24), hoy, settings = corte25)
+            assertEquals(LocalDate.of(2026, 9, 24), due, "hoy $hoy")
+            assertEquals(PaymentStatus.OVERDUE, statusFor(due, hoy, 3), "hoy $hoy")
+            assertEquals("2026-09", reminderKeyFor(rule(24), hoy, settings = corte25), "hoy $hoy")
+        }
+        // El 30 ya son 6 días: rueda al 24-oct.
+        val hoy = LocalDate.of(2026, 9, 30)
+        val due = dueDateFor(rule(24), hoy, settings = corte25)
+        assertEquals(LocalDate.of(2026, 10, 24), due)
+        assertEquals(PaymentStatus.UPCOMING, statusFor(due, hoy, 3))
+    }
+
+    @Test fun `con corte 25 un pago del 24 ya sellado rueda enseguida`() {
+        val hoy = LocalDate.of(2026, 9, 25)
+        assertEquals(
+            LocalDate.of(2026, 10, 24),
+            dueDateFor(rule(24), hoy, occurredPeriods = setOf("2026-09"), settings = corte25),
+        )
+        assertTrue(
+            selectDueForReminder(listOf(rule(24) to null), hoy, 3, mapOf(rule(24).id to setOf("2026-09")), corte25).isEmpty(),
+        )
+    }
+
+    @Test fun `el vencido en gracia del periodo anterior entra al barrido de avisos`() {
+        val hoy = LocalDate.of(2026, 9, 26)
+        assertEquals(listOf(rule(24).id), selectDueForReminder(listOf(rule(24) to null), hoy, 3, settings = corte25).map { it.id })
+        // Ya avisado por ese vencimiento (clave «2026-09»): no se repite.
+        assertTrue(selectDueForReminder(listOf(rule(24) to "2026-09"), hoy, 3, settings = corte25).isEmpty())
+    }
+
+    @Test fun `por calendario un pago del 30 sigue vencido el 2 del mes siguiente`() {
+        val hoy = LocalDate.of(2026, 10, 2)
+        val due = dueDateFor(rule(30), hoy)
+        assertEquals(LocalDate.of(2026, 9, 30), due)
+        assertEquals(PaymentStatus.OVERDUE, statusFor(due, hoy, 3))
+        val out = upcomingPayments(listOf(rule(30)), hoy, 3).single()
+        assertEquals("2026-09-30", out.dueDate)
+        assertEquals(-2, out.daysUntil)
+        // Sellado, rueda al 30-oct como siempre.
+        assertEquals(LocalDate.of(2026, 10, 30), dueDateFor(rule(30), hoy, occurredPeriods = setOf("2026-09")))
+    }
+
+    @Test fun `una regla que arranco despues del vencimiento en gracia no lo trae de vuelta`() {
+        val desdeEl25 = rule(24).copy(activeFrom = "2026-09-25")
+        assertEquals(LocalDate.of(2026, 10, 24), dueDateFor(desdeEl25, LocalDate.of(2026, 9, 26), settings = corte25))
+        assertEquals(LocalDate.of(2026, 10, 24), ocurrenciaPorPreguntar(LocalDate.of(2026, 9, 26), desdeEl25, corte25))
+    }
+
+    @Test fun `el endpoint de ocurrencias sigue preguntando por el vencido en gracia`() {
+        // Corte 25, día 24: del 25 al 29 se pregunta por el 24-sep (con «Ya lo pagué»).
+        for (dia in 25..29) {
+            assertEquals(LocalDate.of(2026, 9, 24), ocurrenciaPorPreguntar(LocalDate.of(2026, 9, dia), rule(24), corte25))
+        }
+        // El 30 ya es la del período en curso, que todavía no llegó (el endpoint no pregunta).
+        assertEquals(LocalDate.of(2026, 10, 24), ocurrenciaPorPreguntar(LocalDate.of(2026, 9, 30), rule(24), corte25))
+        // Por calendario, día 30: el 2-oct sigue siendo el 30-sep.
+        val cal = com.jvillada.movi.shared.model.PeriodSettings()
+        assertEquals(LocalDate.of(2026, 9, 30), ocurrenciaPorPreguntar(LocalDate.of(2026, 10, 2), rule(30), cal))
+        // Y cuando no hay nada en gracia, es exactamente la ocurrencia en juego de siempre.
+        assertEquals(ocurrenciaEnJuego(LocalDate.of(2026, 9, 20), 28, corte25), ocurrenciaPorPreguntar(LocalDate.of(2026, 9, 20), rule(28), corte25))
+        assertEquals(ocurrenciaEnJuego(LocalDate.of(2026, 9, 2), 28, corte25), ocurrenciaPorPreguntar(LocalDate.of(2026, 9, 2), rule(28), corte25))
+    }
+
+    @Test fun `los candidatos del vencido en gracia salen de su propia ventana`() {
+        // El pago del 24-sep anotado el 23-sep (antes del corte) se sigue proponiendo el 26-sep.
+        val evento = com.jvillada.movi.shared.model.FinancialEvent(
+            id = "ev_1", accountId = "acc", type = TransactionType.EXPENSE, amount = 1000,
+            currency = "COP", category = "Otros", description = "Pago",
+            timestamp = com.jvillada.movi.server.time.appDateToEpochMillis(LocalDate.of(2026, 9, 23)) + 12 * 3_600_000L,
+        )
+        val due = ocurrenciaPorPreguntar(LocalDate.of(2026, 9, 26), rule(24), corte25)!!
+        assertEquals(listOf("ev_1"), occurrenceCandidatesFor(rule(24), due, listOf(evento), settings = corte25).map { it.id })
     }
 
     @Test fun `con corte 1 nada cambia`() {

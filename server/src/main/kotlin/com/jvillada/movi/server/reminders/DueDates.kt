@@ -88,6 +88,52 @@ fun ocurrenciaEnJuego(hoy: LocalDate, dayOfMonth: Int, settings: PeriodSettings,
 }
 
 /**
+ * **La última ocurrencia que ya llegó** (en [hoy] o antes), si lleva como mucho [graceDays] días de
+ * atraso; `null` si la última ya pasó la gracia.
+ *
+ * Existe por el cambio de período. Con corte 25, un pago del día 24 que no se registró el 24 de
+ * septiembre desaparecía el 25: el período nuevo (25-sep a 24-oct) solo contiene el 24 de octubre,
+ * así que [dueDateFor] decía «vence en un mes» y `/api/payments/occurrences` dejaba de ofrecer
+ * «Ya lo pagué» **al día siguiente del vencimiento**. Lo mismo pasaba por calendario con los días
+ * 27-31 en los primeros días del mes. La gracia existe justamente para ese atraso; el borde del
+ * período no puede cortarla.
+ *
+ * No mira el período a propósito: la gracia se cuenta en días desde el vencimiento, y un
+ * recurrente mensual tiene a lo sumo una ocurrencia dentro de cinco días hacia atrás.
+ */
+fun ocurrenciaEnGracia(hoy: LocalDate, dayOfMonth: Int, graceDays: Int = DEFAULT_GRACE_DAYS): LocalDate? {
+    val mes = YearMonth.from(hoy)
+    val enEsteMes = occurrenceInMonth(mes, dayOfMonth)
+    val ultima = if (enEsteMes.isAfter(hoy)) occurrenceInMonth(mes.minusMonths(1), dayOfMonth) else enEsteMes
+    return ultima.takeIf { ChronoUnit.DAYS.between(it, hoy) <= graceDays }
+}
+
+/**
+ * **La ocurrencia sobre la que `/api/payments/occurrences` pregunta hoy**: la que está en juego en
+ * el período ([ocurrenciaEnJuego]) salvo que la del período anterior siga dentro de la gracia y la
+ * del período en curso todavía no haya llegado. En ese caso la pregunta sigue siendo por la
+ * anterior —con su «Ya lo pagué» si está abierta, o con su «Deshacer» si ya se selló— hasta que
+ * pase la gracia, igual que [dueDateFor] la sigue mostrando vencida.
+ *
+ * No se mira si la anterior está sellada para elegirla: sellarla no puede hacer desaparecer el
+ * «Deshacer» un segundo después del toque. Lo que sí rueda con el sello es «Próximos».
+ */
+fun ocurrenciaPorPreguntar(
+    hoy: LocalDate,
+    rule: RecurringRule,
+    settings: PeriodSettings,
+    graceDays: Int = DEFAULT_GRACE_DAYS,
+    zone: ZoneId = AppClock.zone,
+): LocalDate? {
+    val enJuego = ocurrenciaEnJuego(hoy, rule.dayOfMonth, settings, zone)
+    val enGracia = ocurrenciaEnGracia(hoy, rule.dayOfMonth, graceDays)
+    val usarLaDeGracia = enGracia != null &&
+        ruleIsActiveOn(rule, enGracia) &&
+        (enJuego == null || (enGracia.isBefore(enJuego) && enJuego.isAfter(hoy)))
+    return if (usarLaDeGracia) enGracia else enJuego
+}
+
+/**
  * Clave de dedupe del vencimiento actual de una regla.
  *
  * Es el periodo del vencimiento vigente (no el de hoy), calculado con la misma [dueDateFor] que
@@ -149,6 +195,10 @@ private const val MAX_OCCURRENCE_ROLLS: Int = 24
  * se perdía: el 2 de septiembre, un pago del día 28 que no se registró el 28 de agosto seguía
  * dentro de la gracia, pero el cálculo por calendario ya saltaba al 28 de septiembre y lo daba por
  * hecho sin que nadie lo dijera. Ahora se sigue viendo vencido hasta que pase la gracia o se marque.
+ *
+ * Y lo mismo **cuando la ocurrencia quedó en el período anterior** ([ocurrenciaEnGracia]): con corte
+ * 25, un pago del 24 sin registrar sigue vencido el 25, el 26… hasta el 29, y el 30 rueda al 24 de
+ * octubre. Por calendario, un pago del 30 sigue vencido el 2 del mes siguiente.
  */
 fun dueDateFor(
     rule: RecurringRule,
@@ -163,7 +213,23 @@ fun dueDateFor(
         // Un período sin ocurrencia (acortado a mano) arranca por la primera que venga después.
         primeraOcurrenciaDesde(diasDelPeriodo(today, settings).start, rule.dayOfMonth)
     }
-    var due = if (ChronoUnit.DAYS.between(natural, today) > graceDays) {
+    val inicio = rule.activeFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    // **Antes de rodar hacia adelante, la ocurrencia anterior que sigue en gracia.**
+    //
+    // `natural` sale del período que contiene hoy, así que al cambiar de período la ocurrencia de
+    // ayer ya no está ahí: con corte 25, el 25-sep un pago del 24 sin registrar saltaba al 24-oct
+    // como UPCOMING, sin «vencido» ni aviso. Si la última que llegó lleva ≤ [graceDays] días y su
+    // sello (`periodOf`, el mes del vencimiento, que no cambia) no está puesto, sigue siendo el
+    // vencimiento vigente. Sellada, se sigue de largo como siempre.
+    val enGracia = ocurrenciaEnGracia(today, rule.dayOfMonth, graceDays)
+    if (enGracia != null &&
+        enGracia.isBefore(natural) &&
+        periodOf(enGracia) !in occurredPeriods &&
+        (inicio == null || enGracia.isAfter(inicio))
+    ) {
+        return enGracia
+    }
+    var due =if (ChronoUnit.DAYS.between(natural, today) > graceDays) {
         occurrenceInMonth(YearMonth.from(natural).plusMonths(1), rule.dayOfMonth)
     } else {
         natural
@@ -181,7 +247,6 @@ fun dueDateFor(
     //
     // Rueda mes a mes con el mismo tope que el bucle de abajo: sin él, una fecha de inicio
     // absurda (un año 2400 mal tecleado) daría un bucle infinito en vez de un dato raro.
-    val inicio = rule.activeFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     var sinArrancar = 0
     while (inicio != null && !due.isAfter(inicio) && sinArrancar < MAX_OCCURRENCE_ROLLS) {
         due = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
