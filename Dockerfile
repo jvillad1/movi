@@ -74,7 +74,6 @@ RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/
     gradle :webApp:wasmJsBrowserDistribution --no-daemon --console=plain --build-cache > /tmp/wasm.log 2>&1 \
     || (echo "══ FALLÓ EL WASM ══" && tail -120 /tmp/wasm.log && false)
 
-COPY scripts/el-paquete-web-trae-las-fuentes.sh scripts/
 RUN sh scripts/el-paquete-web-trae-las-fuentes.sh webApp/build/dist/wasmJs/productionExecutable
 
 RUN mkdir -p server/src/main/resources/static && \
