@@ -22,6 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -129,19 +132,20 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(text = statusText(payment), style = Movi.textos.apoyo, color = color)
-                Box(
-                    modifier = Modifier
-                        .size(3.dp)
-                        .clip(CircleShape)
-                        .background(Movi.colores.textoApagado),
-                )
-                Text(rule.category, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
+            // **Un solo texto, no dos en una fila.** Antes eran dos `Text` sin reparto de ancho: el
+            // del vencimiento («Vence el 16 de septiembre · en 1 día») se llevaba todo lo que
+            // quería y a la categoría le quedaba un hueco de una letra, así que «Educación» se
+            // dibujaba una letra por renglón y la fila crecía media pantalla. Visto en la web a
+            // 390 dp con un nombre largo. Juntos, parten renglón donde corresponde.
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = color)) { append(statusText(payment)) }
+                    append("  ·  ")
+                    append(rule.category)
+                },
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
         }
 
         Text(
