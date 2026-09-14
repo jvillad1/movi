@@ -35,14 +35,21 @@ fun isDebtAccount(type: AccountType): Boolean =
     type == AccountType.CREDIT_CARD || type == AccountType.LOAN
 
 /**
- * (activos, deudas, neto) across accounts.
- * Assets = COP balance of non-debt accounts. Debts = each debt account's COP estimate
- * (or its COP balance when there is nothing foreign to estimate). Net = assets − deudas.
+ * **Lo que vale una cuenta en pesos**: su estimado con la TRM si tiene plata en otra moneda, o su
+ * saldo en pesos si no. `balance` es SOLO la parte en pesos (el server deja los dólares en
+ * `balancesByCurrency`/`estimatedTotalCop`), así que sumar `balance` dejaba fuera los dólares de una
+ * cuenta de ahorros o de inversión — mientras las deudas sí se estimaban y el server
+ * (`/api/finance-summary`, Movi AI) sí los convertía. Una sola regla para activos y deudas.
+ */
+fun valorEnPesos(account: Account): Long = account.estimatedTotalCop ?: account.balance
+
+/**
+ * (activos, deudas, neto) across accounts, todo con [valorEnPesos]. Net = assets − deudas.
  */
 fun assetsDebtsNet(accounts: List<Account>): Triple<Long, Long, Long> {
-    val activos = accounts.filter { !isDebtAccount(it.type) }.sumOf { it.balance }
+    val activos = accounts.filter { !isDebtAccount(it.type) }.sumOf { valorEnPesos(it) }
     val deudas = accounts.filter { isDebtAccount(it.type) }
-        .sumOf { it.estimatedTotalCop ?: it.balance }
+        .sumOf { valorEnPesos(it) }
     return Triple(activos, deudas, activos - deudas)
 }
 

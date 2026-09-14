@@ -30,6 +30,8 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
 import com.jvillada.movi.ui.components.signedMoney
+import com.jvillada.movi.ui.components.saldoEnSuMoneda
+import com.jvillada.movi.ui.components.valorEnPesos
 import com.jvillada.movi.ui.credits.totalDebtCop
 
 /**
@@ -308,9 +310,10 @@ fun heroBalance(accounts: List<Account>): HeroBalance {
 
     val libres = cuentasLibres(accounts)
     val condicionadas = accounts.filter { !isDebtAccount(it.type) && !it.condicionadaA.isNullOrBlank() }
-    val condicionado = condicionadas.sumOf { it.balance }
-    val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }.sumOf { it.balance }
-    val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }.sumOf { it.balance }
+    // En pesos con los dólares estimados, igual que [assetsDebtsNet]: ver [valorEnPesos].
+    val condicionado = condicionadas.sumOf { valorEnPesos(it) }
+    val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }.sumOf { valorEnPesos(it) }
+    val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }.sumOf { valorEnPesos(it) }
 
     return HeroBalance(
         tuPlata = disponible + invertido,
@@ -348,7 +351,12 @@ fun cuentasDelHero(accounts: List<Account>?): List<CuentaHero>? {
     val libres = cuentasLibres(accounts)
     val disponibles = libres.filter { it.type.group != AccountGroup.INVERSION }
     val invertidas = libres.filter { it.type.group == AccountGroup.INVERSION }
-    return (disponibles + invertidas).map { CuentaHero(it.name, signedMoney(it.balance, it.currency)) }
+    // Cada cuenta en SU moneda (una cuenta en dólares decía «US$0»: era su parte en pesos con el
+    // rótulo de dólares). Ver [saldoEnSuMoneda].
+    return (disponibles + invertidas).map {
+        val (monto, moneda) = saldoEnSuMoneda(it)
+        CuentaHero(it.name, signedMoney(monto, moneda))
+    }
 }
 
 // ── Próximos pagos ─────────────────────────────────────────────────────────────────

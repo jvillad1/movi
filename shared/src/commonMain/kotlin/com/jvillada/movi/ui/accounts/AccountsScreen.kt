@@ -331,7 +331,7 @@ private fun AccountsGroup(
                 Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
                 Text(" · ${accounts.size}", fontSize = 11.sp, color = Movi.colores.textoApagado)
             }
-            Cifra(formatCOP(accounts.sumOf { it.balance }), 12f, color = Movi.colores.textoMedio)
+            Cifra(formatCOP(accounts.sumOf { valorEnPesos(it) }), 12f, color = Movi.colores.textoMedio)
         }
         MinCard(
             modifier = Modifier.fillMaxWidth(),

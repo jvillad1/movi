@@ -179,4 +179,22 @@ class PlataCondicionadaTest {
         assertEquals(formatCOP(activos), fila.value)
         assertEquals("2 cuentas", fila.sub)
     }
+
+    /**
+     * **Los dólares de una cuenta que no es deuda cuentan en «Tu plata».** `balance` es solo la parte
+     * en pesos; antes una inversión con US$10.000 sumaba $0 al Inicio y a Cuentas mientras el server
+     * y Movi AI sí la convertían.
+     */
+    @Test
+    fun los_dolares_de_una_cuenta_de_ahorro_o_inversion_cuentan() {
+        val inversionUsd = com.jvillada.movi.shared.model.Account(
+            "inv-usd", "Broker USD", com.jvillada.movi.shared.model.AccountType.INVESTMENT, 0L, "USD",
+            balancesByCurrency = mapOf("USD" to 10_000L), estimatedTotalCop = 40_000_000L,
+        )
+        val ahorros = com.jvillada.movi.shared.model.Account("ah", "Ahorros", com.jvillada.movi.shared.model.AccountType.SAVINGS, 1_000_000L, "COP")
+        val hero = heroBalance(listOf(inversionUsd, ahorros))
+        assertEquals(41_000_000L, hero.tuPlata)
+        assertEquals(41_000_000L, hero.patrimonio)
+        assertEquals("US$10.000", cuentasDelHero(listOf(inversionUsd))!!.single().monto)
+    }
 }

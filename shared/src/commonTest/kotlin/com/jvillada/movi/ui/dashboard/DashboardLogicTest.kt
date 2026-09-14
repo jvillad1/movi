@@ -388,7 +388,8 @@ class DashboardLogicTest {
         val hero = cuentasDelHero(
             listOf(
                 Account("a1", "Bancolombia Ahorros", AccountType.SAVINGS, 2_000_000),
-                Account("i1", "CDT en dólares", AccountType.INVESTMENT, -50, currency = "USD"),
+                // Como la manda el server: `balance` es la parte en pesos y los dólares van por moneda.
+                Account("i1", "CDT en dólares", AccountType.INVESTMENT, 0, currency = "USD", balancesByCurrency = mapOf("USD" to -50L)),
             ),
         )
         assertEquals(listOf("$2.000.000", "−US$50"), hero?.map { it.monto })
