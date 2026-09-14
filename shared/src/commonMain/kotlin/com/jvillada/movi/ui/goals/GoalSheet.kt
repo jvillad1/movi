@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.goals
 
+import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,6 +69,8 @@ fun GoalSheet(
     }
 
     var name by remember { mutableStateOf(existing?.name ?: "") }
+    // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
+    var pidiendoBorrar by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf(existing?.target) }
     var selectedAccountId by remember { mutableStateOf(existing?.accountId) }
     var targetDate by remember { mutableStateOf(existing?.targetDate ?: "") }
@@ -170,9 +173,20 @@ fun GoalSheet(
                             text = if (saving) "…" else "Eliminar",
                             fontSize = 13.sp,
                             color = Movi.colores.sale,
-                            modifier = Modifier.clickable(enabled = !saving) { delete() },
+                            modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
                         )
                     }
+                }
+                if (pidiendoBorrar && existing != null) {
+                    ConfirmacionEnLinea(
+                        pregunta = "¿Eliminar la meta «${existing.name}»?",
+                        detalle = "Se borra la meta. La plata de su cuenta y sus movimientos no se tocan. No se puede deshacer.",
+                        textoConfirmar = "Eliminar",
+                        ocupado = saving,
+                        onConfirmar = { delete() },
+                        onCancelar = { pidiendoBorrar = false },
+                        modifier = Modifier.padding(bottom = 18.dp),
+                    )
                 }
 
                 SectionLabel("NOMBRE")

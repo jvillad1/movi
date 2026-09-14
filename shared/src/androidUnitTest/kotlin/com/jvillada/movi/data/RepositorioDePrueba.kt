@@ -47,7 +47,8 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun getGoals(): List<Goal> = noUsado("getGoals")
     override suspend fun createGoal(goal: Goal): Goal = noUsado("createGoal")
     override suspend fun updateGoal(id: String, goal: Goal): Goal = noUsado("updateGoal")
-    override suspend fun deleteGoal(id: String) = noUsado("deleteGoal")
+    // `: Unit` explícito: con el tipo inferido (`Nothing`) una prueba no podría sobrescribirlo con uno que vuelve.
+    override suspend fun deleteGoal(id: String): Unit = noUsado("deleteGoal")
     override suspend fun getSmsMessages(): List<SmsMessage> = noUsado("getSmsMessages")
     override suspend fun getSms(id: String): SmsMessage = noUsado("getSms")
     override suspend fun parseSms(id: String): ParsedSms = noUsado("parseSms")
