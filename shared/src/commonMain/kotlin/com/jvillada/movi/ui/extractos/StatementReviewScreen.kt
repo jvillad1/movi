@@ -78,6 +78,9 @@ fun StatementReviewScreen(
     val destinationAccount = destino.cuenta
 
     val confirmedCount = reconciliations.values.count { it.confirm }
+    // Las coincidencias que el dueño no tocó: no se importan ni se concilian. Antes eso pasaba en
+    // silencio, y una coincidencia falsa sin revisar era una compra real que nunca entraba.
+    val sinRevisar = result.matches.count { it.parsed.id !in reconciliations }
     val importCount = selectedIds.size + confirmedCount
     val canImport = importCount > 0 && !working && !imported && destinationAccount != null
 
@@ -278,12 +281,22 @@ fun StatementReviewScreen(
         }
 
         // Sticky bottom bar
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Movi.colores.tarjeta)
                 .padding(16.dp),
         ) {
+            if (sinRevisar > 0) {
+                Text(
+                    if (sinRevisar == 1) "1 coincidencia sin revisar no se va a importar ni a conciliar. Si es otra compra, toca «No son el mismo»."
+                    else "$sinRevisar coincidencias sin revisar no se van a importar ni a conciliar. Si son otras compras, toca «No son el mismo».",
+                    fontSize = 12.5.sp,
+                    color = Movi.colores.aviso,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            }
             Button(
                 onClick = ::import,
                 enabled = canImport,
