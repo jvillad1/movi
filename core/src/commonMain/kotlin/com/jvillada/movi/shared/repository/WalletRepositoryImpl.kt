@@ -231,6 +231,9 @@ class WalletRepositoryImpl(
     override suspend fun parseSms(id: String): ParsedSms =
         client.get("$baseUrl/api/sms/$id/parse").body()
 
+    override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> =
+        client.get("$baseUrl/api/sms/$id/coincidencias").body()
+
     override suspend fun confirmSms(id: String) {
         client.post("$baseUrl/api/sms/$id/confirm")
     }

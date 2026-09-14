@@ -1,5 +1,10 @@
 package com.jvillada.movi.server.routes
 
+import kotlin.math.roundToLong
+import kotlin.math.abs
+import com.jvillada.movi.server.reminders.loadEventsBetween
+import com.jvillada.movi.shared.model.momentoDelSms
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
@@ -163,6 +168,27 @@ private fun categoryFor(text: String, merchant: String, type: TransactionType): 
     }
 }
 
+/** Cuántos días alrededor del mensaje se busca lo ya anotado: un gasto se anota el día o un par después. */
+internal const val DIAS_PARA_COINCIDIR: Long = 3
+
+/**
+ * **¿Este SMS ya está anotado?** Los movimientos vivos con el mismo monto (redondeado, como se
+ * guarda), la misma moneda y el mismo tipo, a [DIAS_PARA_COINCIDIR] días o menos del mensaje, del
+ * más cercano al más lejano. Máximo tres: más es una lista, no una propuesta.
+ *
+ * El monto sí filtra acá, a diferencia del emparejador de recurrentes: un SMS dice la cifra exacta
+ * que se movió, así que un movimiento con otro monto no es este.
+ */
+internal fun coincidenciasDelSms(parsed: ParsedSms, momento: Long, eventos: List<FinancialEvent>): List<FinancialEvent> {
+    val monto = parsed.amount.roundToLong()
+    val margen = DIAS_PARA_COINCIDIR * 86_400_000L
+    return eventos
+        .filter { it.amount == monto && it.currency == parsed.currency && it.type == parsed.type }
+        .filter { abs(it.timestamp - momento) <= margen }
+        .sortedBy { abs(it.timestamp - momento) }
+        .take(3)
+}
+
 fun Route.smsRoutes() {
     /**
      * La bandeja, **del más nuevo al más viejo**.
@@ -214,8 +240,25 @@ fun Route.smsRoutes() {
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
         val parsed = parseSms(sms.text)
-            ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "No se pudo parsear")
+            // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
+            // plazo). Se dice así, porque la pantalla muestra este texto.
+            ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
         call.respond(parsed)
+    }
+
+    get("/api/sms/{id}/coincidencias") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+        val sms = dbQuery {
+            SmsMessages.selectAll()
+                .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
+                .firstOrNull()?.toSmsMessage()
+        } ?: return@get call.respond(HttpStatusCode.NotFound)
+        val parsed = parseSms(sms.text) ?: return@get call.respond(emptyList<FinancialEvent>())
+        val momento = momentoDelSms(sms.time, ahora = System.currentTimeMillis())
+        val margen = DIAS_PARA_COINCIDIR * 86_400_000L
+        val eventos = dbQuery { loadEventsBetween(uid, momento - margen, momento + margen + 1) }
+        call.respond(coincidenciasDelSms(parsed, momento, eventos))
     }
 
     post("/api/sms/{id}/confirm") {

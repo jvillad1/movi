@@ -91,6 +91,15 @@ interface WalletRepository {
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getSms(id: String): SmsMessage
     suspend fun parseSms(id: String): ParsedSms
+
+    /**
+     * **Los movimientos que ya están anotados y parecen ser este SMS** (`GET /api/sms/{id}/coincidencias`):
+     * mismo monto, misma moneda, mismo tipo y a pocos días del mensaje. Vacía si no hay ninguno.
+     *
+     * Existe para no duplicar: confirmar un SMS siempre creaba un movimiento nuevo, aunque el dueño
+     * ya lo hubiera anotado a mano. Con esto la pantalla pregunta «¿es este?» antes.
+     */
+    suspend fun getSmsCoincidencias(id: String): List<FinancialEvent>
     suspend fun confirmSms(id: String)
     suspend fun ignoreSms(id: String)
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary

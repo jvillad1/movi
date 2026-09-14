@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlin.math.roundToLong
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -306,14 +307,35 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     var eligiendoCuenta by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    /** Movimientos ya anotados que parecen ser este SMS (mismo monto, moneda y tipo, días cercanos). */
+    var coincidencias by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+
+    /** «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. */
+    fun esElQueYaEstaba() {
+        if (working) return
+        working = true
+        error = null
+        coroutine.launch {
+            runCatching { Repositories.wallets.confirmSms(smsId) }
+                .onSuccess {
+                    working = false
+                    sms = sms?.copy(state = SMS_STATE_CONFIRMED)
+                    goBack(Screen.SMSInbox)
+                }
+                .onFailure { working = false; error = it.toUserMessage() }
+        }
+    }
 
     LaunchedEffect(smsId) {
         runCatching { Repositories.wallets.getSms(smsId) }.onSuccess { sms = it }
             .onFailure { error = "No pude cargar el SMS" }
         runCatching { Repositories.wallets.parseSms(smsId) }
             .onSuccess { parsed = it; selectedCategory = it.category }
-            .onFailure { error = "No pude parsear el SMS" }
+            // El server explica por qué (un aviso que no es un movimiento, por ejemplo).
+            .onFailure { error = it.toUserMessage() }
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { accounts = it }
+        // Si ya está anotado, se ofrece antes de crear otro: confirmar siempre creaba uno nuevo.
+        runCatching { Repositories.wallets.getSmsCoincidencias(smsId) }.onSuccess { coincidencias = it }
     }
 
     val currentSms = sms
@@ -455,8 +477,50 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     }
                 }
 
+                if (coincidencias.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    MinSectionHeader(title = "¿Ya lo anotaste?")
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(18.dp),
+                    ) {
+                        Text(
+                            if (coincidencias.size == 1) "Encontramos un movimiento igual. Si es este, no se crea otro."
+                            else "Encontramos movimientos iguales. Si es uno de estos, no se crea otro.",
+                            fontSize = 12.5.sp,
+                            color = Movi.colores.textoMedio,
+                            lineHeight = 17.sp,
+                        )
+                        coincidencias.forEach { ev ->
+                            Spacer(Modifier.height(12.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(ev.description, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                                    Text(
+                                        "${epochMillisToAppDate(ev.timestamp)} · ${formatMoney(ev.amount, ev.currency)}",
+                                        fontSize = 12.sp,
+                                        color = Movi.colores.textoMedio,
+                                    )
+                                }
+                                Text(
+                                    "Es este",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Movi.colores.marca,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(Movi.colores.marca.copy(alpha = 0.16f))
+                                        .clickable(enabled = !working) { esElQueYaEstaba() }
+                                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(14.dp))
-                MinSectionHeader(title = "Movi sugiere")
+                MinSectionHeader(title = if (coincidencias.isNotEmpty()) "O anótalo como nuevo" else "Movi sugiere")
                 MinCard(
                     modifier = Modifier.fillMaxWidth(),
                     variant = MinCardVariant.Elevated,
