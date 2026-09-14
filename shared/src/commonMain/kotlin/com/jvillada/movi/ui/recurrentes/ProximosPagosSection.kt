@@ -22,6 +22,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -122,30 +126,30 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = rule.name,
-                fontSize = 14.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
                 letterSpacing = (-0.1).sp,
             )
             Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(text = statusText(payment), fontSize = 11.sp, color = color)
-                Box(
-                    modifier = Modifier
-                        .size(3.dp)
-                        .clip(CircleShape)
-                        .background(Movi.colores.textoApagado),
-                )
-                Text(rule.category, fontSize = 11.sp, color = Movi.colores.textoMedio)
-            }
+            // **Un solo texto, no dos en una fila.** Antes eran dos `Text` sin reparto de ancho: el
+            // del vencimiento («Vence el 16 de septiembre · en 1 día») se llevaba todo lo que
+            // quería y a la categoría le quedaba un hueco de una letra, así que «Educación» se
+            // dibujaba una letra por renglón y la fila crecía media pantalla. Visto en la web a
+            // 390 dp con un nombre largo. Juntos, parten renglón donde corresponde.
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = color)) { append(statusText(payment)) }
+                    append("  ·  ")
+                    append(rule.category)
+                },
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
         }
 
         Text(
             text = textoDelMonto(rule, conSigno = true),
-            fontSize = 14.sp,
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
@@ -191,7 +195,7 @@ internal fun PropuestaOcurrencia(
     Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, bottom = 14.dp)) {
         Text(
             text = tituloPropuesta(rule.type, estado.periodoDelDueno ?: estado.period),
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.texto,
         )
@@ -207,14 +211,13 @@ internal fun PropuestaOcurrencia(
             ) {
                 Text(
                     text = descripcionPropuesta(propuesta),
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     lineHeight = 16.sp,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
                     text = formatMoney(propuesta.amount, propuesta.currency),
-                    fontSize = 12.sp,
                     style = Movi.textos.monto,
                     color = Movi.colores.texto,
                     lineHeight = 16.sp,
@@ -230,7 +233,7 @@ internal fun PropuestaOcurrencia(
                 Text(
                     text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +
                         "Puede ser: revísalo antes de confirmar.",
-                    fontSize = 11.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     lineHeight = 15.sp,
                 )
@@ -256,7 +259,7 @@ internal fun PropuestaOcurrencia(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = etiquetaCierreManual(rule.type) + ", sin emparejar ningún movimiento",
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.marca,
                 modifier = Modifier.clickable { if (!enVuelo) onCerrarSinMovimiento() },
             )
@@ -274,7 +277,7 @@ internal fun ActionChip(label: String, primary: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
+        Text(label, style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = if (primary) Movi.colores.fondo else Movi.colores.texto)
     }
 }
 
@@ -325,7 +328,7 @@ fun SeccionProximosPagos(
                 variant = MinCardVariant.Elevated,
                 padding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
             ) {
-                Text("Nada vence en los próximos días", fontSize = 14.sp, color = Movi.colores.textoMedio)
+                Text("Nada vence en los próximos días", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
             }
         } else {
             MinCard(
@@ -393,7 +396,7 @@ fun SeccionSinConfirmar(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = rule.name,
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                             letterSpacing = (-0.1).sp,
@@ -401,13 +404,12 @@ fun SeccionSinConfirmar(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = "Día ${rule.dayOfMonth} · sin confirmar",
-                            fontSize = 11.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                     }
                     Text(
                         text = textoDelMonto(rule, conSigno = true),
-                        fontSize = 14.sp,
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = if (rule.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.texto,
@@ -473,13 +475,13 @@ fun SeccionYaOcurrieron(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = rule.name,
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                             letterSpacing = (-0.1).sp,
                         )
                         Spacer(Modifier.height(2.dp))
-                        Text(textoYaOcurrio(estado), fontSize = 11.sp, color = Movi.colores.textoMedio)
+                        Text(textoYaOcurrio(estado), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
                     // El «Deshacer» solo existe donde hay un sello que borrar. Una cuota o un pago
                     // de tarjeta llega acá **derivado del movimiento** que bajó la deuda, y eso no
@@ -489,7 +491,7 @@ fun SeccionYaOcurrieron(
                     if (sePuedeDeshacer(estado)) {
                         Text(
                             text = if (rule.id in marcando) "Guardando…" else "Deshacer",
-                            fontSize = 12.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.marca,
                             modifier = Modifier.clickable {
                                 if (rule.id !in marcando) onDeshacer(rule.id, estado.period)
@@ -498,9 +500,9 @@ fun SeccionYaOcurrieron(
                     } else {
                         Text(
                             text = "Se quita borrando\nel movimiento",
-                            fontSize = 10.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
-                            lineHeight = 13.sp,
+                            textAlign = TextAlign.End,
                         )
                     }
                 }
