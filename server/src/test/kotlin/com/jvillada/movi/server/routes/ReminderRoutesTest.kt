@@ -44,6 +44,7 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
@@ -591,6 +592,43 @@ class ReminderRoutesTest {
             it[Events.timestamp] = appDateToEpochMillis(hoy)
             it[Events.transferId] = transferId
         }
+    }
+
+    /**
+     * **El período del usuario, no el 25 de nadie.** Con el corte en el día de hoy, el período en
+     * curso arranca hoy y ya lleva el nombre del mes siguiente: la ocurrencia de hoy se sigue
+     * sellando con su mes de vencimiento (clave estable), pero la pantalla la nombra por el período,
+     * igual que Movimientos. Con otro corte, otro nombre: sale del perfil de cada uno.
+     */
+    @Test
+    fun `la ocurrencia en juego se nombra por el periodo de cada usuario`() = testApplication {
+        if (hoy.dayOfMonth == 1) return@testApplication // con corte 1 período y mes coinciden
+        transaction {
+            Users.update({ Users.id eq userAId }) { it[Users.periodCutoffDay] = hoy.dayOfMonth }
+        }
+        application { testModule() }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokenA = mintToken(userAId, userAEmail)
+        val regla = reglaDeHoy(client, tokenA, "Arriendo por periodo")
+        sembrarMovimiento("ev-periodo-1")
+
+        val estado = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        val siguiente = hoy.plusMonths(1)
+        val periodoSiguiente = "${siguiente.year}-" + siguiente.monthValue.toString().padStart(2, '0')
+        assertEquals(periodoDeHoy, estado.period, "la clave del sello es el mes del vencimiento")
+        assertEquals(periodoSiguiente, estado.periodoDelDueno, "el nombre es el del período del usuario")
+        assertTrue(estado.candidates.any { it.id == "ev-periodo-1" })
+
+        // El usuario B, sin corte propio, ve el mismo día nombrado por el calendario.
+        transaction {
+            Users.update({ Users.id eq userAId }) { it[Users.periodCutoffDay] = 1 }
+        }
+        val calendario = client.get("/api/payments/occurrences") {
+            header(HttpHeaders.Authorization, "Bearer $tokenA")
+        }.body<List<OccurrenceState>>().single { it.ruleId == regla.id }
+        assertEquals(periodoDeHoy, calendario.periodoDelDueno)
     }
 
     @Test

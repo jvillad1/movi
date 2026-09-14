@@ -202,7 +202,7 @@ fun avisoDeSelloSuelto(mark: EventOccurrenceMark?, nueva: LocalDate): String? {
     val desde = runCatching { LocalDate.parse(mark.validFrom) }.getOrNull() ?: return null
     val hasta = runCatching { LocalDate.parse(mark.validTo) }.getOrNull() ?: return null
     if (nueva in desde..hasta) return null
-    val mes = etiquetaDePeriodo(mark.period) ?: return null
+    val mes = etiquetaDePeriodo(mark.periodoDelDueno ?: mark.period) ?: return null
     return "Este movimiento es el que marcaste como «ya ocurrió» de «${mark.ruleName}» en $mes. " +
         "Con esta fecha deja de servir para ese mes: la marca se suelta y Movi te lo vuelve a " +
         "recordar hasta que lo marques otra vez."

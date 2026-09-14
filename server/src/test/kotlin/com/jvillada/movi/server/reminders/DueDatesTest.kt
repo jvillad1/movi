@@ -122,4 +122,54 @@ class DueDatesTest {
         assertEquals(PaymentStatus.UPCOMING, out[1].status)
         assertEquals(22, out[1].daysUntil)
     }
+
+    // ── El período del dueño (corte 25) ───────────────────────────────────────
+
+    private val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
+
+    @Test fun `con corte 25 la ocurrencia en juego es la del periodo, no la del mes`() {
+        // «Octubre» va del 25-sep al 24-oct: un pago del 28 es el 28-sep, uno del 10 es el 10-oct.
+        assertEquals(LocalDate.of(2026, 9, 28), ocurrenciaEnJuego(LocalDate.of(2026, 9, 26), 28, corte25))
+        assertEquals(LocalDate.of(2026, 10, 10), ocurrenciaEnJuego(LocalDate.of(2026, 9, 26), 10, corte25))
+        // Y el 20-sep todavía es «septiembre» (25-ago a 24-sep): el del 28 en juego es el 28-ago.
+        assertEquals(LocalDate.of(2026, 8, 28), ocurrenciaEnJuego(LocalDate.of(2026, 9, 20), 28, corte25))
+        assertEquals("2026-10", periodoDelDueno(LocalDate.of(2026, 9, 28), corte25))
+    }
+
+    @Test fun `con corte 25 un pago del 28 sin registrar sigue vencido dentro de la gracia al cambiar de mes`() {
+        // Por calendario, el 2-sep ya saltaba al 28-sep y el 28-ago se daba por hecho en silencio.
+        val hoy = LocalDate.of(2026, 9, 2)
+        assertEquals(LocalDate.of(2026, 9, 28), dueDateFor(rule(28), hoy))
+        val due = dueDateFor(rule(28), hoy, settings = corte25)
+        assertEquals(LocalDate.of(2026, 8, 28), due)
+        assertEquals(PaymentStatus.OVERDUE, statusFor(due, hoy, 3))
+    }
+
+    @Test fun `con corte 25 pasada la gracia rueda a la siguiente ocurrencia`() {
+        assertEquals(LocalDate.of(2026, 9, 28), dueDateFor(rule(28), LocalDate.of(2026, 9, 20), settings = corte25))
+        assertEquals(LocalDate.of(2026, 10, 10), dueDateFor(rule(10), LocalDate.of(2026, 9, 26), settings = corte25))
+    }
+
+    @Test fun `el sello sigue siendo el mes del vencimiento y rueda igual con corte 25`() {
+        // El 28-sep ya marcado como ocurrido (clave «2026-09», su mes de calendario): sigue el 28-oct.
+        val hoy = LocalDate.of(2026, 9, 29)
+        assertEquals(
+            LocalDate.of(2026, 10, 28),
+            dueDateFor(rule(28), hoy, occurredPeriods = setOf("2026-09"), settings = corte25),
+        )
+        assertEquals("2026-10", reminderKeyFor(rule(28), hoy, occurredPeriods = setOf("2026-09"), settings = corte25))
+    }
+
+    @Test fun `un periodo que arranco antes mueve la ocurrencia en juego`() {
+        // Octubre arrancó el 22-sep: el 23-sep ya es octubre, y el pago del 23 en juego es el 23-sep.
+        val settings = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25, iniciosPropios = mapOf("2026-10" to "2026-09-22"))
+        assertEquals(LocalDate.of(2026, 9, 23), ocurrenciaEnJuego(LocalDate.of(2026, 9, 23), 23, settings))
+    }
+
+    @Test fun `con corte 1 nada cambia`() {
+        val cal = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 1)
+        for (dia in listOf(1, 5, 15, 28, 31)) for (hoy in listOf(LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 29), LocalDate.of(2026, 12, 31))) {
+            assertEquals(dueDateFor(rule(dia), hoy), dueDateFor(rule(dia), hoy, settings = cal), "día $dia hoy $hoy")
+        }
+    }
 }

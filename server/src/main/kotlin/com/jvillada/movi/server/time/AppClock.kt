@@ -109,9 +109,16 @@ suspend fun cutoffDayOf(uid: String): Int = dbQuery {
  * `UserRoutes`: el mismo criterio, y por el mismo motivo — un dato roto no puede dejar sin
  * contestar una pantalla entera.
  */
-suspend fun ajustesDePeriodoDe(uid: String): PeriodSettings = dbQuery {
+suspend fun ajustesDePeriodoDe(uid: String): PeriodSettings = dbQuery { ajustesDelPeriodoSinSuspender(uid) }
+
+/**
+ * Lo mismo que [ajustesDePeriodoDe], para leerlo **dentro de una transacción que ya está abierta**
+ * (un `dbQuery` que no puede suspender a mitad de camino). Una sola implementación de la lectura:
+ * la suspendida delega acá.
+ */
+fun ajustesDelPeriodoSinSuspender(uid: String): PeriodSettings {
     val fila = Users.selectAll().where { Users.id eq uid }.firstOrNull()
-    PeriodSettings(
+    return PeriodSettings(
         cutoffDay = (fila?.get(Users.periodCutoffDay) ?: 1).coerceIn(1, 31),
         iniciosPropios = fila?.get(Users.periodStarts)?.let { json ->
             runCatching {

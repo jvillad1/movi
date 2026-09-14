@@ -1,11 +1,18 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.PaymentStatus
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /**
@@ -23,8 +30,62 @@ const val DEFAULT_GRACE_DAYS: Int = 5
 fun occurrenceInMonth(month: YearMonth, dayOfMonth: Int): LocalDate =
     month.atDay(dayOfMonth.coerceIn(1, month.lengthOfMonth()))
 
-/** Periodo "YYYY-MM" de una fecha — la unidad con la que se sella un recordatorio. */
+/**
+ * Periodo "YYYY-MM" de una fecha — la unidad con la que se sella un recordatorio.
+ *
+ * **Es el mes de calendario del VENCIMIENTO, y está bien que lo sea**, aunque el dueño viva por
+ * períodos (corte 25). Un recurrente mensual tiene exactamente una ocurrencia por mes de
+ * calendario, así que esta clave identifica la ocurrencia sin ambigüedad y no se mueve nunca: si el
+ * dueño cambia su corte o declara que un período arrancó otro día, los sellos que ya puso siguen
+ * apuntando a la misma cuota. Lo que sí sigue al período es **cuál ocurrencia está en juego** hoy
+ * ([ocurrenciaEnJuego]) y cómo se nombra en pantalla ([periodoDelDueno]).
+ */
 fun periodOf(date: LocalDate): String = YearMonth.from(date).toString()
+
+/**
+ * Los días del período del dueño que contiene [fecha], con los dos bordes incluidos.
+ *
+ * Delega en [periodoDe] y [ventanaDe] de `:core`, las mismas funciones que usan Movimientos,
+ * Presupuestos y el Inicio: si acá se reimplementara la regla del corte, «el mes» de Recurrentes y
+ * el de Movimientos podrían volver a separarse por un día, que es justo lo que esto vino a cerrar.
+ */
+fun diasDelPeriodo(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = AppClock.zone): ClosedRange<LocalDate> {
+    // Mediodía y no medianoche: un borde de zona horaria no puede correr el día.
+    val millis = appDateToEpochMillis(fecha, zone) + 12 * 3_600_000L
+    val ventana = ventanaDe(periodoDe(millis, settings), settings)
+    return epochMillisToAppDate(ventana.first, zone)..epochMillisToAppDate(ventana.last, zone)
+}
+
+/** El nombre del período del dueño en que cae [fecha], como `"2026-10"` — para decirlo en pantalla. */
+fun periodoDelDueno(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = AppClock.zone): String {
+    val millis = appDateToEpochMillis(fecha, zone) + 12 * 3_600_000L
+    return periodoDe(millis, settings).prefijo
+}
+
+/** La primera ocurrencia de [dayOfMonth] que cae en [desde] o después. */
+fun primeraOcurrenciaDesde(desde: LocalDate, dayOfMonth: Int): LocalDate {
+    val mes = YearMonth.from(desde)
+    val enEseMes = occurrenceInMonth(mes, dayOfMonth)
+    return if (enEseMes.isBefore(desde)) occurrenceInMonth(mes.plusMonths(1), dayOfMonth) else enEseMes
+}
+
+/**
+ * **La ocurrencia que está en juego hoy**: la primera que cae dentro del período del dueño que
+ * contiene [hoy], o `null` si ese período no tiene ninguna.
+ *
+ * Con corte 1 es la del mes de calendario, exactamente lo de siempre. Con corte 25 el período
+ * «octubre» va del 25 de septiembre al 24 de octubre, así que un arriendo del día 28 que se paga el
+ * 28 de septiembre **es de octubre** —igual que lo cuenta Movimientos— y uno del día 10 es el 10 de
+ * octubre. Antes Recurrentes preguntaba por el mes de calendario y los dos lados de la app podían
+ * hablar de meses distintos sobre el mismo pago.
+ *
+ * `null` solo pasa con un período acortado a mano (un inicio propio que lo deja más corto que un
+ * mes) que no alcanza a contener el día de la regla: ese período no tiene ocurrencia que preguntar.
+ */
+fun ocurrenciaEnJuego(hoy: LocalDate, dayOfMonth: Int, settings: PeriodSettings, zone: ZoneId = AppClock.zone): LocalDate? {
+    val dias = diasDelPeriodo(hoy, settings, zone)
+    return primeraOcurrenciaDesde(dias.start, dayOfMonth).takeIf { it in dias }
+}
 
 /**
  * Clave de dedupe del vencimiento actual de una regla.
@@ -39,7 +100,8 @@ fun reminderKeyFor(
     today: LocalDate,
     graceDays: Int = DEFAULT_GRACE_DAYS,
     occurredPeriods: Set<String> = emptySet(),
-): String = periodOf(dueDateFor(rule, today, graceDays, occurredPeriods))
+    settings: PeriodSettings = PeriodSettings(),
+): String = periodOf(dueDateFor(rule, today, graceDays, occurredPeriods, settings))
 
 /**
  * Cuántos periodos ya-ocurridos seguidos se aguanta [dueDateFor] antes de dejar de rodar.
@@ -79,17 +141,30 @@ private const val MAX_OCCURRENCE_ROLLS: Int = 24
  *     vigente ya es el del mes que viene, no por un `if` aparte que alguien pueda olvidar.
  *
  * Y al mes siguiente vuelve a estar pendiente solo: el periodo nuevo no está en el conjunto.
+ *
+ * ## [settings] — el período del dueño
+ *
+ * La ocurrencia de partida es la del **período** que contiene [today] ([ocurrenciaEnJuego]), no la
+ * del mes de calendario. Con corte 1 es lo mismo de siempre. Con corte 25 cambia un caso que antes
+ * se perdía: el 2 de septiembre, un pago del día 28 que no se registró el 28 de agosto seguía
+ * dentro de la gracia, pero el cálculo por calendario ya saltaba al 28 de septiembre y lo daba por
+ * hecho sin que nadie lo dijera. Ahora se sigue viendo vencido hasta que pase la gracia o se marque.
  */
 fun dueDateFor(
     rule: RecurringRule,
     today: LocalDate,
     graceDays: Int = DEFAULT_GRACE_DAYS,
     occurredPeriods: Set<String> = emptySet(),
+    settings: PeriodSettings = PeriodSettings(),
 ): LocalDate {
-    val thisMonth = YearMonth.from(today)
-    val natural = occurrenceInMonth(thisMonth, rule.dayOfMonth)
+    val natural = if (settings.esMesDeCalendario) {
+        occurrenceInMonth(YearMonth.from(today), rule.dayOfMonth)
+    } else {
+        // Un período sin ocurrencia (acortado a mano) arranca por la primera que venga después.
+        primeraOcurrenciaDesde(diasDelPeriodo(today, settings).start, rule.dayOfMonth)
+    }
     var due = if (ChronoUnit.DAYS.between(natural, today) > graceDays) {
-        occurrenceInMonth(thisMonth.plusMonths(1), rule.dayOfMonth)
+        occurrenceInMonth(YearMonth.from(natural).plusMonths(1), rule.dayOfMonth)
     } else {
         natural
     }
@@ -138,9 +213,10 @@ fun upcomingPayments(
     today: LocalDate,
     leadDays: Int,
     occurredBy: Map<String, Set<String>> = emptyMap(),
+    settings: PeriodSettings = PeriodSettings(),
 ): List<UpcomingPayment> =
     rules.map { rule ->
-        val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
+        val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), settings)
         UpcomingPayment(
             rule = rule,
             dueDate = due.toString(),
@@ -175,17 +251,18 @@ fun selectDueForReminder(
     today: LocalDate,
     leadDays: Int,
     occurredBy: Map<String, Set<String>> = emptyMap(),
+    settings: PeriodSettings = PeriodSettings(),
 ): List<RecurringRule> =
     rules
         .filter { (rule, lastRemindedPeriod) ->
             val ocurridos = occurredBy[rule.id].orEmpty()
-            val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos)
+            val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings)
             // remindMe primero: si el dueño desmarcó «Recordarme unos días antes» para ESTE
             // pago, no hay nada más que evaluar. El pago sigue existiendo (aparece en Próximos
             // y en los totales) — lo único que se apaga es el aviso.
             rule.remindMe &&
                 rule.type == TransactionType.EXPENSE &&
-                lastRemindedPeriod != reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos) &&
+                lastRemindedPeriod != reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings) &&
                 statusFor(due, today, leadDays) != PaymentStatus.UPCOMING
         }
         .map { it.first }

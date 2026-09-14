@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
@@ -170,8 +171,12 @@ val CATEGORIAS_QUE_SALDAN: List<String> = listOf(CUOTA_CATEGORY, CARD_PAYMENT_CA
  * día que `dueDateFor` aprenda a mirar un vencimiento del mes pasado que sigue abierto, esta
  * función lo hereda sin que nadie tenga que acordarse.
  */
-fun periodoQueSalda(rule: RecurringRule, fecha: LocalDate, graceDays: Int = DEFAULT_GRACE_DAYS): String =
-    periodOf(minOf(dueDateFor(rule, fecha, graceDays), fecha))
+fun periodoQueSalda(
+    rule: RecurringRule,
+    fecha: LocalDate,
+    graceDays: Int = DEFAULT_GRACE_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
+): String = periodOf(minOf(dueDateFor(rule, fecha, graceDays, settings = settings), fecha))
 
 /**
  * Para cada regla sintética de [rules], **qué movimiento saldó cada periodo**.
@@ -189,6 +194,7 @@ fun pagosDeDeudaPorPeriodo(
     pagos: List<FinancialEvent>,
     graceDays: Int = DEFAULT_GRACE_DAYS,
     zone: ZoneId = AppClock.zone,
+    settings: PeriodSettings = PeriodSettings(),
 ): Map<String, Map<String, FinancialEvent>> = rules
     .mapNotNull { rule ->
         val cuenta = cuentaDeLaDeudaDe(rule.id) ?: return@mapNotNull null
@@ -201,7 +207,7 @@ fun pagosDeDeudaPorPeriodo(
             .filter { it.category == categoria }
             .filter { it.type == TransactionType.INCOME }
             .sortedBy { it.timestamp }
-            .associateBy { periodoQueSalda(rule, epochMillisToAppDate(it.timestamp, zone), graceDays) }
+            .associateBy { periodoQueSalda(rule, epochMillisToAppDate(it.timestamp, zone), graceDays, settings) }
         if (porPeriodo.isEmpty()) null else rule.id to porPeriodo
     }
     .toMap()
@@ -231,8 +237,9 @@ fun periodosSaldados(
     pagos: List<FinancialEvent>,
     graceDays: Int = DEFAULT_GRACE_DAYS,
     zone: ZoneId = AppClock.zone,
+    settings: PeriodSettings = PeriodSettings(),
 ): Map<String, Set<String>> =
-    pagosDeDeudaPorPeriodo(rules, pagos, graceDays, zone).mapValues { (_, v) -> v.keys }
+    pagosDeDeudaPorPeriodo(rules, pagos, graceDays, zone, settings).mapValues { (_, v) -> v.keys }
 
 /**
  * Une lo sellado a mano con lo derivado de los movimientos, en el mapa que consumen [dueDateFor],

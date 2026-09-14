@@ -250,6 +250,8 @@ data class EventOccurrenceMark(
     val validFrom: String,
     /** "YYYY-MM-DD" inclusive. */
     val validTo: String,
+    /** El período del dueño del vencimiento, para mostrar (ver `OccurrenceState.periodoDelDueno`). */
+    val periodoDelDueno: String? = null,
 )
 
 @Serializable
