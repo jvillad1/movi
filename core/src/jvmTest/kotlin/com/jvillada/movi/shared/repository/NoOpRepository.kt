@@ -282,7 +282,7 @@ open class NoOpRepository(
         eventosDelServer.filter { accountId == null || it.accountId == accountId }
 
     override suspend fun getEventsByDay() = emptyList<EventDay>()
-    override suspend fun voidEvent(id: String, reason: String?) = error("stub")
+    override suspend fun voidEvent(id: String, reason: String?): com.jvillada.movi.shared.model.VoidEvent = error("stub")
     /**
      * Imita al server: 404 para un evento que no está en [knownEventIds] — igual que el
      * `PUT /api/events/{id}/category` real cuando el evento no existe o es de otro usuario —, y

@@ -379,6 +379,106 @@ class SyncEngineTest {
         assertNull(db.financialEventQueries.selectById("ev-nsr2", testUserId).executeAsOne().syncedAt)
     }
 
+    /**
+     * Remoto que imita `POST /api/events/{id}/void` del server: anula lo que conoce y contesta
+     * 404 a lo que nunca le llegó.
+     */
+    private class VoidAwareRemote(private val conocidos: MutableSet<String> = mutableSetOf()) : NoOpRepository() {
+        var rechazarEventos = false
+        val eventosSubidos = mutableListOf<String>()
+        val anulados = mutableListOf<String>()
+        override suspend fun createAccount(account: Account): Account = account
+        override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+            eventosSubidos += event.id
+            if (rechazarEventos) throw ApiException(422, "Esa categoría no se puede anotar.")
+            conocidos += event.id
+            return event
+        }
+        override suspend fun voidEvent(id: String, reason: String?): com.jvillada.movi.shared.model.VoidEvent {
+            if (id !in conocidos) throw ApiException(404, "Event not found")
+            anulados += id
+            return com.jvillada.movi.shared.model.VoidEvent(id = "v_$id", originalEventId = id, reason = reason, timestamp = 0L)
+        }
+    }
+
+    /**
+     * **Anular un movimiento que el server rechazó lo saca del aviso y del ciclo.** Antes el ciclo
+     * lo reenviaba cada 30 s, la anulación rebotaba contra un 404 eterno y el aviso «corrígelo o
+     * anúlalo» no se iba nunca, aunque el dueño hubiera hecho justo lo que decía.
+     */
+    @Test
+    fun anular_un_movimiento_rechazado_lo_saca_del_aviso_y_deja_de_reintentarlo() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-anula", "Efectivo", AccountType.CASH, 0L))
+        val remote = VoidAwareRemote().apply { rechazarEventos = true }
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+        local.postEvent(event("ev-rechazado", "acc-anula", TransactionType.EXPENSE, 9_000L))
+        engine.syncEvents()
+        assertEquals(1, local.getMovimientosRechazados().size, "el aviso aparece")
+
+        local.voidEvent("ev-rechazado", null)
+        assertTrue(local.getMovimientosRechazados().isEmpty(), "anulado, el aviso se va")
+
+        remote.eventosSubidos.clear()
+        engine.syncEvents()
+        engine.syncVoids()
+        assertTrue(remote.eventosSubidos.isEmpty(), "no se vuelve a subir un movimiento anulado")
+        assertTrue(db.voidEventQueries.selectUnsynced().executeAsList().isEmpty(), "el 404 de algo que nunca subió se sella")
+
+        // Y el ciclo siguiente no insiste con nada.
+        engine.syncEvents()
+        engine.syncVoids()
+        assertTrue(remote.eventosSubidos.isEmpty())
+        assertTrue(remote.anulados.isEmpty())
+    }
+
+    /**
+     * El caso que obliga a empujar la anulación en vez de sellarla de antemano: el POST llegó al
+     * server pero la respuesta se perdió, así que acá sigue sin sellar. La anulación tiene que
+     * llegar allá, o el server se queda con un movimiento que el dueño anuló.
+     */
+    @Test
+    fun anular_un_movimiento_que_llego_al_server_sin_respuesta_lo_anula_alla() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-perdido", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-perdido", "acc-perdido", TransactionType.EXPENSE, 9_000L))
+        assertNull(db.financialEventQueries.selectById("ev-perdido", testUserId).executeAsOne().syncedAt)
+        // El server ya lo tiene, aunque el teléfono nunca se enteró.
+        val remote = VoidAwareRemote(conocidos = mutableSetOf("ev-perdido"))
+
+        local.voidEvent("ev-perdido", null)
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+        engine.syncEvents()
+        engine.syncVoids()
+
+        assertTrue(remote.eventosSubidos.isEmpty())
+        assertEquals(listOf("ev-perdido"), remote.anulados, "la anulación llega al server")
+        assertTrue(db.voidEventQueries.selectUnsynced().executeAsList().isEmpty())
+    }
+
+    /** Un 404 sobre un movimiento que SÍ subió no es «nunca llegó»: no se sella y se reintenta. */
+    @Test
+    fun un_404_sobre_un_movimiento_que_si_subio_no_se_sella() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-subido", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-subido", "acc-subido", TransactionType.EXPENSE, 9_000L))
+        val engine = SyncEngine(db = db, remote = VoidAwareRemote(), userId = { testUserId })
+        engine.syncAccounts()
+        engine.syncEvents()
+        assertNotNull(db.financialEventQueries.selectById("ev-subido", testUserId).executeAsOne().syncedAt)
+
+        local.voidEvent("ev-subido", null)
+        // Otro server que no lo conoce: el 404 no se puede tomar como «no hay nada que anular».
+        SyncEngine(db = db, remote = VoidAwareRemote(), userId = { testUserId }).syncVoids()
+
+        assertEquals(1, db.voidEventQueries.selectUnsynced().executeAsList().size)
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

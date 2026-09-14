@@ -197,6 +197,18 @@ class SyncEngine(
      * ver `POST /api/events/{id}/void`) y la carrera entre dos dispositivos anulando las dos
      * patas a la vez. Antes eso quedaba sin sellar y el ciclo lo reintentaba cada 30 segundos
      * para siempre, ensuciando el log con un "error" que en realidad era el resultado buscado.
+     *
+     * **Un 404 también se sella, pero solo si el movimiento nunca subió** (`syncedAt` en null, o
+     * la fila ya no está). Es el caso de anular un movimiento que el server rechazó, o que se
+     * anotó sin señal y se anuló antes de subir: `selectUnsynced` ya no lo empuja, así que en el
+     * server no hay nada que anular, y antes esa anulación rebotaba contra un 404 eterno mientras
+     * el aviso de Movimientos seguía diciendo «corrígelo o anúlalo».
+     *
+     * No se deja de empujar la anulación de antemano, y es a propósito: un movimiento puede haber
+     * llegado al server sin que el teléfono recibiera la respuesta (se cortó la señal a mitad del
+     * POST), y ahí sigue en null acá pero existe allá. Empujar primero la anulación lo anula en
+     * ese caso; y cuando de verdad no llegó, el 404 lo dice. Un 404 de un movimiento que SÍ subió
+     * es otra cosa y se sigue reintentando.
      */
     internal suspend fun syncVoids() {
         val unsynced = db.voidEventQueries.selectUnsynced().executeAsList()
@@ -207,7 +219,10 @@ class SyncEngine(
                     Clock.System.now().toEpochMilliseconds(), row.id
                 )
             } catch (e: ApiException) {
-                if (e.status == 409) {
+                val nuncaSubio = e.status == 404 &&
+                    db.financialEventQueries.selectById(row.originalEventId, userId())
+                        .executeAsOneOrNull()?.syncedAt == null
+                if (e.status == 409 || nuncaSubio) {
                     db.voidEventQueries.markSynced(
                         Clock.System.now().toEpochMilliseconds(), row.id
                     )
