@@ -541,6 +541,23 @@ class EventRoutesTest {
      * «Por confirmar» no tenía salida: no existía ninguna ruta para confirmar un movimiento que
      * entró solo. Confirma, es idempotente, arrastra al par de un traspaso y no toca lo ajeno.
      */
+    /**
+     * Un APK anterior al arreglo no guardaba la moneda en el teléfono: sus movimientos llegan sin la
+     * clave. Sin moneda en el pedido vale la de la cuenta; si viene, se respeta.
+     */
+    @Test
+    fun `POST sin moneda toma la de la cuenta, y con moneda la respeta`() = testApplication {
+        wireApp()
+        transaction { Accounts.update({ Accounts.id eq savingsAccountId }) { it[Accounts.currency] = "USD" } }
+        val sinMoneda = postEvent(userAId, """{"id":"ev-sin","accountId":"$savingsAccountId","type":"EXPENSE","amount":120,"category":"Tecnología","description":"Railway","timestamp":${System.currentTimeMillis()}}""")
+        assertEquals(HttpStatusCode.Created, sinMoneda.status, sinMoneda.bodyAsText())
+        val conMoneda = postEvent(userAId, """{"id":"ev-con","accountId":"$savingsAccountId","type":"EXPENSE","amount":50000,"currency":"COP","category":"Comida","description":"Pan","timestamp":${System.currentTimeMillis()}}""")
+        assertEquals(HttpStatusCode.Created, conMoneda.status, conMoneda.bodyAsText())
+        fun moneda(id: String) = transaction { Events.selectAll().where { Events.id eq id }.single()[Events.currency] }
+        assertEquals("USD", moneda("ev-sin"))
+        assertEquals("COP", moneda("ev-con"))
+    }
+
     @Test
     fun `PUT confirm confirma el movimiento, a su par, y no lo ajeno`() = testApplication {
         wireApp()
