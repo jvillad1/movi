@@ -624,6 +624,8 @@ internal fun TransferBody(
     }
 
     var amount by remember { mutableStateOf<Long?>(null) }
+    /** Lo que bajó la deuda en su moneda, cuando se paga una tarjeta desde una cuenta de otra moneda. */
+    var montoEnLaDeuda by remember { mutableStateOf<Long?>(null) }
     // Ola 13 — LA FECHA DEL TRASPASO SE ELIGE, NO SE ESCRIBE.
     //
     // Acá había un campo de texto donde se tecleaba «AAAA-MM-DD» a mano, con su
@@ -738,7 +740,7 @@ internal fun TransferBody(
 
     val missing = if (esPago) {
         validarPagoDeCuota(
-            pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note, null),
+            pagoRequestFor(ids, from?.id.orEmpty(), to?.id.orEmpty(), amount ?: 0L, 0L, note, null, montoEnLaDeuda),
             from,
             to,
         )
@@ -759,7 +761,7 @@ internal fun TransferBody(
         val destino = to ?: return
         // Lo que la hoja le PROMETIÓ, capturado antes de salir: si el server escribe otro reparto
         // hay que poder decir cuál era el que él leyó. Se calcula igual que el renglón de abajo.
-        val desgloseMostrado = if (esPago) desgloseDelPago(destino, terminosPorCuenta[destino.id], amount, interesEfectivo) else null
+        val desgloseMostrado = if (esPago) desgloseDelPago(destino, terminosPorCuenta[destino.id], if (origen.currency != destino.currency) montoEnLaDeuda else amount, interesEfectivo) else null
         // Con «Hoy» (el default) queda la hora real, como siempre; cualquier otro día va al
         // mediodía de Bogotá — ver [timestampParaFecha] y [epochAlMediodia].
         val timestamp = timestampParaFecha(fecha, hoy)
@@ -769,7 +771,7 @@ internal fun TransferBody(
             val result = runCatching {
                 if (esPago) {
                     Repositories.wallets.payInstallment(
-                        pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note, interesEfectivo),
+                        pagoRequestFor(ids, origen.id, destino.id, amount ?: 0L, timestamp, note, interesEfectivo, montoEnLaDeuda),
                     )
                 } else {
                     Repositories.wallets.createTransfer(
@@ -1030,7 +1032,34 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(16.dp))
-        MoneyField(value = amount, onValueChange = { amount = it }, label = "MONTO", modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO))
+        // Entre monedas (pagar la tarjeta en dólares desde pesos) el monto es lo que SALIÓ de la
+        // cuenta, en su moneda, y abajo se pide lo que bajó la deuda. La app no convierte: el tipo
+        // de cambio lo puso el banco. Ver `CreatePagoDeCuotaRequest.montoEnLaMonedaDeLaDeuda`.
+        val pagoEntreMonedas = esPago && from != null && to != null && from.currency != to.currency
+        MoneyField(
+            value = amount,
+            onValueChange = { amount = it },
+            label = if (pagoEntreMonedas) "LO QUE SALIÓ DE ${from!!.name.uppercase()}" else "MONTO",
+            prefix = simboloDeMoneda(if (pagoEntreMonedas) from!!.currency else "COP"),
+            modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO),
+        )
+        if (pagoEntreMonedas) {
+            Spacer(Modifier.height(12.dp))
+            MoneyField(
+                value = montoEnLaDeuda,
+                onValueChange = { montoEnLaDeuda = it },
+                label = "LO QUE BAJÓ LA DEUDA",
+                prefix = simboloDeMoneda(to!!.currency),
+                modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO_EN_LA_DEUDA),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "La cuenta y la tarjeta están en monedas distintas. Escribe los dos montos como aparecen " +
+                    "en el banco: Movi no convierte.",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+        }
 
         // ── Ola 14 · lo que este traspaso le hace al crédito ────────────────────────────────
         //
@@ -1095,7 +1124,7 @@ internal fun TransferBody(
         // Es plata suya: tiene que poder VERIFICAR el número, no confiar en él. Ver
         // [textoDelDesglose].
         if (esPago && to != null) {
-            val desglose = desgloseDelPago(to, termsDelDestino, amount, interesEfectivo)
+            val desglose = desgloseDelPago(to, termsDelDestino, if (from != null && from.currency != to.currency) montoEnLaDeuda else amount, interesEfectivo)
             Spacer(Modifier.height(12.dp))
 
             // ── El interés de este mes, editable ─────────────────────────────────────────────
@@ -1371,6 +1400,8 @@ private fun pagoRequestFor(
     note: String,
     /** `null` = que el server estime. Sin default a propósito: olvidarlo no compila. */
     interesReal: Long?,
+    /** Lo que bajó la deuda en su moneda; solo se manda si las monedas difieren. */
+    montoEnLaDeuda: Long?,
 ) = com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest(
     fromAccountId = fromAccountId,
     debtAccountId = debtAccountId,
@@ -1381,8 +1412,12 @@ private fun pagoRequestFor(
     fromEventId = ids.fromEventId,
     toEventId = ids.toEventId,
     interesReal = interesReal,
+    montoEnLaMonedaDeLaDeuda = montoEnLaDeuda,
 )
+
+private fun simboloDeMoneda(moneda: String): String = when (moneda) { "COP" -> "$"; "USD" -> "US$"; else -> moneda }
 
 /** Etiquetas de prueba de los dos campos de monto de esta hoja, para que Robolectric los distinga. */
 internal const val TAG_CAMPO_DE_MONTO = "campo_de_monto_del_traspaso"
 internal const val TAG_CAMPO_DE_INTERES = "campo_de_interes_de_la_cuota"
+internal const val TAG_CAMPO_DE_MONTO_EN_LA_DEUDA = "campo_de_monto_en_la_moneda_de_la_deuda"

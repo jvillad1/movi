@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.MONTO_DE_UN_PAGO_ENTRE_MONEDAS
+import com.jvillada.movi.shared.model.RechazoDeEdicion
 import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import org.jetbrains.exposed.sql.update
@@ -576,6 +578,12 @@ fun Route.eventRoutes() {
                             (Events.userId eq uid) and (Events.transferId eq transferId) and (Events.id neq id)
                         }
                         .map { it.toFinancialEvent() }
+                    // Un pago entre monedas (tarjeta en dólares pagada desde pesos): las dos cifras no
+                    // se deducen una de la otra —el tipo de cambio lo puso el banco—, así que corregir
+                    // una no puede recalcular la otra. Se rechaza en vez de inventarla.
+                    if (hermanas.any { it.currency != fila.currency }) {
+                        return@dbQuery ResultadoDeEdicion.Rechazado(RechazoDeEdicion(422, MONTO_DE_UN_PAGO_ENTRE_MONEDAS))
+                    }
                     hermanas.forEach { hermana ->
                         val montoNuevoDeLaHermana = montoDeLaHermanaAlCorregir(
                             montoViejo = fila.amount,
