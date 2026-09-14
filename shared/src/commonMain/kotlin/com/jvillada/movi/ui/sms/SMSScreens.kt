@@ -146,7 +146,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                     aviso?.let { hecho ->
                         Text(
                             hecho.rotulo,
-                            fontSize = 11.sp,
+                            style = Movi.textos.apoyo,
                             color = if (hecho.esAlerta) Movi.colores.aviso else Movi.colores.textoMedio,
                             letterSpacing = 1.4.sp,
                             fontWeight = FontWeight.Medium,
@@ -154,7 +154,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             hecho.detalle,
-                            fontSize = 13.5.sp,
+                            style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
                             lineHeight = 19.sp,
                         )
@@ -169,7 +169,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         if (!rememberSmsCaptureReady()) {
                             Text(
                                 "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo.",
-                                fontSize = 12.5.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.aviso,
                                 lineHeight = 18.sp,
                             )
@@ -177,7 +177,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                     } else {
                         Text(
                             "Este dispositivo no puede leer mensajes: eso lo hace un teléfono Android con Movi instalado. Aquí los revisas antes de que cuenten.",
-                            fontSize = 12.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 18.sp,
                         )
@@ -194,14 +194,14 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                             if (silencioActual) {
                                 Text(
                                     "Este aviso no se muestra en Inicio.",
-                                    fontSize = 12.5.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                 )
                                 Spacer(Modifier.height(6.dp))
                             }
                             Text(
                                 if (silencioActual) "Volver a avisarme en Inicio" else "No me avises de esto en Inicio",
-                                fontSize = 12.5.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.clickableSimple {
@@ -249,9 +249,9 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Text(sms.bank, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                            Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text(sms.time, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
+                            Text(sms.time, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             Spacer(Modifier.weight(1f))
                             val (label, color) = when (sms.state) {
                                 SMS_STATE_PENDING -> "PENDIENTE" to Movi.colores.aviso
@@ -259,12 +259,12 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                                 SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
                                 else -> sms.state.uppercase() to Movi.colores.textoMedio
                             }
-                            Text(label, fontSize = 10.5.sp, style = Movi.textos.rotulo, color = color, letterSpacing = 0.4.sp)
+                            Text(label, style = Movi.textos.rotulo, color = color)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
                             Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
-                            Text(sms.text, fontSize = 12.sp, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
+                            Text(sms.text, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontFamily = FontFamily.Monospace, lineHeight = 17.sp, modifier = Modifier.padding(start = 12.dp))
                         }
                         Spacer(Modifier.height(14.dp))
                         Hairline()
@@ -273,7 +273,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(sms.det, fontSize = 13.sp, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
+                            Text(sms.det, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
                             if (sms.state == SMS_STATE_PENDING) {
                                 Box(
                                     modifier = Modifier
@@ -282,7 +282,7 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                                         .clickable { onNavigate(Screen.SMSReconcile(sms.id)) }
                                         .padding(horizontal = 10.dp, vertical = 4.dp),
                                 ) {
-                                    Text("Revisar", fontSize = 12.5.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                    Text("Revisar", style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                                 }
                             }
                         }
@@ -453,24 +453,22 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     padding = PaddingValues(18.dp),
                 ) {
                     if (sms == null) {
-                        Text("Cargando…", fontSize = 13.sp, color = Movi.colores.textoMedio)
+                        Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(sms!!.bank, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                            Text(sms!!.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text("SMS", fontSize = 11.sp, color = Movi.colores.textoMedio, style = Movi.textos.rotulo, letterSpacing = 0.4.sp)
+                            Text("SMS", color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text(sms!!.time, fontSize = 11.sp, color = Movi.colores.textoMedio)
+                            Text(sms!!.time, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
                             Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Movi.colores.hilo))
                             Text(
                                 "\"${sms!!.text}\"",
-                                fontSize = 13.sp,
                                 color = Movi.colores.textoMedio,
-                                style = Movi.textos.monto,
-                                lineHeight = 19.sp,
+                                style = Movi.textos.cuerpo,
                                 modifier = Modifier.padding(start = 12.dp),
                             )
                         }
@@ -488,7 +486,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         Text(
                             if (coincidencias.size == 1) "Encontramos un movimiento igual. Si es este, no se crea otro."
                             else "Encontramos movimientos iguales. Si es uno de estos, no se crea otro.",
-                            fontSize = 12.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 17.sp,
                         )
@@ -496,16 +494,16 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             Spacer(Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(ev.description, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                                    Text(ev.description, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
                                         "${epochMillisToAppDate(ev.timestamp)} · ${formatMoney(ev.amount, ev.currency)}",
-                                        fontSize = 12.sp,
+                                        style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
                                 Text(
                                     "Es este",
-                                    fontSize = 13.5.sp,
+                                    style = Movi.textos.cuerpo,
                                     fontWeight = FontWeight.Medium,
                                     color = Movi.colores.marca,
                                     modifier = Modifier
@@ -527,7 +525,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     padding = PaddingValues(20.dp),
                 ) {
                     if (parsed == null) {
-                        Text("Parseando…", fontSize = 13.sp, color = Movi.colores.textoMedio)
+                        Text("Parseando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     } else {
                         val p = parsed!!
                         Row(
@@ -536,10 +534,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(p.merchant, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.2).sp)
+                                Text(p.merchant, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.2).sp)
                                 Text(
                                     "${selectedCategory ?: p.category} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
-                                    fontSize = 12.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     modifier = Modifier.padding(top = 3.dp),
                                 )
@@ -548,7 +546,6 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             val color = if (p.type == TransactionType.EXPENSE) Movi.colores.sale else Movi.colores.entra
                             Text(
                                 "$sign${formatMoney(p.amount.roundToLong(), p.currency)}",
-                                fontSize = 17.sp,
                                 style = Movi.textos.monto,
                                 fontWeight = FontWeight.Medium,
                                 color = color,
@@ -645,7 +642,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                                     .clickable { selectedCategory = opt }
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             ) {
-                                Text(opt, fontSize = 12.5.sp, color = if (on) Movi.colores.fondo else Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                Text(opt, style = Movi.textos.apoyo, color = if (on) Movi.colores.fondo else Movi.colores.texto, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -653,14 +650,14 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
 
                 if (error != null) {
                     Spacer(Modifier.height(10.dp))
-                    Text(error!!, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
 
                 // Ola 2 #1: red de seguridad — si la pila de navegación rota trae de vuelta a
                 // este detalle ya resuelto (confirmado o ignorado), no se puede reconfirmar.
                 if (currentSms != null && currentSms.state != SMS_STATE_PENDING) {
                     Spacer(Modifier.height(10.dp))
-                    Text("Este mensaje ya se confirmó", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                    Text("Este mensaje ya se confirmó", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
             }
         }
@@ -679,7 +676,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     .clickable(enabled = !working && !alreadyResolved) { ignore() },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Ignorar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text("Ignorar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             }
             val canConfirm = parsed != null && resolvedAccount != null && !working && !alreadyResolved
             Box(
@@ -693,7 +690,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
             ) {
                 Text(
                     if (working) "Guardando…" else "Confirmar",
-                    fontSize = 14.sp,
+                    style = Movi.textos.cuerpo,
                     fontWeight = FontWeight.Medium,
                     color = if (canConfirm) Movi.colores.fondo else Movi.colores.textoApagado,
                 )
@@ -741,14 +738,14 @@ private fun Detail(
             }
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(label.uppercase(), fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
-            Text(value, fontSize = 13.5.sp, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.padding(top = 2.dp))
+            Text(label.uppercase(), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp)
+            Text(value, style = Movi.textos.cuerpo, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.padding(top = 2.dp))
             if (hint != null) {
-                Text(hint, fontSize = 11.sp, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 2.dp))
+                Text(hint, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 2.dp))
             }
         }
         if (action != null) {
-            Text(action, fontSize = 12.sp, color = Movi.colores.textoMedio)
+            Text(action, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }
