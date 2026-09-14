@@ -62,6 +62,8 @@ fun Route.statementRoutes() {
         val uid = call.userId()
         val multipart = call.receiveMultipart()
         var fileName = "statement"
+        // Para leerle los números de cuenta al armar la respuesta (ver `numerosDeCuenta`).
+        var textoDelExtracto = ""
         var bytes = ByteArray(0)
 
         var mimeType = ""
@@ -110,6 +112,7 @@ fun Route.statementRoutes() {
             parsed = ClaudeStatementParser.parseImage(bytes, imageMime, Stores.merchantRules.getRules(uid))
         } else {
             val text = StatementParser.extractText(bytes, fileName)
+            textoDelExtracto = text
             val docType = StatementParser.detectDocumentType(text)
             if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
                 val msg = when (docType) {
@@ -261,6 +264,7 @@ fun Route.statementRoutes() {
                 period = period,
                 newTransactions = newTransactions,
                 matches = matches,
+                numerosDeCuenta = StatementParser.numerosDeCuenta(fileName, textoDelExtracto),
             )
         )
     }
