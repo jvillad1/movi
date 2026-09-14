@@ -281,6 +281,9 @@ fun desgloseDelPago(
         seguroMensual = terms?.insuranceMonthly,
         otrosCargosMensuales = terms?.otrosCargosMensuales,
         interesReal = interesValido,
+        // La hoja no tiene los pagos del mes a mano: estima como si fuera el primero. Si ya hubo
+        // otro pago parcial, el server descuenta lo cobrado y devuelve el desglose que escribió.
+        yaCobradoEnElMes = 0L,
     )
 }
 
@@ -301,6 +304,7 @@ fun interesEstimadoDelMes(deuda: Account?, terms: CreditTerms?): Long? {
         rateEa = terms?.rateEa,
         seguroMensual = terms?.insuranceMonthly,
         otrosCargosMensuales = terms?.otrosCargosMensuales,
+        yaCobradoEnElMes = 0L,
     )
     return d.interes.takeIf { d.motivo == MotivoDelDesglose.AMORTIZA }
 }

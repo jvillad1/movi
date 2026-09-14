@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.Events
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
@@ -531,6 +532,10 @@ fun Route.creditRoutes() {
                 seguroMensual = terms.insuranceMonthly,
                 otrosCargosMensuales = terms.otrosCargosMensuales,
                 interesReal = pedido.interesReal,
+                yaCobradoEnElMes = cargosYaCobradosEnElMes(
+                    loadNonVoidedEvents(uid, accountId).filter { it.id != idDelMes && it.currency == cuenta.currency },
+                    AppClock.today(),
+                ) { null },
             )
             val amortiza = desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL
             val base = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga"
