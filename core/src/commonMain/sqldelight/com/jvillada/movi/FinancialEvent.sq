@@ -91,13 +91,22 @@ markSyncError:
 UPDATE financial_event SET syncError = :syncError WHERE id = :id AND userId = :userId;
 
 -- Lo que el server rechazó y todavía no subió (ver migración 9.sqm).
+--
+-- Sin lo anulado en este dispositivo: el aviso de Movimientos dice «corrígelo o anúlalo», y un
+-- movimiento que el dueño ya anuló no puede seguir en el aviso para siempre.
 selectRechazados:
 SELECT * FROM financial_event
-WHERE syncedAt IS NULL AND length(syncError) > 0 AND userId = :userId;
+WHERE syncedAt IS NULL AND length(syncError) > 0 AND userId = :userId
+  AND id NOT IN (SELECT originalEventId FROM void_event);
 
+-- Sin lo anulado en este dispositivo: un movimiento pendiente que el dueño anuló no se sube
+-- (antes se reenviaba cada 30 s, y si el server lo había rechazado, para siempre). Si ya había
+-- llegado al server sin que el teléfono recibiera la respuesta, la anulación lo anula allá — ver
+-- SyncEngine.syncVoids.
 selectUnsynced:
 SELECT * FROM financial_event
-WHERE syncedAt IS NULL AND userId = :userId AND transferId IS NULL;
+WHERE syncedAt IS NULL AND userId = :userId AND transferId IS NULL
+  AND id NOT IN (SELECT originalEventId FROM void_event);
 
 -- Las dos patas de un traspaso, para anular en cascada (ver LocalRepository.voidEvent).
 selectByTransferId:

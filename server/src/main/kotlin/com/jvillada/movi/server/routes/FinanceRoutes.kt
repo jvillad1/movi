@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RenameBudgetRequest
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.movementCount
 import io.ktor.http.HttpStatusCode
@@ -186,6 +187,9 @@ fun Route.financeRoutes() {
                 (Events.timestamp greaterEq monthStart) and
                 (Events.timestamp less monthEnd)
             }.filterNot { it[Events.id] in voidedIds }
+                // «Por confirmar» no entra en ingresos ni egresos del período: la misma regla que
+                // `monthCashFlow` del Inicio y que los chips de Movimientos.
+                .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
 
             val accountTypeById = accountTypesFor(uid)
             // Movimientos de cuentas de deuda NO son flujo de caja del mes (ver isCashFlow):
