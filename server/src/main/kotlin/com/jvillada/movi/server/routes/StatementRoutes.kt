@@ -292,16 +292,32 @@ fun Route.statementRoutes() {
         val reconciliadosEnEsteImporte = mutableSetOf<String>()
         for (dec in decision.reconciliations) {
             if (dec.confirm) {
-                val existingEvent = dbQuery {
-                    Events.selectAll()
+                // **La pareja tiene que estar en la cuenta del extracto.** Si la propuesta era de otra
+                // cuenta (el emparejador no la conoce: se elige después), se busca la pareja real
+                // en ESTA cuenta antes de dar la fila por nueva. Antes se creaba directo: una compra
+                // de $500.000 de la tarjeta emparejada con un traspaso de Ahorros del mismo día
+                // entraba como nueva aunque su SMS ya estuviera en la tarjeta — compra duplicada.
+                val parejaId = dbQuery {
+                    val propuesta = Events.selectAll()
                         .where { (Events.id eq dec.existingEventId) and (Events.userId eq uid) }
+                        .firstOrNull()
+                    if (propuesta != null && propuesta[Events.accountId] == decision.accountId &&
+                        dec.existingEventId !in reconciliadosEnEsteImporte
+                    ) {
+                        dec.existingEventId
+                    } else {
+                        parejaEnLaCuenta(uid, decision.accountId, dec.parsed, reconciliadosEnEsteImporte)
+                    }
+                }
+                val existingEvent = if (parejaId == null) null else dbQuery {
+                    Events.selectAll()
+                        .where { (Events.id eq parejaId) and (Events.userId eq uid) }
                         .firstOrNull()
                         // **Solo es el mismo movimiento si está en la cuenta del extracto.** El
                         // emparejador no conoce la cuenta (se elige después), así que una compra de
                         // la tarjeta podía quedar «conciliada» contra una pata de traspaso de la
                         // cuenta de ahorros por el mismo monto: la tarjeta se quedaba sin la compra
                         // y su deuda $X más baja. Si no coincide la cuenta, la fila entra como nueva.
-                        ?.takeIf { it[Events.accountId] == decision.accountId && dec.existingEventId !in reconciliadosEnEsteImporte }
                         ?.let {
                             ExistingEventFields(
                                 category   = it[Events.category],
@@ -334,7 +350,7 @@ fun Route.statementRoutes() {
                     val finalMerchant    = if (dec.merchantSource    == FieldSource.STATEMENT) dec.parsed.merchant    else existMerchant
 
                     dbQuery {
-                        Events.update({ (Events.id eq dec.existingEventId) and (Events.userId eq uid) }) {
+                        Events.update({ (Events.id eq parejaId!!) and (Events.userId eq uid) }) {
                             it[category]          = finalCategory
                             it[description]       = finalDescription
                             it[merchant]          = finalMerchant
@@ -345,7 +361,7 @@ fun Route.statementRoutes() {
                             it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
                         }
                     }
-                    reconciliadosEnEsteImporte += dec.existingEventId
+                    reconciliadosEnEsteImporte += parejaId!!
 
                     if (dec.parsed.category != existCat) {
                         Stores.merchantRules.saveRule(uid, MerchantRule(
@@ -544,3 +560,28 @@ private data class ExistingEventFields(
 
 /** A dónde va una fila del extracto cuya categoría no se puede usar (ver `createEventFromParsed`). */
 private const val FALLBACK_CATEGORY = "Otros"
+
+/**
+ * La pareja de una fila de extracto **dentro de [cuentaId]**: un movimiento vivo con el mismo monto,
+ * moneda y tipo, a dos días o menos, que no se haya usado ya en este importe. El más cercano en fecha.
+ * Mismo criterio que el emparejador del análisis, con la cuenta que ahí no se conocía.
+ */
+private fun parejaEnLaCuenta(
+    uid: String,
+    cuentaId: String,
+    fila: ParsedTransaction,
+    yaUsados: Set<String>,
+): String? {
+    val cuando = runCatching { appDateToEpochMillis(LocalDate.parse(fila.date)) }.getOrNull() ?: return null
+    val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
+    return Events.selectAll()
+        .where {
+            (Events.userId eq uid) and (Events.accountId eq cuentaId) and
+                (Events.amount eq fila.amount) and (Events.currency eq fila.currency) and
+                (Events.type eq fila.type.name)
+        }
+        .map { it[Events.id] to it[Events.timestamp] }
+        .filter { (id, ts) -> id !in anulados && id !in yaUsados && abs(cuando - ts) <= 2 * 86_400_000L }
+        .minByOrNull { (_, ts) -> abs(cuando - ts) }
+        ?.first
+}

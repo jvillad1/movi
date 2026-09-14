@@ -242,7 +242,7 @@ class StatementRoutesTest {
 
     // ── Conciliar: solo contra lo que de verdad es el mismo movimiento ────────────────────────
 
-    private fun sembrar(id: String, cuenta: String, monto: Long, estado: String = "UNCONFIRMED") = transaction {
+    private fun sembrar(id: String, cuenta: String, monto: Long, estado: String = "UNCONFIRMED", cuando: Long = System.currentTimeMillis()) = transaction {
         Events.insert {
             it[Events.id] = id
             it[Events.userId] = userAId
@@ -252,7 +252,7 @@ class StatementRoutesTest {
             it[Events.currency] = "COP"
             it[Events.category] = "Comida"
             it[Events.description] = "anotado"
-            it[Events.timestamp] = System.currentTimeMillis()
+            it[Events.timestamp] = cuando
             it[Events.reconciliationStatus] = estado
         }
     }
@@ -292,6 +292,34 @@ class StatementRoutesTest {
         assertEquals(3, tarjeta.size, "ev-sms + 2 filas nuevas: $tarjeta")
         val ahorros = transaction { Events.selectAll().where { Events.id eq "ev-ahorros" }.single()[Events.statementImportId] }
         assertEquals(null, ahorros, "el movimiento de otra cuenta no se toca")
+    }
+
+    /**
+     * Si la propuesta era de otra cuenta pero en la del extracto está la pareja de verdad, se concilia
+     * con esa en vez de crear la compra otra vez: antes quedaba duplicada.
+     */
+    @Test
+    fun `una propuesta de otra cuenta busca la pareja en la cuenta del extracto antes de duplicar`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert {
+                it[id] = "acc-ahorros-b"; it[userId] = userAId; it[name] = "Ahorros"; it[type] = "SAVINGS"; it[currency] = "COP"
+            }
+        }
+        val dia = com.jvillada.movi.server.time.appDateToEpochMillis(java.time.LocalDate.parse("2026-06-14"))
+        sembrar("ev-traspaso-ahorros", "acc-ahorros-b", 500_000, estado = "RECONCILED", cuando = dia)
+        sembrar("ev-sms-tarjeta", accountAId, 500_000, cuando = dia + 86_400_000L)
+
+        val body = """{"statementId":"st-pareja","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[],"reconciliations":[${reconciliacion("p1", "ev-traspaso-ahorros", 500_000)}],"skipped":[]}"""
+        val res = client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val tarjeta = eventosDeLaTarjeta()
+        assertEquals(listOf("ev-sms-tarjeta" to "RECONCILED"), tarjeta, "se concilió con el SMS de la tarjeta, sin duplicar")
     }
 
     @Test
