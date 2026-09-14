@@ -17,6 +17,11 @@ private val CARD_PAYMENT_PATTERNS = listOf(
     "pago tc ",
     "abono tarjeta",
     "pago a tarjeta",
+    // Las dos redacciones de Bancolombia que se escapaban (vistas en la bandeja real, sep-2026):
+    // «Pagaste $1,008,902 en la tarjeta de credito *9208 desde la cuenta *8133» y
+    // «Recibimos pago por 9.809.799 a tu tarjeta de credito **9208».
+    "en la tarjeta de credito",
+    "a tu tarjeta de credito",
 )
 
 /**

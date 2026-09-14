@@ -121,4 +121,45 @@ class SmsParseTest {
     fun `un texto sin monto no parsea`() {
         assertNull(parseSms("Bancolombia: tu clave fue actualizada."))
     }
+
+    // ── Las redacciones que no se leían (bandeja real, sep-2026; nombres cambiados) ──────────
+
+    @Test
+    fun `una compra con COP pegado al monto se lee`() {
+        val p = assertNotNull(parseSms("Bancolombia: Compraste COP249.000,00 en PAYPAL *MICROSOFT con tu T.Cred *1111, el 06/09/2026 a las 08:03."))
+        assertEquals(249_000.0, p.amount)
+        assertEquals("COP", p.currency)
+        assertEquals("PAYPAL *MICROSOFT", p.merchant, "sin «con tu T» pegado")
+    }
+
+    @Test
+    fun `una compra en dolares se lee con su moneda`() {
+        val p = assertNotNull(parseSms("Bancolombia: Compraste USD20,00 en ANTHROPIC* CLAUDE SU, el 09/09/2026 a las 00:53. Esta compra esta asociada a T.Cred *1111."))
+        assertEquals(20.0, p.amount)
+        assertEquals("USD", p.currency)
+        assertEquals("ANTHROPIC* CLAUDE SU", p.merchant)
+    }
+
+    @Test
+    fun `el pago recibido a la tarjeta sin signo pesos es pago de tarjeta`() {
+        val p = assertNotNull(parseSms("Bancolombia: Recibimos pago por 9.809.799 a tu tarjeta de credito **2222 desde Wompi-PSE, el 08/09/2026 07:56:38."))
+        assertEquals(9_809_799.0, p.amount)
+        assertEquals(CARD_PAYMENT_CATEGORY, p.category)
+        val otro = assertNotNull(parseSms("Bancolombia: Pagaste \$1,008,902 en la tarjeta de credito *2222 desde la cuenta *3333, el 29/08/2026."))
+        assertEquals(CARD_PAYMENT_CATEGORY, otro.category)
+    }
+
+    @Test
+    fun `pagos QR y transferencias dicen a quien`() {
+        assertEquals("Pago QR", assertNotNull(parseSms("Bancolombia: ANA PEREZ pagaste \$18,500.00 por codigo QR desde tu cuenta *3333 a la llave 0087 el 09/09/2026 a las 15:08.")).merchant)
+        assertEquals("PEDRO GOMEZ", assertNotNull(parseSms("Bancolombia: ANA, transferiste \$25,910.00 a la llave @pedro desde tu cuenta *3333 a PEDRO GOMEZ el 10/09/26 a las 08:50.")).merchant)
+        assertEquals("Salud Total S A", assertNotNull(parseSms("Bancolombia: Pagaste \$138,600.00 a Salud Total S A desde tu producto 3333 el 05/09/2026 17:16:47.")).merchant)
+        assertEquals("CARLOS RUIZ", assertNotNull(parseSms("Bancolombia: ANA, recibiste una transferencia de CARLOS RUIZ por \$1,000,000 en tu cuenta *3333.")).merchant, "sin «por \$…» pegado")
+    }
+
+    @Test
+    fun `los avisos que no mueven plata no se proponen como movimiento`() {
+        assertNull(parseSms("Bancolombia confirma ampliacion de plazo por USD 1,202.49 en su TC MASTER *1111. La tasa es de 2.18%."))
+        assertNull(parseSms("Bancolombia: Muy bien. Inscribiste la cuenta de un tercero desde APP Bancolombia."))
+    }
 }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import kotlin.math.roundToLong
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -370,7 +371,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     id = newId("ev"),
                     accountId = acct.id,
                     type = p.type,
-                    amount = p.amount.toLong(),
+                    // Redondeado y no truncado (US$15,44 → 15), y en la moneda que dice el SMS: una
+                    // compra en dólares no se anota como pesos.
+                    amount = p.amount.roundToLong(),
+                    currency = p.currency,
                     category = cat,
                     description = p.merchant,
                     merchant = p.merchant,
@@ -479,7 +483,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                             val sign = if (p.type == TransactionType.EXPENSE) "−" else "+"
                             val color = if (p.type == TransactionType.EXPENSE) Movi.colores.sale else Movi.colores.entra
                             Text(
-                                "$sign\$${formatThousands(p.amount.toLong())}",
+                                "$sign${formatMoney(p.amount.roundToLong(), p.currency)}",
                                 fontSize = 17.sp,
                                 style = Movi.textos.monto,
                                 fontWeight = FontWeight.Medium,
