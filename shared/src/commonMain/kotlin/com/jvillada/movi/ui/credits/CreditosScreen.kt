@@ -426,7 +426,7 @@ private fun LoanCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            Text(credit.terms?.let { "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
+            Text(credit.terms?.let { if (it.sinIntereses) "Sin intereses" else "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
             EditTermsIcon(onEdit)
         }
         Text(credit.terms?.bank ?: "Sin términos registrados", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))

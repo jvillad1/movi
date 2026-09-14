@@ -429,6 +429,13 @@ object Credits : Table("credit_terms") {
      * `SchemaDeArranqueTest` y por `OtrosCargosColumnTest`.
      */
     val otrosCargosMensuales = long("otros_cargos_mensuales").nullable()
+    /**
+     * «Este crédito no cobra intereses»; ver `CreditTerms.sinIntereses`. Nullable y se lee como
+     * `false`, por lo mismo que `payroll_deduction`: `createMissingTablesAndColumns` corre DENTRO de
+     * la transacción de arranque, y `ADD COLUMN … NULL` es el único DDL que no puede fallar sobre
+     * las filas que ya están. `Credits` ya está en esa lista.
+     */
+    val sinIntereses = bool("sin_intereses").nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

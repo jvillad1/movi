@@ -159,7 +159,18 @@ private fun porcentajePagado(credit: CreditSummary): ProgresoDeCredito {
  * los haría desaparecer justo en el crédito donde más importan. El decimal se omite cuando es cero,
  * para que «100 %» no se lea «100,0 %».
  */
-fun textoDelInteres(plan: PlanDelCredito): String = when (plan.comoVa) {
+fun textoDelInteres(plan: PlanDelCredito): String = when {
+    // «No cobra intereses» lo declaró el dueño: decir «$0 de interés · 0 % de la cuota» se leería
+    // como una estimación. Sin deuda sigue diciendo lo suyo, que es más informativo.
+    plan.sinIntereses && plan.comoVa == ComoVaLaDeuda.SIN_CUOTA -> NO_COBRA_INTERESES + " · sin cuota registrada"
+    plan.sinIntereses && plan.comoVa != ComoVaLaDeuda.SIN_DEUDA -> NO_COBRA_INTERESES
+    else -> textoDelInteresConTasa(plan)
+}
+
+/** Lo que dice la tarjeta de un crédito marcado «No cobra intereses». */
+const val NO_COBRA_INTERESES: String = "No cobra intereses"
+
+private fun textoDelInteresConTasa(plan: PlanDelCredito): String = when (plan.comoVa) {
     // Sin tasa no es 0 %: es que no se sabe. Misma postura que [MotivoDelDesglose.SIN_TASA].
     ComoVaLaDeuda.SIN_TASA -> "Sin tasa registrada: no se sabe cuánto de la cuota es interés"
 
@@ -215,7 +226,10 @@ fun comoVaEstaDeuda(plan: PlanDelCredito, periodoActual: PeriodoFinanciero): Com
     // Ni alerta ni fecha: la deuda se queda donde está. Es lo que pasa con el préstamo de su mamá,
     // y es el acuerdo, no un accidente.
     ComoVaLaDeuda.SOLO_INTERESES -> ComoVaEstaDeuda(
-        "La cuota se va toda en intereses: la deuda se queda donde está",
+        // Sin intereses no hay en qué «irse» la cuota: lo que la deja quieta es el seguro o los
+        // otros cargos.
+        if (plan.sinIntereses) "La cuota no le baja nada a la deuda: se queda donde está"
+        else "La cuota se va toda en intereses: la deuda se queda donde está",
         esAlerta = false,
     )
 

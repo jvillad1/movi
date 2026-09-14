@@ -166,6 +166,7 @@ fun Route.pagoDeCuotaRoutes() {
                 rateEa = terms?.rateEa,
                 seguroMensual = terms?.insuranceMonthly,
                 otrosCargosMensuales = terms?.otrosCargosMensuales,
+                sinIntereses = terms?.sinIntereses ?: false,
                 interesReal = body.interesReal,
                 // Los otros pagos de esta deuda en el mismo mes que este (sin sus propias patas).
                 yaCobradoEnElMes = run {

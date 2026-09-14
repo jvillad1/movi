@@ -62,6 +62,9 @@ class SchemaDeArranqueTest {
         // del dueño adentro, y TODA consulta de tarjetas nombra esta columna (`toCardTerms`):
         // sin el ALTER, la pantalla de Créditos y «Próximos pagos» dejan de cargar enteras.
         "card_terms" to "pago_minimo",
+        // «No cobra intereses»: la casilla que separa un préstamo familiar sin tasa de una tasa
+        // que no se conoce. Toda consulta de créditos la nombra (`toCreditTerms`).
+        "credit_terms" to "sin_intereses",
     )
 
     /**

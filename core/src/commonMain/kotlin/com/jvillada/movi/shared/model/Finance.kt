@@ -168,7 +168,38 @@ data class CreditTerms(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val otrosCargosMensuales: Long? = null,
+    /**
+     * **Este crédito no cobra intereses**: un préstamo de la familia, un acuerdo sin tasa.
+     *
+     * Existe porque [rateEa] en 0 ya significa otra cosa, y a propósito: «no sabemos la tasa» (ver
+     * [ComoVaLaDeuda.SIN_TASA]). El Crédito Techo Gardenera del dueño tiene tasa 0 como marcador,
+     * y proyectarle una fecha sería inventar que no cobra nada. Con esta casilla la diferencia
+     * entre «no cobra» y «no sé cuánto cobra» la declara el dueño, no la adivina Movi: con `true`
+     * la cuota entera menos seguro y otros cargos baja la deuda, y la pantalla dice cuándo termina.
+     *
+     * Con `true`, [rateEa] tiene que ser 0: una tasa positiva en un crédito sin intereses son dos
+     * respuestas a la misma pregunta. Lo valida [validarTasaDelCredito] en la hoja y en el server.
+     *
+     * Viaja siempre, aunque valga `false`, por lo mismo que el resto: sin eso, **desmarcar la
+     * casilla no la apagaba**. Ver el KDoc de la clase.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val sinIntereses: Boolean = false,
 )
+
+/** Lo que se le dice a quien marca «No cobra intereses» y además escribe una tasa. */
+const val TASA_EN_CREDITO_SIN_INTERESES: String =
+    "Un crédito que no cobra intereses no puede tener tasa. Deja la tasa en 0 o desmarca «No cobra intereses»."
+
+/**
+ * ¿La tasa de estas condiciones es coherente? Devuelve el motivo, o `null` si está bien.
+ *
+ * La hoja y el server (`POST` y `PUT /api/credits`) llaman a esta misma función, así que crear y
+ * editar validan igual. La hoja nunca debería tropezar con esto —con la casilla marcada guarda 0—,
+ * pero un cliente viejo o un cuerpo escrito a mano sí.
+ */
+fun validarTasaDelCredito(terms: CreditTerms): String? =
+    if (terms.sinIntereses && terms.rateEa != 0.0) TASA_EN_CREDITO_SIN_INTERESES else null
 
 @Serializable
 data class CreditSummary(

@@ -70,6 +70,7 @@ import com.jvillada.movi.shared.model.conPuntosDeMiles
 import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.validarInteresReal
+import com.jvillada.movi.shared.model.validarTasaDelCredito
 import io.ktor.http.ContentType
 import io.ktor.server.request.contentType
 
@@ -203,6 +204,8 @@ fun Route.creditRoutes() {
             val terms = body.terms
                 .copy(accountId = accountId)
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
+            // La misma regla que apaga el botón de la hoja. Ver `validarTasaDelCredito`.
+            validarTasaDelCredito(terms)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             val opening = openingEventFor(cuentaAlAbrir, now = System.currentTimeMillis())
             // Las patas se construyen con `transferLegsFor`, la MISMA función que usa
             // `POST /api/transfers` (vive en :core justamente para eso): misma categoría
@@ -310,11 +313,17 @@ fun Route.creditRoutes() {
                 // default deserializado se escribía sobre la columna y editar la cuota desde el
                 // teléfono viejo le devolvía el recordatorio a un crédito que él había silenciado.
                 .let { if ("remindMe" in crudo) it else it.copy(remindMe = previo?.remindMe ?: true) }
+                // «No cobra intereses» entra al club por el mismo agujero: un APK anterior a la
+                // casilla manda la tasa en 0 sin la clave, y sin esta línea editar la nota de un
+                // préstamo familiar lo devolvería a «sin tasa registrada».
+                .let { if ("sinIntereses" in crudo) it else it.copy(sinIntereses = previo?.sinIntereses ?: false) }
                 // El tope de la columna es varchar(60): un nombre más largo hacía fallar el
                 // INSERT en Postgres y se caía el guardado ENTERO del crédito con un 500 sin
                 // mensaje, porque no hay StatusPages. Se recorta acá en vez de rechazar: nadie
                 // pierde un crédito por haber escrito de más en un rótulo.
                 .let { it.copy(paidBy = it.paidBy?.trim()?.take(60)?.takeIf { v -> v.isNotBlank() }) }
+            // Crear y editar validan igual: la misma función que el alta y que la hoja.
+            validarTasaDelCredito(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             // upsert atómico por PK (accountId): elimina la carrera check-then-insert.
             // lastRemindedPeriod no está en el body del upsert, así que se conserva
             // a propósito: un cambio de día aplica desde el mes siguiente (v1).
@@ -534,6 +543,7 @@ fun Route.creditRoutes() {
                 rateEa = terms.rateEa,
                 seguroMensual = terms.insuranceMonthly,
                 otrosCargosMensuales = terms.otrosCargosMensuales,
+                sinIntereses = terms.sinIntereses,
                 interesReal = pedido.interesReal,
                 // La cuota de [periodo], no la del mes de hoy: registrar el 2 de septiembre la cuota de
                 // agosto no puede descontar lo que ya cobró… septiembre.
@@ -610,6 +620,7 @@ private fun fillTerms(
     it[Credits.paidBy] = terms.paidBy?.trim()?.takeIf { v -> v.isNotBlank() }
     it[Credits.insuranceMonthly] = terms.insuranceMonthly?.takeIf { v -> v > 0L }
     it[Credits.otrosCargosMensuales] = terms.otrosCargosMensuales?.takeIf { v -> v > 0L }
+    it[Credits.sinIntereses] = terms.sinIntereses
 }
 
 private fun summaryFor(
