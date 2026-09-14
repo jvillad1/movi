@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
@@ -251,15 +252,26 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                         ) {
                             Text(sms.bank, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                             StatusDot(Movi.colores.textoApagado, 2.dp)
-                            Text(sms.time, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            Spacer(Modifier.weight(1f))
+                            // La fecha se lleva lo que sobra y, si no alcanza, es la que se corta: el
+                            // banco y el estado son lo que se busca con la vista.
+                            Text(
+                                sms.time,
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoMedio,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
                             val (label, color) = when (sms.state) {
                                 SMS_STATE_PENDING -> "PENDIENTE" to Movi.colores.aviso
                                 SMS_STATE_CONFIRMED -> "CONFIRMADO" to Movi.colores.entra
                                 SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
                                 else -> sms.state.uppercase() to Movi.colores.textoMedio
                             }
-                            Text(label, style = Movi.textos.rotulo, color = color)
+                            // Un renglón siempre. Con el espaciado de `rotulo`, «CONFIRMADO» no entraba
+                            // al lado de la fecha y se partía en «CONFIRMAD» con la «O» abajo. Visto en
+                            // la web a 390 dp.
+                            Text(label, style = Movi.textos.rotulo, color = color, maxLines = 1, softWrap = false)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
