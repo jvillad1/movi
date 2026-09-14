@@ -594,7 +594,15 @@ fun CreditTermsSheet(
                         modifier = Modifier
                             .size(20.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (esLibranza) Movi.colores.marca else Movi.colores.tarjeta),
+                            .background(if (esLibranza) Movi.colores.marca else Movi.colores.tarjeta)
+                            // **Sin marcar, la casilla no se veía.** Se pintaba del color de la
+                            // tarjeta encima de una hoja del mismo color: quedaban el texto y su
+                            // sangría, sin el cuadro que dice que eso se marca. Visto en la web.
+                            // Lleva borde como la de «Recordarme», que siempre se vio.
+                            .then(
+                                if (esLibranza) Modifier
+                                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(6.dp)),
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         // Ícono, no el carácter «✓».
