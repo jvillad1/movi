@@ -43,7 +43,7 @@ class SyncEngineTest {
         private val accountTypes = mutableMapOf<String, AccountType>()
         val pushedAccountIds = mutableListOf<String>()
         val pushedEventIds = mutableListOf<String>()
-        private val pushedEvents = mutableListOf<FinancialEvent>()
+        val pushedEvents = mutableListOf<FinancialEvent>()
 
         override suspend fun createAccount(account: Account): Account {
             knownAccountIds += account.id
@@ -112,6 +112,26 @@ class SyncEngineTest {
      * validación de `EventRoutes.kt`). Primero se demuestra el orden EQUIVOCADO (para no probar
      * un caso feliz que pasaría igual sin importar el orden) y después el correcto.
      */
+    /**
+     * **La moneda viaja.** El teléfono no la guardaba y el POST salía con el default "COP": un gasto
+     * de US$120 anotado sin señal sobre la Master Black USD llegaba al server como $120 pesos.
+     */
+    @Test
+    fun syncEvents_sube_la_moneda_del_movimiento() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-usd", "Master USD", AccountType.CREDIT_CARD, 0L, "USD"))
+        local.postEvent(event("ev-usd", "acc-usd", TransactionType.EXPENSE, 120L).copy(currency = "USD"))
+        assertEquals("USD", local.getEvents("acc-usd").single { it.id == "ev-usd" }.currency, "el teléfono la guarda")
+
+        val remote = OrderSensitiveRemote()
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+        engine.syncEvents()
+
+        assertEquals("USD", remote.pushedEvents.single { it.id == "ev-usd" }.currency, "y la sube")
+    }
+
     @Test
     fun syncAccounts_antes_que_syncEvents_permite_que_el_evento_de_una_cuenta_offline_llegue() = runBlocking {
         val db = createDatabase("sync-test.db")
@@ -220,14 +240,14 @@ class SyncEngineTest {
         db.financialEventQueries.insert(
             "ev-pata-suelta", "acc-tr", "EXPENSE", 100_000L, "Traspaso", "Traspaso a CDT", null,
             1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, "tr-huerfano",
-            1_700_000_000_000L, null, 0L,
+            1_700_000_000_000L, null, 0L, "COP",
         )
         // Y un evento normal al lado, para que el test distinga "no empuja la pata" de
         // "no empuja nada".
         db.financialEventQueries.insert(
             "ev-normal", "acc-tr", "EXPENSE", 5_000L, "Mercado", "pan", null,
             1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, null,
-            1_700_000_000_000L, null, 0L,
+            1_700_000_000_000L, null, 0L, "COP",
         )
 
         SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()

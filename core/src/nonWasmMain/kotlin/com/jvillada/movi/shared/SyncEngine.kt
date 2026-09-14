@@ -153,6 +153,9 @@ class SyncEngine(
                         // «Este no se repite» marcado sin señal. No viajaba: el POST llegaba con el
                         // default y la marca se perdía al sincronizar.
                         noSeRepite = row.noSeRepite != 0L,
+                        // La moneda, que tampoco viajaba: un gasto en dólares anotado sin señal
+                        // llegaba como pesos. Ver migración 8.sqm.
+                        currency = row.currency,
                     )
                 )
                 db.financialEventQueries.markSyncedIfUnchanged(
