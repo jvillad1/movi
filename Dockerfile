@@ -46,24 +46,25 @@ COPY . .
 
 RUN echo "── recursos ──" && (free -m || true) && df -h /app && nproc
 
-# ── El caché de build devolvió un wasm viejo (2026-09-14) ─────────────────────
+# ── Un despliegue «exitoso» con el código de otro commit (2026-09-14) ─────────
 #
-# El despliegue de 76451ee terminó en SUCCESS y /version dijo el commit nuevo, pero
-# la web servía un paquete que no conocía las fuentes de #208: no pedía ningún .ttf y
-# /composeResources/… caía al index.html. La misma etapa de este Dockerfile, armada en
-# CI sin caché y con el mismo commit, sí las traía, y con otro composeApp.js
-# (578.097 bytes contra 574.176) y otro wasm (6.089.765 contra 5.538.570). O sea: el
-# caché de build de Gradle que vive en el montaje le devolvió salidas de antes.
+# Dos despliegues terminaron en SUCCESS, con /version en el commit nuevo, y la web
+# no conocía las fuentes de #208. La primera explicación fue que el caché de build
+# de Gradle del montaje había devuelto un wasm viejo, y por eso está la purga de
+# abajo. **Era falsa.** El log del build siguiente mostró 15 pasos con un Dockerfile
+# de 16: `railway up` corrido desde un git worktree sube la carpeta PRINCIPAL del
+# repositorio, no el worktree. Esa carpeta estaba en #202. Se desplegó desde una
+# exportación sin git y salió bien. `/version` no lo delató porque lee una variable
+# que pone quien despliega, no el código.
 #
-# Dos cosas:
+# Lo que queda, y por qué:
 #
-# 1. PURGA DE UNA VEZ, atada a la versión de Kotlin. Si el marcador no está, se borra
-#    solo el caché de build —no las dependencias ni el caché de Kotlin, que son lo que
-#    mantiene el build debajo de los 20 minutos— y se deja el marcador. El próximo
-#    cambio de Kotlin cambia el nombre del marcador y vuelve a purgar.
-# 2. UNA GUARDA QUE FALLA EL BUILD si el paquete no trae las fuentes. Un build fallido
-#    en Railway deja arriba el despliegue anterior, que es lo seguro; uno exitoso con un
-#    wasm viejo reemplaza producción sin que nadie lo note, que es lo que pasó.
+# 1. LA PURGA, atada a la versión de Kotlin. No fue la causa, pero es barata: corre
+#    una vez por versión y borra solo el caché de build, no las dependencias ni el
+#    caché de Kotlin, que son lo que mantiene el build debajo de los 20 minutos.
+# 2. LA GUARDA de fuentes. Esta sí vale: habría frenado ese despliegue, que subió un
+#    código anterior a las fuentes. Un build fallido en Railway deja arriba el
+#    despliegue anterior; uno exitoso con el código equivocado lo reemplaza sin ruido.
 RUN --mount=type=cache,id=s/8fdd793e-509a-42a8-ae98-e1fc6be27577-gradle,target=/root/.gradle \
     KOTLIN=$(sed -n 's/^kotlin = "\(.*\)"$/\1/p' gradle/libs.versions.toml) && \
     MARCA=/root/.gradle/.cache-de-build-purgado-kotlin-$KOTLIN && \

@@ -2,10 +2,11 @@
 # ¿El paquete web que se va a desplegar trae las fuentes de Movi?
 #
 # Lo corre el Dockerfile después de armar el wasm. Existe porque el 2026-09-14 Railway
-# desplegó con SUCCESS un wasm viejo, sacado del caché de build, que no conocía las
-# fuentes: la web se veía con la letra del sistema y nadie lo habría notado. Un build
-# que falla deja arriba el despliegue anterior; uno que pasa con un paquete viejo lo
-# reemplaza. Por eso esto falla fuerte.
+# desplegó con SUCCESS un código anterior a las fuentes: `railway up` desde un git
+# worktree subió la carpeta principal del repositorio, que estaba en otro commit. La
+# web se veía con la letra del sistema y /version decía el commit correcto. Un build
+# que falla deja arriba el despliegue anterior; uno que pasa con el código equivocado
+# lo reemplaza. Por eso esto falla fuerte.
 #
 # Uso: el-paquete-web-trae-las-fuentes.sh <carpeta del paquete>
 set -eu
