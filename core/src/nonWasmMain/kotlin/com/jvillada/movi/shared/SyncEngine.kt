@@ -168,6 +168,20 @@ class SyncEngine(
                     // viajaba no puede quedar sellado como «por confirmar» en el server.
                     row.reconciliationStatus,
                 )
+            } catch (e: ApiException) {
+                logSyncFailure("syncEvents", e, id = row.id)
+                // Un rechazo del server (4xx que no es sesión vencida ni «demasiadas peticiones»):
+                // reintentar solo no lo arregla. Se guarda el motivo para que Movimientos lo diga.
+                // Salvo que la cuenta todavía no haya subido: ese 404 se arregla solo en el ciclo
+                // siguiente, cuando syncAccounts la empuje.
+                val cuentaSinSubir = db.accountQueries.selectById(row.accountId).executeAsOneOrNull()?.syncedAt == null
+                if (e.status in 400..499 && e.status != 401 && e.status != 408 && e.status != 429 && !cuentaSinSubir) {
+                    db.financialEventQueries.markSyncError(
+                        e.serverMessage?.takeIf { it.isNotBlank() && it.length <= 200 } ?: "El servidor no lo aceptó (${e.status}).",
+                        row.id,
+                        row.userId,
+                    )
+                }
             } catch (e: Exception) {
                 logSyncFailure("syncEvents", e, id = row.id)
             }

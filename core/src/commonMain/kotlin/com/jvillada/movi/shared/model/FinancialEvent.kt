@@ -254,6 +254,9 @@ data class EventOccurrenceMark(
     val periodoDelDueno: String? = null,
 )
 
+/** Un movimiento que el teléfono no pudo subir, con el motivo que dio el server. */
+data class MovimientoRechazado(val evento: FinancialEvent, val motivo: String)
+
 @Serializable
 data class VoidEvent(
     val id: String,
