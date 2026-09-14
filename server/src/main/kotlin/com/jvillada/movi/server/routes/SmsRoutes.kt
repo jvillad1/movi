@@ -183,7 +183,11 @@ internal fun coincidenciasDelSms(parsed: ParsedSms, momento: Long, eventos: List
     val monto = parsed.amount.roundToLong()
     val margen = DIAS_PARA_COINCIDIR * 86_400_000L
     return eventos
-        .filter { it.amount == monto && it.currency == parsed.currency && it.type == parsed.type }
+        // Un pago de tarjeta se anota en Movi como abono a la cuenta de la tarjeta (un ingreso ahí),
+        // mientras el SMS lo lee como salida: con el tipo exigido, los abonos a la AMEX de 9.000.000 y
+        // 9.809.799 nunca se encontraban. En esa categoría el tipo no identifica.
+        .filter { it.amount == monto && it.currency == parsed.currency }
+        .filter { parsed.category == CARD_PAYMENT_CATEGORY || it.type == parsed.type }
         .filter { abs(it.timestamp - momento) <= margen }
         .sortedBy { abs(it.timestamp - momento) }
         .take(3)
