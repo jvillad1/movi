@@ -583,4 +583,9 @@ data class PagoDeCuotaResult(
 @Serializable
 data class RegistrarCuotaAjenaRequest(
     val interesReal: Long? = null,
+    /**
+     * La cuota de qué mes (`"2026-08"`). `null` = la última que ya venció (ver
+     * `mesDeLaCuotaVencida` en el server), que es lo que el botón quiere decir casi siempre.
+     */
+    val periodo: String? = null,
 )

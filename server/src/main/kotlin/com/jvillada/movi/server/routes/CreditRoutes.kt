@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.db.Events
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.debtAdjustmentEventFor
 import com.jvillada.movi.server.balance.enrichWith
@@ -437,13 +441,24 @@ fun Route.creditRoutes() {
             }
 
             val ahora = System.currentTimeMillis()
-            // El período en la zona de la app (Bogotá): un descuento de las 9 pm del 31 no puede
-            // caer en el mes siguiente y volver a bajar la deuda.
-            val periodo = java.time.Instant.ofEpochMilli(ahora)
-                .atZone(AppClock.zone)
-                .toLocalDate()
-                .toString()
-                .take(7)
+            val pedido = if (call.request.contentType().withoutParameters() == ContentType.Application.Json) {
+                call.receive<RegistrarCuotaAjenaRequest>()
+            } else {
+                RegistrarCuotaAjenaRequest()
+            }
+            // **La cuota de qué mes.** Antes era el mes de HOY: registrar el 2 de septiembre el
+            // descuento del 30 de agosto lo archivaba como septiembre, y el descuento real de
+            // septiembre después reventaba contra la clave (500) — la deuda quedaba un capital por
+            // encima. Ahora, sin pedido explícito, es la última cuota que ya venció según el día de
+            // pago del crédito, en la zona de la app.
+            val hoy = AppClock.today()
+            val periodo = pedido.periodo
+                ?.also { pedido ->
+                    val valido = Regex("""^\d{4}-(0[1-9]|1[0-2])$""").matches(pedido) &&
+                        java.time.YearMonth.parse(pedido) <= java.time.YearMonth.from(hoy)
+                    if (!valido) return@post call.respond(HttpStatusCode.BadRequest, "Mes inválido: usa \"AAAA-MM\" y no uno futuro.")
+                }
+                ?: mesDeLaCuotaVencida(hoy, terms.dayOfMonth)
             // **Un id, no dos.** La primera versión de esto usaba un prefijo distinto según el
             // caso (`ev_nomina_` vs `ev_tercero_`) con el argumento de que un crédito que cambia
             // de esquema no podía quedar con el pago del mes bloqueado por la idempotencia del
@@ -464,7 +479,27 @@ fun Route.creditRoutes() {
             // de producción antes de tocarlo y no existía ningún `ev_nomina_%` (el dueño nunca
             // había usado «Registrar descuento»). Si algún día hubiera datos viejos con ese
             // prefijo, habría que mirar los dos ids antes de insertar.
-            val idDelMes = "ev_cuota_${accountId}_$periodo"
+            val base0 = "ev_cuota_${accountId}_$periodo"
+            // Una cuota por mes, pero una ANULADA no puede bloquear volver a registrarla (por
+            // ejemplo, para cargarla con el interés real): antes su fila seguía ocupando el id y el
+            // reintento daba 500. Se busca la viva; si no hay, se usa el primer id libre.
+            val (yaViva, idDelMes) = dbQuery {
+                val filas = Events.selectAll()
+                    .where { (Events.userId eq uid) and (Events.id like "$base0%") }
+                    .map { it[Events.id] }
+                val anuladas = VoidEvents.selectAll()
+                    .where { (VoidEvents.userId eq uid) and (VoidEvents.originalEventId inList filas) }
+                    .map { it[VoidEvents.originalEventId] }.toSet()
+                val viva = filas.any { it !in anuladas }
+                val libre = generateSequence(1) { it + 1 }.map { if (it == 1) base0 else "${base0}_$it" }.first { it !in filas }
+                viva to libre
+            }
+            if (yaViva) {
+                return@post call.respond(
+                    HttpStatusCode.Conflict,
+                    "Ya está registrada la cuota de ${nombreDelMesEnEspanol(periodo)}. Si quieres corregirla, anúlala y vuelve a registrarla.",
+                )
+            }
 
             // ── Esta cuota también baja la deuda SOLO por el capital ─────────────────────────
             //
@@ -479,11 +514,6 @@ fun Route.creditRoutes() {
             // El botón de la app hoy no manda cuerpo —estima—; un cuerpo JSON con `interesReal`
             // se valida con la misma función que la cuota pagada desde una cuenta, y se rechaza
             // con 422 antes de escribir nada si el capital quedaría negativo.
-            val pedido = if (call.request.contentType().withoutParameters() == ContentType.Application.Json) {
-                call.receive<RegistrarCuotaAjenaRequest>()
-            } else {
-                RegistrarCuotaAjenaRequest()
-            }
             validarInteresReal(pedido.interesReal, terms.installment, AccountType.LOAN, terms.insuranceMonthly, terms.otrosCargosMensuales)?.let {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
             }
@@ -524,7 +554,9 @@ fun Route.creditRoutes() {
                 source = EventSource.MANUAL,
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
                 createdAt = ahora,
-                noAmortiza = if (amortiza) desglose.interes + desglose.seguro else null,
+                // Todo lo que no baja la deuda, incluidos los otros cargos del mes: sin ellos, editar
+                // después el monto de esta cuota recalculaba el capital con una parte de menos.
+                noAmortiza = if (amortiza) desglose.interes + desglose.seguro + desglose.otrosCargos else null,
             )
             dbQuery { insertEventRow(uid, evento) }
 
@@ -597,4 +629,25 @@ private sealed interface AdjustOutcome {
     data object NotLoan : AdjustOutcome
     data object NotCop : AdjustOutcome
     data class Ok(val summary: CreditSummary) : AdjustOutcome
+}
+
+/**
+ * El mes de la **última cuota que ya venció** hoy: la de este mes si su día ya llegó (recortado al
+ * largo del mes), si no la del mes pasado. Es la que se registra cuando se toca «Registrar
+ * descuento» sin decir de qué mes.
+ */
+internal fun mesDeLaCuotaVencida(hoy: java.time.LocalDate, diaDePago: Int): String {
+    val esteMes = java.time.YearMonth.from(hoy)
+    val vencimiento = esteMes.atDay(diaDePago.coerceIn(1, esteMes.lengthOfMonth()))
+    return (if (vencimiento.isAfter(hoy)) esteMes.minusMonths(1) else esteMes).toString()
+}
+
+private val MESES_EN_ESPANOL = listOf(
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+
+private fun nombreDelMesEnEspanol(periodo: String): String {
+    val mes = periodo.substringAfter('-').toIntOrNull() ?: return periodo
+    return "${MESES_EN_ESPANOL.getOrElse(mes - 1) { periodo }} de ${periodo.substringBefore('-')}"
 }
