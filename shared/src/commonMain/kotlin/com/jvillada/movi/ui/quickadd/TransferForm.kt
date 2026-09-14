@@ -856,7 +856,7 @@ internal fun TransferBody(
             // «Registrar pago» otra vez sobre un pago que ya está hecho.
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.height(18.dp))
-                Text(avisoGuardado, fontSize = 14.sp, color = Movi.colores.texto, lineHeight = 20.sp)
+                Text(avisoGuardado, style = Movi.textos.cuerpo, color = Movi.colores.texto, lineHeight = 20.sp)
                 Spacer(Modifier.height(20.dp))
                 Box(
                     modifier = Modifier
@@ -867,7 +867,7 @@ internal fun TransferBody(
                         .clickable { avisoDelDesglose = null; onSaved() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Entendido", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+                    Text("Entendido", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
                 }
                 Spacer(Modifier.height(18.dp))
             }
@@ -959,7 +959,7 @@ internal fun TransferBody(
                             "—para el desembolso o para un abono extraordinario— pero la tarjeta no: el pago " +
                             "de la tarjeta se anota como gasto."
                 },
-                fontSize = 13.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -977,7 +977,7 @@ internal fun TransferBody(
         ) {
             CardRow(
                 left = {
-                    Text("Desde", fontSize = 14.5.sp, color = Movi.colores.textoMedio)
+                    Text("Desde", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
                     // Ola 11: mismo aviso que la fila «Cuenta» del editor y por el mismo motivo
                     // —el valor por defecto es una decisión de la app y tiene que poder leerse
                     // antes de guardar—, con el mismo alto reservado para que elegir una cuenta
@@ -987,7 +987,7 @@ internal fun TransferBody(
                 right = {
                     Text(
                         text = from?.name ?: "Elegir cuenta",
-                        fontSize = 14.5.sp,
+                        style = Movi.textos.titulo,
                         color = if (from == null) Movi.colores.textoApagado else Movi.colores.texto,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -1003,7 +1003,7 @@ internal fun TransferBody(
             )
             CardRow(
                 left = {
-                    Text("Hacia", fontSize = 14.5.sp, color = Movi.colores.textoMedio)
+                    Text("Hacia", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
                     // Menos una: el destino no puede ser el origen, así que con dos cuentas el
                     // destino no tiene alternativa y no hay ninguna decisión que confesar —
                     // misma regla que «con una sola cuenta el aviso no dice nada».
@@ -1015,7 +1015,7 @@ internal fun TransferBody(
                 right = {
                     Text(
                         text = to?.name ?: "Elegir cuenta",
-                        fontSize = 14.5.sp,
+                        style = Movi.textos.titulo,
                         color = if (to == null) Movi.colores.textoApagado else Movi.colores.texto,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -1063,12 +1063,12 @@ internal fun TransferBody(
                     "Abono extraordinario: plata extra que baja el capital. La cuota mensual no va " +
                         "aquí — esa se anota como gasto en Agregar."
                 },
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
             deudaDespuesDelTraspaso(from, to, amount)?.let { renglon ->
                 Spacer(Modifier.height(6.dp))
-                Text(renglon, fontSize = 12.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
             }
         }
 
@@ -1126,7 +1126,7 @@ internal fun TransferBody(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     if (interesEstimado != null) INTERES_ESTIMADO_AVISO else INTERES_SIN_TASA_AVISO,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     lineHeight = 17.sp,
                 )
@@ -1142,7 +1142,7 @@ internal fun TransferBody(
                         (amount ?: 0L) <= 0L ->
                             Text(
                                 "Escribe el monto para ver cuánto de la cuota baja la deuda.",
-                                fontSize = 12.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                                 lineHeight = 17.sp,
                             )
@@ -1150,24 +1150,24 @@ internal fun TransferBody(
                         // sobre una carga a medias sería exactamente el número plausible y falso
                         // que esta ola vino a matar.
                         to.type == AccountType.LOAN && !terminosCargados ->
-                            Text("Calculando cuánto baja la deuda…", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                            Text("Calculando cuánto baja la deuda…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         to.type == AccountType.LOAN && falloCargarTerminos ->
-                            Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                            Text(SIN_CONDICIONES_PARA_EL_DESGLOSE, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
                         // Un interés que no cabe en la cuota: se dice acá, al lado del campo y con
                         // las mismas palabras que contestaría el server, y el botón queda apagado.
                         // No se muestra un capital negativo ni se clampa en silencio.
                         errorDeInteres != null ->
-                            Text(errorDeInteres, fontSize = 12.sp, color = Movi.colores.sale, lineHeight = 17.sp)
+                            Text(errorDeInteres, style = Movi.textos.apoyo, color = Movi.colores.sale, lineHeight = 17.sp)
                         // Nada de `return@Column` acá: un early return se llevaría por delante la
                         // fecha, la nota y el botón de Guardar. Los dos renglones son opcionales
                         // por separado.
                         else -> {
                             desglose?.let { d -> textoDelDesglose(d, to.currency) }?.let { renglon ->
-                                Text(renglon, fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+                                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
                                 Spacer(Modifier.height(6.dp))
                             }
                             deudaDespuesDelPago(to, desglose)?.let { renglon ->
-                                Text(renglon, fontSize = 12.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                                Text(renglon, style = Movi.textos.apoyo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -1176,7 +1176,7 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(14.dp))
-        Text("FECHA", fontSize = 11.sp, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
+        Text("FECHA", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         // Misma caja que tenía el campo de texto (mismo alto, mismo borde, mismo lugar) pero se
         // toca en vez de escribirse: así el formulario no cambia de alto respecto de master y el
@@ -1192,7 +1192,7 @@ internal fun TransferBody(
         ) {
             Text(
                 text = etiquetaDeFecha(fecha, hoy),
-                fontSize = 14.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1200,7 +1200,7 @@ internal fun TransferBody(
         }
 
         Spacer(Modifier.height(14.dp))
-        Text("NOTA (OPCIONAL)", fontSize = 11.sp, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
+        Text("NOTA (OPCIONAL)", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         FieldBox(if (esPago) "Concepto del pago" else "Concepto del traspaso", note, onValueChange = { note = it })
 
@@ -1212,7 +1212,7 @@ internal fun TransferBody(
         Spacer(Modifier.height(10.dp))
         Box(modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp)) {
             if (error != null) {
-                Text(error!!, fontSize = 12.sp, color = Movi.colores.sale)
+                Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
         }
 
@@ -1232,7 +1232,7 @@ internal fun TransferBody(
                     esPago -> "Registrar pago"
                     else -> "Guardar traspaso"
                 },
-                fontSize = 15.sp,
+                style = Movi.textos.titulo,
                 fontWeight = FontWeight.Medium,
                 color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
             )
@@ -1246,7 +1246,7 @@ internal fun TransferBody(
             if (!saving && missing != null) {
                 Text(
                     text = missing,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -1265,7 +1265,7 @@ internal fun TransferBody(
             } else {
                 "El traspaso se guarda en línea: las dos puntas se registran juntas o no se registra ninguna."
             },
-            fontSize = 11.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
@@ -1309,7 +1309,7 @@ private fun TransferAccountPicker(
             Spacer(Modifier.height(14.dp))
             Text(
                 "CRÉDITOS",
-                fontSize = 11.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 letterSpacing = 0.4.sp,
                 fontWeight = FontWeight.Medium,
@@ -1318,7 +1318,7 @@ private fun TransferAccountPicker(
             Text(
                 "Elige uno para registrar el desembolso que te entró a la cuenta, o un abono " +
                     "extraordinario que sale de ella.",
-                fontSize = 11.5.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )
             Spacer(Modifier.height(8.dp))
@@ -1340,14 +1340,14 @@ private fun GrupoDeCuentas(
                 left = {
                     Text(
                         text = account.name,
-                        fontSize = 14.5.sp,
+                        style = Movi.textos.titulo,
                         color = Movi.colores.texto,
                         fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                     )
                 },
                 right = {
                     if (account.id == selectedId) {
-                        Text("Elegida", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                        Text("Elegida", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
                 },
                 onClick = { onPick(account.id) },
