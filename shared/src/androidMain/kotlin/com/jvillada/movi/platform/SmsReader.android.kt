@@ -168,16 +168,16 @@ fun rowToSmsMessage(address: String?, date: Long, dateSent: Long, body: String?)
 }
 
 /**
- * Query Telephony.Sms.Inbox for messages from the last 30 days. Runs on Dispatchers.IO.
+ * Query Telephony.Sms.Inbox for messages guardados desde [desdeMillis]. Runs on Dispatchers.IO.
+ * Quien llama decide desde cuándo (hoy: el período anterior del dueño, ver `desdeDondeRecuperarSms`).
  *
- * El filtro de 30 días es sobre `DATE` (cuándo el teléfono guardó la fila), no sobre `time`.
+ * El filtro es sobre `DATE` (cuándo el teléfono guardó la fila), no sobre `time`.
  * Como `time` puede quedar hasta `MAX_SMSC_QUEUE_MILLIS` (48 h) más viejo que `DATE`, una
  * fila cerca del borde de estos 30 días — o de un cambio de mes — puede salir con `time`
  * apenas fuera de esa ventana, o en el mes calendario anterior. Es correcto (el banco la
  * mandó ahí), no un bug del filtro ni del dedupe.
  */
-suspend fun readDeviceSms(context: Context): List<SmsMessage> = withContext(Dispatchers.IO) {
-    val thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+suspend fun readDeviceSms(context: Context, desdeMillis: Long): List<SmsMessage> = withContext(Dispatchers.IO) {
     val uri = Telephony.Sms.Inbox.CONTENT_URI
     val projection = arrayOf(
         Telephony.Sms._ID,
@@ -189,7 +189,7 @@ suspend fun readDeviceSms(context: Context): List<SmsMessage> = withContext(Disp
         Telephony.Sms.DATE_SENT,
     )
     val selection = "${Telephony.Sms.DATE} >= ?"
-    val selectionArgs = arrayOf(thirtyDaysAgo.toString())
+    val selectionArgs = arrayOf(desdeMillis.toString())
     val sortOrder = "${Telephony.Sms.DATE} DESC"
 
     val results = mutableListOf<SmsMessage>()

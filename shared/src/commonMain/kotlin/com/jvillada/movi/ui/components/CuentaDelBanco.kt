@@ -118,6 +118,17 @@ internal fun cuentaPorElNumero(texto: String, candidatas: List<Account>): Accoun
             digitosDelNombre.findAll(cuenta.name).any { it.value == ultimosCuatro }
         }
         if (coinciden.size == 1) return coinciden.single()
+        // **Empate por moneda.** La Master Black tiene dos cuentas con el mismo número, una en pesos
+        // y otra en dólares, así que «T.Cred *3684» coincide con las dos y no se elegía ninguna. Si
+        // el mensaje ESCRIBE la moneda («Compraste USD20,00», «COP249.000,00»), esa desempata. Un «$» a
+        // secas no: sin la palabra no se adivina (ver el test del empate).
+        val moneda = when {
+            Regex("""\bUSD\s*[0-9]""", RegexOption.IGNORE_CASE).containsMatchIn(texto) -> "USD"
+            Regex("""\bCOP\s*[0-9]""", RegexOption.IGNORE_CASE).containsMatchIn(texto) -> "COP"
+            else -> null
+        }
+        val deEsaMoneda = coinciden.filter { it.currency == moneda }
+        if (moneda != null && coinciden.size > 1 && deEsaMoneda.size == 1) return deEsaMoneda.single()
     }
     return null
 }

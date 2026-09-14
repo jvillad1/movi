@@ -167,4 +167,18 @@ class PeriodoFinancieroTest {
         assertFailsWith<IllegalArgumentException> { PeriodSettings(cutoffDay = 0) }
         assertFailsWith<IllegalArgumentException> { PeriodSettings(cutoffDay = 32) }
     }
+
+    // ── Desde cuándo recupera el teléfono los SMS ─────────────────────────────
+
+    /** El período en curso entero y el anterior completo, por el corte de cada uno — no 30 días. */
+    @Test
+    fun el_historial_de_sms_arranca_en_el_periodo_anterior() {
+        val corte25 = PeriodSettings(cutoffDay = 25)
+        // 26-sep con corte 25: el período en curso («octubre») arrancó ayer; el anterior, el 25-ago.
+        assertEquals(bogota(2026, 8, 25, 0, 0), desdeDondeRecuperarSms(bogota(2026, 9, 26), corte25))
+        // 20-sep: en curso «septiembre» (25-ago…), anterior «agosto» desde el 25-jul.
+        assertEquals(bogota(2026, 7, 25, 0, 0), desdeDondeRecuperarSms(bogota(2026, 9, 20), corte25))
+        // Calendario: el 1 del mes pasado.
+        assertEquals(bogota(2026, 8, 1, 0, 0), desdeDondeRecuperarSms(bogota(2026, 9, 14), calendario))
+    }
 }

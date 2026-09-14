@@ -325,7 +325,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
             Spacer(Modifier.height(10.dp))
         }
         Text(
-            "Sube los SMS bancarios de los últimos 30 días que sigan en el teléfono. " +
+            "Sube los SMS bancarios de tu período actual y del anterior que sigan en el teléfono. " +
                 "Sirve para recuperar lo que la captura automática no alcanzó a mandar.",
             fontSize = 13.sp,
             color = Movi.colores.textoMedio,
@@ -338,7 +338,7 @@ private fun SensorBackfillCard(installSource: InstallSource, outageSince: Long, 
         Text("Último historial sincronizado: ${formatCaptureDate(lastBackfillAt)}", fontSize = 12.sp, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(12.dp))
         SensorButton(
-            label = if (toSettings) "Abrir ajustes de la app" else "Sincronizar últimos 30 días",
+            label = if (toSettings) "Abrir ajustes de la app" else "Sincronizar el período",
             enabled = loggedIn && !running,
             loading = running,
         ) {

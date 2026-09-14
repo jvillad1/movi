@@ -1,5 +1,8 @@
 package com.jvillada.movi.sms
 
+import com.jvillada.movi.shared.model.desdeDondeRecuperarSms
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.data.Repositories
 import android.content.Context
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.platform.readDeviceSms
@@ -8,7 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Recuperación manual del historial: lee el inbox del teléfono (últimos 30 días), se queda
+ * Recuperación manual del historial: lee el inbox del teléfono desde el arranque del período
+ * anterior del dueño (ver [desdeDondeRecuperarSms]; antes eran 30 días fijos), se queda
  * SOLO con los SMS bancarios y los sube por el mismo endpoint que la captura en vivo.
  *
  * Existe porque el sensor puede quedar mudo sin que nadie se entere — token vencido,
@@ -26,7 +30,13 @@ object SmsBackfill {
         val token = SessionManager.token
         if (token.isNullOrBlank()) return@withContext BackfillOutcome.NoSession
 
-        val inbox = runCatching { readDeviceSms(context) }
+        // El período del dueño sale de su perfil. Sin respuesta se usa el mes de calendario: igual
+        // lee el mes pasado entero y el actual, que es más que los 30 días de antes.
+        val periodo = runCatching { Repositories.wallets.getUserProfile() }
+            .map { PeriodSettings(cutoffDay = it.periodCutoffDay, iniciosPropios = it.periodStarts) }
+            .getOrDefault(PeriodSettings())
+        val desde = desdeDondeRecuperarSms(System.currentTimeMillis(), periodo)
+        val inbox = runCatching { readDeviceSms(context, desde) }
             .getOrElse { return@withContext outcomeForReadFailure(it) }
         val bank = filterBankMessages(inbox, SmsFilterConfigStore.load(context))
         if (bank.isEmpty()) return@withContext BackfillOutcome.NothingFound
@@ -108,7 +118,7 @@ internal fun backfillMessage(outcome: BackfillOutcome): String = when (outcome) 
         outcome.synced == 0 -> "${outcome.found} mensajes bancarios encontrados; el server ya los tenía todos."
         else -> "${outcome.found} mensajes bancarios encontrados · ${outcome.synced} nuevos subidos."
     }
-    BackfillOutcome.NothingFound -> "No hay SMS bancarios en los últimos 30 días del teléfono."
+    BackfillOutcome.NothingFound -> "No hay SMS bancarios en el teléfono desde el inicio de tu período anterior."
     BackfillOutcome.NoSession -> "Entra primero: sin sesión no se puede subir nada."
     BackfillOutcome.NoPermission -> "Sin el permiso de lectura de SMS no se puede recuperar el historial."
     BackfillOutcome.AuthRetry -> "El servidor rechazó la sesión esta vez — prueba de nuevo en un momento."
