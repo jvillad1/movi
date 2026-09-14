@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -356,7 +355,7 @@ fun CreditTermsSheet(
                     if (candidates.isNotEmpty()) {
                         Text(
                             "Ya tienes una deuda cargada como cuenta, ¿es esta?",
-                            fontSize = 12.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -404,7 +403,7 @@ fun CreditTermsSheet(
                         // dicen las opciones.
                         Text(
                             "¿Acabas de recibir la plata de este crédito?",
-                            fontSize = 13.5.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                         )
@@ -439,7 +438,7 @@ fun CreditTermsSheet(
                             Text(
                                 "Lo que tu banco dice que debes hoy. Si no lo tienes a mano, " +
                                     "déjalo en blanco y cuádralo después con «Ajustar saldo».",
-                                fontSize = 11.5.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                             )
                         }
@@ -475,7 +474,7 @@ fun CreditTermsSheet(
                 Text(
                     "Si tu cuota incluye seguro de vida deudor, escríbelo aquí. Esa parte no baja " +
                         "la deuda, así que sin este dato Movi te mostraría menos deuda de la que tienes.",
-                    fontSize = 11.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -489,7 +488,7 @@ fun CreditTermsSheet(
                     "Algunos créditos cobran algo más dentro de la cuota que no es interés, ni " +
                         "seguro, ni abono: en el extracto suele decir «otros conceptos». Escríbelo " +
                         "aquí para que Movi no lo cuente como abono a tu deuda.",
-                    fontSize = 11.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -511,16 +510,16 @@ fun CreditTermsSheet(
                     SectionLabel("LA PLATA QUE TE ENTRÓ")
                     Spacer(Modifier.height(8.dp))
                     when {
-                        !cuentasCargadas -> Text("Cargando tus cuentas…", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                        !cuentasCargadas -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         // Un fallo de red NO es «no tienes cuentas»: acá se dice lo que pasó y se
                         // ofrece volver a intentar, en vez de mandar a crear una cuenta que ya
                         // existe. Ver [falloCargarCuentas].
                         falloCargarCuentas -> {
-                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 "Reintentar",
-                                fontSize = 13.sp,
+                                style = Movi.textos.cuerpo,
                                 color = Movi.colores.texto,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier
@@ -535,11 +534,11 @@ fun CreditTermsSheet(
                         // después de que el dueño dijo que la plata sí le entró.
                         sinCuentasDestino -> Text(
                             SIN_CUENTA_PARA_EL_DESEMBOLSO,
-                            fontSize = 12.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                         else -> {
-                            Text("¿A qué cuenta te entró?", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                            Text("¿A qué cuenta te entró?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             Spacer(Modifier.height(8.dp))
                             cuentasDestino.forEach { acc ->
                                 SelectRow(
@@ -570,7 +569,7 @@ fun CreditTermsSheet(
                             Text(
                                 explicacion?.texto ?: "Por defecto es el capital del crédito. Cámbialo si " +
                                     "el banco te depositó menos porque descontó costos.",
-                                fontSize = 11.5.sp,
+                                style = Movi.textos.apoyo,
                                 // Una brecha implausible se pinta distinto: es lo único que
                                 // separa a la vista «esto está bien» de «revisa lo que
                                 // escribiste». Ver [ExplicacionDelDesembolso].
@@ -617,12 +616,12 @@ fun CreditTermsSheet(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Se descuenta de mi nómina", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                        Text("Se descuenta de mi nómina", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                         Text(
                             text = "La cuota se retiene del sueldo antes de que la plata llegue a tu " +
                                 "cuenta. Movi deja de pedirte que la registres como gasto —tu sueldo ya " +
                                 "viene neto— y en su lugar te ofrece bajar la deuda con un toque.",
-                            fontSize = 11.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
@@ -641,7 +640,7 @@ fun CreditTermsSheet(
                     Spacer(Modifier.height(16.dp))
                     Text(
                         "¿LA PAGA ALGUIEN MÁS?",
-                        fontSize = 11.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         fontWeight = FontWeight.Medium,
                         letterSpacing = 0.4.sp,
@@ -676,7 +675,7 @@ fun CreditTermsSheet(
                             text = "Déjalo vacío si la pagas tú. Escribe un nombre solo si la cuota la " +
                                 "paga otra persona o sale de otra bolsa — una pensión voluntaria, tu " +
                                 "pareja, un familiar.",
-                            fontSize = 11.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
@@ -685,7 +684,7 @@ fun CreditTermsSheet(
                             text = "La deuda sigue siendo tuya y suma entera en tu deuda total. Lo que " +
                                 "cambia es que la cuota deja de contar como gasto tuyo del mes y Movi " +
                                 "deja de recordártela — en su lugar te ofrece bajar la deuda con un toque.",
-                            fontSize = 11.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                             lineHeight = 16.sp,
                         )
@@ -721,7 +720,7 @@ fun CreditTermsSheet(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text = it,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.sale,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -738,14 +737,14 @@ fun CreditTermsSheet(
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (saving) "Guardando…" else "Guardar crédito", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(if (saving) "Guardando…" else "Guardar crédito", color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
             }
             // F24: antes el botón se apagaba en silencio. Ahora dice la primera cosa que falta.
             if (!canSave && !saving && missingFieldMessage != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = missingFieldMessage,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -766,7 +765,7 @@ fun CreditTermsSheet(
                 } else {
                     Text(
                         "Eliminar términos",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.sale,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
@@ -782,7 +781,7 @@ fun CreditTermsSheet(
 internal fun SectionLabel(text: String) {
     Text(
         text = text,
-        fontSize = 11.sp,
+        style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
@@ -810,7 +809,7 @@ internal fun FieldBox(
         if (value.isEmpty()) {
             Text(
                 placeholder,
-                fontSize = 14.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoApagado,
                 maxLines = 1,
                 softWrap = false,
@@ -822,7 +821,7 @@ internal fun FieldBox(
         BasicTextField(
             value = campo.valor,
             onValueChange = campo::alCambiar,
-            textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
             cursorBrush = SolidColor(Movi.colores.texto),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
@@ -857,12 +856,12 @@ private fun OpcionDeAlta(
     ) {
         Text(
             titulo,
-            fontSize = 13.5.sp,
+            style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
         )
         Spacer(Modifier.height(3.dp))
-        Text(detalle, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
+        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     }
 }
 
@@ -1011,7 +1010,7 @@ private fun SelectRow(label: String, selected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 13.5.sp, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Text(label, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }
 
@@ -1031,14 +1030,14 @@ private fun RateFieldBox(placeholder: String, value: String, onValueChange: (Str
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
-                if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = Movi.colores.textoApagado)
+                if (value.isEmpty()) Text(placeholder, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                 // [esAtajoDeSeleccionarTodo].
                 val campo = rememberCampoConSeleccion(value, onValueChange)
                 BasicTextField(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
-                    textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                     cursorBrush = SolidColor(Movi.colores.texto),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -1046,7 +1045,7 @@ private fun RateFieldBox(placeholder: String, value: String, onValueChange: (Str
                         .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                 )
             }
-            if (value.isNotEmpty()) Text("%", fontSize = 14.sp, color = Movi.colores.textoMedio)
+            if (value.isNotEmpty()) Text("%", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         }
     }
 }
