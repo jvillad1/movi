@@ -428,7 +428,12 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
                 color = if (categoria.hidden) Movi.colores.textoMedio else Movi.colores.texto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                // **Todo el ancho que sobra es del nombre.** Antes el nombre (`weight(1f, fill =
+                // false)`) y un separador (`weight(1f)`) se repartían el espacio en partes iguales:
+                // el nombre nunca pasaba de la mitad del renglón —«Restaurantes y domicilios a la
+                // casa» quedaba en «Restaurantes …» con espacio vacío al lado— y la etiqueta no
+                // llegaba al borde. Visto en la web a 390 dp.
+                modifier = Modifier.weight(1f),
             )
             if (categoria.reserved) {
                 Icon(
@@ -438,7 +443,6 @@ private fun FilaDeCategoria(categoria: CategoryUsage, onClick: () -> Unit) {
                     modifier = Modifier.size(13.dp),
                 )
             }
-            Box(modifier = Modifier.weight(1f))
             Etiqueta(etiquetaDeTipo(categoria), tinteDeTipo(categoria))
         }
         Row(
