@@ -1791,6 +1791,8 @@ class LocalRepository(
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =
         remote.getStatementImportDetail(id)
+    // Server-first como el importe mismo: lo que anula vive en el server y baja con la próxima lectura.
+    override suspend fun deleteStatementImport(id: String) = remote.deleteStatementImport(id)
     override suspend fun getScreen(slug: String, cachedVersion: Int?): ScreenDefinition? =
         remote.getScreen(slug, cachedVersion)
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition =

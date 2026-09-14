@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.extractos
 
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.LocalGoBack
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,6 +40,12 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val goBack = LocalGoBack.current
+    val coroutine = rememberCoroutineScope()
+    var pidiendoDeshacer by remember { mutableStateOf(false) }
+    var deshaciendo by remember { mutableStateOf(false) }
+    var errorDeDeshacer by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(importId) {
         loading = true
         error = null
@@ -69,8 +78,44 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
             )
-            detail != null -> ImportDetailContent(detail = detail!!)
+            detail != null -> {
+                errorDeDeshacer?.let {
+                    Text(it, fontSize = 12.5.sp, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = 20.dp))
+                }
+                // **Deshacer el importe entero.** Antes un extracto importado en la cuenta equivocada
+                // solo se arreglaba anulando fila por fila.
+                Text(
+                    "Deshacer este importe",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.sale,
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .clickable(enabled = !deshaciendo) { pidiendoDeshacer = true }
+                        .padding(vertical = 8.dp),
+                )
+                ImportDetailContent(detail = detail!!)
+            }
         }
+    }
+    if (pidiendoDeshacer) {
+        ConfirmarEnHoja(
+            pregunta = "¿Deshacer este importe?",
+            detalle = "Se anulan los movimientos que creó este extracto. Lo que ya tenías anotado y solo se concilió se queda. No se puede deshacer.",
+            textoConfirmar = "Deshacer",
+            ocupado = deshaciendo,
+            onConfirmar = {
+                deshaciendo = true
+                errorDeDeshacer = null
+                coroutine.launch {
+                    runCatching { Repositories.wallets.deleteStatementImport(importId) }
+                        .onSuccess { pidiendoDeshacer = false; goBack(Screen.Extractos) }
+                        .onFailure { errorDeDeshacer = it.toUserMessage(); pidiendoDeshacer = false }
+                    deshaciendo = false
+                }
+            },
+            onCancelar = { pidiendoDeshacer = false },
+        )
     }
 }
 

@@ -103,6 +103,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento = trasEscribir { delegado.updateDocument(id, cambios) }
     override suspend fun deleteDocument(id: String): Unit = trasEscribir { delegado.deleteDocument(id) }
     override suspend fun importStatement(decision: ImportDecision): Unit = trasEscribir { delegado.importStatement(decision) }
+    override suspend fun deleteStatementImport(id: String): Unit = trasEscribir { delegado.deleteStatementImport(id) }
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition = trasEscribir { delegado.putScreen(slug, sections) }
     override suspend fun restoreScreen(slug: String): ScreenDefinition = trasEscribir { delegado.restoreScreen(slug) }
 }

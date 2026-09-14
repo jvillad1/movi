@@ -113,6 +113,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun importStatement(decision: ImportDecision) = noUsado("importStatement")
     override suspend fun getStatementImports(): List<StatementImport> = noUsado("getStatementImports")
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail = noUsado("getStatementImportDetail")
+    override suspend fun deleteStatementImport(id: String): Unit = noUsado("deleteStatementImport")
     override suspend fun getScreen(slug: String, cachedVersion: Int?): ScreenDefinition? = noUsado("getScreen")
     override suspend fun putScreen(slug: String, sections: List<ScreenSection>): ScreenDefinition = noUsado("putScreen")
     override suspend fun restoreScreen(slug: String): ScreenDefinition = noUsado("restoreScreen")
