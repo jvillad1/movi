@@ -208,6 +208,12 @@ fun Route.eventRoutes() {
                         it[merchant]    = event.merchant
                         it[timestamp]   = event.timestamp
                         it[Events.noSeRepite] = event.noSeRepite
+                        // Confirmado en el teléfono (`confirmEvent` sin señal) → confirmado acá.
+                        // Solo en esa dirección: un reenvío viejo no puede devolver a «por
+                        // confirmar» algo que ya se confirmó en la web.
+                        if (event.reconciliationStatus == ReconciliationStatus.RECONCILED) {
+                            it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
+                        }
                     }
                     // Mismo criterio que `PUT /{id}/timestamp`: si la fecha se movió, un «ya
                     // ocurrió» sellado con este movimiento se suelta cuando ya no le corresponde.

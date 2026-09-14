@@ -292,6 +292,22 @@ class EventRoutesTest {
         assertEquals(5_000L, filas.single()[Events.amount])
     }
 
+    /** Confirmado sin señal en el teléfono → el reenvío lo confirma acá; uno viejo no lo desconfirma. */
+    @Test
+    fun `el reenvio confirmado confirma, y uno sin confirmar no desconfirma`() = testApplication {
+        wireApp()
+        postEvent(userAId, gasto("evt-conf", 20_200))
+        transaction { Events.update({ Events.id eq "evt-conf" }) { it[Events.reconciliationStatus] = "UNCONFIRMED" } }
+        fun estado() = transaction { Events.selectAll().where { Events.id eq "evt-conf" }.single()[Events.reconciliationStatus] }
+
+        postEvent(userAId, gasto("evt-conf", 20_200).replace("\"source\":\"MANUAL\"", "\"source\":\"STATEMENT\",\"reconciliationStatus\":\"UNCONFIRMED\""))
+        assertEquals("UNCONFIRMED", estado())
+        postEvent(userAId, gasto("evt-conf", 20_200).replace("\"source\":\"MANUAL\"", "\"source\":\"STATEMENT\",\"reconciliationStatus\":\"RECONCILED\""))
+        assertEquals("RECONCILED", estado())
+        postEvent(userAId, gasto("evt-conf", 20_200).replace("\"source\":\"MANUAL\"", "\"source\":\"STATEMENT\",\"reconciliationStatus\":\"UNCONFIRMED\""))
+        assertEquals("RECONCILED", estado(), "un reenvío viejo no desconfirma")
+    }
+
     @Test
     fun `un id de otro usuario no se pisa`() = testApplication {
         wireApp()

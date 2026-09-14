@@ -164,6 +164,9 @@ class SyncEngine(
                     // `LocalRepository.updateEvent`): el mismo agujero que la categoría y la
                     // fecha ya tenían tapado, abierto por tres campos más.
                     row.amount, row.accountId, row.description, row.noSeRepite,
+                    // Y el estado: confirmar un movimiento pendiente sin señal mientras el POST
+                    // viajaba no puede quedar sellado como «por confirmar» en el server.
+                    row.reconciliationStatus,
                 )
             } catch (e: Exception) {
                 logSyncFailure("syncEvents", e, id = row.id)
