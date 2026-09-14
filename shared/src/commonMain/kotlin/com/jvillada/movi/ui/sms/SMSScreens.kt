@@ -268,10 +268,18 @@ fun SMSInboxScreen(onNavigate: (Screen) -> Unit) {
                                 SMS_STATE_IGNORED -> "IGNORADO" to Movi.colores.textoMedio
                                 else -> sms.state.uppercase() to Movi.colores.textoMedio
                             }
-                            // Un renglón siempre. Con el espaciado de `rotulo`, «CONFIRMADO» no entraba
-                            // al lado de la fecha y se partía en «CONFIRMAD» con la «O» abajo. Visto en
-                            // la web a 390 dp.
-                            Text(label, style = Movi.textos.rotulo, color = color, maxLines = 1, softWrap = false)
+                            // Un renglón siempre. Con el espaciado completo de `rotulo` (1,7 sp),
+                            // «CONFIRMADO» no entraba al lado de la fecha: primero se partía en
+                            // «CONFIRMAD» con la «O» abajo, y sin partirse le comía los minutos a la
+                            // hora. Visto en la web a 390 dp. A 0,8 sp entran los dos; en un teléfono más
+                            // angosto la fecha es la que cede.
+                            Text(
+                                label,
+                                style = Movi.textos.rotulo.copy(letterSpacing = 0.8.sp),
+                                color = color,
+                                maxLines = 1,
+                                softWrap = false,
+                            )
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp)) {
