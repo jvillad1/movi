@@ -9,7 +9,7 @@ package com.jvillada.movi.theme
  * en `ios-arm64_x86_64-simulator`.
  *
  * Y la biblioteca las busca justo ahí: su lector de iOS (`findComposeResourcesPath`) recorre
- * `<app>/Frameworks/*.framework/composeResources` antes de caer a `compose-resources` en la raíz
+ * `<app>/Frameworks/<cada framework>/composeResources` antes de caer a `compose-resources` en la raíz
  * del paquete. Xcode copia la carpeta del framework entera al embeberlo.
  *
  * Si algo de eso fallara, `Font(recurso)` tiraría `MissingResourceException` adentro de
