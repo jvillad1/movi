@@ -163,6 +163,31 @@ class PagosDeDeudaTest {
         assertEquals(setOf("2026-09"), periodosSaldados(listOf(regla), pagos)[regla.id])
     }
 
+    /**
+     * **El pago que cruza el fin de mes**, que antes saldaba el mes siguiente: una tarjeta del 30
+     * pagada el 2 de octubre salda septiembre, y el 30 de octubre sigue avisando. Con corte 25, lo
+     * mismo con un pago del 24 hecho el 25.
+     */
+    @Test fun `el pago que cruza el mes dentro de la gracia salda el mes que vencio`() {
+        val regla = reglaDeTarjeta(dia = 30)
+        val pagos = listOf(
+            pago(cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY, fecha = LocalDate.of(2026, 10, 2)),
+        )
+        assertEquals(setOf("2026-09"), periodosSaldados(listOf(regla), pagos)[regla.id])
+
+        val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
+        val del24 = reglaDeTarjeta(dia = 24)
+        val pagoDel25 = listOf(
+            pago(cuenta = cuentaDeLaTarjeta, categoria = CARD_PAYMENT_CATEGORY, fecha = LocalDate.of(2026, 9, 25)),
+        )
+        val saldados = periodosSaldados(listOf(del24), pagoDel25, settings = corte25)
+        assertEquals(setOf("2026-09"), saldados[del24.id])
+        assertEquals(
+            "2026-10-24",
+            upcomingPayments(listOf(del24), LocalDate.of(2026, 9, 26), 3, saldados, corte25).single().dueDate,
+        )
+    }
+
     // ── Lo que NO cuenta como pago ────────────────────────────────────────────
 
     /**

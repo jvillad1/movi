@@ -1,7 +1,8 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.reminders.periodoDelDueno
-import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
+import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
+import com.jvillada.movi.server.reminders.DEFAULT_GRACE_DAYS
 import com.jvillada.movi.server.reminders.diasDelPeriodo
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
@@ -361,9 +362,12 @@ fun Route.reminderRoutes() {
             // Solo la franja donde puede haber candidatos, no todos los movimientos de la vida
             // del usuario: desde el primero del mes (el piso del emparejador) hasta la ventana
             // por delante del vencimiento más tardío posible.
+            // El piso baja también hasta la ventana de una ocurrencia del período ANTERIOR que
+            // sigue en gracia (ver `ocurrenciaPorPreguntar`): sus candidatos caen antes del corte.
+            val pisoDeLaGracia = today.minusDays(DEFAULT_GRACE_DAYS + OCCURRENCE_WINDOW_DAYS)
             val eventos = loadEventsBetween(
                 uid = uid,
-                desde = appDateToEpochMillis(diasDelPeriodoEnCurso.start),
+                desde = appDateToEpochMillis(minOf(diasDelPeriodoEnCurso.start, pisoDeLaGracia)),
                 hastaExclusivo = appDateToEpochMillis(
                     diasDelPeriodoEnCurso.endInclusive.plusDays(OCCURRENCE_WINDOW_DAYS + 1),
                 ),
@@ -384,7 +388,11 @@ fun Route.reminderRoutes() {
                 // vista TODO el mes, en vez de hacerlos desaparecer a los pocos días.
                 // La del PERÍODO en curso (ver arriba). Un período acortado a mano que no alcanza a
                 // contener el día de la regla no tiene nada que preguntar.
-                val due = ocurrenciaEnJuego(today, rule.dayOfMonth, periodo) ?: return@mapNotNull null
+                //
+                // Salvo la del período ANTERIOR mientras siga en gracia: con corte 25, el pago
+                // del 24 sin marcar se sigue ofreciendo («Ya lo pagué») del 25 al 29, en vez de
+                // desaparecer al día siguiente de vencer. Ver `ocurrenciaPorPreguntar`.
+                val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
                 // Una regla que todavía no arrancó no tiene ocurrencia este mes: es lo que evita
                 // que la primera cuota de un crédito caiga el mismo día del desembolso.
                 if (!ruleIsActiveOn(rule, due)) return@mapNotNull null
@@ -441,7 +449,7 @@ fun Route.reminderRoutes() {
             val pagos = cargarPagosDeDeuda(uid, today)
             pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo).mapNotNull { (ruleId, porPeriodo) ->
                 val rule = sinteticas.first { it.id == ruleId }
-                val due = ocurrenciaEnJuego(today, rule.dayOfMonth, periodo) ?: return@mapNotNull null
+                val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
                 val pago = porPeriodo[periodOf(due)] ?: return@mapNotNull null
                 // **Cuánta plata fue.** El monto no filtra —no puede: movi no conoce el extracto,
                 // y el saldo de la tarjeta o la cuota del crédito no son comparables con lo que se

@@ -119,14 +119,14 @@ import java.time.ZoneId
  *
  * ### Lo que este tope NO cierra
  *
- * El pago que cruza el fin de mes: una cuota del 30 de septiembre pagada el 2 de octubre se
- * atribuye a **octubre**, así que septiembre sigue avisando (ruido, tolerable) y el 30 de octubre
- * queda dado por pagado sin que nadie lo haya pagado (eso sí cuesta). El agujero ya existía —el
- * código de antes hacía exactamente lo mismo en ese caso— y el tope no lo ensancha: lo reduce de
- * «cualquier pago con 6+ días de atraso» a «solo los que cruzan el mes». Cerrarlo pide atribuir el
- * pago a la ocurrencia MÁS CERCANA, y esa regla trae su propia forma de fallar —un pago hecho con
- * mucha anticipación saldaría el mes siguiente, que es el error caro—, así que se deja anotado en
- * vez de resolverlo a medias.
+ * ~~El pago que cruza el fin de mes~~ — **cerrado** desde que `dueDateFor` mira la ocurrencia del
+ * período anterior que sigue en gracia ([ocurrenciaEnGracia]): una cuota del 30 de septiembre
+ * pagada el 2 de octubre ya se atribuye a **septiembre**, y el 30 de octubre sigue avisando. Lo
+ * mismo con corte 25 y un pago del 24 hecho el 25.
+ *
+ * Lo que queda: como acá `occurredPeriods` va vacío, un SEGUNDO pago dentro de esa gracia (el 30
+ * de septiembre ya pagado el 29, y otro abono el 2 de octubre) también cae en septiembre y no
+ * adelanta octubre. Es el lado barato: octubre avisa de más, no de menos.
  *
  * Dos pagos dentro del mismo ciclo caen en el mismo periodo y ahí el `Map` se queda con el último:
  * el periodo está saldado igual. Ver [pagosDeDeudaPorPeriodo], que ordena por fecha para que «el
@@ -165,11 +165,10 @@ val CATEGORIAS_QUE_SALDAN: List<String> = listOf(CUOTA_CATEGORY, CARD_PAYMENT_CA
  * cierra. `occurredPeriods` va vacío a propósito: acá se pregunta a qué vencimiento apuntaba el
  * calendario, no cuál quedó libre después de saldar otros.
  *
- * Como `dueDateFor` nunca mira más atrás del mes de [fecha], hoy esto equivale a «el mes en que se
- * pagó». Se escribe igual como el mínimo de los dos, y no como `periodOf(fecha)` a secas, porque lo
- * que hay que fijar es la REGLA —el vencimiento vigente, nunca uno futuro— y no la coincidencia: el
- * día que `dueDateFor` aprenda a mirar un vencimiento del mes pasado que sigue abierto, esta
- * función lo hereda sin que nadie tenga que acordarse.
+ * Se escribe como el mínimo de los dos, y no como `periodOf(fecha)` a secas, porque lo que hay que
+ * fijar es la REGLA —el vencimiento vigente, nunca uno futuro— y no la coincidencia. Y eso ya pagó:
+ * desde que `dueDateFor` mira el vencimiento del mes pasado que sigue en gracia, un pago del 2 de
+ * octubre sobre una cuota del 30 salda septiembre sin que esta función cambiara.
  */
 fun periodoQueSalda(
     rule: RecurringRule,
