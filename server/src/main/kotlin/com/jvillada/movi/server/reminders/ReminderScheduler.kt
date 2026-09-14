@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.RecurringRules
@@ -131,18 +133,21 @@ private suspend fun processUser(
     // nadie lo leía. Va en el MISMO mapa —no en un filtro nuevo— para que el sello de
     // `lastRemindedPeriod` de más abajo, que lo relee, no pueda divergir del filtro.
     val sinteticasSolas = sinteticas.map { it.first }
+    // El período de ESTE usuario: qué vencimiento está en juego depende de su corte (ver
+    // `dueDateFor`). El filtro, el texto y el sello de abajo usan el mismo, o volverían a divergir.
+    val periodo = ajustesDePeriodoDe(userId)
     val occurredBy = unirOcurridos(
         dbQuery { loadOccurredBy(userId) },
         if (sinteticasSolas.isEmpty()) emptyMap()
-        else periodosSaldados(sinteticasSolas, cargarPagosDeDeuda(userId, today)),
+        else periodosSaldados(sinteticasSolas, cargarPagosDeDeuda(userId, today), settings = periodo),
     )
 
-    val selected = selectDueForReminder(allPairs, today, leadDays, occurredBy)
+    val selected = selectDueForReminder(allPairs, today, leadDays, occurredBy, periodo)
 
     if (selected.isEmpty()) return
 
     val emailSent = if (!apiKey.isNullOrBlank()) {
-        val html = buildHtmlEmail(selected, today, leadDays, occurredBy)
+        val html = buildHtmlEmail(selected, today, leadDays, occurredBy, periodo)
         ResendClient.sendEmail(
             to = userEmail, subject = "Pagos próximos en movi",
             html = html, apiKey = apiKey, from = from,
@@ -150,7 +155,7 @@ private suspend fun processUser(
     } else false
 
     val pushSent = if (WebPushSender.isConfigured()) {
-        runCatching { WebPushSender.sendToUser(userId, buildPushPayload(selected, today, leadDays, occurredBy)) }
+        runCatching { WebPushSender.sendToUser(userId, buildPushPayload(selected, today, leadDays, occurredBy, periodo)) }
             .getOrElse { logger.warn("push sweep falló para $userId: ${it.message}"); false }
     } else false
 
@@ -163,7 +168,7 @@ private suspend fun processUser(
         // Update rules one-by-one: Exposed's update DSL doesn't support an IN clause
         // in the where block, so individual updates are the cleanest approach.
         for (rule in selected) {
-            val duePeriod = reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
+            val duePeriod = reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), periodo)
             dbQuery {
                 if (rule.id.startsWith(CREDIT_RULE_PREFIX)) {
                     Credits.update({
@@ -182,7 +187,7 @@ private suspend fun processUser(
                 }
             }
         }
-        val periods = selected.map { reminderKeyFor(it, today, DEFAULT_GRACE_DAYS, occurredBy[it.id].orEmpty()) }.distinct().sorted()
+        val periods = selected.map { reminderKeyFor(it, today, DEFAULT_GRACE_DAYS, occurredBy[it.id].orEmpty(), periodo) }.distinct().sorted()
         logger.info(
             "ReminderScheduler: reminded user $userId about ${selected.size} payment(s) " +
                 "for period(s) ${periods.joinToString(", ")}",
@@ -207,9 +212,10 @@ internal fun buildHtmlEmail(
      * elegía avisar el 5 de octubre y el correo decía «vence el 5 de septiembre · vencido».
      */
     occurredBy: Map<String, Set<String>> = emptyMap(),
+    settings: PeriodSettings = PeriodSettings(),
 ): String {
     val items = rules.joinToString(separator = "") { rule ->
-        val due     = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
+        val due     = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), settings)
         val status  = statusFor(due, today, leadDays)
         // Con la ventana de gracia, una regla de día<=leadDays puede vencer legítimamente el
         // mes PASADO (p.ej. el 29 de julio, un día 1 vence "el 1 de agosto"). Mostrar solo el

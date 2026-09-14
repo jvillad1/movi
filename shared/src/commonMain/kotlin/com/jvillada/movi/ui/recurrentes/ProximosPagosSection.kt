@@ -190,7 +190,7 @@ internal fun PropuestaOcurrencia(
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, bottom = 14.dp)) {
         Text(
-            text = tituloPropuesta(rule.type, estado.period),
+            text = tituloPropuesta(rule.type, estado.periodoDelDueno ?: estado.period),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.texto,

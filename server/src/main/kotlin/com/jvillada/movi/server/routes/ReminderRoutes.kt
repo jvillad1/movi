@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.reminders.periodoDelDueno
+import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
+import com.jvillada.movi.server.reminders.diasDelPeriodo
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Users
@@ -284,6 +288,8 @@ fun Route.reminderRoutes() {
         // distinto al que de verdad usa el scheduler.
         val leadDays = leadDaysOf(uid)
         val hoy = AppClock.today()
+        // El período del dueño decide qué vencimiento está en juego (ver `dueDateFor`).
+        val periodo = ajustesDePeriodoDe(uid)
         val (rules, occurredBy) = dbQuery {
             val r = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
             r to loadOccurredBy(uid)
@@ -306,9 +312,9 @@ fun Route.reminderRoutes() {
         // hereda sin que nadie tenga que acordarse. Y el APK que el dueño tiene instalado no ve
         // ningún campo nuevo ni ningún valor de enum que no conozca: ve la fecha correcta.
         val derivadas = if (sinteticas.isEmpty()) emptyMap()
-            else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy))
+            else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy), settings = periodo)
         call.respond(
-            upcomingPayments(rules + sinteticas, hoy, leadDays, unirOcurridos(occurredBy, derivadas)),
+            upcomingPayments(rules + sinteticas, hoy, leadDays, unirOcurridos(occurredBy, derivadas), periodo),
         )
     }
 
@@ -330,8 +336,11 @@ fun Route.reminderRoutes() {
     get("/api/payments/occurrences") {
         val uid = call.userId()
         val today = AppClock.today()
-        val mesEnCurso = YearMonth.from(today)
-        val periodoEnCurso = mesEnCurso.toString()
+        // **El período del dueño, no el mes de calendario.** Con corte 25, «octubre» va del 25 de
+        // septiembre al 24 de octubre, y la pregunta «¿ya pagaste el de octubre?» tiene que ser
+        // sobre la ocurrencia que cae ahí —la misma que Movimientos cuenta en octubre—.
+        val periodo = ajustesDePeriodoDe(uid)
+        val diasDelPeriodoEnCurso = diasDelPeriodo(today, periodo)
         val estados = dbQuery {
             // Solo reglas REALES. La cuota de un crédito y el pago de una tarjeta son reglas
             // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
@@ -354,9 +363,9 @@ fun Route.reminderRoutes() {
             // por delante del vencimiento más tardío posible.
             val eventos = loadEventsBetween(
                 uid = uid,
-                desde = appDateToEpochMillis(mesEnCurso.atDay(1)),
+                desde = appDateToEpochMillis(diasDelPeriodoEnCurso.start),
                 hastaExclusivo = appDateToEpochMillis(
-                    mesEnCurso.atEndOfMonth().plusDays(OCCURRENCE_WINDOW_DAYS + 1),
+                    diasDelPeriodoEnCurso.endInclusive.plusDays(OCCURRENCE_WINDOW_DAYS + 1),
                 ),
             )
 
@@ -373,10 +382,16 @@ fun Route.reminderRoutes() {
                 //
                 // Además, mirar el mes en curso mantiene el «Ya ocurrió» y su «Deshacer» a la
                 // vista TODO el mes, en vez de hacerlos desaparecer a los pocos días.
-                val due = occurrenceInMonth(mesEnCurso, rule.dayOfMonth)
+                // La del PERÍODO en curso (ver arriba). Un período acortado a mano que no alcanza a
+                // contener el día de la regla no tiene nada que preguntar.
+                val due = ocurrenciaEnJuego(today, rule.dayOfMonth, periodo) ?: return@mapNotNull null
                 // Una regla que todavía no arrancó no tiene ocurrencia este mes: es lo que evita
                 // que la primera cuota de un crédito caiga el mismo día del desembolso.
                 if (!ruleIsActiveOn(rule, due)) return@mapNotNull null
+                // La clave del sello sigue siendo el mes del vencimiento (ver `periodOf`): estable
+                // aunque el dueño cambie su corte. El nombre que se muestra es el del período.
+                val periodoEnCurso = periodOf(due)
+                val nombreDelPeriodo = periodoDelDueno(due, periodo)
                 val cerrado = periodoEnCurso in ocurridos[rule.id].orEmpty()
                 when {
                     cerrado -> {
@@ -388,6 +403,7 @@ fun Route.reminderRoutes() {
                             occurred = true,
                             eventId = fila?.eventId,
                             confirmedAt = fila?.confirmedAt ?: 0L,
+                            periodoDelDueno = nombreDelPeriodo,
                         )
                     }
                     // El día todavía no llegó: no se pregunta nada. Preguntar «¿ya ocurrió?» por
@@ -399,7 +415,8 @@ fun Route.reminderRoutes() {
                         period = periodoEnCurso,
                         dueDate = due.toString(),
                         occurred = false,
-                        candidates = occurrenceCandidatesFor(rule, due, eventos, usados),
+                        candidates = occurrenceCandidatesFor(rule, due, eventos, usados, settings = periodo),
+                        periodoDelDueno = nombreDelPeriodo,
                     )
                 }
             }
@@ -422,9 +439,10 @@ fun Route.reminderRoutes() {
         val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
         val derivadas = if (sinteticas.isEmpty()) emptyList() else {
             val pagos = cargarPagosDeDeuda(uid, today)
-            pagosDeDeudaPorPeriodo(sinteticas, pagos).mapNotNull { (ruleId, porPeriodo) ->
-                val pago = porPeriodo[periodoEnCurso] ?: return@mapNotNull null
+            pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo).mapNotNull { (ruleId, porPeriodo) ->
                 val rule = sinteticas.first { it.id == ruleId }
+                val due = ocurrenciaEnJuego(today, rule.dayOfMonth, periodo) ?: return@mapNotNull null
+                val pago = porPeriodo[periodOf(due)] ?: return@mapNotNull null
                 // **Cuánta plata fue.** El monto no filtra —no puede: movi no conoce el extracto,
                 // y el saldo de la tarjeta o la cuota del crédito no son comparables con lo que se
                 // movió (ver `PagosDeDeuda.kt`)— así que un abono de $50.000 salda el periodo
@@ -436,8 +454,9 @@ fun Route.reminderRoutes() {
                 val salida = plataQueSalio(pago, pagos)
                 OccurrenceState(
                     ruleId = ruleId,
-                    period = periodoEnCurso,
-                    dueDate = occurrenceInMonth(mesEnCurso, rule.dayOfMonth).toString(),
+                    period = periodOf(due),
+                    dueDate = due.toString(),
+                    periodoDelDueno = periodoDelDueno(due, periodo),
                     occurred = true,
                     eventId = pago.id,
                     // No hubo confirmación que fechar: lo más cierto que se puede decir es cuándo

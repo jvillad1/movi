@@ -126,6 +126,14 @@ data class OccurrenceState(
      */
     val derivadaDeUnMovimiento: Boolean = false,
     /**
+     * El nombre del **período del dueño** en que cae [dueDate] (`"2026-10"`), para decirlo en
+     * pantalla. [period] es la clave del sello —el mes de calendario del vencimiento, estable
+     * aunque cambie el corte— y con corte 25 un pago del 28 de septiembre tiene clave
+     * `"2026-09"` pero es «el de octubre», igual que en Movimientos. `null` desde un server viejo:
+     * ahí se muestra [period], que era lo de antes.
+     */
+    val periodoDelDueno: String? = null,
+    /**
      * **Cuánta plata prueba esta fila** —y su moneda—, cuando sale de un movimiento y no de un
      * sello. `null` en las selladas a mano: ahí lo que hay es la palabra del dueño.
      *

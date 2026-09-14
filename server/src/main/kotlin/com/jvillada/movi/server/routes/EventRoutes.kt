@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
+import com.jvillada.movi.server.reminders.periodoDelDueno
 import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.server.balance.accountTypesFor
@@ -455,11 +457,13 @@ fun Route.eventRoutes() {
                     java.time.YearMonth.parse(period),
                     regla[RecurringRules.dayOfMonth],
                 )
-                val ventana = occurrenceWindow(due)
+                val periodo = ajustesDelPeriodoSinSuspender(uid)
+                val ventana = occurrenceWindow(due, settings = periodo)
                 EventOccurrenceMark(
                     ruleId = regla[RecurringRules.id],
                     ruleName = regla[RecurringRules.name],
                     period = period,
+                    periodoDelDueno = periodoDelDueno(due, periodo),
                     validFrom = ventana.start.toString(),
                     validTo = ventana.endInclusive.toString(),
                 )
@@ -895,6 +899,7 @@ private fun soltarOcurrenciasSinEvidencia(
     fecha: java.time.LocalDate,
 ) {
     if (eventIds.isEmpty()) return
+    val periodo = ajustesDelPeriodoSinSuspender(uid)
     val filas = RecurringOccurrences.selectAll()
         .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId inList eventIds) }
         .map { it[RecurringOccurrences.ruleId] to it[RecurringOccurrences.period] }
@@ -903,7 +908,7 @@ private fun soltarOcurrenciasSinEvidencia(
             .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
             .firstOrNull()?.get(RecurringRules.dayOfMonth)
         val sigueValiendo = dia != null && runCatching {
-            sostieneLaOcurrencia(fecha, occurrenceInMonth(java.time.YearMonth.parse(period), dia))
+            sostieneLaOcurrencia(fecha, occurrenceInMonth(java.time.YearMonth.parse(period), dia), settings = periodo)
         }.getOrDefault(false)
         if (!sigueValiendo) {
             RecurringOccurrences.deleteWhere {

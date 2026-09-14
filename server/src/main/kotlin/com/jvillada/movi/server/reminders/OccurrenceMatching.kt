@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -108,9 +109,13 @@ const val OCCURRENCE_WINDOW_DAYS: Long = 10
 fun occurrenceWindow(
     dueDate: LocalDate,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
 ): ClosedRange<LocalDate> {
-    // El piso nunca cae antes del mes del vencimiento: ver el KDoc de OCCURRENCE_WINDOW_DAYS.
-    val piso = maxOf(YearMonth.from(dueDate).atDay(1), dueDate.minusDays(windowDays))
+    // El piso nunca cae antes del PERÍODO del vencimiento: ver el KDoc de OCCURRENCE_WINDOW_DAYS.
+    // Con corte 1 es el primer día del mes, lo de siempre; con corte 25 un pago del día 1 que se
+    // hizo el 27 del mes anterior ya es de ese período, y tiene que poder proponerse.
+    val inicio = if (settings.esMesDeCalendario) YearMonth.from(dueDate).atDay(1) else diasDelPeriodo(dueDate, settings).start
+    val piso = maxOf(inicio, dueDate.minusDays(windowDays))
     return piso..dueDate.plusDays(windowDays)
 }
 
@@ -136,7 +141,8 @@ fun sostieneLaOcurrencia(
     fecha: LocalDate,
     dueDate: LocalDate,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
-): Boolean = fecha in occurrenceWindow(dueDate, windowDays)
+    settings: PeriodSettings = PeriodSettings(),
+): Boolean = fecha in occurrenceWindow(dueDate, windowDays, settings)
 
 /** Cuántas propuestas se le muestran al dueño. Más de tres es una lista, no una propuesta. */
 const val MAX_OCCURRENCE_CANDIDATES: Int = 3
@@ -162,12 +168,13 @@ fun occurrenceCandidatesFor(
     zone: ZoneId = AppClock.zone,
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     max: Int = MAX_OCCURRENCE_CANDIDATES,
+    settings: PeriodSettings = PeriodSettings(),
 ): List<FinancialEvent> {
     val claveRegla = claveComparableDeNombre(rule.name)
     val claveCategoria = claveComparableDeNombre(rule.category)
     // La ventana (con su piso en el primer día del mes del vencimiento) sale de
     // [occurrenceWindow]: es la MISMA que decide si un sello ya puesto sigue teniendo evidencia.
-    val ventana = occurrenceWindow(dueDate, windowDays)
+    val ventana = occurrenceWindow(dueDate, windowDays, settings)
 
     return events
         .asSequence()

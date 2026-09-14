@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.push
 
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.reminders.DEFAULT_GRACE_DAYS
 import com.jvillada.movi.server.reminders.dueDateFor
 import com.jvillada.movi.server.reminders.statusFor
@@ -21,9 +22,10 @@ fun buildPushPayload(
     leadDays: Int,
     // Los mismos periodos ocurridos con los que se eligió qué avisar; ver `buildHtmlEmail`.
     occurredBy: Map<String, Set<String>> = emptyMap(),
+    settings: PeriodSettings = PeriodSettings(),
 ): String {
     val lines = selected.take(MAX_LINES).map { rule ->
-        val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty())
+        val due = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), settings)
         val daysAgo = ChronoUnit.DAYS.between(due, today).toInt()
         val daysUntil = ChronoUnit.DAYS.between(today, due).toInt()
         val estado = when (statusFor(due, today, leadDays)) {

@@ -186,7 +186,9 @@ fun etiquetaCierreManual(tipo: TransactionType): String =
  * siendo cierto.
  */
 fun textoYaOcurrio(estado: OccurrenceState): String {
-    val mes = nombreDelMes(estado.period)
+    // El nombre del período del dueño (con corte 25, el pago del 28-sep es «de octubre»); un server
+    // viejo no lo manda y se cae al mes del vencimiento, que era lo de antes.
+    val mes = nombreDelMes(estado.periodoDelDueno ?: estado.period)
     val cuando = if (mes.isEmpty()) "Ya ocurrió" else "Ya ocurrió en $mes"
     val monto = estado.montoDelPago
     return when {
