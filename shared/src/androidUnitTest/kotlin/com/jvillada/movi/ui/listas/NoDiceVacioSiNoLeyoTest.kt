@@ -116,7 +116,9 @@ class NoDiceVacioSiNoLeyoTest {
         }) { PresupuestosScreen(onNavigate = {}) }
 
         esperar("No pudimos cargar tus presupuestos")
-        assertTrue(!hay("Nuevo presupuesto"))
+        // «Nuevo» y no «Nuevo presupuesto»: el botón del encabezado dice solo «Nuevo», y por
+        // substring esto cubre también el «Nuevo presupuesto» de la pantalla vacía.
+        assertTrue(!hay("Nuevo"))
         assertTrue(!hay("Gastado en"))
         val antes = lecturas
         reintentar()
