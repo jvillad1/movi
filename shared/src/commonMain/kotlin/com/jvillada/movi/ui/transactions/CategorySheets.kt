@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -107,7 +106,7 @@ private fun BottomSheetScaffold(
 private fun SheetLabel(text: String) {
     Text(
         text = text,
-        fontSize = 11.sp,
+        style = Movi.textos.apoyo,
         fontWeight = FontWeight.Medium,
         color = Movi.colores.textoMedio,
         letterSpacing = 0.5.sp,
@@ -136,9 +135,9 @@ private fun CategoryRow(
         // genérico y uniforme en vez de intentar mapear 15+ emojis uno a uno.
         Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(18.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(name, fontSize = 14.5.sp, color = Movi.colores.texto)
+            Text(name, style = Movi.textos.titulo, color = Movi.colores.texto)
             if (subtitle != null) {
-                Text(subtitle, fontSize = 11.5.sp, color = Movi.colores.textoMedio, lineHeight = 15.sp)
+                Text(subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 15.sp)
             }
         }
         if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(16.dp))
@@ -333,7 +332,7 @@ fun ChangeCategorySheet(
                 Spacer(Modifier.height(12.dp))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
                 Spacer(Modifier.height(16.dp))
-                Text(TRANSFER_RECATEGORIZE_BLOCKED, fontSize = 13.5.sp, color = Movi.colores.textoMedio)
+                Text(TRANSFER_RECATEGORIZE_BLOCKED, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(20.dp))
                 Hairline()
                 Spacer(Modifier.height(16.dp))
@@ -409,9 +408,9 @@ fun ChangeCategorySheet(
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SheetLabel("SALDO INICIAL")
                 Spacer(Modifier.height(8.dp))
-                Text(event.description, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text(event.description, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                 Spacer(Modifier.height(16.dp))
-                Text(OPENING_BALANCE_EXPLAINER, fontSize = 13.5.sp, color = Movi.colores.textoMedio, lineHeight = 19.sp)
+                Text(OPENING_BALANCE_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, lineHeight = 19.sp)
                 if (onVerCuenta != null) {
                     Spacer(Modifier.height(16.dp))
                     Box(
@@ -425,7 +424,7 @@ fun ChangeCategorySheet(
                     ) {
                         Text(
                             "Ver la cuenta",
-                            fontSize = 13.5.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.marca,
                         )
@@ -459,7 +458,7 @@ fun ChangeCategorySheet(
             if (isOrphanedTransferLeg(event)) {
                 SheetLabel("ERA UN TRASPASO")
                 Spacer(Modifier.height(8.dp))
-                Text(ORPHANED_LEG_EXPLAINER, fontSize = 13.5.sp, color = Movi.colores.textoMedio)
+                Text(ORPHANED_LEG_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(20.dp))
                 Hairline()
                 Spacer(Modifier.height(16.dp))
@@ -553,7 +552,7 @@ fun ChangeCategorySheet(
                 ) {
                     Text(
                         "Usar \"$trimmedFreeText\"",
-                        fontSize = 13.5.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                         color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
                     )
@@ -562,11 +561,11 @@ fun ChangeCategorySheet(
 
             if (saving) {
                 Spacer(Modifier.height(10.dp))
-                Text("Guardando…", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
             error?.let {
                 Spacer(Modifier.height(10.dp))
-                Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
             SeccionDeAnular(onAnular, habilitado = !saving)
@@ -595,7 +594,7 @@ private fun SeccionDeAnular(onAnular: (() -> Unit)?, habilitado: Boolean) {
     Spacer(Modifier.height(8.dp))
     Text(
         text = "Anular este movimiento",
-        fontSize = 13.5.sp,
+        style = Movi.textos.cuerpo,
         fontWeight = FontWeight.Medium,
         color = Movi.colores.sale,
         modifier = Modifier
@@ -608,7 +607,7 @@ private fun SeccionDeAnular(onAnular: (() -> Unit)?, habilitado: Boolean) {
     // alguien no lo toque por miedo a perder el registro.
     Text(
         text = "Deja de contar en tus cifras. El registro no se pierde.",
-        fontSize = 11.5.sp,
+        style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
     )
 }
@@ -678,14 +677,14 @@ fun CardPaymentCandidatesSheet(
             Text(
                 "Marcarlos como \"$CARD_PAYMENT_CATEGORY\" evita contar esta plata dos veces: " +
                     "ya se contó como gasto el día que se compró con la tarjeta.",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 17.sp,
             )
             Spacer(Modifier.height(14.dp))
 
             if (remaining.isEmpty()) {
-                Text("Ya no quedan pagos por confirmar.", fontSize = 13.sp, color = Movi.colores.textoMedio)
+                Text("Ya no quedan pagos por confirmar.", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
             }
 
             remaining.forEachIndexed { i, event ->
@@ -697,17 +696,16 @@ fun CardPaymentCandidatesSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             event.description,
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                         )
                         Spacer(Modifier.height(2.dp))
-                        Text("hoy: ${event.category}", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                        Text("hoy: ${event.category}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
                         formatCOP(event.amount),
-                        fontSize = 13.sp,
                         style = Movi.textos.monto,
                         color = Movi.colores.texto,
                         modifier = Modifier.padding(end = 10.dp),
@@ -724,7 +722,7 @@ fun CardPaymentCandidatesSheet(
                             Text(
                                 if (isSavingThis) "…" else "No es",
                                 color = Movi.colores.textoMedio,
-                                fontSize = 12.sp,
+                                style = Movi.textos.apoyo,
                                 fontWeight = FontWeight.Medium,
                             )
                         }
@@ -738,7 +736,7 @@ fun CardPaymentCandidatesSheet(
                             Text(
                                 if (isSavingThis) "Marcando…" else "Marcar",
                                 color = Movi.colores.fondo,
-                                fontSize = 12.sp,
+                                style = Movi.textos.apoyo,
                                 fontWeight = FontWeight.Medium,
                             )
                         }
@@ -749,7 +747,7 @@ fun CardPaymentCandidatesSheet(
 
             error?.let {
                 Spacer(Modifier.height(10.dp))
-                Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
             Spacer(Modifier.height(20.dp))
@@ -803,12 +801,12 @@ private fun NombreQueSeEdita(nombre: String, onEditar: () -> Unit) {
     ) {
         Text(
             nombre,
-            fontSize = 15.sp,
+            style = Movi.textos.titulo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )
-        Text("Editar", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
+        Text("Editar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca)
     }
 }
 
@@ -827,7 +825,7 @@ private fun PorConfirmar(event: FinancialEvent, onError: (String?) -> Unit, onCo
     Text(
         "Entró solo y todavía no cuenta en tus gastos ni ingresos. Revisa el monto, la categoría y el " +
             "nombre, y confírmalo.",
-        fontSize = 13.sp,
+        style = Movi.textos.monto,
         color = Movi.colores.textoMedio,
         lineHeight = 18.sp,
     )
@@ -852,7 +850,7 @@ private fun PorConfirmar(event: FinancialEvent, onError: (String?) -> Unit, onCo
     ) {
         Text(
             if (confirmando) "Confirmando…" else "Confirmar",
-            fontSize = 14.sp,
+            style = Movi.textos.cuerpo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.marca,
         )
@@ -931,19 +929,19 @@ private fun SeccionDelMovimiento(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = formatMoney(event.amount, event.currency),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
+                // El monto que encabeza la hoja: tamaño de título, con las cifras tabulares de un
+                // monto. La escala todavía no tiene un estilo para esto.
+                style = Movi.textos.titulo.copy(fontFeatureSettings = "tnum"),
                 color = Movi.colores.texto,
-                style = Movi.textos.monto,
             )
             // El nombre de la cuenta y no su id: si la lista todavía no llegó no se inventa nada.
             cuentaActual?.let {
-                Text(it.name, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                Text(it.name, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
         Text(
             text = if (abierto) "Cerrar" else "Cambiar",
-            fontSize = 13.sp,
+            style = Movi.textos.cuerpo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.marca,
         )
@@ -984,12 +982,12 @@ private fun SeccionDelMovimiento(
             onValueChange = campo::alCambiar,
             enabled = !guardando,
             cursorBrush = SolidColor(Movi.colores.texto),
-            textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
             singleLine = true,
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
             decorationBox = { inner ->
                 if (concepto.isEmpty()) {
-                    Text("Ej: Mesada de la hija", fontSize = 14.sp, color = Movi.colores.textoMedio)
+                    Text("Ej: Mesada de la hija", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 }
                 inner()
             },
@@ -1002,11 +1000,11 @@ private fun SeccionDelMovimiento(
         Spacer(Modifier.height(8.dp))
         Text(
             text = cuentaActual?.name ?: "La cuenta de este movimiento",
-            fontSize = 14.sp,
+            style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
         )
         Spacer(Modifier.height(6.dp))
-        Text(PATA_NO_CAMBIA_DE_CUENTA, fontSize = 12.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+        Text(PATA_NO_CAMBIA_DE_CUENTA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, lineHeight = 17.sp)
     } else {
         SelectorDeCuentaDelMovimiento(
             elegibles = elegibles,
@@ -1034,7 +1032,7 @@ private fun SeccionDelMovimiento(
     )
     avisos.forEach { aviso ->
         Spacer(Modifier.height(12.dp))
-        Text(aviso, fontSize = 12.5.sp, color = Movi.colores.aviso, lineHeight = 17.sp)
+        Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 17.sp)
     }
 
     Spacer(Modifier.height(14.dp))
@@ -1054,7 +1052,7 @@ private fun SeccionDelMovimiento(
                 !hayCambios -> "Sin cambios"
                 else -> "Guardar cambios"
             },
-            fontSize = 13.5.sp,
+            style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = if (puedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
         )
@@ -1192,7 +1190,7 @@ private fun SeccionEstoSeRepite(
             text = "Marcaste que este movimiento no se repite, así que no aparece en Recurrentes. " +
                 "Esto vale solo para este movimiento: si tienes un cobro mensual con el mismo " +
                 "nombre, ese sigue igual.",
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             lineHeight = 17.sp,
         )
@@ -1208,7 +1206,7 @@ private fun SeccionEstoSeRepite(
         ) {
             Text(
                 text = if (marcando) "Guardando…" else "Sí se repite, después de todo",
-                fontSize = 13.5.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Medium,
                 color = if (!marcando) Movi.colores.marca else Movi.colores.textoApagado,
             )
@@ -1219,7 +1217,7 @@ private fun SeccionEstoSeRepite(
         text = "Movi puede anotarlo en Recurrentes con lo que ya tiene este movimiento: el " +
             "concepto, el monto, la categoría, la cuenta y el día. El primer recordatorio será " +
             "el mes que viene, porque este pago ya lo hiciste.",
-        fontSize = 12.sp,
+        style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         lineHeight = 17.sp,
     )
@@ -1235,7 +1233,7 @@ private fun SeccionEstoSeRepite(
     ) {
         Text(
             text = if (consultando) "Revisando…" else "Sí, se repite todos los meses",
-            fontSize = 13.5.sp,
+            style = Movi.textos.cuerpo,
             fontWeight = FontWeight.Medium,
             color = if (!consultando && !marcando) Movi.colores.marca else Movi.colores.textoApagado,
         )
@@ -1245,7 +1243,7 @@ private fun SeccionEstoSeRepite(
     Spacer(Modifier.height(10.dp))
     Text(
         text = if (marcando) "Guardando…" else "No, este no se repite",
-        fontSize = 12.5.sp,
+        style = Movi.textos.apoyo,
         fontWeight = FontWeight.Medium,
         color = if (marcando) Movi.colores.textoApagado else Movi.colores.marca,
         modifier = Modifier.clickable(enabled = !marcando && !consultando) { marcarQueSeRepite(false) },
@@ -1256,7 +1254,7 @@ private fun SeccionEstoSeRepite(
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Ya lo tienes anotado como «${regla.name}», así que este movimiento no necesita otro.",
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             lineHeight = 17.sp,
         )
@@ -1264,7 +1262,7 @@ private fun SeccionEstoSeRepite(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Editar este recurrente",
-                fontSize = 12.5.sp,
+                style = Movi.textos.apoyo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.marca,
                 modifier = Modifier.clickable { onEditarRecurrente(regla) },
@@ -1276,7 +1274,7 @@ private fun SeccionEstoSeRepite(
         Text(
             text = "Ya lo tienes anotado como «$nombre» (una suscripción confirmada), así que " +
                 "este movimiento no necesita otro recurrente.",
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             lineHeight = 17.sp,
         )
@@ -1322,12 +1320,12 @@ private fun SelectorDeCuentaDelMovimiento(
                 // Sin la lista de cuentas no se sabe el nombre — se dice, en vez de inventarlo o
                 // de mostrar el id. El monto y el concepto se siguen pudiendo guardar igual.
                 text = seleccionada?.name ?: "No pudimos cargar tus cuentas",
-                fontSize = 14.sp,
+                style = Movi.textos.monto,
                 color = if (seleccionada != null) Movi.colores.texto else Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )
             if (elegibles.isNotEmpty()) {
-                Text(if (abierto) "Cerrar" else "Elegir", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                Text(if (abierto) "Cerrar" else "Elegir", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
     }
@@ -1336,7 +1334,7 @@ private fun SelectorDeCuentaDelMovimiento(
         Text(
             text = "Solo se listan tus cuentas en $moneda: un movimiento no cambia de moneda al " +
                 "cambiar de cuenta.",
-            fontSize = 11.5.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             lineHeight = 16.sp,
         )
@@ -1354,7 +1352,7 @@ private fun SelectorDeCuentaDelMovimiento(
                 val elegida = cuenta.id == seleccionada?.id
                 Text(
                     text = cuenta.name,
-                    fontSize = 14.sp,
+                    style = Movi.textos.cuerpo,
                     fontWeight = if (elegida) FontWeight.Medium else FontWeight.Normal,
                     color = if (elegida) Movi.colores.marca else Movi.colores.texto,
                     modifier = Modifier
@@ -1452,14 +1450,14 @@ private fun SeccionDeFecha(
     ) {
         Text(
             text = etiquetaDeFecha(actual, hoy),
-            fontSize = 15.sp,
+            style = Movi.textos.titulo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = if (abierto) "Cerrar" else "Cambiar",
-            fontSize = 13.sp,
+            style = Movi.textos.cuerpo,
             fontWeight = FontWeight.Medium,
             color = Movi.colores.marca,
         )
@@ -1483,7 +1481,7 @@ private fun SeccionDeFecha(
         )
         avisos.forEach { aviso ->
             Spacer(Modifier.height(12.dp))
-            Text(aviso, fontSize = 12.5.sp, color = Movi.colores.aviso, lineHeight = 17.sp)
+            Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.aviso, lineHeight = 17.sp)
         }
         Spacer(Modifier.height(12.dp))
         val puedeGuardar = elegida != actual && !guardando
@@ -1502,14 +1500,14 @@ private fun SeccionDeFecha(
                     elegida == actual -> "Elige otro día"
                     else -> "Mover a ${etiquetaDeFecha(elegida, hoy).lowercase()}"
                 },
-                fontSize = 13.5.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Medium,
                 color = if (puedeGuardar) Movi.colores.marca else Movi.colores.textoApagado,
             )
         }
         error?.let {
             Spacer(Modifier.height(10.dp))
-            Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
     }
 }
