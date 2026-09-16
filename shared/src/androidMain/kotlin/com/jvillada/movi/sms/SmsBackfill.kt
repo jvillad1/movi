@@ -68,6 +68,12 @@ object SmsBackfill {
                 // manual exitosa escondería justo el síntoma que esta función existe para
                 // detectar. Se guarda aparte en markLastBackfill.
                 SmsFilterConfigStore.markLastBackfill(context)
+                // Y se apaga el aviso de pausa por sesión: si esta subida pasó, el token de este
+                // teléfono sirve y el 401 que lo encendió ya quedó atrás. Sin esto, la pantalla
+                // seguía diciendo «la captura estuvo pausada desde…» después de una sincronización
+                // que funcionó — visto en el teléfono del dueño el 16-sep, con el barrido periódico
+                // subiendo bien horas después del 401.
+                SmsFilterConfigStore.clearAuthExpired(context)
                 BackfillOutcome.Uploaded(found = bank.size, synced = result.synced)
             }
             SmsSyncResult.Unauthorized -> {
