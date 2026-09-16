@@ -2,6 +2,12 @@ package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
+import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Goals
+import com.jvillada.movi.server.db.RecurringOccurrences
+import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.SmsMessages
+import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Users
@@ -42,7 +48,12 @@ class DocumentosEnElContextoDeMoviAiTest {
         )
         transaction {
             SchemaUtils.drop(Documents, VoidEvents, Events, Budgets, Accounts, Users)
-            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Budgets, Documents)
+            SchemaUtils.create(
+                Users, Accounts, Events, VoidEvents, Budgets, Documents,
+                // Desde que el contexto del asistente incluye el período (recurrentes, créditos,
+                // suscripciones, metas y lo que espera confirmación), `buildUserContext` las lee.
+                RecurringRules, RecurringOccurrences, Credits, Subscriptions, Goals, SmsMessages,
+            )
             listOf(duenoId to "dueno@movi.test", otroId to "otro@movi.test").forEach { (uid, mail) ->
                 Users.insert {
                     it[id] = uid

@@ -11,6 +11,8 @@ import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigAdaptive
 import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
+import com.jvillada.movi.server.ai.contextoDelPeriodoDe
+import com.jvillada.movi.server.ai.render
 import com.jvillada.movi.server.ai.renderizarDocumentos
 import com.jvillada.movi.server.balance.accountCopValue
 import com.jvillada.movi.server.balance.accountTypesFor
@@ -308,6 +310,11 @@ internal suspend fun buildUserContext(uid: String): String {
     // Los papeles del dueño: solo metadatos y notas, nunca los bytes — ver
     // `consultaDeDocumentos`, donde eso no es un detalle de eficiencia.
     val documentos = cargarDocumentosParaContexto(uid)
+    // Todo lo que el asistente no veía hasta acá: en qué se fue la plata, los recurrentes con su
+    // estado en este período, los créditos con tasa y cuota, las suscripciones y las metas. Ver
+    // `ContextoDelPeriodo.kt` — usa las MISMAS reglas que el Inicio, para que los dos digan lo
+    // mismo.
+    val delPeriodo = contextoDelPeriodoDe(uid)
 
     // Budgets
     val budgets = dbQuery {
@@ -323,6 +330,7 @@ internal suspend fun buildUserContext(uid: String): String {
         appendLine("- Gastos: \$$egresos")
         appendLine("- Flujo: \$${ingresos - egresos}")
         appendLine()
+        append(delPeriodo.render())
         appendLine("== Cuentas ==")
         if (accountRows.isEmpty()) {
             appendLine("- (sin cuentas registradas)")
