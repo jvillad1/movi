@@ -22,6 +22,9 @@ import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.shared.model.rangoLegibleDe
+import com.jvillada.movi.shared.model.ventanaDe
+import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.components.CardRow
@@ -98,7 +101,11 @@ private fun SduiSection(
     when (section.type) {
         "HERO_BALANCE" -> HeroBalanceSection(section, data, onNavigate)
         "UPCOMING_PAYMENTS" -> UpcomingPaymentsSection(section, data, onNavigate)
-        "ALERTS" -> AlertsSection(section, data, onNavigate)
+        // El tipo sigue llamándose ALERTS para que un APK viejo pinte algo, pero lo que muestra es
+        // «Para revisar»: además de lo que está mal, dice qué hacer y lleva a donde se hace.
+        "ALERTS" -> ParaRevisarSection(section, data, onNavigate)
+        "CHECKLIST_DEL_PERIODO" -> ChecklistDelPeriodoSection(section, data, onNavigate)
+        "GASTO_POR_CATEGORIA" -> GastoPorCategoriaSection(section, data, onNavigate)
         "QUICK_LINKS_WITH_TOTALS" -> QuickLinksSection(section, data, onNavigate, uriHandler)
         "CARD_ROW" -> CardRowSection(section, onNavigate, uriHandler)
         "CARD_LIST" -> CardListSection(section, onNavigate, uriHandler)
@@ -206,6 +213,13 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
             style = Movi.textos.cuerpo,
             color = Movi.colores.textoMedio,
         )
+        // **De qué período habla todo lo de abajo.** Las cifras del Inicio siempre fueron del
+        // período del dueño —del 25 al 25, si así lo configuró— pero la pantalla no lo decía, y un
+        // «Gastos $26,6M» sin ventana es una cifra que no se puede verificar contra nada. Con el
+        // mes de calendario `rangoLegibleDe` devuelve null: ahí no hay nada que aclarar.
+        encabezadoDelPeriodo(data)?.let { rango ->
+            Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        }
         Spacer(Modifier.height(10.dp))
         // Antes de que las cuentas contesten, un «$0» de 44 sp es la afirmación más fuerte que
         // hace esta pantalla, y es falsa mientras carga: en la web (sin caché que sobreviva a
@@ -563,5 +577,27 @@ private fun SduiCardTile(card: ScreenCard, onClick: (() -> Unit)?) {
             Spacer(Modifier.height(6.dp))
             Text(it, style = Movi.textos.rotulo, color = Movi.colores.marca)
         }
+    }
+}
+
+/**
+ * «Del 25 de agosto al 24 de septiembre · quedan 9 días», o `null` si el dueño usa el mes de
+ * calendario (ahí el nombre del mes ya lo dice todo) o si el perfil todavía no contestó.
+ *
+ * Los días que quedan importan tanto como el rango: son la diferencia entre «me pasé» y «me estoy
+ * por pasar», y es lo que convierte el resumen en algo accionable.
+ */
+@Composable
+private fun encabezadoDelPeriodo(data: DashboardData): String? {
+    val periodo = data.periodoActual ?: return null
+    val rango = rangoLegibleDe(periodo, data.ajustesDePeriodo) ?: return null
+    val ahora = Clock.System.now().toEpochMilliseconds()
+    val fin = ventanaDe(periodo, data.ajustesDePeriodo).last
+    val dias = ((fin - ahora) / 86_400_000L).toInt()
+    return when {
+        dias > 1 -> "$rango · quedan $dias días"
+        dias == 1 -> "$rango · queda 1 día"
+        dias == 0 -> "$rango · último día"
+        else -> rango
     }
 }

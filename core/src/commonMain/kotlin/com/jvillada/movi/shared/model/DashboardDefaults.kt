@@ -48,15 +48,29 @@ package com.jvillada.movi.shared.model
 // misma función) y la fila ya guardada en `screen_definitions` tienen que quedar iguales para
 // que el Inicio del dueño, ya sembrado en generación 4, la deje de mostrar después del deploy
 // (ver `seedScreens`: una fila con `seed_version < version` se reemplaza completa).
-const val DASHBOARD_LAYOUT_VERSION = 5
+// Generación 6: el Inicio pasa a ser el RESUMEN DEL PERÍODO. El dueño: «quiero que la home sea
+// tipo un resumen del periodo … en qué categorías hice movimientos y en dónde se me fue la plata,
+// qué me falta por pagar y qué ya pagué tipo checklist … que también tire insights de qué cosas
+// debería revisar».
+//
+// Entran dos secciones nuevas —CHECKLIST_DEL_PERIODO y GASTO_POR_CATEGORIA— y sale
+// UPCOMING_PAYMENTS, que contestaba otra pregunta («qué vence en siete días») y quedaría diciendo
+// lo mismo que el checklist, dos veces.
+//
+// Las otras dos NO cambian de tipo a propósito, porque el tipo es lo único que un APK viejo
+// entiende: HERO_BALANCE ahora encabeza con el rango del período y ALERTS se pinta como «Para
+// revisar». Un teléfono sin actualizar sigue viendo su hero y sus alertas de siempre, y las dos
+// secciones nuevas simplemente no le aparecen (ver `renderableSections`).
+const val DASHBOARD_LAYOUT_VERSION = 6
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
     version = DASHBOARD_LAYOUT_VERSION,
     sections = listOf(
         ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
-        ScreenSection(type = "UPCOMING_PAYMENTS", title = "Próximos pagos"),
-        ScreenSection(type = "ALERTS", title = "Alertas"),
+        ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Pagos del período"),
+        ScreenSection(type = "GASTO_POR_CATEGORIA", title = "En qué se fue"),
+        ScreenSection(type = "ALERTS", title = "Para revisar"),
         // Sin el "✦" que llevaba antes: en la web salía como ▯ (la fuente no tiene el glifo),
         // mismo problema que la Ola 2 arregló en los íconos de texto.
         ScreenSection(

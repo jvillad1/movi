@@ -17,6 +17,9 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Goal
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.SubscriptionsResult
@@ -101,6 +104,15 @@ data class DashboardData(
     /** `null` = no llegó; ver [budgets]. */
     val goals: List<Goal>? = null,
     val subscriptions: SubscriptionsResult? = null,
+    /**
+     * Los sellos de «ya ocurrió» de este período. Los pone el dueño en Movimientos; el Inicio solo
+     * los lee, para poder tildar el checklist (ver `checklistDelPeriodo`).
+     */
+    val ocurrencias: List<OccurrenceState>? = null,
+    /** El corte del dueño y sus inicios propios. Sin perfil, el mes de calendario. */
+    val ajustesDePeriodo: PeriodSettings = PeriodSettings(),
+    /** En qué período estamos, según [ajustesDePeriodo]. `null` mientras no se sepa la fecha. */
+    val periodoActual: PeriodoFinanciero? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -661,10 +673,18 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
     renderableSections(def).filter { section ->
         when (section.type) {
             "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
-            "ALERTS" -> dashboardAlerts(
-                overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
-                data.captura, data.capturaSilenciada,
+            // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el
+            // checklist sabe de vencidos. Ver `cosasParaRevisar`: sin nada que sugerir, no ocupa
+            // lugar.
+            "ALERTS" -> cosasParaRevisar(
+                checklist = checklistDelPeriodoDe(data),
+                categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
+                flujoDelPeriodo = (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
+                smsPorConfirmar = data.pendingSms,
+                candidatosAPagoDeTarjeta = data.cardCandidates,
             ).isNotEmpty()
+            "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty()
+            "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
             "QUICK_LINKS_WITH_TOTALS", "LINK_LIST", "CARD_ROW", "CARD_LIST" -> section.cards.isNotEmpty()
             else -> true
         }
@@ -696,3 +716,19 @@ fun spentByCategoryForPeriod(days: List<EventDay>, ventana: LongRange): Map<Stri
         .filter { it.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(it) && it.currency == "COP" }
         .groupBy { it.category }
         .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+
+/**
+ * El checklist del período de [data], o vacío mientras no se sepa en qué período estamos.
+ *
+ * Está acá y no en `ResumenDelPeriodo.kt` porque es el puente entre el `DashboardData` y esa
+ * lógica pura: el archivo de lógica no conoce al Inicio, y así sigue.
+ */
+internal fun checklistDelPeriodoDe(data: DashboardData): List<PagoDelPeriodo> {
+    val periodo = data.periodoActual ?: return emptyList()
+    return checklistDelPeriodo(
+        upcoming = data.upcoming.orEmpty(),
+        ocurrencias = data.ocurrencias.orEmpty(),
+        periodo = periodo,
+        settings = data.ajustesDePeriodo,
+    )
+}
