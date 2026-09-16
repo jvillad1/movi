@@ -121,8 +121,8 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             Text(initials.ifEmpty { "U" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, letterSpacing = (-0.5).sp)
                         }
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(displayName, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
-                            Text(SessionManager.userEmail ?: "", fontSize = 12.5.sp, color = Movi.colores.textoMedio)
+                            Text(displayName, style = Movi.textos.titular, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
+                            Text(SessionManager.userEmail ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             // F44: "PREMIUM · FAMILIAR" estaba fijo en el código — no existen
                             // planes ni tipos de cuenta, así que la etiqueta mentía. Se saca;
                             // vuelve con significado real si algún día hay planes o familia (F8).
@@ -132,7 +132,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         // cambiar (alias y color), en vez de dos afordancias separadas.
                         Text(
                             "Editar",
-                            fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
+                            style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.marca,
                             modifier = Modifier.clickable { showEditProfile = true },
                         )
                     }
@@ -152,7 +152,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         // F42: reemplaza la sección "Cuenta" que F45 había sacado entera por
                         // ser puro decorado — esta fila sí tiene algo real detrás.
                         CardRow(
-                            left = { Text("Cambiar contraseña", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
+                            left = { Text("Cambiar contraseña", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
                             showChevron = true,
                             onClick = { showChangePassword = true },
                         )
@@ -162,12 +162,12 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         CardRow(
                             left = {
                                 Column {
-                                    Text("Inicio del mes", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                                    Text("Inicio del mes", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
                                         text = profile?.periodCutoffDay?.let { d ->
                                             if (d == 1) "Mes de calendario" else "Cada día $d"
                                         } ?: "Mes de calendario",
-                                        fontSize = 12.sp,
+                                        style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
@@ -248,10 +248,10 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         CardRow(
                             left = {
                                 Column {
-                                    Text("Avisarme antes de un vencimiento", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                                    Text("Avisarme antes de un vencimiento", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
                                         text = reminderLeadHint(profile?.reminderLeadDays ?: DEFAULT_REMINDER_LEAD_DAYS),
-                                        fontSize = 12.sp,
+                                        style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
@@ -296,19 +296,19 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column {
-                                    Text("Notificaciones push", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                                    Text("Notificaciones push", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
                                         when (pushStatus) {
                                             "enabled" -> "Activadas en este dispositivo"
                                             "denied" -> "Bloqueadas por el navegador"
                                             else -> "Recibe tus pagos próximos"
                                         },
-                                        fontSize = 12.sp, color = Movi.colores.textoMedio,
+                                        style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
                                     )
                                 }
                                 Text(
                                     if (pushStatus == "enabled") "Desactivar" else "Activar",
-                                    fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                    style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium,
                                     color = if (pushStatus == "denied") Movi.colores.textoApagado else Movi.colores.texto,
                                     modifier = Modifier.clickable(enabled = pushStatus != "denied") {
                                         if (pushStatus == "enabled") PushOptIn.disable() else PushOptIn.enable()
@@ -336,7 +336,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         // 6). El texto ya no promete: solo dice que no hay meta y enlaza a
                         // Metas.
                         CardRow(
-                            left = { Text("Aún sin meta", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio) },
+                            left = { Text("Aún sin meta", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio) },
                             sub = "Ver Metas de ahorro",
                             isLast = true,
                             onClick = { onNavigate(Screen.Goals) },
@@ -366,7 +366,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         .padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Cerrar sesión", fontSize = 14.sp, color = Movi.colores.sale, fontWeight = FontWeight.Medium)
+                    Text("Cerrar sesión", style = Movi.textos.cuerpo, color = Movi.colores.sale, fontWeight = FontWeight.Medium)
                 }
             }
 
@@ -386,7 +386,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                         ) {
                             CardRow(
-                                left = { Text("Editor de pantallas", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
+                                left = { Text("Editor de pantallas", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto) },
                                 sub = "Reordena y edita las secciones del Inicio sin desplegar",
                                 showChevron = true,
                                 isLast = true,

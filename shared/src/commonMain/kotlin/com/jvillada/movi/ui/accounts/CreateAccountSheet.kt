@@ -195,13 +195,13 @@ fun CreateAccountSheet(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
                     cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                         .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                     decorationBox = { inner ->
                         if (name.isEmpty()) {
-                            Text("Ej: Bancolombia Ahorros", fontSize = 14.sp, color = Movi.colores.textoMedio)
+                            Text("Ej: Bancolombia Ahorros", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                         }
                         inner()
                     },
@@ -233,7 +233,7 @@ fun CreateAccountSheet(
             // F52: nota, no botón — Créditos vive en Más, no acá.
             Text(
                 text = "¿Tarjetas o préstamos? Se cargan en Créditos",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
 
@@ -253,7 +253,7 @@ fun CreateAccountSheet(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = error!!,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.sale,
                 )
             }
@@ -272,7 +272,7 @@ fun CreateAccountSheet(
             ) {
                 Text(
                     text = if (saving) "Creando…" else "Crear cuenta",
-                    fontSize = 15.sp,
+                    style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                 )
@@ -281,7 +281,7 @@ fun CreateAccountSheet(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = missingFieldMessage,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
@@ -296,7 +296,7 @@ fun CreateAccountSheet(
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        fontSize = 11.sp,
+        style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         letterSpacing = 0.4.sp,
         fontWeight = FontWeight.Medium,
@@ -331,7 +331,7 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
                 )
                 Text(
                     text = label,
-                    fontSize = 13.sp,
+                    style = Movi.textos.cuerpo,
                     fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                     color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
                 )
@@ -339,7 +339,7 @@ private fun RowScope.Chip(label: String, selected: Boolean, onClick: () -> Unit,
         } else {
             Text(
                 text = label,
-                fontSize = 13.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                 color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
             )
@@ -377,7 +377,7 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
             )
             Text(
                 text = option.label,
-                fontSize = 14.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = FontWeight.Medium,
                 color = if (selected) Movi.colores.marca else Movi.colores.texto,
             )
@@ -385,7 +385,7 @@ private fun TypeCard(option: TypeOption, selected: Boolean, onClick: () -> Unit)
         Spacer(Modifier.height(3.dp))
         Text(
             text = option.description,
-            fontSize = 12.sp,
+            style = Movi.textos.apoyo,
             color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
         )
     }

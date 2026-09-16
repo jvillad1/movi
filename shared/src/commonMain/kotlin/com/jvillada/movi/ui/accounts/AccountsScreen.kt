@@ -126,7 +126,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             ) {
                                 Text(
                                     text = "Sin cuentas aún",
-                                    fontSize = 15.sp,
+                                    style = Movi.textos.titulo,
                                     color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                 )
@@ -140,7 +140,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 ) {
                                     Text(
                                         text = "Crear primera cuenta",
-                                        fontSize = 13.sp,
+                                        style = Movi.textos.cuerpo,
                                         fontWeight = FontWeight.Medium,
                                         color = Movi.colores.marca,
                                     )
@@ -166,7 +166,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         ) {
                             Text(
                                 text = "PATRIMONIO NETO",
-                                fontSize = 11.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                                 letterSpacing = 0.4.sp,
                                 fontWeight = FontWeight.Medium,
@@ -196,7 +196,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // «Tu plata» y no «Activos»: es el mismo número y el mismo rótulo
                                 // que la cifra grande del Inicio, y compartir la palabra es lo
                                 // que hace obvio que son la misma cosa vista dos veces.
-                                Text("Tu plata", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                                Text("Tu plata", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 Cifra(formatCOP(balance.tuPlata), 12f, color = Movi.colores.entra)
                             }
                             // El renglón que faltaba: sin él, tu plata − deudas no daba el
@@ -209,7 +209,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 ) {
                                     Text(
                                         text = balance.condicionadoA?.let { "Solo para $it" } ?: "De uso condicionado",
-                                        fontSize = 12.sp,
+                                        style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                     Cifra(formatCOP(balance.condicionado), 12f, color = Movi.colores.textoMedio)
@@ -221,7 +221,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Text("Deudas", fontSize = 12.sp, color = Movi.colores.textoMedio)
+                                    Text("Deudas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                     Cifra("−${formatCOP(balance.deudas)}", 12f, color = Movi.colores.sale)
                                 }
                             }
@@ -268,14 +268,14 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 Column {
                                     Text(
                                         text = "Movimientos entre cuentas",
-                                        fontSize = 14.sp,
+                                        style = Movi.textos.cuerpo,
                                         fontWeight = FontWeight.Medium,
                                         color = Movi.colores.texto,
                                     )
                                     Spacer(Modifier.height(3.dp))
                                     Text(
                                         text = "Traspasos, cuotas de crédito y pagos de tarjeta",
-                                        fontSize = 12.sp,
+                                        style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
@@ -328,8 +328,8 @@ private fun AccountsGroup(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row {
-                Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
-                Text(" · ${accounts.size}", fontSize = 11.sp, color = Movi.colores.textoApagado)
+                Text(title.uppercase(), style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
+                Text(" · ${accounts.size}", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
             Cifra(formatCOP(accounts.sumOf { valorEnPesos(it) }), 12f, color = Movi.colores.textoMedio)
         }
@@ -341,7 +341,7 @@ private fun AccountsGroup(
             if (accounts.isEmpty()) {
                 Text(
                     text = "Sin cuentas de ${title.lowercase()} aún",
-                    fontSize = 13.sp,
+                    style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                     modifier = Modifier.padding(vertical = 14.dp),
                 )
@@ -361,7 +361,7 @@ private fun AccountsGroup(
                             Icon(imageVector = icon, contentDescription = typeLabel, tint = Movi.colores.textoMedio, modifier = Modifier.size(20.dp))
                             Text(
                                 text = account.name,
-                                fontSize = 14.5.sp,
+                                style = Movi.textos.titulo,
                                 fontWeight = FontWeight.Medium,
                                 color = Movi.colores.texto,
                             )
