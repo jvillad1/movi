@@ -122,11 +122,11 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Movi", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
-        Text("Finanzas personales", fontSize = 14.sp, color = Movi.colores.textoMedio)
+        Text("Finanzas personales", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(40.dp))
 
         MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
-            Text("Correo", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = email,
                 onChange = { email = it },
@@ -138,7 +138,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
             )
             Spacer(Modifier.height(16.dp))
-            Text("Contraseña", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = password,
                 onChange = { password = it },
@@ -154,17 +154,17 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
 
             error?.let {
                 Spacer(Modifier.height(12.dp))
-                Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
             notice?.let {
                 Spacer(Modifier.height(12.dp))
-                Text(it, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
 
             Spacer(Modifier.height(12.dp))
             Text(
                 "¿Olvidaste tu contraseña?",
-                fontSize = 13.sp, color = Movi.colores.marca,
+                style = Movi.textos.cuerpo, color = Movi.colores.marca,
                 modifier = Modifier.noRippleClickable { requestReset() },
             )
 
@@ -185,7 +185,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 } else {
                     Text(
                         "Entrar",
-                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
                         color = Movi.colores.fondo,
                     )
                 }
@@ -195,7 +195,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text(
             "¿No tienes cuenta? Regístrate",
-            fontSize = 13.sp, color = Movi.colores.marca,
+            style = Movi.textos.cuerpo, color = Movi.colores.marca,
             modifier = Modifier.noRippleClickable { onNavigate(Screen.Register) }
         )
     }
@@ -218,7 +218,7 @@ internal fun AuthField(
     BasicTextField(
         value = campo.valor,
         onValueChange = campo::alCambiar,
-        textStyle = TextStyle(fontSize = 15.sp, color = Movi.colores.texto),
+        textStyle = Movi.textos.titulo.copy(color = Movi.colores.texto),
         cursorBrush = SolidColor(Movi.colores.marca),
         singleLine = true,
         visualTransformation = if (showAsPassword) PasswordVisualTransformation() else VisualTransformation.None,
@@ -231,7 +231,7 @@ internal fun AuthField(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.weight(1f)) {
-                    if (value.isEmpty()) Text(placeholder, color = Movi.colores.textoApagado, fontSize = 15.sp)
+                    if (value.isEmpty()) Text(placeholder, color = Movi.colores.textoApagado, style = Movi.textos.titulo)
                     inner()
                 }
                 if (isPassword) {

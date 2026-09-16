@@ -555,7 +555,7 @@ fun CategoryField(
 
     Column(modifier = modifier) {
         if (label != null) {
-            Text(label, fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+            Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
             Spacer(Modifier.height(8.dp))
         }
         Box(
@@ -574,7 +574,7 @@ fun CategoryField(
                 },
                 singleLine = true,
                 cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = TextStyle(color = Movi.colores.texto, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                textStyle = Movi.textos.titulo.copy(color = Movi.colores.texto),
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -601,7 +601,7 @@ fun CategoryField(
                         focused = state.isFocused
                     },
                 decorationBox = { inner ->
-                    if (value.isEmpty()) Text(placeholder, fontSize = 15.sp, color = Movi.colores.textoApagado)
+                    if (value.isEmpty()) Text(placeholder, style = Movi.textos.titulo, color = Movi.colores.textoApagado)
                     inner()
                 },
             )
@@ -631,13 +631,13 @@ fun CategoryField(
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Text(
                             "«$nuevaCategoria» la usa Movi sola",
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.texto,
                         )
                         Text(
                             "Es una categoría reservada y de ella dependen las cifras de tu mes. Elige otra.",
-                            fontSize = 11.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                     }
@@ -652,13 +652,13 @@ fun CategoryField(
                     ) {
                         Text(
                             "Crear \"$nuevaCategoria\"",
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.marca,
                         )
                         Text(
                             "Se guarda tal cual, como categoría tuya",
-                            fontSize = 11.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                     }
@@ -676,13 +676,13 @@ fun CategoryField(
                     ) {
                         Text(
                             "Usar \"$nombreConocido\"",
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = Movi.colores.marca,
                         )
                         Text(
                             ladoConocido ?: "Ya la tienes anotada",
-                            fontSize = 11.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
                         )
                     }
@@ -691,7 +691,7 @@ fun CategoryField(
                 matches.forEachIndexed { i, name ->
                     Text(
                         name,
-                        fontSize = 14.sp,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.texto,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -723,7 +723,7 @@ fun CategoryField(
         Spacer(Modifier.height(8.dp))
         Text(
             text = "Administrar categorías",
-            fontSize = 12.5.sp,
+            style = Movi.textos.apoyo,
             color = Movi.colores.marca,
             fontWeight = FontWeight.Medium,
             modifier = Modifier
