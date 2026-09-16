@@ -156,6 +156,14 @@ class SyncEngine(
                         // La moneda, que tampoco viajaba: un gasto en dólares anotado sin señal
                         // llegaba como pesos. Ver migración 8.sqm.
                         currency = row.currency,
+                        // **La edad de esta versión**, que es lo que decide quién gana cuando este
+                        // reenvío llega a un id que el server ya tiene. `null` acá quiere decir
+                        // «este teléfono no editó el movimiento desde que lo anotó», y el server
+                        // lo lee así: la copia de la web, si el dueño la corrigió, es posterior y
+                        // gana. Viaja siempre —clave presente, valga lo que valga—, que es lo que
+                        // le permite al server distinguir esto de un APK viejo. Ver
+                        // `FinancialEvent.lastEditedAt` y `pisaElReenvio` en EventRoutes.kt.
+                        lastEditedAt = row.lastEditedAt,
                     )
                 )
                 db.financialEventQueries.markSyncedIfUnchanged(

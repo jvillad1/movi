@@ -242,6 +242,25 @@ object Events : Table("financial_events") {
      * arranque.
      */
     val noSeRepite           = bool("no_se_repite").default(false)
+    /**
+     * **Cuándo se corrigió por última vez** esta fila, o NULL si nadie la tocó desde que nació. Ver
+     * [com.jvillada.movi.shared.model.FinancialEvent.lastEditedAt] para el porqué completo; el
+     * resumen es que `POST /api/events` es un upsert por id y sin esta columna el reenvío de una
+     * copia vieja del teléfono pisaba en silencio la corrección que el dueño acababa de hacer en
+     * la web.
+     *
+     * Nullable, y por el mismo motivo que [transferId], [createdAt] y [noAmortiza]: la agrega sola
+     * `createMissingTablesAndColumns(Events)` al arrancar sobre la base ya desplegada, y una
+     * columna nullable por esa vía es segura sobre una tabla con datos. Las filas que ya existen
+     * quedan en NULL, que es exactamente lo que significa: nadie las editó después de crearlas —
+     * o al menos no desde que esto se guarda—, así que el reenvío de un APK viejo las sigue
+     * pisando igual que hasta hoy y no se pierde nada de lo que ya está.
+     *
+     * **Sin índice**: nunca se filtra ni se ordena por ella — solo se lee junto con su propia fila,
+     * y un `CREATE INDEX` que falle es lo que puede dejar el server sin levantar (estas migraciones
+     * corren dentro de la transacción de arranque).
+     */
+    val lastEditedAt         = long("last_edited_at").nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)

@@ -56,5 +56,9 @@ fun insertEventRow(uid: String, event: FinancialEvent) {
         it[Events.createdAt]     = event.createdAt ?: System.currentTimeMillis()
         it[Events.noAmortiza]    = event.noAmortiza
         it[Events.noSeRepite]    = event.noSeRepite
+        // Casi siempre null acá: un movimiento que nace no tiene ninguna versión anterior a la que
+        // ganarle (ver FinancialEvent.lastEditedAt). Se copia lo que venga igual, porque por esta
+        // función también entran las patas que el cliente ya tenía escritas de antes.
+        it[Events.lastEditedAt]  = event.lastEditedAt
     }
 }

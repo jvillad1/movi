@@ -1,0 +1,15 @@
+-- Migración 10 → 11: agrega financial_event.lastEditedAt — **la edad de esta versión del movimiento**.
+--
+-- `POST /api/events` es un upsert por id: el teléfono reenvía cada 30 segundos lo que todavía tiene
+-- sin sellar. Si el POST anterior LLEGÓ al server pero la respuesta no volvió (se cortó la señal a
+-- mitad, se murió el proceso), la fila local se queda sin sellar aunque el server ya la tenga — y
+-- si en esa ventana el dueño corrige el movimiento desde la web, el reenvío de la copia vieja
+-- pisaba esa corrección sin decir nada: ni un error, ni un aviso, el monto de vuelta al anterior.
+--
+-- Con esta columna el reenvío viaja con la edad de su versión y el server lo deja perder contra una
+-- edición más nueva (ver `pisaElReenvio` en EventRoutes.kt). La escribe cada corrección local que
+-- se resuelve sin señal (`marcarEditado`).
+--
+-- Nullable y sin default: `null` es «nadie lo editó», que es la verdad de todo lo que ya está en el
+-- teléfono — y lo que hace que estas filas se sigan comportando exactamente como hasta hoy.
+ALTER TABLE financial_event ADD COLUMN lastEditedAt INTEGER;

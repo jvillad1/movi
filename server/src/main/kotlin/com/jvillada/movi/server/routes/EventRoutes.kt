@@ -120,6 +120,36 @@ internal fun categoriaQueMoviEscribeSola(category: String): String? = when {
  */
 internal val ORIGENES_YA_REVISADOS = setOf(EventSource.MANUAL, EventSource.SMS)
 
+/**
+ * **¿El reenvío del teléfono pisa lo que el server ya tiene?** La regla entera de la carrera entre
+ * los dos dispositivos, en un solo lugar y sin tocar la base, para poder probarla sola.
+ *
+ * Tres casos, y cada uno tiene su motivo:
+ *
+ * 1. **El cliente no mandó la clave** ([mandoLaEdicion] `false`) → **pisa**, igual que antes de
+ *    esta ola. Es un APK anterior a este campo —el del dueño corre el 1.25— y no tiene forma de
+ *    decir qué tan vieja es su copia. Tratar esa ausencia como «editado en el año 0» lo haría
+ *    perder **siempre**, incluso cuando su copia es la corrección legítima que él acaba de escribir
+ *    sin señal: le estaríamos borrando datos a cambio de tapar el agujero. El agujero para ese APK
+ *    se cierra el día que instale el nuevo, no antes.
+ * 2. **Nadie editó lo guardado** ([edicionGuardada] `null`) → **pisa**. No hay ninguna corrección
+ *    que proteger: lo que está en el server es lo que este mismo teléfono subió.
+ * 3. **Los dos tienen edad** → pisa solo si la que llega **no es más vieja**. El empate va para el
+ *    que llega a propósito: el caso normal es el reenvío del MISMO contenido (el POST llegó y la
+ *    respuesta no), y ahí escribir lo mismo encima de lo mismo no cambia nada. Con [edicionQueLlega]
+ *    en `null` y algo guardado, el reenvío pierde: el teléfono está diciendo «yo no edité esto», o
+ *    sea que su copia es la original y la del server es posterior.
+ */
+internal fun pisaElReenvio(
+    mandoLaEdicion: Boolean,
+    edicionQueLlega: Long?,
+    edicionGuardada: Long?,
+): Boolean {
+    if (!mandoLaEdicion) return true
+    if (edicionGuardada == null) return true
+    return edicionQueLlega != null && edicionQueLlega >= edicionGuardada
+}
+
 fun Route.eventRoutes() {
     route("/api/events") {
 
@@ -130,6 +160,13 @@ fun Route.eventRoutes() {
             val crudo = call.receive<JsonObject>()
             val body = jsonDeLaApi.decodeFromJsonElement<FinancialEvent>(crudo)
             val mandoLaMoneda = "currency" in crudo
+            // Y si el cliente sabe de ediciones, por el mismo camino y por un motivo parecido: un
+            // `lastEditedAt` ausente es un APK que no conoce el campo, y uno presente en `null` es
+            // uno que sí lo conoce y está diciendo «esta copia no la editó nadie». Distinguirlos es
+            // lo que deja pisar al primero (como hasta hoy, para no perderle nada al teléfono que
+            // ya está instalado) y hacer perder al segundo contra una corrección más nueva de la
+            // web. Ver `FinancialEvent.lastEditedAt` y `pisaElReenvio` más abajo.
+            val mandoLaEdicion = "lastEditedAt" in crudo
             val uid = call.userId()
             val now = System.currentTimeMillis()
 
@@ -258,11 +295,29 @@ fun Route.eventRoutes() {
             // mismos que compara `markSyncedIfUnchanged`, más «no se repite»). Solo para un
             // movimiento suelto del mismo dueño: una pata de traspaso o de cuota nunca sale por
             // esta ruta (ver arriba), y un id de otro usuario es un choque real (409).
+            //
+            // **Pero «el reenvío manda» no puede ser incondicional, y ahí estaba el agujero.** El
+            // POST puede haber LLEGADO sin que el teléfono viera la respuesta (se cortó la señal a
+            // mitad, se murió el proceso): la fila local se queda sin sellar aunque el server ya la
+            // tenga. Si en esa ventana el dueño corrige el movimiento **en la web** —el monto, la
+            // categoría, la fecha, el concepto, la cuenta— el ciclo siguiente reenviaba la copia
+            // vieja del teléfono y este UPDATE pisaba la corrección sin decir nada.
+            //
+            // Ahora el reenvío pierde contra una edición más nueva: [pisaElReenvio] compara la edad
+            // de las dos versiones (ver `FinancialEvent.lastEditedAt`). Cuando pierde no se escribe
+            // nada y se contesta **200 con lo guardado** — no un error: para el teléfono el
+            // movimiento efectivamente llegó, así que sellarlo y dejar de reenviarlo es la verdad,
+            // y la próxima lectura de `getEvents` (server primero) le baja la versión buena.
             val reenvio = dbQuery {
                 val existente = Events.selectAll().where { Events.id eq event.id }.firstOrNull()
                     ?: return@dbQuery null
                 if (existente[Events.userId] != uid) return@dbQuery HttpStatusCode.Conflict to null
-                if (existente[Events.transferId] == null) {
+                if (existente[Events.transferId] == null && pisaElReenvio(
+                        mandoLaEdicion = mandoLaEdicion,
+                        edicionQueLlega = event.lastEditedAt,
+                        edicionGuardada = existente[Events.lastEditedAt],
+                    )
+                ) {
                     val cambioLaFecha = existente[Events.timestamp] != event.timestamp
                     Events.update({ (Events.id eq event.id) and (Events.userId eq uid) }) {
                         it[accountId]   = event.accountId
@@ -272,6 +327,10 @@ fun Route.eventRoutes() {
                         it[merchant]    = event.merchant
                         it[timestamp]   = event.timestamp
                         it[Events.noSeRepite] = event.noSeRepite
+                        // La edad de la versión que acaba de ganar, para que la próxima se compare
+                        // contra ella y no contra la que había. Solo si vino: un APK viejo no tiene
+                        // ninguna que ofrecer y la guardada se deja como está.
+                        if (event.lastEditedAt != null) it[Events.lastEditedAt] = event.lastEditedAt
                         // Confirmado en el teléfono (`confirmEvent` sin señal) → confirmado acá.
                         // Solo en esa dirección: un reenvío viejo no puede devolver a «por
                         // confirmar» algo que ya se confirmó en la web.
@@ -312,6 +371,11 @@ fun Route.eventRoutes() {
                     // Faltaba: el teléfono guarda «no se repite» en un movimiento pendiente y el
                     // POST que lo sube lo perdía, así que volvía a aparecer en Recurrentes.
                     it[Events.noSeRepite]    = event.noSeRepite
+                    // Casi siempre null: un alta no tiene versión anterior a la que ganarle. No lo
+                    // es cuando el movimiento se anotó Y se corrigió sin señal, y ahí importa que
+                    // la edición viaje con él — si no, el server lo guardaría como «nunca editado»
+                    // y la comparación del próximo reenvío arrancaría de cero.
+                    it[Events.lastEditedAt]  = event.lastEditedAt
                 }
             }
             // El eco lleva la bandera derivada, no la que mandó el cliente: countsAsCashFlow
@@ -434,12 +498,19 @@ fun Route.eventRoutes() {
                 val isVoided = event != null && VoidEvents.selectAll()
                     .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
                     .count() > 0
+                val ahora = System.currentTimeMillis()
                 if (event != null && !isVoided) {
                     Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
                         it[Events.category] = category
+                        // **La edad de esta corrección** (ver `FinancialEvent.lastEditedAt`): sin
+                        // esto, un reenvío del teléfono con la categoría vieja la pisaría en
+                        // silencio. Toda escritura que corrija un movimiento existente lo sella.
+                        it[Events.lastEditedAt] = ahora
                     }
                 }
-                event?.takeIf { !isVoided }?.copy(category = category)?.withCashFlowFlag(accountTypesFor(uid))
+                event?.takeIf { !isVoided }
+                    ?.copy(category = category, lastEditedAt = ahora)
+                    ?.withCashFlowFlag(accountTypesFor(uid))
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
             else call.respond(updated)
@@ -661,6 +732,7 @@ fun Route.eventRoutes() {
                 val nuevoMonto = cambios.amount
                 val nuevaCuenta = cambios.accountId
                 val nuevoConcepto = cambios.description
+                val ahora = System.currentTimeMillis()
                 if (nuevoMonto == null && nuevaCuenta == null && nuevoConcepto == null) {
                     // Guardar sin haber cambiado nada no es un error: es un 200 con el evento tal
                     // como está. Escribir igual sería una fila tocada sin motivo.
@@ -710,6 +782,9 @@ fun Route.eventRoutes() {
                         )
                         Events.update({ (Events.userId eq uid) and (Events.id eq hermana.id) }) {
                             it[amount] = montoNuevoDeLaHermana
+                            // La hermana también queda editada: si no, un reenvío del teléfono
+                            // podría devolverle su cifra vieja y partir el par.
+                            it[Events.lastEditedAt] = ahora
                         }
                     }
                 }
@@ -717,6 +792,11 @@ fun Route.eventRoutes() {
                     if (nuevoMonto != null) it[amount] = nuevoMonto
                     if (nuevaCuenta != null) it[accountId] = nuevaCuenta
                     if (nuevoConcepto != null) it[description] = nuevoConcepto
+                    // **La edad de esta corrección** (ver `FinancialEvent.lastEditedAt`). Es la
+                    // ruta que más importa de las cinco: el monto, la cuenta y el concepto son
+                    // justo lo que el dueño corrige desde la web sobre un movimiento que el
+                    // teléfono todavía cree pendiente.
+                    it[Events.lastEditedAt] = ahora
                 }
 
                 ResultadoDeEdicion.Ok(
@@ -724,6 +804,7 @@ fun Route.eventRoutes() {
                         amount = nuevoMonto ?: fila.amount,
                         accountId = nuevaCuenta ?: fila.accountId,
                         description = nuevoConcepto ?: fila.description,
+                        lastEditedAt = ahora,
                     ).withCashFlowFlag(accountTypesFor(uid)),
                 )
             }
@@ -811,13 +892,15 @@ fun Route.eventRoutes() {
                     null
                 } else {
                     val par = event.transferId
+                    val ahora = System.currentTimeMillis()
                     Events.update({
                         (Events.userId eq uid) and
                             (if (par != null) (Events.transferId eq par) else (Events.id eq id))
                     }) {
                         it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
+                        it[Events.lastEditedAt] = ahora
                     }
-                    event.copy(reconciliationStatus = ReconciliationStatus.RECONCILED)
+                    event.copy(reconciliationStatus = ReconciliationStatus.RECONCILED, lastEditedAt = ahora)
                         .withCashFlowFlag(accountTypesFor(uid))
                 }
             }
@@ -841,10 +924,13 @@ fun Route.eventRoutes() {
                 if (event == null || isVoided) {
                     null
                 } else {
+                    val ahora = System.currentTimeMillis()
                     Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
                         it[noSeRepite] = !seRepite
+                        it[Events.lastEditedAt] = ahora
                     }
-                    event.copy(noSeRepite = !seRepite).withCashFlowFlag(accountTypesFor(uid))
+                    event.copy(noSeRepite = !seRepite, lastEditedAt = ahora)
+                        .withCashFlowFlag(accountTypesFor(uid))
                 }
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
@@ -878,9 +964,11 @@ fun Route.eventRoutes() {
                     null
                 } else {
                     val transferId = event.transferId
+                    val ahora = System.currentTimeMillis()
                     val idsAfectados: List<String> = if (transferId != null) {
                         Events.update({ (Events.userId eq uid) and (Events.transferId eq transferId) }) {
                             it[timestamp] = nuevo
+                            it[Events.lastEditedAt] = ahora
                         }
                         Events.selectAll()
                             .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
@@ -888,6 +976,9 @@ fun Route.eventRoutes() {
                     } else {
                         Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
                             it[timestamp] = nuevo
+                            // Sin esto, un reenvío del teléfono con la fecha vieja la devolvía —y
+                            // con ella el movimiento a otro mes— sin decir nada.
+                            it[Events.lastEditedAt] = ahora
                         }
                         listOf(id)
                     }
@@ -920,7 +1011,7 @@ fun Route.eventRoutes() {
                     // cambio de fecha nombra el recurrente y el mes (ver `GET /{id}/occurrence`)-
                     // asi que soltar no es una sorpresa: es lo que se anuncio.
                     soltarOcurrenciasSinEvidencia(uid, idsAfectados, fecha)
-                    event.copy(timestamp = nuevo).withCashFlowFlag(accountTypesFor(uid))
+                    event.copy(timestamp = nuevo, lastEditedAt = ahora).withCashFlowFlag(accountTypesFor(uid))
                 }
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
