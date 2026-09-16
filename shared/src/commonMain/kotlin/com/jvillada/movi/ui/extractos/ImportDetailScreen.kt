@@ -74,19 +74,19 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
             )
             error != null -> Text(
                 error!!,
-                fontSize = 13.sp, color = Movi.colores.sale,
+                style = Movi.textos.cuerpo, color = Movi.colores.sale,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
             )
             detail != null -> {
                 errorDeDeshacer?.let {
-                    Text(it, fontSize = 12.5.sp, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = 20.dp))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(horizontal = 20.dp))
                 }
                 // **Deshacer el importe entero.** Antes un extracto importado en la cuenta equivocada
                 // solo se arreglaba anulando fila por fila.
                 Text(
                     "Deshacer este importe",
-                    fontSize = 13.5.sp,
+                    style = Movi.textos.cuerpo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.sale,
                     modifier = Modifier
@@ -135,7 +135,7 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
             item(key = "empty") {
                 Text(
                     "No se encontraron movimientos",
-                    fontSize = 13.sp, color = Movi.colores.textoMedio,
+                    style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                 )
@@ -144,7 +144,7 @@ private fun ImportDetailContent(detail: StatementImportDetail) {
             item(key = "section-label") {
                 Text(
                     "MOVIMIENTOS",
-                    fontSize = 11.sp, color = Movi.colores.textoMedio,
+                    style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
                     letterSpacing = 0.8.sp,
                 )
             }
@@ -178,7 +178,7 @@ private fun ImportSummaryHeader(imp: StatementImport) {
     ) {
         Text(
             "${imp.bankName.uppercase()} · ${imp.period.uppercase()}",
-            fontSize = 11.sp, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
+            style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -187,11 +187,11 @@ private fun ImportSummaryHeader(imp: StatementImport) {
         ) {
             Text(
                 "${imp.importedCount} importadas · ${imp.reconciledCount} reconciliadas",
-                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto,
+                style = Movi.textos.cuerpo, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto,
             )
             Text(
                 epochToShortDate(imp.importedAt),
-                fontSize = 12.sp, color = Movi.colores.textoMedio,
+                style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
             )
         }
     }
@@ -210,19 +210,19 @@ private fun ImportEventRow(event: FinancialEvent) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 event.description.ifBlank { event.merchant ?: "Sin descripción" },
-                fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto,
+                style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto,
             )
             Spacer(Modifier.height(2.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(event.category, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                Text(event.category, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 StatusDot(Movi.colores.textoApagado, 2.dp)
                 Text(
                     epochToShortDate(event.timestamp),
-                    fontSize = 11.sp, color = Movi.colores.textoMedio,
-                    style = Movi.textos.monto,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
                 )
             }
         }
