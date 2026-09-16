@@ -204,6 +204,7 @@ fun cosasParaRevisar(
     flujoDelPeriodo: Long,
     smsPorConfirmar: Int,
     candidatosAPagoDeTarjeta: Int,
+    gastoSinCategoria: Long = 0,
     cuantas: Int = 4,
 ): List<CosaParaRevisar> {
     val todas = buildList {
@@ -249,6 +250,19 @@ fun cosasParaRevisar(
                 ),
             )
         }
+        if (gastoSinCategoria > 0) {
+            add(
+                CosaParaRevisar(
+                    texto = "Hay gastos sin categoría este período",
+                    // El «y la próxima vez» no es una promesa de marketing: es literalmente lo que
+                    // hace `MemoriaDeCategorias`. Ponerle categoría a uno le enseña a Movi el
+                    // destinatario entero, y por eso vale la pena decirle que el rato invertido
+                    // rinde más de una vez.
+                    detalle = "Ponles una y Movi reconoce sola a ese mismo destinatario la próxima vez.",
+                    destino = DestinoDeRevision.MOVIMIENTOS,
+                ),
+            )
+        }
         if (flujoDelPeriodo < 0) {
             add(
                 CosaParaRevisar(
@@ -261,6 +275,20 @@ fun cosasParaRevisar(
     }
     return todas.sortedByDescending { it.urgente }.take(cuantas)
 }
+
+/**
+ * **Cuánta plata del período quedó sin categoría.** Los dos nombres, porque durante un tiempo Movi
+ * escribió «Otro» en singular al confirmar un SMS mientras el resto de la app decía «Otros»: hay
+ * movimientos viejos con cada uno, y los dos significan lo mismo — que nadie decidió todavía.
+ *
+ * No se confunde con el renglón «Otras N categorías» que arma [categoriasDelPeriodo] para la cola
+ * del gráfico: eso es un agrupado de categorías que sí existen, y se compara contra el mapa crudo.
+ */
+fun gastoSinCategoriaDe(gastoPorCategoria: Map<String, Long>): Long =
+    gastoPorCategoria.entries
+        .filter { it.key.trim().equals("Otros", ignoreCase = true) || it.key.trim().equals("Otro", ignoreCase = true) }
+        .sumOf { it.value }
+        .coerceAtLeast(0)
 
 /** El monto que el checklist dice que ya se pagó, para el rótulo de avance. */
 fun yaPagado(checklist: List<PagoDelPeriodo>): Long =

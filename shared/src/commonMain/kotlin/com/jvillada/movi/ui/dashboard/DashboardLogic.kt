@@ -676,13 +676,7 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el
             // checklist sabe de vencidos. Ver `cosasParaRevisar`: sin nada que sugerir, no ocupa
             // lugar.
-            "ALERTS" -> cosasParaRevisar(
-                checklist = checklistDelPeriodoDe(data),
-                categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
-                flujoDelPeriodo = (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
-                smsPorConfirmar = data.pendingSms,
-                candidatosAPagoDeTarjeta = data.cardCandidates,
-            ).isNotEmpty()
+            "ALERTS" -> cosasParaRevisarDe(data).isNotEmpty()
             "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty()
             "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
             "QUICK_LINKS_WITH_TOTALS", "LINK_LIST", "CARD_ROW", "CARD_LIST" -> section.cards.isNotEmpty()
@@ -716,6 +710,21 @@ fun spentByCategoryForPeriod(days: List<EventDay>, ventana: LongRange): Map<Stri
         .filter { it.type == TransactionType.EXPENSE && cuentaEnGastosEIngresos(it) && it.currency == "COP" }
         .groupBy { it.category }
         .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+
+/**
+ * **Lo que el Inicio recomienda mirar hoy**, armado con lo que ya cargó la pantalla.
+ *
+ * Existe para que la sección y la regla que decide si la sección se pinta usen exactamente la misma
+ * cuenta: estaban escritas dos veces, y la de acá ya se había quedado sin el gasto sin categoría.
+ */
+internal fun cosasParaRevisarDe(data: DashboardData): List<CosaParaRevisar> = cosasParaRevisar(
+    checklist = checklistDelPeriodoDe(data),
+    categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
+    flujoDelPeriodo = (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
+    smsPorConfirmar = data.pendingSms,
+    candidatosAPagoDeTarjeta = data.cardCandidates,
+    gastoSinCategoria = gastoSinCategoriaDe(data.spentByCategory.orEmpty()),
+)
 
 /**
  * El checklist del período de [data], o vacío mientras no se sepa en qué período estamos.

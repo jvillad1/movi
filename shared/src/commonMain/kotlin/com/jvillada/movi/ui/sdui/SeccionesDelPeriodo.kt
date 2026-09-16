@@ -43,7 +43,7 @@ import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.ui.dashboard.avanceDelChecklist
 import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
-import com.jvillada.movi.ui.dashboard.cosasParaRevisar
+import com.jvillada.movi.ui.dashboard.cosasParaRevisarDe
 import com.jvillada.movi.ui.dashboard.faltaPorPagar
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 
@@ -304,20 +304,9 @@ internal fun ParaRevisarSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
 ) {
-    val periodo = data.periodoActual
-    val checklist = if (periodo == null) emptyList() else checklistDelPeriodo(
-        upcoming = data.upcoming.orEmpty(),
-        ocurrencias = data.ocurrencias.orEmpty(),
-        periodo = periodo,
-        settings = data.ajustesDePeriodo,
-    )
-    val cosas = cosasParaRevisar(
-        checklist = checklist,
-        categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
-        flujoDelPeriodo = (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
-        smsPorConfirmar = data.pendingSms,
-        candidatosAPagoDeTarjeta = data.cardCandidates,
-    )
+    // La misma cuenta que decide si esta sección se pinta (ver `visibleSections`): una sola
+    // definición, o la pantalla y su regla de visibilidad terminan opinando distinto.
+    val cosas = cosasParaRevisarDe(data)
     if (cosas.isEmpty()) return
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
