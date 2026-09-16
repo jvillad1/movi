@@ -155,7 +155,9 @@ class ProximosPagosEnMovimientosTest {
         esperarTexto("Arriendo")
         // MinSectionHeader pinta el título en mayúsculas.
         composeRule.onNodeWithText("PRÓXIMOS", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Vencido hace 2 días", useUnmergedTree = true).assertIsDisplayed()
+        // Con `substring`: el vencimiento va en el mismo texto que la categoría («Vencido hace 2 días
+        // · Vivienda»), para que no se repartan un renglón y la categoría quede de una letra de ancho.
+        composeRule.onNodeWithText("Vencido hace 2 días", substring = true, useUnmergedTree = true).assertIsDisplayed()
         // La propuesta, con el mes que nombra y su salida sin movimiento que emparejar.
         composeRule.onNodeWithText("¿Ya pagaste el de septiembre?", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Ya lo pagué", useUnmergedTree = true).assertIsDisplayed()
