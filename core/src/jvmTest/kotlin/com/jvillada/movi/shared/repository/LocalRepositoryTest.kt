@@ -9,6 +9,11 @@ import com.jvillada.movi.shared.model.CUENTA_NO_ENCONTRADA
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.MONTO_INVALIDO
+import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
+import com.jvillada.movi.shared.model.TransferResult
+import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
+import com.jvillada.movi.shared.model.mensajeDeMonedaDistinta
+import com.jvillada.movi.shared.model.pagoDeCuotaLegs
 import com.jvillada.movi.shared.model.PATA_NO_CAMBIA_DE_CUENTA
 import com.jvillada.movi.shared.model.CreateTransferRequest
 import com.jvillada.movi.shared.model.EventSource
@@ -1838,10 +1843,12 @@ class LocalRepositoryTest {
         categoria: String = CUOTA_CATEGORY,
         /** Lo que esa cuota NO amortizó, tal como baja del server en la pata de la deuda. */
         noAmortiza: Long? = null,
+        /** La moneda de ESA pata: entre monedas las dos mitades no la comparten (ver `pagoDeCuotaLegs`). */
+        moneda: String = "COP",
     ) = db.financialEventQueries.insert(
         id, accountId, tipo.name, monto, categoria, "Pata", null,
         1_788_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, transferId, null, noAmortiza,
-        0L, "COP", null,
+        0L, moneda, null,
     )
 
     /**
@@ -1946,4 +1953,213 @@ class LocalRepositoryTest {
         assertEquals(10_000_000L - 1_286_548L, repo.getAccount("acc-ah-rt").balance)
         assertEquals(41_093_905L - 813_843L, repo.getAccount("acc-9695-rt").balance)
     }
+
+    // ── Multimoneda · el espejo local acumula PESOS ──────────────────────────
+    //
+    // `account.balance` de la tabla local es la MISMA cifra que el server manda en
+    // `Account.balance`, y esa cifra es **solo el componente en pesos**: `enrichWith` la saca de
+    // `computeBalances(...)["COP"]`, que agrupa los eventos por moneda, y deja el resto en
+    // `balancesByCurrency` (que esta tabla no sabe guardar). Estos tests fijan que el espejo se
+    // mueva por lo mismo que el server, ni más ni menos — antes aplicaba el número crudo y un
+    // gasto de US$120 le restaba ciento veinte PESOS a la cuenta.
+
+    /**
+     * **Un gasto en dólares no le saca pesos a una cuenta en pesos.**
+     *
+     * El caso es real desde que existe la Master Black USD: un movimiento puede llevar una moneda
+     * distinta de la de su cuenta (el server la acepta tal cual, ver `POST /api/events`), y ahí el
+     * teléfono restaba el número pelado. La plata no se pierde por esto: la fila queda con su
+     * moneda y el server la devuelve en `balancesByCurrency` apenas hay red.
+     */
+    @Test
+    fun postEvent_en_dolares_no_le_resta_pesos_a_una_cuenta_en_pesos() = runBlocking {
+        repo.createAccount(Account("acc-cop", "Bancolombia", AccountType.SAVINGS, 1_000_000L))
+
+        repo.postEvent(enMoneda("ev-usd", "acc-cop", TransactionType.EXPENSE, 120L, "USD"))
+
+        assertEquals(1_000_000L, repo.getAccount("acc-cop").balance, "US\$120 no son \$120")
+        // Y el movimiento sí quedó anotado, con su moneda: lo que no hace es mover el componente
+        // en pesos.
+        val guardado = repo.getEvents("acc-cop").single { it.id == "ev-usd" }
+        assertEquals("USD", guardado.currency)
+    }
+
+    /** La contracara, para que el filtro no se pase de largo: en su moneda, el saldo se mueve igual. */
+    @Test
+    fun postEvent_en_la_moneda_de_la_cuenta_mueve_el_saldo_como_siempre() = runBlocking {
+        repo.createAccount(Account("acc-cop-2", "Bancolombia", AccountType.SAVINGS, 1_000_000L))
+
+        repo.postEvent(enMoneda("ev-cop", "acc-cop-2", TransactionType.EXPENSE, 50_000L, "COP"))
+        repo.postEvent(enMoneda("ev-usd-2", "acc-cop-2", TransactionType.EXPENSE, 120L, "USD"))
+
+        assertEquals(950_000L, repo.getAccount("acc-cop-2").balance, "solo el gasto en pesos")
+    }
+
+    /**
+     * **Y al revés: en una cuenta en dólares, esta columna sigue siendo la de los pesos.**
+     *
+     * No es una rareza de este espejo, es la regla del server: para la Master Black USD,
+     * `Account.balance` vale 0 y la deuda en dólares viaja en `balancesByCurrency["USD"]` (por eso
+     * `CardSummaries` lee `balancesByCurrency[currency] ?: balance`, y por eso ajustar el saldo de
+     * un crédito que no es COP se rechaza con 422). El precio, declarado: sin red una cuenta en
+     * dólares muestra su componente en pesos —$0 mientras no haya ninguno— en vez de su deuda en
+     * dólares. Es lo mismo que contesta el server con red, y `saldoEnSuMoneda` ya rotula ese
+     * respaldo EN PESOS a propósito: menos informativo y verdadero, en ese orden.
+     */
+    @Test
+    fun postEvent_en_una_cuenta_en_dolares_solo_acumula_el_componente_en_pesos() = runBlocking {
+        repo.createAccount(
+            Account("acc-usd", "Master Black", AccountType.CREDIT_CARD, 0L, currency = "USD"),
+        )
+
+        repo.postEvent(enMoneda("ev-compra-usd", "acc-usd", TransactionType.EXPENSE, 120L, "USD"))
+        assertEquals(0L, repo.getAccount("acc-usd").balance, "la deuda en dólares no es el saldo en pesos")
+
+        // Un cargo en pesos sobre esa misma tarjeta (el banco los cobra: cuota de manejo, seguros)
+        // SÍ es componente en pesos, y es lo que el server pondría en `balance`.
+        repo.postEvent(enMoneda("ev-cargo-cop", "acc-usd", TransactionType.EXPENSE, 45_000L, "COP"))
+        assertEquals(45_000L, repo.getAccount("acc-usd").balance)
+    }
+
+    /** Anular un movimiento en otra moneda tampoco puede mover el espejo — ni al anotarlo, ni al anularlo. */
+    @Test
+    fun voidEvent_de_un_movimiento_en_dolares_no_corre_el_saldo_en_pesos() = runBlocking {
+        repo.createAccount(Account("acc-cop-3", "Bancolombia", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(enMoneda("ev-usd-3", "acc-cop-3", TransactionType.EXPENSE, 120L, "USD"))
+        assertEquals(1_000_000L, repo.getAccount("acc-cop-3").balance)
+
+        repo.voidEvent("ev-usd-3")
+
+        assertEquals(1_000_000L, repo.getAccount("acc-cop-3").balance)
+    }
+
+    /**
+     * **Corregir el monto de un movimiento en dólares no puede dejar pesos de más.**
+     *
+     * Este es el que dejaba rastro permanente: sin red, `aplicarEdicionLocal` deshacía US$120 y
+     * aplicaba US$100 sobre el saldo en pesos, y la cuenta quedaba con **$20 que nadie recibió**.
+     * A diferencia de anular —que era la reversa exacta del alta y volvía sola a su lugar—, acá
+     * el acumulado no vuelve a pasar por ninguna parte: queda así hasta que una lectura con red
+     * lo pise, y sin red no lo pisa nunca.
+     */
+    @Test
+    fun updateEvent_de_un_movimiento_en_dolares_no_deja_pesos_de_mas() = runBlocking {
+        repo.createAccount(Account("acc-cop-4", "Bancolombia", AccountType.SAVINGS, 1_000_000L))
+        repo.postEvent(enMoneda("ev-usd-4", "acc-cop-4", TransactionType.EXPENSE, 120L, "USD"))
+
+        repo.updateEvent("ev-usd-4", EdicionDeMovimiento(amount = 100L))
+
+        assertEquals(100L, repo.getEvents("acc-cop-4").single { it.id == "ev-usd-4" }.amount)
+        assertEquals(1_000_000L, repo.getAccount("acc-cop-4").balance, "antes quedaban \$20 inventados")
+    }
+
+    /**
+     * **Un movimiento en dólares no se muda a una cuenta en pesos**, ni siquiera sin red.
+     *
+     * La guarda ya existía; lo que no existía era el dato con que compararla. Este espejo pasaba
+     * la moneda de la CUENTA actual —«la tabla local no guarda la moneda del movimiento»—, que
+     * dejó de ser cierto con la migración 8. Con la moneda de la cuenta, mudar el US$120 de una
+     * cuenta en pesos a OTRA en pesos pasaba la validación local mientras el server (que compara
+     * contra `events.currency`) lo rechaza: dos respuestas distintas para la misma corrección.
+     */
+    @Test
+    fun updateEvent_no_muda_a_una_cuenta_en_pesos_un_movimiento_en_dolares() = runBlocking {
+        repo.createAccount(Account("acc-cop-5", "Bancolombia", AccountType.SAVINGS, 1_000_000L))
+        repo.createAccount(Account("acc-cop-6", "Nu", AccountType.SAVINGS, 0L))
+        repo.postEvent(enMoneda("ev-usd-5", "acc-cop-5", TransactionType.EXPENSE, 120L, "USD"))
+
+        val fallo = runCatching {
+            repo.updateEvent("ev-usd-5", EdicionDeMovimiento(accountId = "acc-cop-6"))
+        }.exceptionOrNull()
+
+        assertTrue(fallo is ApiException && fallo.status == 422, "esperaba 422, fue $fallo")
+        assertEquals(mensajeDeMonedaDistinta("COP", "USD"), (fallo as ApiException).serverMessage)
+        assertEquals(1_000_000L, repo.getAccount("acc-cop-5").balance, "y no tocó ningún saldo")
+        assertEquals(0L, repo.getAccount("acc-cop-6").balance)
+    }
+
+    /**
+     * **El pago de la Master Black en dólares desde la cuenta en pesos** — el par de monedas
+     * distintas que existe de verdad desde que `pagoDeCuotaLegs` le da a cada pata la moneda de SU
+     * cuenta: los pesos salen de Bancolombia y los dólares bajan la tarjeta.
+     *
+     * Los dos espejos tienen que quedar donde el server los dejaría: la cuenta en pesos, menos los
+     * pesos que salieron; la tarjeta, con su componente en pesos intacto —su deuda en dólares vive
+     * en `balancesByCurrency`, que esta tabla no guarda—. Antes, la pata en dólares le restaba
+     * 1.200 a la deuda **en pesos** de la tarjeta: mil doscientos pesos de deuda borrados de una
+     * cuenta que no debe un solo peso.
+     */
+    @Test
+    fun el_pago_de_una_tarjeta_en_dolares_desde_pesos_deja_los_dos_espejos_donde_van() = runBlocking {
+        repo.createAccount(Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 20_000_000L))
+        repo.createAccount(
+            Account("acc-master", "Master Black", AccountType.CREDIT_CARD, 0L, currency = "USD"),
+        )
+        val pedido = CreatePagoDeCuotaRequest(
+            fromAccountId = "acc-banco",
+            debtAccountId = "acc-master",
+            // Lo que salió de la cuenta en pesos, y lo que bajó la tarjeta en dólares: la app no
+            // convierte nada, el cambio que aplicó el banco solo lo sabe el banco.
+            amount = 4_800_000L,
+            montoEnLaMonedaDeLaDeuda = 1_200L,
+            timestamp = 1_788_000_000_000L,
+            transferId = "tr-master",
+            fromEventId = "ev-master-dinero",
+            toEventId = "ev-master-deuda",
+        )
+        // Las patas las arma la MISMA función que usa el server (`PagoDeCuotaRoutes`), así que la
+        // moneda de cada una no es una suposición de este test.
+        val patas = pagoDeCuotaLegs(
+            request = pedido,
+            from = repo.getAccount("acc-banco"),
+            debt = repo.getAccount("acc-master"),
+            desglose = desglosarCuotaRegistrada(
+                cuota = 1_200L,
+                tipoDeLaDeuda = AccountType.CREDIT_CARD,
+                saldoDeLaDeuda = 1_200L,
+                rateEa = null,
+                seguroMensual = null,
+                otrosCargosMensuales = null,
+                interesReal = null,
+                yaCobradoEnElMes = 0L,
+            ),
+        )
+        val server = object : NoOpRepository() {
+            override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
+                // El server que acaba de escribir las dos patas las devuelve en el GET siguiente:
+                // sin esto serían fantasmas para [LocalRepository.getEvents].
+                eventosDelServer += patas.first
+                eventosDelServer += patas.second
+                return TransferResult(from = patas.first, to = patas.second)
+            }
+        }
+        val conServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        conServer.createTransfer(
+            CreateTransferRequest(
+                transferId = "tr-master",
+                fromEventId = "ev-master-dinero",
+                toEventId = "ev-master-deuda",
+                fromAccountId = "acc-banco",
+                toAccountId = "acc-master",
+                amount = 4_800_000L,
+                timestamp = 1_788_000_000_000L,
+            ),
+        )
+
+        assertEquals("COP", conServer.getEvents("acc-banco").single().currency)
+        assertEquals("USD", conServer.getEvents("acc-master").single().currency)
+        assertEquals(1_200L, conServer.getEvents("acc-master").single().amount, "la deuda baja en dólares")
+        assertEquals(20_000_000L - 4_800_000L, repo.getAccount("acc-banco").balance)
+        assertEquals(0L, repo.getAccount("acc-master").balance, "la tarjeta no debe pesos")
+    }
+
+    /** Un [event] con moneda, para los tests de arriba. */
+    private fun enMoneda(
+        id: String,
+        accountId: String,
+        type: TransactionType,
+        amount: Long,
+        moneda: String,
+    ) = event(id, accountId, type, amount).copy(currency = moneda)
 }

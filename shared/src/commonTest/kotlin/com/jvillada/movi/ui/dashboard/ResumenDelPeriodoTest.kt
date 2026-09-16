@@ -221,6 +221,37 @@ class ResumenDelPeriodoTest {
         assertEquals(emptyList(), revisar)
     }
 
+    /**
+     * El renglón que él pidió sin nombrarlo: *«tres de cinco movimientos quedaron en Otro»*. La
+     * sugerencia no es un reproche —«no categorizaste»— sino un trato: ponerle categoría a uno le
+     * enseña a Movi el destinatario entero (ver `MemoriaDeCategorias` en `:core`).
+     */
+    @Test
+    fun `el gasto sin categoria se propone revisar, y explica que vale para la proxima`() {
+        val revisar = cosasParaRevisar(
+            checklist = emptyList(), categorias = emptyList(), flujoDelPeriodo = 500_000,
+            smsPorConfirmar = 0, candidatosAPagoDeTarjeta = 0, gastoSinCategoria = 128_000,
+        )
+
+        val cosa = revisar.single()
+        assertEquals(DestinoDeRevision.MOVIMIENTOS, cosa.destino)
+        assertTrue("sin categoría" in cosa.texto)
+        assertTrue("próxima vez" in cosa.detalle, "tiene que decir para qué sirve el rato: ${cosa.detalle}")
+        assertFalse(cosa.urgente, "es una sugerencia, no una alarma")
+    }
+
+    @Test
+    fun `los dos nombres de la ausencia de categoria cuentan igual`() {
+        // «Otro» lo escribía el confirmador de SMS y «Otros» el resto de la app: hay movimientos
+        // viejos con cada uno, y los dos significan que nadie decidió todavía.
+        assertEquals(
+            30_000,
+            gastoSinCategoriaDe(mapOf("Otro" to 10_000L, "Otros" to 20_000L, "Comida" to 900_000L)),
+        )
+        assertEquals(0, gastoSinCategoriaDe(mapOf("Comida" to 900_000L)))
+        assertEquals(0, gastoSinCategoriaDe(mapOf("Otras 3 categorías" to 5_000L)), "eso es la cola del gráfico, no una ausencia")
+    }
+
     @Test
     fun `un solo mensaje del banco no es urgente, y cien si`() {
         fun sms(n: Int) = cosasParaRevisar(emptyList(), emptyList(), 0, n, 0).single()

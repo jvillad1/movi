@@ -641,6 +641,18 @@ data class ParsedSms(
      * Antes no existía y una compra en dólares no se leía (o se hubiera anotado como pesos).
      */
     val currency: String = "COP",
+    /**
+     * **Por qué Movi propone esta categoría**, en una línea lista para mostrar: «La usaste 4 veces
+     * para este mismo destinatario». `null` cuando la propuesta no viene de la historia del dueño
+     * sino de la red de seguridad (ver [categoriaProbablePorElNombre]) o de nada.
+     *
+     * Existe porque una sugerencia que se explica se puede **rechazar**, y una que no, solo se
+     * obedece: el dueño tiene que poder ver de dónde salió antes de aceptarla.
+     *
+     * Con valor por defecto para que un APK viejo siga leyendo esta respuesta (los tres `Platform`
+     * configuran `ignoreUnknownKeys = true`, así que el campo nuevo le pasa de largo).
+     */
+    val aprendidoDe: String? = null,
 )
 
 @Serializable

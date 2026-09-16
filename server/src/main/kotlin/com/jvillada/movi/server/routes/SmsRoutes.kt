@@ -12,8 +12,13 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildSmsPushPayload
 import com.jvillada.movi.server.sms.SmsDedupeIndex
+import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.MemoriaDeCategorias
+import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
+import com.jvillada.movi.shared.model.huellaDeUnMovimiento
+import com.jvillada.movi.shared.model.laHuellaEsUnNumero
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
@@ -49,6 +54,22 @@ private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\.|$)""", RegexOp
 private val destinatarioDesdeRegex = Regex("""\ba\s+(?!la\s|las\s|tu\s)(.+?)\s+desde\s""", RegexOption.IGNORE_CASE)
 /** «… desde tu cuenta *8133 a DANIEL LEONETT el 10/09/26». */
 private val destinatarioElRegex = Regex("""\ba\s+(?!la\s|las\s|tu\s)([^*@\d].+?)\s+el\s""", RegexOption.IGNORE_CASE)
+
+/**
+ * **La llave a la que se pagó, y la cuenta a la que se transfirió.** Sin esto, todos los pagos por
+ * QR del dueño se llamaban «Pago QR» y todas sus transferencias sin nombre, «Transferencia»: el
+ * único dato que separa uno de otro —la llave, el número de cuenta— se tiraba al leer el mensaje.
+ *
+ * Es lo que hace posible [com.jvillada.movi.shared.model.MemoriaDeCategorias]: sin un nombre que
+ * distinga dos destinatarios, no hay nada que recordar de ninguno.
+ */
+private val llaveRegex = Regex("""\bllave\s+(@?[A-Za-z0-9._-]{3,})""", RegexOption.IGNORE_CASE)
+
+/**
+ * La cuenta **de destino**, que no es la de origen: `desde tu cuenta *3333` es de dónde salió la
+ * plata y no identifica a nadie. Solo cuenta la que viene detrás de un « a ».
+ */
+private val cuentaDestinoRegex = Regex("""\ba\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,})""", RegexOption.IGNORE_CASE)
 
 /**
  * Avisos del banco que traen plata en el texto pero **no son un movimiento**: confirmarlos crearía
@@ -132,10 +153,16 @@ internal fun parseSms(text: String): ParsedSms? {
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
         type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
         looksLikeCardPayment(text, category = "") -> "Pago de tarjeta"
-        "codigo qr" in minusculas || "código qr" in minusculas -> "Pago QR"
+        // Un pago por QR puede venir con el nombre del comercio («por codigo QR en Mora Soccer»);
+        // cuando no, la llave es lo único que lo distingue del pago por QR de mañana.
+        "codigo qr" in minusculas || "código qr" in minusculas ->
+            limpio(merchantInRegex.find(text)?.groupValues?.get(1))
+                ?: llaveRegex.find(text)?.let { "Pago QR · llave ${it.groupValues[1]}" }
+                ?: "Pago QR"
         else -> limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioElRegex.find(text)?.groupValues?.get(1))
             ?: limpio(merchantInRegex.find(text)?.groupValues?.get(1))
+            ?: cuentaDestinoRegex.find(text)?.let { "Transferencia a la cuenta *${it.groupValues[1]}" }
             ?: if ("transferiste" in minusculas) "Transferencia" else "Movimiento"
     }
 
@@ -156,16 +183,45 @@ private fun categoryFor(text: String, merchant: String, type: TransactionType): 
     if (type == TransactionType.INCOME) {
         return if (merchant.equals("Nómina", true)) "Nómina" else "Transferencia"
     }
-    val m = merchant.lowercase()
-    return when {
-        "uber" in m || "didi" in m || "taxi" in m -> "Transporte"
-        "crepes" in m || "waffles" in m || "rappi" in m || "mcdonald" in m -> "Restaurantes"
-        "éxito" in m || "exito" in m || "carulla" in m || "olímpica" in m || "olimpica" in m || "d1" in m || "ara" in m -> "Mercado"
-        "drogas" in m || "farma" in m || "salud" in m || "medi" in m -> "Salud"
-        "netflix" in m || "spotify" in m || "disney" in m || "hbo" in m || "youtube" in m -> "Suscripción"
-        "claro" in m || "movistar" in m || "tigo" in m || "epm" in m || "energía" in m -> "Servicios"
-        else -> "Otro"
-    }
+    return categoriaProbablePorElNombre(merchant) ?: SIN_CATEGORIA
+}
+
+/**
+ * **Lo que Movi propone cuando no sabe.** Se llamaba «Otro», en singular, y era el único lugar de
+ * toda la app donde se llamaba así: los selectores, las predefinidas y los datos del dueño dicen
+ * «Otros». Un SMS confirmado abría entonces una categoría paralela de un solo movimiento, y el
+ * gráfico de «en qué se fue la plata» la mostraba aparte.
+ */
+internal const val SIN_CATEGORIA = "Otros"
+
+/**
+ * **La propuesta, ya pasada por la memoria del dueño.** Lo que él anotó antes para este mismo
+ * destinatario le gana a cualquier tabla de palabras clave — y le gana también a `Otros`, que es
+ * justo el renglón que él quería ver desaparecer.
+ *
+ * Tres cosas quedan **fuera** del alcance de la memoria a propósito:
+ *
+ * - **El pago de tarjeta**, que no es una categoría de gasto sino una regla de plata (ver
+ *   `looksLikeCardPayment` y `isCashFlow`): si la memoria pudiera moverlo, un abono a la AMEX
+ *   volvería a contarse como gasto del mes.
+ * - **El monto y el tipo**, que los dice el banco y no se adivinan.
+ * - **El nombre, cuando el banco mandó uno de verdad.** Solo se reemplaza cuando la huella es un
+ *   número (una llave, una cuenta): «llave 0092184713» no lo puede leer nadie, y si el dueño ya le
+ *   puso nombre a ese destinatario, ese nombre es suyo.
+ */
+internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
+    if (parsed.category == CARD_PAYMENT_CATEGORY) return parsed
+    val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return parsed
+    val huella = huellaDeUnMovimiento(parsed.merchant)
+    return parsed.copy(
+        category = recuerdo.categoria,
+        merchant = if (huella != null && laHuellaEsUnNumero(huella)) recuerdo.nombre else parsed.merchant,
+        aprendidoDe = if (recuerdo.cuantos == 1) {
+            "Así lo anotaste la última vez"
+        } else {
+            "Así lo anotaste ${recuerdo.cuantos} veces"
+        },
+    )
 }
 
 /** Cuántos días alrededor del mensaje se busca lo ya anotado: un gasto se anota el día o un par después. */
@@ -247,7 +303,9 @@ fun Route.smsRoutes() {
             // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
             // plazo). Se dice así, porque la pantalla muestra este texto.
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
-        call.respond(parsed)
+        // La historia del dueño entra acá y no adentro de `parseSms`: ese mismo parseo lo usan el
+        // sync y la push, donde no hay a quién consultarle nada.
+        call.respond(conLoQueMoviRecuerda(parsed, dbQuery { memoriaDe(uid) }))
     }
 
     get("/api/sms/{id}/coincidencias") {

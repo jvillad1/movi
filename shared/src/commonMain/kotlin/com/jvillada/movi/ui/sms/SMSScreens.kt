@@ -28,9 +28,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.ui.components.suggestCategoryMatches
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -392,15 +395,24 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
     )
     val resolvedAccount = cuentaDelSms.cuenta
 
-    val categoryOptions: List<String> = run {
-        val base = parsed?.category
-        val alts = if (parsed?.type == TransactionType.INCOME) {
-            listOf("Nómina", "Transferencia", "Reembolso")
-        } else {
-            listOf("Restaurantes", "Mercado", "Transporte", "Salud", "Suscripción", "Servicios", "Hogar", "Otro")
-        }
-        (listOfNotNull(base) + alts).distinct().take(4)
-    }
+    /**
+     * **Las categorías que él usa, no una lista escrita a mano.**
+     *
+     * Acá había ocho nombres fijos —«Restaurantes», «Mercado», «Suscripción», «Hogar»— de los
+     * cuales el dueño no usa ninguno: sus movimientos están en «Comida», «Fútbol», «Hija»,
+     * «Gardenera». Para poner una de esas tenía que salir de esta pantalla. Ahora salen del mismo
+     * catálogo que el resto de la app ([suggestCategoryMatches], con sus propias adelante), con la
+     * que Movi propone siempre primera.
+     *
+     * Se muestran hasta diez porque la fila rueda en horizontal; el tope está para que la lista no
+     * se vuelva un buscador sin buscador.
+     */
+    val categoryOptions: List<String> = categoriasParaElegirEnElSms(
+        propuesta = selectedCategory ?: parsed?.category,
+        tipo = parsed?.type,
+        usadas = UsedCategoriesCache.used,
+        prefs = UsedCategoriesCache.prefs,
+    )
 
     fun confirm() {
         val cat = selectedCategory ?: parsed?.category ?: return
@@ -641,6 +653,10 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                         ok = selectedCategory != null,
                         label = "Categoría",
                         value = selectedCategory ?: "—",
+                        // De dónde salió la propuesta: «Así lo anotaste 4 veces». Una sugerencia
+                        // que se explica se puede rechazar; una que no, solo se obedece. Se calla
+                        // en cuanto él elige otra — ya no está explicando lo que se ve.
+                        hint = parsed?.aprendidoDe?.takeIf { selectedCategory == parsed?.category },
                         isLast = true,
                     )
                 }
@@ -832,6 +848,29 @@ private fun Modifier.clickableSimple(onClick: () -> Unit) = this.then(
  * El monto va redondeado y no truncado (US$15,44 → 15), y en la moneda que dice el SMS: una
  * compra en dólares no se anota como pesos.
  */
+/**
+ * **Las pastillas de categoría del detalle de un SMS**: lo que Movi propone primero, y detrás las
+ * categorías que el dueño usa de verdad.
+ *
+ * Ver el KDoc de `categoryOptions` en la pantalla para el porqué. Vive afuera del `@Composable`
+ * para poder probarse sin pintar nada.
+ */
+internal fun categoriasParaElegirEnElSms(
+    propuesta: String?,
+    tipo: TransactionType?,
+    usadas: Map<String, Set<TransactionType>>,
+    prefs: Map<String, CategoryPref>,
+    cuantas: Int = 10,
+): List<String> {
+    val delCatalogo = suggestCategoryMatches(
+        query = "",
+        type = tipo,
+        usedCategories = usadas,
+        prefs = prefs,
+    )
+    return (listOfNotNull(propuesta?.takeIf { it.isNotBlank() }) + delCatalogo).distinct().take(cuantas)
+}
+
 internal fun movimientoConfirmadoDelSms(
     id: String,
     cuentaId: String,
