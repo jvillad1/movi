@@ -117,6 +117,41 @@ private fun com.jvillada.movi.Account.toAccountModel() = Account(
     condicionadaA = normalizarCondicion(conditionedTo),
 )
 
+/**
+ * **Lo que un movimiento le suma al saldo espejado de su cuenta**: [signedDelta] con la moneda
+ * puesta. Un movimiento en otra moneda no mueve nada y devuelve `0`.
+ *
+ * ### Por qué la moneda decide, y por qué es exactamente esta regla
+ *
+ * La columna `account.balance` de este espejo guarda la MISMA cifra que el server manda en
+ * `Account.balance`, y esa cifra es **solo el componente en pesos**: el server la deriva con
+ * `computeBalances`, que agrupa los eventos **por moneda**, y `enrichWith` pone en el wire
+ * `balances["COP"]` — el resto de las monedas viaja aparte, en `balancesByCurrency`, que esta
+ * tabla no sabe guardar (ver `saldoEnSuMoneda` en `MoneyDisplay.kt`: por eso su respaldo sin red
+ * rotula la cifra local EN PESOS). Lo dice también, con todas las letras, el rechazo de
+ * `POST /api/credits/{id}/adjust-balance` para una cuenta que no es COP.
+ *
+ * Acá la moneda no se miraba: el delta se aplicaba con el número crudo. Un gasto de US$120 en la
+ * Master Black le restaba **ciento veinte pesos** al espejo, y unos pesos anotados sobre una
+ * cuenta en dólares le sumaban dólares. El resultado no era el saldo de ninguna de las dos
+ * monedas, y a la próxima lectura con red el server lo pisaba sin que nada explicara el salto.
+ *
+ * **No se convierte con la TRM**, por el mismo motivo que no lo hace
+ * [com.jvillada.movi.shared.model.aporteAlFlujoDelDia] ni ningún otro total de la app: sería la
+ * única cifra que cambia de valor sin que se mueva un peso.
+ * El movimiento en dólares no se pierde por esto —queda en su fila, con su moneda, y el server lo
+ * devuelve en `balancesByCurrency` apenas hay red—; lo que no hace es mover el componente en pesos.
+ */
+private fun deltaDelEspejo(
+    accountType: AccountType,
+    tipo: TransactionType,
+    monto: Long,
+    moneda: String,
+): Long = if (moneda != MONEDA_DEL_ESPEJO) 0L else signedDelta(accountType, tipo, monto)
+
+/** La moneda que la columna `account.balance` sabe acumular. Ver [deltaDelEspejo]. */
+private const val MONEDA_DEL_ESPEJO = "COP"
+
 class LocalRepository(
     private val db: MoviDatabase,
     private val remote: WalletRepository,
@@ -462,8 +497,12 @@ class LocalRepository(
                 // revisión de esta rama): en una cuenta LOAN/CREDIT_CARD un INCOME es un abono
                 // que BAJA la deuda. Antes de este fix, un abono desde QuickAdd a una libranza
                 // ya ajustada la subía en vez de bajarla — el teléfono y el server divergían.
+                //
+                // Y `deltaDelEspejo`, no `signedDelta` pelado: esta columna acumula SOLO pesos
+                // (ver su KDoc). Un US$120 anotado sobre la Master Black no puede restarle
+                // $120 al espejo.
                 val accountType = AccountType.valueOf(acct.type)
-                val delta = signedDelta(accountType, resolved.type, resolved.amount)
+                val delta = deltaDelEspejo(accountType, resolved.type, resolved.amount, resolved.currency)
                 db.accountQueries.updateBalance(acct.balance + delta, acct.id)
             }
         }
@@ -708,8 +747,9 @@ class LocalRepository(
                     // solo tenía lo que este teléfono había escrito no se notaba; desde que baja
                     // lo del server, un gasto en dólares entraba al total como si fueran pesos —
                     // con un COP de $10.000 y un USD de 100, el server decía −10.000 y el
-                    // teléfono −10.100. La columna `currency` ni siquiera existe en el espejo
-                    // (todo se lee como COP), así que sin este filtro la diferencia es invisible.
+                    // teléfono −10.100. Hasta la migración 8 la columna `currency` ni siquiera
+                    // existía en el espejo —todo se leía como COP—, así que sin este filtro la
+                    // diferencia era invisible.
                     total = items.filter { it.currency == "COP" && it.countsAsCashFlow }.sumOf {
                         if (it.type == TransactionType.INCOME) it.amount else -it.amount
                     },
@@ -755,11 +795,14 @@ class LocalRepository(
 
             (listOfNotNull(event) + hermanas).forEach { fila ->
                 val acct = db.accountQueries.selectById(fila.accountId).executeAsOneOrNull() ?: return@forEach
-                // Reversa exacta de signedDelta (mismo hallazgo que postEvent, arriba):
+                // Reversa exacta del delta del alta (mismo hallazgo que postEvent, arriba):
                 // anular un evento en una cuenta LOAN/CREDIT_CARD tiene que deshacer el
-                // efecto con la convención de deuda, no con la de cuenta de activo.
+                // efecto con la convención de deuda, no con la de cuenta de activo. Y «exacta»
+                // incluye la moneda: anular un gasto en dólares no puede devolverle pesos a una
+                // cuenta que nunca los perdió.
                 val accountType = AccountType.valueOf(acct.type)
-                val originalDelta = signedDelta(accountType, TransactionType.valueOf(fila.type), fila.amount)
+                val originalDelta =
+                    deltaDelEspejo(accountType, TransactionType.valueOf(fila.type), fila.amount, fila.currency)
                 db.accountQueries.updateBalance(acct.balance - originalDelta, acct.id)
             }
         }
@@ -853,7 +896,7 @@ class LocalRepository(
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
                 db.accountQueries.updateBalance(
-                    acct.balance + signedDelta(accountType, leg.type, leg.amount), acct.id,
+                    acct.balance + deltaDelEspejo(accountType, leg.type, leg.amount, leg.currency), acct.id,
                 )
             }
         }
@@ -1176,15 +1219,17 @@ class LocalRepository(
      * mismas palabras. La guarda de **anulado** no está en esa lista —necesita mirar una tabla—
      * y se repite acá a mano, contra `void_event`.
      *
-     * Las dos diferencias declaradas, y ninguna es un rechazo distinto:
+     * La única diferencia declarada, y no es un rechazo distinto: cuando la edición **va a salir
+     * al server** y la cuenta destino no está espejada en este dispositivo, la existencia de esa
+     * cuenta la decide el server y no esta pre-validación — ver el comentario junto a
+     * `cambiosAValidar`. (La otra que había acá, «la tabla local no guarda la moneda del
+     * movimiento», dejó de ser cierta con la migración 8: la comparación usa la moneda de la
+     * fila, la misma que compara el server.)
      *
-     * 1. La tabla local **no guarda la moneda del movimiento**, así que la comparación de monedas
-     *    usa la de su **cuenta actual**. Coinciden para todo lo que la app escribe (un movimiento
-     *    nace en la moneda de su cuenta) y el camino sin red solo corre para movimientos que la
-     *    app escribió y todavía no subió.
-     * 2. Cuando la edición **va a salir al server** y la cuenta destino no está espejada en este
-     *    dispositivo, la existencia de esa cuenta la decide el server y no esta pre-validación:
-     *    ver el comentario junto a `cambiosAValidar`.
+     * ### Y el saldo se mueve por MONEDA
+     *
+     * `account.balance` acumula solo pesos —es lo que el server manda en `Account.balance`, ver
+     * [deltaDelEspejo]—, así que corregir el monto de un movimiento en dólares no lo toca.
      */
     override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
         val uid = userId()
@@ -1234,7 +1279,13 @@ class LocalRepository(
                 cambios = cambiosAValidar,
                 esPataDeUnPar = filaActual.transferId != null,
                 cuentaActualId = filaActual.accountId,
-                monedaDelMovimiento = cuentaActual?.currency ?: "COP",
+                // La del MOVIMIENTO, que es la que compara el server (`PUT /api/events/{id}`
+                // valida contra `fila.currency`). Acá se pasaba la de su CUENTA, con el argumento
+                // de que la tabla local no guardaba la moneda por movimiento — hoy sí la guarda
+                // (migración 8), así que las dos caras miran el mismo dato y un movimiento en
+                // dólares que vive en una cuenta en pesos se rechaza igual en el teléfono que en
+                // el server, en vez de mudarse a otra cuenta en pesos como si fuera de ella.
+                monedaDelMovimiento = filaActual.currency,
                 cuentaNueva = cuentaPedida?.let {
                     Account(
                         id = it.id, name = it.name,
@@ -1348,12 +1399,21 @@ class LocalRepository(
         // El saldo acumulado: se deshace el efecto viejo donde estaba y se aplica el nuevo donde
         // queda. Con la cuenta sin cambiar las dos caen sobre la misma fila y el neto es la
         // diferencia; con la cuenta cambiada se mueven las dos.
-        moverSaldo(local.accountId, tipo, -local.amount)
-        moverSaldo(cuentaNuevaId, tipo, montoNuevo)
+        //
+        // La moneda va en las cuatro: es la del MOVIMIENTO —cada hermana la suya, que entre
+        // monedas no son la misma (ver `pagoDeCuotaLegs`: los pesos salen de la cuenta y los
+        // dólares bajan la deuda)— y es la que decide si esta columna, que solo acumula pesos,
+        // se mueve. Sin eso, corregir el monto de un movimiento en dólares le corría el saldo en
+        // pesos a su cuenta por la diferencia, y ahí quedaba: el espejo no vuelve a pasar por acá.
+        moverSaldo(local.accountId, tipo, -local.amount, local.currency)
+        moverSaldo(cuentaNuevaId, tipo, montoNuevo, local.currency)
         hermanas.forEach { hermana ->
             val tipoHermana = TransactionType.valueOf(hermana.type)
-            moverSaldo(hermana.accountId, tipoHermana, -hermana.amount)
-            moverSaldo(hermana.accountId, tipoHermana, montoNuevoDeCadaHermana.getValue(hermana.id))
+            moverSaldo(hermana.accountId, tipoHermana, -hermana.amount, hermana.currency)
+            moverSaldo(
+                hermana.accountId, tipoHermana,
+                montoNuevoDeCadaHermana.getValue(hermana.id), hermana.currency,
+            )
         }
 
         val types = accountTypes(uid)
@@ -1370,13 +1430,14 @@ class LocalRepository(
 
     /**
      * Suma a `account.balance` el efecto de [monto] con la convención de **esa** cuenta — un monto
-     * negativo deshace. Es [signedDelta] y no un `if INCOME suma`: en una LOAN/CREDIT_CARD un
-     * EXPENSE sube la deuda y un INGRESO la baja (mismo hallazgo que [postEvent] y [voidEvent]).
+     * negativo deshace. Es [deltaDelEspejo] y no un `if INCOME suma`: en una LOAN/CREDIT_CARD un
+     * EXPENSE sube la deuda y un INGRESO la baja (mismo hallazgo que [postEvent] y [voidEvent]), y
+     * lo que está en otra [moneda] no mueve esta columna, que acumula solo pesos.
      * Si la cuenta no está en este dispositivo no hay saldo que mover.
      */
-    private fun moverSaldo(accountId: String, tipo: TransactionType, monto: Long) {
+    private fun moverSaldo(accountId: String, tipo: TransactionType, monto: Long, moneda: String) {
         val acct = db.accountQueries.selectById(accountId).executeAsOneOrNull() ?: return
-        val delta = signedDelta(AccountType.valueOf(acct.type), tipo, monto)
+        val delta = deltaDelEspejo(AccountType.valueOf(acct.type), tipo, monto, moneda)
         db.accountQueries.updateBalance(acct.balance + delta, acct.id)
     }
 
@@ -1462,7 +1523,8 @@ class LocalRepository(
                 if (leg.accountId == loanAccountId) return@forEach
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 db.accountQueries.updateBalance(
-                    acct.balance + signedDelta(AccountType.valueOf(acct.type), leg.type, leg.amount), acct.id,
+                    acct.balance + deltaDelEspejo(AccountType.valueOf(acct.type), leg.type, leg.amount, leg.currency),
+                    acct.id,
                 )
             }
         }

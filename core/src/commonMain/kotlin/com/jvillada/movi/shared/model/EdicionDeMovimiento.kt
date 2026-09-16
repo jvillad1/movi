@@ -318,10 +318,11 @@ data class RechazoDeEdicion(val status: Int, val mensaje: String)
  *    pide algo de otro usuario recibe «no existe», no «no puedes».
  * 5. **Misma moneda** — 422, ver [mensajeDeMonedaDistinta].
  *
- * [monedaDelMovimiento] es la del evento en el server. El espejo local pasa la de la **cuenta
- * actual** porque la tabla local no guarda moneda por movimiento; las dos coinciden para todo lo
- * que la app escribe (un movimiento nace en la moneda de su cuenta) y ese camino local solo corre
- * para movimientos que la app escribió y todavía no subió.
+ * [monedaDelMovimiento] es la del EVENTO —no la de su cuenta—, y las dos caras la sacan del mismo
+ * lugar: el server de `events.currency` y el espejo local de la columna `currency` de su tabla
+ * (existe desde la migración 8; antes de eso este parámetro recibía la moneda de la cuenta actual,
+ * que es lo mismo para todo lo que la app escribe y deja de serlo para un movimiento en dólares
+ * anotado sobre una cuenta en pesos).
  */
 fun validarEdicionDeMovimiento(
     cambios: EdicionDeMovimiento,
