@@ -165,7 +165,7 @@ fun StatementReviewScreen(
             // En renglón propio y no al lado del chip: a 375 dp, «Destino: Bancolombia Ahorros La
             // puso Movi Cambiar» no entra en una línea, y lo primero que se recorta es justamente
             // lo que hay que leer.
-            avisoDeLaCuentaDelBanco(destino.origen)?.let { aviso ->
+            avisoDeLaCuentaDelBanco(destino.origen, queLoDijo = "el extracto")?.let { aviso ->
                 Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 3.dp))
             }
         }

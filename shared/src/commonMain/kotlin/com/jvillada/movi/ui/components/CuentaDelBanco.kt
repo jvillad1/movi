@@ -181,10 +181,19 @@ fun resolverCuentaDelBanco(
  * el número y no una corazonada. Decir de dónde salió es lo que convierte un acierto en algo
  * verificable — él puede mirar el SMS de arriba y ver el mismo número.
  *
+ * **[queLoDijo] existe porque este renglón se lee en dos pantallas.** La misma frase la muestra el
+ * detalle de un SMS y la revisión de un extracto, y en la segunda «el número que dice el mensaje»
+ * nombra algo que no está: ahí no hay ningún mensaje, hay un PDF del banco con el número de la
+ * tarjeta adentro. Un aviso que existe para que el dueño pueda VERIFICAR de dónde salió la cuenta
+ * no puede mandarlo a buscar en el lugar equivocado.
+ *
  * `when` exhaustivo y sin `else`, por lo mismo que el resto de esta ola.
  */
-fun avisoDeLaCuentaDelBanco(origen: OrigenDeLaCuentaDelBanco): String? = when (origen) {
-    OrigenDeLaCuentaDelBanco.POR_EL_NUMERO -> "Por el número que dice el mensaje"
+fun avisoDeLaCuentaDelBanco(
+    origen: OrigenDeLaCuentaDelBanco,
+    queLoDijo: String = "el mensaje",
+): String? = when (origen) {
+    OrigenDeLaCuentaDelBanco.POR_EL_NUMERO -> "Por el número que dice $queLoDijo"
     OrigenDeLaCuentaDelBanco.POR_DEFECTO -> "La puso Movi"
     OrigenDeLaCuentaDelBanco.NINGUNA -> "Elígela tú"
     OrigenDeLaCuentaDelBanco.POR_EL_BANCO, OrigenDeLaCuentaDelBanco.A_MANO -> null
