@@ -56,8 +56,9 @@ import kotlin.test.assertTrue
  * Ola 4 (F9/F40): el seed es `defaultDashboardDefinition()` de `:core`, y `seedScreens` ahora
  * también ACTUALIZA filas de una generación anterior (ver los últimos tests).
  *
- * Generación 5 (Explora sale del Inicio): HERO_BALANCE -> UPCOMING_PAYMENTS -> ALERTS ->
- * BANNER(IA) — sin QUICK_LINKS_WITH_TOTALS, que hasta la generación 4 iba entre ALERTS y BANNER.
+ * Generación 6 (el Inicio es el resumen del período): HERO_BALANCE -> CHECKLIST_DEL_PERIODO ->
+ * GASTO_POR_CATEGORIA -> ALERTS («Para revisar») -> BANNER(IA). Sale UPCOMING_PAYMENTS, que decía
+ * lo mismo que el checklist; el tipo sigue existiendo en la taxonomía.
  */
 class ScreenRoutesTest {
 
@@ -156,14 +157,13 @@ class ScreenRoutesTest {
         assertEquals("dashboard", body["slug"]!!.jsonPrimitive.content)
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val sections = body["sections"]!!.jsonArray
-        // Generación 5: sin QUICK_LINKS_WITH_TOTALS ("Explora") — sus cinco accesos duplicaban
-        // navegación que ya existe en el rail/bottom-nav y en «Más».
+        // Generación 6: el Inicio como resumen del período.
         assertEquals(
-            listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
             sections.map { it.jsonObject["type"]!!.jsonPrimitive.content },
         )
 
-        val aiBanner = sections[3].jsonObject
+        val aiBanner = sections.last().jsonObject
         assertEquals("BANNER", aiBanner["type"]!!.jsonPrimitive.content)
         assertEquals("Pregúntale a Movi AI", aiBanner["text"]!!.jsonPrimitive.content)
     }
@@ -353,7 +353,7 @@ class ScreenRoutesTest {
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
-        assertEquals(listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"), types)
+        assertEquals(listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"), types)
         assertTrue("QUICK_LINKS_WITH_TOTALS" !in types, "Explora desaparece tras el deploy, no solo en instalaciones nuevas")
     }
 }

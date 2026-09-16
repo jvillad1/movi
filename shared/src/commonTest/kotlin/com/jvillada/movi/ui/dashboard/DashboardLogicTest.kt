@@ -30,6 +30,8 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.credits.totalDebtCop
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.periodoDeLaFecha
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -811,14 +813,31 @@ class DashboardLogicTest {
         assertEquals(listOf("HERO_BALANCE", "BANNER"), visible.map { it.type })
     }
 
+    /**
+     * Generación 6: el checklist y «en qué se fue» aparecen cuando hay algo que contar, igual que
+     * antes hacían «Próximos pagos» y «Alertas». Sin período conocido —el perfil todavía no
+     * contestó— el checklist no se pinta: diría «0 de 0 pagados», que es una afirmación falsa.
+     */
     @Test
-    fun `proximos pagos y alertas aparecen solo cuando hay algo`() {
-        val withStuff = DashboardData(
+    fun `el checklist y el gasto por categoria aparecen solo cuando hay algo`() {
+        val conCosas = DashboardData(
             upcoming = listOf(upcoming("r1", "Arriendo", 1_000, daysUntil = 2)),
             cardCandidates = 1,
+            spentByCategory = mapOf("Vivienda" to 1_000L),
+            // El período del vencimiento que arma `upcoming(...)`: «2026-08-22».
+            periodoActual = periodoDeLaFecha("2026-08-22", PeriodSettings()),
         )
-        val visible = visibleSections(defaultDashboardDefinition(), withStuff)
-        assertEquals(listOf("HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "BANNER"), visible.map { it.type })
+        val visible = visibleSections(defaultDashboardDefinition(), conCosas)
+        assertEquals(
+            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            visible.map { it.type },
+        )
+    }
+
+    @Test
+    fun `sin periodo conocido el checklist no afirma nada`() {
+        val sinPerfil = DashboardData(upcoming = listOf(upcoming("r1", "Arriendo", 1_000, daysUntil = 2)))
+        assertTrue("CHECKLIST_DEL_PERIODO" !in visibleSections(defaultDashboardDefinition(), sinPerfil).map { it.type })
     }
 
     @Test

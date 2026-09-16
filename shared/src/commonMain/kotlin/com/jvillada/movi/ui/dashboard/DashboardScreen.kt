@@ -27,6 +27,8 @@ import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
@@ -289,6 +291,22 @@ fun DashboardScreen(
                     }
             }
             launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }
+            // Los sellos de «ya ocurrió», para poder tildar el checklist del período. Si falla, el
+            // checklist muestra todo como pendiente: recordar algo ya pagado molesta; dar por
+            // pagado algo que no, cuesta plata.
+            launch { runCatching { Repositories.wallets.getOccurrenceStates() }.onSuccess { o -> data = data.copy(ocurrencias = o) } }
+            // El período del dueño (su día de corte y los inicios que movió a mano). Sin esto el
+            // Inicio hablaría del mes de calendario, que es justo lo que dejó de hacer el resto de
+            // la app.
+            launch {
+                runCatching { Repositories.wallets.getUserProfile() }.onSuccess { perfil ->
+                    val ajustes = PeriodSettings(perfil.periodCutoffDay, perfil.periodStarts)
+                    data = data.copy(
+                        ajustesDePeriodo = ajustes,
+                        periodoActual = periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes),
+                    )
+                }
+            }
             // F50: la cifra de "investments" ahora sale de `data.accounts` (cuentas tipo
             // INVESTMENT) — ya no hace falta este fetch aparte de holdings.
             launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }

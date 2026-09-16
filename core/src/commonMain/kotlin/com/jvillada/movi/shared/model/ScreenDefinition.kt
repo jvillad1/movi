@@ -47,6 +47,10 @@ object ScreenTaxonomy {
     val SECTION_TYPES = listOf(
         "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS",
         "CARD_ROW", "CARD_LIST", "LINK_LIST", "BANNER",
+        // Generación 6, el Inicio como resumen del período. Un tipo que no esté en esta lista lo
+        // descarta `renderableSections`: es la capa que evita un Inicio en blanco por un typo, y
+        // también lo que hace que un APK viejo ignore en silencio una sección que no sabe pintar.
+        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA",
     )
     val ACTION_TYPES = listOf("NAVIGATE", "OPEN_URL")
     // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.
