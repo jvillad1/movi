@@ -85,6 +85,7 @@ import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.rechazoDelMonto
+import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
@@ -1022,6 +1023,30 @@ class LocalRepository(
         val updated = remote.updateEventCategory(id, category)
         db.financialEventQueries.updateCategory(updated.category, updated.id, uid)
         return updated
+    }
+
+    /**
+     * **Los parecidos los sabe el server y nadie más.** Quién es «el mismo destinatario» sale de
+     * la huella (ver `huellaDeUnMovimiento`), y calcularla acá sobre el espejo local daría una
+     * lista distinta de la que el lote va a mover — dos respuestas para la misma pregunta.
+     */
+    override suspend fun getParecidos(id: String): List<FinancialEvent> = remote.getParecidos(id)
+
+    /**
+     * **El server primero, el espejo después**, igual que [updateEventCategory] para una fila ya
+     * sincronizada — y acá sin la rama local, porque un lote solo se arma con ids que el server ya
+     * conoce (salen de [getParecidos], que es una consulta suya).
+     *
+     * Se espejan **los ids que el server dice que movió**, no los que se pidieron: lo que omitió
+     * es una pata de traspaso o una apertura, y escribirles la categoría nueva acá le pondría
+     * «Comida» a media transferencia — que además volvería a contar como gasto del mes
+     * (`isCashFlow` decide por el nombre) hasta la próxima lectura.
+     */
+    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse {
+        val uid = userId()
+        val resultado = remote.recategorizarEnLote(ids, category)
+        resultado.cambiados.forEach { db.financialEventQueries.updateCategory(category, it, uid) }
+        return resultado
     }
 
     /**

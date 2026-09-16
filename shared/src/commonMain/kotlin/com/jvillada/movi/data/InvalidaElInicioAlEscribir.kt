@@ -84,6 +84,10 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult = trasEscribir { delegado.createTransfer(request) }
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult = trasEscribir { delegado.payInstallment(request) }
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = trasEscribir { delegado.updateEventCategory(id, category) }
+    // `getParecidos` NO invalida: es una lectura, y no escribe nada.
+    override suspend fun getParecidos(id: String): List<FinancialEvent> = delegado.getParecidos(id)
+    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse =
+        trasEscribir { delegado.recategorizarEnLote(ids, category) }
     override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent = trasEscribir { delegado.updateEventTimestamp(id, timestamp) }
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent = trasEscribir { delegado.updateEventRepeats(id, repeats) }
     override suspend fun confirmEvent(id: String): FinancialEvent = trasEscribir { delegado.confirmEvent(id) }

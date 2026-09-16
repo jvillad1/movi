@@ -53,6 +53,7 @@ import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
+import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 
 interface WalletRepository {
     suspend fun getCredits(): List<CreditSummary>
@@ -336,6 +337,32 @@ interface WalletRepository {
      * [com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY] si en verdad lo era.
      */
     suspend fun dismissCardPaymentCandidate(id: String)
+
+    /**
+     * **Los otros movimientos del mismo destinatario que están en otra categoría**
+     * (`GET /api/events/{id}/parecidos`), para poder arreglarlos todos de una en vez de uno por
+     * uno — que es justo lo que nadie hace, y por eso «Otros» se queda ahí.
+     *
+     * Quién es «el mismo destinatario» lo decide el server con
+     * [com.jvillada.movi.shared.model.huellaDeUnMovimiento]: la llave del pago QR, el número de
+     * cuenta, el nombre del comercio sin el arranque del banco. Un movimiento cuyo texto no
+     * identifica a nadie («Pago QR» a secas) **no tiene parecidos**, y la lista vuelve vacía.
+     *
+     * Lista vacía es la respuesta normal, no un error: quiere decir que no hay nada que ofrecer.
+     */
+    suspend fun getParecidos(id: String): List<FinancialEvent>
+
+    /**
+     * Pone la misma categoría a varios movimientos de una
+     * (`PUT /api/events/category-en-lote`), normalmente los que propuso [getParecidos] y el dueño
+     * confirmó.
+     *
+     * El server revalida cada id con las mismas reglas que [updateEventCategory] —un lote no es
+     * una puerta de atrás a las categorías reservadas— y **omite** lo que no se puede mover (una
+     * pata de traspaso, una apertura, un anulado) en vez de tumbar el lote entero. Por eso la
+     * respuesta trae los dos números.
+     */
+    suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse
     suspend fun register(request: RegisterRequest): AuthResponse
     suspend fun login(request: LoginRequest): AuthResponse
 

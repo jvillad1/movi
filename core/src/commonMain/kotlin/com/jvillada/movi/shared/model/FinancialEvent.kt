@@ -190,6 +190,35 @@ data class FinancialEvent(
 data class UpdateEventCategoryRequest(val category: String)
 
 /**
+ * Body de `PUT /api/events/category-en-lote`: **arreglar uno arregla los parecidos**.
+ *
+ * Existe porque corregir la categoría de un movimiento uno por uno es justo lo que el dueño no va
+ * a hacer — y entonces «Otros» se queda ahí. Cuando Movi ya sabe que cinco movimientos son del
+ * mismo destinatario (ver [huellaDeUnMovimiento]), ofrecer el lote es la diferencia entre un toque
+ * y cinco.
+ *
+ * Los ids los propone el server (`GET /api/events/{id}/parecidos`) y los confirma el dueño: el
+ * cliente nunca arma una lista por su cuenta, y el server vuelve a validar cada uno igual que en
+ * `PUT /{id}/category` — un lote no es una puerta de atrás a las categorías reservadas.
+ */
+@Serializable
+data class RecategorizarEnLoteRequest(val ids: List<String>, val category: String)
+
+/**
+ * Qué pasó con el lote. **`omitidos` no es un error**: una pata de traspaso o un saldo inicial
+ * colado en la lista se saltan en silencio (cambiarlos haría desaparecer plata de las cifras), y el
+ * dueño ve el número real de los que sí se movieron.
+ *
+ * [cambiados] son los **ids**, no un conteo, y esa es la diferencia que importa: el espejo local
+ * del teléfono escribe la categoría nueva sobre exactamente esas filas. Con un número no sabría
+ * cuáles, y escribirla sobre las que el server omitió le pondría «Comida» a media transferencia —
+ * que además volvería a contar como gasto del mes ([isCashFlow] decide por el nombre) hasta la
+ * próxima lectura.
+ */
+@Serializable
+data class RecategorizarEnLoteResponse(val cambiados: List<String>, val omitidos: Int)
+
+/**
  * Body de `PUT /api/events/{id}/timestamp` — **corregir la fecha de un movimiento ya anotado**.
  *
  * Es un epoch-ms y no un `"AAAA-MM-DD"` a propósito: el almacenamiento de Movi es epoch-ms y cada

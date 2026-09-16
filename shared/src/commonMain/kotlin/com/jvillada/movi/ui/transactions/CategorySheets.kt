@@ -66,6 +66,8 @@ import com.jvillada.movi.ui.recurrentes.prefillFrom
 import com.jvillada.movi.ui.recurrentes.prefillNameFor
 import com.jvillada.movi.ui.recurrentes.puedeOfrecerseComoRecurrenteDesdeElDetalle
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.style.TextOverflow
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 
 /**
  * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
@@ -299,6 +301,21 @@ fun ChangeCategorySheet(
     // como la opción ya marcada — perderla acá sería más confuso que una entrada de más.
     val currentIsKnown = options.any { it.name == event.category }
 
+    /**
+     * **Los otros movimientos del mismo destinatario**, con la categoría que tienen hoy. Se piden
+     * al abrir la hoja y no al elegir: cuando el dueño toca una categoría, la oferta tiene que
+     * estar lista — una pausa de red en ese momento se siente como que la app se colgó.
+     *
+     * Si la lectura falla, la lista queda vacía y no se ofrece nada: es una ayuda de más, y no
+     * puede impedir lo que el dueño vino a hacer.
+     */
+    var parecidos by remember(event.id) { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    LaunchedEffect(event.id) {
+        parecidos = runCatching { Repositories.wallets.getParecidos(event.id) }.getOrDefault(emptyList())
+    }
+    /** El segundo paso: no nulo mientras se pregunta si el cambio va también para los parecidos. */
+    var oferta by remember(event.id) { mutableStateOf<OfertaDeLote?>(null) }
+
     fun choose(category: String) {
         if (category == event.category || saving) return
         saving = true
@@ -306,7 +323,32 @@ fun ChangeCategorySheet(
         coroutine.launch {
             val result = runCatching { Repositories.wallets.updateEventCategory(event.id, category) }
             saving = false
-            result.onSuccess { onEventChanged(it) }.onFailure { error = it.toUserMessage() }
+            result
+                .onSuccess { actualizado ->
+                    // Arreglar uno puede arreglar a los parecidos — pero no sin preguntar: son
+                    // movimientos que el dueño no está mirando, y cambiarlos solos sería mover
+                    // cifras suyas a sus espaldas.
+                    val otros = parecidosQueCambiarian(parecidos, category)
+                    if (otros.isEmpty()) onEventChanged(actualizado)
+                    else oferta = OfertaDeLote(categoria = category, movimiento = actualizado, otros = otros)
+                }
+                .onFailure { error = it.toUserMessage() }
+        }
+    }
+
+    fun aplicarElLote(o: OfertaDeLote) {
+        if (saving) return
+        saving = true
+        error = null
+        coroutine.launch {
+            val result = runCatching { Repositories.wallets.recategorizarEnLote(o.otros.map { it.id }, o.categoria) }
+            saving = false
+            // Salga bien o mal, el movimiento que el dueño abrió YA quedó cambiado: la hoja se
+            // cierra igual y el error del lote se muestra en la pantalla de atrás. Dejarlo acá
+            // adentro obligaría a distinguir dos éxitos parciales en la misma hoja.
+            result
+                .onSuccess { onEventChanged(o.movimiento) }
+                .onFailure { error = it.toUserMessage(); saving = false }
         }
     }
 
@@ -436,6 +478,84 @@ fun ChangeCategorySheet(
                 SeccionDeFecha(event = event, onFechaCambiada = onEventChanged)
                 Spacer(Modifier.height(24.dp))
             }
+        }
+        return
+    }
+
+    // **El segundo paso**, cuando hay parecidos: el movimiento ya quedó cambiado y lo único que
+    // falta es decidir por los otros. Reemplaza el contenido de la hoja en vez de abrir otra
+    // encima —una hoja no puede abrir otra sobre sí misma— y cerrarla por afuera equivale a «solo
+    // este», que es la opción conservadora.
+    oferta?.let { o ->
+        BottomSheetScaffold(onDismiss = { onEventChanged(o.movimiento) }, dismissEnabled = !saving) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                SheetLabel("¿Y LOS PARECIDOS?")
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    tituloDeLaOferta(o),
+                    style = Movi.textos.titulo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Movi los reconoce como el mismo lugar. Cámbialos también y no tienes que abrirlos uno por uno.",
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.textoMedio,
+                    lineHeight = 19.sp,
+                )
+                Spacer(Modifier.height(16.dp))
+                // Se listan todos los que se van a mover, con la categoría que tienen hoy: una
+                // confirmación sobre cifras propias que no deja ver qué cambia no es una
+                // confirmación. Por eso el lote está topeado (ver MAXIMO_DE_PARECIDOS).
+                o.otros.forEach { otro ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(otro.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "${epochMillisToAppDate(otro.timestamp)} · ${otro.category}",
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoMedio,
+                            )
+                        }
+                        Text(
+                            formatMoney(otro.amount, otro.currency),
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.textoMedio,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Movi.colores.marca)
+                        .clickable(enabled = !saving) { aplicarElLote(o) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (saving) "Cambiando…" else "Sí, ponlos en «${o.categoria}»",
+                        style = Movi.textos.cuerpo,
+                        fontWeight = FontWeight.Medium,
+                        color = Movi.colores.sobreMarca,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(enabled = !saving) { onEventChanged(o.movimiento) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("No, solo este", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+            BarraDeError(error)
         }
         return
     }
@@ -1510,4 +1630,37 @@ private fun SeccionDeFecha(
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
     }
+}
+
+/**
+ * **El segundo paso de [ChangeCategorySheet]**: el movimiento que el dueño abrió ya quedó en
+ * [categoria], y estos [otros] son del mismo destinatario y están en otra.
+ *
+ * Es un estado y no dos variables sueltas porque las tres cosas nacen y mueren juntas: mientras
+ * haya oferta, la hoja muestra la pregunta y nada más.
+ */
+internal data class OfertaDeLote(
+    val categoria: String,
+    /** El movimiento ya actualizado, para devolverlo al cerrar elija lo que elija. */
+    val movimiento: FinancialEvent,
+    val otros: List<FinancialEvent>,
+)
+
+/**
+ * **Cuáles de los parecidos cambiarían de verdad.** El server manda los del mismo destinatario con
+ * la categoría que tienen hoy; los que ya están en la que el dueño acaba de elegir no se ofrecen —
+ * preguntar por un cambio que no cambia nada gasta la única atención que esta pregunta tiene.
+ */
+internal fun parecidosQueCambiarian(parecidos: List<FinancialEvent>, categoria: String): List<FinancialEvent> =
+    parecidos.filter { it.category != categoria }
+
+/**
+ * «4 movimientos más de Zelo Group». En singular cuando es uno solo: «1 movimientos» es de las
+ * cosas que hacen que una app se sienta escrita por una máquina.
+ */
+internal fun tituloDeLaOferta(oferta: OfertaDeLote): String {
+    val cuantos = oferta.otros.size
+    val nombre = oferta.movimiento.description.trim().ifBlank { "este lugar" }
+    return if (cuantos == 1) "Hay 1 movimiento más de «$nombre»"
+    else "Hay $cuantos movimientos más de «$nombre»"
 }
