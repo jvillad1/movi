@@ -3,6 +3,7 @@ package com.jvillada.movi.shared
 import com.jvillada.movi.shared.db.createDatabase
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -130,6 +131,73 @@ class SyncEngineTest {
         engine.syncEvents()
 
         assertEquals("USD", remote.pushedEvents.single { it.id == "ev-usd" }.currency, "y la sube")
+    }
+
+    /**
+     * **La edad de la versión viaja, y dice la verdad en los dos casos.**
+     *
+     * Es la mitad cliente de la carrera que `pisaElReenvio` (server, `EventRoutes.kt`) resuelve: el
+     * `POST /api/events` puede haber LLEGADO sin que el teléfono viera la respuesta, así que la
+     * fila local se queda sin sellar y el ciclo de 30 s la reenvía. Si el dueño corrigió ese
+     * movimiento en la web mientras tanto, el reenvío pisaba su corrección sin decir nada.
+     *
+     * El server decide con lo que llegue acá, así que las dos direcciones importan:
+     * - **sin editar → `null`**, que es lo que le dice al server «esta copia es la original, si vos
+     *   tenés una edición guardada es posterior a la mía y gana»;
+     * - **editado sin señal → un instante**, que es lo que le deja ganarle a la copia más vieja del
+     *   server. Sin esto, arreglar el primer caso rompería el segundo.
+     */
+    @Test
+    fun syncEvents_sube_la_edad_de_la_version_de_cada_movimiento() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-edicion", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-sin-editar", "acc-edicion", TransactionType.EXPENSE, 50_000L))
+        local.postEvent(event("ev-editado", "acc-edicion", TransactionType.EXPENSE, 50_000L))
+        local.updateEvent("ev-editado", EdicionDeMovimiento(amount = 9_000L))
+
+        val remote = OrderSensitiveRemote()
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+        engine.syncEvents()
+
+        assertNotNull(
+            remote.pushedEvents.single { it.id == "ev-editado" }.lastEditedAt,
+            "corregir sin señal es el caso normal del teléfono, y esa corrección tiene que poder ganar",
+        )
+        assertNull(
+            remote.pushedEvents.single { it.id == "ev-sin-editar" }.lastEditedAt,
+            "anotarlo no es editarlo: null es lo que le hace perder contra la corrección de la web",
+        )
+    }
+
+    /**
+     * **Toda corrección local sella, venga por la puerta que venga.** Es la regla frágil de este
+     * arreglo: una corrección que no selle sale diciendo «yo no edité nada» y el server se la hace
+     * perder contra la copia de la web — el mismo bug al revés, esta vez perdiendo lo que el dueño
+     * escribió en el teléfono. Por eso se prueban las cuatro puertas y no solo la del monto.
+     */
+    @Test
+    fun syncEvents_sella_la_edicion_venga_por_la_puerta_que_venga() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-puertas", "Efectivo", AccountType.CASH, 0L))
+        listOf("ev-cat", "ev-fecha", "ev-repite", "ev-confirma").forEach {
+            local.postEvent(event(it, "acc-puertas", TransactionType.EXPENSE, 50_000L))
+        }
+        local.updateEventCategory("ev-cat", "Restaurantes")
+        local.updateEventTimestamp("ev-fecha", System.currentTimeMillis() - 3L * 24 * 60 * 60 * 1000)
+        local.updateEventRepeats("ev-repite", false)
+        local.confirmEvent("ev-confirma")
+
+        val remote = OrderSensitiveRemote()
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+        engine.syncEvents()
+
+        listOf("ev-cat", "ev-fecha", "ev-repite", "ev-confirma").forEach { id ->
+            assertNotNull(remote.pushedEvents.single { it.id == id }.lastEditedAt, "$id salió sin sellar")
+        }
     }
 
     /** Un 422 del server se reintentaba cada 30 s para siempre sin avisar. Ahora queda el motivo. */
@@ -283,14 +351,14 @@ class SyncEngineTest {
         db.financialEventQueries.insert(
             "ev-pata-suelta", "acc-tr", "EXPENSE", 100_000L, "Traspaso", "Traspaso a CDT", null,
             1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, "tr-huerfano",
-            1_700_000_000_000L, null, 0L, "COP",
+            1_700_000_000_000L, null, 0L, "COP", null,
         )
         // Y un evento normal al lado, para que el test distinga "no empuja la pata" de
         // "no empuja nada".
         db.financialEventQueries.insert(
             "ev-normal", "acc-tr", "EXPENSE", 5_000L, "Mercado", "pan", null,
             1_700_000_000_000L, "MANUAL", null, "RECONCILED", null, testUserId, null,
-            1_700_000_000_000L, null, 0L, "COP",
+            1_700_000_000_000L, null, 0L, "COP", null,
         )
 
         SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()

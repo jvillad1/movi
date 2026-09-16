@@ -177,6 +177,55 @@ data class FinancialEvent(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val noSeRepite: Boolean = false,
+    /**
+     * **Cuándo se corrigió por última vez** este movimiento — epoch-ms, `null` si nadie lo tocó
+     * desde que nació. No es [createdAt] (cuándo se anotó) ni [timestamp] (cuándo ocurrió): es la
+     * edad de la versión, y existe para **una sola** pregunta, la que decide quién gana cuando dos
+     * dispositivos escriben el mismo id.
+     *
+     * ### El agujero que tapa
+     *
+     * El teléfono escribe primero en su base y `SyncEngine.syncEvents` empuja después lo que
+     * todavía tiene `syncedAt IS NULL`. Si el `POST /api/events` **llega** al server pero la
+     * respuesta no vuelve —se cortó la señal a mitad, el proceso se murió—, la fila local se queda
+     * sin sellar: para el teléfono ese movimiento «no subió». Mientras tanto el dueño lo corrige
+     * **desde la web** —el monto, la categoría, la fecha, el concepto, la cuenta—. El ciclo
+     * siguiente reenvía la copia vieja del teléfono, y el alta de `POST /api/events` es un upsert
+     * por id: la corrección de la web desaparecía sin que nada lo dijera, ni un error ni un aviso.
+     *
+     * Con este campo el reenvío **pierde contra una edición más nueva**: el server compara lo que
+     * llega contra lo que tiene guardado y solo pisa si la versión que entra no es más vieja.
+     * Los empates van para el que llega, así que un reenvío idéntico —el caso normal, el evento
+     * que vuelve porque nadie lo tocó— sigue siendo inofensivo.
+     *
+     * ### Quién lo escribe
+     *
+     * **Los dos lados, cada uno con su reloj, y solo al CORREGIR.** El server lo sella en cada
+     * `PUT /api/events/{id}…` (monto, cuenta, concepto, categoría, fecha, «se repite», confirmar) y
+     * en el renombre/unificación de categorías; el teléfono lo sella en el espejo local cada vez
+     * que resuelve una corrección sin señal (ver `LocalRepository` y `marcarEditado` en
+     * `FinancialEvent.sq`). Un alta no lo escribe: un movimiento recién anotado no tiene ninguna
+     * versión anterior a la que ganarle.
+     *
+     * Los relojes son distintos y no se sincronizan — el del teléfono puede estar corrido. Está
+     * acotado a propósito: esto **no** entra en ningún total, no decide de qué día es el
+     * movimiento ni cómo se ordena la lista. Solo desempata entre dos versiones del mismo id, y el
+     * peor caso de un reloj corrido es el mismo que había antes de este campo (una de las dos
+     * ediciones se pierde), nunca peor.
+     *
+     * ### Por qué viaja siempre, incluso en `null`
+     *
+     * Por lo mismo que [noSeRepite] y que `CardTerms.pagoMinimo`: el Json de este proyecto tiene
+     * `encodeDefaults = false`, así que un `null` no se serializaría y el cuerpo saldría **sin la
+     * clave** — indistinguible del que manda un APK viejo, que no conoce el campo. Y esos dos casos
+     * significan cosas opuestas para el server: «este cliente sabe de ediciones y esta copia no fue
+     * editada» (o sea, que pierde contra cualquier edición guardada) contra «este cliente no sabe
+     * nada de esto» (que se atiende como antes de esta ola, pisando). Con [EncodeDefault] la clave
+     * está siempre y el server puede preguntar `"lastEditedAt" in crudo`. Lo fija
+     * `EdicionEnElWireTest`.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val lastEditedAt: Long? = null,
 )
 
 /**

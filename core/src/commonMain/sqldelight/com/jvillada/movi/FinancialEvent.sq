@@ -62,7 +62,17 @@ CREATE TABLE financial_event (
     -- Por qué el server rechazó este movimiento al subirlo (un 4xx), o NULL. Lo escribe el
     -- SyncEngine y lo lee Movimientos para avisar. Un INSERT OR REPLACE (cualquier corrección local)
     -- lo limpia, y el próximo ciclo vuelve a intentar. Migración 9.sqm.
-    syncError               TEXT
+    syncError               TEXT,
+    -- **Cuándo se corrigió por última vez en ESTE teléfono**, o NULL si nadie lo tocó desde que se
+    -- anotó. Ver FinancialEvent.lastEditedAt en :core para el porqué completo. El resumen: el POST
+    -- de un movimiento pendiente puede haber LLEGADO sin que el teléfono viera la respuesta, y si
+    -- el dueño lo corrige en la web mientras tanto, el reenvío pisaba esa corrección. Con esto el
+    -- reenvío viaja con la edad de su versión y el server lo deja perder. Migración 10.sqm.
+    --
+    -- Nullable, como createdAt y noAmortiza: las filas que ya están en el teléfono no la tienen y
+    -- no hay de dónde sacarla — y NULL las describe bien, porque significa «nadie la editó». Sin
+    -- índice: nunca se filtra ni se ordena por ella.
+    lastEditedAt            INTEGER
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -116,8 +126,8 @@ insert:
 INSERT OR REPLACE INTO financial_event(
     id, accountId, type, amount, category, description, merchant,
     timestamp, source, rawPayload, reconciliationStatus, syncedAt, userId, transferId,
-    createdAt, noAmortiza, noSeRepite, currency
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    createdAt, noAmortiza, noSeRepite, currency, lastEditedAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 markSynced:
 UPDATE financial_event SET syncedAt = :syncedAt WHERE id = :id;
@@ -142,6 +152,20 @@ UPDATE financial_event SET syncedAt = :syncedAt
 WHERE id = :id AND category = :category AND timestamp = :timestamp
   AND amount = :amount AND accountId = :accountId AND description = :description
   AND noSeRepite = :noSeRepite AND reconciliationStatus = :reconciliationStatus;
+
+-- **La edad de la versión local**, que es lo que decide quién gana el día que el teléfono reenvíe
+-- un movimiento que el server ya tiene. Ver FinancialEvent.lastEditedAt en :core.
+--
+-- Se llama justo después de cada corrección local, dentro de la misma transacción. La regla, igual
+-- de estricta que la de markSyncedIfUnchanged y por el mismo motivo: **toda corrección que se
+-- resuelva acá sin señal tiene que sellar**. Una que no selle deja su copia diciendo «yo no edité
+-- nada», y el server se la hace perder contra la versión de la web — o sea, el arreglo se vuelve
+-- el bug al revés, y esta vez perdiendo lo que el dueño escribió en el teléfono.
+--
+-- No entra en markSyncedIfUnchanged: toda corrección local mueve además alguno de los siete campos
+-- que ese WHERE ya compara, así que la carrera del POST en vuelo está cubierta sin esta columna.
+marcarEditado:
+UPDATE financial_event SET lastEditedAt = :lastEditedAt WHERE id = :id AND userId = :userId;
 
 updateCategory:
 UPDATE financial_event SET category = :category WHERE id = :id AND userId = :userId;

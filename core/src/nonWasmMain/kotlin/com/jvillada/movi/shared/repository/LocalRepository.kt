@@ -455,6 +455,9 @@ class LocalRepository(
                 // lo haría SQLDelight si el tipo estuviera mapeado.
                 siNoSeRepite(resolved.noSeRepite),
                 resolved.currency,
+                // Null en un alta: un movimiento que nace no tiene ninguna versión anterior a la
+                // que ganarle (ver FinancialEvent.lastEditedAt). Lo escriben las correcciones.
+                resolved.lastEditedAt,
             )
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
@@ -849,6 +852,7 @@ class LocalRepository(
                     leg.noAmortiza,
                     siNoSeRepite(leg.noSeRepite),
                     leg.currency,
+                    leg.lastEditedAt,
                 )
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
                 val accountType = AccountType.valueOf(acct.type)
@@ -963,6 +967,7 @@ class LocalRepository(
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
             if (local != null && local.syncedAt == null) {
                 db.financialEventQueries.updateCategory(category, id, uid)
+                marcarEditado(id, uid)
                 // La categoría se aplica ANTES de derivar la bandera: al revés, countsAsCashFlow
                 // saldría calculado contra la categoría vieja y el objeto devuelto diría que un
                 // pago de tarjeta sí es flujo de caja — el mismo doble conteo que esto arregla.
@@ -1026,6 +1031,7 @@ class LocalRepository(
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
             if (local != null && local.syncedAt == null) {
                 db.financialEventQueries.updateReconciliationStatus(ReconciliationStatus.RECONCILED.name, id, uid)
+                marcarEditado(id, uid)
                 local.toModel(types).copy(reconciliationStatus = ReconciliationStatus.RECONCILED)
             } else {
                 null
@@ -1045,6 +1051,7 @@ class LocalRepository(
             val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
             if (local != null && local.syncedAt == null) {
                 db.financialEventQueries.updateNoSeRepite(siNoSeRepite(!repeats), id, uid)
+                marcarEditado(id, uid)
                 local.toModel(types).copy(noSeRepite = !repeats)
             } else {
                 null
@@ -1118,8 +1125,11 @@ class LocalRepository(
                 val transferId = local.transferId
                 if (transferId != null) {
                     db.financialEventQueries.updateTimestampByTransferId(timestamp, transferId, uid)
+                    db.financialEventQueries.selectByTransferId(transferId, uid).executeAsList()
+                        .forEach { marcarEditado(it.id, uid) }
                 } else {
                     db.financialEventQueries.updateTimestamp(timestamp, id, uid)
+                    marcarEditado(id, uid)
                 }
                 local.toModel(types).copy(timestamp = timestamp)
             } else {
@@ -1333,6 +1343,7 @@ class LocalRepository(
         }
 
         db.financialEventQueries.updateMovimiento(montoNuevo, cuentaNuevaId, conceptoNuevo, local.id, uid)
+        marcarEditado(local.id, uid)
         // Una por una, con su propia cifra: el UPDATE masivo por `transferId` que había acá les
         // escribía la misma a todas y por eso se fue con la copia.
         hermanas.forEach { hermana ->
@@ -1343,6 +1354,7 @@ class LocalRepository(
                 hermana.id,
                 uid,
             )
+            marcarEditado(hermana.id, uid)
         }
 
         // El saldo acumulado: se deshace el efecto viejo donde estaba y se aplica el nuevo donde
@@ -1458,6 +1470,7 @@ class LocalRepository(
                     leg.noAmortiza,
                     siNoSeRepite(leg.noSeRepite),
                     leg.currency,
+                    leg.lastEditedAt,
                 )
                 if (leg.accountId == loanAccountId) return@forEach
                 val acct = db.accountQueries.selectById(leg.accountId).executeAsOneOrNull() ?: return@forEach
@@ -1532,6 +1545,7 @@ class LocalRepository(
             event.reconciliationStatus.name, event.syncedAt ?: ahora, uid,
             event.transferId, event.createdAt, event.noAmortiza, siNoSeRepite(event.noSeRepite),
             event.currency,
+            event.lastEditedAt,
         )
     }
     /**
@@ -1574,6 +1588,9 @@ class LocalRepository(
                     event.noAmortiza,
                     siNoSeRepite(event.noSeRepite),
                     event.currency,
+                    // Ídem el sello de creación: el ajuste lo editó (o no) el server, y lo que
+                    // diga su respuesta es la verdad.
+                    event.lastEditedAt,
                 )
             }
             // Upsert (INSERT OR REPLACE): si el crédito se creó desde el server la fila puede no
@@ -1834,6 +1851,29 @@ class LocalRepository(
             }
             .toMap()
 
+    /**
+     * **Deja escrito que esta fila se acaba de corregir en este teléfono**, con el reloj de este
+     * teléfono. Corre siempre dentro de la transacción de quien llama.
+     *
+     * Es la mitad cliente del arreglo que vive del otro lado en `pisaElReenvio` (`EventRoutes.kt`):
+     * el `POST /api/events` es un upsert por id y el teléfono reenvía cada 30 segundos lo que
+     * todavía no selló. Si ese POST ya había llegado —y solo se perdió la respuesta— y mientras
+     * tanto el dueño corrigió el movimiento **en la web**, el reenvío pisaba esa corrección sin
+     * decir nada. Ahora el reenvío viaja con esta marca y el server lo hace perder si es más vieja.
+     *
+     * **Toda corrección local que se resuelva sin señal tiene que llamar acá**, y por un motivo
+     * simétrico al de arriba: una corrección que no selle sale diciendo «yo no edité nada», y el
+     * server se la hace perder contra la copia de la web — o sea, el mismo bug al revés, esta vez
+     * perdiendo lo que el dueño escribió en el teléfono. Es la misma regla que ya tiene
+     * `markSyncedIfUnchanged` («todo campo que una corrección local pueda tocar entra en el
+     * WHERE»), del otro lado del mismo problema.
+     *
+     * Vale también para las patas hermanas de un par: la cascada las corrige a ellas también.
+     */
+    private fun marcarEditado(id: String, uid: String) {
+        db.financialEventQueries.marcarEditado(Clock.System.now().toEpochMilliseconds(), id, uid)
+    }
+
     private fun com.jvillada.movi.Financial_event.toModel(
         typeByAccount: Map<String, AccountType> = emptyMap(),
     ) = FinancialEvent(
@@ -1851,6 +1891,7 @@ class LocalRepository(
         noAmortiza = noAmortiza,
         noSeRepite = noSeRepite != 0L,
         currency = currency,
+        lastEditedAt = lastEditedAt,
         countsAsCashFlow = typeByAccount[accountId]
             ?.let { isCashFlow(it, TransactionType.valueOf(type), category) }
             ?: true,

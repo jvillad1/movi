@@ -295,6 +295,10 @@ internal fun Transaction.rewriteCategory(
 ): CategoryRewriteResult {
     val movements = Events.update({ (Events.userId eq uid) and (Events.category eq from) }) {
         it[category] = to
+        // Renombrar o unificar ES editar cada una de esas filas: sin el sello, el reenvío de un
+        // movimiento pendiente devolvería la categoría vieja que el dueño acaba de dejar atrás.
+        // Ver `FinancialEvent.lastEditedAt`.
+        it[Events.lastEditedAt] = System.currentTimeMillis()
     }
 
     var budgets = 0

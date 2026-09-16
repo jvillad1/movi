@@ -333,6 +333,165 @@ class EventRoutesTest {
         assertEquals(true, transaction { Events.selectAll().where { Events.id eq "evt-nsr" }.single()[Events.noSeRepite] })
     }
 
+    // ── El reenvío contra la edición de la web: quién gana ──────────────────────
+    //
+    // El agujero: el `POST /api/events` del teléfono LLEGA pero la respuesta no vuelve (se cortó la
+    // señal, se murió el proceso), así que la fila local se queda sin sellar y el ciclo de 30 s la
+    // reenvía. Si en esa ventana el dueño corrigió el movimiento **en la web**, el upsert de esta
+    // ruta pisaba esa corrección sin decir nada. Ver `FinancialEvent.lastEditedAt` y `pisaElReenvio`.
+
+    /** El cuerpo tal como lo arma un cliente que conoce el campo: la clave viaja SIEMPRE. */
+    private fun gastoConEdicion(id: String, monto: Long, edicion: Long?, categoria: String = "Mercado") =
+        """{"id":"$id","accountId":"$savingsAccountId","type":"EXPENSE","amount":$monto,
+            "category":"$categoria","description":"D1","source":"MANUAL","timestamp":1757000000000,
+            "noSeRepite":false,"lastEditedAt":${edicion ?: "null"}}"""
+
+    private fun montoGuardado(id: String) =
+        transaction { Events.selectAll().where { Events.id eq id }.single()[Events.amount] }
+
+    private fun categoriaGuardada(id: String) =
+        transaction { Events.selectAll().where { Events.id eq id }.single()[Events.category] }
+
+    private fun edicionGuardadaDe(id: String) =
+        transaction { Events.selectAll().where { Events.id eq id }.single()[Events.lastEditedAt] }
+
+    private suspend fun ApplicationTestBuilder.putMovimiento(id: String, userId: String, body: String) =
+        client.put("/api/events/$id") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+
+    /**
+     * Lo primero que no se puede romper: un movimiento que el server NO tiene se inserta igual,
+     * traiga la clave o no. Sin esto, la guarda nueva convertiría el camino normal —el 99 % de los
+     * POST— en un rechazo silencioso.
+     */
+    @Test
+    fun `la primera entrega de un movimiento nuevo se sigue insertando`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gastoConEdicion("evt-primera", 33_000, null)).status)
+        assertEquals(33_000L, montoGuardado("evt-primera"))
+        assertEquals(null, edicionGuardadaDe("evt-primera"), "un alta no es una edición")
+    }
+
+    /**
+     * El caso que dispara todo esto: el POST llegó, la respuesta no. El teléfono reenvía lo MISMO.
+     * Tiene que ser un no-op tranquilo (200), no un error ni un duplicado — si no, el ciclo de 30 s
+     * lo reintentaría para siempre.
+     */
+    @Test
+    fun `un reenvio identico es un no-op, no un error`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gastoConEdicion("evt-igual", 41_000, null)).status)
+        val res = postEvent(userAId, gastoConEdicion("evt-igual", 41_000, null))
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals(1, transaction { Events.selectAll().where { Events.id eq "evt-igual" }.count() })
+        assertEquals(41_000L, montoGuardado("evt-igual"))
+    }
+
+    /**
+     * **El bug, con sus cifras.** El teléfono sube $50.000 y no ve la respuesta; el dueño corrige a
+     * $9.000 desde la web; el ciclo siguiente reenvía los $50.000. Antes volvían los $50.000 sin
+     * decir nada: ni un error, ni un aviso, la corrección deshecha.
+     */
+    @Test
+    fun `el reenvio viejo no revierte la correccion hecha en la web`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gastoConEdicion("evt-web", 50_000, null)).status)
+        assertEquals(HttpStatusCode.OK, putMovimiento("evt-web", userAId, """{"amount":9000}""").status)
+        assertEquals(9_000L, montoGuardado("evt-web"))
+
+        val reenvio = postEvent(userAId, gastoConEdicion("evt-web", 50_000, null))
+        assertEquals(HttpStatusCode.OK, reenvio.status, "el teléfono tiene que poder sellarlo y dejar de reenviar")
+        assertEquals(9_000L, montoGuardado("evt-web"), "la corrección de la web manda")
+        assertEquals(
+            9_000L,
+            Json.parseToJsonElement(reenvio.bodyAsText()).jsonObject["amount"]!!.jsonPrimitive.long,
+            "y la respuesta dice la verdad de lo guardado, no el eco de lo que se mandó",
+        )
+    }
+
+    /** Lo mismo por la otra puerta que el dueño usa todo el tiempo: la categoría. */
+    @Test
+    fun `el reenvio viejo no revierte la categoria corregida en la web`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gastoConEdicion("evt-cat", 12_000, null)).status)
+        assertEquals(HttpStatusCode.OK, putCategory("evt-cat", "Restaurantes", userAId).status)
+
+        assertEquals(HttpStatusCode.OK, postEvent(userAId, gastoConEdicion("evt-cat", 12_000, null, "Mercado")).status)
+        assertEquals("Restaurantes", categoriaGuardada("evt-cat"))
+    }
+
+    /**
+     * **Y el lado que NO se puede romper por arreglar el otro:** corregir sin señal es el caso
+     * normal del teléfono, y esa corrección tiene que ganarle a la copia más vieja del server.
+     * Una guarda que hiciera perder siempre al reenvío sería el mismo bug al revés.
+     */
+    @Test
+    fun `la correccion hecha en el telefono sin senal si gana`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gastoConEdicion("evt-tel", 50_000, null)).status)
+        assertEquals(HttpStatusCode.OK, putMovimiento("evt-tel", userAId, """{"amount":9000}""").status)
+
+        // El dueño corrige en el teléfono DESPUÉS (su reloj, un minuto más tarde).
+        val despues = System.currentTimeMillis() + 60_000L
+        assertEquals(HttpStatusCode.OK, postEvent(userAId, gastoConEdicion("evt-tel", 7_000, despues)).status)
+        assertEquals(7_000L, montoGuardado("evt-tel"))
+        assertEquals(despues, edicionGuardadaDe("evt-tel"), "y la próxima se compara contra ESTA")
+    }
+
+    /**
+     * **El APK que el dueño tiene instalado (1.25) no manda la clave, y sigue pisando.** Es una
+     * decisión, no un olvido: sin la clave no hay forma de saber qué tan vieja es su copia, y
+     * tratar la ausencia como «editado en el año 0» lo haría perder SIEMPRE — incluso cuando su
+     * copia es la corrección que él acaba de escribir sin señal. Se le taparía el agujero
+     * borrándole datos. El agujero se cierra para ese APK el día que instale el nuevo.
+     */
+    @Test
+    fun `un APK viejo que no manda la clave se sigue atendiendo como antes`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postEvent(userAId, gasto("evt-apk-viejo", 50_000)).status)
+        assertEquals(HttpStatusCode.OK, putMovimiento("evt-apk-viejo", userAId, """{"amount":9000}""").status)
+
+        assertEquals(HttpStatusCode.OK, postEvent(userAId, gasto("evt-apk-viejo", 50_000)).status)
+        assertEquals(50_000L, montoGuardado("evt-apk-viejo"))
+    }
+
+    /**
+     * El par sigue moviéndose entero —la regla de siempre— y **las dos patas quedan selladas**: si
+     * solo se sellara la que se tocó, un reenvío podría devolverle a la hermana su cifra vieja y
+     * partir el par en dos mitades que no se corresponden.
+     */
+    @Test
+    fun `corregir una pata sigue cascadeando, y sella a las dos`() = testApplication {
+        wireApp()
+        transaction {
+            listOf("ev-par-out" to "EXPENSE", "ev-par-in" to "INCOME").forEach { (evId, tipo) ->
+                Events.insert {
+                    it[id]                   = evId
+                    it[userId]               = userAId
+                    it[accountId]            = savingsAccountId
+                    it[type]                 = tipo
+                    it[amount]               = 500_000L
+                    it[currency]             = "COP"
+                    it[category]             = "Traspaso"
+                    it[description]          = "Traspaso"
+                    it[timestamp]            = 1_757_000_000_000L
+                    it[eventSource]          = "MANUAL"
+                    it[reconciliationStatus] = "RECONCILED"
+                    it[transferId]           = "tr-par"
+                }
+            }
+        }
+
+        assertEquals(HttpStatusCode.OK, putMovimiento("ev-par-out", userAId, """{"amount":300000}""").status)
+        assertEquals(300_000L, montoGuardado("ev-par-out"))
+        assertEquals(300_000L, montoGuardado("ev-par-in"), "la cascada de siempre")
+        assertNotNull(edicionGuardadaDe("ev-par-out"))
+        assertNotNull(edicionGuardadaDe("ev-par-in"), "la hermana también quedó editada")
+    }
+
     /** «Ajuste de saldo» y «traspaso» en minúscula pasaban la guarda de recategorizar. */
     @Test
     fun `recategorizar a cualquier reservada se rechaza, sin distinguir mayusculas`() = testApplication {
