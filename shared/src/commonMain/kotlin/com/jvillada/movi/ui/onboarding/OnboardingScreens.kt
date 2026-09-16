@@ -115,7 +115,9 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                 Column {
                     Text("Familiar", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(6.dp))
-                    Text("$4.870.000", style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.6).sp)
+                    // Tamaño a mano a propósito: estas dos tarjetas son una ILUSTRACIÓN de la app,
+                    // no la app. Van al tamaño que la composición pide, no al de la escala.
+                    Text("$4.870.000", fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.6).sp)
                     Spacer(Modifier.height(12.dp))
                     Hairline()
                     Spacer(Modifier.height(10.dp))
@@ -140,7 +142,7 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                 Column {
                     Text("Balance · abril", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(6.dp))
-                    Text("$1.840.000", style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-1.0).sp)
+                    Text("$1.840.000", fontSize = 28.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-1.0).sp)
                     Spacer(Modifier.height(10.dp))
                     SimpleSparkline(
                         modifier = Modifier.fillMaxWidth().height(32.dp),
