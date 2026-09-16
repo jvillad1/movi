@@ -465,10 +465,12 @@ fun CreditTermsSheet(
                         Box(Modifier.weight(1f)) {
                             // F23/F24: solo dígitos y un único punto — el "%" lo pinta RateFieldBox,
                             // nunca lo escribe la persona.
-                            RateFieldBox("Tasa % EA", rateEa, { rateEa = filterRateInput(it) })
+                            RateFieldBox("18,5", rateEa, { rateEa = filterRateInput(it) }, rotulo = "Tasa % EA")
                         }
                     }
-                    Box(Modifier.weight(1f)) { FieldBox("Plazo (meses)", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
+                    Box(Modifier.weight(1f)) {
+                        FieldBox("60", termMonths, { termMonths = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Plazo (meses)")
+                    }
                 }
                 // Pegada a la tasa, que es lo que reemplaza.
                 CasillaConExplicacion(
@@ -486,8 +488,10 @@ fun CreditTermsSheet(
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, placeholder = "Cuota mensual (COP)") }
-                    Box(Modifier.weight(1f)) { FieldBox("Día de pago", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number) }
+                    Box(Modifier.weight(1f)) { MoneyField(installment, { installment = it }, label = "Cuota mensual", placeholder = "$ 0") }
+                    Box(Modifier.weight(1f)) {
+                        FieldBox("5", dayOfMonth, { dayOfMonth = it.filter { ch -> ch.isDigit() } }, KeyboardType.Number, rotulo = "Día de pago")
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 // El seguro va PEGADO a la cuota, no al final con las notas: es plata que está
@@ -782,7 +786,18 @@ internal fun FieldBox(
     value: String,
     onValueChange: (String) -> Unit,
     keyboardType: KeyboardType = KeyboardType.Text,
+    /**
+     * El nombre del campo, **arriba y siempre** (ver [com.jvillada.movi.ui.components.RotuloDeCampo]).
+     * Se pone donde el valor solo no se explica —«240», «5»— y no donde el placeholder es un
+     * ejemplo («Ej: Viaje»), que ahí sí tiene sentido que desaparezca al escribir.
+     *
+     * **Los dos campos de una misma fila lo llevan o no lo llevan juntos**: uno con rótulo y otro
+     * sin él quedan a distinta altura.
+     */
+    rotulo: String? = null,
 ) {
+    Column {
+    if (rotulo != null) RotuloDeCampo(rotulo)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -815,6 +830,7 @@ internal fun FieldBox(
             singleLine = true,
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
+    }
     }
 }
 
@@ -1071,7 +1087,15 @@ private fun CasillaConExplicacion(
  * lo escribe, así que nunca puede terminar en el estado ("12%") que rompía el parseo (F23/F24).
  */
 @Composable
-private fun RateFieldBox(placeholder: String, value: String, onValueChange: (String) -> Unit) {
+private fun RateFieldBox(
+    placeholder: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    /** Ver [FieldBox]: va con el de al lado, o los dos quedan a distinta altura. */
+    rotulo: String? = null,
+) {
+    Column {
+    if (rotulo != null) RotuloDeCampo(rotulo)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1099,6 +1123,7 @@ private fun RateFieldBox(placeholder: String, value: String, onValueChange: (Str
             }
             if (value.isNotEmpty()) Text("%", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         }
+    }
     }
 }
 

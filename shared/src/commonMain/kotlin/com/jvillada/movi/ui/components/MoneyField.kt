@@ -144,6 +144,32 @@ private fun offsetTrasDigitos(agrupado: String, n: Int): Int {
     return agrupado.length
 }
 
+/**
+ * **El nombre del campo, arriba y siempre.**
+ *
+ * Un `placeholder` desaparece al escribir, y eso convierte un formulario ya lleno en una columna de
+ * números sin rótulo: el dueño abría las condiciones de un crédito y veía «240» y «5» sueltos, sin
+ * forma de saber cuál era el plazo y cuál el día de pago sin borrar uno para que reapareciera el
+ * texto. Un formulario se abre más veces para revisar que para llenar.
+ *
+ * Vive acá y lo usan los tres campos ([MoneyField], `FieldBox`, `RateFieldBox`) porque se ponen uno
+ * al lado del otro: si cada uno rotulara a su manera, dos campos de la misma fila quedarían con el
+ * texto a distinta altura.
+ */
+@Composable
+internal fun RotuloDeCampo(texto: String) {
+    Text(
+        text = texto,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        letterSpacing = 0.4.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+    Spacer(Modifier.height(6.dp))
+}
+
 @Composable
 fun MoneyField(
     value: Long?,
@@ -160,16 +186,7 @@ fun MoneyField(
     prefix: String = "$",
 ) {
     Column(modifier = modifier) {
-        if (label != null) {
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                color = Movi.colores.textoMedio,
-                letterSpacing = 0.4.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
+        if (label != null) RotuloDeCampo(label)
         val digits = value?.toString() ?: ""
 
         // ── Ola 9 · C — CÓMO SE EDITA UN MONTO (y por qué antes se guardaba otra cifra) ──

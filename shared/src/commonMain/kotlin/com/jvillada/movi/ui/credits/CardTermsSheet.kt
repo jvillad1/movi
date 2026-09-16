@@ -188,10 +188,10 @@ fun CardTermsSheet(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
-                        FieldBox("Corte (opcional)", cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number)
+                        FieldBox("20", cutoffDay, { cutoffDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Corte (opcional)")
                     }
                     Box(Modifier.weight(1f)) {
-                        FieldBox("Día de pago", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number)
+                        FieldBox("5", paymentDay, { paymentDay = it.filter { ch -> ch.isDigit() }.take(2) }, KeyboardType.Number, rotulo = "Día de pago")
                     }
                 }
                 Spacer(Modifier.height(8.dp))
