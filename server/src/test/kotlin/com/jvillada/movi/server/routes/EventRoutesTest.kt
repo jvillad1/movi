@@ -231,6 +231,26 @@ class EventRoutesTest {
             setBody("""{"category":"$category"}""")
         }
 
+    private suspend fun ApplicationTestBuilder.getParecidos(id: String, userId: String) =
+        client.get("/api/events/$id/parecidos") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+
+    private suspend fun ApplicationTestBuilder.putLote(ids: List<String>, category: String, userId: String) =
+        client.put("/api/events/category-en-lote") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"ids":[${ids.joinToString(",") { "\"$it\"" }}],"category":"$category"}""")
+        }
+
+    /** Un movimiento que llegó del banco: `merchant` es el texto crudo, que es de donde sale la huella. */
+    private fun seedDelBanco(id: String, merchant: String, category: String, descripcion: String = merchant) {
+        seedEvent(id, userAId, savingsAccountId, "EXPENSE", descripcion, category)
+        transaction {
+            Events.update({ Events.id eq id }) { it[Events.merchant] = merchant }
+        }
+    }
+
     private suspend fun ApplicationTestBuilder.putRepeats(id: String, repeats: Boolean, userId: String) =
         client.put("/api/events/$id/repeats") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
@@ -1648,4 +1668,127 @@ class EventRoutesTest {
 
     private fun createdAtDe(id: String): Long? =
         transaction { Events.selectAll().where { Events.id eq id }.first()[Events.createdAt] }
+
+    private fun categoriaDe(id: String): String =
+        transaction { Events.selectAll().where { Events.id eq id }.first()[Events.category] }
+
+    // ── Arreglar uno arregla los parecidos ───────────────────────────────────
+
+    /**
+     * El caso del dueño: cinco pagos por QR al mismo lugar, uno categorizado y cuatro en «Otros».
+     * Corregirlos de a uno es justo lo que nadie hace, y por eso «Otros» se queda ahí.
+     */
+    @Test
+    fun `los parecidos son los del mismo destinatario, con la categoria que tienen hoy`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-qr-1", merchant = "Pago QR · llave 0092184713", category = "Comida")
+        seedDelBanco("ev-qr-2", merchant = "Pagaste por codigo QR a la llave 0092184713", category = "Otros")
+        seedDelBanco("ev-qr-3", merchant = "Pago QR · llave 0092184713", category = "Otros")
+        seedDelBanco("ev-otro-lugar", merchant = "Pago QR · llave 7777000", category = "Otros")
+
+        val res = getParecidos("ev-qr-1", userAId)
+
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val ids = Json.parseToJsonElement(res.bodyAsText()).jsonArray
+            .map { it.jsonObject["id"]!!.jsonPrimitive.content }
+        assertEquals(setOf("ev-qr-2", "ev-qr-3"), ids.toSet(), "otra llave no es el mismo destinatario")
+    }
+
+    /**
+     * **Lo más importante de este endpoint.** «Pago QR» a secas no identifica a nadie: si tuviera
+     * parecidos, Movi ofrecería mandar todos los pagos por QR del mes a una sola categoría.
+     */
+    @Test
+    fun `un movimiento que no identifica a nadie no tiene parecidos`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-mudo-1", merchant = "Pago QR", category = "Otros")
+        seedDelBanco("ev-mudo-2", merchant = "Pago QR", category = "Comida")
+
+        assertEquals("[]", getParecidos("ev-mudo-1", userAId).bodyAsText())
+    }
+
+    @Test
+    fun `los anulados y los de otro usuario no son parecidos de nadie`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-zelo-1", merchant = "Zelo Group", category = "Otros")
+        seedDelBanco("ev-zelo-2", merchant = "Zelo Group", category = "Tecnología")
+        voidEvent("ev-zelo-2", userAId)
+
+        assertEquals("[]", getParecidos("ev-zelo-1", userAId).bodyAsText())
+        assertEquals(HttpStatusCode.NotFound, getParecidos("ev-zelo-1", userBId).status)
+    }
+
+    @Test
+    fun `el lote pone la misma categoria a todos y dice cuales movio`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-lote-1", merchant = "Mora Soccer", category = "Otros")
+        seedDelBanco("ev-lote-2", merchant = "Pago QR Mora Soccer", category = "Otros")
+
+        val res = putLote(listOf("ev-lote-1", "ev-lote-2"), "Fútbol", userAId)
+
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val cuerpo = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals(
+            setOf("ev-lote-1", "ev-lote-2"),
+            cuerpo["cambiados"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet(),
+        )
+        assertEquals(0, cuerpo["omitidos"]!!.jsonPrimitive.content.toInt())
+        assertEquals("Fútbol", categoriaDe("ev-lote-1"))
+        assertEquals("Fútbol", categoriaDe("ev-lote-2"))
+    }
+
+    /**
+     * Un lote **no es una puerta de atrás**: las categorías que Movi escribe sola se rechazan acá
+     * igual que en `PUT /{id}/category`. Sin esto, el camino nuevo reabría el daño que seis
+     * guardas cerraron una por una — un gasto real sale de «Gastos del mes» sin decir nada.
+     */
+    @Test
+    fun `el lote no deja entrar a una categoria reservada`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-res-1", merchant = "Mora Soccer", category = "Otros")
+
+        for (reservada in listOf("Traspaso", "Saldo inicial", "Ajuste de saldo", "traspaso")) {
+            val res = putLote(listOf("ev-res-1"), reservada, userAId)
+            assertEquals(HttpStatusCode.UnprocessableEntity, res.status, "«$reservada» entró al lote")
+        }
+        assertEquals("Otros", categoriaDe("ev-res-1"))
+    }
+
+    /**
+     * Lo que no se puede mover se **omite y se cuenta**, no tumba el lote: el dueño quiso arreglar
+     * tres movimientos, y que uno resulte ser de otro usuario no es motivo para no arreglarle los
+     * otros dos.
+     */
+    @Test
+    fun `lo que no se puede mover se omite, y los demas se cambian igual`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-mix-1", merchant = "Mora Soccer", category = "Otros")
+        seedDelBanco("ev-mix-anulado", merchant = "Mora Soccer", category = "Otros")
+        voidEvent("ev-mix-anulado", userAId)
+        seedEvent("ev-mix-apertura", userAId, savingsAccountId, "INCOME", "Saldo con el que arrancó", "Saldo inicial")
+
+        val res = putLote(listOf("ev-mix-1", "ev-mix-anulado", "ev-mix-apertura", "ev-no-existe"), "Fútbol", userAId)
+
+        val cuerpo = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals(listOf("ev-mix-1"), cuerpo["cambiados"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(3, cuerpo["omitidos"]!!.jsonPrimitive.content.toInt())
+        assertEquals("Saldo inicial", categoriaDe("ev-mix-apertura"), "una apertura no se mueve ni en lote")
+    }
+
+    @Test
+    fun `un lote de otro usuario no cambia nada`() = testApplication {
+        wireApp()
+        seedDelBanco("ev-ajeno", merchant = "Mora Soccer", category = "Otros")
+
+        val res = putLote(listOf("ev-ajeno"), "Fútbol", userBId)
+
+        assertEquals(0, Json.parseToJsonElement(res.bodyAsText()).jsonObject["cambiados"]!!.jsonArray.size)
+        assertEquals("Otros", categoriaDe("ev-ajeno"))
+    }
+
+    @Test
+    fun `un lote vacio es un error de quien llama, no un cambio silencioso`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, putLote(emptyList(), "Fútbol", userAId).status)
+    }
 }

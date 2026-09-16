@@ -89,6 +89,10 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult = noUsado("createTransfer")
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult = noUsado("payInstallment")
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = noUsado("updateEventCategory")
+    /** Vacío y no `noUsado`: la hoja de categoría lo pide siempre, y no tener parecidos es normal. */
+    override suspend fun getParecidos(id: String): List<FinancialEvent> = emptyList()
+    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse =
+        noUsado("recategorizarEnLote")
     override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent = noUsado("updateEventTimestamp")
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent = noUsado("updateEventRepeats")
     override suspend fun confirmEvent(id: String): FinancialEvent = noUsado("confirmEvent")

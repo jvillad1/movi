@@ -294,6 +294,13 @@ open class NoOpRepository(
      * local pasaba aunque `LocalRepository` llamara al server para un evento todavía sin
      * sincronizar: el 404 real que daría el server ahí nunca se ejercitaba.
      */
+    /** Sin parecidos: los tests que los necesitan sobrescriben este método. */
+    override suspend fun getParecidos(id: String): List<FinancialEvent> = emptyList()
+
+    /** Echo de lo pedido, para que el espejo local tenga qué escribir. */
+    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse =
+        RecategorizarEnLoteResponse(cambiados = ids.filter { it in knownEventIds }, omitidos = ids.count { it !in knownEventIds })
+
     override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
         if (id !in knownEventIds) throw ApiException(404)
         // La cuenta se CONSERVA: ningún server real mueve un evento de cuenta al recategorizarlo,

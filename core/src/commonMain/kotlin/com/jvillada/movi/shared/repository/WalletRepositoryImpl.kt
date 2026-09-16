@@ -64,6 +64,8 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.RenameAccountRequest
 import com.jvillada.movi.shared.model.UpdateAccountConditionRequest
+import com.jvillada.movi.shared.model.RecategorizarEnLoteRequest
+import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -475,6 +477,29 @@ class WalletRepositoryImpl(
         val url = if (reason != null) "$baseUrl/api/events/$id/void?reason=$reason"
                   else "$baseUrl/api/events/$id/void"
         val response = client.post(url)
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    /**
+     * Sin `throw` por status: una lista de parecidos que no se pudo leer **no puede impedir**
+     * cambiar la categoría del movimiento que el dueño vino a arreglar. Es una oferta de más; si
+     * falla, no se ofrece.
+     */
+    override suspend fun getParecidos(id: String): List<FinancialEvent> =
+        runCatching { client.get("$baseUrl/api/events/$id/parecidos").body<List<FinancialEvent>>() }
+            .getOrDefault(emptyList())
+
+    // Mismo idioma que updateEventCategory: el server rechaza con 400 (lista vacía o categoría
+    // mal escrita) o 422 (una categoría que Movi escribe sola), y ese texto es lo único que le
+    // explica al dueño por qué no se guardó.
+    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse {
+        val response = client.put("$baseUrl/api/events/category-en-lote") {
+            contentType(ContentType.Application.Json)
+            setBody(RecategorizarEnLoteRequest(ids, category))
+        }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }

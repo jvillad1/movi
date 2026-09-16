@@ -62,6 +62,57 @@ private sealed interface ResultadoDeEdicion {
     class Ok(val evento: FinancialEvent) : ResultadoDeEdicion
 }
 
+
+/**
+ * **La categoría está mal escrita** (vacía, o más larga de lo que la columna aguanta), o `null` si
+ * se puede usar. 400: es un error de forma, no una regla de negocio.
+ */
+/**
+ * **Cuántos parecidos se ofrecen y se cambian de una.** No es una cota de rendimiento: es que un
+ * lote que el dueño no puede leer de un vistazo antes de tocar no es una confirmación, es un
+ * cheque en blanco sobre sus propias cifras.
+ */
+internal const val MAXIMO_DE_PARECIDOS = 50
+
+internal fun categoriaMalEscrita(category: String): String? = when {
+    category.isBlank() -> "La categoría no puede estar vacía"
+    category.length > 60 -> "La categoría no puede superar 60 caracteres"
+    else -> null
+}
+
+/**
+ * **Las categorías que Movi escribe sola y que nadie pone a mano**, con el motivo que se le muestra
+ * al dueño — o `null` si esta se puede usar.
+ *
+ * Cada una de estas guardas nació de un daño medido y silencioso: `isCashFlow` excluye estas
+ * categorías del mes POR NOMBRE, así que escribir una sobre un gasto real lo hace desaparecer de
+ * «Gastos del mes» contestando 200 y sin decir nada (un gasto de $50.000 recategorizado a «Saldo
+ * inicial» bajaba el mes de $165.289 a $115.289). Las cuatro primeras llegaron acá **después** de
+ * que el daño ya fuera posible; las siguientes, el mismo día que nació la categoría.
+ *
+ * Están juntas en una función y no repartidas en cada ruta porque desde hoy hay **dos** puertas
+ * —una por movimiento y una por lote— y una guarda que solo cierra una de las dos no es una guarda.
+ *
+ * «Pago de tarjeta» es la excepción a propósito: la confirmación de un candidato la escribe por
+ * esta misma puerta (ver `GET /card-payment-candidates`), y es correcta.
+ */
+internal fun categoriaQueMoviEscribeSola(category: String): String? = when {
+    // Un evento recategorizado a "Traspaso" sería medio traspaso: se dejaría de contar en el mes
+    // sin ninguna pata del otro lado que explique adónde fue la plata.
+    category == TRANSFER_CATEGORY -> TRANSFER_CATEGORY_RESERVED
+    category == ORPHANED_LEG_CATEGORY -> ORPHANED_LEG_NOT_MANUAL
+    category == PAYROLL_DEDUCTION_CATEGORY ->
+        "«Descuento de nómina» la escribe Movi cuando registras la cuota de una libranza"
+    category == THIRD_PARTY_PAYMENT_CATEGORY ->
+        "«Pago de un tercero» la escribe Movi cuando registras la cuota de un crédito que paga otro"
+    category == OPENING_CATEGORY -> OPENING_CATEGORY_RESERVED
+    // Y todas las demás, **sin distinguir mayúsculas**: comparar exacto dejaba pasar «traspaso» en
+    // minúscula, y con eso un gasto real de $200.000 salía de «Gastos del mes» sin decir nada.
+    category != CARD_PAYMENT_CATEGORY && isReservedCategory(category) ->
+        "«$category» la escribe Movi sola: no se puede poner a mano"
+    else -> null
+}
+
 /**
  * Los orígenes que, al llegar por `POST /api/events`, ya pasaron por los ojos del dueño: lo que
  * anotó a mano y lo que confirmó desde la bandeja de SMS. Llegan confirmados aunque el cliente
@@ -345,71 +396,11 @@ fun Route.eventRoutes() {
                 ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
             val uid = call.userId()
             val category = call.receive<UpdateEventCategoryRequest>().category.trim()
-            if (category.isBlank()) {
-                return@put call.respond(HttpStatusCode.BadRequest, "La categoría no puede estar vacía")
+            categoriaMalEscrita(category)?.let {
+                return@put call.respond(HttpStatusCode.BadRequest, it)
             }
-            if (category.length > 60) {
-                return@put call.respond(HttpStatusCode.BadRequest, "La categoría no puede superar 60 caracteres")
-            }
-            // Nadie entra a la categoría reservada por esta puerta: un evento recategorizado a
-            // "Traspaso" sería medio traspaso — se dejaría de contar en el mes (regla de
-            // isCashFlow) sin ninguna pata del otro lado que explique adónde fue la plata.
-            if (category == TRANSFER_CATEGORY) {
-                return@put call.respond(HttpStatusCode.UnprocessableEntity, TRANSFER_CATEGORY_RESERVED)
-            }
-            // Ola 15: ni a «Cuenta eliminada» tampoco. Hasta acá esta puerta estaba abierta y no
-            // escondía nada —esa categoría todavía contaba en el mes—, pero desde que `isCashFlow`
-            // la excluye, escribirla en un gasto real lo haría desaparecer de «Gastos del mes» sin
-            // que nada lo dijera: el mismo daño silencioso que la guarda de la ola 10 cerró en
-            // `POST /api/events` para las otras reservadas.
-            //
-            // Y se bloquea SOLO esta, no toda categoría reservada: por esta misma ruta pasa la
-            // confirmación de un pago de tarjeta (ver GET /card-payment-candidates arriba), que
-            // escribe CARD_PAYMENT_CATEGORY a propósito y es correcta.
-            if (category == ORPHANED_LEG_CATEGORY) {
-                return@put call.respond(HttpStatusCode.UnprocessableEntity, ORPHANED_LEG_NOT_MANUAL)
-            }
-            // Ola 17: ni a «Descuento de nómina». Es la reservada más nueva y llegó con el mismo
-            // peligro que las anteriores: `isCashFlow` la excluye del mes POR NOMBRE, así que
-            // escribirla sobre un gasto real lo haría desaparecer de «Gastos del mes» sin decir
-            // nada. La guarda se agrega en la misma ola que la categoría, no una ola después —
-            // que es como las otras tres llegaron acá.
-            if (category == PAYROLL_DEDUCTION_CATEGORY) {
-                return@put call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "«Descuento de nómina» la escribe Movi cuando registras la cuota de una libranza",
-                )
-            }
-            // Ola 18: ni a «Pago de un tercero», por lo mismo y en la misma ola en que nace la
-            // categoría. Esta es la sexta reservada y la segunda que llega con su guarda puesta
-            // desde el primer día; las cuatro primeras llegaron acá tarde, cada una después de
-            // que el daño ya fuera posible.
-            if (category == THIRD_PARTY_PAYMENT_CATEGORY) {
-                return@put call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "«Pago de un tercero» la escribe Movi cuando registras la cuota de un crédito que paga otro",
-                )
-            }
-            // Ola 16: ni a «Saldo inicial». Es la reservada que faltaba, y era la más cara de las
-            // cuatro por esta puerta — ver [OPENING_CATEGORY_RESERVED], que trae la medición: un
-            // gasto real de $50.000 recategorizado así contestaba 200 y bajaba «Gastos del mes» de
-            // $165.289 a $115.289, sin decir nada. `POST /api/events` ya cerraba este daño desde la
-            // Ola 10; `PUT` no, y la app ofrecía el camino con el botón «Usar "…"» del campo libre
-            // (cerrado también en esta ola, ver `ofreceCategoriaEscritaAMano`).
-            if (category == OPENING_CATEGORY) {
-                return@put call.respond(HttpStatusCode.UnprocessableEntity, OPENING_CATEGORY_RESERVED)
-            }
-            // **Y todas las demás, sin distinguir mayúsculas.** Las guardas de arriba nombran cada
-            // reservada una por una y comparan exacto, así que «Ajuste de saldo» (la séptima) y
-            // «traspaso» en minúscula pasaban: un gasto real de $200.000 recategorizado así salía de
-            // «Gastos del mes» sin decir nada. El teléfono ya lo cerraba recorriendo
-            // RESERVED_CATEGORIES con la única excepción de «Pago de tarjeta»; esto es lo mismo, para
-            // que la próxima reservada quede cerrada acá el día que nazca.
-            if (category != CARD_PAYMENT_CATEGORY && isReservedCategory(category)) {
-                return@put call.respond(
-                    HttpStatusCode.UnprocessableEntity,
-                    "«$category» la escribe Movi sola: no se puede poner a mano",
-                )
+            categoriaQueMoviEscribeSola(category)?.let {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, it)
             }
             // Y nadie sale tampoco: sacar una pata de la categoría reservada la devolvería al
             // flujo de caja del mes —el gasto fantasma que esta feature vino a matar— y dejaría
@@ -452,6 +443,101 @@ fun Route.eventRoutes() {
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
             else call.respond(updated)
+        }
+
+        /**
+         * **Los otros movimientos del mismo destinatario**, para poder arreglarlos todos de una.
+         *
+         * Corregir la categoría de a uno es justo lo que nadie hace, y por eso «Otros» se queda
+         * ahí. Cuando Movi ya sabe que cinco movimientos son del mismo lugar (ver
+         * [com.jvillada.movi.shared.model.huellaDeUnMovimiento]), ofrecer el lote es la diferencia
+         * entre un toque y cinco.
+         *
+         * Devuelve los del mismo destinatario **con su categoría actual**, sin este mismo, sin los
+         * anulados y sin las patas de traspaso ni las aperturas —que esta puerta no puede mover de
+         * todos modos—. Quién queda por cambiar lo decide el cliente contra la categoría que el
+         * dueño acaba de elegir, que es un dato que todavía no existe cuando se pide esta lista.
+         * Lista vacía es la respuesta más común y no es un error.
+         *
+         * Un movimiento cuyo texto **no identifica a nadie** («Pago QR» a secas) no tiene
+         * parecidos: la huella es `null` y la respuesta es vacía. Es a propósito — juntar todos los
+         * pagos por QR del mes bajo una categoría sería peor que dejarlos sin categoría.
+         */
+        get("/{id}/parecidos") {
+            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val parecidos = dbQuery {
+                val evento = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                    ?: return@dbQuery null
+                val huella = huellaDeUnMovimiento(evento.merchant?.takeIf { it.isNotBlank() } ?: evento.description)
+                    ?: return@dbQuery emptyList()
+                val anulados = VoidEvents.selectAll()
+                    .where { VoidEvents.userId eq uid }
+                    .map { it[VoidEvents.originalEventId] }
+                    .toSet()
+                Events.selectAll()
+                    .where { (Events.userId eq uid) and (Events.id neq id) }
+                    .orderBy(Events.timestamp to SortOrder.DESC)
+                    .filterNot { it[Events.id] in anulados }
+                    .filter { it[Events.transferId] == null && it[Events.category] != OPENING_CATEGORY }
+                    .map { it.toFinancialEvent() }
+                    .filter { otro ->
+                        huellaDeUnMovimiento(otro.merchant?.takeIf { it.isNotBlank() } ?: otro.description) == huella
+                    }
+                    .take(MAXIMO_DE_PARECIDOS)
+            }
+            if (parecidos == null) call.respond(HttpStatusCode.NotFound)
+            else call.respond(parecidos)
+        }
+
+        /**
+         * **Arreglar uno arregla los parecidos.** Recategoriza varios movimientos de una,
+         * normalmente los que propuso `GET /{id}/parecidos` y el dueño confirmó.
+         *
+         * Cada id se vuelve a validar con las mismas reglas de `PUT /{id}/category`: un lote no es
+         * una puerta de atrás a las categorías reservadas. Lo que no se puede mover —una pata de
+         * traspaso, una apertura, un anulado, algo de otro usuario— se **omite** y se cuenta, en
+         * vez de tumbar el lote entero: el dueño quiso arreglar cinco movimientos, y que uno de
+         * ellos resulte ser media transferencia no es motivo para no arreglarle los otros cuatro.
+         */
+        put("/category-en-lote") {
+            val uid = call.userId()
+            val body = call.receive<RecategorizarEnLoteRequest>()
+            val category = body.category.trim()
+            categoriaMalEscrita(category)?.let {
+                return@put call.respond(HttpStatusCode.BadRequest, it)
+            }
+            categoriaQueMoviEscribeSola(category)?.let {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, it)
+            }
+            val ids = body.ids.distinct()
+            if (ids.isEmpty()) {
+                return@put call.respond(HttpStatusCode.BadRequest, "No hay movimientos para cambiar")
+            }
+            if (ids.size > MAXIMO_DE_PARECIDOS) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Son demasiados movimientos de una sola vez")
+            }
+            val resultado = dbQuery {
+                val anulados = VoidEvents.selectAll()
+                    .where { VoidEvents.userId eq uid }
+                    .map { it[VoidEvents.originalEventId] }
+                    .toSet()
+                val movibles = Events.selectAll()
+                    .where { (Events.userId eq uid) and (Events.id inList ids) }
+                    .filterNot { it[Events.id] in anulados }
+                    .filter { it[Events.transferId] == null && it[Events.category] != TRANSFER_CATEGORY }
+                    .filter { it[Events.category] != OPENING_CATEGORY }
+                    .map { it[Events.id] }
+                if (movibles.isNotEmpty()) {
+                    Events.update({ (Events.userId eq uid) and (Events.id inList movibles) }) {
+                        it[Events.category] = category
+                    }
+                }
+                RecategorizarEnLoteResponse(cambiados = movibles, omitidos = ids.size - movibles.size)
+            }
+            call.respond(resultado)
         }
 
         /**
