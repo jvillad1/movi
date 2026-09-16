@@ -27,14 +27,26 @@ import kotlinx.coroutines.withContext
 object SmsBackfill {
 
     suspend fun run(context: Context): BackfillOutcome = withContext(Dispatchers.IO) {
-        val token = SessionManager.token
-        if (token.isNullOrBlank()) return@withContext BackfillOutcome.NoSession
-
         // El período del dueño sale de su perfil. Sin respuesta se usa el mes de calendario: igual
         // lee el mes pasado entero y el actual, que es más que los 30 días de antes.
         val periodo = runCatching { Repositories.wallets.getUserProfile() }
             .map { PeriodSettings(cutoffDay = it.periodCutoffDay, iniciosPropios = it.periodStarts) }
             .getOrDefault(PeriodSettings())
+        conElPeriodo(context, periodo)
+    }
+
+    /**
+     * **El backfill sin preguntar el perfil**, para los hilos que corren sin la app abierta.
+     *
+     * [run] pasa por `Repositories`, que en Android necesita el `DatabaseDriverFactory.init` de
+     * `MainActivity`: un Worker que arranca el proceso solo (el teléfono lleva días sin que nadie
+     * abra Movi, que es justo cuando esto hace falta) se cae ahí. Este camino usa el período que
+     * le pasen —el de calendario alcanza: lee el mes pasado entero y el actual— y de ahí en más
+     * es idéntico, incluido el filtro de privacidad y el dedupe del server.
+     */
+    suspend fun conElPeriodo(context: Context, periodo: PeriodSettings): BackfillOutcome = withContext(Dispatchers.IO) {
+        val token = SessionManager.token
+        if (token.isNullOrBlank()) return@withContext BackfillOutcome.NoSession
         val desde = desdeDondeRecuperarSms(System.currentTimeMillis(), periodo)
         val inbox = runCatching { readDeviceSms(context, desde) }
             .getOrElse { return@withContext outcomeForReadFailure(it) }
