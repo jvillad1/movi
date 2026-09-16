@@ -144,3 +144,11 @@ compose.resources {
     packageOfResClass = "com.jvillada.movi.resources"
     generateResClass = always
 }
+
+// `ElIngresoHablaLosTokensTest` lee el index.html del webApp para comparar sus colores con
+// `Tokens.kt`. Sin declararlo como entrada, un cambio que toque SOLO ese archivo dejaba la prueba
+// «al día» y Gradle no la corría: pasaba en verde sin mirar.
+tasks.withType<Test>().configureEach {
+    inputs.file(rootProject.file("webApp/src/wasmJsMain/resources/index.html"))
+        .withPropertyName("indexDelWebApp")
+}
