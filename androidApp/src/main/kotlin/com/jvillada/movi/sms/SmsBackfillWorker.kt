@@ -6,7 +6,9 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -48,6 +50,22 @@ class SmsBackfillWorker(context: Context, params: WorkerParameters) : CoroutineW
     companion object {
         private const val TAG = "movi"
         private const val UNIQUE_NAME = "movi-sms-backfill"
+        private const val UNIQUE_AHORA = "movi-sms-backfill-ahora"
+
+        /**
+         * **Y un barrido al abrir la app**, que es lo que tapa el hueco entre ciclos: el periódico
+         * puede tardar hasta seis horas en tocarle turno (Android no lo adelanta ni forzándolo), y
+         * abrir Movi es justo el momento en que el dueño va a mirar los números. REPLACE y no KEEP
+         * porque lo que importa es el barrido más reciente, no el que quedó colgado sin red.
+         */
+        fun barrerAhora(context: Context) {
+            val request = OneTimeWorkRequestBuilder<SmsBackfillWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(UNIQUE_AHORA, ExistingWorkPolicy.REPLACE, request)
+        }
 
         /** Idempotente (KEEP): llamarlo en cada apertura no reinicia el ciclo. */
         fun schedule(context: Context) {

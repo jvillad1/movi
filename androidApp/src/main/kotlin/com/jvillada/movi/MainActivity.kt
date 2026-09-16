@@ -30,6 +30,9 @@ class MainActivity : ComponentActivity() {
         // Y el barrido de SMS cada 6 horas: la captura en vivo se pierde mensajes cuando Android
         // castiga a la app en segundo plano (ver SmsBackfillWorker).
         SmsBackfillWorker.schedule(applicationContext)
+        // Y uno ahora mismo: abrir la app es cuando va a mirar los números, y el periódico puede
+        // estar a horas de su turno.
+        SmsBackfillWorker.barrerAhora(applicationContext)
         // Y un refresh oportunista en cada apertura — reemplaza el que disparaba la
         // pantalla del sensor cuando era la única UI del APK.
         SmsFilterConfigStore.refreshIfStale(applicationContext)
