@@ -30,7 +30,6 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 
-private val MinAmber = Color(0xFFE8A85C)
 
 @Composable
 fun StatementReviewScreen(
@@ -142,11 +141,11 @@ fun StatementReviewScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Destino:", fontSize = 11.sp, color = Movi.colores.textoMedio)
+                Text("Destino:", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 Text(
                     destinationAccount?.name ?: "Elige la cuenta",
-                    fontSize = 11.sp,
-                    color = if (sinCuenta) MinAmber else Movi.colores.marca,
+                    style = Movi.textos.apoyo,
+                    color = if (sinCuenta) Movi.colores.aviso else Movi.colores.marca,
                     fontWeight = FontWeight.Medium,
                     // `fill = false` y no un `Spacer` con peso: un segundo hijo pesado le
                     // recortaría el ancho al chip a la mitad de la fila, y «Bancolombia Ahorros»
@@ -154,12 +153,12 @@ fun StatementReviewScreen(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .clip(RoundedCornerShape(4.dp))
-                        .background((if (sinCuenta) MinAmber else Movi.colores.marca).copy(alpha = 0.12f))
+                        .background((if (sinCuenta) Movi.colores.aviso else Movi.colores.marca).copy(alpha = 0.12f))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
                 Text(
                     if (eligiendoCuenta) "Cerrar" else "Cambiar",
-                    fontSize = 11.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )
             }
@@ -167,7 +166,7 @@ fun StatementReviewScreen(
             // puso Movi Cambiar» no entra en una línea, y lo primero que se recorta es justamente
             // lo que hay que leer.
             avisoDeLaCuentaDelBanco(destino.origen)?.let { aviso ->
-                Text(aviso, fontSize = 11.sp, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 3.dp))
+                Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = 3.dp))
             }
         }
         if (eligiendoCuenta) {
@@ -203,7 +202,7 @@ fun StatementReviewScreen(
                 item {
                     Text(
                         "POSIBLES DUPLICADOS",
-                        fontSize = 10.sp, color = MinAmber, letterSpacing = 1.sp,
+                        style = Movi.textos.rotulo, color = Movi.colores.aviso,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
@@ -241,12 +240,12 @@ fun StatementReviewScreen(
                     ) {
                         Text(
                             "NUEVAS TRANSACCIONES",
-                            fontSize = 10.sp, color = Movi.colores.textoMedio, letterSpacing = 1.sp,
+                            style = Movi.textos.rotulo, color = Movi.colores.textoMedio,
                         )
                         val allSelected = selectedIds.size == result.newTransactions.size
                         Text(
                             if (allSelected) "Deseleccionar todas" else "Seleccionar todas",
-                            fontSize = 11.sp, color = Movi.colores.marca,
+                            style = Movi.textos.apoyo, color = Movi.colores.marca,
                             modifier = Modifier.clickable {
                                 selectedIds = if (allSelected) emptySet()
                                     else result.newTransactions.map { it.id }.toSet()
@@ -275,14 +274,14 @@ fun StatementReviewScreen(
         // Error message
         error?.let {
             Text(
-                it, fontSize = 12.sp, color = Movi.colores.sale,
+                it, style = Movi.textos.apoyo, color = Movi.colores.sale,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
         if (imported) {
             Text(
                 "Este extracto ya se importó",
-                fontSize = 12.sp, color = Movi.colores.textoMedio,
+                style = Movi.textos.apoyo, color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
@@ -298,7 +297,7 @@ fun StatementReviewScreen(
                 Text(
                     if (sinRevisar == 1) "1 coincidencia sin revisar no se va a importar ni a conciliar. Si es otra compra, toca «No son el mismo»."
                     else "$sinRevisar coincidencias sin revisar no se van a importar ni a conciliar. Si son otras compras, toca «No son el mismo».",
-                    fontSize = 12.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.aviso,
                     lineHeight = 17.sp,
                     modifier = Modifier.padding(bottom = 10.dp),
@@ -316,7 +315,7 @@ fun StatementReviewScreen(
                 } else {
                     Text(
                         "Importar $importCount seleccionada${if (importCount != 1) "s" else ""}",
-                        fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                        style = Movi.textos.titulo, fontWeight = FontWeight.Bold, color = Color.White,
                     )
                 }
             }
@@ -347,14 +346,14 @@ private fun NewTransactionRow(
             modifier = Modifier.size(20.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(tx.merchant, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
-            Text("${tx.category} · ${tx.date}", fontSize = 11.sp, color = Movi.colores.textoMedio)
+            Text(tx.merchant, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text("${tx.category} · ${tx.date}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         val amountColor = if (tx.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
         val prefix = if (tx.type == TransactionType.INCOME) "+" else "−"
         Text(
             "$prefix${formatMoney(tx.amount, tx.currency)}",
-            fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = amountColor,
+            style = Movi.textos.monto, fontWeight = FontWeight.SemiBold, color = amountColor,
         )
     }
 }
@@ -372,7 +371,7 @@ private fun ReconciliationCard(
     var merchantSource by remember { mutableStateOf(FieldSource.MANUAL) }
 
     val isDecided = decision != null
-    val borderColor = if (isDecided && decision!!.confirm) Movi.colores.entra else MinAmber
+    val borderColor = if (isDecided && decision!!.confirm) Movi.colores.entra else Movi.colores.aviso
 
     Column(
         modifier = modifier
@@ -391,17 +390,17 @@ private fun ReconciliationCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 // Ola 2 #5 (F11): glifo escrito como texto → ícono Material (salía como ▯ en la web).
-                Icon(Icons.Rounded.Warning, contentDescription = null, tint = MinAmber, modifier = Modifier.size(11.dp))
+                Icon(Icons.Rounded.Warning, contentDescription = null, tint = Movi.colores.aviso, modifier = Modifier.size(11.dp))
                 Text(
                     "POSIBLE DUPLICADO",
-                    fontSize = 9.sp, color = MinAmber, letterSpacing = 0.5.sp,
+                    style = Movi.textos.rotulo, color = Movi.colores.aviso,
                 )
             }
             val amtColor = if (match.parsed.type == TransactionType.INCOME) Movi.colores.entra else Movi.colores.sale
             val prefix = if (match.parsed.type == TransactionType.INCOME) "+" else "−"
             Text(
                 "$prefix${formatMoney(match.parsed.amount, match.parsed.currency)}",
-                fontSize = 12.sp, fontWeight = FontWeight.Bold, color = amtColor,
+                style = Movi.textos.apoyo, fontWeight = FontWeight.Bold, color = amtColor,
             )
         }
 
@@ -409,12 +408,12 @@ private fun ReconciliationCard(
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.width(80.dp))
             Text(
-                "MANUAL", fontSize = 9.sp, color = Movi.colores.marca, letterSpacing = 0.8.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                "MANUAL", style = Movi.textos.rotulo, color = Movi.colores.marca,
+                modifier = Modifier.weight(1f),
             )
             Text(
-                "EXTRACTO", fontSize = 9.sp, color = Color(0xFF5CB8E8), letterSpacing = 0.8.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                "EXTRACTO", style = Movi.textos.rotulo, color = Movi.colores.entreCuentas,
+                modifier = Modifier.weight(1f),
             )
         }
 
@@ -457,7 +456,7 @@ private fun ReconciliationCard(
         if (!isDecided) {
             Text(
                 "Toca cada campo para cambiar la fuente",
-                fontSize = 9.sp, color = Movi.colores.textoApagado,
+                style = Movi.textos.apoyo, color = Movi.colores.textoApagado,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -473,7 +472,7 @@ private fun ReconciliationCard(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp),
                 ) {
-                    Text("No son el mismo", fontSize = 11.sp, color = Movi.colores.textoMedio)
+                    Text("No son el mismo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
                 Button(
                     onClick = {
@@ -493,7 +492,7 @@ private fun ReconciliationCard(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Movi.colores.marca),
                 ) {
-                    Text("Confirmar reconciliación", fontSize = 11.sp, color = Color.White)
+                    Text("Confirmar reconciliación", style = Movi.textos.apoyo, color = Color.White)
                 }
             }
         } else {
@@ -506,7 +505,7 @@ private fun ReconciliationCard(
                 }
                 Text(
                     if (decision.confirm) "Reconciliado" else "Se importará como nuevo",
-                    fontSize = 11.sp,
+                    style = Movi.textos.apoyo,
                     color = if (decision.confirm) Movi.colores.entra else Movi.colores.textoMedio,
                     fontWeight = FontWeight.Medium,
                 )
@@ -528,7 +527,7 @@ private fun FieldRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 10.sp, color = Movi.colores.textoMedio, modifier = Modifier.width(80.dp))
+        Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.width(80.dp))
         FieldCell(
             value = manualValue,
             active = selected == FieldSource.MANUAL,
@@ -555,7 +554,7 @@ private fun FieldCell(
     val bgColor = if (active) Movi.colores.marca.copy(alpha = 0.08f) else Movi.colores.tarjeta
     Text(
         value,
-        fontSize = 10.sp,
+        style = Movi.textos.apoyo,
         color = if (active) Movi.colores.texto else Movi.colores.textoMedio,
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
