@@ -66,7 +66,7 @@ fun MinPrimaryButton(
     ) {
         Text(
             text = text,
-            fontSize = 15.sp,
+            style = Movi.textos.titulo,
             fontWeight = FontWeight.Medium,
             color = if (dark) Movi.colores.texto else Movi.colores.marca,
             letterSpacing = 0.1.sp,
@@ -90,7 +90,7 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OnboardingDots(step = 1)
-            Text("Saltar", fontSize = 13.sp, color = Movi.colores.textoMedio, modifier = Modifier.clickable { onNavigate(Screen.Dashboard) })
+            Text("Saltar", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.clickable { onNavigate(Screen.Dashboard) })
         }
 
         // Visual — stacked cards
@@ -113,15 +113,15 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                     .padding(18.dp),
             ) {
                 Column {
-                    Text("Familiar", fontSize = 11.sp, color = Movi.colores.textoMedio)
+                    Text("Familiar", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(6.dp))
-                    Text("$4.870.000", fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.6).sp)
+                    Text("$4.870.000", style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.6).sp)
                     Spacer(Modifier.height(12.dp))
                     Hairline()
                     Spacer(Modifier.height(10.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("3 miembros", fontSize = 11.sp, color = Movi.colores.textoMedio)
-                        Text("+12,4%", fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
+                        Text("3 miembros", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        Text("+12,4%", style = Movi.textos.monto, color = Movi.colores.textoMedio)
                     }
                 }
             }
@@ -138,9 +138,9 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
                     .padding(20.dp),
             ) {
                 Column {
-                    Text("Balance · abril", fontSize = 11.sp, color = Movi.colores.textoMedio)
+                    Text("Balance · abril", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(6.dp))
-                    Text("$1.840.000", fontSize = 28.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-1.0).sp)
+                    Text("$1.840.000", style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-1.0).sp)
                     Spacer(Modifier.height(10.dp))
                     SimpleSparkline(
                         modifier = Modifier.fillMaxWidth().height(32.dp),
@@ -152,9 +152,7 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text(
                 text = "MOVI",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.6.sp,
+                style = Movi.textos.rotulo,
                 color = Movi.colores.textoMedio,
             )
             Spacer(Modifier.height(16.dp))
@@ -177,7 +175,7 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
             Spacer(Modifier.height(12.dp))
             Text(
                 text = "Movi lee tus SMS, extractos y recibos para que veas a dónde se va cada peso — tuyo y de tu familia.",
-                fontSize = 14.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 20.sp,
             )
@@ -186,7 +184,7 @@ fun WelcomeScreen(onNavigate: (Screen) -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text(
                 text = "¿Ya tienes cuenta? Iniciar sesión",
-                fontSize = 13.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
@@ -212,7 +210,7 @@ fun OnboardingProfileScreen(onNavigate: (Screen) -> Unit) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(22.dp))
             OnboardingDots(step = 6)
             Spacer(Modifier.weight(1f))
-            Text("6/6", fontSize = 12.sp, color = Movi.colores.textoMedio, style = Movi.textos.rotulo)
+            Text("6/6", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
         }
 
         Column(
@@ -224,10 +222,8 @@ fun OnboardingProfileScreen(onNavigate: (Screen) -> Unit) {
         ) {
             Text(
                 text = "ÚLTIMO PASO",
-                fontSize = 11.sp,
+                style = Movi.textos.rotulo,
                 color = Movi.colores.textoMedio,
-                letterSpacing = 1.4.sp,
-                fontWeight = FontWeight.Medium,
             )
             Spacer(Modifier.height(12.dp))
             Text(
@@ -241,7 +237,7 @@ fun OnboardingProfileScreen(onNavigate: (Screen) -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Esto nos ayuda a darte recomendaciones que sí encajen contigo. Puedes cambiarlo cuando quieras.",
-                fontSize = 13.5.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 19.sp,
             )
@@ -286,7 +282,7 @@ private fun SliderQuestion(
     }
 
     Column {
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp)
+        Text(label, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp)
         Spacer(Modifier.height(14.dp))
 
         val pct = (value - 1).toFloat() / (max - 1)
@@ -340,8 +336,8 @@ private fun SliderQuestion(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(leftHint, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
-            Text(rightHint, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
+            Text(leftHint, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text(rightHint, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }
