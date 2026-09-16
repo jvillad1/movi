@@ -203,7 +203,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     Text(
                         text = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel " +
                             "que quieras tener a mano. Los extractos que importes se archivan solos.",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.textoMedio,
                         lineHeight = 18.sp,
                     )
@@ -282,13 +282,13 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                 .clickable(enabled = false) {}
                 .padding(horizontal = 20.dp, vertical = 22.dp),
         ) {
-            Text("¿Borrar este documento?", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text("¿Borrar este documento?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Spacer(Modifier.height(8.dp))
-            Text(doc.nombre, fontSize = 14.sp, color = Movi.colores.texto)
+            Text(doc.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
-                fontSize = 12.5.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 lineHeight = 17.sp,
             )
@@ -296,7 +296,7 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "Cancelar",
-                    fontSize = 14.sp,
+                    style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
@@ -307,7 +307,7 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Borrar",
-                    fontSize = 14.sp,
+                    style = Movi.textos.cuerpo,
                     color = Movi.colores.sale,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
@@ -337,7 +337,7 @@ private fun FilaDeDocumento(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(doc.nombre, fontSize = 14.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                Text(doc.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(2.dp))
                 // Peso, fecha y período en un renglón: son los tres datos con los que uno
                 // reconoce cuál de tres extractos parecidos es el que busca.
@@ -347,25 +347,25 @@ private fun FilaDeDocumento(
                         etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
                         doc.periodo,
                     ).joinToString(" · "),
-                    fontSize = 11.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
                 )
                 doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
                     Spacer(Modifier.height(2.dp))
-                    Text(nota, fontSize = 11.5.sp, color = Movi.colores.textoMedio)
+                    Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
             }
             Spacer(Modifier.width(8.dp))
             Text(
                 "Abrir",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.marca,
             )
             Spacer(Modifier.width(4.dp))
             Text(
                 "Editar",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -375,7 +375,7 @@ private fun FilaDeDocumento(
             Spacer(Modifier.width(4.dp))
             Text(
                 "Borrar",
-                fontSize = 12.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.sale,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -472,7 +472,7 @@ private fun EditarDocumentoSheet(
                 CampoDeTexto("NOMBRE", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
                 Spacer(Modifier.height(14.dp))
 
-                Text("TIPO", fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                Text("TIPO", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
                 Spacer(Modifier.height(8.dp))
                 TipoDeDocumento.entries.forEach { t ->
                     Row(
@@ -485,7 +485,7 @@ private fun EditarDocumentoSheet(
                     ) {
                         Text(
                             nombreDeTipo(t),
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             color = if (t == tipo) Movi.colores.texto else Movi.colores.textoMedio,
                             fontWeight = if (t == tipo) FontWeight.Medium else FontWeight.Normal,
                             modifier = Modifier.weight(1f),
@@ -521,13 +521,13 @@ private fun EditarDocumentoSheet(
                     Text(
                         if (guardando) "Guardando…" else "Guardar",
                         color = Movi.colores.fondo,
-                        fontSize = 14.sp,
+                        style = Movi.textos.cuerpo,
                         fontWeight = FontWeight.Medium,
                     )
                 }
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
                 Spacer(Modifier.height(20.dp))
             }
@@ -542,7 +542,7 @@ private fun CampoDeTexto(
     onCambio: (String) -> Unit,
     marcador: String,
 ) {
-    Text(etiqueta, fontSize = 11.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+    Text(etiqueta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
     Spacer(Modifier.height(8.dp))
     Box(
         modifier = Modifier
@@ -553,14 +553,14 @@ private fun CampoDeTexto(
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         if (valor.isEmpty()) {
-            Text(marcador, fontSize = 14.sp, color = Movi.colores.textoApagado, maxLines = 1)
+            Text(marcador, style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
         }
         // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
         val campo = rememberCampoConSeleccion(valor, onCambio)
         BasicTextField(
             value = campo.valor,
             onValueChange = campo::alCambiar,
-            textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+            textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
             cursorBrush = SolidColor(Movi.colores.marca),
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
