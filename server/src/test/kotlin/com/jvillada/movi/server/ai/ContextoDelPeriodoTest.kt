@@ -13,6 +13,7 @@ import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.routes.buildUserContext
+import com.jvillada.movi.server.ai.CUANTOS_MOVIMIENTOS_CABEN
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.coroutines.runBlocking
@@ -198,6 +199,69 @@ class ContextoDelPeriodoTest {
         assertTrue("Lo que está esperando al dueño" in texto)
         assertTrue("1 mensajes del banco sin confirmar" in texto)
         assertTrue("1 movimientos en «Por confirmar»" in texto)
+    }
+
+    // ── Los movimientos, uno por uno ─────────────────────────────────────────
+
+    /**
+     * Sin esto el asistente contesta totales y nada más: no puede decir en qué restaurante, ni si
+     * un gasto se repitió, ni qué hay detrás de «Comida: $1.200.000» — que es justo lo que el
+     * dueño pregunta.
+     */
+    @Test
+    fun `los movimientos del periodo van uno por uno, con nombre, categoria y cuenta`() {
+        transaction {
+            Events.insert {
+                it[id] = "e-mora"; it[userId] = dueno; it[accountId] = "a1"
+                it[type] = TransactionType.EXPENSE.name; it[amount] = 25_000L; it[currency] = "COP"
+                it[category] = "Fútbol"; it[description] = "Mora Soccer"; it[timestamp] = ahora
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+
+        val texto = contexto()
+
+        assertTrue("Los movimientos de este período, uno por uno" in texto)
+        assertTrue("Mora Soccer (Fútbol, Ahorros Nómina): -\$25000" in texto, "falta el renglón:\n$texto")
+    }
+
+    @Test
+    fun `un anulado tampoco aparece como renglon`() {
+        gasto("Mercado", 500_000, id = "e-anulado-renglon")
+        transaction {
+            VoidEvents.insert {
+                it[id] = "v-renglon"; it[userId] = dueno; it[originalEventId] = "e-anulado-renglon"
+                it[timestamp] = ahora
+            }
+        }
+
+        assertFalse("Mercado (" in contexto())
+    }
+
+    /**
+     * **El corte se anuncia.** Un recorte callado haría que el asistente sumara lo que ve y
+     * contestara una cifra que no coincide con la pantalla, sin nada que lo delate.
+     */
+    @Test
+    fun `cuando no caben todos, el texto dice cuantos faltan`() {
+        val cuantos = CUANTOS_MOVIMIENTOS_CABEN + 7
+        transaction {
+            repeat(cuantos) { i ->
+                Events.insert {
+                    it[id] = "e-muchos-$i"; it[userId] = dueno; it[accountId] = "a1"
+                    it[type] = TransactionType.EXPENSE.name; it[amount] = 1_000L; it[currency] = "COP"
+                    it[category] = "Comida"; it[description] = "Almuerzo $i"; it[timestamp] = ahora - i
+                    it[reconciliationStatus] = "RECONCILED"
+                }
+            }
+        }
+
+        val texto = contexto()
+
+        assertTrue("y 7 movimientos más de este período que no caben aquí" in texto, texto.takeLast(600))
+        // Y se conservan los más NUEVOS: lo que se cae es lo más viejo.
+        assertTrue("Almuerzo 0" in texto)
+        assertFalse("Almuerzo ${cuantos - 1}" in texto)
     }
 
     @Test
