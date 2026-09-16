@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.sms
 
+import com.jvillada.movi.server.routes.SIN_CATEGORIA
 import com.jvillada.movi.server.routes.parseSms
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
@@ -102,10 +103,19 @@ class SmsParseTest {
     // ── El resto del parseo, que la firma nueva de categoryFor podía romper ───
 
     @Test
-    fun `una compra se clasifica por el comercio`() {
+    fun `una compra se clasifica por el comercio, con las categorias que la app ofrece`() {
         assertEquals("Transporte", assertNotNull(parseSms("Compra por \$25.000 en UBER TRIP.")).category)
-        assertEquals("Mercado", assertNotNull(parseSms("Compra por \$180.000 en EXITO POBLADO.")).category)
-        assertEquals("Suscripción", assertNotNull(parseSms("Compra por \$44.900 en NETFLIX.")).category)
+        // Antes «Mercado» y «Suscripción»: dos categorías que no existen en ningún selector de la
+        // app ni en los datos del dueño. Cada SMS confirmado abría una categoría paralela de un
+        // solo movimiento y partía el gráfico de «en qué se fue la plata». Ver SIN_CATEGORIA.
+        assertEquals("Comida", assertNotNull(parseSms("Compra por \$180.000 en EXITO POBLADO.")).category)
+        assertEquals("Entretenimiento", assertNotNull(parseSms("Compra por \$44.900 en NETFLIX.")).category)
+    }
+
+    @Test
+    fun `lo que no se reconoce queda sin categoria, y eso se llama Otros`() {
+        assertEquals(SIN_CATEGORIA, assertNotNull(parseSms("Compra por \$3.200 en ZELO GROUP.")).category)
+        assertEquals("Otros", SIN_CATEGORIA, "la app entera dice «Otros»; «Otro» era solo de acá")
     }
 
     @Test
@@ -151,7 +161,17 @@ class SmsParseTest {
 
     @Test
     fun `pagos QR y transferencias dicen a quien`() {
-        assertEquals("Pago QR", assertNotNull(parseSms("Bancolombia: ANA PEREZ pagaste \$18,500.00 por codigo QR desde tu cuenta *3333 a la llave 0087 el 09/09/2026 a las 15:08.")).merchant)
+        // **La llave va en el nombre.** Sin ella todos los pagos por QR se llaman igual, y Movi no
+        // tiene con qué distinguir el almuerzo de ayer del arriendo de mañana — ni, por lo tanto,
+        // con qué acordarse de cómo se categorizó ninguno de los dos.
+        assertEquals("Pago QR · llave 0087", assertNotNull(parseSms("Bancolombia: ANA PEREZ pagaste \$18,500.00 por codigo QR desde tu cuenta *3333 a la llave 0087 el 09/09/2026 a las 15:08.")).merchant)
+        // Con el nombre del comercio adentro, ese nombre manda: la llave sobra.
+        assertEquals("Carnes y legumbres", assertNotNull(parseSms("Bancolombia: Pago QR por \$126.800 en Carnes y legumbres.")).merchant)
+        // Igual con una transferencia sin nombre: la cuenta de DESTINO es lo único que identifica.
+        assertEquals(
+            "Transferencia a la cuenta *41279033068",
+            assertNotNull(parseSms("Bancolombia: ANA, transferiste \$10,000.00 a la cuenta *41279033068 desde tu cuenta *3333.")).merchant,
+        )
         assertEquals("PEDRO GOMEZ", assertNotNull(parseSms("Bancolombia: ANA, transferiste \$25,910.00 a la llave @pedro desde tu cuenta *3333 a PEDRO GOMEZ el 10/09/26 a las 08:50.")).merchant)
         assertEquals("Salud Total S A", assertNotNull(parseSms("Bancolombia: Pagaste \$138,600.00 a Salud Total S A desde tu producto 3333 el 05/09/2026 17:16:47.")).merchant)
         assertEquals("CARLOS RUIZ", assertNotNull(parseSms("Bancolombia: ANA, recibiste una transferencia de CARLOS RUIZ por \$1,000,000 en tu cuenta *3333.")).merchant, "sin «por \$…» pegado")
