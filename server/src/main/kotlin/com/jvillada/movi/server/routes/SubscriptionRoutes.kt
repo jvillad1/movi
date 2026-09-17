@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.fx.TasaUsdCop
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
@@ -282,9 +283,49 @@ private suspend fun resultFor(uid: String): SubscriptionsResult {
             .map { it.toSubscription() }
     }
     val active = subs.filter { it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED }
-    val needsFx = active.any { it.currency == "USD" }
-    val rate = if (needsFx) FxRateService.usdToCop() else 0.0
-    val total = active.sumOf { s ->
+    // Una sola consulta de TRM, y **solo si hay algo en dólares**: la primera del día sale a
+    // datos.gov.co con 5 s de timeout, adentro del request. Mismo criterio que `loadCardRulePairs`.
+    val needsFx = active.any { it.currency != "COP" }
+    val tasa = if (needsFx) FxRateService.tasaUsdCop() else null
+    return totalDeSuscripciones(subs, active, tasa)
+}
+
+/**
+ * **El total del mes, y qué quedó afuera** — la parte de `resultFor` que tiene una decisión
+ * adentro, separada para poder probarla sin red ni base (mismo recurso que
+ * [FxRateService.resolverTasa], y por el mismo motivo).
+ *
+ * ## Una tasa de respaldo no convierte nada
+ *
+ * [FxRateService.usdToCop] **nunca falla**: con la fuente oficial caída, sin caché del día y sin
+ * `USD_COP_RATE`, devuelve la constante de $4.000 sin decirlo. Este total se sumaba con eso, así
+ * que los cuatro cobros en dólares del dueño entraban a «Gastos recurrentes» —y por lo tanto se
+ * restaban de su «Flujo libre»— con un número que **nadie eligió para hoy**, y nada en la pantalla
+ * lo delataba.
+ *
+ * El camino de las tarjetas ya había resuelto exactamente esto y de esta manera: `minimoEnPesos`
+ * (CardReminders.kt) prefiere `null` antes que convertir con el respaldo, porque la pantalla sabe
+ * decir «este total está incompleto» y no sabe decir «este total está inventado». Acá se hace lo
+ * mismo: las filas en dólares quedan FUERA del total, se cuentan en
+ * [SubscriptionsResult.cobrosSinConvertir], y la tasa viaja en `0.0` —que es justamente lo que el
+ * cliente ya lee como «no puedo convertir esto» (ver `copDeSuscripcion`)—.
+ *
+ * Restar de menos y decirlo es peor que restar bien, y es mucho mejor que restar un número
+ * inventado.
+ *
+ * @param todas todas las filas del dueño, tal cual van al wire (incluidas candidatas y
+ *   descartadas): el total solo mira [activas], pero la lista se devuelve entera.
+ * @param activas AUTO + CONFIRMED, las únicas que suman.
+ * @param tasa la TRM y de dónde salió, o `null` si no hizo falta pedirla (nada en otra moneda).
+ */
+internal fun totalDeSuscripciones(
+    todas: List<Subscription>,
+    activas: List<Subscription>,
+    tasa: TasaUsdCop?,
+): SubscriptionsResult {
+    // Una tasa de respaldo vale lo mismo que no tener tasa: ver el KDoc.
+    val rate = tasa?.takeIf { !it.esRespaldo }?.valor?.takeIf { it > 0.0 } ?: 0.0
+    val aportes = activas.map { s ->
         // PRORRATEAR PRIMERO, convertir después — en ese orden, y el cliente hace lo mismo
         // (`copDeSuscripcion`, RecurrentesLogic.kt). Al revés el redondeo del medio cambiaría el
         // resultado, y dos totales que dicen contar lo mismo se separarían por pesos.
@@ -293,15 +334,22 @@ private suspend fun resultFor(uid: String): SubscriptionsResult {
         // y la del cliente no puedan discrepar. Para una suscripción MENSUAL —o sea, todas las
         // que existían antes de la Ola 16— devuelve `amount` sin tocarlo.
         val mensual = s.montoMensualEquivalente()
-        when (s.currency) {
-            "COP" -> mensual
-            "USD" -> (mensual * rate).roundToLong()
-            else  -> 0L
+        when {
+            s.currency == "COP" -> mensual
+            s.currency == "USD" && rate > 0.0 -> (mensual * rate).roundToLong()
+            // Sin tasa de verdad (o una moneda que no es ninguna de las dos): no se convierte, y
+            // se cuenta. `null` es «este total no lo puede incluir», no «esto vale cero».
+            else -> null
         }
     }
     // La tasa viaja junto al total: el cliente la necesita para restar del total una fila en
     // dólares (ver KDoc de SubscriptionsResult.usdToCop).
-    return SubscriptionsResult(subscriptions = subs, monthlyTotalCop = total, usdToCop = rate)
+    return SubscriptionsResult(
+        subscriptions = todas,
+        monthlyTotalCop = aportes.filterNotNull().sum(),
+        usdToCop = rate,
+        cobrosSinConvertir = aportes.count { it == null },
+    )
 }
 
 private fun ResultRow.toSubscription() = Subscription(

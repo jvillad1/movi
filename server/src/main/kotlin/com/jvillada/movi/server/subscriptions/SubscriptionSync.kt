@@ -53,9 +53,34 @@ suspend fun runSubscriptionDetection(uid: String) {
             .where { RecurringRules.userId eq uid }
             .mapTo(mutableSetOf()) { claveComparableDeNombre(it[RecurringRules.name]) }
             .filterNotTo(mutableSetOf()) { it.isEmpty() }
+        // **Y lo que ya está anotado como SUSCRIPCIÓN tampoco se vuelve a descubrir**, que era el
+        // agujero que quedaba abierto.
+        //
+        // La criba de arriba (`existing`) empareja por CLAVE DE COMERCIO, y esa clave no es la
+        // misma según quién escribió la fila: un alta manual guarda `manual_netflix` (ver
+        // `manualMerchantKey` en SubscriptionRoutes.kt) y el detector produce el canónico
+        // `netflix`. O sea que el par más probable de todos —el dueño anota «Netflix» a mano en
+        // enero, el detector ve los cargos en marzo— NO se emparejaba por clave, y el nombre no se
+        // miraba contra nada: la guarda de acá abajo solo consultaba `recurring_rules`. Resultado:
+        // dos filas para el mismo cobro, las dos activas, y `resultFor` sumando $44.900 dos veces
+        // al total del mes y al «Flujo libre».
+        //
+        // Se compara con [claveComparableDeNombre], la misma que las reglas y la misma que usa el
+        // cliente para decidir que dos filas son la misma cosa, así que las tres guardas no pueden
+        // discrepar.
+        //
+        // **Solo las ACTIVAS** (AUTO + CONFIRMED), igual que `nombresDeSuscripcionesQueYaSuman` del
+        // lado del cliente: una DISMISSED no suma nada —el dueño dijo que no— y una CANDIDATE
+        // todavía no. Bloquear el alta por una fila que no está sumando escondería un cobro real
+        // detrás de otro que el dueño ya descartó.
+        val nombresDeSuscripcionesActivas = existing.values
+            .filter { it[Subscriptions.status] == SubStatus.AUTO.name || it[Subscriptions.status] == SubStatus.CONFIRMED.name }
+            .mapTo(mutableSetOf()) { claveComparableDeNombre(it[Subscriptions.displayName]) }
+            .filterNotTo(mutableSetOf()) { it.isEmpty() }
         for (d in detected) {
-            val yaEsUnaRegla = claveComparableDeNombre(d.displayName) in nombresDeReglas
-            upsertDetected(uid, d, existing[d.merchantKey to d.currency], yaEsUnaRegla)
+            val clave = claveComparableDeNombre(d.displayName)
+            val yaEstaAnotado = clave in nombresDeReglas || clave in nombresDeSuscripcionesActivas
+            upsertDetected(uid, d, existing[d.merchantKey to d.currency], yaEstaAnotado)
         }
     }
 }
@@ -100,16 +125,19 @@ private fun Transaction.upsertDetected(
     uid: String,
     d: DetectedSub,
     row: ResultRow?,
-    /** ¿El dueño ya tiene una regla recurrente con este nombre? Ver [runSubscriptionDetection]. */
-    yaEsUnaRegla: Boolean = false,
+    /**
+     * ¿El dueño ya tiene una regla recurrente **o una suscripción activa** con este nombre? Ver
+     * [runSubscriptionDetection].
+     */
+    yaEstaAnotado: Boolean = false,
 ) {
     if (row != null) {
         applyExisting(row, d)
         return
     }
-    // Alta frenada: ya está anotado como regla, y dos filas para el mismo cobro le duplican el
-    // gasto en «Gastos recurrentes» y en «Próximos pagos».
-    if (yaEsUnaRegla) return
+    // Alta frenada: ya está anotado (como regla o como suscripción activa), y dos filas para el
+    // mismo cobro le duplican el gasto en «Gastos recurrentes» y en «Próximos pagos».
+    if (yaEstaAnotado) return
     val savepoint = connection.setSavepoint("sub_detect_${d.merchantKey}_${d.currency}")
     try {
         insertNew(uid, d)

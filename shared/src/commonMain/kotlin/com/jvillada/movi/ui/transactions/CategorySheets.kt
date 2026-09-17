@@ -60,10 +60,9 @@ import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
-import com.jvillada.movi.ui.recurrentes.equivalenteYaAnotado
+import com.jvillada.movi.ui.recurrentes.equivalenteYaAnotadoDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.prefillFrom
-import com.jvillada.movi.ui.recurrentes.prefillNameFor
 import com.jvillada.movi.ui.recurrentes.puedeOfrecerseComoRecurrenteDesdeElDetalle
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
@@ -1194,7 +1193,7 @@ private fun SeccionDelMovimiento(
  * ## Las TRES preguntas que necesitan red, y por qué se hacen AL TOCAR
  *
  * Tres cosas convertirían esto en un duplicado y ninguna se puede saber sin preguntar (la lista
- * la resuelve [equivalenteYaAnotado], que es donde está el porqué de cada una):
+ * la resuelve [equivalenteYaAnotadoDe], que es donde está el porqué de cada una):
  *
  * 1. **Este movimiento ya es la ocurrencia de un recurrente** (`GET /api/events/{id}/occurrence`).
  * 2. **Ya hay una regla con este nombre** (`GET /api/recurring-rules`).
@@ -1220,13 +1219,13 @@ private fun SeccionDelMovimiento(
  *
  * ## PR 1 del rediseño de Recurrentes: el mensaje de «ya existe» dejó de ser un punto muerto
  *
- * Hasta acá, cuando [equivalenteYaAnotado] encontraba un equivalente, la sección se limitaba a
+ * Hasta acá, cuando [equivalenteYaAnotadoDe] encontraba un equivalente, la sección se limitaba a
  * decir «edítalo desde Recurrentes» — una instrucción que manda a una pantalla que el dueño pidió
  * que dejara de existir como destino propio (ver el pedido en el PR que agrega esto). Ahora, si el
  * equivalente es una **REGLA**, se ofrece editarla en el momento con
  * [com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet].
  *
- * [equivalenteYaAnotado] solo devuelve el NOMBRE con el que ya está anotado — no dice por cuál de
+ * [equivalenteYaAnotadoDe] solo devuelve el NOMBRE con el que ya está anotado — no dice por cuál de
  * sus tres puertas entró (el sello de ocurrencia, una regla, o una suscripción). Así que acá se
  * busca ese nombre, normalizado, en las `reglas` que la propia función ya acaba de leer: si hay
  * una regla con ese nombre, ESA es la que se edita (el sello de ocurrencia, cuando es el que
@@ -1282,11 +1281,14 @@ private fun SeccionEstoSeRepite(
             val cobros = runCatching { Repositories.wallets.getSubscriptions().subscriptions }
                 .getOrNull().orEmpty()
             consultando = false
-            val equivalente = equivalenteYaAnotado(
+            // Por el EVENTO y no por su nombre: el cargo del banco dice «COMPRA NETFLIX.COM
+            // BOGOTA» y la suscripción se llama «Netflix», así que comparar solo la nota dejaba
+            // crear la regla duplicada. Ver [clavesDeCobroDe].
+            val equivalente = equivalenteYaAnotadoDe(
+                event = event,
                 selloDeOcurrencia = sello?.ruleName,
                 reglas = reglas,
                 suscripcionesQueYaSuman = nombresDeSuscripcionesQueYaSuman(cobros),
-                nombre = prefillNameFor(event),
             )
             when {
                 equivalente == null -> onAbrirFormulario(prefillFrom(event))

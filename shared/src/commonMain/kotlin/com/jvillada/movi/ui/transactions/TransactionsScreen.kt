@@ -102,6 +102,7 @@ import com.jvillada.movi.ui.recurrentes.claveDescartada
 import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
+import com.jvillada.movi.ui.recurrentes.avisoDeCandidataDuplicada
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
 import com.jvillada.movi.ui.recurrentes.notaDeProrrateo
@@ -1670,7 +1671,14 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                     CandidataSuscripcionCard(
                                         sub = s,
                                         accountNames = accountNames,
-                                        yaEsRegla = claveDeNombre(s.displayName) in clavesDeReglasRecurrentes,
+                                        // Contra las reglas Y contra las suscripciones que ya
+                                        // suman: confirmar un duplicado cuenta el cobro dos veces.
+                                        // Ver [avisoDeCandidataDuplicada].
+                                        aviso = avisoDeCandidataDuplicada(
+                                            candidata = s,
+                                            clavesDeReglas = clavesDeReglasRecurrentes,
+                                            activas = subsParaRecurrentes.subscriptions,
+                                        ),
                                         enVuelo = s.id in suscripcionesEnVuelo,
                                         onConfirmar = { confirmarCandidata(s, SubStatus.CONFIRMED) },
                                         onDescartar = { confirmarCandidata(s, SubStatus.DISMISSED) },
@@ -2774,7 +2782,8 @@ private fun CandidataSuscripcionCard(
     sub: Subscription,
     /** Para poder decir en qué tarjeta vio Movi el cobro. Ver [contextoDeCandidata]. */
     accountNames: Map<String, String>,
-    yaEsRegla: Boolean,
+    /** «Ya lo tienes como…», o `null` si es nueva de verdad. Ver [avisoDeCandidataDuplicada]. */
+    aviso: String?,
     enVuelo: Boolean,
     onConfirmar: () -> Unit,
     onDescartar: () -> Unit,
@@ -2810,9 +2819,9 @@ private fun CandidataSuscripcionCard(
             color = Movi.colores.textoMedio,
             modifier = Modifier.padding(top = 4.dp),
         )
-        if (yaEsRegla) {
+        if (aviso != null) {
             Text(
-                text = "Ya lo tienes como recurrente",
+                text = aviso,
                 style = Movi.textos.apoyo,
                 color = Movi.colores.aviso,
                 modifier = Modifier.padding(top = 4.dp),
@@ -2823,7 +2832,7 @@ private fun CandidataSuscripcionCard(
             AccionCandidataChip(
                 label = when {
                     enVuelo -> "Guardando…"
-                    yaEsRegla -> "Confirmar igual"
+                    aviso != null -> "Confirmar igual"
                     else -> "Confirmar"
                 },
                 primary = true,
