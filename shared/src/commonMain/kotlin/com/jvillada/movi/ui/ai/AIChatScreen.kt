@@ -110,6 +110,13 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
         val target = messages.size + if (loading) 1 else 0
         if (target > 0) listState.animateScrollToItem(target - 1)
     }
+    // **Y al abrir el teclado también.** La lista encoge por el `imePadding()` de la raíz, así que
+    // sin esto lo último que se dijo queda tapado justo cuando el dueño va a escribir la respuesta
+    // — el mismo síntoma que el teclado encima del campo, un renglón más arriba.
+    val tecladoALaVista = elTecladoEstaALaVista()
+    LaunchedEffect(tecladoALaVista) {
+        if (tecladoALaVista && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; Movi AI se abre desde Más — destino de reserva si no
