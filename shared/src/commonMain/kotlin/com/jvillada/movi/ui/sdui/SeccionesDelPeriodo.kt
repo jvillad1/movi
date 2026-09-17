@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.sdui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,9 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,11 +37,14 @@ import com.jvillada.movi.ui.dashboard.CosaParaRevisar
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DestinoDeRevision
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
-import com.jvillada.movi.ui.dashboard.avanceDelChecklist
 import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
 import com.jvillada.movi.ui.dashboard.cosasParaRevisarDe
 import com.jvillada.movi.ui.dashboard.faltaPorPagar
+import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
+import com.jvillada.movi.ui.dashboard.pagosPendientes
+import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
+import com.jvillada.movi.ui.recurrentes.CasillaDeChecklist
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 
 /**
@@ -152,12 +151,33 @@ private fun FilaDeCategoria(categoria: CategoriaDelPeriodo) {
 // ── El checklist del período ─────────────────────────────────────────────────
 
 /**
- * **Lo que se paga en este período, con lo hecho tildado.**
+ * **El rótulo de esta sección se cablea acá, no se lee de la fila del SDUI.**
  *
- * Reemplaza a «Próximos pagos», que contestaba otra pregunta: qué vence en los próximos siete
- * días. El dueño pidió esta: *«qué me falta por pagar y qué ya pagué tipo checklist»*.
+ * Decía «Pagos del período» sobre una lista que solo tiene los que FALTAN, y el dueño lo dijo con
+ * todas las letras: *«solo muestra los faltantes, no muestra todos; debería indicar que esos son
+ * los faltantes nada más»*. El rótulo es la mitad del arreglo.
  *
- * Tocar una fila lleva a Movimientos con el chip «Recurrentes» puesto, que es donde se marca.
+ * Y va cableado por lo mismo que `HERO_BALANCE_TITLE` (ver `DashboardDefaults.kt`): la fila de
+ * `screen_definitions` llega a todos los clientes en el instante del deploy, pero el renderer viaja
+ * en el binario. Cambiar el título en el seed obligaría a subir la generación del layout y a que el
+ * rótulo nuevo aterrice sobre APKs viejos; cambiarlo acá lo ata al mismo binario que decide qué
+ * filas se pintan, que es de lo que el rótulo habla.
+ */
+private const val TITULO_FALTA_POR_PAGAR = "Falta por pagar"
+
+/**
+ * **Lo que falta pagar de este período, y de cuántos pagos es eso.**
+ *
+ * La tarjeta lista SOLO lo pendiente —no cambió: lo pagado del período nunca llegaba acá, por el
+ * rodado del vencimiento que `checklistDelPeriodo` ahora corrige— y lo que cambió es que lo dice.
+ * El rótulo, la línea de avance («te faltan 3 de 7 pagos de este período») y el pie («ya marcaste
+ * 4…») son las tres piezas de la misma frase.
+ *
+ * No pasa a listarlo todo porque el Inicio es un resumen y la lista entera tiene su lugar: «Ver
+ * todos» aterriza en el checklist completo del chip «Recurrentes», que es donde además se tilda.
+ *
+ * Los INGRESOS quedan fuera de esta tarjeta y de sus cuentas: un sueldo pendiente no es algo que
+ * falte pagar. Se ven —y se tildan— en el checklist completo, bajo «Por cobrar».
  */
 @Composable
 internal fun ChecklistDelPeriodoSection(
@@ -174,12 +194,13 @@ internal fun ChecklistDelPeriodoSection(
     )
     if (checklist.isEmpty()) return
 
-    val (pagados, total) = avanceDelChecklist(checklist)
+    val pendientes = pagosPendientes(checklist)
     val falta = faltaPorPagar(checklist)
+    val pie = pieDeLoYaPagado(checklist)
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(
-            title = section.title ?: "Pagos del período",
+            title = TITULO_FALTA_POR_PAGAR,
             action = "Ver todos",
             onAction = { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) },
         )
@@ -190,7 +211,7 @@ internal fun ChecklistDelPeriodoSection(
         ) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "$pagados de $total pagados",
+                    text = lineaDeLoQueFalta(checklist),
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
                     modifier = Modifier.weight(1f),
@@ -203,10 +224,16 @@ internal fun ChecklistDelPeriodoSection(
                     )
                 }
             }
-            Spacer(Modifier.height(Movi.espacios.medio))
-            checklist.forEachIndexed { i, pago ->
-                FilaDelChecklist(pago) { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) }
-                if (i < checklist.lastIndex) Hairline()
+            if (pendientes.isNotEmpty()) {
+                Spacer(Modifier.height(Movi.espacios.medio))
+                pendientes.forEachIndexed { i, pago ->
+                    FilaDelChecklist(pago) { onNavigate(Screen.Transactions(CHIP_RECURRENTES)) }
+                    if (i < pendientes.lastIndex) Hairline()
+                }
+            }
+            if (pie != null) {
+                Spacer(Modifier.height(Movi.espacios.corto))
+                Text(text = pie, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
         }
     }
@@ -227,7 +254,7 @@ private fun FilaDelChecklist(pago: PagoDelPeriodo, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
     ) {
-        Casilla(marcada = pago.pagado)
+        CasillaDeChecklist(marcada = pago.pagado)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = pago.nombre,
@@ -274,31 +301,9 @@ private fun textoDelEstado(pago: PagoDelPeriodo): String = when {
     else -> "Vence en ${pago.diasParaVencer} días"
 }
 
-@Composable
-private fun Casilla(marcada: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(20.dp)
-            .clip(RoundedCornerShape(Movi.formas.minima))
-            .background(if (marcada) Movi.colores.entra.copy(alpha = 0.18f) else Movi.colores.tarjeta)
-            .then(
-                if (marcada) Modifier
-                else Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.minima)),
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (marcada) {
-            // Ícono y no el carácter «✓»: la fuente del canvas de la web no lo trae y salía como
-            // un cuadradito vacío (ver la casilla de ReminderWarning, mismo motivo).
-            Icon(
-                Icons.Rounded.Check,
-                contentDescription = "Pagado",
-                tint = Movi.colores.entra,
-                modifier = Modifier.size(14.dp),
-            )
-        }
-    }
-}
+// La casilla se mudó a `ui/recurrentes/ChecklistDelPeriodo.kt` (CasillaDeChecklist): la pintan esta
+// tarjeta y el checklist completo, y dos copias de un mismo control terminan divergiendo — el
+// argumento de siempre en esta parte del código.
 
 // ── Para revisar ─────────────────────────────────────────────────────────────
 

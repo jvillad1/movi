@@ -4,10 +4,15 @@ import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.ventanaDe
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
 
 /**
@@ -111,8 +116,44 @@ data class PagoDelPeriodo(
      * No entra a [faltaPorPagar] ni a ningún total: esos ya excluyen todo lo que sea un saldo.
      */
     val moneda: String = "COP",
+    /**
+     * **Cuándo vence, dentro de ESTE período**, en ISO (`"2026-09-12"`). Vacío solo si la fecha
+     * llegó con una forma que no se entiende.
+     *
+     * Es el dato que el dueño pidió con todas las letras: *«con valor y fecha para ser
+     * realizado»*. Y no siempre es el `dueDate` de `/api/payments/upcoming`: ese rueda al período
+     * siguiente apenas algo se marca o se pasan los días de gracia (ver `dueDateFor`), así que
+     * para lo ya pagado la fecha buena es la de su ocurrencia. Ver [checklistDelPeriodo].
+     */
+    val vence: String = "",
+    /**
+     * El `"YYYY-MM"` con el que se sella y se desella este pago, o `null` si todavía no se puede
+     * marcar —el vencimiento no llegó, o la lectura de ocurrencias no contestó—.
+     *
+     * Viaja en la fila porque marcar es exactamente lo que el checklist ofrece, y el endpoint pide
+     * el período del VENCIMIENTO, no el del dueño (ver `OccurrenceState.period`). Sin este dato la
+     * pantalla tendría que recalcularlo, que es la forma conocida de sellar el mes equivocado.
+     */
+    val periodoDelSello: String? = null,
+    /**
+     * Está pagado porque hay un MOVIMIENTO que lo prueba —la cuota de un crédito, el pago de una
+     * tarjeta—, no porque alguien lo haya marcado. No se puede destildar: se revierte borrando ese
+     * movimiento. Ver [com.jvillada.movi.shared.model.OccurrenceState.derivadaDeUnMovimiento].
+     */
+    val derivado: Boolean = false,
+    /** Un sueldo no se paga: llega. No suma en [faltaPorPagar] ni cuenta como un pago del período. */
+    val esIngreso: Boolean = false,
 ) {
     val vencido: Boolean get() = !pagado && diasParaVencer < 0
+
+    /**
+     * ¿Esta fila se puede tildar (o destildar) desde el checklist?
+     *
+     * Las dos puertas que el server ya cierra, dichas antes de dibujar el control: sin período que
+     * sellar no hay nada que mandar, y lo derivado de un movimiento no se desmarca. Una casilla que
+     * no hace nada es peor que no tener casilla — este repo ya pagó ese error una vez.
+     */
+    val seMarca: Boolean get() = periodoDelSello != null && !derivado
 }
 
 /**
@@ -128,9 +169,27 @@ data class PagoDelPeriodo(
  * 3. **Primero lo que falta, y dentro de eso lo vencido.** Lo que ya está hecho no compite por la
  *    atención, así que va al final aunque venza antes.
  *
- * El sello de «ya ocurrió» lo pone el dueño en Movimientos y viaja en [ocurrencias]; acá solo se
- * lee. Una regla sin ocurrencia conocida cuenta como pendiente: es el lado seguro de equivocarse
- * —recuerda algo que quizá ya pagó— contra dar por pagado algo que no.
+ * ## La ocurrencia manda sobre el vencimiento vigente
+ *
+ * `/api/payments/upcoming` contesta «¿cuál es el PRÓXIMO vencimiento de esta regla?», y esa fecha
+ * **rueda**: apenas el dueño marca el arriendo de septiembre, el vencimiento vigente pasa a ser el
+ * de octubre; y si pasaron los días de gracia sin marcar nada, también. Leer solo esa fecha tenía
+ * dos consecuencias, las dos vistas en la pantalla del dueño:
+ *
+ * - **lo pagado se caía del checklist** —su fecha ya era del período siguiente—, así que la tarjeta
+ *   del Inicio decía «0 de 3 pagados» para siempre y solo listaba lo que faltaba. Es el reclamo que
+ *   abrió este trabajo: *«solo muestra los faltantes, no muestra todos»*;
+ * - **lo vencido hace rato también**: el gimnasio del día 5, sin marcar, desaparecía del período
+ *   apenas se le pasaba la gracia, aunque siguiera debiéndose.
+ *
+ * Por eso manda la OCURRENCIA cuando su vencimiento cae en la ventana (ver `OccurrenceState`, que
+ * habla del mes en curso y no rueda nunca): de ahí salen la fecha, el tilde y el período del sello.
+ * El `dueDate` de [upcoming] solo se usa cuando no hay ocurrencia que mirar — el caso de un pago
+ * que todavía no vence, que es justamente el que tampoco se puede marcar.
+ *
+ * El sello de «ya ocurrió» lo pone el dueño; acá solo se lee. Una regla sin ocurrencia conocida
+ * cuenta como pendiente: es el lado seguro de equivocarse —recuerda algo que quizá ya pagó— contra
+ * dar por pagado algo que no.
  */
 fun checklistDelPeriodo(
     upcoming: List<UpcomingPayment>,
@@ -139,18 +198,31 @@ fun checklistDelPeriodo(
     settings: PeriodSettings,
 ): List<PagoDelPeriodo> {
     val ventana = ventanaDe(periodo, settings)
-    val selladas = ocurrencias.filter { it.occurred }.map { it.ruleId }.toSet()
+    val hoy = hoySegunLosVencimientos(upcoming)
+    // Una ocurrencia por regla: el endpoint emite la del período en juego, así que dos en la misma
+    // ventana no debería pasar — y si pasara, gana la última, que es la más cercana al presente.
+    val delPeriodo = ocurrencias.filter { epochDeFecha(it.dueDate) in ventana }.associateBy { it.ruleId }
     return upcoming
-        .filter { it.epochDelVencimiento() in ventana }
-        .map { pago ->
+        .mapNotNull { pago ->
+            val ocurrencia = delPeriodo[pago.rule.id]
+            val vence = ocurrencia?.dueDate
+                ?: pago.dueDate.takeIf { epochDeFecha(it) in ventana }
+                ?: return@mapNotNull null
             PagoDelPeriodo(
                 ruleId = pago.rule.id,
                 nombre = pago.rule.name,
                 monto = pago.rule.amount,
-                pagado = pago.rule.id in selladas,
-                diasParaVencer = pago.daysUntil,
+                pagado = ocurrencia?.occurred == true,
+                // Con la fecha de la ocurrencia, el `daysUntil` que mandó el server habla de OTRO
+                // vencimiento: se recalcula contra el mismo «hoy» del que salió esa respuesta.
+                diasParaVencer = if (ocurrencia == null) pago.daysUntil
+                else diasEntre(hoy, vence) ?: pago.daysUntil,
                 montoEsSaldo = pago.rule.montoEsSaldo,
                 moneda = pago.rule.currency,
+                vence = vence,
+                periodoDelSello = ocurrencia?.period,
+                derivado = ocurrencia?.derivadaDeUnMovimiento == true,
+                esIngreso = pago.rule.type == TransactionType.INCOME,
             )
         }
         .sortedWith(
@@ -161,14 +233,39 @@ fun checklistDelPeriodo(
 }
 
 /**
- * El vencimiento de un pago, en epoch ms, para poder preguntarle si cae en la ventana del período.
+ * Qué día es hoy **según la misma respuesta** que trajo los vencimientos.
  *
- * `dueDate` viene del server como `"2026-09-16"` y se arma el mediodía de Bogotá, igual que el
- * resto de la app: la medianoche exacta cae justo en el borde de la ventana y un pago del día del
- * corte podía quedar afuera por un milisegundo.
+ * `daysUntil` ya es la distancia a hoy medida por el server, con su reloj y su zona: restarla del
+ * vencimiento devuelve esa fecha sin que este archivo consulte ningún reloj —y así sigue siendo
+ * puro, que es la condición de todo lo que decide sobre la plata del dueño acá adentro—. `null` si
+ * la lista viene vacía o con fechas que no se entienden.
  */
-internal fun UpcomingPayment.epochDelVencimiento(): Long {
-    val partes = dueDate.split("-")
+private fun hoySegunLosVencimientos(upcoming: List<UpcomingPayment>): LocalDate? =
+    upcoming.firstNotNullOfOrNull { pago ->
+        fechaDe(pago.dueDate)?.minus(pago.daysUntil, DateTimeUnit.DAY)
+    }
+
+/** Días de [hoy] a [vence], o `null` si alguna de las dos no se entiende. */
+private fun diasEntre(hoy: LocalDate?, vence: String): Int? {
+    val destino = fechaDe(vence) ?: return null
+    return hoy?.daysUntil(destino)
+}
+
+private fun fechaDe(iso: String): LocalDate? = runCatching { LocalDate.parse(iso) }.getOrNull()
+
+/**
+ * El vencimiento de un pago, en epoch ms, para poder preguntarle si cae en la ventana del período.
+ */
+internal fun UpcomingPayment.epochDelVencimiento(): Long = epochDeFecha(dueDate)
+
+/**
+ * Una fecha ISO en epoch ms — la de un vencimiento o la de una ocurrencia.
+ *
+ * Se arma al mediodía de Bogotá, igual que el resto de la app: la medianoche exacta cae justo en el
+ * borde de la ventana y un pago del día del corte podía quedar afuera por un milisegundo.
+ */
+internal fun epochDeFecha(iso: String): Long {
+    val partes = iso.split("-")
     if (partes.size != 3) return 0L
     val anio = partes[0].toIntOrNull() ?: return 0L
     val mes = partes[1].toIntOrNull() ?: return 0L
@@ -178,9 +275,71 @@ internal fun UpcomingPayment.epochDelVencimiento(): Long {
         .toEpochMilliseconds()
 }
 
-/** Cuánto falta por pagar de este período, sin contar lo que es un saldo y no una cuota. */
+/**
+ * Cuánto falta por pagar de este período.
+ *
+ * Fuera quedan dos cosas que no son plata que vaya a salir: el SALDO de una tarjeta (es una deuda,
+ * no una cuota) y todo INGRESO. Lo segundo hacía que el «Falta $X» del Inicio incluyera el sueldo
+ * del dueño mientras no lo marcara — la cifra afirmaba que le faltaba pagar su propio salario.
+ */
 fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
-    checklist.filter { !it.pagado && !it.montoEsSaldo }.sumOf { it.monto }
+    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso }.sumOf { it.monto }
+
+// ── Cómo se agrupa y qué dice la tarjeta ─────────────────────────────────────
+
+/** Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. */
+fun pagosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
+    checklist.filter { !it.pagado && !it.esIngreso }
+
+/** Lo que falta que LLEGUE: el sueldo, un arriendo que cobra. Se tilda igual, pero no se «paga». */
+fun ingresosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
+    checklist.filter { !it.pagado && it.esIngreso }
+
+/** Lo ya tildado, pagos e ingresos juntos: la mitad del checklist que prueba el avance. */
+fun yaMarcados(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> = checklist.filter { it.pagado }
+
+/**
+ * El avance **sobre los pagos**: cuántos están tildados de cuántos hay.
+ *
+ * Los ingresos quedan afuera del conteo por la misma razón por la que quedan afuera de
+ * [faltaPorPagar]: «te faltan 2 de 5 pagos» tiene que hablar de plata que sale. Los ingresos siguen
+ * estando en el checklist y se tildan igual — no se cuentan, que es distinto de esconderlos.
+ */
+fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
+    val pagos = checklist.filter { !it.esIngreso }
+    return pagos.count { it.pagado } to pagos.size
+}
+
+/**
+ * **La línea que hace honesta a la tarjeta del Inicio**: dice que lo listado es lo que FALTA, y de
+ * cuántos pagos del período se trata.
+ *
+ * El reclamo del dueño, textual: *«solo muestra los faltantes, no muestra todos; debería indicar
+ * que esos son los faltantes nada más»*. La tarjeta no pasa a listarlo todo —para eso está el
+ * checklist completo, a un toque— pero deja de presentar una parte como si fuera el total.
+ */
+fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
+    val (pagados, total) = avanceDelChecklist(checklist)
+    val faltan = total - pagados
+    val pagos = if (total == 1) "pago" else "pagos"
+    return when {
+        total == 0 -> "Este período no tiene pagos anotados"
+        faltan == 0 && total == 1 -> "Marcaste el único pago de este período"
+        faltan == 0 -> "Marcaste los $total $pagos de este período"
+        else -> "Te ${if (faltan == 1) "falta" else "faltan"} $faltan de $total $pagos de este período"
+    }
+}
+
+/**
+ * El pie que dice dónde está lo que esta tarjeta NO muestra, o `null` si no falta nada por contar.
+ *
+ * Sin él, «te faltan 3 de 7» deja al dueño con la pregunta de dónde quedaron los otros cuatro.
+ */
+fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
+    val (pagados, total) = avanceDelChecklist(checklist)
+    if (pagados == 0 || pagados == total) return null
+    return "Ya marcaste $pagados. El checklist completo está en «Ver todos»."
+}
 
 // ── Qué debería revisar ──────────────────────────────────────────────────────
 
@@ -301,12 +460,8 @@ fun gastoSinCategoriaDe(gastoPorCategoria: Map<String, Long>): Long =
 
 /** El monto que el checklist dice que ya se pagó, para el rótulo de avance. */
 fun yaPagado(checklist: List<PagoDelPeriodo>): Long =
-    checklist.filter { it.pagado && !it.montoEsSaldo }.sumOf { it.monto }
+    checklist.filter { it.pagado && !it.montoEsSaldo && !it.esIngreso }.sumOf { it.monto }
 
 /** Un pago de [checklist] que sirva de ejemplo de lo que urge, o `null` si no falta nada. */
 fun loQueUrge(checklist: List<PagoDelPeriodo>): PagoDelPeriodo? =
-    checklist.firstOrNull { !it.pagado }
-
-/** El estado del checklist en una línea: «3 de 7 pagados». */
-fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> =
-    checklist.count { it.pagado } to checklist.size
+    checklist.firstOrNull { !it.pagado && !it.esIngreso }

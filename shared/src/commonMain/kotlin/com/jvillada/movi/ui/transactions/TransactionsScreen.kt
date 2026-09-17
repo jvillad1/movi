@@ -91,7 +91,9 @@ import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
 import com.jvillada.movi.ui.recurrentes.OrigenDeSuscripcion
 import com.jvillada.movi.ui.recurrentes.Recurrente
 import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
+import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
+import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
 import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
 import com.jvillada.movi.ui.recurrentes.SeccionSinConfirmar
 import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
@@ -1059,6 +1061,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     var vencimientosOk by remember { mutableStateOf(false) }
     var ocurrencias by remember { mutableStateOf<List<OccurrenceState>>(emptyList()) }
     var ocurrenciasOk by remember { mutableStateOf(false) }
+    /**
+     * **Alguna de esas dos lecturas falló.** `vencimientosOk`/`ocurrenciasOk` solo distinguen «ya
+     * contestó» de «todavía no», y el checklist necesita la tercera: mientras viaja no dice nada, y
+     * si no llegó tiene que decir que no pudo leerlo (ver [SeccionChecklistDelPeriodo]). Sin este
+     * dato, una lectura caída se veía igual que una lenta — para siempre.
+     */
+    var recurrentesNoSePudieronLeer by remember { mutableStateOf(false) }
     // Lo que el dueño rechazó con «no fue este», mientras dure esta pantalla. Las claves son
     // (regla, movimiento) — ver [claveDescartada]. No se persiste: rechazar una propuesta no es un
     // hecho sobre su plata, a diferencia de confirmarla.
@@ -1101,15 +1110,19 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         coroutineScope {
             val porVencer = async { runCatching { Repositories.wallets.getUpcomingPayments() } }
             val porOcurrir = async { runCatching { Repositories.wallets.getOccurrenceStates() } }
+            recurrentesNoSePudieronLeer = false
             porVencer.await()
                 .onSuccess { upcomingRecurrentes = it; vencimientosOk = true }
-                .onFailure { error = it.toUserMessage() }
+                .onFailure { error = it.toUserMessage(); recurrentesNoSePudieronLeer = true }
             // Si esta falla no se pinta ninguna propuesta ni ninguna marca: la sección se ve como
             // antes de que existiera. Un «ya ocurrió» que en realidad no se pudo leer sería una
             // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
             porOcurrir.await()
                 .onSuccess { ocurrencias = it; ocurrenciasOk = true }
-                .onFailure { if (error == null) error = it.toUserMessage() }
+                .onFailure {
+                    if (error == null) error = it.toUserMessage()
+                    recurrentesNoSePudieronLeer = true
+                }
         }
     }
 
@@ -1313,6 +1326,35 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
         if (searchQuery.isNotBlank()) filtrados
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
+    }
+
+    /**
+     * **El checklist del período**, la lista que el dueño pidió ver al tocar «Ver todos» en el
+     * Inicio: todo lo que se paga este período —lo tildado incluido—, con su monto y su fecha.
+     *
+     * Sale de la MISMA función pura que la tarjeta del Inicio (`checklistDelPeriodo`), con las dos
+     * lecturas que este chip ya trae frescas. Una segunda cuenta acá habría vuelto a poner al
+     * Inicio y a Movimientos a decir cosas distintas del mismo mes, que es un error que este repo
+     * ya cometió y arregló.
+     *
+     * **Solo para el período en curso.** Movimientos deja navegar a meses anteriores, pero
+     * `/api/payments/upcoming` y `/api/payments/occurrences` contestan sobre HOY: pintar sus filas
+     * bajo el rótulo de agosto sería afirmar sobre un mes cerrado con los datos de otro. En un
+     * período que no es el de hoy, el checklist no se pinta.
+     */
+    val checklistDelChip = remember(
+        upcomingRecurrentes, ocurrencias, ocurrenciasOk, periodoVisible, periodoDeHoy, ajustesDelPeriodo,
+    ) {
+        if (periodoVisible != periodoDeHoy) emptyList()
+        else checklistDelPeriodo(
+            upcoming = upcomingRecurrentes,
+            // Con la lectura de ocurrencias a medias no se tilda nada: un «ya pagado» que en
+            // realidad no se pudo leer sería una afirmación sin respaldo — la misma regla que
+            // gobierna las propuestas de «Próximos».
+            ocurrencias = if (ocurrenciasOk) ocurrencias else emptyList(),
+            periodo = periodoVisible,
+            settings = ajustesDelPeriodo,
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -1609,6 +1651,32 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 },
                             )
                         }
+                    }
+                }
+
+                // ── El checklist del período ────────────────────────────────────────────
+                //
+                // Va PRIMERO, y es el destino del «Ver todos» del Inicio: el dueño llegaba acá
+                // buscando «los recurrentes tipo checklist del mes, con valor y fecha» y se
+                // encontraba las mismas obligaciones repartidas en tres tarjetas, ninguna de las
+                // cuales enumera el período entero. Las tres siguen abajo, porque contestan otra
+                // cosa (qué movimiento fue cada pago, qué quedó sin confirmar, de dónde salió cada
+                // sello). Ver [SeccionChecklistDelPeriodo].
+                if (periodoVisible == periodoDeHoy) {
+                    item {
+                        SeccionChecklistDelPeriodo(
+                            checklist = checklistDelChip,
+                            cargando = !recurrentesNoSePudieronLeer && !(vencimientosOk && ocurrenciasOk),
+                            pudoLeer = !recurrentesNoSePudieronLeer,
+                            marcando = marcando,
+                            // El MISMO camino que «Ya lo pagué»: sin movimiento que emparejar, que
+                            // es lo que una casilla puede prometer. Emparejar un movimiento sigue
+                            // siendo cosa de la propuesta de «Próximos», que para eso los propone.
+                            onMarcar = { ruleId, period -> marcarOcurrio(ruleId, period, null) },
+                            onDeshacer = { ruleId, period -> deshacerOcurrio(ruleId, period) },
+                            onReintentar = { recurrentesReloadKey++ },
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                        )
                     }
                 }
 
