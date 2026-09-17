@@ -335,6 +335,11 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
             }
             appendLine("- ${s.nombre}: \$${s.montoMensualCop} al mes, el día ${s.dia}" + cobroReal)
         }
+        // **El total va sumado desde acá, y no lo suma el modelo.** Medido el 17-sep en el teléfono
+        // del dueño: con los diez renglones correctos delante, contestó «$880.361» donde la suma es
+        // $900.295 — casi $20.000 de diferencia en una cifra sobre la que él decide algo. Sumar diez
+        // números es justo lo que un modelo hace mal y una función hace bien.
+        appendLine("Total de suscripciones activas al mes: \$${suscripciones.sumOf { it.montoMensualCop }}")
         appendLine()
     }
 
