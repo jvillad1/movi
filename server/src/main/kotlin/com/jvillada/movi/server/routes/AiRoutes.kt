@@ -10,7 +10,7 @@ import com.anthropic.models.messages.TextBlockParam
 import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
 import com.jvillada.movi.server.ai.render
-import com.jvillada.movi.server.ai.renderizarDocumentos
+import com.jvillada.movi.server.ai.BUSCAR_DOCUMENTOS
 import com.jvillada.movi.server.balance.accountCopValue
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
@@ -34,6 +34,12 @@ import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.server.ai.ElModeloDeAnthropic
 import com.jvillada.movi.server.ai.conversarConHerramientas
 import com.jvillada.movi.server.ai.ejecutarHerramienta
+import io.ktor.server.application.log
+import com.jvillada.movi.server.ai.laPreguntaPideCriterio
+import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
+import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
+import com.jvillada.movi.server.ai.MODELO_PARA_CONSEJOS
+import com.jvillada.movi.server.ai.ULTIMOS_MENSAJES_QUE_VIAJAN
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -63,13 +69,6 @@ private val anthropicClient: AnthropicClient? by lazy {
     runCatching { AnthropicOkHttpClient.builder().apiKey(key).build() }.getOrNull()
 }
 
-/**
- * El modelo que contesta. Constante y con nombre porque desde que hay herramientas se nombra en
- * dos lugares —la llamada y la prueba que fija cuál se usa—, y un literal repetido es cómo dos
- * caminos terminan hablando con modelos distintos.
- */
-internal const val MODELO_DEL_ASISTENTE = "claude-opus-4-7"
-
 private val PERSONA = """Eres Movi AI, un copiloto financiero personal y familiar para usuarios en Colombia.
 
 Hablas en español relajado y directo, sin jerga financiera innecesaria. Tuteas al usuario, no uses "usted".
@@ -80,6 +79,7 @@ Vocabulario de la app: di "gasto"/"gastos", nunca "egreso"/"egresos". La interfa
 Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO" y en lo que devuelvan tus herramientas. Nunca estimes ni completes de memoria una cifra que no viniera de ahí.
 
 Tienes dos herramientas para consultar sus movimientos más allá del período que ya ves: buscar_movimientos (hechos concretos) y totales_por_categoria (cuánto). Úsalas cuando la pregunta hable de otro mes, de otro período o de algo que el bloque no trae; no las uses para lo que ya está ahí, que es el período en curso completo. Consulta antes de responder, nunca después de haber dicho una cifra.
+Si necesitas dos consultas, pídelas EN EL MISMO TURNO: dos juntas cuestan lo mismo que una, y dos seguidas cuestan el doble.
 Si una consulta vuelve vacía, dilo: "no encuentro nada" es una respuesta correcta y "creo que gastaste como" no lo es.
 Si la pregunta no se puede contestar ni con los datos ni consultando, dilo claramente y sugiere qué información faltaría.
 
@@ -150,7 +150,11 @@ fun Route.aiRoutes() {
         }
 
         val context = buildUserContext(call.userId())
-        val paraElModelo = mensajesParaElModelo(body.messages)
+        // **Solo el final del hilo.** El teléfono manda la conversación entera en cada pregunta,
+        // así que sin este recorte una charla larga se paga completa cada vez. El `dropWhile` de
+        // `mensajesParaElModelo` va DESPUÉS del recorte: si al cortar queda un turno del asistente
+        // al principio, la API lo rechaza.
+        val paraElModelo = mensajesParaElModelo(body.messages.takeLast(ULTIMOS_MENSAJES_QUE_VIAJAN))
         val messageParams = paraElModelo.map(::toMessageParam)
         if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
             call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
@@ -162,18 +166,31 @@ fun Route.aiRoutes() {
         // cuándo y cuántas veces, y se prueba sin red). El `uid` sale del token y nunca del texto
         // que escribe el modelo: las herramientas solo leen, y solo lo de este dueño.
         val uid = call.userId()
+        // El modelo lo decide la pregunta, no una constante: ver `laPreguntaPideCriterio`. Casi
+        // todo lo que él pregunta es un dato y lo contesta el chico; el grande es para el criterio.
+        val ultima = paraElModelo.last()
+        val pideCriterio = laPreguntaPideCriterio(ultima.content, hayImagen = ultima.imageBase64 != null)
+        val elModelo = ElModeloDeAnthropic(
+            client = client,
+            modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
+            persona = PERSONA,
+            contexto = context,
+            mensajesDelDueno = messageParams,
+            // Pensar se cobra como salida. Se enciende solo cuando de verdad hay algo que pensar.
+            piensa = pideCriterio,
+            modeloDeRespaldo = MODELO_DE_RESPALDO,
+        )
         val reply = runCatching {
             conversarConHerramientas(
-                modelo = ElModeloDeAnthropic(
-                    client = client,
-                    modelo = MODELO_DEL_ASISTENTE,
-                    persona = PERSONA,
-                    contexto = context,
-                    mensajesDelDueno = messageParams,
-                ),
+                modelo = elModelo,
                 ejecutar = { llamada -> ejecutarHerramienta(uid, llamada) },
             )
         }
+        // Lo que costó, en el log. Sin esto el costo se estima; con esto se mira.
+        call.application.log.info(
+            "movi-ai uid=$uid criterio=$pideCriterio entrada=${elModelo.fichasDeEntrada} " +
+                "cache=${elModelo.fichasLeidasDeCache} salida=${elModelo.fichasDeSalida}",
+        )
         reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it))) }
             .onFailure {
                 call.respond(
@@ -327,9 +344,8 @@ internal suspend fun buildUserContext(uid: String): String {
         inc to exp
     }
 
-    // Los papeles del dueño: solo metadatos y notas, nunca los bytes — ver
-    // `consultaDeDocumentos`, donde eso no es un detalle de eficiencia.
-    val documentos = cargarDocumentosParaContexto(uid)
+    // Cuántos papeles tiene, nada más: los renglones se piden con `buscar_documentos`.
+    val cuantosDocumentos = cargarDocumentosParaContexto(uid).size
     // Todo lo que el asistente no veía hasta acá: en qué se fue la plata, los recurrentes con su
     // estado en este período, los créditos con tasa y cuota, las suscripciones y las metas. Ver
     // `ContextoDelPeriodo.kt` — usa las MISMAS reglas que el Inicio, para que los dos digan lo
@@ -377,14 +393,17 @@ internal suspend fun buildUserContext(uid: String): String {
             budgets.forEach { (cat, limit) -> appendLine("- $cat: límite \$$limit") }
         }
 
-        // Vacío cuando no hay documentos: el bloque no se anuncia solo para decir que está vacío.
-        val bloqueDeDocumentos = renderizarDocumentos(
-            documentos,
-            accountRows.associate { it.id to it.name },
-        )
-        if (bloqueDeDocumentos.isNotEmpty()) {
+        // **Los documentos ya no viajan acá.** Eran 33 papeles con sus notas —casi seis mil
+        // caracteres— en CADA mensaje, para una pregunta cada tantas. Ahora se consultan con
+        // `buscar_documentos`, que trae los mismos renglones y solo cuando hacen falta. Lo único
+        // que queda en el contexto es la línea de abajo, que le dice que existen.
+        if (cuantosDocumentos > 0) {
             appendLine()
-            append(bloqueDeDocumentos)
+            appendLine(
+                "== Documentos ==\n- El dueño tiene $cuantosDocumentos documentos guardados " +
+                    "(extractos, pólizas, recibos) con notas suyas. Si una pregunta puede " +
+                    "contestarse con ellos, consúltalos con la herramienta $BUSCAR_DOCUMENTOS.",
+            )
         }
     }
 }

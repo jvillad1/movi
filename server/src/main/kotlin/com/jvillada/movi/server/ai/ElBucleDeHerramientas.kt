@@ -28,7 +28,8 @@ sealed interface RespuestaDelModelo {
 interface ElModeloConHerramientas {
     /**
      * Una vuelta más. Con [puedeUsarHerramientas] en `false` el modelo no puede pedir datos y
-     * tiene que contestar con lo que ya tiene — así es como el bucle garantiza que termina.
+     * tiene que contestar con lo que ya tiene — así es como el bucle garantiza que termina. La
+     * implementación lo hace prohibiéndolas, no quitándolas: ver el KDoc de `LAS_HERRAMIENTAS`.
      */
     suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean): RespuestaDelModelo
 
@@ -37,11 +38,15 @@ interface ElModeloConHerramientas {
 }
 
 /**
- * **Cuántas veces puede consultar antes de tener que contestar.** Cuatro alcanza para «cuánto
- * gasté en Comida en agosto y en septiembre» (dos consultas y la respuesta) y deja margen para una
- * corrección de fecha. Un tope más alto no responde mejores preguntas: gasta plata y hace esperar.
+ * **Cuántas veces puede consultar antes de tener que contestar.**
+ *
+ * Tres, y no cuatro como al principio: cada vuelta es una llamada al modelo con todo el prefijo
+ * encima. «Cuánto gasté en Comida en agosto y en septiembre» **no** necesita cuatro — son dos
+ * consultas, y dos consultas pedidas en el mismo turno cuestan una sola vuelta (el PERSONA se lo
+ * pide explícitamente). Lo que la cuarta compraba era una corrección de fecha de vez en cuando; lo
+ * que costaba era una llamada más en cada conversación que se enredara.
  */
-const val VUELTAS_MAXIMAS = 4
+const val VUELTAS_MAXIMAS = 3
 
 /**
  * **El bucle.** Termina siempre, y termina con texto:
@@ -49,8 +54,10 @@ const val VUELTAS_MAXIMAS = 4
  * - Si el modelo contesta, se devuelve eso.
  * - Si pide herramientas, se ejecutan **todas** las que pidió en esa vuelta y se le contestan
  *   juntas — pedir dos consultas a la vez es una sola vuelta, no dos.
- * - En la última vuelta se le quitan las herramientas, así que no puede volver a pedir: o habla o
- *   se queda sin decir nada, y para ese caso está el texto de abajo.
+ * - En la última vuelta se le **prohíbe** usarlas (`tool_choice: none`), así que no puede volver a
+ *   pedir: o habla o se queda sin decir nada, y para ese caso está el texto de abajo. Se prohíben
+ *   en vez de quitarlas porque las herramientas son parte del prefijo que se cachea, y sacarlas
+ *   tiraría la caché de la llamada más larga de la conversación.
  *
  * [ejecutar] no lanza: una herramienta que falla le contesta al modelo qué pasó (ver
  * [ejecutarHerramienta]) para que pueda corregir y volver a preguntar. Si igual lanzara, el error

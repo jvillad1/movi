@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
@@ -39,8 +40,8 @@ class HerramientasDelAsistenteTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(VoidEvents, Events, Accounts, Users)
-            SchemaUtils.create(Users, Accounts, Events, VoidEvents)
+            SchemaUtils.drop(Documents, VoidEvents, Events, Accounts, Users)
+            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Documents)
             Users.insert {
                 it[id] = dueno; it[email] = "dueno@herramientas.test"; it[name] = "Camilo"
                 it[passwordHash] = "hash"
@@ -203,7 +204,7 @@ class HerramientasDelAsistenteTest {
     fun `las herramientas que se ofrecen son las que se saben ejecutar`() {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
-        assertEquals(setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA), ofrecidas.toSet())
+        assertEquals(setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS), ofrecidas.toSet())
         ofrecidas.forEach { nombre ->
             assertFalse(
                 "No existe una herramienta" in preguntar(nombre, "desde" to "2026-08-01", "hasta" to "2026-08-31"),

@@ -26,12 +26,13 @@ import java.time.format.DateTimeParseException
  * he pagado a Coomeva este año?», ni «¿esto que compré hoy ya lo había comprado?». El dueño lo
  * pidió así: *«o poder consultarlo de alguna forma al menos»*.
  *
- * Acá viven las dos preguntas que puede hacerle a la base, y **solo esas dos**:
+ * Acá viven las tres preguntas que puede hacerle a la base, y **solo esas tres**:
  *
  * | Herramienta | Contesta |
  * |---|---|
  * | [BUSCAR_MOVIMIENTOS] | «¿qué compré en X?», «¿qué hubo entre estas dos fechas?» |
  * | [TOTALES_POR_CATEGORIA] | «¿cuánto gasté en Comida en agosto?», «¿gasté más que el mes pasado?» |
+ * | [BUSCAR_DOCUMENTOS] | «¿qué dice la póliza del 2334?», «¿tengo el extracto de agosto?» |
  *
  * ### Tres reglas que no se negocian
  *
@@ -55,6 +56,7 @@ data class LlamadaDeHerramienta(
 
 const val BUSCAR_MOVIMIENTOS = "buscar_movimientos"
 const val TOTALES_POR_CATEGORIA = "totales_por_categoria"
+const val BUSCAR_DOCUMENTOS = "buscar_documentos"
 
 /**
  * **Cuántos movimientos devuelve una búsqueda.** No es una cota de rendimiento: es que una lista
@@ -89,6 +91,7 @@ suspend fun ejecutarHerramienta(uid: String, llamada: LlamadaDeHerramienta): Str
     when (llamada.nombre) {
         BUSCAR_MOVIMIENTOS -> buscarMovimientos(uid, llamada.argumentos)
         TOTALES_POR_CATEGORIA -> totalesPorCategoria(uid, llamada.argumentos)
+        BUSCAR_DOCUMENTOS -> buscarDocumentos(uid, llamada.argumentos)
         else -> "No existe una herramienta que se llame «${llamada.nombre}»."
     }
 } catch (e: FechaIlegible) {
@@ -97,7 +100,7 @@ suspend fun ejecutarHerramienta(uid: String, llamada: LlamadaDeHerramienta): Str
 
 internal class FechaIlegible(val loQueVino: String) : Exception()
 
-// ── Las dos consultas ────────────────────────────────────────────────────────
+// ── Las consultas ────────────────────────────────────────────────────────────
 
 private suspend fun buscarMovimientos(uid: String, args: Map<String, String>): String {
     val desde = fechaDe(args["desde"]) ?: AppClock.today().minusMonths(MESES_HACIA_ATRAS_POR_DEFECTO)
@@ -156,6 +159,33 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
                 }
         }
     }.trim()
+}
+
+/**
+ * **Los papeles del dueño, cuando hacen falta.** Este bloque vivía en el contexto de cada mensaje
+ * —33 documentos con sus notas, casi seis mil caracteres— para contestar una pregunta cada tantas.
+ * El texto que devuelve es exactamente el mismo de antes (ver [renderizarDocumentos]): lo único
+ * que cambió es CUÁNDO se paga.
+ *
+ * Con [texto] filtra por nombre o por notas; sin él los trae todos, hasta donde llega el
+ * presupuesto de caracteres que esa función ya administraba.
+ */
+private suspend fun buscarDocumentos(uid: String, args: Map<String, String>): String {
+    val texto = args["texto"]?.takeIf { it.isNotBlank() }
+    val todos = cargarDocumentosParaContexto(uid)
+    val elegidos = if (texto == null) todos else todos.filter { doc ->
+        val aguja = normalizarParaBuscar(texto)
+        aguja in normalizarParaBuscar(doc.nombre) || aguja in normalizarParaBuscar(doc.notas.orEmpty())
+    }
+    if (elegidos.isEmpty()) {
+        return if (texto == null) "El dueño no tiene documentos guardados."
+        else "Ninguno de los ${todos.size} documentos guardados dice «$texto»."
+    }
+    val nombresDeCuenta = dbQuery {
+        Accounts.selectAll().where { Accounts.userId eq uid }
+            .associate { it[Accounts.id] to it[Accounts.name] }
+    }
+    return renderizarDocumentos(elegidos, nombresDeCuenta).trim()
 }
 
 // ── La lectura, una sola y con las reglas de plata ───────────────────────────

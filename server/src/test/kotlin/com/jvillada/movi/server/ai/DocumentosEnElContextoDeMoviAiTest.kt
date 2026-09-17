@@ -100,6 +100,18 @@ class DocumentosEnElContextoDeMoviAiTest {
 
     private fun contexto(uid: String = duenoId) = runBlocking { buildUserContext(uid) }
 
+    /**
+     * **Los documentos se consultan, ya no viajan en cada mensaje.** Eran 33 papeles con sus notas
+     * —casi seis mil caracteres— en el contexto de CADA pregunta, para responder una cada tantas.
+     * El texto que devuelve la herramienta es el mismo de antes; lo que cambió es cuándo se paga.
+     *
+     * Las garantías que fija esta clase no cambiaron de contenido, solo de puerta: agrupados por
+     * cuenta, con la nota, sin los bytes y sin los de otro usuario.
+     */
+    private fun documentosSegunElAsistente(uid: String = duenoId) = runBlocking {
+        ejecutarHerramienta(uid, LlamadaDeHerramienta("tu_1", BUSCAR_DOCUMENTOS, emptyMap()))
+    }
+
     @Test
     fun `el asistente ve el documento, con su nota, bajo el nombre de la cuenta`() {
         cuenta(duenoId, "acc-2334", "Crediágil 2334")
@@ -110,13 +122,30 @@ class DocumentosEnElContextoDeMoviAiTest {
             accountId = "acc-2334",
         )
 
-        val ctx = contexto()
+        val ctx = documentosSegunElAsistente()
 
         assertTrue(ctx.contains("== Documentos guardados"), ctx)
         assertTrue(ctx.contains("[Crediágil 2334]"), "agrupado por cuenta, como los busca el dueño:\n$ctx")
         assertTrue(ctx.contains("Extracto_2334_08_2026.pdf"), ctx)
         // El dato por el que existe todo esto: de acá sale «el 2334 paga 1.960 de seguro».
         assertTrue(ctx.contains("seguro 1.960, saldo 507.553."), ctx)
+    }
+
+    /**
+     * El contexto ya no lleva los documentos, pero **sí tiene que decir que existen**: si no, el
+     * asistente no tiene por qué sospechar que hay una herramienta que vale la pena usar.
+     */
+    @Test
+    fun `el contexto dice cuantos documentos hay y con que herramienta se leen`() {
+        documento(duenoId, "Extracto_2334_08_2026.pdf", "una nota")
+        documento(duenoId, "Poliza_HDI.pdf", "otra nota")
+
+        val ctx = contexto()
+
+        assertTrue(ctx.contains("2 documentos guardados"), ctx)
+        assertTrue(ctx.contains(BUSCAR_DOCUMENTOS), ctx)
+        // Y las notas NO están: por eso el bloque se fue.
+        assertFalse(ctx.contains("una nota"), "las notas cuestan fichas en cada mensaje:\n$ctx")
     }
 
     @Test
@@ -141,7 +170,7 @@ class DocumentosEnElContextoDeMoviAiTest {
         documento(duenoId, "Extracto_propio.pdf", "esta plata sí es del dueño")
         documento(otroId, "Extracto_ajeno.pdf", "plata que no es del dueño")
 
-        val ctx = contexto()
+        val ctx = documentosSegunElAsistente()
 
         assertTrue(ctx.contains("Extracto_propio.pdf"), ctx)
         assertTrue(ctx.contains("esta plata sí es del dueño"), ctx)
@@ -154,7 +183,7 @@ class DocumentosEnElContextoDeMoviAiTest {
         val marcador = "ESTO-SON-LOS-BYTES-DEL-PDF"
         documento(duenoId, "Extracto_con_bytes.pdf", "una nota corta", contenido = marcador.toByteArray())
 
-        val ctx = contexto()
+        val ctx = documentosSegunElAsistente()
 
         assertTrue(ctx.contains("Extracto_con_bytes.pdf"), "el documento sí está:\n$ctx")
         assertFalse(ctx.contains(marcador), "el contenido del archivo NO viaja al modelo:\n$ctx")
@@ -184,7 +213,7 @@ class DocumentosEnElContextoDeMoviAiTest {
         documento(duenoId, "Extracto_2334_08_2026.pdf", "del crédito", accountId = "acc-2334", subidoEn = 2_000)
         documento(duenoId, "Poliza_HDI.pdf", "prima 835.200 al ano = 69.600 AL MES.", subidoEn = 1_000)
 
-        val ctx = contexto()
+        val ctx = documentosSegunElAsistente()
 
         assertTrue(ctx.contains("[$SIN_CUENTA]"), ctx)
         assertTrue(ctx.contains("Poliza_HDI.pdf"), ctx)

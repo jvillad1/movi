@@ -10,6 +10,7 @@ import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigAdaptive
 import com.anthropic.models.messages.Tool
+import com.anthropic.models.messages.ToolChoiceNone
 import com.anthropic.models.messages.ToolResultBlockParam
 import com.anthropic.models.messages.ToolUseBlock
 import com.fasterxml.jackson.core.type.TypeReference
@@ -30,7 +31,20 @@ internal class ElModeloDeAnthropic(
     private val persona: String,
     private val contexto: String,
     mensajesDelDueno: List<MessageParam>,
-    private val maxTokens: Long = 1024L,
+    private val maxTokens: Long = MAX_TOKENS_DE_RESPUESTA,
+    /**
+     * **Pensar cuesta como salida, que es lo caro.** Para «¿cuánto gasté en Comida?» —donde la
+     * cuenta la hace la consulta y no el modelo— no compra nada. Se enciende solo en el camino
+     * caro, el de los consejos.
+     */
+    private val piensa: Boolean = false,
+    /**
+     * A qué modelo reintentar **una vez** si el primero falla. Existe por una razón concreta: el
+     * id de un modelo es un texto que viaja a la API, y si alguno dejara de estar disponible en
+     * esta cuenta el asistente se caería entero. Con esto, el peor caso es una respuesta más cara,
+     * no una pantalla de error.
+     */
+    private val modeloDeRespaldo: String? = null,
     /**
      * **La única línea que de verdad llama a la red**, izada a parámetro para poder probar todo lo
      * demás: que las herramientas se ofrezcan (y se dejen de ofrecer en la última vuelta), y sobre
@@ -49,8 +63,10 @@ internal class ElModeloDeAnthropic(
         persona: String,
         contexto: String,
         mensajesDelDueno: List<MessageParam>,
-        maxTokens: Long = 1024L,
-    ) : this(modelo, persona, contexto, mensajesDelDueno, maxTokens, { params ->
+        maxTokens: Long = MAX_TOKENS_DE_RESPUESTA,
+        piensa: Boolean = false,
+        modeloDeRespaldo: String? = null,
+    ) : this(modelo, persona, contexto, mensajesDelDueno, maxTokens, piensa, modeloDeRespaldo, { params ->
         withContext(Dispatchers.IO) { client.messages().create(params) }
     })
 
@@ -63,9 +79,27 @@ internal class ElModeloDeAnthropic(
      */
     private var ultima: Message? = null
 
+    /** Las fichas que consumió la conversación, para poder mirar el costo real y no estimarlo. */
+    var fichasDeEntrada: Long = 0L
+        private set
+    var fichasDeSalida: Long = 0L
+        private set
+    var fichasLeidasDeCache: Long = 0L
+        private set
+
     override suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean): RespuestaDelModelo {
-        val respuesta = llamar(armarLlamada(puedeUsarHerramientas))
+        val respuesta = try {
+            llamar(armarLlamada(puedeUsarHerramientas))
+        } catch (falla: Exception) {
+            val respaldo = modeloDeRespaldo ?: throw falla
+            llamar(armarLlamada(puedeUsarHerramientas, conEsteModelo = respaldo))
+        }
         ultima = respuesta
+        respuesta.usage().let { uso ->
+            fichasDeEntrada += uso.inputTokens()
+            fichasDeSalida += uso.outputTokens()
+            fichasLeidasDeCache += uso.cacheReadInputTokens().orElse(0L)
+        }
 
         val pedidos = respuesta.content().mapNotNull { it.toolUse().orElse(null) }
         return if (pedidos.isEmpty()) {
@@ -81,24 +115,36 @@ internal class ElModeloDeAnthropic(
     }
 
     /** Lo que se le manda a la API en esta vuelta. Aparte para poder mirarlo en una prueba. */
-    internal fun armarLlamada(puedeUsarHerramientas: Boolean): MessageCreateParams =
+    internal fun armarLlamada(
+        puedeUsarHerramientas: Boolean,
+        conEsteModelo: String = modelo,
+    ): MessageCreateParams =
         MessageCreateParams.builder()
-            .model(modelo)
+            .model(conEsteModelo)
             .maxTokens(maxTokens)
-            .thinking(ThinkingConfigAdaptive.builder().build())
+            .apply { if (piensa) thinking(ThinkingConfigAdaptive.builder().build()) }
             .systemOfTextBlockParams(
                 listOf(
-                    TextBlockParam.builder().text(persona).build(),
+                    // **Las dos partes se cachean, y en este orden.** La PERSONA no cambia nunca y
+                    // el contexto cambia cuando cambian los datos: lo estable primero, para que un
+                    // movimiento nuevo no invalide también las instrucciones. Sin esto, una
+                    // conversación de tres vueltas paga el prefijo entero tres veces.
+                    TextBlockParam.builder()
+                        .text(persona)
+                        .cacheControl(CacheControlEphemeral.builder().build())
+                        .build(),
                     TextBlockParam.builder()
                         .text(contexto)
-                        // El contexto es lo más largo y no cambia entre vueltas: sin caché, una
-                        // conversación de tres consultas lo paga tres veces.
                         .cacheControl(CacheControlEphemeral.builder().build())
                         .build(),
                 ),
             )
             .messages(turnos)
-            .apply { if (puedeUsarHerramientas) LAS_HERRAMIENTAS.forEach { addTool(it) } }
+            // Las herramientas van SIEMPRE, incluso cuando ya no puede usarlas: son parte del
+            // prefijo cacheado, y quitarlas tiraría la caché de la última llamada entera. Lo que
+            // cambia es el permiso, que no toca el prefijo.
+            .apply { LAS_HERRAMIENTAS.forEach { addTool(it) } }
+            .apply { if (!puedeUsarHerramientas) toolChoice(ToolChoiceNone.builder().build()) }
             .build()
 
     /** Los turnos acumulados, para que una prueba pueda mirar cómo quedó la conversación. */
@@ -140,14 +186,26 @@ private fun ToolUseBlock.comoLlamada(): LlamadaDeHerramienta {
     )
 }
 
+/**
+ * **Cuánto puede escribir de respuesta.** La PERSONA ya pide cuatro o cinco frases; esto es el
+ * techo, y estaba en 1024 sin ninguna razón. Una respuesta de finanzas personales que necesita más
+ * de esto es una respuesta que el dueño no va a leer.
+ */
+internal const val MAX_TOKENS_DE_RESPUESTA = 700L
+
 private fun texto(descripcion: String) =
     JsonValue.from(mapOf("type" to "string", "description" to descripcion))
 
 /**
- * **Las dos preguntas que el asistente puede hacerle a la base.** Las descripciones son para el
- * modelo, no para el dueño, y dicen dos cosas que no se deducen del nombre: que las fechas son del
- * calendario (no del período del dueño, que ya viene resuelto en el contexto) y que la búsqueda
- * tiene tope mientras que los totales suman todo.
+ * **Las preguntas que el asistente puede hacerle a la base.** Las descripciones son para el modelo,
+ * no para el dueño, y dicen cosas que no se deducen del nombre: que las fechas son del calendario
+ * (no del período del dueño, que ya viene resuelto en el contexto) y que la búsqueda tiene tope
+ * mientras que los totales suman todo.
+ *
+ * **Esta lista es parte del prefijo que se cachea**, así que va igual en todas las vueltas de una
+ * conversación — incluso en la última, donde el modelo ya no puede usarlas: quitarlas cambiaría el
+ * prefijo y tiraría la caché de esa llamada entera. Lo que se hace en la última vuelta es
+ * prohibirle elegirlas (`tool_choice: none`), que no toca el prefijo.
  */
 internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
     Tool.builder()
@@ -194,6 +252,30 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                         .build(),
                 )
                 .required(listOf("desde", "hasta"))
+                .build(),
+        )
+        .build(),
+    Tool.builder()
+        .name(BUSCAR_DOCUMENTOS)
+        .description(
+            "Lee los documentos que el usuario guardó en Movi —extractos, pólizas, recibos— con " +
+                "las notas que él mismo escribió al subirlos. Úsala cuando la pregunta pueda " +
+                "contestarse con un papel («¿qué seguro paga la cuenta 2334?», «¿tengo el extracto " +
+                "de agosto?»). Del archivo solo hay nombre, tipo, período y esas notas: nunca el " +
+                "texto de adentro del PDF, así que no describas lo que dice un documento que no " +
+                "esté en su nota. Cuando una cifra salga de aquí, di de qué documento sale.",
+        )
+        .inputSchema(
+            Tool.InputSchema.builder()
+                .properties(
+                    Tool.InputSchema.Properties.builder()
+                        .putAdditionalProperty(
+                            "texto",
+                            texto("Parte del nombre del documento o de sus notas. Sin esto vienen todos."),
+                        )
+                        .build(),
+                )
+                .required(emptyList())
                 .build(),
         )
         .build(),
