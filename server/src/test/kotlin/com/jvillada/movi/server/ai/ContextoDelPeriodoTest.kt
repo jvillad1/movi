@@ -19,10 +19,14 @@ import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
+import java.time.YearMonth
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -152,6 +156,159 @@ class ContextoDelPeriodoTest {
 
         assertTrue("Arriendo" in texto && "YA ocurrió en este período" in texto)
         assertTrue("Gimnasio" in texto && "TODAVÍA no ocurrió en este período" in texto)
+    }
+
+    // ── El sello del período, con el corte del dueño ─────────────────────────
+
+    /** El corte del dueño es 25, no 1. Sin esto, todas estas pruebas corren sobre el mes de calendario. */
+    private fun conCorte25() = transaction {
+        Users.update({ Users.id eq dueno }) { it[periodCutoffDay] = 25 }
+    }
+
+    /**
+     * El mes con el que se sella la cuota de un recurrente del día 5 cuando el corte es 25: el del
+     * VENCIMIENTO. El período va del 25 de un mes al 24 del siguiente, así que la cuota del día 5
+     * siempre cae en el mes de cierre — nunca en el del arranque.
+     */
+    private fun mesDelVencimientoDeUnDia5(): YearMonth {
+        val hoy = AppClock.now().toLocalDate()
+        return if (hoy.dayOfMonth >= 25) YearMonth.from(hoy).plusMonths(1) else YearMonth.from(hoy)
+    }
+
+    private fun arriendoDia5(sellado: String?) = transaction {
+        RecurringRules.insert {
+            it[id] = "r-arriendo"; it[userId] = dueno; it[name] = "Arriendo"; it[category] = "Vivienda"
+            it[amount] = 1_850_000L; it[dayOfMonth] = 5; it[type] = TransactionType.EXPENSE.name
+        }
+        if (sellado != null) {
+            RecurringOccurrences.insert {
+                it[userId] = dueno; it[ruleId] = "r-arriendo"; it[period] = sellado
+                it[eventId] = null; it[confirmedAt] = ahora
+            }
+        }
+    }
+
+    /**
+     * **El sello es el del vencimiento, y el vencimiento no vive en el mes del arranque.**
+     *
+     * Con corte 25 el período va del 25 de agosto al 24 de septiembre, pero un arriendo del día 5
+     * vence el 5 de septiembre y `recurring_occurrences.period` lo sella «2026-09» (ver
+     * `periodOf`). El contexto preguntaba por el mes del ARRANQUE —«2026-08»—, así que no
+     * encontraba el sello y le hacía decir al asistente que el arriendo no está pagado cuando sí
+     * lo está. El dueño usa corte 25: no es un caso de borde, es su caso.
+     */
+    @Test
+    fun `con corte 25, el arriendo sellado en el mes del vencimiento se lee como pagado`() {
+        conCorte25()
+        arriendoDia5(sellado = mesDelVencimientoDeUnDia5().toString())
+
+        val texto = contexto()
+
+        assertTrue("Arriendo" in texto)
+        assertTrue("YA ocurrió en este período" in texto, "el sello del vencimiento es el que manda:\n$texto")
+    }
+
+    /** Y al revés: un sello del mes del ARRANQUE es de otra cuota, no de esta. */
+    @Test
+    fun `con corte 25, un sello del mes del arranque no da por pagada la cuota en juego`() {
+        conCorte25()
+        arriendoDia5(sellado = mesDelVencimientoDeUnDia5().minusMonths(1).toString())
+
+        val texto = contexto()
+
+        assertTrue("TODAVÍA no ocurrió en este período" in texto, "ese sello es de la cuota anterior:\n$texto")
+    }
+
+    // ── Suscripciones ────────────────────────────────────────────────────────
+
+    private fun suscripcion(
+        id: String,
+        nombre: String,
+        monto: Long,
+        moneda: String = "COP",
+        periodicidad: String = "MENSUAL",
+        estado: String = "CONFIRMED",
+        dia: Int = 5,
+    ) = transaction {
+        Subscriptions.insert {
+            it[Subscriptions.id] = id
+            it[userId] = dueno
+            it[merchantKey] = "key-$id"
+            it[displayName] = nombre
+            it[amount] = monto
+            it[currency] = moneda
+            it[dayOfMonth] = dia
+            it[status] = estado
+            it[confidence] = "HIGH"
+            it[firstSeen] = ahora
+            it[lastSeen] = ahora
+            it[occurrences] = 3
+            it[Subscriptions.periodicidad] = periodicidad
+        }
+    }
+
+    /**
+     * El monto mensual que el texto le atribuye a una suscripción, en pesos — del renglón
+     * «- Nombre: $44900 al mes, el día 5».
+     */
+    private fun montoMensualEnElTexto(texto: String, nombre: String): Long {
+        val renglon = texto.lines().firstOrNull { it.startsWith("- $nombre:") }
+            ?: error("«$nombre» no está en el contexto:\n$texto")
+        return renglon.substringAfter("\$").takeWhile { it.isDigit() }.toLongOrNull()
+            ?: error("el renglón no dice un monto mensual: $renglon")
+    }
+
+    /**
+     * **Un cobro en dólares no son pesos.** `amount` está en la moneda nativa: US$12 llegaba al
+     * asistente como «$12» y él lo leía como doce pesos. Se convierte con la TRM, igual que
+     * `SubscriptionRoutes.resultFor`, y el cobro real se dice aparte para que el dueño reconozca
+     * lo que ve en su extracto.
+     */
+    @Test
+    fun `una suscripcion en dolares llega convertida a pesos`() {
+        suscripcion("s-usd", "Spotify", 12L, moneda = "USD")
+
+        val texto = contexto()
+
+        assertTrue("(el cobro real es USD \$12 al mes" in texto, texto)
+        // La TRM viene de la red (o del respaldo del código); lo que se fija acá es que NO se
+        // dijeron doce pesos. Con la tasa más baja que el servicio acepta ($100) ya son $1.200.
+        assertTrue(
+            montoMensualEnElTexto(texto, "Spotify") >= 1_200L,
+            "doce dólares no pueden llegar como doce pesos:\n$texto",
+        )
+    }
+
+    /**
+     * **Un cobro anual no es un gasto del mes.** Se prorratea con [montoMensualEquivalente]
+     * —redondeando hacia arriba, igual que el cliente y que `/api/subscriptions`—, y el cobro real
+     * se dice aparte: el dueño ve $112.900 una vez al año en su extracto, no $9.409 todos los
+     * meses.
+     */
+    @Test
+    fun `un cobro anual llega prorrateado al mes, y dice cuanto es el cobro real`() {
+        suscripcion("s-anual", "NBA League Pass", 112_900L, periodicidad = "ANUAL", dia = 3)
+
+        val texto = contexto()
+
+        assertEquals(9_409L, montoMensualEnElTexto(texto, "NBA League Pass"), texto)
+        assertTrue("(el cobro real es \$112900 una vez al año)" in texto, texto)
+    }
+
+    /**
+     * Una CANDIDATE es una sospecha del detector que el dueño todavía no aceptó. Dicha como un
+     * hecho, le pone al asistente en la boca un gasto que quizá no existe — y `resultFor`, que es
+     * lo que el dueño ve en pantalla, tampoco la cuenta.
+     */
+    @Test
+    fun `una suscripcion candidata no se cuenta como un hecho`() {
+        suscripcion("s-cand", "Claro Video", 24_900L, estado = "CANDIDATE")
+        suscripcion("s-auto", "Netflix", 44_900L, estado = "AUTO")
+
+        val texto = contexto()
+
+        assertTrue("Netflix" in texto, "una AUTO sí va")
+        assertFalse("Claro Video" in texto, "una candidata no puede llegar como un hecho:\n$texto")
     }
 
     @Test

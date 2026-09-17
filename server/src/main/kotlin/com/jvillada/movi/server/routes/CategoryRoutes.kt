@@ -278,7 +278,9 @@ internal fun Transaction.categoryExists(uid: String, name: String): Boolean {
  *   pidió. La regla es la misma en las dos: no fundir presupuestos sin que lo haya pedido.
  * - **`recurring_rules`** — lo que se repite cada mes también lleva el nombre copiado.
  * - **`category_prefs`** — la preferencia viaja con el nombre (si no, esconder + renombrar
- *   dejaría escondida una categoría que ya no existe y visible la nueva).
+ *   dejaría escondida una categoría que ya no existe y visible la nueva). Viajan las dos cosas
+ *   que guarda esa tabla: el tipo fijado y el "escondida" — este último solo al renombrar, ver
+ *   el comentario en el cuerpo.
  *
  * `subscriptions` no aparece porque **no tiene columna de categoría**: una suscripción se
  * identifica por comerciante (`merchant_key`), no por categoría. Verificado en el esquema, no
@@ -334,9 +336,9 @@ internal fun Transaction.rewriteCategory(
         it[category] = to
     }
 
-    // Preferencias: la del destino manda; si no tenía, hereda el tipo fijado del origen. El
-    // destino nunca queda escondido (ver KDoc), y la fila del origen se borra siempre — para
-    // volver a "esconder el origen" hay una sola línea, la de abajo, y solo si vale la pena.
+    // Preferencias: la del destino manda; si no tenía, hereda las del origen. La fila del origen
+    // se borra siempre — para volver a "esconder el origen" hay una sola línea, la de abajo, y
+    // solo si vale la pena.
     val prefOrigen = CategoryPrefs.selectAll()
         .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq from) }
         .firstOrNull()
@@ -345,13 +347,29 @@ internal fun Transaction.rewriteCategory(
         .firstOrNull()
     val tipoFijadoDestino = prefDestino?.get(CategoryPrefs.pinnedType)
         ?: prefOrigen?.get(CategoryPrefs.pinnedType)
+    // **Renombrar conserva el "escondida"; unificar no.** Son las dos mitades de la misma regla
+    // ("la preferencia viaja con el nombre", arriba), y se separan porque las dos operaciones
+    // significan cosas distintas:
+    //
+    //  - Renombrar es la MISMA categoría con otro nombre, y el destino no existía (la ruta lo
+    //    exige). Si el dueño la había escondido, esconderla sigue siendo lo que él pidió: sin
+    //    esto, corregirle el tipeo a una categoría escondida la devolvía callada a la lista de
+    //    sugerencias, que es exactamente lo que él había apagado.
+    //  - Unificar es mover historia a una categoría que YA existe y que acaba de recibir datos:
+    //    ahí el destino nunca queda escondido (ver KDoc), porque esconderlo sería mandar sus
+    //    movimientos a un nombre que la app no le va a volver a ofrecer nunca.
+    //
+    // `hideSource` es lo único que distingue una operación de la otra (ver KDoc): `false` = un
+    // renombrado, `true` = una unificación.
+    val esUnificacion = hideSource
+    val escondidoDestino = !esUnificacion && prefOrigen?.get(CategoryPrefs.hidden) == true
     CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq from) }
     CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq to) }
-    if (tipoFijadoDestino != null) {
+    if (tipoFijadoDestino != null || escondidoDestino) {
         CategoryPrefs.insert {
             it[userId]     = uid
             it[name]       = to
-            it[hidden]     = false
+            it[hidden]     = escondidoDestino
             it[pinnedType] = tipoFijadoDestino
         }
     }
