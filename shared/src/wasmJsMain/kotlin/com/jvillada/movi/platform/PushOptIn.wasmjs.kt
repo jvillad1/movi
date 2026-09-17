@@ -27,9 +27,18 @@ private fun jsEnable(): Boolean =
 private fun jsDisable(): Boolean =
     js("(function(){try{if(window.moviPush) window.moviPush.disable()}catch(e){}return true})()")
 
+/**
+ * El `&& window.moviPush.olvidarAlSalir` no sobra: `push.js` es un archivo estático que el
+ * navegador puede tener cacheado de una versión anterior —de hecho, de una anterior a esta
+ * función—, y llamar a `undefined` acá sería una `JsException` en mitad del logout.
+ */
+private fun jsForgetForLogout(): Boolean =
+    js("(function(){try{if(window.moviPush && window.moviPush.olvidarAlSalir) window.moviPush.olvidarAlSalir()}catch(e){}return true})()")
+
 actual object PushOptIn {
     actual val supported: Boolean get() = jsSupported()
     actual fun status(): String = jsStatus()
     actual fun enable() { jsEnable() }
     actual fun disable() { jsDisable() }
+    actual fun disableForLogout() { jsForgetForLogout() }
 }

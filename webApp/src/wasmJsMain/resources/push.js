@@ -2,6 +2,11 @@
 // (síncrono) pueda leerlo; enable()/disable()/init() lo refrescan async.
 (function () {
     var _status = 'unsupported';
+    // El endpoint de la suscripción viva, recordado en cada refresh(). Existe por una sola
+    // razón: al cerrar sesión hay que mandar el DELETE **sin poder esperar a nada**, porque la
+    // página se recarga enseguida (ver olvidarAlSalir). Pedirle el endpoint al ServiceWorker en
+    // ese momento es una promesa que la recarga se lleva puesta.
+    var _endpoint = '';
 
     // El token, sin poder tirar NUNCA. `localStorage` no es una propiedad que siempre
     // esté: con el almacenamiento del sitio bloqueado, tocarla tira SecurityError.
@@ -34,12 +39,13 @@
     }
 
     async function refresh() {
-        if (!supported()) { _status = 'unsupported'; return _status; }
+        if (!supported()) { _status = 'unsupported'; _endpoint = ''; return _status; }
         if (Notification.permission === 'denied') { _status = 'denied'; return _status; }
         try {
             var reg = await navigator.serviceWorker.getRegistration('push-sw.js');
             var sub = reg ? await reg.pushManager.getSubscription() : null;
             _status = sub ? 'enabled' : 'disabled';
+            _endpoint = sub ? sub.endpoint : '';
         } catch (e) { _status = 'disabled'; }
         return _status;
     }
@@ -84,11 +90,51 @@
         return refresh();
     }
 
+    // Cerrar sesión tiene que soltar la suscripción, y no es lo mismo que disable().
+    //
+    // Lo que había: salir dejaba al navegador suscrito y al servidor con su fila. En una
+    // portátil prestada —o después de la racha de 401 que cierra la sesión sola— esa pantalla
+    // de bloqueo seguía mostrando el nombre de la tarjeta y el monto de cada vencimiento del
+    // dueño, y él no tenía cómo cortarlo desde su cuenta: el DELETE necesita el endpoint, que
+    // solo conoce ese navegador.
+    //
+    // Por qué no alcanza con llamar a disable(): el logout de la web termina en un
+    // location.reload() (ver SessionManager.clear), y disable() arranca pidiéndole la
+    // suscripción al ServiceWorker — una promesa que la recarga cancela antes de que llegue a
+    // mandar nada. Acá, en cambio:
+    //   · el token y el endpoint ya están en memoria, así que el fetch sale AHORA, síncrono;
+    //   · va con keepalive, que es lo que le permite sobrevivir a la recarga;
+    //   · y el unsubscribe() del navegador queda como intento de mejor esfuerzo: si la recarga
+    //     lo corta no importa, porque el servidor ya no tiene fila a la cual mandarle nada.
+    function olvidarAlSalir() {
+        var t = token();
+        var ep = _endpoint;
+        _status = 'disabled';
+        _endpoint = '';
+        if (ep && t) {
+            try {
+                fetch('/api/push/subscribe', {
+                    method: 'DELETE',
+                    keepalive: true,
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+                    body: JSON.stringify({ endpoint: ep })
+                }).catch(function () {});
+            } catch (e) { /* un logout no se detiene por esto */ }
+        }
+        try {
+            navigator.serviceWorker.getRegistration('push-sw.js')
+                .then(function (reg) { return reg ? reg.pushManager.getSubscription() : null; })
+                .then(function (sub) { if (sub) sub.unsubscribe(); })
+                .catch(function () {});
+        } catch (e) { /* idem */ }
+    }
+
     window.moviPush = {
         supported: supported,
         status: function () { return _status; },
         enable: function () { enable(); },
         disable: function () { disable(); },
+        olvidarAlSalir: olvidarAlSalir,
         _refresh: refresh
     };
     refresh();

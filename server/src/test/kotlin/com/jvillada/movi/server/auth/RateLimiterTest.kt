@@ -62,4 +62,31 @@ class RateLimiterTest {
         assertFalse(RateLimiter.allow("viva", maxAttempts = 10, windowMs = 60 * 60_000L),
             "el intento 11 debía denegarse: el barrido no puede regalar intentos")
     }
+
+    /**
+     * **La clave que se guarda está recortada.** Parte de la clave viene del cuerpo de la
+     * petición (`login:email:…`) y el mapa la retiene hasta una hora: sin tope, un `email` de
+     * megabytes POSTeado sin autenticar era memoria del proceso que nadie libera, una entrada
+     * por valor distinto.
+     *
+     * No hay forma de mirar el mapa desde afuera, así que se fija por el comportamiento que
+     * implica el recorte: dos claves que solo se diferencian DESPUÉS del tope comparten balde.
+     * Si alguien sacara el `take`, esta prueba ve dos baldes y falla.
+     */
+    @Test
+    fun `una clave gigantesca se recorta — lo que sigue despues del tope no hace balde nuevo`() {
+        val base = "login:email:" + "a".repeat(5_000)
+        assertTrue(RateLimiter.allow(base + "uno@movi.test", maxAttempts = 1, windowMs = 60_000L))
+        assertFalse(
+            RateLimiter.allow(base + "dos@movi.test", maxAttempts = 1, windowMs = 60_000L),
+            "las dos claves se recortan a lo mismo, así que tienen que compartir balde",
+        )
+    }
+
+    /** Y el recorte no puede ser tan corto como para juntar claves legítimas. */
+    @Test
+    fun `dos correos normales siguen teniendo baldes distintos`() {
+        assertTrue(RateLimiter.allow("login:email:juan@movi.test", maxAttempts = 1, windowMs = 60_000L))
+        assertTrue(RateLimiter.allow("login:email:ana@movi.test", maxAttempts = 1, windowMs = 60_000L))
+    }
 }

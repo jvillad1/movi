@@ -2,6 +2,8 @@ package com.jvillada.movi.server.routes
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.server.db.PasswordResetTokens
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
@@ -18,6 +20,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.server.reminders.ReminderConfig
@@ -33,7 +38,12 @@ import kotlinx.serialization.json.Json
  * es para cuando no se puede entrar).
  */
 
-private const val MAX_NAME_LENGTH = 100
+/**
+ * Ancho de `Users.name varchar(100)`. `internal` porque el registro (`AuthRoutes.kt`) usa ESTA
+ * misma constante: crear y editar no pueden discrepar sobre la misma columna — hasta hace poco sí
+ * lo hacían, y un nombre de 101 caracteres era un 400 al editar y un 500 al registrarse.
+ */
+internal const val MAX_NAME_LENGTH = 100
 
 // Balde propio por usuario, no por correo/IP: quien llama YA está autenticado (tiene un JWT
 // válido), así que la clave por usuario aísla de verdad — no hay "cuenta ajena" que golpear
@@ -169,9 +179,33 @@ fun Route.userRoutes() {
             }
 
             val newHash = BCrypt.withDefaults().hashToString(BCRYPT_COST, req.new.toCharArray())
-            dbQuery { Users.update({ Users.id eq uid }) { it[passwordHash] = newHash } }
+            val ahora = System.currentTimeMillis()
+            // Las tres cosas en la MISMA transacción: o cambia todo, o no cambia nada. Una
+            // contraseña nueva con los enlaces viejos todavía vivos es peor que no haber hecho
+            // nada, porque la persona se queda creyendo que cerró la puerta.
+            dbQuery {
+                Users.update({ Users.id eq uid }) { it[passwordHash] = newHash }
+                // **Cambiar la contraseña desde adentro sella los enlaces de recuperación
+                // pendientes.** El camino del reset ya lo hacía (ver AuthRoutes.kt) y este no:
+                // el confirm solo mira `usedAt` y `expiresAt`, así que un enlace que alguien se
+                // llevó del correo seguía sirviendo DESPUÉS de que el dueño cambiara la
+                // contraseña — y cambiarla es justo lo único que él puede hacer al darse cuenta.
+                // La remediación no cerraba la ventana que venía a cerrar.
+                PasswordResetTokens.update({
+                    (PasswordResetTokens.userId eq uid) and (PasswordResetTokens.usedAt.isNull())
+                }) { it[usedAt] = ahora }
+                // Y las suscripciones push, por lo mismo que en el reset: si el motivo del cambio
+                // es que alguien más tuvo la cuenta, ese navegador ajeno seguiría recibiendo en
+                // la pantalla de bloqueo el nombre de la tarjeta y el monto de cada vencimiento.
+                // El navegador propio se vuelve a suscribir con el interruptor de Perfil.
+                PushSubscriptions.deleteWhere { PushSubscriptions.userId eq uid }
+            }
 
-            call.respond(HttpStatusCode.OK, "Listo, tu contraseña quedó actualizada.")
+            call.respond(
+                HttpStatusCode.OK,
+                "Listo, tu contraseña quedó actualizada. Los enlaces de recuperación que hayas " +
+                    "pedido ya no sirven, y si tenías avisos en el navegador vuelve a activarlos.",
+            )
         }
     }
 }

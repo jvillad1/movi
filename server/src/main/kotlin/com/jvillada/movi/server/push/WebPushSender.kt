@@ -21,6 +21,24 @@ import java.security.Security
 object WebPushSender {
     private val logger = LoggerFactory.getLogger("WebPushSender")
 
+    /**
+     * **Cómo se nombra una suscripción en el log, sin escribirla.**
+     *
+     * El `endpoint` no es un identificador: es la URL de capacidad del dispositivo. Quien la
+     * tenga, junto con las claves, puede mandarle notificaciones a esa pantalla de bloqueo. En un
+     * log rotan, se copian a un agregador y las lee cualquiera con acceso al panel del hosting —
+     * bastante más gente que la que debería poder escribirle al teléfono del dueño.
+     *
+     * Así que al log va un SHA-256 recortado: alcanza para seguir una suscripción a lo largo de
+     * varias líneas (que es para lo único que se usaba la URL entera) y no sirve para mandar
+     * nada. No lleva sal a propósito: la gracia es que el mismo endpoint dé siempre la misma
+     * huella entre reinicios.
+     */
+    internal fun huella(endpoint: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(endpoint.toByteArray())
+        return "sub:" + digest.take(6).joinToString("") { "%02x".format(it) }
+    }
+
     init {
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
             Security.addProvider(BouncyCastleProvider())
@@ -48,18 +66,20 @@ object WebPushSender {
                     // que Apple (web.push.apple.com) rechaza — sin esto, push nunca llega al iPhone PWA.
                     service.send(Notification(endpoint, p256dh, auth, payloadJson.toByteArray()), Encoding.AES128GCM).statusLine.statusCode
                 }.getOrElse { e ->
-                    logger.warn("push a $endpoint falló: ${e.message}")
+                    // El mensaje de la excepción viene de la librería HTTP y suele traer la URL
+                    // entera adentro: se tacha igual que el resto.
+                    logger.warn("push a ${huella(endpoint)} falló: ${e.message?.replace(endpoint, huella(endpoint))}")
                     -1
                 }
             }
             when (status) {
                 in 200..299 -> anyDelivered = true
                 404, 410 -> {
-                    logger.info("push endpoint muerto ($status), borrando: $endpoint")
+                    logger.info("push endpoint muerto ($status), borrando ${huella(endpoint)}")
                     dbQuery { PushSubscriptions.deleteWhere { PushSubscriptions.endpoint eq endpoint } }
                 }
                 -1 -> Unit  // ya logueado
-                else -> logger.warn("push a $endpoint devolvió $status")
+                else -> logger.warn("push a ${huella(endpoint)} devolvió $status")
             }
         }
         return anyDelivered

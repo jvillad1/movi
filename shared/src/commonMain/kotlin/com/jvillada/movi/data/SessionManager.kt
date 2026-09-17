@@ -1,5 +1,6 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
 
 import androidx.compose.runtime.getValue
@@ -228,6 +229,19 @@ object SessionManager {
     }
 
     fun clear() {
+        // PRIMERO, antes de borrar el token: soltar las notificaciones de este dispositivo.
+        //
+        // Salir no las soltaba, y no había forma de soltarlas desde la cuenta: el DELETE del
+        // server necesita el endpoint, que solo conoce el navegador suscrito. O sea que una
+        // portátil prestada —o la sesión que se cierra sola tras una racha de 401— seguía
+        // recibiendo en la pantalla de bloqueo el nombre de la tarjeta y el monto de cada
+        // vencimiento. Ver [PushOptIn.disableForLogout], que además explica por qué va acá
+        // arriba: en la web ese DELETE viaja con el token que la línea de abajo borra.
+        //
+        // El `runCatching` es la promesa de que un logout SIEMPRE termina: en la web esto cruza
+        // a JS —donde `moviPush` puede no existir, o venir cacheado de una versión anterior— y
+        // quedarse con la sesión a medio cerrar sería mucho peor que no soltar la suscripción.
+        runCatching { PushOptIn.disableForLogout() }
         guardar(KEY_TOKEN, null)
         guardar(KEY_USER_ID, null)
         guardar(KEY_NAME, null)

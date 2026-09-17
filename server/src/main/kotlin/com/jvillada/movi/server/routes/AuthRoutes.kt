@@ -7,6 +7,7 @@ import com.jvillada.movi.server.auth.PasswordResetConfig
 import com.jvillada.movi.server.auth.PasswordResetMailer
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.db.PasswordResetTokens
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.AuthResponse
@@ -25,7 +26,9 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -54,6 +57,27 @@ internal const val DUMMY_PASSWORD_HASH = "\$2a\$12\$C8iu.kZWQHOr4prsbuGhI.mYX3n4
 
 /** Respuesta única del login que no prospera. No distingue "no existe" de "contraseña mala". */
 private const val INVALID_CREDENTIALS = "Invalid credentials"
+
+/**
+ * Tope del correo, en caracteres. Es el ancho de la columna (`Users.email varchar(255)`), y por
+ * eso está acá y no en un número inventado: sin este corte, un correo más largo que la columna
+ * llegaba hasta el INSERT y salía como 500 —un error de base sin autenticar, que además le dice a
+ * quien lo dispara más de lo que debería—. Lo que la columna no puede guardar, la ruta no lo
+ * acepta.
+ *
+ * El corte vale para los TRES caminos públicos que reciben un correo (registro, login y pedido de
+ * reset) y no solo para el que escribe: en login y en reset el correo es **material de la clave
+ * del limitador**, que [com.jvillada.movi.server.auth.RateLimiter] deja fija en un mapa durante
+ * una hora. Sin tope, unos pocos POST con un correo de megabytes llenan la memoria del proceso
+ * —el mismo proceso por el que el teléfono sincroniza— sin necesidad de estar autenticado.
+ * `RateLimiter` además recorta la clave por su cuenta; son dos cortes a propósito, no uno
+ * duplicado: este rechaza la petición y aquel protege a cualquier llamador futuro que arme una
+ * clave con algo de afuera.
+ */
+internal const val MAX_EMAIL_LENGTH = 255
+
+/** Mensaje único del correo que no entra. Depende solo del largo, así que no enumera nada. */
+private const val EMAIL_TOO_LONG = "Ese correo es demasiado largo (máximo $MAX_EMAIL_LENGTH caracteres)"
 
 // ── Rate limit: qué protege y qué NO ──────────────────────────────────────────────────────
 //
@@ -97,6 +121,12 @@ private const val RESET_REQUEST_ACK =
     "Si el correo está registrado, te enviamos un enlace para restablecer la contraseña. " +
         "Revisa tu bandeja; el enlace vence en 1 hora."
 
+/**
+ * Marca de "otro confirm se quedó con este token" en el resultado del canje. Cualquier número
+ * negativo sirve: el resultado normal es la cantidad de filas de usuario actualizadas (0 o 1).
+ */
+private const val CONFIRM_TOKEN_YA_CONSUMIDO = -1
+
 /** Respuesta única de un confirm que no prospera: no distingue inexistente de usado de vencido. */
 private const val RESET_TOKEN_REJECTED =
     "El enlace no es válido, ya se usó o venció. Pide uno nuevo desde \"¿Olvidaste tu contraseña?\"."
@@ -118,6 +148,21 @@ fun Route.authRoutes() {
             val req = call.receive<RegisterRequest>()
             if (req.email.isBlank() || req.name.isBlank()) {
                 return@post call.respond(HttpStatusCode.BadRequest, "Nombre y correo requeridos")
+            }
+            // Los dos topes son los anchos de las columnas (`name varchar(100)`,
+            // `email varchar(255)`), y el de nombre es LA MISMA constante que usa la edición de
+            // perfil: crear y editar no pueden discrepar sobre la misma columna. Sin esto, un
+            // nombre de 101 caracteres pasaba toda la validación y reventaba recién en el INSERT
+            // —un 500 en vez del 400 que corresponde—, y el correo largo además alimentaba el
+            // limitador (ver MAX_EMAIL_LENGTH).
+            if (req.name.trim().length > MAX_NAME_LENGTH) {
+                return@post call.respond(
+                    HttpStatusCode.BadRequest,
+                    "El nombre no puede superar los $MAX_NAME_LENGTH caracteres",
+                )
+            }
+            if (req.email.trim().length > MAX_EMAIL_LENGTH) {
+                return@post call.respond(HttpStatusCode.BadRequest, EMAIL_TOO_LONG)
             }
             // La política vive en :core (PasswordPolicy) para que servidor y UI no puedan
             // divergir. Acá está la validación AUTORITATIVA: la del cliente es cortesía.
@@ -162,6 +207,14 @@ fun Route.authRoutes() {
             }
             val req = call.receive<LoginRequest>()
             val email = req.email.lowercase().trim()
+
+            // ANTES del balde por correo, porque el correo ES la clave de ese balde y el
+            // limitador la guarda una hora: un correo de megabytes por petición era memoria del
+            // proceso que nadie libera, sin autenticar. Depende solo del largo —ni mira la
+            // base—, así que no distingue un correo registrado de uno inventado.
+            if (email.length > MAX_EMAIL_LENGTH) {
+                return@post call.respond(HttpStatusCode.BadRequest, EMAIL_TOO_LONG)
+            }
 
             // Balde estricto por correo: el ataque de fuerza bruta apunta SIEMPRE a una cuenta,
             // y este es el único balde que en producción no es global. La clave es la cadena
@@ -239,6 +292,12 @@ fun Route.authRoutes() {
             }
             val req = call.receive<PasswordResetRequest>()
             val email = req.email.lowercase().trim()
+
+            // Mismo corte que en login y por lo mismo: acá abajo el correo se vuelve clave del
+            // limitador, que la retiene una hora. Ver MAX_EMAIL_LENGTH.
+            if (email.length > MAX_EMAIL_LENGTH) {
+                return@post call.respond(HttpStatusCode.BadRequest, EMAIL_TOO_LONG)
+            }
 
             // El 429 depende solo de la cadena pedida, no de si existe la cuenta: un correo
             // desconocido consume su balde igual, así que esto tampoco enumera.
@@ -356,18 +415,42 @@ fun Route.authRoutes() {
                 return@post call.respond(HttpStatusCode.BadRequest, RESET_TOKEN_REJECTED)
             }
 
+            val tokenId = row[PasswordResetTokens.id]
             val userId = row[PasswordResetTokens.userId]
             val newHash = BCrypt.withDefaults().hashToString(BCRYPT_COST, req.newPassword.toCharArray())
 
-            val updatedRows = dbQuery {
-                val n = Users.update({ Users.id eq userId }) { it[passwordHash] = newHash }
-                // Consume el token usado y, de paso, cualquier otro pendiente del mismo usuario:
-                // si pidió tres enlaces, canjear uno mata los otros dos. Se sella incluso si el
-                // usuario ya no está: un token huérfano no puede prosperar nunca.
-                PasswordResetTokens.update({
-                    (PasswordResetTokens.userId eq userId) and (PasswordResetTokens.usedAt.isNull())
+            // El chequeo de `usedAt` de arriba lee, y esto escribe: entre las dos cosas hay una
+            // ventana, y hasta acá las dos mitades vivían en transacciones DISTINTAS. Dos confirm
+            // simultáneos con el mismo token pasaban los dos el chequeo y los dos escribían una
+            // contraseña — el segundo pisando al primero, que es exactamente lo que el enlace de
+            // un solo uso promete que no pasa. Ahora quien decide es el `WHERE used_at IS NULL`
+            // del propio UPDATE: sella primero y solo sigue si la fila era suya. El que pierde la
+            // carrera toca 0 filas y se lleva el mismo rechazo genérico que un token inventado.
+            val resultado = dbQuery {
+                val gano = PasswordResetTokens.update({
+                    (PasswordResetTokens.id eq tokenId) and (PasswordResetTokens.usedAt.isNull())
                 }) { it[usedAt] = now }
-                n
+                if (gano == 0) {
+                    CONFIRM_TOKEN_YA_CONSUMIDO
+                } else {
+                    val n = Users.update({ Users.id eq userId }) { it[passwordHash] = newHash }
+                    // Consume de paso cualquier otro token pendiente del mismo usuario: si pidió
+                    // tres enlaces, canjear uno mata los otros dos. Se sella incluso si el
+                    // usuario ya no está: un token huérfano no puede prosperar nunca.
+                    PasswordResetTokens.update({
+                        (PasswordResetTokens.userId eq userId) and (PasswordResetTokens.usedAt.isNull())
+                    }) { it[usedAt] = now }
+                    // Y las suscripciones push de esa cuenta. Quien restablece la contraseña es,
+                    // en el peor caso, alguien que acaba de recuperarla de manos ajenas: dejar
+                    // viva la suscripción de otro navegador sería seguir mandándole a la pantalla
+                    // de bloqueo el nombre de la tarjeta y el monto de cada vencimiento. No hay
+                    // nada que perder: el navegador que sí es suyo vuelve a suscribirse solo en
+                    // cuanto entre y toque el interruptor.
+                    if (n > 0) {
+                        PushSubscriptions.deleteWhere { PushSubscriptions.userId eq userId }
+                    }
+                    n
+                }
             }
 
             // Falla cerrado. Si la fila del usuario ya no existe (cuenta borrada entre el pedido
@@ -375,7 +458,14 @@ fun Route.authRoutes() {
             // quedó actualizada" sería mentir en el único flujo donde la persona no tiene otra
             // forma de verificarlo. Se contesta el mismo rechazo genérico que un token inválido
             // —no hace falta un mensaje nuevo, y así tampoco revela que el token era bueno.
-            if (updatedRows == 0) {
+            if (resultado == CONFIRM_TOKEN_YA_CONSUMIDO) {
+                call.application.log.warn(
+                    "password-reset: dos confirm a la vez con el mismo token ($userId); " +
+                        "el segundo no cambió nada.",
+                )
+                return@post call.respond(HttpStatusCode.BadRequest, RESET_TOKEN_REJECTED)
+            }
+            if (resultado == 0) {
                 call.application.log.error(
                     "password-reset: token válido para $userId pero el UPDATE tocó 0 filas " +
                         "(¿el usuario ya no existe?). Se responde rechazo, NO éxito.",
