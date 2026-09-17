@@ -84,6 +84,8 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.ui)
     implementation(libs.androidx.activity.compose)
+    // MainActivity es una FragmentActivity: la pide el BiometricPrompt de «Entrar con huella».
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.work.runtime.ktx)
 }
 

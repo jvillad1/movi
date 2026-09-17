@@ -31,8 +31,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.ArranqueDeSesion
+import com.jvillada.movi.data.EXPLICACION_HUELLA
+import com.jvillada.movi.data.MENSAJE_SIN_REGISTRAR
+import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.SesionGuardada
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.decidirArranque
+import com.jvillada.movi.data.ofrecerHuellaTrasEntrar
+import com.jvillada.movi.data.quePasaTrasLaHuella
+import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.theme.*
@@ -51,6 +60,65 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
 
+    // «Entrar con huella» — solo Android tiene lector; en iOS y la web esto es `null` y todo lo
+    // que sigue queda apagado, sin una sola diferencia con la pantalla de antes.
+    val huella = Huella.deEsteAparato()
+    // No `null` mientras se le está ofreciendo activar la huella recién entrado. Guarda la sesión
+    // que acaba de abrir porque es justo lo que hay que cifrar si dice que sí.
+    var ofrecimiento by remember { mutableStateOf<SesionGuardada?>(null) }
+    var pidiendoHuella by remember { mutableStateOf(false) }
+
+    /** Pide la huella y suelta la sesión guardada. Lo llaman el arranque y el enlace de reintento. */
+    fun desbloquear() {
+        val lector = huella ?: return
+        if (pidiendoHuella) return
+        pidiendoHuella = true
+        error = null
+        notice = null
+        lector.abrir { resultado, sesion ->
+            pidiendoHuella = false
+            val que = quePasaTrasLaHuella(resultado, sesion)
+            // Lo que ya no se puede abrir se borra ACÁ, y no en el próximo arranque: si no,
+            // la app volvería a ofrecer una huella que no abre nada, para siempre.
+            if (que.olvidarLoGuardado) lector.olvidar()
+            notice = que.mensaje
+            que.sesion?.let { abierta ->
+                SessionManager.save(abierta.token, abierta.userId, abierta.nombre, abierta.correo)
+                onNavigate(Screen.Dashboard)
+            }
+        }
+    }
+
+    // El arranque: se evalúa UNA vez por visita a esta pantalla. Volver acá tras un logout no
+    // debe disparar el prompt —`clear()` ya olvidó lo guardado— y `decidirArranque` lo confirma.
+    var arranqueEvaluado by remember { mutableStateOf(false) }
+    LaunchedEffect(huella) {
+        if (arranqueEvaluado) return@LaunchedEffect
+        arranqueEvaluado = true
+        val lector = huella ?: return@LaunchedEffect
+        when (
+            decidirArranque(
+                sesionViva = SessionManager.isLoggedIn,
+                huellaActivada = SessionManager.huellaActivada,
+                haySesionGuardada = lector.haySesionGuardada(),
+                estado = lector.estado(),
+            )
+        ) {
+            // App.kt ya no habría mostrado esta pantalla con la sesión abierta; la rama existe
+            // para que el `when` sea exhaustivo y no haya un `else` que tape un caso nuevo.
+            ArranqueDeSesion.ENTRAR_DIRECTO -> Unit
+            ArranqueDeSesion.PEDIR_HUELLA -> desbloquear()
+            ArranqueDeSesion.PEDIR_CONTRASENA ->
+                // Quedó algo guardado que este teléfono ya no puede abrir (le borraron las
+                // huellas). Se olvida y se dice por qué, en vez de dejar un interruptor prendido
+                // que no hace nada.
+                if (SessionManager.huellaActivada) {
+                    huella.olvidar()
+                    notice = MENSAJE_SIN_REGISTRAR
+                }
+        }
+    }
+
     val passwordFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
@@ -66,7 +134,18 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             }.onSuccess { resp ->
                 SessionManager.save(resp.token, resp.userId, resp.name, resp.email)
                 loading = false
-                onNavigate(Screen.Dashboard)
+                // Android y nada más: en el resto `huella` es null y se entra como siempre.
+                val lector = huella
+                val vale = lector != null && ofrecerHuellaTrasEntrar(
+                    estado = lector.estado(),
+                    yaActivada = SessionManager.huellaActivada,
+                    yaLoRechazo = SessionManager.huellaRechazada,
+                )
+                if (vale) {
+                    ofrecimiento = SesionGuardada(resp.token, resp.userId, resp.name, resp.email)
+                } else {
+                    onNavigate(Screen.Dashboard)
+                }
             }.onFailure {
                 // Ver AuthErrors.kt: acá se decidía a ciegas que la culpa era de la contraseña,
                 // pasara lo que pasara. Ahora el 401 —y solo el 401— dice eso.
@@ -125,6 +204,40 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         Text("Finanzas personales", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(40.dp))
 
+        val paraOfrecer = ofrecimiento
+        if (paraOfrecer != null) {
+            // Ya entró: lo único que falta es si quiere que la próxima vez sea con la huella.
+            // El formulario no se dibuja debajo — no hay nada más que escribir.
+            var avisoDelOfrecimiento by remember { mutableStateOf<String?>(null) }
+            OfrecimientoDeHuella(
+                ocupado = pidiendoHuella,
+                aviso = avisoDelOfrecimiento,
+                onActivar = {
+                    val lector = huella
+                    if (lector != null && !pidiendoHuella) {
+                        pidiendoHuella = true
+                        avisoDelOfrecimiento = null
+                        lector.guardar(paraOfrecer) { resultado ->
+                            pidiendoHuella = false
+                            if (resultado == ResultadoDeHuella.EXITO) {
+                                onNavigate(Screen.Dashboard)
+                            } else {
+                                // No se entra a la fuerza ni se sigue de largo callado: la
+                                // sesión ya está abierta, así que puede activar o seguir.
+                                avisoDelOfrecimiento =
+                                    "No se pudo activar en este teléfono. Puedes intentarlo otra vez o seguir sin huella."
+                            }
+                        }
+                    }
+                },
+                onAhoraNo = {
+                    SessionManager.huellaRechazada = true
+                    onNavigate(Screen.Dashboard)
+                },
+            )
+            return@Column
+        }
+
         MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
             Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
@@ -159,6 +272,18 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             notice?.let {
                 Spacer(Modifier.height(12.dp))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+
+            // El reintento. Cancelar el prompt no deja al dueño encerrado en el formulario hasta
+            // el próximo arranque: acá vuelve a pedirlo cuando quiera.
+            if (huella != null && SessionManager.huellaActivada && huella.haySesionGuardada()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    if (pidiendoHuella) "Esperando tu huella…" else "Entrar con huella",
+                    style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium,
+                    color = if (pidiendoHuella) Movi.colores.textoMedio else Movi.colores.marca,
+                    modifier = Modifier.noRippleClickable { desbloquear() },
+                )
             }
 
             Spacer(Modifier.height(12.dp))
@@ -261,3 +386,62 @@ internal fun Modifier.noRippleClickable(onClick: () -> Unit) = this.then(
         onClick = onClick,
     )
 )
+
+/**
+ * **El ofrecimiento, justo después de entrar con la contraseña.**
+ *
+ * Dice en una línea qué se guarda, dónde, y —sobre todo— qué NO se guarda. La contraseña es lo
+ * primero que alguien asume que una función así conserva, y es exactamente lo que Movi no hace.
+ *
+ * «Ahora no» no es un rechazo definitivo de nada: no vuelve a aparecer solo, pero el interruptor
+ * de Perfil está siempre.
+ */
+@Composable
+private fun OfrecimientoDeHuella(
+    ocupado: Boolean,
+    aviso: String?,
+    onActivar: () -> Unit,
+    onAhoraNo: () -> Unit,
+) {
+    MinCard(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        variant = MinCardVariant.Elevated,
+        padding = PaddingValues(20.dp),
+    ) {
+        Text(
+            "Entra con tu huella la próxima vez",
+            style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
+            color = Movi.colores.texto,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(EXPLICACION_HUELLA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+
+        aviso?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+        }
+
+        Spacer(Modifier.height(20.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (ocupado) Movi.colores.tarjeta else Movi.colores.marca)
+                .noRippleClickable(onActivar),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (ocupado) "Esperando tu huella…" else "Activar",
+                style = Movi.textos.titulo, fontWeight = FontWeight.SemiBold,
+                color = if (ocupado) Movi.colores.textoMedio else Movi.colores.fondo,
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text(
+                "Ahora no",
+                style = Movi.textos.cuerpo, color = Movi.colores.textoMedio,
+                modifier = Modifier.noRippleClickable(onAhoraNo),
+            )
+        }
+    }
+}

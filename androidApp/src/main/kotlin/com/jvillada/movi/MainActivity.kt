@@ -2,16 +2,24 @@ package com.jvillada.movi
 
 import android.graphics.Color
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
 import com.jvillada.movi.sms.SmsBackfillWorker
 import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.SmsFilterRefreshWorker
 
-class MainActivity : ComponentActivity() {
+/**
+ * `FragmentActivity` y no `ComponentActivity` por «Entrar con huella»: el `BiometricPrompt` de
+ * AndroidX se monta como fragmento y no sabe hospedarse en otra cosa. `FragmentActivity` ES una
+ * `ComponentActivity`, así que `enableEdgeToEdge`, `setContent` y el resto siguen igual; lo único
+ * que cambia es que ahora hay un `FragmentManager` donde el prompt pueda vivir. Sin esto,
+ * `huellaDeLaPlataforma()` no encuentra actividad y la función queda apagada en el teléfono
+ * —sin fallar, pero sin existir—.
+ */
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
