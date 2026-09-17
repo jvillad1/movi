@@ -148,6 +148,33 @@ class DocumentosEnElContextoDeMoviAiTest {
         assertFalse(ctx.contains("una nota"), "las notas cuestan fichas en cada mensaje:\n$ctx")
     }
 
+    /**
+     * **Pedirlos sin filtro cuesta caro, así que trae menos y lo dice.** Medido: la lista entera de
+     * los 33 papeles del dueño son casi ocho mil caracteres — tanto como costaba el contexto viejo
+     * completo, en una sola consulta. Con el techo corto entra una parte, el bloque anuncia cuántos
+     * quedaron fuera, y el modelo puede volver a pedir con un filtro.
+     */
+    @Test
+    fun `sin filtro los documentos vienen recortados, y el recorte se anuncia`() {
+        repeat(40) { i ->
+            documento(duenoId, "Extracto_$i.pdf", "nota larga de relleno ".repeat(6), subidoEn = i.toLong())
+        }
+
+        val sinFiltro = documentosSegunElAsistente()
+        assertTrue(sinFiltro.length < PRESUPUESTO_DE_DOCUMENTOS, "quedó en ${sinFiltro.length} chars")
+        assertTrue(
+            sinFiltro.contains("hay 40 documentos guardados"),
+            "tiene que decir cuántos quedaron fuera:\n${sinFiltro.take(300)}",
+        )
+
+        // Con filtro no hace falta recortar: son pocos.
+        val conFiltro = runBlocking {
+            ejecutarHerramienta(duenoId, LlamadaDeHerramienta("tu_1", BUSCAR_DOCUMENTOS, mapOf("texto" to "Extracto_7.pdf")))
+        }
+        assertTrue(conFiltro.contains("Extracto_7.pdf"), conFiltro)
+        assertFalse(conFiltro.contains("Extracto_8.pdf"), conFiltro)
+    }
+
     @Test
     fun `sin documentos el contexto no menciona documentos`() {
         cuenta(duenoId, "acc-2334", "Crediágil 2334")

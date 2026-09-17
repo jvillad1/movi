@@ -59,6 +59,14 @@ const val TOTALES_POR_CATEGORIA = "totales_por_categoria"
 const val BUSCAR_DOCUMENTOS = "buscar_documentos"
 
 /**
+ * **Cuánto se le manda cuando pide los documentos sin filtrar.** La lista entera de los 33 papeles
+ * del dueño son casi ocho mil caracteres: tanto como costaba el contexto viejo completo, en una
+ * sola consulta. Con este techo entra un tercio, el bloque dice que hay más, y el modelo puede
+ * volver a pedir con un filtro — que es lo que debería haber hecho de entrada.
+ */
+internal const val PRESUPUESTO_SIN_FILTRO = 2_500
+
+/**
  * **Cuántos movimientos devuelve una búsqueda.** No es una cota de rendimiento: es que una lista
  * más larga que esto no la lee nadie, ni el modelo ni el dueño en la respuesta, y lo que sí hace
  * es empujar el resto de la conversación fuera de la ventana.
@@ -167,8 +175,11 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
  * El texto que devuelve es exactamente el mismo de antes (ver [renderizarDocumentos]): lo único
  * que cambió es CUÁNDO se paga.
  *
- * Con [texto] filtra por nombre o por notas; sin él los trae todos, hasta donde llega el
- * presupuesto de caracteres que esa función ya administraba.
+ * Con [texto] filtra por nombre o por notas; sin él los trae todos, **con un presupuesto más
+ * corto**. Eso último salió de medir: la lista entera son 7.967 caracteres, o sea que una consulta
+ * sin filtro cuesta en entrada lo mismo que costaba el contexto viejo completo. Con filtro devuelve
+ * unos cientos. El recorte se anuncia solo (ver [renderizarDocumentos]), así que el modelo sabe que
+ * hay más y puede volver a preguntar con un filtro — que es justo lo que conviene que haga.
  */
 private suspend fun buscarDocumentos(uid: String, args: Map<String, String>): String {
     val texto = args["texto"]?.takeIf { it.isNotBlank() }
@@ -185,7 +196,8 @@ private suspend fun buscarDocumentos(uid: String, args: Map<String, String>): St
         Accounts.selectAll().where { Accounts.userId eq uid }
             .associate { it[Accounts.id] to it[Accounts.name] }
     }
-    return renderizarDocumentos(elegidos, nombresDeCuenta).trim()
+    val presupuesto = if (texto == null) PRESUPUESTO_SIN_FILTRO else PRESUPUESTO_DE_DOCUMENTOS
+    return renderizarDocumentos(elegidos, nombresDeCuenta, presupuesto).trim()
 }
 
 // ── La lectura, una sola y con las reglas de plata ───────────────────────────

@@ -271,7 +271,10 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                     Tool.InputSchema.Properties.builder()
                         .putAdditionalProperty(
                             "texto",
-                            texto("Parte del nombre del documento o de sus notas. Sin esto vienen todos."),
+                            texto(
+                                "Parte del nombre del documento o de sus notas. Pásalo casi siempre: " +
+                                    "sin filtro solo vienen los primeros y te dice cuántos quedaron fuera.",
+                            ),
                         )
                         .build(),
                 )
