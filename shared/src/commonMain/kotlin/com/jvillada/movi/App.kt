@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -75,6 +76,7 @@ import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.components.recibeElScrollDeLosMargenes
+import com.jvillada.movi.ui.components.elTecladoEstaALaVista
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 
@@ -231,6 +233,7 @@ fun App() {
                 val activeTab = navTabFor(currentScreen)
                 val showRail = widthClass == WindowWidthClass.Expanded && activeTab != null
                 val showBottomNav = widthClass == WindowWidthClass.Compact && activeTab != null
+                val tecladoALaVista = elTecladoEstaALaVista()
                 val onTabSelected: (NavTab) -> Unit = { tab -> navigate(screenForTab(tab)) }
 
                 // Los márgenes a los lados de la columna de 600 dp reenvían la rueda del mouse a
@@ -249,7 +252,16 @@ fun App() {
                     modifier = Modifier.weight(1f).fillMaxHeight().recibeElScrollDeLosMargenes(relevoDeScroll),
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding()) {
+                // **`imePadding()` es lo que hace que el teclado no tape lo que estás
+                // escribiendo.** Movi dibuja de borde a borde (`enableEdgeToEdge`), y con eso el
+                // `adjustResize` del manifiesto deja de encoger la ventana: Android manda el alto
+                // del teclado como un inset y la app tiene que descontarlo. Nadie lo descontaba, y
+                // el chat de Movi AI se abría con el campo de texto debajo del teclado.
+                //
+                // Va acá, en la columna raíz, y no en cada pantalla: el agujero era de TODAS las
+                // que tienen un campo abajo, y una sola línea las cubre a todas — incluidas las
+                // hojas, que se dibujan adentro de este mismo hueco.
+                Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding().imePadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
@@ -367,7 +379,10 @@ fun App() {
                 }
                 } // screen slot
 
-                if (showBottomNav) {
+                // Y con el teclado arriba la barra se esconde: no sirve para nada mientras se
+                // escribe, y son 60 dp de los pocos que quedan — con ella puesta, en un teléfono
+                // chico el campo de texto queda a un renglón del borde.
+                if (showBottomNav && !tecladoALaVista) {
                     MinBottomNav(active = activeTab, onTabSelected = onTabSelected)
                 }
                 } // inner Column (max-width container + bottom nav)
