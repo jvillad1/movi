@@ -239,12 +239,16 @@ internal fun buildHtmlEmail(
             com.jvillada.movi.shared.model.PaymentStatus.UPCOMING   -> "color:#6b7280"
         }
 
-        val amountFormatted = String.format(java.util.Locale.US, "%,d", rule.amount)
         // Una tarjeta no tiene cuota fija: su monto es el saldo. Anunciarlo como el pago sería
         // decirle al dueño que este mes le salen $27.501.150 de la cuenta. Ver `montoEsSaldo`.
+        //
+        // **Y el rótulo de la moneda sale de la regla, no de una constante.** Este era el peor de
+        // los tres renderers: el saldo de una tarjeta en dólares no solo se formateaba como pesos,
+        // se AFIRMABA «COP» — «saldo $1.200 COP» por una deuda de US$1.200, que son unos
+        // $4.800.000. Ver `RecurringRule.currency`.
         val segundaLinea =
-            if (rule.montoEsSaldo) "saldo $${amountFormatted} COP · revisa tu extracto"
-            else "$${amountFormatted} COP"
+            if (rule.montoEsSaldo) "${montoConMoneda(rule)} · revisa tu extracto"
+            else montoConMoneda(rule)
 
         """<tr>
           <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0">
@@ -281,6 +285,26 @@ internal fun buildHtmlEmail(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * El monto de una regla **con su moneda**, y con el «saldo» delante cuando lo que se muestra es la
+ * deuda de una tarjeta y no una cuota.
+ *
+ * `internal` por lo mismo que [buildHtmlEmail]: hay una prueba que fija que una tarjeta en dólares
+ * no salga rotulada como pesos. El COP se sigue diciendo con el sufijo explícito —«$1.843.014 COP»,
+ * que es como el correo lo decía desde siempre—; el dólar usa el prefijo «US$», que es el mismo que
+ * usa `formatMoney` del lado del cliente. Una tercera moneda se nombra con su código, sin inventar
+ * un símbolo.
+ */
+internal fun montoConMoneda(rule: RecurringRule): String {
+    val monto = String.format(java.util.Locale.US, "%,d", rule.amount)
+    val texto = when (rule.currency) {
+        "COP" -> "$" + monto + " COP"
+        "USD" -> "US$" + monto
+        else  -> rule.currency + " " + monto
+    }
+    return if (rule.montoEsSaldo) "saldo $texto" else texto
+}
 
 /** Nombres de mes en español, indexados 0=enero..11=diciembre (evita depender de Locale("es")). */
 private val SPANISH_MONTHS = listOf(

@@ -53,6 +53,12 @@ fun virtualRuleForCard(
         amount     = currentDebt,
         // Es el SALDO, no la cuota: quien lo muestre tiene que saberlo. Ver `montoEsSaldo`.
         montoEsSaldo = true,
+        // **Y en qué moneda es ese saldo.** `currentDebt` viene en la moneda de la cuenta; sin
+        // este dato los tres renderers lo pintaban como pesos y una tarjeta que debe US$1.200
+        // anunciaba «saldo $1.200» —el correo, encima, rotulado «COP»— al lado de las tarjetas en
+        // pesos. Acá NO se convierte, a diferencia de `pagoMinimoCop`: ese alimenta un total en
+        // pesos, este es la cifra que el dueño va a reconocer contra su extracto.
+        currency   = accountCurrency,
         pagoMinimoCop = minimoEnPesos(terms.pagoMinimo, accountCurrency, tasa),
         dayOfMonth = terms.paymentDay,
         type       = TransactionType.EXPENSE,

@@ -61,6 +61,54 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDate
 
+/**
+ * **Los tres motivos por los que una lectura puede no traer movimientos, cada uno con su frase.**
+ *
+ * Son constantes y no literales adentro de la ruta para poder afirmarlas desde una prueba: el
+ * defecto que arreglan no es que el texto estuviera mal escrito, es que NO HABÍA texto —los tres
+ * casos salían como un 200 con la lista vacía—, y una prueba que solo mire el código de estado no
+ * distingue «no hay clave» de «el extracto se cortó».
+ *
+ * En español neutro con tuteo, como todo lo que el dueño lee, y cada una termina en lo que él
+ * puede hacer: partir el archivo, o avisarle a quien administra Movi.
+ */
+const val EXTRACTO_INCOMPLETO: String =
+    "El extracto es muy largo y la lectura quedó incompleta, así que no te mostramos una lista a " +
+        "medias. Divide el archivo en dos (por ejemplo, una quincena en cada uno) y súbelo por partes."
+
+const val IMAGEN_INCOMPLETA: String =
+    "La imagen tiene demasiados movimientos y la lectura quedó incompleta. Sube el extracto en PDF, " +
+        "o toma varias capturas con menos movimientos cada una."
+
+const val LECTURA_SIN_LLAVE: String =
+    "La lectura automática de extractos está apagada: al servidor le falta la clave de Anthropic. " +
+        "Tu archivo no tiene nada malo — avísale a quien administra Movi."
+
+const val EXTRACTO_SIN_MOVIMIENTOS: String =
+    "No encontramos movimientos en este archivo. Revisa que sea el extracto con el detalle de " +
+        "movimientos y no un resumen o un certificado."
+
+/**
+ * **Por qué esta lectura no se puede importar**, o `null` si sí se puede.
+ *
+ * Es el único lugar donde se decide, y por eso es una función y no un `when` adentro de la ruta:
+ * los dos caminos —archivo de texto e imagen— tienen que contestar lo mismo ante lo mismo, y el
+ * defecto que arregla nació justamente de que uno de ellos (el genérico) no contestaba nada.
+ *
+ * El caso interesante es el último: una lectura que salió bien y trajo CERO filas. El camino
+ * Famirios ya avisaba; el genérico devolvía 200 con la lista vacía, y la pantalla de revisión
+ * abría en «0 nuevas · 0 coincidencias» con el botón de importar apagado — que se lee como «este
+ * mes ya estaba conciliado». Un extracto sin movimientos existe (un mes sin usar la cuenta), pero
+ * decirlo con palabras es barato y no deja lugar a esa conclusión.
+ */
+internal fun fallaDeLaLectura(lectura: ClaudeStatementParser.Lectura, esImagen: Boolean): String? =
+    when (lectura) {
+        ClaudeStatementParser.Lectura.SinLlave -> LECTURA_SIN_LLAVE
+        ClaudeStatementParser.Lectura.Incompleta -> if (esImagen) IMAGEN_INCOMPLETA else EXTRACTO_INCOMPLETO
+        is ClaudeStatementParser.Lectura.Ok ->
+            if (lectura.movimientos.isEmpty()) EXTRACTO_SIN_MOVIMIENTOS else null
+    }
+
 fun Route.statementRoutes() {
 
     post("/api/statements/upload") {
@@ -114,7 +162,13 @@ fun Route.statementRoutes() {
                 return@post
             }
             bankName = StatementParser.detectBankName(fileName)
-            parsed = ClaudeStatementParser.parseImage(bytes, imageMime, Stores.merchantRules.getRules(uid))
+            val lectura = ClaudeStatementParser.leerImagen(bytes, imageMime, Stores.merchantRules.getRules(uid))
+            val falla = fallaDeLaLectura(lectura, esImagen = true)
+            if (falla != null) {
+                call.respond(HttpStatusCode.UnprocessableEntity, falla)
+                return@post
+            }
+            parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
         } else {
             val text = StatementParser.extractText(bytes, fileName)
             textoDelExtracto = text
@@ -136,7 +190,13 @@ fun Route.statementRoutes() {
                     FamiriosParser.parse(wb, AppClock.today())
                 }
             } else {
-                ClaudeStatementParser.parse(text, Stores.merchantRules.getRules(uid))
+                val lectura = ClaudeStatementParser.leer(text, Stores.merchantRules.getRules(uid))
+                val falla = fallaDeLaLectura(lectura, esImagen = false)
+                if (falla != null) {
+                    call.respond(HttpStatusCode.UnprocessableEntity, falla)
+                    return@post
+                }
+                (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
             }
             if (isFamirios && parsed.isEmpty()) {
                 call.respond(HttpStatusCode.UnprocessableEntity,

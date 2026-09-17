@@ -85,12 +85,26 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // mecanismo que ya usaba Movimientos, y por el mismo motivo: la hoja es una modal y esta
     // pantalla nunca sale de la composición.
     val refreshTick = LocalRefreshTick.current
+    // El día de corte del dueño y los inicios que movió a mano — lo mismo que cargan Movimientos,
+    // el Inicio y Presupuestos. Ver [ajustesDelPeriodo] para por qué esta pantalla los necesita.
+    var cutoffDay by remember { mutableStateOf(1) }
+    var iniciosPropios by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(reloadKey, refreshTick) {
         loading = true
         val loans = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { credits = it; creditosLeidos = true } }
         val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { cards = it; tarjetasLeidas = true } }
+        // Si el perfil no se puede leer, se queda el corte 1 (el mes de calendario) y no se dice:
+        // acá el período no cambia ninguna cifra de plata, solo el NOMBRE del mes de la última
+        // cuota. Un error a pantalla completa por un mes corrido sería más ruido que el defecto.
+        val perfil = launch {
+            runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
+                cutoffDay = it.periodCutoffDay
+                iniciosPropios = it.periodStarts
+            }
+        }
         loans.join()
         tarjetas.join()
+        perfil.join()
         loading = false
     }
     // Sin las DOS respuestas no se sabe si hay deudas: «Deuda total $0 · Sin créditos» con el botón
@@ -101,10 +115,26 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // una sola vez y baja a las tarjetas: la aritmética vive en `:core` para que el server y los
     // tres clientes vean el mismo número. Ver [PlanDelCredito].
     val planes = remember(credits) { credits.associate { it.account.id to planDelCredito(it) } }
-    // El mes en curso, para poder decir «enero de 2046» en vez de «232 cuotas». Con corte 1, que
-    // es el mes de calendario: la fecha de la última cuota no depende del corte que el dueño use
-    // para sus gastos.
-    val periodoActual = remember { periodoDe(Clock.System.now().toEpochMilliseconds(), PeriodSettings()) }
+    /**
+     * El mes en curso, para poder decir «enero de 2046» en vez de «232 cuotas».
+     *
+     * **Con el período del dueño, no con el de calendario.** Acá había un `PeriodSettings()` a
+     * secas —corte 1— con el argumento de que la fecha de la última cuota no depende del corte que
+     * él use para sus gastos. Suena razonable y es falso en la práctica: esa fecha se dice contando
+     * meses desde «el mes en curso», y con corte 25, el 26 de septiembre el resto de la app ya está
+     * en octubre mientras esto seguía en septiembre. La misma deuda se anunciaba «la última en
+     * octubre de 2029» acá y habría que leerla como noviembre — seis días de cada mes, en una
+     * pantalla cuyo trabajo es decir cuándo se termina de pagar.
+     *
+     * Lo que importa no es cuál de los dos calendarios es «el correcto» en abstracto, es que Movi
+     * tenga UNO: el dueño lee estas fechas al lado de las de Movimientos y el Inicio.
+     */
+    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios) {
+        PeriodSettings(cutoffDay = cutoffDay.coerceIn(1, 31), iniciosPropios = iniciosPropios)
+    }
+    val periodoActual = remember(ajustesDelPeriodo) {
+        periodoDe(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)

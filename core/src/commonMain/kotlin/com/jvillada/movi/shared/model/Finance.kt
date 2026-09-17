@@ -489,6 +489,28 @@ data class RecurringRule(
      */
     val montoEsSaldo: Boolean = false,
     /**
+     * **En qué moneda está [amount].**
+     *
+     * Nació con la tarjeta en dólares. `virtualRuleForCard` pone en [amount] la deuda de la tarjeta
+     * **en la moneda de la cuenta** (una tarjeta en dólares debe dólares), pero la regla no traía la
+     * moneda, así que los tres renderers —Recurrentes, el correo y el push— la formateaban como
+     * pesos: una deuda de US$1.200 se anunciaba como «saldo $1.200», y el correo encima lo
+     * **rotulaba** «$1.200 COP», al lado de las tarjetas en pesos que sí decían la verdad. La cifra
+     * real ronda los $4.800.000; el error no es de redondeo, es de un factor de 4.000.
+     *
+     * **No se convierte: se dice en su moneda.** Es la misma decisión que documenta
+     * [pagoMinimoCop] por el otro lado — ahí convertir tiene sentido porque el mínimo entra a un
+     * total en pesos, y por eso `minimoEnPesos` prefiere `null` antes que usar la tasa de respaldo
+     * de $4.000. Acá no hay total que alimentar: la fila muestra el saldo para que el dueño lo
+     * reconozca contra su extracto, y su extracto está en dólares. Convertirlo con una tasa
+     * inventada sería el mismo número falso que aquel `null` evita.
+     *
+     * `"COP"` por defecto, y eso cubre todo lo demás: las reglas que el dueño escribió viven en
+     * `recurring_rules`, que no tiene esta columna y no la necesita, y la cuota de un crédito
+     * (`virtualRuleFor`) la hereda igual hasta que alguien tenga un crédito en otra moneda.
+     */
+    val currency: String = "COP",
+    /**
      * **Esto se paga UNA vez, no todos los meses.**
      *
      * Hermano de [montoEsSaldo], y por el mismo motivo: hay reglas sintéticas cuyo monto no

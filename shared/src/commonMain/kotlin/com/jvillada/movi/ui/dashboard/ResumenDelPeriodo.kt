@@ -103,6 +103,14 @@ data class PagoDelPeriodo(
     val diasParaVencer: Int,
     /** Su monto es el SALDO de una deuda, no lo que va a salir de la cuenta. */
     val montoEsSaldo: Boolean = false,
+    /**
+     * La moneda de [monto]. Solo es distinta de `"COP"` en el saldo de una tarjeta en dólares —ver
+     * [com.jvillada.movi.shared.model.RecurringRule.currency]—, y viaja hasta acá porque esta lista
+     * también lo PINTA: sin el dato, una deuda de US$1.200 salía en el checklist como «$1.200».
+     *
+     * No entra a [faltaPorPagar] ni a ningún total: esos ya excluyen todo lo que sea un saldo.
+     */
+    val moneda: String = "COP",
 ) {
     val vencido: Boolean get() = !pagado && diasParaVencer < 0
 }
@@ -142,6 +150,7 @@ fun checklistDelPeriodo(
                 pagado = pago.rule.id in selladas,
                 diasParaVencer = pago.daysUntil,
                 montoEsSaldo = pago.rule.montoEsSaldo,
+                moneda = pago.rule.currency,
             )
         }
         .sortedWith(

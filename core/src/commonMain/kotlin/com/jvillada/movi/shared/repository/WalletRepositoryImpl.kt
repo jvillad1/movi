@@ -645,6 +645,11 @@ class WalletRepositoryImpl(
             setBody(request)
         }.status.value
 
+    // `exigirExito()` y no `.body()` a secas, por el mismo motivo que los cuatro de abajo: esta
+    // ruta explica sus rechazos en el cuerpo, en español y a mano —«el extracto es muy largo»,
+    // «falta la clave», «no encontramos movimientos»— y sin esto el cuerpo se perdía adentro de la
+    // excepción de deserialización. Escribir un buen mensaje de error no sirve de nada si el
+    // camino por el que viaja lo tira.
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
         client.post("$baseUrl/api/statements/upload") {
             setBody(MultiPartFormDataContent(formData {
@@ -653,7 +658,7 @@ class WalletRepositoryImpl(
                     append(HttpHeaders.ContentType, mimeType)
                 })
             }))
-        }.body()
+        }.exigirExito().body()
 
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
     // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401

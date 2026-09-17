@@ -34,6 +34,7 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.CategoriaDelPeriodo
 import com.jvillada.movi.ui.dashboard.CosaParaRevisar
@@ -246,7 +247,15 @@ private fun FilaDelChecklist(pago: PagoDelPeriodo, onClick: () -> Unit) {
         Cifra(
             // El monto de una tarjeta es su saldo, no lo que va a salir: se dice más chico y en
             // gris, igual que en «Próximos pagos» (ver RecurringRule.montoEsSaldo).
-            if (pago.montoEsSaldo) formatMoneyCompact(pago.monto) else formatCOP(pago.monto),
+            //
+            // `formatMoneyCompact` abrevia en millones, que es una escala de pesos: aplicada a
+            // dólares diría «$1.200» por una deuda de US$1.200. Una moneda que no es la de la casa
+            // se dice entera y con su prefijo — son cifras cortas de por sí.
+            when {
+                pago.montoEsSaldo && pago.moneda != "COP" -> formatMoney(pago.monto, pago.moneda)
+                pago.montoEsSaldo -> formatMoneyCompact(pago.monto)
+                else -> formatCOP(pago.monto)
+            },
             if (pago.montoEsSaldo) 12.5f else 13.5f,
             color = if (pago.montoEsSaldo) Movi.colores.textoApagado else colorDelMonto,
         )
