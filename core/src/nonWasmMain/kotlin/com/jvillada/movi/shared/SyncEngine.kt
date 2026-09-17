@@ -176,6 +176,10 @@ class SyncEngine(
                     // viajaba no puede quedar sellado como «por confirmar» en el server.
                     row.reconciliationStatus,
                 )
+                // Subió: se borra el rastro de los fallos anteriores —la cuenta y, si se había
+                // llegado a escribir, el aviso—. Que este POST haya pasado es exactamente lo que
+                // el aviso decía que no pasaba.
+                db.financialEventQueries.limpiarElRastroDeFallos(row.id, row.userId)
             } catch (e: ApiException) {
                 logSyncFailure("syncEvents", e, id = row.id)
                 // Un rechazo del server (4xx que no es sesión vencida ni «demasiadas peticiones»):
@@ -189,6 +193,8 @@ class SyncEngine(
                         row.id,
                         row.userId,
                     )
+                } else if (e.status >= 500) {
+                    contarFalloDelServidor(row.id, row.userId, row.intentosFallidos, e.status)
                 }
             } catch (e: Exception) {
                 logSyncFailure("syncEvents", e, id = row.id)
@@ -256,5 +262,54 @@ class SyncEngine(
     private fun logSyncFailure(step: String, error: Exception, id: String? = null) {
         val target = id?.let { " id=$it" } ?: ""
         println("[SyncEngine] $step falló$target: ${error.message}")
+    }
+
+    /**
+     * **Cuenta un fallo de servidor de esta fila, y avisa cuando ya no se puede llamar pasajero.**
+     *
+     * Un 5xx no entra en la lista de rechazos de [syncEvents] a propósito: es el server diciendo
+     * «me rompí», y eso suele arreglarse solo en el ciclo siguiente. El problema era el 5xx que
+     * NO se arregla —el que daba un concepto demasiado largo antes de que el server lo recortara,
+     * y el que va a dar lo próximo con lo que se atore—: la fila reintentaba cada 30 segundos para
+     * siempre y en Movimientos no había una sola palabra. Un movimiento que solo existe en este
+     * teléfono y nadie te lo dice es peor que uno rechazado con motivo.
+     *
+     * Así que se cuentan los fallos SEGUIDOS y, pasado el umbral, se escribe el `syncError` que el
+     * aviso de Movimientos ya sabe mostrar ([com.jvillada.movi.shared.model.MovimientoRechazado]).
+     * Dos cosas que no cambian, y que son la mitad honesta de esto:
+     *
+     * - **no se deja de reintentar** — la fila sigue saliendo en `selectUnsynced`, así que sube
+     *   sola el día que el server se recupere;
+     * - **un éxito borra la cuenta y el aviso** (ver `limpiarElRastroDeFallos` en [syncEvents]).
+     *
+     * Solo cuenta lo que este ciclo sabe que llegó al server y volvió mal. Sin red no se cuenta
+     * (cae en el `catch (e: Exception)` de más abajo), y tampoco un 401 —sesión vencida, se
+     * arregla entrando— ni un 408/429, que son pasajeros por definición.
+     */
+    private fun contarFalloDelServidor(id: String, uid: String, fallosPrevios: Long?, status: Int) {
+        val intentos = (fallosPrevios ?: 0L) + 1L
+        db.financialEventQueries.guardarIntentosFallidos(intentos, id, uid)
+        if (intentos >= INTENTOS_ANTES_DE_AVISAR) {
+            db.financialEventQueries.markSyncError(elServidorNoLoRecibe(status), id, uid)
+        }
+    }
+
+    companion object {
+        /**
+         * **Cuántos fallos seguidos de servidor hacen falta antes de avisar.** Diez ciclos de 30
+         * segundos son cinco minutos: lo bastante para que un despliegue, un reinicio o un pico
+         * pasen sin molestar a nadie, y lo bastante poco para que el dueño se entere el mismo rato
+         * en que el movimiento se quedó trabado — no dos días después, cuando ya no se acuerda de
+         * haberlo anotado.
+         */
+        const val INTENTOS_ANTES_DE_AVISAR: Long = 10L
+
+        /**
+         * Lo que se le dice cuando el server lleva rato negándose a recibir un movimiento. Dice las
+         * dos cosas que importan: que Movi no se rindió, y que el problema está del otro lado —así
+         * no se pone a buscar qué escribió mal.
+         */
+        fun elServidorNoLoRecibe(status: Int): String =
+            "Movi lo sigue intentando, pero el servidor no lo está recibiendo (error $status)."
     }
 }

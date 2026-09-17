@@ -547,6 +547,138 @@ class SyncEngineTest {
         assertEquals(1, db.voidEventQueries.selectUnsynced().executeAsList().size)
     }
 
+    // ── El 5xx que no afloja ──────────────────────────────────────────────────
+
+    /**
+     * Server que se rompe las primeras [fallos] veces y después recibe bien. Cuenta los intentos
+     * para que las pruebas puedan afirmar que **se siguió reintentando**, que es la mitad de este
+     * arreglo que sería fácil romper sin que ninguna otra prueba se quejara.
+     */
+    private class ServidorRoto(var fallos: Int, val status: Int = 500) : NoOpRepository() {
+        var intentos = 0
+        val subidos = mutableListOf<String>()
+
+        override suspend fun createAccount(account: Account): Account = account
+
+        override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+            intentos++
+            if (fallos > 0) {
+                fallos--
+                throw ApiException(status, "Internal Server Error")
+            }
+            subidos += event.id
+            return event
+        }
+    }
+
+    /**
+     * **Un tropezón del server no se anuncia.** Dos 5xx seguidos y al tercer ciclo entra: eso es un
+     * despliegue o un reinicio, y avisar ahí sería enseñarle al dueño a ignorar el aviso. El umbral
+     * ([SyncEngine.INTENTOS_ANTES_DE_AVISAR]) existe justamente para no gastar el aviso en esto.
+     */
+    @Test
+    fun syncEvents_un_5xx_que_se_recupera_nunca_llega_a_avisar() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-5xx-ok", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-5xx-ok", "acc-5xx-ok", TransactionType.EXPENSE, 9_000L))
+        val remote = ServidorRoto(fallos = 2)
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+
+        repeat(3) {
+            engine.syncEvents()
+            assertTrue(local.getMovimientosRechazados().isEmpty(), "no se avisa por un tropezón")
+        }
+
+        assertEquals(3, remote.intentos, "los dos fallos no cortaron los reintentos")
+        assertNotNull(db.financialEventQueries.selectById("ev-5xx-ok", testUserId).executeAsOne().syncedAt)
+        assertEquals(listOf("ev-5xx-ok"), remote.subidos)
+    }
+
+    /**
+     * **El 5xx que no se arregla sí se dice, y se sigue intentando igual.**
+     *
+     * Era el agujero: `syncError` solo se marcaba para un 4xx, así que un movimiento que el server
+     * rechazaba con 500 —la forma que tenía un concepto demasiado largo— se quedaba reintentando
+     * cada 30 segundos para siempre y en Movimientos no aparecía nada. Ahora, pasados
+     * [SyncEngine.INTENTOS_ANTES_DE_AVISAR] fallos seguidos (unos cinco minutos), el aviso lo dice
+     * — sin dejar de empujar, que es lo que le permite subir solo cuando el server vuelve.
+     */
+    @Test
+    fun syncEvents_un_5xx_que_persiste_avisa_y_no_deja_de_reintentar() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-5xx", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-5xx", "acc-5xx", TransactionType.EXPENSE, 9_000L))
+        val remote = ServidorRoto(fallos = Int.MAX_VALUE, status = 503)
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+
+        val antesDelUmbral = (SyncEngine.INTENTOS_ANTES_DE_AVISAR - 1L).toInt()
+        repeat(antesDelUmbral) { engine.syncEvents() }
+        assertTrue(local.getMovimientosRechazados().isEmpty(), "todavía puede ser pasajero")
+
+        engine.syncEvents()
+        val rechazado = local.getMovimientosRechazados().single()
+        assertEquals("ev-5xx", rechazado.evento.id)
+        assertEquals(SyncEngine.elServidorNoLoRecibe(503), rechazado.motivo)
+        assertTrue("sigue intentando" in rechazado.motivo, rechazado.motivo)
+
+        // Y sigue empujando: el aviso no es una rendición.
+        engine.syncEvents()
+        assertEquals(SyncEngine.INTENTOS_ANTES_DE_AVISAR + 1L, remote.intentos.toLong())
+        assertNull(db.financialEventQueries.selectById("ev-5xx", testUserId).executeAsOne().syncedAt)
+    }
+
+    /** Cuando el server vuelve, el movimiento sube y el aviso se va con la cuenta de fallos. */
+    @Test
+    fun syncEvents_un_exito_borra_la_cuenta_de_fallos_y_el_aviso() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-vuelve", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-vuelve", "acc-vuelve", TransactionType.EXPENSE, 9_000L))
+        val remote = ServidorRoto(fallos = SyncEngine.INTENTOS_ANTES_DE_AVISAR.toInt())
+        val engine = SyncEngine(db = db, remote = remote, userId = { testUserId })
+        engine.syncAccounts()
+
+        repeat(SyncEngine.INTENTOS_ANTES_DE_AVISAR.toInt()) { engine.syncEvents() }
+        assertEquals(1, local.getMovimientosRechazados().size, "llegó al umbral y avisó")
+        assertEquals(
+            SyncEngine.INTENTOS_ANTES_DE_AVISAR,
+            db.financialEventQueries.selectById("ev-vuelve", testUserId).executeAsOne().intentosFallidos,
+        )
+
+        engine.syncEvents()
+
+        assertEquals(listOf("ev-vuelve"), remote.subidos)
+        val fila = db.financialEventQueries.selectById("ev-vuelve", testUserId).executeAsOne()
+        assertNotNull(fila.syncedAt)
+        assertNull(fila.intentosFallidos, "la cuenta arranca de cero la próxima vez")
+        assertNull(fila.syncError)
+        assertTrue(local.getMovimientosRechazados().isEmpty())
+    }
+
+    /** Sin red no hay server que se niegue: eso no cuenta para el aviso. */
+    @Test
+    fun syncEvents_la_falta_de_red_no_cuenta_como_un_servidor_que_se_niega() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-sin-red", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-sin-red", "acc-sin-red", TransactionType.EXPENSE, 9_000L))
+        val sinRed = object : NoOpRepository() {
+            override suspend fun createAccount(account: Account): Account = account
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent = throw IllegalStateException("sin red")
+        }
+        val engine = SyncEngine(db = db, remote = sinRed, userId = { testUserId })
+        engine.syncAccounts()
+
+        repeat(SyncEngine.INTENTOS_ANTES_DE_AVISAR.toInt() + 2) { engine.syncEvents() }
+
+        assertTrue(local.getMovimientosRechazados().isEmpty(), "el teléfono sin señal no es culpa del server")
+        assertNull(db.financialEventQueries.selectById("ev-sin-red", testUserId).executeAsOne().intentosFallidos)
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

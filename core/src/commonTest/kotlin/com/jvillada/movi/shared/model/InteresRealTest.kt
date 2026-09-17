@@ -92,33 +92,33 @@ class InteresRealTest {
 
     @Test
     fun null_siempre_pasa() {
-        assertNull(validarInteresReal(null, 1_204_064L, AccountType.LOAN, 124_800L, null))
-        assertNull(validarInteresReal(null, 100L, AccountType.CREDIT_CARD, null, null))
+        assertNull(validarInteresReal(null, 1_204_064L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 0L))
+        assertNull(validarInteresReal(null, 100L, AccountType.CREDIT_CARD, null, null, yaCobradoEnElMes = 0L))
     }
 
     @Test
     fun un_interes_negativo_se_rechaza() {
-        assertEquals(INTERES_REAL_NEGATIVO, validarInteresReal(-1L, 1_204_064L, AccountType.LOAN, 124_800L, null))
+        assertEquals(INTERES_REAL_NEGATIVO, validarInteresReal(-1L, 1_204_064L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 0L))
     }
 
     @Test
     fun cero_es_un_interes_valido() {
         // «El banco no cobró interés este mes» es una afirmación legítima, y distinta de «no sé».
-        assertNull(validarInteresReal(0L, 1_204_064L, AccountType.LOAN, 124_800L, null))
+        assertNull(validarInteresReal(0L, 1_204_064L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 0L))
         val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 0L, 124_800L, null, yaCobradoEnElMes = 0L)
         assertEquals(1_204_064L - 124_800L, d.capital)
     }
 
     @Test
     fun una_tarjeta_no_lleva_interes_adentro_del_pago() {
-        assertEquals(INTERES_REAL_EN_TARJETA, validarInteresReal(10_000L, 1_008_902L, AccountType.CREDIT_CARD, null, null))
+        assertEquals(INTERES_REAL_EN_TARJETA, validarInteresReal(10_000L, 1_008_902L, AccountType.CREDIT_CARD, null, null, yaCobradoEnElMes = 0L))
     }
 
     @Test
     fun un_interes_que_deja_el_capital_negativo_se_rechaza_con_las_cifras() {
         // 473.227 + 124.800 = 598.027 > 500.000: la deuda SUBIRÍA con un pago. Eso no se clampa,
         // se rechaza, y el mensaje dice las tres cifras para que se vea cuál está mal.
-        val motivo = assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null))
+        val motivo = assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 0L))
 
         assertTrue("473.227" in motivo, motivo)
         assertTrue("124.800" in motivo, motivo)
@@ -129,13 +129,13 @@ class InteresRealTest {
     @Test
     fun interes_mas_seguro_igual_a_la_cuota_se_acepta_y_deja_el_capital_en_cero() {
         // El borde: nada abona a capital, pero la deuda tampoco sube. Es un pago que existe.
-        assertNull(validarInteresReal(473_227L, 598_027L, AccountType.LOAN, 124_800L, null))
+        assertNull(validarInteresReal(473_227L, 598_027L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 0L))
         assertEquals(0L, desglosarCuotaConInteresReal(598_027L, AccountType.LOAN, 473_227L, 124_800L, null, yaCobradoEnElMes = 0L).capital)
     }
 
     @Test
     fun sin_seguro_declarado_el_mensaje_no_lo_nombra() {
-        val motivo = assertNotNull(validarInteresReal(600_000L, 500_000L, AccountType.LOAN, null, null))
+        val motivo = assertNotNull(validarInteresReal(600_000L, 500_000L, AccountType.LOAN, null, null, yaCobradoEnElMes = 0L))
         assertTrue("seguro" !in motivo, motivo)
     }
 
@@ -236,6 +236,119 @@ class InteresRealTest {
         assertEquals(0L, d.seguro)
         assertEquals(0L, d.otrosCargos)
         assertEquals(1_622_385L, d.capital, "4.101.123 − 2.478.738; antes daba 1.508.285")
+    }
+
+    // ── Y la guarda mira lo MISMO que el desglose ──────────────────────────────
+
+    /**
+     * **El segundo pago chico que la validación rechazaba y el desglose sí sabía repartir.**
+     *
+     * El ·9695, seguro $124.800. El primer pago parcial cubrió el interés del mes ($473.227) y el
+     * seguro. Sobre el segundo pago, de $100.000, el dueño escribe el interés que le cobraron por
+     * él: $0 — el mes ya lo pagó.
+     *
+     * `desglosarCuotaRegistrada` honra eso desde la ola pasada y abona los $100.000 enteros. La
+     * validación se quedó mirando el seguro ENTERO de `credit_terms`: $100.000 − $0 − $124.800 da
+     * negativo, y rechazaba un pago legítimo con un mensaje que hablaba de un cargo que la app no
+     * iba a cobrar. Nunca escribió un número malo; simplemente no dejaba pasar.
+     */
+    @Test
+    fun el_segundo_pago_chico_ya_no_se_rechaza_por_un_seguro_que_el_mes_ya_cobro() {
+        val yaCobrado = 473_227L + 124_800L
+
+        assertNull(
+            validarInteresReal(0L, 100_000L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = yaCobrado),
+            "el seguro del mes ya lo cobró el primer pago: no puede rechazar por él",
+        )
+        // Y lo que se acepta es exactamente lo que se va a escribir.
+        val d = desglosarCuotaRegistrada(
+            cuota = 100_000L,
+            tipoDeLaDeuda = AccountType.LOAN,
+            saldoDeLaDeuda = 40_710_555L,
+            rateEa = 11.27,
+            seguroMensual = 124_800L,
+            otrosCargosMensuales = null,
+            interesReal = 0L,
+            yaCobradoEnElMes = yaCobrado,
+        )
+        assertEquals(0L, d.seguro)
+        assertEquals(100_000L, d.capital)
+        assertEquals(MotivoDelDesglose.INTERES_REAL, d.motivo)
+    }
+
+    @Test
+    fun el_segundo_pago_con_un_interes_chico_escrito_tambien_pasa() {
+        // La misma cuota, pero al segundo pago el banco sí le cobró algo de interés ($10.000). Con
+        // el seguro entero daba −$14.800 y se rechazaba; con el que falta cobrar (cero) abona
+        // $110.000, que es lo que el desglose escribe.
+        val yaCobrado = 473_227L + 124_800L
+
+        assertNull(validarInteresReal(10_000L, 120_000L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = yaCobrado))
+        assertEquals(
+            110_000L,
+            desglosarCuotaConInteresReal(120_000L, AccountType.LOAN, 10_000L, 124_800L, null, yaCobradoEnElMes = yaCobrado).capital,
+        )
+    }
+
+    @Test
+    fun un_mes_que_todavia_no_cobro_el_seguro_sigue_rechazando() {
+        // Lo que NO es esto: «ignorar el seguro cuando hay pagos previos». Un primer abono de
+        // $200.000 contra un interés escrito de $473.227 ni llega al seguro —la escalera se lo
+        // come entero el interés—, así que el seguro del mes sigue vivo y un pago de $500.000 con
+        // ese interés sigue sin caber. Es la escalera del desglose, no un permiso: la misma
+        // aritmética que `lo_ya_cobrado_que_solo_alcanzo_para_el_interes_no_borra_el_seguro`.
+        val motivo = assertNotNull(
+            validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 200_000L)
+        )
+        assertTrue("124.800" in motivo, motivo)
+        assertTrue("subiría" in motivo, motivo)
+    }
+
+    @Test
+    fun un_interes_mas_grande_que_el_pago_se_sigue_rechazando_aunque_el_mes_ya_cobro() {
+        // El caso que la guarda existe para atrapar, con el mes ya cobrado: el interés escrito se
+        // cobra ENTERO siempre, así que $200.000 sobre un pago de $100.000 haría subir la deuda.
+        val motivo = assertNotNull(
+            validarInteresReal(200_000L, 100_000L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 473_227L + 124_800L)
+        )
+        assertTrue("200.000" in motivo, motivo)
+        assertTrue("subiría" in motivo, motivo)
+        // Y el mensaje no nombra un seguro que ya está pago: dice las cifras que de verdad se
+        // restaron, para que el dueño pueda rehacer la cuenta.
+        assertTrue("seguro" !in motivo, motivo)
+    }
+
+    @Test
+    fun lo_ya_cobrado_no_le_perdona_nada_a_un_interes_negativo_ni_a_una_tarjeta() {
+        val yaCobrado = 473_227L + 124_800L
+        assertEquals(
+            INTERES_REAL_NEGATIVO,
+            validarInteresReal(-1L, 1_204_064L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = yaCobrado),
+        )
+        assertEquals(
+            INTERES_REAL_EN_TARJETA,
+            validarInteresReal(10_000L, 1_008_902L, AccountType.CREDIT_CARD, null, null, yaCobradoEnElMes = yaCobrado),
+        )
+    }
+
+    @Test
+    fun la_guarda_y_el_desglose_no_pueden_discrepar_en_ningun_borde() {
+        // La regla entera en una frase: si la guarda deja pasar, el desglose no puede dar un
+        // capital negativo; y si el desglose daría uno, la guarda tiene que rechazar. Se barre el
+        // borde de la cuota del ·9695 con el seguro ya cobrado a medias y entero.
+        val seguro = 124_800L
+        for (yaCobrado in listOf(0L, 100_000L, 473_227L, 473_227L + 60_000L, 473_227L + seguro)) {
+            for (cuota in listOf(0L, 50_000L, 124_800L, 200_000L, 604_064L)) {
+                for (interes in listOf(0L, 10_000L, 473_227L)) {
+                    val motivo = validarInteresReal(interes, cuota, AccountType.LOAN, seguro, null, yaCobrado)
+                    if (motivo == null) {
+                        val d = desglosarCuotaConInteresReal(cuota, AccountType.LOAN, interes, seguro, null, yaCobrado)
+                        assertTrue(d.capital >= 0L, "aceptó $interes sobre $cuota (ya cobrado $yaCobrado) y dio ${d.capital}")
+                        assertEquals(cuota, d.interes + d.seguro + d.otrosCargos + d.capital)
+                    }
+                }
+            }
+        }
     }
 
     // ── Un crédito sin tasa también lo acepta ──────────────────────────────────

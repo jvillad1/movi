@@ -271,7 +271,10 @@ fun desgloseDelPago(
     if (deuda == null || monto == null || monto <= 0L) return null
     if (deuda.type != AccountType.LOAN && deuda.type != AccountType.CREDIT_CARD) return null
     val interesValido = interesReal?.takeIf {
-        validarInteresReal(it, monto, deuda.type, terms?.insuranceMonthly, terms?.otrosCargosMensuales) == null
+        // `yaCobradoEnElMes = 0L`, el mismo que usa el desglose de abajo: la hoja no tiene los
+        // pagos del mes a mano, así que valida y estima como si este fuera el primero. Si ya hubo
+        // otro pago parcial, el server —que sí los tiene— acepta lo que acá se vería apretado.
+        validarInteresReal(it, monto, deuda.type, terms?.insuranceMonthly, terms?.otrosCargosMensuales, yaCobradoEnElMes = 0L) == null
     }
     return desglosarCuotaRegistrada(
         cuota = monto,
@@ -746,6 +749,9 @@ internal fun TransferBody(
             to.type,
             termsDelDestino?.insuranceMonthly,
             termsDelDestino?.otrosCargosMensuales,
+            // Ver `desgloseDelPago`: la hoja no sabe qué se cobró ya este mes, así que valida como
+            // si este fuera el primer pago de la cuota.
+            yaCobradoEnElMes = 0L,
         )
     } else {
         null

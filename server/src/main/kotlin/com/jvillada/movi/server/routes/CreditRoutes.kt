@@ -534,9 +534,6 @@ fun Route.creditRoutes() {
             // El botón de la app hoy no manda cuerpo —estima—; un cuerpo JSON con `interesReal`
             // se valida con la misma función que la cuota pagada desde una cuenta, y se rechaza
             // con 422 antes de escribir nada si el capital quedaría negativo.
-            validarInteresReal(pedido.interesReal, terms.installment, AccountType.LOAN, terms.insuranceMonthly, terms.otrosCargosMensuales)?.let {
-                return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
-            }
             // El saldo ANTES de esta cuota, por moneda y sin la fila de este mismo mes: igual que
             // en la ruta del pago, un reintento no puede calcular el interés sobre la deuda ya
             // bajada.
@@ -546,6 +543,45 @@ fun Route.creditRoutes() {
             val saldoAntes = loadNonVoidedEvents(uid, accountId)
                 .filter { it.id != idDelMes && it.currency == cuenta.currency }
                 .sumOf { signedDelta(AccountType.LOAN, it.type, it.amount) }
+            // La cuota de [periodo], no la del mes de hoy: registrar el 2 de septiembre la cuota de
+            // agosto no puede descontar lo que ya cobró… septiembre.
+            //
+            // Se calcula ANTES de validar y no adentro del desglose: la validación mira lo que al
+            // mes le falta cobrar, igual que el desglose. Con el seguro entero, un segundo pago de
+            // una cuota cuyo seguro ya se cobró se rechazaba por un cargo que nadie iba a cobrar.
+            val yaCobradoEnElMes = run {
+                val delMes = loadNonVoidedEvents(uid, accountId)
+                    .filter { it.id != idDelMes && it.currency == cuenta.currency && it.noAmortiza != null }
+                // **Cubierto, no guardado**, igual que en la ruta del pago (ver
+                // `cargosYaCobradosEnElMes`): una fila guarda el cargo ENTERO del mes aunque el
+                // pago no lo haya alcanzado, así que lo que de verdad cubrió es la plata que
+                // salió de la cuenta —la otra pata de su par—.
+                //
+                // Acá antes iba un `{ null }` fijo, o sea «ninguna fila tiene par», y eso le
+                // regalaba a la cuota de la nómina un interés que nadie pagó: contra los
+                // $3.646.011 de interés del mes de la libranza ·4818, un abono parcial de
+                // $3.000.000 el día 5 descontaba los $3.646.011 enteros, la cuota de la nómina
+                // cobraba $646.011 menos de interés y la deuda quedaba $646.011 por debajo de
+                // la real, sin que nada lo dijera.
+                val pares = delMes.mapNotNull { it.transferId }.toSet()
+                val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
+                    Events.selectAll()
+                        .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq accountId) }
+                        .associate { it[Events.transferId]!! to it[Events.amount] }
+                }
+                cargosYaCobradosEnElMes(delMes, vencimientoDelPeriodo, terms.dayOfMonth) { fila ->
+                    // `null` queda solo para la fila que de verdad no tiene par: la cuota que
+                    // paga la nómina o un tercero se escribe sola, sin pata del dinero, y ahí
+                    // lo guardado ES lo cubierto.
+                    fila.transferId?.let { pagadoPorPar[it] }
+                }
+            }
+            validarInteresReal(
+                pedido.interesReal, terms.installment, AccountType.LOAN,
+                terms.insuranceMonthly, terms.otrosCargosMensuales, yaCobradoEnElMes,
+            )?.let {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
+            }
             val desglose = desglosarCuotaRegistrada(
                 cuota = terms.installment,
                 tipoDeLaDeuda = AccountType.LOAN,
@@ -555,35 +591,8 @@ fun Route.creditRoutes() {
                 otrosCargosMensuales = terms.otrosCargosMensuales,
                 sinIntereses = terms.sinIntereses,
                 interesReal = pedido.interesReal,
-                // La cuota de [periodo], no la del mes de hoy: registrar el 2 de septiembre la cuota de
-                // agosto no puede descontar lo que ya cobró… septiembre.
-                yaCobradoEnElMes = run {
-                    val delMes = loadNonVoidedEvents(uid, accountId)
-                        .filter { it.id != idDelMes && it.currency == cuenta.currency && it.noAmortiza != null }
-                    // **Cubierto, no guardado**, igual que en la ruta del pago (ver
-                    // `cargosYaCobradosEnElMes`): una fila guarda el cargo ENTERO del mes aunque el
-                    // pago no lo haya alcanzado, así que lo que de verdad cubrió es la plata que
-                    // salió de la cuenta —la otra pata de su par—.
-                    //
-                    // Acá antes iba un `{ null }` fijo, o sea «ninguna fila tiene par», y eso le
-                    // regalaba a la cuota de la nómina un interés que nadie pagó: contra los
-                    // $3.646.011 de interés del mes de la libranza ·4818, un abono parcial de
-                    // $3.000.000 el día 5 descontaba los $3.646.011 enteros, la cuota de la nómina
-                    // cobraba $646.011 menos de interés y la deuda quedaba $646.011 por debajo de
-                    // la real, sin que nada lo dijera.
-                    val pares = delMes.mapNotNull { it.transferId }.toSet()
-                    val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
-                        Events.selectAll()
-                            .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq accountId) }
-                            .associate { it[Events.transferId]!! to it[Events.amount] }
-                    }
-                    cargosYaCobradosEnElMes(delMes, vencimientoDelPeriodo, terms.dayOfMonth) { fila ->
-                        // `null` queda solo para la fila que de verdad no tiene par: la cuota que
-                        // paga la nómina o un tercero se escribe sola, sin pata del dinero, y ahí
-                        // lo guardado ES lo cubierto.
-                        fila.transferId?.let { pagadoPorPar[it] }
-                    }
-                },
+                // Calculado arriba, porque la validación mira lo mismo.
+                yaCobradoEnElMes = yaCobradoEnElMes,
             )
             val amortiza = desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL
             val base = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga"
