@@ -31,8 +31,9 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.EXPLICACION_HUELLA
 import com.jvillada.movi.data.EstadoDeHuella
+import com.jvillada.movi.data.PropositoDeHuella
 import com.jvillada.movi.data.ResultadoDeHuella
-import com.jvillada.movi.data.SesionGuardada
+import com.jvillada.movi.data.motivoDeLaHuella
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.UpdateProfileRequest
@@ -262,31 +263,26 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             val alternar = alternar@{
                                 if (ocupada) return@alternar
                                 if (activada) {
-                                    huella.olvidar()
+                                    // Apagarla es inmediato y no toca la sesión: lo único que
+                                    // cambia es que al abrir la app ya no se pide el dedo.
+                                    SessionManager.huellaActivada = false
                                     activada = false
                                     avisoHuella = null
                                 } else if (estado == EstadoDeHuella.SIN_REGISTRAR) {
                                     avisoHuella = "Registra una huella en los ajustes de este teléfono y vuelve."
                                 } else {
-                                    val token = SessionManager.token
-                                    if (token == null) {
-                                        avisoHuella = "Vuelve a entrar con tu contraseña y activa la huella ahí."
-                                    } else {
-                                        ocupada = true
-                                        avisoHuella = null
-                                        huella.guardar(
-                                            SesionGuardada(
-                                                token = token,
-                                                userId = SessionManager.userId.orEmpty(),
-                                                nombre = SessionManager.userName.orEmpty(),
-                                                correo = SessionManager.userEmail.orEmpty(),
-                                            )
-                                        ) { resultado ->
-                                            ocupada = false
-                                            activada = SessionManager.huellaActivada
-                                            if (resultado != ResultadoDeHuella.EXITO) {
-                                                avisoHuella = "No se pudo activar. Vuelve a intentarlo."
-                                            }
+                                    // Se pide el dedo ANTES de prender el interruptor: prenderlo a
+                                    // ciegas lo dejaría con una puerta que recién falla la próxima
+                                    // vez que abra Movi, cuando ya no está mirando esta pantalla.
+                                    ocupada = true
+                                    avisoHuella = null
+                                    huella.pedir(PropositoDeHuella.ACTIVAR) { resultado ->
+                                        ocupada = false
+                                        if (resultado == ResultadoDeHuella.EXITO) {
+                                            SessionManager.huellaActivada = true
+                                            activada = true
+                                        } else {
+                                            avisoHuella = motivoDeLaHuella(resultado)
                                         }
                                     }
                                 }
@@ -306,18 +302,18 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                                 activada -> EXPLICACION_HUELLA
                                                 estado == EstadoDeHuella.SIN_REGISTRAR ->
                                                     "Este teléfono todavía no tiene huellas registradas."
-                                                else -> "Entra sin escribir tu contraseña en este teléfono."
+                                                else -> "Abre Movi con tu huella, sin escribir tu contraseña."
                                             },
                                             style = Movi.textos.apoyo,
                                             color = if (avisoHuella != null) Movi.colores.sale else Movi.colores.textoMedio,
                                         )
-                                        // La contracara, dicha donde se toma la decisión y no
-                                        // descubierta después: con la sesión bajo llave, los
-                                        // procesos que Android levanta solo (el barrido de SMS)
-                                        // arrancan sin token.
+                                        // El alcance exacto, dicho donde se toma la decisión y no
+                                        // descubierto después. La huella tapa la app; NO cifra la
+                                        // sesión, y eso es lo que deja a la captura de SMS
+                                        // funcionando sola en segundo plano.
                                         if (activada) {
                                             Text(
-                                                "Mientras no abras Movi, la captura de SMS en segundo plano queda en pausa.",
+                                                "Tapa la app, no la cifra. Tus SMS del banco se siguen subiendo solos aunque no abras Movi.",
                                                 style = Movi.textos.apoyo,
                                                 color = Movi.colores.textoApagado,
                                             )

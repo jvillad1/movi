@@ -23,7 +23,10 @@ import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.platform.AjustarBarrasDelSistema
 import com.jvillada.movi.platform.BackHandlerEffect
+import com.jvillada.movi.data.ArranqueDeSesion
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.decidirArranque
+import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.documentos.DocumentosScreen
@@ -86,8 +89,34 @@ fun App() {
         CompositionLocalProvider(
             LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f)
         ) {
+            // **La puerta de «Entrar con huella».**
+            //
+            // Con el interruptor prendido, la app arranca en [Screen.Login] **aunque la sesión
+            // esté viva**: es esa pantalla la que muestra el prompt del sistema y, con el dedo
+            // aceptado, navega al Inicio sin pedir que se escriba nada. Sin interruptor —o en la
+            // web y iOS, donde `Huella.deEsteAparato()` es null— esto vale [ArranqueDeSesion.SIN_PUERTA]
+            // y el arranque es exactamente el de siempre.
+            //
+            // Se decide UNA vez, acá, y no en un efecto: un `LaunchedEffect` corre después de la
+            // primera composición, o sea después de dibujar el Inicio con su plata a la vista, que
+            // es justo lo que la puerta existe para evitar.
+            val huella = Huella.deEsteAparato()
+            val puerta = remember(huella) {
+                if (huella == null) ArranqueDeSesion.SIN_PUERTA
+                else decidirArranque(
+                    haySesion = SessionManager.isLoggedIn,
+                    huellaActivada = SessionManager.huellaActivada,
+                    estado = huella.estado(),
+                )
+            }
             val backStack = remember {
-                mutableStateListOf<Screen>(if (SessionManager.isLoggedIn) Screen.Dashboard else Screen.Login)
+                mutableStateListOf<Screen>(
+                    if (SessionManager.isLoggedIn && puerta == ArranqueDeSesion.SIN_PUERTA) {
+                        Screen.Dashboard
+                    } else {
+                        Screen.Login
+                    }
+                )
             }
             val currentScreen = backStack.last()
 

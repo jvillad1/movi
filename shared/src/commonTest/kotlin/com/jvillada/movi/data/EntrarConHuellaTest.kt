@@ -10,164 +10,123 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * # «Entrar con huella», las cuatro formas de salir mal
+ * # «Entrar con huella»: cuándo se pide, y las tres formas de salir mal
  *
  * El prompt biométrico no existe en la JVM, así que **esta es la única cobertura posible** de lo
- * que pasa cuando no sale bien: cancelar, quedarse sin huellas registradas, que cambien las
- * huellas del teléfono, y un token que el servidor ya no acepta. Por eso la decisión vive en
- * funciones puras (`EntrarConHuella.kt`) y no adentro de la pantalla.
+ * que pasa cuando no sale bien: cancelar, quedarse sin huellas registradas, y un lector que falla.
+ * Por eso la decisión vive en funciones puras (`EntrarConHuella.kt`) y no adentro de la pantalla.
  *
- * Lo que estas pruebas NO cubren, dicho para que nadie las lea como cobertura del rasgo entero:
- * el cifrado real contra el Keystore de Android y el diálogo del sistema. Eso solo se puede ver
- * en un teléfono.
+ * La que más importa de todo el archivo es [elTokenSigueDisponibleDeFondo]: es el motivo por el
+ * que este diseño reemplazó al anterior.
  */
 class EntrarConHuellaTest {
 
     @BeforeTest fun limpiarAntes() = SessionManager.clear()
     @AfterTest fun limpiarDespues() = SessionManager.clear()
 
-    // ---------- Qué hacer al arrancar ----------
+    // ---------- Lo que el dueño eligió: la huella NO le cuesta la captura de SMS ----------
 
     @Test
-    fun `con la sesion abierta no se pide nada`() {
+    fun elTokenSigueDisponibleDeFondo() {
+        // Con la huella prendida y todo.
+        SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
+        SessionManager.huellaActivada = true
+
+        // Esto es exactamente lo que hacen `SmsBackfill` (cada 6 horas) y el receptor en tiempo
+        // real tras un reinicio: leer el token, sin pantalla, sin prompt, sin nadie delante del
+        // teléfono. El diseño anterior cifraba el token con una llave que pedía un dedo, así que
+        // acá devolvía null y los SMS del banco dejaban de subirse hasta que él abriera la app.
+        assertEquals("tok_123", SessionManager.token, "un worker sin token no sube ningún SMS")
+        assertTrue(SessionManager.isLoggedIn)
+        // Y lo demas que el uploader manda con el mensaje.
+        assertEquals("usr_1", SessionManager.userId)
+    }
+
+    @Test
+    fun `prender y apagar el interruptor no toca la sesion`() {
+        SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
+
+        SessionManager.huellaActivada = true
+        assertTrue(SessionManager.huellaActivada)
+        assertEquals("tok_123", SessionManager.token)
+
+        SessionManager.huellaActivada = false
+        assertFalse(SessionManager.huellaActivada)
+        assertEquals("tok_123", SessionManager.token, "apagar la huella no puede desloguear a nadie")
+        assertTrue(SessionManager.isLoggedIn)
+    }
+
+    // ---------- Qué se interpone al abrir la app ----------
+
+    @Test
+    fun `con sesion y el interruptor prendido se pide la huella`() {
         assertEquals(
-            ArranqueDeSesion.ENTRAR_DIRECTO,
-            decidirArranque(
-                sesionViva = true,
-                huellaActivada = true,
-                haySesionGuardada = true,
-                estado = EstadoDeHuella.LISTA,
-            ),
+            ArranqueDeSesion.PEDIR_HUELLA,
+            decidirArranque(haySesion = true, huellaActivada = true, estado = EstadoDeHuella.LISTA),
         )
     }
 
     @Test
-    fun `con la huella activada y algo guardado se pide la huella`() {
+    fun `sin el interruptor la app arranca como siempre`() {
         assertEquals(
-            ArranqueDeSesion.PEDIR_HUELLA,
-            decidirArranque(
-                sesionViva = false,
-                huellaActivada = true,
-                haySesionGuardada = true,
-                estado = EstadoDeHuella.LISTA,
-            ),
+            ArranqueDeSesion.SIN_PUERTA,
+            decidirArranque(haySesion = true, huellaActivada = false, estado = EstadoDeHuella.LISTA),
+        )
+    }
+
+    @Test
+    fun `sin sesion no hay nada que tapar - el login ya es una puerta`() {
+        assertEquals(
+            ArranqueDeSesion.SIN_PUERTA,
+            decidirArranque(haySesion = false, huellaActivada = true, estado = EstadoDeHuella.LISTA),
         )
     }
 
     @Test
     fun `sin huellas registradas se pide la contrasena, no un prompt que va a fallar`() {
-        // El caso del teléfono al que le borraron las huellas entre una apertura y la siguiente.
+        // El teléfono al que le borraron las huellas entre una apertura y la siguiente. No se
+        // apaga el interruptor solo (sería bajarle la guardia sin avisar) ni se borra la sesión.
         assertEquals(
             ArranqueDeSesion.PEDIR_CONTRASENA,
-            decidirArranque(
-                sesionViva = false,
-                huellaActivada = true,
-                haySesionGuardada = true,
-                estado = EstadoDeHuella.SIN_REGISTRAR,
-            ),
+            decidirArranque(haySesion = true, huellaActivada = true, estado = EstadoDeHuella.SIN_REGISTRAR),
+        )
+        assertEquals(
+            ArranqueDeSesion.PEDIR_CONTRASENA,
+            decidirArranque(haySesion = true, huellaActivada = true, estado = EstadoDeHuella.NO_DISPONIBLE),
         )
     }
 
+    // ---------- Qué se dice después del prompt ----------
+
     @Test
-    fun `el interruptor prendido sin nada guardado no pide huella`() {
-        // Es el estado en el que queda un teléfono tras un logout si el interruptor sobreviviera:
-        // pedir la huella para abrir una caja vacía sería un bucle garantizado.
-        assertEquals(
-            ArranqueDeSesion.PEDIR_CONTRASENA,
-            decidirArranque(
-                sesionViva = false,
-                huellaActivada = true,
-                haySesionGuardada = false,
-                estado = EstadoDeHuella.LISTA,
-            ),
-        )
+    fun `una huella correcta no tiene nada que explicar`() {
+        assertNull(motivoDeLaHuella(ResultadoDeHuella.EXITO))
     }
 
     @Test
-    fun `sin la huella activada la app entra como siempre`() {
-        assertEquals(
-            ArranqueDeSesion.PEDIR_CONTRASENA,
-            decidirArranque(
-                sesionViva = false,
-                huellaActivada = false,
-                haySesionGuardada = true,
-                estado = EstadoDeHuella.LISTA,
-            ),
-        )
+    fun `cancelar, sin huellas y una falla del lector dicen que hacer`() {
+        assertEquals(MENSAJE_CANCELADA, motivoDeLaHuella(ResultadoDeHuella.CANCELADA))
+        assertEquals(MENSAJE_SIN_REGISTRAR, motivoDeLaHuella(ResultadoDeHuella.SIN_REGISTRAR))
+        assertEquals(MENSAJE_FALLA, motivoDeLaHuella(ResultadoDeHuella.FALLA))
+        // Ninguno puede dejarlo sin salida: los tres nombran la contraseña, que es el camino que
+        // siempre funciona.
+        listOf(MENSAJE_CANCELADA, MENSAJE_SIN_REGISTRAR, MENSAJE_FALLA).forEach { mensaje ->
+            assertTrue(mensaje.contains("contraseña"), "«$mensaje» no le dice cómo entrar")
+        }
     }
 
     @Test
-    fun `en la web y en iOS nunca se pide huella`() {
-        // `NO_DISPONIBLE` es lo que devuelven las plataformas sin lector, y también un Android
-        // sin hardware biométrico.
-        assertEquals(
-            ArranqueDeSesion.PEDIR_CONTRASENA,
-            decidirArranque(
-                sesionViva = false,
-                huellaActivada = true,
-                haySesionGuardada = true,
-                estado = EstadoDeHuella.NO_DISPONIBLE,
-            ),
-        )
-    }
+    fun `fallar la huella no le cuesta la sesion`() {
+        // Es la diferencia entera con guardar el token bajo llave: acá la huella no abre nada, así
+        // que ningún resultado puede costarle lo que ya tenía. Lo afirma el estado, no el mensaje.
+        SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
+        SessionManager.huellaActivada = true
 
-    // ---------- Qué pasa después del prompt ----------
-
-    @Test
-    fun `una huella correcta suelta la sesion y no borra nada`() {
-        val guardada = SesionGuardada("tok_123", "usr_1", "Juan", "juan@correo.com")
-        val que = quePasaTrasLaHuella(ResultadoDeHuella.EXITO, guardada)
-
-        assertEquals(guardada, que.sesion)
-        assertFalse(que.olvidarLoGuardado)
-        assertNull(que.mensaje, "entrar bien no tiene nada que explicar")
-    }
-
-    @Test
-    fun `cancelar deja todo como estaba y lo dice`() {
-        val que = quePasaTrasLaHuella(ResultadoDeHuella.CANCELADA, null)
-
-        assertNull(que.sesion)
-        assertFalse(que.olvidarLoGuardado, "cancelar no puede costarle la sesión guardada")
-        assertEquals(MENSAJE_CANCELADA, que.mensaje)
-    }
-
-    @Test
-    fun `quedarse sin huellas registradas olvida lo guardado`() {
-        val que = quePasaTrasLaHuella(ResultadoDeHuella.SIN_REGISTRAR, null)
-
-        assertNull(que.sesion)
-        assertTrue(que.olvidarLoGuardado)
-        assertEquals(MENSAJE_SIN_REGISTRAR, que.mensaje)
-    }
-
-    @Test
-    fun `una llave invalidada olvida lo guardado - es lo unico que corta el bucle`() {
-        // Android invalida la llave cuando cambian las huellas del teléfono. Lo cifrado ya no se
-        // puede abrir NUNCA: dejarlo ahí sería ofrecer una huella inútil en cada arranque.
-        val que = quePasaTrasLaHuella(ResultadoDeHuella.LLAVE_INVALIDA, null)
-
-        assertTrue(que.olvidarLoGuardado)
-        assertEquals(MENSAJE_LLAVE_INVALIDA, que.mensaje)
-    }
-
-    @Test
-    fun `un fallo pasajero del lector no borra la sesion guardada`() {
-        val que = quePasaTrasLaHuella(ResultadoDeHuella.FALLA, null)
-
-        assertFalse(que.olvidarLoGuardado, "un lector ocupado no es motivo para perder lo guardado")
-        assertEquals(MENSAJE_FALLA, que.mensaje)
-    }
-
-    @Test
-    fun `un exito sin sesion adentro se trata como llave rota`() {
-        // Descifró, pero lo que salió no se pudo leer. No hay otra causa posible, y seguir como
-        // si nada dejaría al dueño mirando un prompt que "funciona" y no entra.
-        val que = quePasaTrasLaHuella(ResultadoDeHuella.EXITO, null)
-
-        assertNull(que.sesion)
-        assertTrue(que.olvidarLoGuardado)
-        assertEquals(MENSAJE_LLAVE_INVALIDA, que.mensaje)
+        ResultadoDeHuella.entries.forEach { resultado ->
+            motivoDeLaHuella(resultado)
+            assertEquals("tok_123", SessionManager.token, "$resultado tocó la sesión")
+            assertTrue(SessionManager.huellaActivada, "$resultado apagó el interruptor")
+        }
     }
 
     // ---------- Cuándo se ofrece ----------
@@ -181,57 +140,6 @@ class EntrarConHuellaTest {
         assertFalse(ofrecerHuellaTrasEntrar(EstadoDeHuella.NO_DISPONIBLE, yaActivada = false, yaLoRechazo = false))
     }
 
-    // ---------- Lo que se guarda, y lo que se olvida ----------
-
-    @Test
-    fun `activar guarda lo cifrado y prende el interruptor`() {
-        SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
-        SessionManager.activarHuella(iv = "00112233445566778899aabb", datos = "deadbeef")
-
-        assertTrue(SessionManager.huellaActivada)
-        assertEquals("00112233445566778899aabb" to "deadbeef", SessionManager.sesionBajoLlave)
-        // La sesión de ESTE momento no se corta: el dueño no se queda afuera por activarlo.
-        assertEquals("tok_123", SessionManager.token)
-        assertTrue(SessionManager.isLoggedIn)
-    }
-
-    @Test
-    fun `apagar el interruptor olvida lo cifrado y no cierra la sesion`() {
-        SessionManager.save("tok_123", "usr_1", "Juan", "juan@correo.com")
-        SessionManager.activarHuella(iv = "aabb", datos = "ccdd")
-        SessionManager.desactivarHuella()
-
-        assertFalse(SessionManager.huellaActivada)
-        assertNull(SessionManager.sesionBajoLlave)
-        assertEquals("tok_123", SessionManager.token, "apagar la huella no puede desloguear a nadie")
-    }
-
-    @Test
-    fun `un token vencido no deja bucle - cerrar la sesion olvida la caja fuerte`() {
-        SessionManager.save("tok_vencido", "usr_1", "Juan", "juan@correo.com")
-        SessionManager.activarHuella(iv = "aabb", datos = "ccdd")
-        assertNotNull(SessionManager.sesionBajoLlave)
-
-        // Lo que hace el servidor cuando el token de 30 días ya caducó: 401, 401, 401.
-        SessionManager.onUnauthorized()
-        SessionManager.onUnauthorized()
-        SessionManager.onUnauthorized()
-
-        assertFalse(SessionManager.isLoggedIn)
-        assertFalse(SessionManager.huellaActivada, "quedaría un interruptor prendido sin nada que abrir")
-        assertNull(SessionManager.sesionBajoLlave, "abrir esto soltaría el MISMO token muerto")
-        // Y el arranque siguiente pide la contraseña, que es lo único que puede funcionar.
-        assertEquals(
-            ArranqueDeSesion.PEDIR_CONTRASENA,
-            decidirArranque(
-                sesionViva = SessionManager.isLoggedIn,
-                huellaActivada = SessionManager.huellaActivada,
-                haySesionGuardada = SessionManager.sesionBajoLlave != null,
-                estado = EstadoDeHuella.LISTA,
-            ),
-        )
-    }
-
     @Test
     fun `el no del dueno sobrevive al logout, igual que su correo`() {
         SessionManager.huellaRechazada = true
@@ -240,9 +148,38 @@ class EntrarConHuellaTest {
         assertTrue(SessionManager.huellaRechazada, "es una respuesta sobre este teléfono, no de la sesión")
         assertFalse(ofrecerHuellaTrasEntrar(EstadoDeHuella.LISTA, yaActivada = false, yaLoRechazo = true))
 
-        // Y activarla desde Perfil borra ese "no": si lo prendió, quiere que se le ofrezca de nuevo
-        // la próxima vez que haga falta.
-        SessionManager.activarHuella(iv = "aabb", datos = "ccdd")
+        // Y prenderla borra ese «no»: si lo prendió, quiere que se le ofrezca de nuevo si hiciera
+        // falta más adelante.
+        SessionManager.huellaActivada = true
         assertFalse(SessionManager.huellaRechazada)
+    }
+
+    // ---------- El token vencido ----------
+
+    @Test
+    fun `un token vencido no deja bucle - cerrar la sesion apaga el interruptor`() {
+        SessionManager.save("tok_vencido", "usr_1", "Juan", "juan@correo.com")
+        SessionManager.huellaActivada = true
+        assertNotNull(SessionManager.token)
+
+        // Lo que hace el servidor cuando el token de 30 días ya caducó: 401, 401, 401.
+        SessionManager.onUnauthorized()
+        SessionManager.onUnauthorized()
+        SessionManager.onUnauthorized()
+
+        assertFalse(SessionManager.isLoggedIn)
+        assertFalse(
+            SessionManager.huellaActivada,
+            "quedaría pidiendo el dedo para abrir una app que igual va a rebotar al login",
+        )
+        // Y el arranque siguiente muestra el formulario directo, que es lo único que funciona.
+        assertEquals(
+            ArranqueDeSesion.SIN_PUERTA,
+            decidirArranque(
+                haySesion = SessionManager.isLoggedIn,
+                huellaActivada = SessionManager.huellaActivada,
+                estado = EstadoDeHuella.LISTA,
+            ),
+        )
     }
 }

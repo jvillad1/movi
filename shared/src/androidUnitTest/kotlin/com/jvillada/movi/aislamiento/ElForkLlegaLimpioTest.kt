@@ -16,8 +16,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.HuellaDelAparato
 import com.jvillada.movi.data.EstadoDeHuella
+import com.jvillada.movi.data.PropositoDeHuella
 import com.jvillada.movi.data.ResultadoDeHuella
-import com.jvillada.movi.data.SesionGuardada
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import kotlinx.coroutines.runBlocking
@@ -78,6 +78,7 @@ class ElForkLlegaLimpioTest {
         DiasPlegadosStore.alternar("2024-03-15")
         RecurringOfferGate.recordarLoQueYaHay(listOf(ARRIENDO), emptyList())
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
+        SessionManager.huellaActivada = true
         SessionManager.save(
             token = "token-de-otra-prueba",
             userId = "u1",
@@ -95,6 +96,7 @@ class ElForkLlegaLimpioTest {
         assertNotNull("La definición de pantalla no quedó cacheada", ScreenDefCache.dashboard)
         assertNotNull("El repositorio de prueba no quedó enchufado", Repositories.sustitutoDePrueba)
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
+        assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
     }
 
     @Test
@@ -115,7 +117,6 @@ class ElForkLlegaLimpioTest {
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
         assertFalse("«Entrar con huella» trae la resaca del método anterior", SessionManager.huellaActivada)
-        assertNull("La sesión cifrada de otra prueba sigue guardada", SessionManager.sesionBajoLlave)
 
         // El estado de `RecurringOfferGate` es privado; lo único que lo delata es lo que ofrece.
         // Sin repositorio enchufado, limpio devuelve dos listas vacías; sucio devolvería la regla
@@ -130,10 +131,7 @@ private val DEFINICION_DE_OTRA_PRUEBA = defaultDashboardDefinition()
 
 private val LECTOR_DE_OTRA_PRUEBA = object : HuellaDelAparato {
     override fun estado() = EstadoDeHuella.LISTA
-    override fun haySesionGuardada() = false
-    override fun guardar(sesion: SesionGuardada, alTerminar: (ResultadoDeHuella) -> Unit) = Unit
-    override fun abrir(alTerminar: (ResultadoDeHuella, SesionGuardada?) -> Unit) = Unit
-    override fun olvidar() = Unit
+    override fun pedir(proposito: PropositoDeHuella, alTerminar: (ResultadoDeHuella) -> Unit) = Unit
 }
 
 private val ARRIENDO = RecurringRule(
