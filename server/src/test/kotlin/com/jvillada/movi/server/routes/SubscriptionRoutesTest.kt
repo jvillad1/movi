@@ -443,6 +443,77 @@ class SubscriptionRoutesTest {
         assertEquals(90_000L, gym["amount"]!!.jsonPrimitive.long, "el re-scan no le pisa el monto que puso el dueño")
     }
 
+    // ── Una suscripción no se cuenta dos veces ───────────────────────────────
+    //
+    // El par más realista de todos, y el que ninguna criba atrapaba: el dueño anota «Netflix» a
+    // mano (clave `manual_netflix`) y meses después el detector ve los tres cargos y propone su
+    // «Netflix» canónica (clave `netflix`). Dos filas para el mismo cobro, las dos activas, y
+    // $44.900 contados dos veces en el total del mes y en «Flujo libre».
+
+    @Test
+    fun `el detector no propone una suscripcion que el dueno ya anoto a mano`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        crearSuscripcion(token, """{"displayName":"Netflix","amount":44900,"currency":"COP","dayOfMonth":14}""")
+
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+        val body = listar(token)
+        val netflix = body["subscriptions"]!!.jsonArray
+            .filter { it.jsonObject["displayName"]!!.jsonPrimitive.content == "Netflix" }
+        assertEquals(1, netflix.size, "una sola fila para el mismo cobro")
+        assertEquals("manual_netflix", netflix[0].jsonObject["merchantKey"]!!.jsonPrimitive.content)
+        // Y la plata se cuenta una vez: la manual está CONFIRMED, la detectada no existe.
+        assertEquals(44_900L, body["monthlyTotalCop"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * La otra mitad de la guarda: una fila DISMISSED no está sumando nada —el dueño dijo que no—
+     * así que no puede esconder un cobro que el detector sí encuentra.
+     */
+    @Test
+    fun `una suscripcion descartada no frena el descubrimiento del mismo cobro`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        val creada = crearSuscripcion(token, """{"displayName":"Netflix","amount":44900,"currency":"COP","dayOfMonth":14}""")
+        val id = Json.parseToJsonElement(creada.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+        transaction { Subscriptions.update({ Subscriptions.id eq id }) { it[status] = "DISMISSED" } }
+
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+        val claves = listar(token)["subscriptions"]!!.jsonArray
+            .map { it.jsonObject["merchantKey"]!!.jsonPrimitive.content }
+        assertTrue("netflix" in claves, "la descartada no bloquea el descubrimiento")
+    }
+
+    /**
+     * Y la guarda **solo frena las altas**: la suscripción activa que ya existía se sigue
+     * refrescando con lo que ve el barrido, igual que pasaba con las reglas.
+     */
+    @Test
+    fun `una detectada que ya existe se sigue refrescando aunque haya otra con el mismo nombre`() = testApplication {
+        wireApp()
+        val token = tokenFor(userAId)
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+        val netflixId = listar(token)["subscriptions"]!!.jsonArray
+            .first { it.jsonObject["merchantKey"]!!.jsonPrimitive.content == "netflix" }
+            .jsonObject["id"]!!.jsonPrimitive.content
+        // El dueño la confirma, y encima anota a mano otra con el mismo nombre.
+        transaction { Subscriptions.update({ Subscriptions.id eq netflixId }) { it[status] = "CONFIRMED" } }
+        crearSuscripcion(token, """{"displayName":"Netflix","amount":44900,"currency":"COP","dayOfMonth":14}""")
+
+        client.post("/api/subscriptions/detect") { header(HttpHeaders.Authorization, "Bearer $token") }
+
+        val filas = listar(token)["subscriptions"]!!.jsonArray
+        assertEquals(
+            "CONFIRMED",
+            filas.first { it.jsonObject["id"]!!.jsonPrimitive.content == netflixId }
+                .jsonObject["status"]!!.jsonPrimitive.content,
+            "la que ya existía no se degrada ni desaparece",
+        )
+        assertEquals(2, filas.count { it.jsonObject["displayName"]!!.jsonPrimitive.content == "Netflix" })
+    }
+
     @Test
     fun `POST rejects a blank name, non-positive amount and unknown currency`() = testApplication {
         wireApp()

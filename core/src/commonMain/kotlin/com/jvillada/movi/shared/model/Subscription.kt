@@ -11,7 +11,7 @@ enum class SubStatus { AUTO, CANDIDATE, CONFIRMED, DISMISSED }
  * F38: prefijo de [Subscription.merchantKey] que marca un alta MANUAL — la escribió el dueño,
  * no la encontró el detector.
  *
- * `normalizeMerchant` (SubscriptionDetector.kt) deriva su clave de la descripción del EVENTO
+ * `normalizeMerchant` (Comercio.kt, acá en `:core`) deriva su clave de la descripción del EVENTO
  * bancario y nunca antepone este prefijo, así que una fila `manual_*` queda estructuralmente
  * fuera de lo que el detector puede generar o re-escribir: un re-scan no la toca ni la duplica.
  *
@@ -244,8 +244,33 @@ data class SubscriptionsResult(
      * Esto importa en este proyecto en particular: el APK se entrega a mano por Drive y el
      * server se despliega aparte, así que un cliente nuevo contra un server viejo es un estado
      * real, no teórico.
+     *
+     * **Desde la Ola 22 hay un segundo motivo para que valga `0.0`**, y viene acompañado: el
+     * server tenía una tasa pero era la de RESPALDO —la constante del código, que no eligió
+     * nadie—, así que prefirió no convertir. Eso se dice en [cobrosSinConvertir]; la tasa sola no
+     * alcanzaría para distinguirlo de «no hizo falta».
      */
     val usdToCop: Double = 0.0,
+    /**
+     * **Cuántos cobros activos quedaron FUERA de [monthlyTotalCop] porque no se pudieron pasar a
+     * pesos**, y por eso este total está incompleto.
+     *
+     * Pasa cuando la TRM del día no se pudo consultar, no hay caché de hoy y `USD_COP_RATE` no
+     * está configurada: ahí [com.jvillada.movi.server.fx.FxRateService] solo puede ofrecer su
+     * constante de $4.000, que es un número plausible y no es una tasa. Convertir con eso metía
+     * los cuatro cobros en dólares del dueño al total —y se los restaba del «Flujo libre»— con
+     * una cifra inventada y sin decirlo. Ver `totalDeSuscripciones` en SubscriptionRoutes.kt, y
+     * `minimoEnPesos` (CardReminders.kt), que resolvió lo mismo de la misma forma para el mínimo
+     * de una tarjeta.
+     *
+     * El cliente lo pinta como «este total no incluye N cobros en otra moneda» (ver
+     * `resumenRecurrentes` y `ResumenFlujoLibreCard`). **Hace falta como campo propio** porque el
+     * cliente no puede deducirlo: cuando no tiene que excluir ninguna fila usa [monthlyTotalCop]
+     * tal cual, sin mirar la tasa, y un `usdToCop` en `0.0` significa además «este server es
+     * viejo y no la manda» — donde el total SÍ trae los dólares adentro. Un server viejo manda
+     * `0` acá, que es la verdad para él.
+     */
+    val cobrosSinConvertir: Int = 0,
 )
 
 /**

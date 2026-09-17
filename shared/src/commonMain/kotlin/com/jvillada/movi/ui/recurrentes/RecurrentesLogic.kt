@@ -295,6 +295,58 @@ data class ResumenRecurrentes(
  *   por prefijo de id, Movimientos ni siquiera las pedía), que es la forma exacta en que las dos
  *   cifras que dicen contar lo mismo se separan.
  */
+/**
+ * ¿Esta fila está adentro de [SubscriptionsResult.monthlyTotalCop]?
+ *
+ * Solo tiene sentido en la rama que usa el total del server tal cual. El server deja afuera las
+ * filas que no pudo pasar a pesos —todas de una vez, porque la tasa o sirve o no sirve— y dice
+ * cuántas son en [SubscriptionsResult.cobrosSinConvertir]; una fila en pesos siempre entró.
+ */
+/**
+ * **El aviso de una candidata que ya está anotada**, o `null` si de verdad es nueva.
+ *
+ * Es lo que la tarjeta «Detectadas · por confirmar» pinta antes de que el dueño toque
+ * «Confirmar», y su motivo es de plata: Recurrentes muestra reglas y suscripciones en UNA sola
+ * lista y las **suma juntas**, así que confirmar una candidata que duplica algo que ya existe le
+ * cuenta el mismo cobro dos veces en «Gastos recurrentes» y en «Flujo libre», y le pone dos filas
+ * en «Próximos pagos».
+ *
+ * Hasta acá solo miraba las REGLAS. Faltaba la otra mitad, que es la más fácil de encontrarse: una
+ * suscripción anotada a mano guarda la clave `manual_netflix` y el detector produce el canónico
+ * `netflix`, así que las dos filas describen el mismo cobro y ninguna criba las emparejaba — ni la
+ * del server (por clave de comercio) ni esta (por nombre, y solo contra reglas). El dueño veía
+ * «Netflix» propuesta como nueva teniendo «Netflix» activa.
+ *
+ * El server ahora frena esas altas (`runSubscriptionDetection`), así que esta tarjeta es la red
+ * para lo que YA está en la base de antes de esa guarda — y para el APK que corre contra un server
+ * viejo, que en este proyecto es un estado normal.
+ *
+ * **Solo las ACTIVAS** (AUTO + CONFIRMED), igual que [nombresDeSuscripcionesQueYaSuman] y que la
+ * guarda del server: una descartada no suma nada, y avisar por ella sería frenar al dueño con algo
+ * que no está contando.
+ *
+ * Devuelve el aviso en vez de un `Boolean` porque los dos casos no se explican igual: una regla la
+ * escribió él, una suscripción activa pudo haberla encontrado Movi sola.
+ */
+fun avisoDeCandidataDuplicada(
+    candidata: Subscription,
+    clavesDeReglas: Set<String>,
+    activas: List<Subscription>,
+): String? {
+    val clave = claveDeNombre(candidata.displayName)
+    if (clave.isEmpty()) return null
+    if (clave in clavesDeReglas) return "Ya lo tienes como recurrente"
+    val yaEsSuscripcion = activas.any {
+        it.id != candidata.id &&
+            (it.status == SubStatus.AUTO || it.status == SubStatus.CONFIRMED) &&
+            claveDeNombre(it.displayName) == clave
+    }
+    return if (yaEsSuscripcion) "Ya lo tienes como suscripción activa" else null
+}
+
+private fun entroAlTotalDelServer(sub: Subscription, subs: SubscriptionsResult): Boolean =
+    sub.currency == "COP" || subs.cobrosSinConvertir == 0
+
 fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): ResumenRecurrentes {
     val cuentan = rules.filter { cuentaComoCompromisoMensual(it) }
     // Reparto uno-a-uno: cada regla puede tapar UNA suscripción, no todas las que se llamen
@@ -326,14 +378,24 @@ fun resumenRecurrentes(rules: List<RecurringRule>, subs: SubscriptionsResult): R
         // Ahí `monthlyTotalCop` sí trae los dólares convertidos; solo faltaba la tasa para
         // poder DESGLOSARLO, y sin exclusiones no hace falta desglosar nada.
         gastosDeSuscripciones = subs.monthlyTotalCop
-        sinConvertir = 0
-        dolaresEnElTotal = activas.any { it.currency != "COP" }
+        // **Salvo lo que el SERVER no pudo convertir**, que es lo único que esta rama no puede
+        // deducir sola: acá no se suma fila por fila, así que sin este campo un total al que le
+        // faltan los cuatro cobros en dólares del dueño se pintaría entero y callado. Ver
+        // [SubscriptionsResult.cobrosSinConvertir] — un server viejo manda 0 y esta rama se
+        // comporta como siempre.
+        sinConvertir = subs.cobrosSinConvertir
+        // Lo que ENTRÓ, no lo que existe: con filas sin convertir, los dólares están afuera de
+        // este total y decir «tus dólares entran convertidos» sería falso en la misma pantalla
+        // que ya está avisando que no entraron.
+        dolaresEnElTotal = activas.any { entroAlTotalDelServer(it, subs) && it.currency != "COP" }
         // El total viene del server, que ya prorrateó (ver `resultFor`); acá solo hay que saber
         // si adentro hay algún cobro anual para poder explicarlo. Un server anterior a la Ola 16
         // no manda el campo y todas las filas llegan MENSUAL, así que esto da `false` y no se
         // explica un prorrateo que ese server tampoco hizo: las dos mitades del desfase dicen lo
         // mismo.
-        anualesEnElTotal = activas.any { it.periodicidad == PeriodicidadDeCobro.ANUAL }
+        anualesEnElTotal = activas.any {
+            entroAlTotalDelServer(it, subs) && it.periodicidad == PeriodicidadDeCobro.ANUAL
+        }
     } else {
         // Hay que sumar fila por fila para poder saltear las duplicadas, y eso sí necesita la
         // tasa. Lo que no se pueda convertir queda afuera Y contado, para que la pantalla avise.

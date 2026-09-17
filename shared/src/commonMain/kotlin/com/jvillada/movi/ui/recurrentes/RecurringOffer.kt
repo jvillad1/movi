@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.ui.components.categoriaSirveParaTipo
+import com.jvillada.movi.shared.model.normalizeMerchant
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
@@ -138,13 +139,15 @@ fun shouldOfferRecurring(
     // y «Cuenta eliminada».
     if (isReservedCategory(event.category)) return false
     if (event.amount <= 0L) return false
-    val key = claveDeNombre(prefillNameFor(event))
-    if (key.isEmpty()) return false
+    // **Todas** las formas en que este cobro puede estar ya anotado, no solo la nota. Ver
+    // [clavesDeCobroDe].
+    val claves = clavesDeCobroDe(event)
+    if (claves.isEmpty()) return false
     // La molestia se mide por cosa y por categoría (ver la guarda 3), el duplicado por nombre.
     if (throttleKeyFor(event) in alreadyOffered) return false
     if ((sinTomarPorCategoria[categoryThrottleKeyFor(event)] ?: 0) >= MAX_SIN_TOMAR) return false
-    if (existingRules.any { claveDeNombre(it.name) == key }) return false
-    return existingSubscriptionNames.none { claveDeNombre(it) == key }
+    if (existingRules.any { claveDeNombre(it.name) in claves }) return false
+    return existingSubscriptionNames.none { claveDeNombre(it) in claves }
 }
 
 /**
@@ -255,7 +258,7 @@ fun puedeOfrecerseComoRecurrenteDesdeElDetalle(event: FinancialEvent): Boolean {
     if (event.transferId != null) return false
     if (isReservedCategory(event.category)) return false
     if (event.amount <= 0L) return false
-    return claveDeNombre(prefillNameFor(event)).isNotEmpty()
+    return clavesDeCobroDe(event).isNotEmpty()
 }
 
 /**
@@ -302,12 +305,88 @@ fun equivalenteYaAnotado(
     reglas: List<RecurringRule>,
     suscripcionesQueYaSuman: List<String>,
     nombre: String,
+): String? = equivalenteDe(
+    selloDeOcurrencia = selloDeOcurrencia,
+    reglas = reglas,
+    suscripcionesQueYaSuman = suscripcionesQueYaSuman,
+    claves = setOf(claveDeNombre(nombre)).filterNotTo(mutableSetOf()) { it.isEmpty() },
+)
+
+/**
+ * **El mismo [equivalenteYaAnotado], pero preguntándoselo al MOVIMIENTO** — y por eso mirando
+ * también su `merchant`, no solo la nota. Ver [clavesDeCobroDe]: es la versión que reconoce que
+ * «COMPRA NETFLIX.COM BOGOTA» y la suscripción «Netflix» son el mismo cobro.
+ *
+ * La otra sigue existiendo para cuando lo único que hay es un nombre escrito (la hoja de una regla
+ * nueva, un test), pero todo camino que tenga el evento a mano debería usar esta.
+ */
+fun equivalenteYaAnotadoDe(
+    event: FinancialEvent,
+    selloDeOcurrencia: String?,
+    reglas: List<RecurringRule>,
+    suscripcionesQueYaSuman: List<String>,
+): String? = equivalenteDe(
+    selloDeOcurrencia = selloDeOcurrencia,
+    reglas = reglas,
+    suscripcionesQueYaSuman = suscripcionesQueYaSuman,
+    claves = clavesDeCobroDe(event),
+)
+
+/** El cuerpo compartido por las dos: la única diferencia entre ellas es de dónde salen [claves]. */
+private fun equivalenteDe(
+    selloDeOcurrencia: String?,
+    reglas: List<RecurringRule>,
+    suscripcionesQueYaSuman: List<String>,
+    claves: Set<String>,
 ): String? {
     selloDeOcurrencia?.takeIf { it.isNotBlank() }?.let { return it }
-    val clave = claveDeNombre(nombre)
-    if (clave.isEmpty()) return null
-    reglas.firstOrNull { claveDeNombre(it.name) == clave }?.let { return it.name }
-    return suscripcionesQueYaSuman.firstOrNull { claveDeNombre(it) == clave }
+    if (claves.isEmpty()) return null
+    reglas.firstOrNull { claveDeNombre(it.name) in claves }?.let { return it.name }
+    return suscripcionesQueYaSuman.firstOrNull { claveDeNombre(it) in claves }
+}
+
+/**
+ * **Con qué nombres puede estar anotado el cobro de este movimiento** — todas las claves
+ * comparables bajo las que reconocerlo, no una sola.
+ *
+ * Hasta acá el cliente comparaba **únicamente** [prefillNameFor], o sea la nota del movimiento (y
+ * la categoría si no hay nota). Eso alcanza cuando el dueño escribe «Netflix» a mano, y no alcanza
+ * para nada cuando el movimiento entró por un SMS o por un extracto: ahí la identidad del comercio
+ * vive en `merchant` («NETFLIX.COM»), la descripción es el texto crudo del banco («COMPRA
+ * NETFLIX.COM BOGOTA») y el nombre que Movi guarda en la suscripción es el **canónico**
+ * («Netflix»), que no se parece a ninguno de los dos.
+ *
+ * Con una sola clave, la consecuencia era doble y siempre en la misma dirección —contar de más—:
+ * el chip «Recurrentes» de Movimientos filtraba la fila del cargo real, y «Esto se repite» le
+ * dejaba crear la regla «Netflix» encima de la suscripción «Netflix», así que el mismo $44.900
+ * pasaba a contarse **dos veces** en «Flujo libre».
+ *
+ * Las tres claves, y de dónde sale cada una:
+ *
+ * 1. **La nota** ([prefillNameFor]) — lo que escribió el dueño, que es con lo que nacería la regla.
+ * 2. **El comercio crudo** (`merchant`) — el mismo campo que el server ya mira para emparejar la
+ *    ocurrencia de un recurrente (`occurrenceCandidatesFor`, OccurrenceMatching.kt). Las dos
+ *    mitades del mismo criterio miraban campos distintos, que es la forma exacta en que dos
+ *    superficies que dicen decidir lo mismo se contradicen.
+ * 3. **El comercio CANÓNICO** ([normalizeMerchant], `:core`) — el que convierte «COMPRA
+ *    NETFLIX.COM BOGOTA» en «Netflix», que es el nombre con el que el detector guarda la
+ *    suscripción. Es la única de las tres que cierra el caso de arriba, y por eso
+ *    `normalizeMerchant` se mudó al módulo común: el server y el cliente tienen que leer la misma
+ *    identidad de un cargo o la comparación no puede coincidir nunca.
+ *
+ * Comparar contra un conjunto **no afloja** la comparación de nombres, que sigue siendo exacta
+ * ([claveComparableDeNombre]: sin mayúsculas, sin acentos, sin puntuación, y nada de subcadenas ni
+ * distancias de edición). Lo que agrega son más nombres del MISMO cobro, no más tolerancia — que
+ * es lo que hace que equivocarse hacia «sí, es lo mismo» siga siendo difícil.
+ */
+fun clavesDeCobroDe(event: FinancialEvent): Set<String> {
+    val comercio = event.merchant?.takeIf { it.isNotBlank() }
+    val canonico = normalizeMerchant(comercio ?: event.description)?.displayName
+    return setOf(
+        claveDeNombre(prefillNameFor(event)),
+        claveDeNombre(comercio.orEmpty()),
+        claveDeNombre(canonico.orEmpty()),
+    ).filterNotTo(mutableSetOf()) { it.isEmpty() }
 }
 
 /**
@@ -375,11 +454,11 @@ fun nombreRecurrenteDe(
     nombreDePagoDeTarjeta(event)?.let { return it }
     if (event.transferId != null) return null
     if (isReservedCategory(event.category)) return null
-    return equivalenteYaAnotado(
+    return equivalenteYaAnotadoDe(
+        event = event,
         selloDeOcurrencia = null,
         reglas = reglas,
         suscripcionesQueYaSuman = suscripcionesQueYaSuman,
-        nombre = prefillNameFor(event),
     )
 }
 

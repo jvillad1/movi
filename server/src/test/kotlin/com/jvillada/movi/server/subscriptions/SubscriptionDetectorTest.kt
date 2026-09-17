@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.SubConfidence
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.normalizeMerchant
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
 import kotlin.test.Test
