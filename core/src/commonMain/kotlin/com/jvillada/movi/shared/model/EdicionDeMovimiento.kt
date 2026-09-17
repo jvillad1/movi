@@ -92,6 +92,44 @@ const val CONCEPTO_VACIO: String = "El concepto no puede quedar vacío."
 const val CONCEPTO_DEMASIADO_LARGO: String =
     "El concepto no puede superar $MAX_CONCEPTO_LENGTH caracteres."
 
+/** Largo de `financial_events.category` en el server, y de su espejo local. */
+const val MAX_CATEGORIA_LENGTH: Int = 100
+
+/** Lo que se le dice a quien manda una categoría más larga que la columna. */
+const val CATEGORIA_DEMASIADO_LARGA: String =
+    "La categoría no puede superar $MAX_CATEGORIA_LENGTH caracteres."
+
+/**
+ * **Si los dos textos de un movimiento entran en sus columnas**, o `null` si entran. Hermana de
+ * [rechazoDelMonto], y nacida del mismo modo de falla: la regla existía en la puerta de la
+ * CORRECCIÓN (`PUT /api/events/{id}` la aplica vía [validarEdicionDeMovimiento]) y faltaba en la
+ * del ALTA.
+ *
+ * Lo que pasaba sin esto, con una nota larga escrita en «Agregar»:
+ *
+ * - En la web, `POST /api/events` intentaba meter 400 caracteres en un `varchar(255)` y el insert
+ *   explotaba: **500**, o sea «algo salió mal» sin decir qué ni qué hacer.
+ * - En el teléfono es peor, porque el espejo local escribe PRIMERO: la fila quedaba guardada, el
+ *   `SyncEngine` la empujaba, el server contestaba 500 y —como 500 no cae en 400..499— el camino
+ *   de `syncError` ni siquiera la marcaba. Se reintentaba cada 30 segundos **para siempre**, sin
+ *   nada en pantalla que lo dijera.
+ *
+ * El tope es el de la COLUMNA y no uno inventado más corto: lo que se rechaza es exactamente lo
+ * que la base no puede guardar. Se mira el largo crudo, sin recortar espacios, porque es el texto
+ * crudo el que se inserta.
+ *
+ * Ojo, no es la única regla sobre la categoría: recategorizar un movimiento ya anotado pide además
+ * que no esté vacía y que no pase de 60 (ver `categoriaMalEscrita` en el server). Esa es más
+ * estricta a propósito, y **no** se aplica acá: rechazaría de entrada categorías que la base ya
+ * guarda —las que llegan de un extracto, por ejemplo—, y el reenvío de esas filas quedaría
+ * rebotando igual que lo que este rechazo vino a cerrar.
+ */
+fun rechazoDeLosTextos(category: String, description: String): String? = when {
+    category.length > MAX_CATEGORIA_LENGTH -> CATEGORIA_DEMASIADO_LARGA
+    description.length > MAX_CONCEPTO_LENGTH -> CONCEPTO_DEMASIADO_LARGO
+    else -> null
+}
+
 /**
  * Lo que se le dice a quien intenta **mover de cuenta una de las dos mitades** de un traspaso o de
  * un pago de cuota.

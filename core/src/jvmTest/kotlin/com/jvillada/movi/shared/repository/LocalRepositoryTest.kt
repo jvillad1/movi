@@ -9,6 +9,10 @@ import com.jvillada.movi.shared.model.CUENTA_NO_ENCONTRADA
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.MONTO_INVALIDO
+import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
+import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
+import com.jvillada.movi.shared.model.CATEGORIA_DEMASIADO_LARGA
+import com.jvillada.movi.shared.model.CONCEPTO_DEMASIADO_LARGO
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
@@ -90,6 +94,56 @@ class LocalRepositoryTest {
             assertEquals(400, (error as? ApiException)?.status, "monto $monto")
         }
         assertEquals(10_000L, repo.getAccount("acc-monto").balance, "el saldo no se movió")
+    }
+
+    /**
+     * **Un texto que no entra en su columna se rechaza ACÁ, antes de guardarlo.**
+     *
+     * Es el mismo argumento que el monto, y el caso donde «escribir primero» dolía más: la nota
+     * larga entraba en la base local, el `SyncEngine` la empujaba, el server explotaba al meter 400
+     * caracteres en un `varchar(255)` y contestaba **500** — que no cae en el 400..499 que marca
+     * `syncError`. O sea que la fila se reintentaba cada 30 segundos para siempre, sin nada en
+     * pantalla que lo dijera. Ahora es un 400 con su motivo, y no se guarda nada.
+     */
+    @Test
+    fun postEvent_rechaza_un_concepto_o_una_categoria_que_no_entran_en_la_columna() = runBlocking {
+        repo.createAccount(Account("acc-textos", "Cash", AccountType.CASH, 10_000L))
+
+        val concepto = runCatching {
+            repo.postEvent(
+                event("evt-concepto", "acc-textos", TransactionType.EXPENSE, 1_000L)
+                    .copy(description = "a".repeat(MAX_CONCEPTO_LENGTH + 1)),
+            )
+        }.exceptionOrNull()
+        assertEquals(400, (concepto as? ApiException)?.status)
+        assertEquals(CONCEPTO_DEMASIADO_LARGO, (concepto as ApiException).serverMessage)
+
+        val categoria = runCatching {
+            repo.postEvent(
+                event("evt-categoria", "acc-textos", TransactionType.EXPENSE, 1_000L)
+                    .copy(category = "a".repeat(MAX_CATEGORIA_LENGTH + 1)),
+            )
+        }.exceptionOrNull()
+        assertEquals(400, (categoria as? ApiException)?.status)
+        assertEquals(CATEGORIA_DEMASIADO_LARGA, (categoria as ApiException).serverMessage)
+
+        assertTrue(repo.getEvents("acc-textos").isEmpty(), "no se guardó ninguno de los dos")
+        assertEquals(10_000L, repo.getAccount("acc-textos").balance, "y el saldo no se movió")
+    }
+
+    /** Y el borde de al lado sí pasa: el tope es el de la columna, no uno inventado más corto. */
+    @Test
+    fun postEvent_acepta_el_concepto_y_la_categoria_del_largo_exacto_de_la_columna() = runBlocking {
+        repo.createAccount(Account("acc-borde", "Cash", AccountType.CASH, 10_000L))
+
+        repo.postEvent(
+            event("evt-borde", "acc-borde", TransactionType.EXPENSE, 1_000L).copy(
+                description = "a".repeat(MAX_CONCEPTO_LENGTH),
+                category = "b".repeat(MAX_CATEGORIA_LENGTH),
+            ),
+        )
+
+        assertEquals(1, repo.getEvents("acc-borde").size)
     }
 
     @Test
@@ -245,6 +299,46 @@ class LocalRepositoryTest {
         assertTrue(
             db.financialEventQueries.selectUnsynced(testUserId).executeAsList().any { it.id == "corregido" },
             "y la fila sigue en la cola de subida, para que el ciclo la empuje",
+        )
+    }
+
+    /**
+     * **La moneda que el server corrigió baja al espejo, y la fila mal escrita se cura sola.**
+     *
+     * El escenario completo: un APK anterior al arreglo de `QuickAddScreen` armaba el movimiento
+     * sin `currency`, o sea con el default `"COP"`, aunque la cuenta elegida fuera la Master Black
+     * en dólares. Como `encodeDefaults` está apagado, la clave no viajaba y el server la rellenaba
+     * con la moneda de la cuenta: allá quedaba US$500.000 y acá «COP», que es lo que
+     * `deltaDelEspejo` usa para decidir si el gasto mueve la columna de pesos.
+     *
+     * `difiereDeLoGuardado` no comparaba `currency`, así que la corrección del server **no bajaba
+     * nunca**: la fila local mentía para siempre. Se afirma sobre la fila CRUDA del espejo y no
+     * sobre lo que devuelve `getEvents`, porque para una fila ya sellada esa lista sustituye la
+     * versión remota — o sea que pasaría en verde con el defecto puesto.
+     */
+    @Test
+    fun la_moneda_corregida_por_el_server_cura_la_fila_del_espejo() = runBlocking {
+        val master = Account("accUSD", "Master Black", AccountType.CREDIT_CARD, 0L, currency = "USD")
+        repo.createAccount(master)
+        // Lo que escribía el APK viejo: pesos sobre una cuenta en dólares. Con fecha y sello de
+        // creación fijos para que la ÚNICA diferencia con lo que devuelve el server sea la moneda
+        // — si no, la fila se reescribiría por cualquier otro campo y esta prueba no probaría nada.
+        val comoLoEscribioElTelefono = enMoneda("mal-anotado", "accUSD", TransactionType.EXPENSE, 500_000L, "COP")
+            .copy(timestamp = 1_700_000_000_000L, createdAt = 1_700_000_000_000L)
+        repo.postEvent(comoLoEscribioElTelefono)
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "mal-anotado")
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += master
+        remoto.eventosDelServer += comoLoEscribioElTelefono.copy(currency = "USD", syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        conRed.getEvents()
+
+        assertEquals(
+            "USD",
+            db.financialEventQueries.selectById("mal-anotado", testUserId).executeAsOne().currency,
+            "la fila del espejo se reescribe con la moneda que manda el server",
         )
     }
 
