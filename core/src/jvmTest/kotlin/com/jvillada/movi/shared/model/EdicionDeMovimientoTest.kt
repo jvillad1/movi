@@ -99,6 +99,36 @@ class EdicionDeMovimientoTest {
         assertNull(validar(EdicionDeMovimiento(description = "a".repeat(MAX_CONCEPTO_LENGTH))))
     }
 
+    /**
+     * **La misma regla, pero en la puerta del ALTA.** [rechazoDeLosTextos] la usan
+     * `POST /api/events` y `LocalRepository.postEvent`, que hasta esta rama no validaban ningún
+     * largo: un concepto de 400 caracteres escrito en «Agregar» reventaba el insert del server
+     * (500) y, en el teléfono, se reintentaba cada 30 segundos para siempre — un 500 no cae en el
+     * 400..499 que marca `syncError`.
+     */
+    @Test
+    fun `los textos del alta se rechazan cuando no entran en su columna`() {
+        assertEquals(
+            CONCEPTO_DEMASIADO_LARGO,
+            rechazoDeLosTextos(category = "Comida", description = "a".repeat(MAX_CONCEPTO_LENGTH + 1)),
+        )
+        assertEquals(
+            CATEGORIA_DEMASIADO_LARGA,
+            rechazoDeLosTextos(category = "a".repeat(MAX_CATEGORIA_LENGTH + 1), description = "Almuerzo"),
+        )
+    }
+
+    /** Los topes son inclusivos: son los de la columna, no unos inventados más cortos. */
+    @Test
+    fun `los textos del largo exacto de la columna pasan`() {
+        assertNull(
+            rechazoDeLosTextos(
+                category = "b".repeat(MAX_CATEGORIA_LENGTH),
+                description = "a".repeat(MAX_CONCEPTO_LENGTH),
+            ),
+        )
+    }
+
     @Test
     fun `una pata de un par no puede cambiar de cuenta`() {
         val rechazo = validar(

@@ -185,6 +185,15 @@ fun Route.eventRoutes() {
                 return@post call.respond(HttpStatusCode.BadRequest, motivo)
             }
 
+            // Y el largo de los dos textos, por el mismo argumento: la corrección ya lo validaba y
+            // el alta no, así que una nota de 400 caracteres escrita en «Agregar» no se rechazaba
+            // — se estrellaba contra el `varchar(255)` y salía por el 500 genérico. Ver
+            // [rechazoDeLosTextos], que explica por qué en el teléfono eso era un reintento eterno
+            // y silencioso en vez de un error.
+            rechazoDeLosTextos(body.category, body.description)?.let { motivo ->
+                return@post call.respond(HttpStatusCode.BadRequest, motivo)
+            }
+
             // Ola 10: **una categoría reservada no se anota A MANO.** `isCashFlow` las excluye por
             // nombre, así que un gasto real escrito como «Pago de tarjeta» se guardaba y
             // desaparecía de «Gastos del mes» sin que nada lo dijera. El campo de categoría avisa,

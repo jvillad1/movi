@@ -85,6 +85,7 @@ import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.rechazoDelMonto
+import com.jvillada.movi.shared.model.rechazoDeLosTextos
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
@@ -445,6 +446,14 @@ class LocalRepository(
         // teléfono, el `SyncEngine` la empujaría, el server contestaría 400 y se reintentaría cada
         // 30 segundos para siempre. Misma regla y mismo texto que el server: `rechazoDelMonto`.
         rechazoDelMonto(event.amount)?.let { motivo -> throw ApiException(400, motivo) }
+        // Y el largo de los dos textos, que es el caso donde «escribir primero» dolía más: la nota
+        // larga entraba en la base local, el server contestaba 500 al insertarla en un
+        // `varchar(255)`, y un 500 **no** cae en el 400..499 que el `SyncEngine` marca como
+        // `syncError` — así que la fila se reintentaba cada 30 segundos para siempre sin que nada
+        // apareciera en pantalla. Misma regla y mismo texto que el server: `rechazoDeLosTextos`.
+        rechazoDeLosTextos(event.category, event.description)?.let { motivo ->
+            throw ApiException(400, motivo)
+        }
         // Las otras dos guardas del alta del server, por el mismo motivo (escribir primero): una
         // reservada escrita a mano —salvo la apertura de una cuenta— es un 422 allá, y un epoch
         // fuera de 2000..2100 un 400. Hoy la UI no deja llegar a ninguna de las dos, pero si una
@@ -701,6 +710,14 @@ class LocalRepository(
             remoto.source.name != local.source ||
             remoto.rawPayload != local.rawPayload ||
             remoto.reconciliationStatus.name != local.reconciliationStatus ||
+            // **La moneda entra, y es la que más caro sale si no entra.** El espejo guardaba la
+            // que el cliente hubiera escrito —«COP» por omisión, aunque la cuenta fuera la Master
+            // Black en dólares— mientras el server la corregía sola a la de la cuenta. Sin esta
+            // comparación, la corrección del server no bajaba nunca: la fila local seguía
+            // diciendo «COP» para siempre, y `deltaDelEspejo` le restaba a la columna de pesos el
+            // número crudo de un gasto en dólares. O sea, exactamente el daño que esa guarda
+            // existe para evitar, sostenido por una fila que no se curaba sola.
+            remoto.currency != local.currency ||
             remoto.transferId != local.transferId ||
             remoto.createdAt != local.createdAt ||
             remoto.noAmortiza != local.noAmortiza ||

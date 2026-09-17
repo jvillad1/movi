@@ -1428,7 +1428,12 @@ private fun pagoRequestFor(
     montoEnLaMonedaDeLaDeuda = montoEnLaDeuda,
 )
 
-private fun simboloDeMoneda(moneda: String): String = when (moneda) { "COP" -> "$"; "USD" -> "US$"; else -> moneda }
+/**
+ * El símbolo con el que se muestra un monto en esa moneda. `internal` y no `private` porque la
+ * hoja de «Agregar» ([QuickAddScreen]) la usa para lo mismo: un gasto sobre una cuenta en dólares
+ * tiene que decir «US$», no «$».
+ */
+internal fun simboloDeMoneda(moneda: String): String = when (moneda) { "COP" -> "$"; "USD" -> "US$"; else -> moneda }
 
 /** Etiquetas de prueba de los dos campos de monto de esta hoja, para que Robolectric los distinga. */
 internal const val TAG_CAMPO_DE_MONTO = "campo_de_monto_del_traspaso"

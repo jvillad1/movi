@@ -47,6 +47,8 @@ import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.CATEGORY_RESERVED_SHORT
+import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
+import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
@@ -74,6 +76,66 @@ private const val FRACCION_VALOR_FILA = 0.55f
 
 /** La X del encabezado de un sub-picker. Ver el porqué en [PickerHeader]. */
 internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
+
+/**
+ * **En qué moneda está la plata de esta cuenta** — la del movimiento que se anote contra ella.
+ *
+ * Cae en pesos cuando la cuenta no está en la lista, que es el único caso en que esta hoja no
+ * sabe la moneda: `getAccounts()` falló y la hoja se abrió con un `presetAccountId` (ver el
+ * comentario «B3» del `walletLabel`). Ahí el default no miente más de lo que ya mentía: `"COP"` es
+ * el default del modelo y, como `encodeDefaults` está apagado, la clave ni siquiera viaja — el
+ * server la completa con la de la cuenta, que es lo que hacía antes de este arreglo para TODOS los
+ * movimientos.
+ */
+internal fun monedaDeLaCuenta(
+    cuentas: List<com.jvillada.movi.shared.model.Account>,
+    cuentaId: String?,
+): String = cuentas.firstOrNull { it.id == cuentaId }?.currency ?: MONEDA_POR_DEFECTO
+
+/** La del modelo (`FinancialEvent.currency`), repetida acá para poder nombrarla. */
+private const val MONEDA_POR_DEFECTO = "COP"
+
+/**
+ * **El movimiento que esta hoja va a guardar.** Función aparte y pura para poder afirmar sin
+ * pantalla lo que antes solo existía adentro de `save()` — sobre todo **la moneda**, que es lo que
+ * decide si «500.000» son pesos o dólares.
+ *
+ * Lo que arregla: el evento se armaba sin `currency`, o sea con el default `"COP"` del modelo,
+ * **aunque la cuenta elegida fuera una tarjeta en dólares** (la Master Black lo es, y es un origen
+ * de primera clase en el selector de un gasto). Y como `encodeDefaults` está apagado, la clave no
+ * viajaba: el server la rellenaba con la moneda de la cuenta y guardaba **US$500.000** mientras la
+ * hoja había dicho «$500.000 · COP». En el teléfono quedaba peor, porque el espejo local sí
+ * guardaba el `"COP"` y `deltaDelEspejo` le restaba a la columna de pesos el número crudo de un
+ * gasto en dólares — exactamente el caso que esa guarda existe para evitar.
+ */
+internal fun movimientoDeLaHoja(
+    id: String,
+    cuentaId: String,
+    /** Las cuentas que la hoja tiene a mano; de acá sale la moneda. Ver [monedaDeLaCuenta]. */
+    cuentas: List<com.jvillada.movi.shared.model.Account>,
+    tipo: TransactionType,
+    monto: Long,
+    categoria: String,
+    nota: String,
+    timestamp: Long,
+): FinancialEvent = FinancialEvent(
+    // El id viene de afuera, no se genera acá: un reintento tras un fallo tiene que llevar el
+    // mismo, o el server no tiene cómo saber que es el mismo movimiento. Ver `idDelBorrador`.
+    id = id,
+    accountId = cuentaId,
+    type = tipo,
+    amount = monto,
+    currency = monedaDeLaCuenta(cuentas, cuentaId),
+    category = categoria,
+    description = nota.ifBlank { categoria },
+    source = EventSource.MANUAL,
+    // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es solo para lo
+    // que entra solo (SMS, OCR, extracto), no para lo que el usuario acaba de escribir con sus
+    // propios dedos. Sin esto caía en el default UNCONFIRMED y desaparecía de "Gastos", que
+    // excluye lo pendiente.
+    reconciliationStatus = ReconciliationStatus.RECONCILED,
+    timestamp = timestamp,
+)
 
 /**
  * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
@@ -250,6 +312,23 @@ fun QuickAddScreen(
     // decir «Hoy» y guardar la fecha de mañana.
     val hoy = remember { hoyEnAppZone() }
     var fecha by remember { mutableStateOf(hoy) }
+    /**
+     * **El id del movimiento que se está escribiendo. Se genera una vez por borrador, no una vez
+     * por toque de «Guardar».**
+     *
+     * Es el mismo reflejo que `TransferDraftIds` (ver su KDoc, en `TransferForm.kt`) y nació del
+     * mismo escenario: el server commitea el movimiento, la respuesta se pierde —se cortó la
+     * señal, la app se fue al fondo, venció el timeout—, el dueño lee «revisa tu conexión» y
+     * vuelve a tocar Guardar. Con el `newId("ev")` adentro de `save()`, el segundo intento
+     * llevaba un id NUEVO, así que la única defensa del server contra el duplicado —el reenvío
+     * del mismo id, que `POST /api/events` trata como «este movimiento ya está» y contesta 200—
+     * no tenía de dónde agarrarse: quedaban dos gastos idénticos que él nunca anotó dos veces.
+     * En el teléfono el efecto es peor, porque el espejo local también inserta por PK: dos filas.
+     *
+     * Se renueva **solo después de un éxito**: mientras el anterior no haya llegado, cada
+     * reintento tiene que ser el mismo pedido.
+     */
+    var idDelBorrador by remember { mutableStateOf(newId("ev")) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreateSheet by remember { mutableStateOf(false) }
@@ -437,23 +516,15 @@ fun QuickAddScreen(
         // y se guardaba con espacios.
         val trimmedCategory = category.trim()
         coroutine.launch {
-            val event = FinancialEvent(
-                // Generado acá, no en blanco: en Android/iOS Repositories.wallets es
-                // LocalRepository (offline-first), que inserta por PK id con INSERT OR REPLACE.
-                // Con id = "" cada evento nuevo reemplazaba al anterior en el teléfono en vez de
-                // agregarse (Hallazgo Crítico de la revisión de la Ola 1). Ver newId().
-                id = newId("ev"),
-                accountId = cuenta,
-                type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
-                amount = amount.toLongOrNull() ?: 0L,
-                category = trimmedCategory,
-                description = note.ifBlank { trimmedCategory },
-                source = EventSource.MANUAL,
-                // F12: lo anotado a mano ya está confirmado por definición — "por confirmar" es
-                // solo para lo que entra solo (SMS, OCR, extracto), no para lo que el usuario
-                // acaba de escribir con sus propios dedos. Sin esto caía en el default
-                // UNCONFIRMED y desaparecía de "Gastos", que excluye lo pendiente.
-                reconciliationStatus = ReconciliationStatus.RECONCILED,
+            val event = movimientoDeLaHoja(
+                // El id sale del BORRADOR, no de acá adentro: ver [idDelBorrador] más arriba.
+                id = idDelBorrador,
+                cuentaId = cuenta,
+                cuentas = accounts,
+                tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+                monto = amount.toLongOrNull() ?: 0L,
+                categoria = trimmedCategory,
+                nota = note,
                 // Ola 13: la fecha elegida, no «ahora» a secas. Con «Hoy» (el default) sigue
                 // siendo `Clock.System.now()` exactamente como antes — ver [timestampParaFecha],
                 // que explica por qué otro día va al mediodía de Bogotá y hoy no.
@@ -462,6 +533,9 @@ fun QuickAddScreen(
             val result = runCatching { Repositories.wallets.postEvent(event) }
             saving = false
             result.onSuccess {
+                // Id nuevo recién ACÁ: el movimiento siguiente es otro movimiento. Mismo reflejo
+                // que `TransferForm` — ver [idDelBorrador].
+                idDelBorrador = newId("ev")
                 // F35: si escribió una categoría nueva a mano, que ya aparezca como sugerencia
                 // "usada" en el resto de la sesión. Ola 9 · A3: con el tipo con que la usó.
                 UsedCategoriesCache.record(trimmedCategory, event.type)
@@ -727,7 +801,12 @@ fun QuickAddScreen(
                             LaunchedEffect(Unit) { categoryFocusRequester.requestFocus() }
                             CategoryField(
                                 value = category,
-                                onValueChange = { category = it },
+                                // El tope es el de la COLUMNA (`varchar(100)`), no uno inventado
+                                // más corto: una categoría más larga que eso no se rechazaba —
+                                // reventaba el insert del server con un 500, y en el teléfono
+                                // quedaba rebotando en el sync cada 30 s sin decir nada. Ver
+                                // [rechazoDeLosTextos], que es la misma regla del otro lado.
+                                onValueChange = { category = it.take(MAX_CATEGORIA_LENGTH) },
                                 type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                                 usedCategories = usedCategories,
                                 prefs = categoryPrefs,
@@ -814,6 +893,7 @@ fun QuickAddScreen(
                             } else {
                                 EditorBody(
                             amount = amount,
+                            moneda = monedaDeLaCuenta(accounts, selectedAccountId),
                             onKey = ::onKey,
                             category = category,
                             // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
@@ -919,6 +999,12 @@ internal fun TypeSegments(
 @Composable
 private fun EditorBody(
     amount: String,
+    /**
+     * La moneda de la cuenta elegida — la del movimiento que se va a guardar. Manda el rótulo de
+     * abajo del monto y el símbolo de adelante: con la Master Black elegida, esta hoja decía
+     * «$500.000 · COP» y guardaba US$500.000. Ver [movimientoDeLaHoja].
+     */
+    moneda: String,
     onKey: (String) -> Unit,
     category: String,
     walletLabel: String,
@@ -974,13 +1060,14 @@ private fun EditorBody(
         // La protagonista de la hoja, como «Tu plata» y lo gastado en Presupuestos. Antes iba a
         // 56 sp en una sola línea sin achique: un monto de nueve cifras se salía del ancho del
         // teléfono. CifraProtagonista baja de tamaño hasta que entra.
-        CifraProtagonista("$" + formatAmountKeypadDisplay(amount), color = Movi.colores.texto)
+        CifraProtagonista(simboloDeMoneda(moneda) + formatAmountKeypadDisplay(amount), color = Movi.colores.texto)
         Spacer(Modifier.height(2.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("COP", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
+            // El rótulo de la moneda REAL, no un «COP» clavado. Ver el parámetro [moneda].
+            Text(moneda, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
             Text("·", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
             // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
@@ -1425,6 +1512,24 @@ private fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): St
     return if (saldo.aFavor) "A favor ${saldo.magnitud}" else "Debes ${saldo.magnitud}"
 }
 
+/**
+ * El texto entrante **recortado al tope de su columna**, con la selección dentro de lo que quedó.
+ *
+ * Se construye un [TextFieldValue] nuevo en vez de copiar el entrante: la `composition` del que
+ * llega apunta a posiciones del texto largo, y dejarla colgando sobre un texto más corto es un
+ * rango fuera de límites.
+ */
+internal fun recortadoAlTope(entrante: TextFieldValue, tope: Int): TextFieldValue {
+    if (entrante.text.length <= tope) return entrante
+    return TextFieldValue(
+        text = entrante.text.take(tope),
+        selection = TextRange(
+            entrante.selection.start.coerceAtMost(tope),
+            entrante.selection.end.coerceAtMost(tope),
+        ),
+    )
+}
+
 @Composable
 private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () -> Unit) {
     // `TextFieldValue` y no `String`: hace falta poder decir DÓNDE queda el cursor.
@@ -1461,7 +1566,11 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
         ) {
             BasicTextField(
                 value = value,
-                onValueChange = { value = it },
+                // El mismo tope que la categoría, y por lo mismo: `description` es un
+                // `varchar(255)`, y una nota más larga salía por el 500 genérico del server (en el
+                // teléfono, por un reintento eterno y mudo). Se RECORTA en vez de descartarse,
+                // para que pegar un texto largo deje lo que entra en lugar de no dejar nada.
+                onValueChange = { value = recortadoAlTope(it, MAX_CONCEPTO_LENGTH) },
                 cursorBrush = SolidColor(Movi.colores.texto),
                 textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                 // Ola 8 · V2: **sin `fillMaxWidth` el campo no se podía tocar.** El área

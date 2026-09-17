@@ -20,6 +20,10 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.EVENT_DATE_IN_FUTURE
 import com.jvillada.movi.shared.model.MONTO_INVALIDO
+import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
+import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
+import com.jvillada.movi.shared.model.CATEGORIA_DEMASIADO_LARGA
+import com.jvillada.movi.shared.model.CONCEPTO_DEMASIADO_LARGO
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -555,6 +559,48 @@ class EventRoutesTest {
     fun `un monto normal se sigue aceptando`() = testApplication {
         wireApp()
         assertEquals(HttpStatusCode.Created, postEvent(userAId, conMonto(18_500)).status)
+    }
+
+    // ── Los dos textos: la misma regla al crear que al corregir ───────────────
+    //
+    // `PUT /api/events/{id}` ya validaba el largo del concepto (`validarEdicionDeMovimiento`) y
+    // esta puerta no validaba ninguno de los dos: un concepto de 400 caracteres se estrellaba
+    // contra el `varchar(255)` y salía por el 500 genérico. En el teléfono era peor —la fila
+    // quedaba escrita en el espejo local y el `SyncEngine` la reintentaba cada 30 s para siempre,
+    // porque un 500 no cae en el 400..499 que marca `syncError`. Ver `rechazoDeLosTextos`.
+
+    private fun conTextos(id: String, categoria: String, concepto: String) =
+        """{"id":"$id","accountId":"$savingsAccountId","type":"EXPENSE","amount":18500,
+            "category":"$categoria","description":"$concepto",
+            "source":"MANUAL","timestamp":0}"""
+
+    @Test
+    fun `crear un movimiento con un concepto mas largo que la columna se rechaza`() = testApplication {
+        wireApp()
+        val res = postEvent(userAId, conTextos("evt-concepto-largo", "Comida", "a".repeat(MAX_CONCEPTO_LENGTH + 1)))
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertEquals(CONCEPTO_DEMASIADO_LARGO, res.bodyAsText())
+        assertEquals(0L, transaction { Events.selectAll().where { Events.id eq "evt-concepto-largo" }.count() })
+    }
+
+    @Test
+    fun `crear un movimiento con una categoria mas larga que la columna se rechaza`() = testApplication {
+        wireApp()
+        val res = postEvent(userAId, conTextos("evt-categoria-larga", "a".repeat(MAX_CATEGORIA_LENGTH + 1), "Almuerzo"))
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertEquals(CATEGORIA_DEMASIADO_LARGA, res.bodyAsText())
+        assertEquals(0L, transaction { Events.selectAll().where { Events.id eq "evt-categoria-larga" }.count() })
+    }
+
+    /** El borde de al lado sí entra: el tope es el de la columna, no uno inventado más corto. */
+    @Test
+    fun `el largo exacto de cada columna se sigue aceptando`() = testApplication {
+        wireApp()
+        val res = postEvent(
+            userAId,
+            conTextos("evt-borde", "b".repeat(MAX_CATEGORIA_LENGTH), "a".repeat(MAX_CONCEPTO_LENGTH)),
+        )
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
     }
 
     @Test
