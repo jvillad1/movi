@@ -295,6 +295,24 @@ class ContextoDelPeriodoTest {
     }
 
     /**
+     * **El total va sumado desde el server.** Con los diez renglones correctos delante, el modelo
+     * contestó $880.361 donde la suma era $900.295 (medido el 17-sep en el teléfono del dueño):
+     * sumar diez números es justo lo que un modelo hace mal. Ahora el total viaja hecho.
+     */
+    @Test
+    fun `el total de las suscripciones viaja sumado, no lo suma el modelo`() {
+        suscripcion("s-net", "Netflix", 44_900L, dia = 19)
+        suscripcion("s-yt", "YouTube Premium", 47_900L, dia = 29)
+        suscripcion("s-nba", "NBA League Pass", 112_900L, periodicidad = "ANUAL", dia = 16)
+        suscripcion("s-cand", "Claro Video", 24_900L, estado = "CANDIDATE")
+
+        val texto = contexto()
+
+        // 44.900 + 47.900 + 9.409 (la anual prorrateada); la candidata no entra, como en resultFor.
+        assertTrue("Total de suscripciones activas al mes: \$102209" in texto, texto)
+    }
+
+    /**
      * Una CANDIDATE es una sospecha del detector que el dueño todavía no aceptó. Dicha como un
      * hecho, le pone al asistente en la boca un gasto que quizá no existe — y `resultFor`, que es
      * lo que el dueño ve en pantalla, tampoco la cuenta.
