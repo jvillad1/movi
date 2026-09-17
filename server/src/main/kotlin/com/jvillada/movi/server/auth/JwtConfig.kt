@@ -41,6 +41,27 @@ object JwtConfig {
         }
     }
 
+    /**
+     * **La huella del secreto, para que un cambio se vea.**
+     *
+     * Medido en producción el 17-sep: `JWT_SECRET` estaba configurada en Railway como un valor que
+     * se **generaba en cada lectura**, así que cada arranque firmaba con otra llave y todas las
+     * sesiones morían. Desde afuera no se distingue de «se venció tu sesión»: el teléfono recibe
+     * 401, a los tres cierra sesión, y el dueño vuelve a entrar sin saber por qué. Estuvo así
+     * semanas.
+     *
+     * Seis caracteres de un SHA-256 no dicen nada del secreto (no se puede volver atrás desde
+     * ellos) y sí dicen lo único que hacía falta: si esta huella cambia entre dos arranques y
+     * nadie rotó nada a propósito, el secreto no es estable y las sesiones se están cayendo solas.
+     */
+    val huellaDelSecreto: String by lazy { huellaDe(secret) }
+
+    internal fun huellaDe(valor: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(valor.encodeToByteArray())
+            .take(3)
+            .joinToString("") { b -> ((b.toInt() and 0xFF) + 0x100).toString(16).substring(1) }
+
     private val algorithm: Algorithm by lazy { Algorithm.HMAC256(secret) }
     private const val ISSUER = "movi"
     private const val AUDIENCE = "movi-client"
