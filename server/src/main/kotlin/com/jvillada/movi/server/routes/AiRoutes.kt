@@ -3,13 +3,10 @@ package com.jvillada.movi.server.routes
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.models.messages.Base64ImageSource
-import com.anthropic.models.messages.CacheControlEphemeral
 import com.anthropic.models.messages.ContentBlockParam
 import com.anthropic.models.messages.ImageBlockParam
-import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
-import com.anthropic.models.messages.ThinkingConfigAdaptive
 import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
 import com.jvillada.movi.server.ai.render
@@ -34,14 +31,15 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.normalizarCondicion
+import com.jvillada.movi.server.ai.ElModeloDeAnthropic
+import com.jvillada.movi.server.ai.conversarConHerramientas
+import com.jvillada.movi.server.ai.ejecutarHerramienta
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import com.jvillada.movi.server.time.currentPeriodWindow
@@ -65,6 +63,13 @@ private val anthropicClient: AnthropicClient? by lazy {
     runCatching { AnthropicOkHttpClient.builder().apiKey(key).build() }.getOrNull()
 }
 
+/**
+ * El modelo que contesta. Constante y con nombre porque desde que hay herramientas se nombra en
+ * dos lugares —la llamada y la prueba que fija cuál se usa—, y un literal repetido es cómo dos
+ * caminos terminan hablando con modelos distintos.
+ */
+internal const val MODELO_DEL_ASISTENTE = "claude-opus-4-7"
+
 private val PERSONA = """Eres Movi AI, un copiloto financiero personal y familiar para usuarios en Colombia.
 
 Hablas en español relajado y directo, sin jerga financiera innecesaria. Tuteas al usuario, no uses "usted".
@@ -72,8 +77,11 @@ Habla en español neutro latinoamericano, de tú, sin voseo.
 Montos siempre en pesos colombianos con formato ${'$'}X.XXX.XXX.
 Vocabulario de la app: di "gasto"/"gastos", nunca "egreso"/"egresos". La interfaz habla así y tú también.
 
-Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO".
-Si la pregunta no se puede contestar con esos datos, dilo claramente y sugiere qué información faltaría.
+Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO" y en lo que devuelvan tus herramientas. Nunca estimes ni completes de memoria una cifra que no viniera de ahí.
+
+Tienes dos herramientas para consultar sus movimientos más allá del período que ya ves: buscar_movimientos (hechos concretos) y totales_por_categoria (cuánto). Úsalas cuando la pregunta hable de otro mes, de otro período o de algo que el bloque no trae; no las uses para lo que ya está ahí, que es el período en curso completo. Consulta antes de responder, nunca después de haber dicho una cifra.
+Si una consulta vuelve vacía, dilo: "no encuentro nada" es una respuesta correcta y "creo que gastaste como" no lo es.
+Si la pregunta no se puede contestar ni con los datos ni consultando, dilo claramente y sugiere qué información faltaría.
 
 Tono: directo, empático, accionable. No moralices sobre el gasto.
 Estructura: responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
@@ -148,30 +156,22 @@ fun Route.aiRoutes() {
             return@post
         }
 
-        val params = MessageCreateParams.builder()
-            .model("claude-opus-4-7")
-            .maxTokens(1024L)
-            .thinking(ThinkingConfigAdaptive.builder().build())
-            .systemOfTextBlockParams(
-                listOf(
-                    TextBlockParam.builder().text(PERSONA).build(),
-                    TextBlockParam.builder()
-                        .text(context)
-                        .cacheControl(CacheControlEphemeral.builder().build())
-                        .build(),
-                ),
-            )
-            .messages(messageParams)
-            .build()
-
+        // **Ya no es una llamada, es una conversación.** El asistente puede consultar los
+        // movimientos del dueño antes de contestar (ver `conversarConHerramientas`, que decide
+        // cuándo y cuántas veces, y se prueba sin red). El `uid` sale del token y nunca del texto
+        // que escribe el modelo: las herramientas solo leen, y solo lo de este dueño.
+        val uid = call.userId()
         val reply = runCatching {
-            withContext(Dispatchers.IO) {
-                val response = client.messages().create(params)
-                response.content()
-                    .mapNotNull { block -> block.text().orElse(null)?.text() }
-                    .joinToString("\n")
-                    .ifBlank { "(sin respuesta)" }
-            }
+            conversarConHerramientas(
+                modelo = ElModeloDeAnthropic(
+                    client = client,
+                    modelo = MODELO_DEL_ASISTENTE,
+                    persona = PERSONA,
+                    contexto = context,
+                    mensajesDelDueno = messageParams,
+                ),
+                ejecutar = { llamada -> ejecutarHerramienta(uid, llamada) },
+            )
         }
         reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it))) }
             .onFailure {
