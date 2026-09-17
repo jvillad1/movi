@@ -48,6 +48,9 @@ private data class PendingImage(val fileName: String, val bytes: ByteArray, val 
 @Composable
 fun AIChatScreen(onNavigate: (Screen) -> Unit) {
     val coroutine = rememberCoroutineScope()
+    // El saludo es DE PANTALLA: se pinta, no se manda. La API exige que el primer mensaje del
+    // historial sea del usuario, así que mandarlo hacía fallar todos los turnos — ver
+    // [mensajesParaEnviar], que es quien decide qué viaja.
     val messages = remember {
         mutableStateListOf<ChatMessage>(
             ChatMessage(ChatRole.ASSISTANT, "¡Hola Camilo! Pregúntame lo que quieras sobre tu plata."),
@@ -91,7 +94,10 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
         pendingImage = null
         loading = true
         coroutine.launch {
-            val history = messages.filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }
+            // Lo que viaja NO es la lista de la pantalla: sin el saludo, sin las imágenes de
+            // turnos anteriores (ya se mandaron y se pagaron una vez) y con tope. Ver
+            // [mensajesParaEnviar].
+            val history = mensajesParaEnviar(messages)
             val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
             val replyText = reply.getOrNull()?.text
                 ?: "No pude conectarme con el AI. ${reply.exceptionOrNull()?.message ?: ""}"

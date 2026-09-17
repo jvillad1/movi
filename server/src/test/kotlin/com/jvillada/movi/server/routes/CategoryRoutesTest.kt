@@ -441,6 +441,39 @@ class CategoryRoutesTest {
         assertTrue(lista.none { it.nombre() == "Carro" })
     }
 
+    /**
+     * **Renombrar tampoco puede des-esconder.** La preferencia viaja con el nombre —lo dice el
+     * KDoc de `rewriteCategory`— y «escondida» es una preferencia igual que el tipo fijado.
+     * Viajaba solo el tipo: corregirle el tipeo a una categoría escondida la devolvía callada a
+     * las sugerencias, o sea deshacía algo que el dueño había apagado a propósito, sin decírselo.
+     */
+    @Test
+    fun `renombrar conserva el escondida`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Carro")
+        assertEquals(HttpStatusCode.OK, prefs("Carro", hidden = true).status)
+        assertEquals(HttpStatusCode.OK, rename("Carro", "Auto").status)
+
+        val lista = categorias()
+        assertTrue(lista.porNombre("Auto").flag("hidden"), "escondida sigue escondida con el nombre nuevo")
+        assertTrue(lista.none { it.nombre() == "Carro" })
+    }
+
+    /**
+     * La otra mitad de la misma regla: unificar SÍ deja el destino visible, aunque el origen
+     * estuviera escondido. Acaba de recibir movimientos; esconderlo sería mandarlos a un nombre
+     * que la app no vuelve a ofrecer nunca (ver el KDoc de `rewriteCategory`).
+     */
+    @Test
+    fun `unificar no esconde el destino aunque el origen estuviera escondido`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Trasnporte")
+        assertEquals(HttpStatusCode.OK, prefs("Trasnporte", hidden = true).status)
+        assertEquals(HttpStatusCode.OK, merge("Trasnporte", "Transporte").status)
+
+        assertFalse(categorias().porNombre("Transporte").flag("hidden"))
+    }
+
     // ── Unificar ──────────────────────────────────────────────────────────────
 
     @Test

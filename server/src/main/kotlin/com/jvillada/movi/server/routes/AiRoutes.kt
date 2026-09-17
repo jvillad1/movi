@@ -150,7 +150,8 @@ fun Route.aiRoutes() {
         }
 
         val context = buildUserContext(call.userId())
-        val messageParams = body.messages.map(::toMessageParam)
+        val paraElModelo = mensajesParaElModelo(body.messages)
+        val messageParams = paraElModelo.map(::toMessageParam)
         if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
             call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
             return@post
@@ -182,6 +183,25 @@ fun Route.aiRoutes() {
             }
     }
 }
+
+/**
+ * **La conversación tiene que EMPEZAR con el usuario, o la API la rechaza entera.**
+ *
+ * La Messages API de Anthropic exige que el primer mensaje sea `user`. La pantalla del chat siembra
+ * el historial con un saludo del asistente («¡Hola! Pregúntame lo que quieras sobre tu plata»), y
+ * ese saludo viajaba como `messages[0]`: **todos** los turnos volvían con «Error llamando a
+ * Claude», o sea que Movi AI no contestaba nada. Acá se veía sano porque la única guarda miraba el
+ * ÚLTIMO mensaje, que sí era del usuario.
+ *
+ * El arreglo de fondo está en el cliente —el saludo es de pantalla y no se manda (ver
+ * `mensajesParaEnviar` en `AIChatScreen.kt`)—, pero el server no puede depender de eso: el dueño
+ * tiene un APK viejo instalado, y ese APK va a seguir mandando el saludo por meses. Así que acá se
+ * descarta todo lo que venga antes del primer mensaje del usuario, que es exactamente lo que la
+ * API no acepta. Un historial sin ningún mensaje del usuario queda vacío y cae en la guarda de
+ * «último mensaje debe ser del usuario», que ya existía.
+ */
+internal fun mensajesParaElModelo(messages: List<ChatMessage>): List<ChatMessage> =
+    messages.dropWhile { it.role != ChatRole.USER }
 
 /**
  * F32: recorre los mensajes buscando adjuntos y devuelve el primer problema encontrado (o

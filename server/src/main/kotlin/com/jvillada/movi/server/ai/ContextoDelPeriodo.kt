@@ -11,19 +11,26 @@ import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
+import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PeriodicidadDeCobro
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.montoMensualEquivalente
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import kotlin.math.roundToLong
 
 /**
  * # Lo que el asistente tiene que saber para contestar sobre la plata del dueño
@@ -80,6 +87,32 @@ internal data class RecurrenteParaContexto(
     val yaOcurrioEnElPeriodo: Boolean,
 )
 
+/**
+ * Una suscripción **activa**, ya traída a pesos y al mes.
+ *
+ * Las tres cosas que este tipo existe para que no se pierdan —y que se perdían cuando acá viajaba
+ * un `Triple(nombre, amount, dia)` crudo—:
+ *
+ *  - **La moneda.** `amount` está en la moneda nativa: un Spotify de US11,99 llegaba como «11» y
+ *    el asistente lo leía como once pesos.
+ *  - **La periodicidad.** Un cobro ANUAL llegaba como si fuera del mes, así que el asistente
+ *    contaba doce veces al año lo que se cobra una.
+ *  - **El estado.** Una CANDIDATE es una sospecha del detector que el dueño todavía no aceptó;
+ *    contarla como un hecho le pone en la boca al asistente un gasto que quizá no existe.
+ *
+ * [montoMensualCop] se arma como en `SubscriptionRoutes.resultFor`: se prorratea PRIMERO en la
+ * moneda nativa ([montoMensualEquivalente]) y se convierte DESPUÉS con la TRM. Al revés, el
+ * redondeo del medio separaría por pesos lo que dice el asistente de lo que dice la pantalla.
+ */
+internal data class SuscripcionParaContexto(
+    val nombre: String,
+    val montoMensualCop: Long,
+    val dia: Int,
+    val moneda: String,
+    val montoNativo: Long,
+    val esAnual: Boolean,
+)
+
 /** Un crédito con sus condiciones: sin la tasa y la cuota no se puede opinar de una deuda. */
 internal data class CreditoParaContexto(
     val cuenta: String,
@@ -101,7 +134,7 @@ internal data class ContextoDelPeriodo(
     val gastoPorCategoria: Map<String, Long>,
     val recurrentes: List<RecurrenteParaContexto>,
     val creditos: List<CreditoParaContexto>,
-    val suscripciones: List<Triple<String, Long, Int>>,
+    val suscripciones: List<SuscripcionParaContexto>,
     val metas: List<Triple<String, Long, String?>>,
     val smsPorConfirmar: Int,
     val movimientosPorConfirmar: Int,
@@ -115,7 +148,11 @@ internal data class ContextoDelPeriodo(
 internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
     val ajustes: PeriodSettings = ajustesDePeriodoDe(uid)
     val ventana = currentPeriodWindow(ajustes)
-    val periodoIso = periodoIsoDe(ventana.startMillis)
+    val hoy = AppClock.today()
+    // La TRM, antes de abrir la transacción: es una llamada de red (cacheada por día) y adentro de
+    // `dbQuery` no se puede suspender. No cuesta una llamada extra — `buildUserContext` ya la pide
+    // para valuar las cuentas y las dos leen la misma caché.
+    val tasa = FxRateService.usdToCop()
 
     return dbQuery {
         val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
@@ -144,18 +181,43 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             .groupBy { it[Events.category] }
             .mapValues { (_, filas) -> filas.sumOf { it[Events.amount] } }
 
-        val selladas = RecurringOccurrences.selectAll()
-            .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.period eq periodoIso) }
-            .map { it[RecurringOccurrences.ruleId] }
-            .toSet()
+        // **El sello se calcula POR REGLA, no una sola vez para todo el período.**
+        //
+        // `recurring_occurrences.period` es el mes de calendario del VENCIMIENTO (ver `periodOf`),
+        // y ese mes no tiene por qué ser el del arranque del período: con corte 25, el período va
+        // del 25 de agosto al 24 de septiembre, así que un arriendo del día 5 vence el 5 de
+        // septiembre y se sella «2026-09» mientras el arranque dice «2026-08». Preguntando por el
+        // mes del arranque, el asistente afirmaba que el arriendo no está pagado cuando sí lo
+        // está —o al revés—, que es peor que no tener el dato.
+        //
+        // La derivación buena es la misma que usa `/api/payments/occurrences`:
+        // `periodOf(ocurrenciaPorPreguntar(hoy, regla, ajustes))`. Una sola forma de nombrar la
+        // cuota en juego, para que las dos pantallas no puedan contestar distinto sobre el mismo
+        // pago.
+        val selladasPorRegla: Map<String, Set<String>> = RecurringOccurrences.selectAll()
+            .where { RecurringOccurrences.userId eq uid }
+            .groupBy({ it[RecurringOccurrences.ruleId] }, { it[RecurringOccurrences.period] })
+            .mapValues { (_, periodos) -> periodos.toSet() }
         val recurrentes = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { fila ->
+            val regla = RecurringRule(
+                id = fila[RecurringRules.id],
+                name = fila[RecurringRules.name],
+                category = fila[RecurringRules.category],
+                amount = fila[RecurringRules.amount],
+                dayOfMonth = fila[RecurringRules.dayOfMonth],
+                type = TransactionType.valueOf(fila[RecurringRules.type]),
+                activeFrom = fila[RecurringRules.activeFrom],
+            )
+            // `null` = este período no tiene ninguna ocurrencia que preguntar (un período acortado
+            // a mano que no alcanza a contener el día de la regla). Ahí no hay sello que mirar.
+            val sello = ocurrenciaPorPreguntar(hoy, regla, ajustes)?.let(::periodOf)
             RecurrenteParaContexto(
-                nombre = fila[RecurringRules.name],
-                categoria = fila[RecurringRules.category],
-                monto = fila[RecurringRules.amount],
-                dia = fila[RecurringRules.dayOfMonth],
-                esIngreso = fila[RecurringRules.type] == TransactionType.INCOME.name,
-                yaOcurrioEnElPeriodo = fila[RecurringRules.id] in selladas,
+                nombre = regla.name,
+                categoria = regla.category,
+                monto = regla.amount,
+                dia = regla.dayOfMonth,
+                esIngreso = regla.type == TransactionType.INCOME,
+                yaOcurrioEnElPeriodo = sello != null && sello in selladasPorRegla[regla.id].orEmpty(),
             )
         }
 
@@ -175,10 +237,36 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             )
         }
 
+        // Solo AUTO y CONFIRMED, igual que `SubscriptionRoutes.resultFor`: son las que el dueño
+        // ve como suyas en Recurrentes. Una CANDIDATE sigue siendo una sospecha del detector, y
+        // una sospecha dicha como un hecho es justo lo que el asistente no puede hacer con su
+        // plata.
         val suscripciones = Subscriptions.selectAll()
             .where { Subscriptions.userId eq uid }
-            .filter { it[Subscriptions.status] != "DISMISSED" }
-            .map { Triple(it[Subscriptions.displayName], it[Subscriptions.amount], it[Subscriptions.dayOfMonth]) }
+            .filter { it[Subscriptions.status] == "AUTO" || it[Subscriptions.status] == "CONFIRMED" }
+            .map { fila ->
+                // Un valor imposible en la columna cae en MENSUAL, como en `toSubscription()`: es
+                // lo que era todo antes de que la columna existiera.
+                val periodicidad = runCatching {
+                    PeriodicidadDeCobro.valueOf(fila[Subscriptions.periodicidad])
+                }.getOrDefault(PeriodicidadDeCobro.MENSUAL)
+                val moneda = fila[Subscriptions.currency]
+                val nativo = fila[Subscriptions.amount]
+                // Prorratear primero, convertir después. Ver el KDoc de [SuscripcionParaContexto].
+                val mensualNativo = montoMensualEquivalente(nativo, periodicidad)
+                SuscripcionParaContexto(
+                    nombre = fila[Subscriptions.displayName],
+                    montoMensualCop = when (moneda) {
+                        "COP" -> mensualNativo
+                        "USD" -> (mensualNativo * tasa).roundToLong()
+                        else -> 0L
+                    },
+                    dia = fila[Subscriptions.dayOfMonth],
+                    moneda = moneda,
+                    montoNativo = nativo,
+                    esAnual = periodicidad == PeriodicidadDeCobro.ANUAL,
+                )
+            }
 
         val metas = Goals.selectAll().where { Goals.userId eq uid }
             .map { Triple(it[Goals.name], it[Goals.target], it[Goals.targetDate]) }
@@ -281,9 +369,23 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
     }
 
     if (suscripciones.isNotEmpty()) {
-        appendLine("== Suscripciones ==")
-        suscripciones.sortedByDescending { it.second }.forEach { (nombre, monto, dia) ->
-            appendLine("- $nombre: \$$monto el día $dia")
+        // «activas» en el título, y no «Suscripciones» a secas: acá van las que el dueño tiene por
+        // suyas, no las que el detector todavía propone.
+        appendLine("== Suscripciones activas ==")
+        suscripciones.sortedByDescending { it.montoMensualCop }.forEach { s ->
+            // El cobro real se dice aparte cuando no coincide con el equivalente mensual en pesos.
+            // Si no, un Spotify en dólares y un cobro anual quedarían indistinguibles de un cargo
+            // mensual en pesos, y el asistente contestaría sobre un número que el dueño no
+            // reconoce en su extracto.
+            val cobroReal = when {
+                s.esAnual && s.moneda != "COP" ->
+                    " (el cobro real es ${s.moneda} \$${s.montoNativo} una vez al año)"
+                s.esAnual -> " (el cobro real es \$${s.montoNativo} una vez al año)"
+                s.moneda != "COP" ->
+                    " (el cobro real es ${s.moneda} \$${s.montoNativo} al mes, convertido a la TRM de hoy)"
+                else -> ""
+            }
+            appendLine("- ${s.nombre}: \$${s.montoMensualCop} al mes, el día ${s.dia}" + cobroReal)
         }
         appendLine()
     }
@@ -334,10 +436,4 @@ private fun diasHasta(finExclusivo: Long): Int {
     val hoy = AppClock.now(zona).toLocalDate()
     val ultimo = Instant.ofEpochMilli(finExclusivo - 1).atZone(zona).toLocalDate()
     return ChronoUnit.DAYS.between(hoy, ultimo).toInt().coerceAtLeast(0)
-}
-
-/** «2026-09», el período del vencimiento con el que se sellan las ocurrencias. */
-private fun periodoIsoDe(inicio: Long): String {
-    val fecha = Instant.ofEpochMilli(inicio).atZone(AppClock.zone).toLocalDate()
-    return "%04d-%02d".format(fecha.year, fecha.monthValue)
 }
