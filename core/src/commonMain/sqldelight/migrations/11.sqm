@@ -1,0 +1,18 @@
+-- Migración 11 → 12: agrega financial_event.intentosFallidos — **cuántas veces seguidas el server
+-- se negó a recibir este movimiento**.
+--
+-- El SyncEngine solo marcaba `syncError` para un 4xx que no fuera sesión vencida ni «demasiadas
+-- peticiones»: un rechazo así no se arregla reintentando, y por eso se dice. Un **5xx** no entraba
+-- en esa cuenta —es la forma que tiene el server de decir «yo me rompí», y eso sí se puede arreglar
+-- solo—, así que la fila se quedaba reintentando cada 30 segundos **para siempre**, sin una sola
+-- palabra en Movimientos. Es la forma que tenía un concepto demasiado largo antes de que el server
+-- lo recortara, y la que va a tener lo próximo con lo que el server se atore.
+--
+-- Con esta columna el ciclo cuenta los fallos seguidos de cada fila y, pasado el umbral (ver
+-- `INTENTOS_ANTES_DE_AVISAR` en SyncEngine.kt), escribe el `syncError` que ya sabe mostrar el aviso
+-- de Movimientos. **No deja de reintentar**: el movimiento sigue subiendo solo el día que el server
+-- se recupere, y un éxito borra la cuenta y el aviso.
+--
+-- Nullable y sin backfill: `null` es «ninguno falló todavía», que es la verdad de todo lo que ya
+-- está en el teléfono. Sin índice: nunca se filtra ni se ordena por ella.
+ALTER TABLE financial_event ADD COLUMN intentosFallidos INTEGER;

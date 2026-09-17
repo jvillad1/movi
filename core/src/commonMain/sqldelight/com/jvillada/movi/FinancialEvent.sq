@@ -72,7 +72,16 @@ CREATE TABLE financial_event (
     -- Nullable, como createdAt y noAmortiza: las filas que ya están en el teléfono no la tienen y
     -- no hay de dónde sacarla — y NULL las describe bien, porque significa «nadie la editó». Sin
     -- índice: nunca se filtra ni se ordena por ella.
-    lastEditedAt            INTEGER
+    lastEditedAt            INTEGER,
+    -- **Cuántas veces SEGUIDAS falló la subida de este movimiento** contra un server que contestó
+    -- (un 5xx), o NULL si ninguna. Lo lleva el SyncEngine para poder decir en algún momento lo que
+    -- antes no decía nunca: un 5xx que no se arregla dejaba la fila reintentando cada 30 segundos
+    -- para siempre, en silencio. Pasado el umbral escribe `syncError` y el aviso de Movimientos lo
+    -- muestra — pero se sigue reintentando, y un éxito borra la cuenta y el aviso. Migración 11.sqm.
+    --
+    -- Nullable y sin backfill, como lastEditedAt: NULL es «todavía no falló ninguna vez», que es la
+    -- verdad de todo lo que ya está en el teléfono. Sin índice: nunca se filtra ni se ordena por ella.
+    intentosFallidos        INTEGER
 );
 
 CREATE INDEX idx_event_account ON financial_event(accountId);
@@ -99,6 +108,18 @@ ORDER BY timestamp DESC;
 -- dejaría medio traspaso en el server. Ver SyncEngine.syncEvents.
 markSyncError:
 UPDATE financial_event SET syncError = :syncError WHERE id = :id AND userId = :userId;
+
+-- **Los fallos seguidos contra un server que contestó** (ver `intentosFallidos` arriba y
+-- `INTENTOS_ANTES_DE_AVISAR` en SyncEngine.kt). Se guarda el número ya calculado en Kotlin, en vez
+-- de un `COALESCE(intentosFallidos, 0) + 1` acá, porque el ciclo necesita saber en cuánto quedó
+-- para decidir si ya toca avisar — y leerlo de vuelta sería una consulta más por fila.
+guardarIntentosFallidos:
+UPDATE financial_event SET intentosFallidos = :intentosFallidos WHERE id = :id AND userId = :userId;
+
+-- Un éxito borra las dos cosas: la cuenta de fallos y el aviso. Que el movimiento haya subido es
+-- exactamente lo que el aviso decía que no pasaba.
+limpiarElRastroDeFallos:
+UPDATE financial_event SET intentosFallidos = NULL, syncError = NULL WHERE id = :id AND userId = :userId;
 
 -- Lo que el server rechazó y todavía no subió (ver migración 9.sqm).
 --

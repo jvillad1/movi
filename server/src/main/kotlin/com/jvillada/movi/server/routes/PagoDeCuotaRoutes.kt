@@ -154,7 +154,32 @@ fun Route.pagoDeCuotaRoutes() {
             // **Se valida ACÁ y no se le cree a la hoja**, antes de escribir nada: un interés que
             // deja el capital negativo haría SUBIR la deuda con un pago, y eso es 422 con el
             // motivo, no un clamp silencioso. Misma función que apaga el botón en la app.
-            validarInteresReal(body.interesReal, body.amount, debt.type, terms?.insuranceMonthly, terms?.otrosCargosMensuales)?.let {
+            //
+            // **Y se valida contra lo que al mes le falta cobrar**, que es lo mismo que el desglose
+            // va a usar dos líneas más abajo: mirando el seguro ENTERO, un segundo pago chico de
+            // una cuota cuyo seguro ya se cobró se rechazaba con un cargo que nadie iba a cobrar.
+            // Por eso `yaCobradoEnElMes` se calcula ACÁ y no adentro de la llamada al desglose.
+            //
+            // Los otros pagos de esta deuda en el mismo mes que este (sin sus propias patas).
+            val yaCobradoEnElMes = run {
+                val delMes = loadNonVoidedEvents(uid, debt.id)
+                    .filter { it.transferId != body.transferId && it.currency == debt.currency && it.noAmortiza != null }
+                // La plata que salió de la cuenta en cada pago de antes: la otra pata de su par.
+                val pares = delMes.mapNotNull { it.transferId }.toSet()
+                val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
+                    Events.selectAll()
+                        .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debt.id) }
+                        .associate { it[Events.transferId]!! to it[Events.amount] }
+                }
+                // Por CUOTA, no por mes de calendario: ver `cuotaMasCercana`.
+                cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp), terms?.dayOfMonth) { fila ->
+                    fila.transferId?.let { pagadoPorPar[it] }
+                }
+            }
+            validarInteresReal(
+                body.interesReal, body.amount, debt.type,
+                terms?.insuranceMonthly, terms?.otrosCargosMensuales, yaCobradoEnElMes,
+            )?.let {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, it)
             }
             val desglose = desglosarCuotaRegistrada(
@@ -168,22 +193,8 @@ fun Route.pagoDeCuotaRoutes() {
                 otrosCargosMensuales = terms?.otrosCargosMensuales,
                 sinIntereses = terms?.sinIntereses ?: false,
                 interesReal = body.interesReal,
-                // Los otros pagos de esta deuda en el mismo mes que este (sin sus propias patas).
-                yaCobradoEnElMes = run {
-                    val delMes = loadNonVoidedEvents(uid, debt.id)
-                        .filter { it.transferId != body.transferId && it.currency == debt.currency && it.noAmortiza != null }
-                    // La plata que salió de la cuenta en cada pago de antes: la otra pata de su par.
-                    val pares = delMes.mapNotNull { it.transferId }.toSet()
-                    val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
-                        Events.selectAll()
-                            .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq debt.id) }
-                            .associate { it[Events.transferId]!! to it[Events.amount] }
-                    }
-                    // Por CUOTA, no por mes de calendario: ver `cuotaMasCercana`.
-                    cargosYaCobradosEnElMes(delMes, epochMillisToAppDate(body.timestamp), terms?.dayOfMonth) { fila ->
-                        fila.transferId?.let { pagadoPorPar[it] }
-                    }
-                },
+                // Calculado arriba, porque la validación mira lo mismo.
+                yaCobradoEnElMes = yaCobradoEnElMes,
             )
 
             val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(body, from, debt, desglose)

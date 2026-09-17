@@ -195,7 +195,7 @@ class DesgloseEnLaHojaTest {
 
         assertEquals(MotivoDelDesglose.AMORTIZA, d.motivo)
         assertTrue(d.capital >= 0L)
-        assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null))
+        assertNotNull(validarInteresReal(473_227L, 500_000L, AccountType.LOAN, 124_800L, null, yaCobradoEnElMes = 0L))
     }
 
     @Test

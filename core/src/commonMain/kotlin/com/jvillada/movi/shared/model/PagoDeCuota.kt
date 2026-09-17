@@ -391,6 +391,38 @@ fun mensajeDeInteresQueNoCabe(cuota: Long, interesReal: Long, seguro: Long, otro
 }
 
 /**
+ * **Lo que al mes todavía le falta cobrar** de seguro y otros cargos, una vez descontado lo que
+ * los pagos anteriores de esta misma cuota ya cubrieron. Devuelve `(seguro, otros)`.
+ *
+ * Es la escalera de [desglosarCuotaConInteresReal] sacada aparte para que la validación y el
+ * desglose usen **la misma**, no dos parecidas. Cuando no lo era, [validarInteresReal] miraba el
+ * seguro ENTERO de `credit_terms` y el desglose el que faltaba: un segundo pago chico de una cuota
+ * cuyo seguro ya se cobró se rechazaba con un mensaje que hablaba de un cargo que la app no iba a
+ * cobrar. Nunca escribió un número malo —solo rechazaba de más—, pero un rechazo que no describe
+ * ninguna cifra real es igual de difícil de creer.
+ */
+private fun cargosFijosQueFaltanCobrar(
+    interesReal: Long,
+    seguroMensual: Long?,
+    otrosCargosMensuales: Long?,
+    yaCobradoEnElMes: Long,
+): Pair<Long, Long> {
+    var faltaDescontar = yaCobradoEnElMes.coerceAtLeast(0L)
+    fun menosLoYaCobrado(cargo: Long): Long {
+        val descontado = minOf(cargo, faltaDescontar)
+        faltaDescontar -= descontado
+        return cargo - descontado
+    }
+    // El interés **consume** lo ya cobrado pero no se achica con él: consumir mantiene el mismo
+    // orden de reparto que la estimación (interés, seguro, otros); no achicarlo es porque
+    // [interesReal] es lo que el banco cobró por ESTE pago y va entero.
+    menosLoYaCobrado(interesReal.coerceAtLeast(0L))
+    val seguro = menosLoYaCobrado((seguroMensual ?: 0L).coerceAtLeast(0L))
+    val otros = menosLoYaCobrado((otrosCargosMensuales ?: 0L).coerceAtLeast(0L))
+    return seguro to otros
+}
+
+/**
  * ¿Se puede usar este interés real? Devuelve el motivo, o `null` si está bien — incluido el caso
  * en que no vino ninguno, que es «estímalo» y siempre está bien.
  *
@@ -407,15 +439,26 @@ fun validarInteresReal(
     seguroMensual: Long?,
     /** Ver [desglosarCuota]: sin default, olvidarlo no compila. */
     otrosCargosMensuales: Long?,
+    /**
+     * Ver [desglosarCuota]. **Acá vale exactamente lo mismo que en el desglose**: se valida contra
+     * lo que al mes le falta cobrar, no contra el cargo entero. Sin esto, un segundo pago de
+     * $100.000 sobre una cuota del ·9695 cuyo seguro de $124.800 ya se cobró se rechazaba diciendo
+     * que el seguro no cabía — cuando el desglose que la app iba a escribir no lo volvía a cobrar.
+     *
+     * Sin default, por lo mismo que los otros cargos: quien no lo pase estaría validando contra un
+     * mes que nadie tocó, y eso es justo el error que esta guarda existe para no repetir.
+     */
+    yaCobradoEnElMes: Long,
 ): String? {
     if (interesReal == null) return null
     if (interesReal < 0L) return INTERES_REAL_NEGATIVO
     if (tipoDeLaDeuda != AccountType.LOAN) return INTERES_REAL_EN_TARJETA
-    val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
-    val otros = (otrosCargosMensuales ?: 0L).coerceAtLeast(0L)
+    val (seguro, otros) = cargosFijosQueFaltanCobrar(interesReal, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes)
     // `cuota − interés − seguro − otros < 0` y no `interés + seguro + otros > cuota`: la resta no
     // desborda con cifras que ya pasaron `MONTO_MAXIMO`, la suma de tres entradas ajenas podría.
     if (cuota - interesReal - seguro - otros < 0L) {
+        // Con las cifras que de verdad se van a cobrar: el mensaje nombra el seguro que falta, no
+        // el del contrato, así el dueño puede comprobar la resta que lo rechazó.
         return mensajeDeInteresQueNoCabe(cuota, interesReal, seguro, otros)
     }
     return null
@@ -457,27 +500,19 @@ fun desglosarCuotaConInteresReal(
      */
     yaCobradoEnElMes: Long,
 ): DesgloseDeCuota {
-    require(validarInteresReal(interesReal, cuota, tipoDeLaDeuda, seguroMensual, otrosCargosMensuales) == null) {
+    require(
+        validarInteresReal(interesReal, cuota, tipoDeLaDeuda, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes) == null
+    ) {
         "Un interés real inválido se rechaza antes de desglosar; llama a validarInteresReal primero"
     }
-    var faltaDescontar = yaCobradoEnElMes.coerceAtLeast(0L)
-    fun menosLoYaCobrado(cargo: Long): Long {
-        val descontado = minOf(cargo, faltaDescontar)
-        faltaDescontar -= descontado
-        return cargo - descontado
-    }
-    // El interés **consume** lo ya cobrado pero no se achica con él: consumir mantiene el mismo
-    // orden de reparto que la estimación; no achicarlo es la decisión de arriba.
-    menosLoYaCobrado(interesReal.coerceAtLeast(0L))
-    val seguro = menosLoYaCobrado((seguroMensual ?: 0L).coerceAtLeast(0L))
-    val otros = menosLoYaCobrado((otrosCargosMensuales ?: 0L).coerceAtLeast(0L))
+    // La MISMA escalera que acaba de validar, no una copia: ver [cargosFijosQueFaltanCobrar].
+    val (seguro, otros) = cargosFijosQueFaltanCobrar(interesReal, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes)
     return DesgloseDeCuota(
         cuota = cuota,
         interes = interesReal,
         seguro = seguro,
         otrosCargos = otros,
-        // Nunca negativo: [validarInteresReal] ya garantizó que cabe con el seguro ENTERO, y acá
-        // el seguro solo puede ser menor.
+        // Nunca negativo: [validarInteresReal] ya garantizó que cabe, y con estos mismos cargos.
         capital = cuota - interesReal - seguro - otros,
         motivo = MotivoDelDesglose.INTERES_REAL,
     )
