@@ -90,6 +90,21 @@ enum class UsoDeCuenta {
      * movimientos de Skandia no le saca un peso a nadie. La condición es sobre el retiro.
      */
     CUENTA_DEL_EXTRACTO,
+
+    /**
+     * **De qué cuenta es este papel**: la cuenta a la que se cuelga un documento guardado.
+     *
+     * No alcanzaba con reusar [CUENTA_DEL_EXTRACTO], aunque se parezcan. Lo que se guarda en
+     * Documentos es más ancho que lo que manda extractos: la tabla de amortización del
+     * hipotecario, el pagaré del crédito del vehículo y el certificado de un préstamo ya
+     * desembolsado son justamente papeles de las cuentas que **no** mandan movimientos sueltos.
+     * Con el criterio del extracto, esas tres quedaban plegadas detrás de «Ver todas» — y son de
+     * las que más papel generan.
+     *
+     * Lo único que baja es el **efectivo**: nadie recibe un papel de la plata que tiene en el
+     * bolsillo. No se prohíbe —nada acá prohíbe—, solo deja de proponerse.
+     */
+    PAPEL_GUARDADO,
 }
 
 /**
@@ -146,6 +161,7 @@ fun sirvePara(account: Account, uso: UsoDeCuenta): Boolean = when (uso) {
         AccountType.CHECKING, AccountType.SAVINGS, AccountType.CREDIT_CARD, AccountType.INVESTMENT -> true
         AccountType.CASH, AccountType.LOAN -> false
     }
+    UsoDeCuenta.PAPEL_GUARDADO -> account.type != AccountType.CASH
 }
 
 /**

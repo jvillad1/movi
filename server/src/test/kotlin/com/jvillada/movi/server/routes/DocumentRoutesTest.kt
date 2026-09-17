@@ -66,8 +66,19 @@ class DocumentRoutesTest {
     private val duenoId = "user-dueno-documentos"
     private val otroId = "user-otro-documentos"
 
+    private val cuentaDelDueno = "acc-dueno-doc"
+    private val cuentaDelOtro = "acc-otro-doc"
+
     @BeforeTest
     fun setUp() {
+        // El token de DESCARGA lo emite y lo verifica `JwtConfig`, no el secreto de prueba de
+        // arriba, así que esta clase necesita que JwtConfig tenga uno. Sin esta línea dependía de
+        // que otra clase del mismo fork lo hubiera fijado antes (`secret` es `by lazy`, se
+        // resuelve una vez por JVM) o de que existiera un `server/.env` en el checkout: correr
+        // solo esta clase la hacía fallar entera. Es la misma escotilla que usa `AuthRoutesTest`,
+        // documentada en `JwtConfig` para exactamente esto.
+        System.setProperty("movi.jwt.secret", "test-secret-for-document-routes-jwtconfig-32")
+
         Database.connect(
             url = "jdbc:h2:mem:document_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
@@ -87,6 +98,20 @@ class DocumentRoutesTest {
                     it[email] = mail
                     it[name] = uid
                     it[passwordHash] = "hash"
+                }
+            }
+            // Una cuenta de cada uno: los papeles se cuelgan de una cuenta, y la del otro es la
+            // que la ruta tiene que rechazar.
+            listOf(
+                Triple(cuentaDelDueno, duenoId, "Bancolombia Ahorros"),
+                Triple(cuentaDelOtro, otroId, "Cuenta ajena"),
+            ).forEach { (cuenta, uid, nombre) ->
+                Accounts.insert {
+                    it[id] = cuenta
+                    it[userId] = uid
+                    it[name] = nombre
+                    it[type] = "SAVINGS"
+                    it[currency] = "COP"
                 }
             }
         }
@@ -430,5 +455,111 @@ class DocumentRoutesTest {
         assertFalse("para-borrar" in client.get("/api/documents") {
             header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
         }.bodyAsText())
+    }
+
+    // ── De qué cuenta es este papel ────────────────────────────────────────────
+
+    /**
+     * **El campo existía y no lo llenaba nadie.**
+     *
+     * `Documento.accountId` está en el modelo desde el primer día, pero la pantalla de subida no lo
+     * mandaba, el archivador de extractos tampoco y `EdicionDeDocumento` ni siquiera lo tenía: no
+     * había **ninguna** forma de colgar un papel de una cuenta. El contexto del asistente agrupa
+     * por cuenta, así que los 30 documentos del dueño caían todos bajo «Sin cuenta asociada» y
+     * preguntarle «¿qué tienes guardado de la cuenta 2334?» devolvía el bloque entero sin
+     * distinguir nada.
+     */
+    @Test
+    fun `colgar un documento de una cuenta, cambiarla y descolgarlo`() = testApplication {
+        wireApp()
+        transaction {
+            Accounts.insert {
+                it[id] = "acc-dueno-tarjeta"
+                it[userId] = duenoId
+                it[name] = "Mastercard 3684"
+                it[type] = "CREDIT_CARD"
+                it[currency] = "COP"
+            }
+        }
+        val id = subir(duenoId, nombre = "Extracto_2334_08_2026.pdf")
+
+        val puesta = editar(duenoId, id, """{"accountId":"$cuentaDelDueno"}""")
+        // El cuerpo se lee UNA vez: en `testApplication` es un canal de un solo uso.
+        val cuerpoPuesta = puesta.bodyAsText()
+        assertEquals(HttpStatusCode.OK, puesta.status, cuerpoPuesta)
+        assertTrue(cuentaDelDueno in cuerpoPuesta, cuerpoPuesta)
+
+        // Cambiarla: el papel era de la otra cuenta.
+        val cuerpoCambiada = editar(duenoId, id, """{"accountId":"acc-dueno-tarjeta"}""").bodyAsText()
+        assertTrue("acc-dueno-tarjeta" in cuerpoCambiada, cuerpoCambiada)
+
+        // Y la cadena vacía la descuelga, igual que en período y notas: sin esto, una cuenta
+        // puesta por error se quedaba puesta para siempre.
+        val descolgada = editar(duenoId, id, """{"accountId":""}""")
+        val cuerpo = descolgada.bodyAsText()
+        assertEquals(HttpStatusCode.OK, descolgada.status, cuerpo)
+        assertFalse("acc-dueno-tarjeta" in cuerpo, "la cadena vacía descuelga: $cuerpo")
+    }
+
+    @Test
+    fun `mandar la cuenta de otro no cuelga nada`() = testApplication {
+        // El `where` del UPDATE filtra por documento, no por cuenta: sin comprobarlo antes, el id
+        // ajeno entraba tal cual a la columna y volvía en la respuesta.
+        wireApp()
+        val id = subir(duenoId, nombre = "escritura.pdf")
+
+        val res = editar(duenoId, id, """{"accountId":"$cuentaDelOtro"}""")
+
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertFalse(cuentaDelOtro in client.get("/api/documents") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+        }.bodyAsText(), "el rechazo no puede ser un cambio que además mintió")
+    }
+
+    @Test
+    fun `una cuenta que no existe tampoco se cuelga`() = testApplication {
+        wireApp()
+        val id = subir(duenoId)
+        assertEquals(HttpStatusCode.BadRequest, editar(duenoId, id, """{"accountId":"acc-inventada"}""").status)
+    }
+
+    @Test
+    fun `no mandar la cuenta no la borra`() = testApplication {
+        // La regla central de la ruta, aplicada al campo nuevo: corregir el NOMBRE no puede
+        // descolgar el papel de su cuenta de paso.
+        wireApp()
+        val id = subir(duenoId)
+        assertEquals(HttpStatusCode.OK, editar(duenoId, id, """{"accountId":"$cuentaDelDueno"}""").status)
+
+        val cuerpo = editar(duenoId, id, """{"nombre":"otro nombre.pdf"}""").bodyAsText()
+
+        assertTrue(cuentaDelDueno in cuerpo, "la cuenta no se manda y por lo tanto no se toca: $cuerpo")
+    }
+
+    @Test
+    fun `subir un documento a la cuenta de otro se rechaza`() = testApplication {
+        // La misma puerta, del lado del POST: el multipart ya aceptaba un `accountId` y nadie lo
+        // comprobaba, así que el papel nacía colgado de la cuenta ajena.
+        wireApp()
+        val res = client.post("/api/documents") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("tipo", "EXTRACTO")
+                        append("accountId", cuentaDelOtro)
+                        append("file", byteArrayOf(1, 2, 3), Headers.build {
+                            append(HttpHeaders.ContentDisposition, "filename=\"robado.pdf\"")
+                            append(HttpHeaders.ContentType, "application/pdf")
+                        })
+                    },
+                ),
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertFalse("robado.pdf" in client.get("/api/documents") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+        }.bodyAsText(), "y no quedó guardado sin la cuenta tampoco")
     }
 }

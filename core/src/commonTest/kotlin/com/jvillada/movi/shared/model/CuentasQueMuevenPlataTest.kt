@@ -217,6 +217,23 @@ class CuentasQueMuevenPlataTest {
         assertEquals(listOf("Efectivo", "Vehículo 4083", "Hipotecario 7712"), nombres(partido.otras))
     }
 
+    /**
+     * **Un papel guardado puede ser de cualquier cuenta menos del efectivo.**
+     *
+     * No alcanzaba con reusar el criterio del extracto, aunque se parezcan: la tabla de
+     * amortización del hipotecario y el pagaré del vehículo son papeles de las dos cuentas que
+     * ese criterio deja abajo — y son de las que más papel generan. Lo único que baja es el
+     * efectivo: nadie recibe un papel de la plata del bolsillo.
+     */
+    @Test
+    fun el_selector_de_un_papel_ofrece_todo_menos_el_efectivo() {
+        val partido = cuentasPara(todas, UsoDeCuenta.PAPEL_GUARDADO)
+        assertEquals(listOf("Efectivo"), nombres(partido.otras))
+        assertTrue("Hipotecario 7712" in nombres(partido.principales))
+        assertTrue("Vehículo 4083" in nombres(partido.principales))
+        assertTrue("Pensión voluntaria Skandia" in nombres(partido.principales))
+    }
+
     // ── No es un filtro duro ────────────────────────────────────────────────────
 
     @Test

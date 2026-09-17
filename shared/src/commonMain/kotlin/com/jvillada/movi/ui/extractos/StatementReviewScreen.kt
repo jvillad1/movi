@@ -103,6 +103,11 @@ fun StatementReviewScreen(
                     imports = result.newTransactions.filter { it.id in selectedIds },
                     reconciliations = reconciliations.values.toList(),
                     skipped = result.newTransactions.map { it.id }.filter { it !in selectedIds },
+                    // El papel que la lectura archivó viaja de vuelta para que el server le
+                    // cuelgue ESTA cuenta. Al subirlo todavía no se sabía cuál era —se elige
+                    // acá—, así que sin este viaje de ida y vuelta todo extracto archivado se
+                    // quedaba sin cuenta para siempre.
+                    documentoId = result.documentoId,
                 )
                 Repositories.wallets.importStatement(decision)
             }.onSuccess {

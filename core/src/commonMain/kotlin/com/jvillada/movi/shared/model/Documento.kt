@@ -91,6 +91,21 @@ data class EnlaceDeDescarga(
 data class EdicionDeDocumento(
     val nombre: String? = null,
     val tipo: TipoDeDocumento? = null,
+    /**
+     * **De qué cuenta es este papel.** La cadena vacía lo descuelga, igual que en [periodo] y
+     * [notas]; `null` sigue queriendo decir «no lo toques».
+     *
+     * Nació faltando, y la ausencia dejaba muerta media funcionalidad: `Documento.accountId`
+     * existía desde el primer día y **nadie lo llenaba nunca** —la pantalla de subida no lo
+     * mandaba y el archivador de extractos tampoco—, así que el contexto del asistente agrupaba
+     * por cuenta una lista donde todo caía bajo «Sin cuenta asociada». Preguntarle «¿qué tienes
+     * guardado de la cuenta 2334?» devolvía el bloque entero sin distinguir nada.
+     *
+     * El server comprueba que la cuenta sea **del mismo dueño** antes de escribirla: sin eso,
+     * cualquiera podría colgar un papel suyo de la cuenta de otro y el id ajeno volvería en la
+     * respuesta.
+     */
+    val accountId: String? = null,
     val periodo: String? = null,
     val notas: String? = null,
 )
