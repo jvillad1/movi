@@ -309,6 +309,41 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
 }
 
 /**
+ * **Lo que dice el renglón de una cuenta en la lista**: su saldo escrito en LA MONEDA DE LA
+ * CUENTA, y si esa cifra está en contra del dueño.
+ *
+ * Iba `formatCOP(account.balance)` a secas, y `balance` es solo el componente en PESOS de la
+ * cuenta (lo deriva `enrichWith` en el server: `balances["COP"] ?: 0`). Una inversión con
+ * US$10.000 y ni un peso salía como «$0» debajo de un subtotal de sección que decía
+ * ≈$40.000.000 — el renglón contradecía al encabezado que tenía dos dedos más arriba, y el
+ * número que mostraba no era chico: era falso. Lo mismo le pasaba a una cuenta en pesos con
+ * cualquier movimiento en dólares.
+ *
+ * Es el MISMO arreglo que ya tenían el desglose del hero del Inicio ([cuentasDelHero]) y el
+ * selector de «¿de dónde sale la plata?» (`saldoDeLaCuenta` en la hoja de Agregar), y usa la
+ * misma función que ellos —[saldoEnSuMoneda]— en vez de una tercera copia del criterio. Para
+ * una cuenta en pesos el texto es carácter por carácter el de antes (`signedMoney(x, "COP")` y
+ * `formatCOP(x)` producen lo mismo).
+ *
+ * El subtotal del grupo sigue en pesos con [valorEnPesos] y eso no es un descuido: un subtotal
+ * de varias cuentas solo se puede decir en UNA moneda, así que ahí la TRM es inevitable. Las
+ * dos convenciones conviven a propósito y están explicadas en [saldoEnSuMoneda].
+ *
+ * Esta lista no muestra deudas —viven en Créditos—, así que acá no hace falta invertirle el
+ * signo a nada (para eso está `saldoDeDeuda`): negativo es negativo, plata que no está.
+ *
+ * @property texto el saldo ya escrito, con su signo y su símbolo de moneda.
+ * @property enContra la cifra está en contra del dueño, así que no se pinta de verde.
+ */
+data class SaldoDeLaFila(val texto: String, val enContra: Boolean)
+
+/** Ver [SaldoDeLaFila]. */
+fun saldoDeLaFila(account: Account): SaldoDeLaFila {
+    val (monto, moneda) = saldoEnSuMoneda(account)
+    return SaldoDeLaFila(texto = signedMoney(monto, moneda), enContra = monto < 0)
+}
+
+/**
  * F61: un grupo de cuentas (Dinero o Inversión) con su subtotal en el encabezado de sección y
  * la lista debajo. Vacío, dice que no hay cuentas de ese grupo en lugar de desaparecer — así
  * el dueño ve que el grupo existe y dónde va a caer lo que cree.
@@ -352,6 +387,7 @@ private fun AccountsGroup(
                 // el mismo grupo (Dinero) en todos los cálculos, así que muestran su grupo; el
                 // nombre que puso el dueño es lo que de verdad distingue una cuenta de otra.
                 val typeLabel = account.type.groupLabel
+                val saldo = saldoDeLaFila(account)
                 CardRow(
                     left = {
                         Row(
@@ -370,9 +406,12 @@ private fun AccountsGroup(
                     sub = typeLabel,
                     right = {
                         Cifra(
-                            text = formatCOP(account.balance),
+                            text = saldo.texto,
                             fontSize = 14.5f,
-                            color = Movi.colores.entra,
+                            // Verde es «tengo»: un saldo en contra —una cuenta en descubierto—
+                            // pintado de verde dice lo contrario de lo que pasó. Mismo criterio
+                            // que el hero del detalle de la cuenta.
+                            color = if (saldo.enContra) Movi.colores.sale else Movi.colores.entra,
                         )
                     },
                     isLast = index == accounts.size - 1,
