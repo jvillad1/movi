@@ -5,6 +5,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.models.messages.Base64ImageSource
 import com.anthropic.models.messages.ContentBlockParam
 import com.anthropic.models.messages.ImageBlockParam
+import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
@@ -107,25 +108,148 @@ Aplicá las reglas del usuario cuando el merchant coincida.
 """.trimIndent()
     }
 
-    suspend fun parse(text: String, rules: List<MerchantRule>): List<ParsedTransaction> {
-        val c = client ?: return emptyList()
-        val params = MessageCreateParams.builder()
-            .model("claude-opus-4-7")
-            .maxTokens(4096L)
-            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(buildSystemPrompt(rules)).build()))
-            .messages(listOf(MessageParam.builder().role(MessageParam.Role.USER).content(text).build()))
-            .build()
-        val rawText = withContext(Dispatchers.IO) {
-            val response = c.messages().create(params)
-            response.content()
-                .mapNotNull { block -> block.text().orElse(null)?.text() }
-                .joinToString("")
-        }
-        return parseJson(rawText)
+    /**
+     * **Lo que una lectura de extracto puede terminar siendo, dicho en el tipo.**
+     *
+     * Antes las tres cosas se contestaban con la misma `emptyList()`: que no hubiera clave de
+     * Anthropic, que la respuesta del modelo llegara cortada por el tope de tokens, o que el
+     * archivo de verdad no tuviera movimientos. La ruta no podía distinguirlas y contestaba 200 con
+     * cero filas para las tres, así que un mes de Ahorros con ~80 movimientos abría la pantalla de
+     * revisión en «0 nuevas · 0 coincidencias», con el botón de importar apagado — y eso se lee
+     * como «este mes ya estaba conciliado», que es la conclusión más cara que Movi puede inducir.
+     */
+    sealed interface Lectura {
+        /** Salió bien. Puede traer cero filas: eso sí significa «acá no había movimientos». */
+        data class Ok(val movimientos: List<ParsedTransaction>) : Lectura
+
+        /** El server no tiene `ANTHROPIC_API_KEY`: no se leyó nada, y no es culpa del archivo. */
+        data object SinLlave : Lectura
+
+        /**
+         * El modelo se quedó sin tokens a mitad del JSON. Lo que llegó es un array sin cerrar: se
+         * podría recortar hasta la última fila entera, pero importar «los primeros 40 de 80» sin
+         * decir cuáles faltan es peor que no importar nada.
+         */
+        data object Incompleta : Lectura
     }
 
-    suspend fun parseImage(bytes: ByteArray, mimeType: String, rules: List<MerchantRule>): List<ParsedTransaction> {
-        val c = client ?: return emptyList()
+    /**
+     * Tope de salida por pedido. Con 4096 —lo que había— una fila con su `rawText` ronda los 90
+     * tokens, así que el JSON se cortaba cerca del movimiento 45: un mes normal de Ahorros no
+     * entraba. Este tope y el troceo de [dividirEnPedazos] atacan el mismo problema por los dos
+     * lados; ninguno de los dos alcanza solo.
+     */
+    private const val MAX_TOKENS_DE_SALIDA = 16_000L
+
+    /**
+     * Cuánto texto de extracto va en cada pedido. No es el límite del modelo —la ventana de entrada
+     * es enorme—: es el límite de lo que su RESPUESTA puede tener sin pasarse de
+     * [MAX_TOKENS_DE_SALIDA]. Un extracto en PDF ronda los 150 caracteres por movimiento y cada
+     * movimiento vuelve como ~90 tokens de JSON, así que con este tope un pedido devuelve unas 80
+     * filas y le sobra la mitad del presupuesto.
+     */
+    internal const val MAX_CARACTERES_POR_PEDAZO = 12_000
+
+    /** Cuántas líneas del principio del documento viajan como contexto en cada pedazo. */
+    private const val LINEAS_DE_ENCABEZADO = 15
+
+    /**
+     * ¿La respuesta del modelo quedó cortada?
+     *
+     * Dos señales. `stop_reason == "max_tokens"` es la que el API dice en voz alta; el array sin
+     * cerrar es la red por si la respuesta se truncó por otro camino (una `stop_sequence`, una
+     * reconexión). Si no hay `[` en ninguna parte no está cortada: es una respuesta que no trae
+     * JSON, y eso lo resuelve [parseJson] devolviendo vacío.
+     */
+    internal fun quedoCortada(rawText: String, stopReason: String?): Boolean {
+        if (stopReason == "max_tokens") return true
+        val abre = rawText.indexOf('[')
+        return abre != -1 && rawText.lastIndexOf(']') < abre
+    }
+
+    /**
+     * Parte el texto del extracto en pedidos que quepan en la respuesta, **cortando por líneas**.
+     *
+     * Por líneas y no por caracteres porque un corte a mitad de fila produce un movimiento
+     * inventado en un pedazo y otro mutilado en el siguiente. Una línea más larga que el tope entra
+     * igual en su propio pedazo: partirla sería exactamente el daño que esta función evita.
+     */
+    internal fun dividirEnPedazos(texto: String, maxCaracteres: Int = MAX_CARACTERES_POR_PEDAZO): List<String> {
+        if (texto.length <= maxCaracteres) return listOf(texto)
+        val pedazos = mutableListOf<String>()
+        val actual = StringBuilder()
+        for (linea in texto.lineSequence()) {
+            if (actual.isNotEmpty() && actual.length + linea.length + 1 > maxCaracteres) {
+                pedazos += actual.toString()
+                actual.clear()
+            }
+            if (actual.isNotEmpty()) actual.append('\n')
+            actual.append(linea)
+        }
+        if (actual.isNotEmpty()) pedazos += actual.toString()
+        return pedazos.ifEmpty { listOf(texto) }
+    }
+
+    /**
+     * Las primeras líneas con contenido del documento — el encabezado con el banco, la cuenta y el
+     * período.
+     *
+     * Viaja pegado a cada pedazo después del primero porque el prompt le pide al modelo que saque
+     * el AÑO de ahí cuando las fechas vienen como «15/04». Sin esto, trocear un extracto le
+     * cambiaba el año a todos los movimientos de la segunda mitad.
+     */
+    internal fun encabezadoDe(texto: String, lineas: Int = LINEAS_DE_ENCABEZADO): String =
+        texto.lineSequence().filter { it.isNotBlank() }.take(lineas).joinToString("\n")
+
+    /** El pedazo [indice] de [total], con el encabezado de contexto si no es el primero. */
+    private fun cuerpoDelPedido(pedazo: String, indice: Int, total: Int, encabezado: String): String =
+        if (indice == 0 || encabezado.isBlank()) pedazo
+        // El «de ahí» no es un capricho: el escáner de voseo mira los literales de este módulo, y
+        // «de acá» —que es como lo diría el resto del archivo— lo marca como texto rioplatense.
+        else "ENCABEZADO DEL DOCUMENTO (contexto: de ahí sale el año, no tiene movimientos):\n" +
+            encabezado + "\n\nPARTE ${indice + 1} DE $total DEL EXTRACTO:\n" + pedazo
+
+    private fun MessageCreateParams.Builder.conLoDeSiempre(rules: List<MerchantRule>) =
+        model("claude-opus-4-7")
+            .maxTokens(MAX_TOKENS_DE_SALIDA)
+            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(buildSystemPrompt(rules)).build()))
+
+    private fun textoDe(response: Message): String =
+        response.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
+
+    /**
+     * Lee un extracto de texto. Si no entra en un pedido se manda por partes y las filas se
+     * concatenan — cada pedazo trae su propio array JSON completo.
+     *
+     * **Un pedazo cortado corta la lectura entera.** Devolver las filas de los pedazos que sí
+     * salieron sería el mismo defecto con otro disfraz: una lista incompleta que se ve completa.
+     */
+    suspend fun leer(text: String, rules: List<MerchantRule>): Lectura {
+        val c = client ?: return Lectura.SinLlave
+        val pedazos = dividirEnPedazos(text)
+        val encabezado = if (pedazos.size > 1) encabezadoDe(text) else ""
+        val filas = mutableListOf<ParsedTransaction>()
+        pedazos.forEachIndexed { i, pedazo ->
+            val cuerpo = cuerpoDelPedido(pedazo, i, pedazos.size, encabezado)
+            val params = MessageCreateParams.builder()
+                .conLoDeSiempre(rules)
+                .messages(listOf(MessageParam.builder().role(MessageParam.Role.USER).content(cuerpo).build()))
+                .build()
+            val response = withContext(Dispatchers.IO) { c.messages().create(params) }
+            val rawText = textoDe(response)
+            if (quedoCortada(rawText, response.stopReason().orElse(null)?.asString())) return Lectura.Incompleta
+            filas += parseJson(rawText)
+        }
+        return Lectura.Ok(filas)
+    }
+
+    /**
+     * Lee una captura de pantalla o una foto del extracto. No se trocea —una imagen no se parte por
+     * líneas— pero el tope de salida y la detección de corte son los mismos: si la respuesta no
+     * alcanzó, se dice.
+     */
+    suspend fun leerImagen(bytes: ByteArray, mimeType: String, rules: List<MerchantRule>): Lectura {
+        val c = client ?: return Lectura.SinLlave
         // mimeType must already be a Claude-supported image media type (validated by supportedImageMime at the route).
         val mediaType = Base64ImageSource.MediaType.of(mimeType)
         val b64 = java.util.Base64.getEncoder().encodeToString(bytes)
@@ -142,18 +266,13 @@ Aplicá las reglas del usuario cuando el merchant coincida.
                 .build()
         )
         val params = MessageCreateParams.builder()
-            .model("claude-opus-4-7")
-            .maxTokens(4096L)
-            .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(buildSystemPrompt(rules)).build()))
+            .conLoDeSiempre(rules)
             .addUserMessageOfBlockParams(listOf(imageBlock, textBlock))
             .build()
-        val rawText = withContext(Dispatchers.IO) {
-            val response = c.messages().create(params)
-            response.content()
-                .mapNotNull { block -> block.text().orElse(null)?.text() }
-                .joinToString("")
-        }
-        return parseJson(rawText)
+        val response = withContext(Dispatchers.IO) { c.messages().create(params) }
+        val rawText = textoDe(response)
+        if (quedoCortada(rawText, response.stopReason().orElse(null)?.asString())) return Lectura.Incompleta
+        return Lectura.Ok(parseJson(rawText))
     }
 
     /** Returns true if [mimeType] represents an image (starts with "image/"). */

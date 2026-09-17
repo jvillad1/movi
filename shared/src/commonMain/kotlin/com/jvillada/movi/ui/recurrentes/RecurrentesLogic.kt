@@ -13,8 +13,8 @@ import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.components.signedMoney
 import kotlin.math.roundToLong
 
 /**
@@ -778,7 +778,13 @@ fun cuentaParaElWire(cuentaEnLaHoja: String?, elDuenoEligioSinCuenta: Boolean): 
  *   «Próximos pagos» del Inicio no. Un saldo nunca lleva signo: no es un movimiento.
  */
 fun textoDelMonto(rule: RecurringRule, conSigno: Boolean = false): String = when {
-    rule.montoEsSaldo -> "saldo ${formatCOP(rule.amount)}"
-    conSigno -> "${if (rule.type == TransactionType.INCOME) "+" else "−"}${formatCOP(rule.amount)}"
-    else -> formatCOP(rule.amount)
+    // `formatMoney` y no `formatCOP`: el saldo de una tarjeta viaja en la moneda de la cuenta
+    // ([RecurringRule.currency]), y una tarjeta en dólares que debe US$1.200 se leía «saldo $1.200»
+    // —una cifra 4.000 veces más chica— en la misma lista donde las tarjetas en pesos decían bien
+    // la suya. No se convierte acá: la fila muestra lo que él va a encontrar en su extracto.
+    rule.montoEsSaldo -> "saldo ${formatMoney(rule.amount, rule.currency)}"
+    conSigno -> "${if (rule.type == TransactionType.INCOME) "+" else "−"}${formatMoney(rule.amount, rule.currency)}"
+    // `signedMoney` y no `formatMoney` a secas: es lo que hacía `formatCOP` acá (trae su propio
+    // signo si el monto es negativo), solo que ahora mirando la moneda.
+    else -> signedMoney(rule.amount, rule.currency)
 }

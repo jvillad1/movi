@@ -31,6 +31,7 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
+import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
@@ -69,7 +70,11 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
                 }
                 .onFailure {
                     uploading = false
-                    error = "No pude procesar el extracto: ${it.message ?: "error"}"
+                    // `toUserMessage()` y no `it.message`: cuando el server explicó el rechazo
+                    // —«el extracto es muy largo y la lectura quedó incompleta», «no encontramos
+                    // movimientos»— eso es lo único que el dueño puede usar. Con `it.message`
+                    // leía el texto crudo de la excepción de Ktor con el cuerpo adentro.
+                    error = "No pude procesar el extracto: ${it.toUserMessage()}"
                 }
         }
     }

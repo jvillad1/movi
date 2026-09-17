@@ -38,9 +38,11 @@ fun buildPushPayload(
         // que anunciar «Pago tarjeta AMEX 9208 — $27.501.150 (vence hoy)» es la versión más
         // ruidosa del número que esta rama vino a corregir. Mismo copy que el email y que el
         // Inicio: el saldo, dicho con su nombre. Ver `RecurringRule.montoEsSaldo`.
-        val monto =
-            if (rule.montoEsSaldo) "saldo $${formatMiles(rule.amount)}"
-            else "$${formatMiles(rule.amount)}"
+        //
+        // **Y en la moneda de la regla.** El saldo de una tarjeta viaja en la moneda de la cuenta
+        // (ver `RecurringRule.currency`): sin mirarla, una deuda de US$1.200 sonaba como «saldo
+        // $1.200», una cifra 4.000 veces más chica que la real.
+        val monto = montoConMoneda(rule)
         "${rule.name} — $monto ($estado)"
     }
     val extra = selected.size - MAX_LINES
@@ -71,3 +73,21 @@ fun buildSmsPushPayload(parsed: List<ParsedSms>): String {
 
 private fun formatMiles(amount: Long): String =
     amount.toString().reversed().chunked(3).joinToString(".").reversed()
+
+/**
+ * El monto de una regla con su moneda, y con el «saldo» delante cuando es la deuda de una tarjeta.
+ *
+ * Es el gemelo de `montoConMoneda` del correo, con el formato de miles de acá (puntos, como en el
+ * resto de la app) en vez del `Locale.US` que usa el HTML. Existe separado porque `:server` no
+ * puede importar `:shared` —la misma nota que ya tenía `textoDelMonto`—, y lo que evita que se
+ * separen son las pruebas de los dos lados.
+ */
+private fun montoConMoneda(rule: RecurringRule): String {
+    val monto = formatMiles(rule.amount)
+    val texto = when (rule.currency) {
+        "COP" -> "$" + monto
+        "USD" -> "US$" + monto
+        else  -> rule.currency + " " + monto
+    }
+    return if (rule.montoEsSaldo) "saldo $texto" else texto
+}
