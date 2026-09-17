@@ -13,6 +13,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.DeleteBudgetRequest
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Holding
 import com.jvillada.movi.shared.model.RenameBudgetRequest
@@ -22,6 +23,7 @@ import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.movementCount
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -77,28 +79,36 @@ fun Route.financeRoutes() {
         call.respond(HttpStatusCode.Created, body)
     }
 
-    put("/api/budgets/{category}") {
-        val uid = call.userId()
-        val cat = call.parameters["category"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+    // ── Editar, borrar y renombrar: el nombre viaja en el CUERPO ──────────────
+    //
+    // Una categoría es texto libre del dueño, y meterla en un segmento de ruta la rompe: un
+    // presupuesto de «Luz/Agua» se creaba bien (el POST de arriba lo manda en el cuerpo) y
+    // después no se podía ni editar ni borrar — `/api/budgets/Luz/Agua` son DOS segmentos y
+    // `{category}` hace coincidir uno solo, así que era 404 para siempre. Con «#» se perdía
+    // todo lo que sigue y con «%» el decode del path directamente falla. Es exactamente la
+    // regla que ya sigue Categorías («los nombres viajan SIEMPRE en el cuerpo»).
+    //
+    // Las tres rutas de abajo con `{category}` SE QUEDAN, haciendo lo mismo: el APK que el
+    // dueño tiene instalado todavía las llama, y actualizarlo no es condición para desplegar
+    // esto. Los clientes de hoy (:core) ya usan las nuevas.
+
+    put("/api/budgets") {
         val body = call.receive<Budget>()
-        rechazoDelMonto(body.monthlyLimit)?.let { motivo -> return@put call.respond(HttpStatusCode.BadRequest, motivo) }
-        val updated = dbQuery {
-            Budgets.update({ (Budgets.userId eq uid) and (Budgets.category eq cat) }) {
-                it[monthlyLimit] = body.monthlyLimit
-            }
-        }
-        if (updated == 0) call.respond(HttpStatusCode.NotFound)
-        else call.respond(body.copy(category = cat))
+        editarPresupuesto(call, body.category, body)
+    }
+
+    post("/api/budgets/delete") {
+        borrarPresupuesto(call, call.receive<DeleteBudgetRequest>().category)
+    }
+
+    put("/api/budgets/{category}") {
+        val cat = call.parameters["category"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+        editarPresupuesto(call, cat, call.receive())
     }
 
     delete("/api/budgets/{category}") {
-        val uid = call.userId()
         val cat = call.parameters["category"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
-        val deleted = dbQuery {
-            Budgets.deleteWhere { (Budgets.userId eq uid) and (Budgets.category eq cat) }
-        }
-        if (deleted == 0) call.respond(HttpStatusCode.NotFound)
-        else call.respond(HttpStatusCode.NoContent)
+        borrarPresupuesto(call, cat)
     }
 
     // Ola 10: este rename **rechaza con 409** si el nombre nuevo ya tiene presupuesto, mientras
@@ -114,37 +124,16 @@ fun Route.financeRoutes() {
     // presupuesto y gasto es por nombre de categoría (ver `spentByCategoryForPeriod` del lado
     // del cliente), así que renombrar acá deja de "ver" los movimientos con el nombre viejo —
     // es la advertencia que la hoja de edición le muestra al dueño antes de guardar.
+    post("/api/budgets/rename") {
+        val body = call.receive<RenameBudgetRequest>()
+        val cat = body.category?.trim()
+        if (cat.isNullOrBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Falta la categoría")
+        renombrarPresupuesto(call, cat, body.newCategory)
+    }
+
     put("/api/budgets/{category}/rename") {
-        val uid = call.userId()
         val cat = call.parameters["category"] ?: return@put call.respond(HttpStatusCode.BadRequest)
-        val newCategory = call.receive<RenameBudgetRequest>().newCategory.trim()
-        if (newCategory.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Falta el nombre nuevo")
-
-        val outcome = dbQuery<RenameOutcome> {
-            val current = Budgets.selectAll()
-                .where { (Budgets.userId eq uid) and (Budgets.category eq cat) }
-                .firstOrNull() ?: return@dbQuery RenameOutcome.NotFound
-            if (newCategory != cat) {
-                val taken = Budgets.selectAll()
-                    .where { (Budgets.userId eq uid) and (Budgets.category eq newCategory) }
-                    .count() > 0
-                if (taken) return@dbQuery RenameOutcome.Conflict
-            }
-            val limit = current[Budgets.monthlyLimit]
-            Budgets.deleteWhere { (Budgets.userId eq uid) and (Budgets.category eq cat) }
-            Budgets.insert {
-                it[userId]       = uid
-                it[category]     = newCategory
-                it[monthlyLimit] = limit
-            }
-            RenameOutcome.Ok(Budget(newCategory, limit))
-        }
-
-        when (outcome) {
-            RenameOutcome.NotFound -> call.respond(HttpStatusCode.NotFound)
-            RenameOutcome.Conflict -> call.respond(HttpStatusCode.Conflict, "Ya existe un presupuesto llamado \"$newCategory\"")
-            is RenameOutcome.Ok    -> call.respond(outcome.budget)
-        }
+        renombrarPresupuesto(call, cat, call.receive<RenameBudgetRequest>().newCategory)
     }
 
     // ── Finance summary — computed from real Events ────────────────────────────
@@ -230,10 +219,72 @@ fun Route.financeRoutes() {
     }
 }
 
+// ── Presupuestos: un solo cuerpo por operación ────────────────────────────────
+// Cada una de las tres operaciones tiene DOS rutas (el nombre en el cuerpo y, por el APK viejo,
+// el nombre en la ruta) y un solo cuerpo, acá abajo. Así las dos no pueden divergir.
+
+private suspend fun editarPresupuesto(call: ApplicationCall, categoria: String, body: Budget) {
+    val uid = call.userId()
+    val cat = categoria.trim()
+    if (cat.isBlank()) return call.respond(HttpStatusCode.BadRequest, "Falta la categoría")
+    rechazoDelMonto(body.monthlyLimit)?.let { motivo -> return call.respond(HttpStatusCode.BadRequest, motivo) }
+    val updated = dbQuery {
+        Budgets.update({ (Budgets.userId eq uid) and (Budgets.category eq cat) }) {
+            it[monthlyLimit] = body.monthlyLimit
+        }
+    }
+    if (updated == 0) call.respond(HttpStatusCode.NotFound)
+    else call.respond(body.copy(category = cat))
+}
+
+private suspend fun borrarPresupuesto(call: ApplicationCall, categoria: String) {
+    val uid = call.userId()
+    val cat = categoria.trim()
+    if (cat.isBlank()) return call.respond(HttpStatusCode.BadRequest, "Falta la categoría")
+    val deleted = dbQuery {
+        Budgets.deleteWhere { (Budgets.userId eq uid) and (Budgets.category eq cat) }
+    }
+    if (deleted == 0) call.respond(HttpStatusCode.NotFound)
+    else call.respond(HttpStatusCode.NoContent)
+}
+
+private suspend fun renombrarPresupuesto(call: ApplicationCall, categoria: String, nombreNuevo: String) {
+    val uid = call.userId()
+    val cat = categoria.trim()
+    val newCategory = nombreNuevo.trim()
+    if (newCategory.isBlank()) return call.respond(HttpStatusCode.BadRequest, "Falta el nombre nuevo")
+
+    val outcome = dbQuery<RenameOutcome> {
+        val current = Budgets.selectAll()
+            .where { (Budgets.userId eq uid) and (Budgets.category eq cat) }
+            .firstOrNull() ?: return@dbQuery RenameOutcome.NotFound
+        if (newCategory != cat) {
+            val taken = Budgets.selectAll()
+                .where { (Budgets.userId eq uid) and (Budgets.category eq newCategory) }
+                .count() > 0
+            if (taken) return@dbQuery RenameOutcome.Conflict
+        }
+        val limit = current[Budgets.monthlyLimit]
+        Budgets.deleteWhere { (Budgets.userId eq uid) and (Budgets.category eq cat) }
+        Budgets.insert {
+            it[userId]       = uid
+            it[category]     = newCategory
+            it[monthlyLimit] = limit
+        }
+        RenameOutcome.Ok(Budget(newCategory, limit))
+    }
+
+    when (outcome) {
+        RenameOutcome.NotFound -> call.respond(HttpStatusCode.NotFound)
+        RenameOutcome.Conflict -> call.respond(HttpStatusCode.Conflict, "Ya existe un presupuesto llamado \"$newCategory\"")
+        is RenameOutcome.Ok    -> call.respond(outcome.budget)
+    }
+}
+
 /**
- * Resultado de PUT /api/budgets/{category}/rename, decidido dentro de la transacción y
- * respondido fuera — mismo idioma que `AdjustOutcome` en CreditRoutes.kt: `call.respond` es
- * suspend y `dbQuery` no lo es.
+ * Resultado de renombrar un presupuesto, decidido dentro de la transacción y respondido fuera
+ * — mismo idioma que `AdjustOutcome` en CreditRoutes.kt: `call.respond` es suspend y `dbQuery`
+ * no lo es.
  */
 private sealed interface RenameOutcome {
     data object NotFound : RenameOutcome
