@@ -57,4 +57,17 @@ class LasInstruccionesNombranSusHerramientasTest {
     fun `las instrucciones siguen apuntando al bloque que si viaja`() {
         assertTrue("DATOS DEL USUARIO" in PERSONA)
     }
+
+    /**
+     * **Un mes no es su período, y eso hay que decírselo.** Su corte es el 25: «agosto» y «este
+     * período» son ventanas distintas que se superponen a medias. El bloque trae las cifras del
+     * período rotuladas como tales, así que un modelo que no sepa la diferencia contesta una
+     * pregunta por agosto con la cifra del período — un número equivocado con cara de exacto, que
+     * es la peor forma de equivocarse en una app de plata.
+     */
+    @Test
+    fun `las instrucciones avisan que un mes de calendario no es el periodo del usuario`() {
+        assertTrue("OJO CON LOS MESES" in PERSONA, "sin esto contesta agosto con la cifra del período")
+        assertTrue("fechas de calendario" in PERSONA)
+    }
 }
