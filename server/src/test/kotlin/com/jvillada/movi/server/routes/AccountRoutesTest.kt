@@ -20,6 +20,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -492,6 +493,56 @@ class AccountRoutesTest {
         // final; con `lower(name)`, va donde el dueño espera verla.
         assertEquals(listOf("Bancolombia", "efectivo", "Nequi"), nombres)
     }
+
+    /**
+     * **Renombrar una cuenta no puede devolverle al teléfono el saldo del día que se creó.**
+     *
+     * `PUT /{id}/name` contestaba con `toAccount()` a secas, o sea la columna cruda
+     * `accounts.balance`: se escribe al crear la cuenta y **no se actualiza nunca más** —el saldo
+     * de verdad se deriva de los eventos (`enrichWith`/`computeBalances`)—. Y el cliente espeja
+     * esa respuesta en su fila local con `syncedAt = now` (`mirrorAccountLocally`), así que el
+     * crédito del dueño, nacido en $257.000.000 y abonado hasta $200.000.000, volvía a los
+     * $257.000.000 en el teléfono apenas se le corregía el nombre, y se seguía viendo así en
+     * cada lectura que cayera en el respaldo local: sin red, o con el server más lento que
+     * `PRESUPUESTO_DE_RED_MS`. El mismo defecto que `PUT /{id}/conditioned-to` ya tenía
+     * documentado y arreglado — este era la copia que quedó.
+     */
+    @Test
+    fun `PUT name contesta el saldo derivado de los eventos, no la columna de cuando se creo`() =
+        testApplication {
+            wireApp()
+            // La cuenta nace declarando $257.000.000 en la columna cruda…
+            createAccount("acc-libranza", "LOAN", 257_000_000L)
+            // …y los eventos reales la dejan en $200.000.000 de deuda.
+            postOpeningEvent("acc-libranza", "EXPENSE", 257_000_000L, "Deuda inicial")
+            val abono = client.post("/api/events") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody(
+                    """{"id":"","accountId":"acc-libranza","type":"INCOME","amount":57000000,
+                        "category":"Otros","description":"Abono","timestamp":0}""",
+                )
+            }
+            assertEquals(HttpStatusCode.Created, abono.status)
+            assertEquals(200_000_000L, accountBalance("acc-libranza"), "el derivado, antes de renombrar")
+
+            val res = client.put("/api/accounts/acc-libranza/name") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody("""{"name":"Libranza 4818"}""")
+            }
+            assertEquals(HttpStatusCode.OK, res.status)
+
+            val cuerpo = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+            assertEquals("Libranza 4818", cuerpo["name"]!!.jsonPrimitive.content)
+            assertEquals(
+                200_000_000L,
+                cuerpo["balance"]!!.jsonPrimitive.long,
+                "con la columna cruda contestaría 257.000.000: el saldo del día que se creó",
+            )
+            // Y lo que el teléfono espeja tiene que ser lo mismo que contesta una lectura normal.
+            assertEquals(accountBalance("acc-libranza"), cuerpo["balance"]!!.jsonPrimitive.long)
+        }
 
     private suspend fun ApplicationTestBuilder.createNamedAccount(id: String, name: String) =
         client.post("/api/accounts") {

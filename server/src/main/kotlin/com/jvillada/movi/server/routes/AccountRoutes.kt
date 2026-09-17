@@ -135,6 +135,16 @@ fun Route.accountRoutes() {
          * movimientos apuntan por `accountId`, así que ninguno se despega al renombrar. Es una
          * diferencia con renombrar una CATEGORÍA, donde el cruce es por nombre y sí corta la
          * relación con lo viejo (ver `CategoryRoutes.rewriteCategory`).
+         *
+         * **Y contesta la cuenta ENRIQUECIDA**, igual que `GET /{id}` y `PUT /{id}/conditioned-to`
+         * — ver el porqué completo en el comentario de esa otra ruta. En corto: el cliente espeja
+         * esta respuesta en su fila local (`mirrorAccountLocally`, con `syncedAt = now`), y
+         * `toAccount()` a secas trae la columna cruda `accounts.balance`, que se escribe al crear
+         * la cuenta y no se actualiza nunca más. Un crédito nacido en $257.000.000 y abonado hasta
+         * $200.000.000 volvía a los $257.000.000 en el teléfono apenas se le corregía el nombre, y
+         * se veía así en cada lectura que cayera en el respaldo local (sin red, o con la respuesta
+         * más lenta que `PRESUPUESTO_DE_RED_MS`). El saldo no cambia al renombrar: justamente por
+         * eso la respuesta tiene que traer el de verdad y no uno viejo.
          */
         put("/{id}/name") {
             val uid = call.userId()
@@ -148,10 +158,10 @@ fun Route.accountRoutes() {
                 Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) { it[Accounts.name] = nombre }
             }
             if (filas == 0) return@put call.respond(HttpStatusCode.NotFound)
-            val actualizada = dbQuery {
+            val base = dbQuery {
                 Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.first().toAccount()
             }
-            call.respond(actualizada)
+            call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
         }
 
         /**

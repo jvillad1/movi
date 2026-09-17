@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.ui.accounts.saldoDeLaFila
 import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import kotlin.test.Test
@@ -196,5 +197,55 @@ class PlataCondicionadaTest {
         assertEquals(41_000_000L, hero.tuPlata)
         assertEquals(41_000_000L, hero.patrimonio)
         assertEquals("US$10.000", cuentasDelHero(listOf(inversionUsd))!!.single().monto)
+    }
+
+    /**
+     * **Y el renglón de la pantalla Cuentas dice lo mismo que el hero**, que era la otra mitad
+     * del defecto de arriba y quedó sin arreglar.
+     *
+     * La misma inversión con US$10.000 y cero pesos: el subtotal del grupo «Inversión» decía
+     * ≈$40.000.000 (usa [valorEnPesos], que sí estima) y el renglón inmediatamente debajo decía
+     * «$0», porque pintaba `formatCOP(account.balance)` y `balance` es solo el componente en
+     * pesos. Dos cifras de la MISMA cuenta, a dos dedos de distancia, sin nada que explicara la
+     * diferencia — y la del renglón ni siquiera era una estimación distinta: era falsa.
+     *
+     * El renglón se arregla con la misma función que el hero (`saldoEnSuMoneda`), no con una
+     * tercera copia del criterio: es la cuarta vez en este proyecto que dos superficies calculan
+     * la misma regla por separado.
+     */
+    @Test
+    fun el_renglon_de_Cuentas_dice_los_dolares_igual_que_el_hero() {
+        val inversionUsd = Account(
+            "inv-usd", "Broker USD", AccountType.INVESTMENT, 0L, "USD",
+            balancesByCurrency = mapOf("USD" to 10_000L), estimatedTotalCop = 40_000_000L,
+        )
+
+        val fila = saldoDeLaFila(inversionUsd)
+
+        assertEquals("US$10.000", fila.texto, "antes decía «$0»: el componente en pesos de una cuenta en dólares")
+        assertEquals(cuentasDelHero(listOf(inversionUsd))!!.single().monto, fila.texto)
+        assertFalse(fila.enContra)
+    }
+
+    /** Una cuenta en pesos sigue diciendo exactamente lo de antes: el arreglo no la toca. */
+    @Test
+    fun una_cuenta_en_pesos_escribe_su_renglon_igual_que_antes() {
+        assertEquals(formatCOP(14_525_167), saldoDeLaFila(ahorros).texto)
+        assertFalse(saldoDeLaFila(ahorros).enContra)
+    }
+
+    /**
+     * **Y una cuenta en descubierto no se pinta de verde.** El renglón tenía el color fijo en
+     * `Movi.colores.entra` (el verde de «entra plata»), así que una cuenta con el saldo en contra
+     * salía en verde: el color decía lo contrario del número que estaba coloreando.
+     */
+    @Test
+    fun un_saldo_en_contra_no_se_pinta_como_si_fuera_plata_a_favor() {
+        val sobregirada = Account("neg", "Corriente en rojo", AccountType.CHECKING, -320_000L)
+
+        val fila = saldoDeLaFila(sobregirada)
+
+        assertTrue(fila.enContra, "negativo es plata que no está: no puede ir en el verde de «entra»")
+        assertEquals("−$320.000", fila.texto)
     }
 }
