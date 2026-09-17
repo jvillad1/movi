@@ -29,6 +29,11 @@ import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.Repositories
 import kotlinx.coroutines.launch
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.EXPLICACION_HUELLA
+import com.jvillada.movi.data.EstadoDeHuella
+import com.jvillada.movi.data.ResultadoDeHuella
+import com.jvillada.movi.data.SesionGuardada
+import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
@@ -229,6 +234,113 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                             // de alto es más fácil de acertar que uno de 32 de ancho.
                             onClick = { TemaStore.alternar() },
                         )
+                    }
+                }
+            }
+
+            // «Entrar con huella». Solo aparece donde hay lector: en iOS y la web
+            // `Huella.deEsteAparato()` es null y este item no dibuja nada, igual que la sección
+            // de push no existe fuera del navegador.
+            item {
+                val huella = Huella.deEsteAparato()
+                val estado = huella?.estado() ?: EstadoDeHuella.NO_DISPONIBLE
+                if (huella != null && estado != EstadoDeHuella.NO_DISPONIBLE) {
+                    // Se lee una vez y se guarda en estado de Compose: `SessionManager` no es
+                    // observable, así que sin esto el interruptor no se movería al tocarlo.
+                    var activada by remember { mutableStateOf(SessionManager.huellaActivada) }
+                    var avisoHuella by remember { mutableStateOf<String?>(null) }
+                    var ocupada by remember { mutableStateOf(false) }
+
+                    Spacer(Modifier.height(14.dp))
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        MinSectionHeader(title = "Entrar")
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                        ) {
+                            val alternar = alternar@{
+                                if (ocupada) return@alternar
+                                if (activada) {
+                                    huella.olvidar()
+                                    activada = false
+                                    avisoHuella = null
+                                } else if (estado == EstadoDeHuella.SIN_REGISTRAR) {
+                                    avisoHuella = "Registra una huella en los ajustes de este teléfono y vuelve."
+                                } else {
+                                    val token = SessionManager.token
+                                    if (token == null) {
+                                        avisoHuella = "Vuelve a entrar con tu contraseña y activa la huella ahí."
+                                    } else {
+                                        ocupada = true
+                                        avisoHuella = null
+                                        huella.guardar(
+                                            SesionGuardada(
+                                                token = token,
+                                                userId = SessionManager.userId.orEmpty(),
+                                                nombre = SessionManager.userName.orEmpty(),
+                                                correo = SessionManager.userEmail.orEmpty(),
+                                            )
+                                        ) { resultado ->
+                                            ocupada = false
+                                            activada = SessionManager.huellaActivada
+                                            if (resultado != ResultadoDeHuella.EXITO) {
+                                                avisoHuella = "No se pudo activar. Vuelve a intentarlo."
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            CardRow(
+                                left = {
+                                    Column {
+                                        Text(
+                                            "Entrar con huella",
+                                            style = Movi.textos.titulo,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Movi.colores.texto,
+                                        )
+                                        Text(
+                                            text = avisoHuella ?: when {
+                                                ocupada -> "Esperando tu huella…"
+                                                activada -> EXPLICACION_HUELLA
+                                                estado == EstadoDeHuella.SIN_REGISTRAR ->
+                                                    "Este teléfono todavía no tiene huellas registradas."
+                                                else -> "Entra sin escribir tu contraseña en este teléfono."
+                                            },
+                                            style = Movi.textos.apoyo,
+                                            color = if (avisoHuella != null) Movi.colores.sale else Movi.colores.textoMedio,
+                                        )
+                                        // La contracara, dicha donde se toma la decisión y no
+                                        // descubierta después: con la sesión bajo llave, los
+                                        // procesos que Android levanta solo (el barrido de SMS)
+                                        // arrancan sin token.
+                                        if (activada) {
+                                            Text(
+                                                "Mientras no abras Movi, la captura de SMS en segundo plano queda en pausa.",
+                                                style = Movi.textos.apoyo,
+                                                color = Movi.colores.textoApagado,
+                                            )
+                                        }
+                                    }
+                                },
+                                right = {
+                                    Switch(
+                                        checked = activada,
+                                        onCheckedChange = { alternar() },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Movi.colores.sobreMarca,
+                                            checkedTrackColor = Movi.colores.marca,
+                                            uncheckedThumbColor = Movi.colores.textoApagado,
+                                            uncheckedTrackColor = Movi.colores.tarjeta,
+                                            uncheckedBorderColor = Movi.colores.borde,
+                                        ),
+                                    )
+                                },
+                                isLast = true,
+                                onClick = { alternar() },
+                            )
+                        }
                     }
                 }
             }

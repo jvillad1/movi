@@ -31,6 +31,11 @@ orgJson = "20231013"
 robolectric = "4.14.1"
 junit = "4.13.2"
 androidx-composeUi = "1.8.2"
+# «Entrar con huella»: el prompt biométrico del sistema. 1.1.0 es la última estable.
+androidx-biometric = "1.1.0"
+# biometric arrastra fragment 1.2.5 (de 2020), que no convive con el activity 1.9.3 que ya
+# usa la app. Se fija uno moderno acá para que Gradle no resuelva la mezcla vieja.
+androidx-fragment = "1.8.5"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -102,6 +107,8 @@ org-json = { module = "org.json:json", version.ref = "orgJson" }
 # Ver el KDoc de HojaAgregarGeometriaTest para qué cubren y qué NO.
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 junit = { module = "junit:junit", version.ref = "junit" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidx-fragment" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "androidx-composeUi" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "androidx-composeUi" }
 

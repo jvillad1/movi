@@ -57,6 +57,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.android)
             implementation(libs.koin.android)
+            // «Entrar con huella» (platform/HuellaDelAparato.android.kt). `fragment` va
+            // explícito: `biometric` pide FragmentActivity y arrastra un fragment de 2020.
+            implementation(libs.androidx.biometric)
+            implementation(libs.androidx.fragment)
         }
         commonMain.dependencies {
             implementation(project(":core"))

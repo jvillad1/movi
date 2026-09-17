@@ -133,7 +133,7 @@ Ktor HTTP engine is platform-specific: `ktor-client-android` for Android, `ktor-
 
 ### androidApp module
 
-`com.android.application` (NOT multiplatform). Holds `MainActivity`, the `AndroidManifest.xml`, `res/` (launcher icons, strings), and the SMS-capture receivers/workers (`SmsRealtimeReceiver`, `SmsSyncWorker`, `SmsFilterRefreshWorker`), which reuse the `sms/` logic that lives in `:shared`'s `androidMain`. `applicationId = com.jvillada.movi`; module `namespace = com.jvillada.movi.app`. `MainActivity` (Kotlin package `com.jvillada.movi`) calls `App()` from `:shared` and `DatabaseDriverFactory.init` from `:core` — the phone runs the full Movi app; the SMS-capture setup UI lives inside it (Mensajes del banco → «Captura en este teléfono»), not in a separate sensor screen.
+`com.android.application` (NOT multiplatform). Holds `MainActivity`, the `AndroidManifest.xml`, `res/` (launcher icons, strings), and the SMS-capture receivers/workers (`SmsRealtimeReceiver`, `SmsSyncWorker`, `SmsFilterRefreshWorker`), which reuse the `sms/` logic that lives in `:shared`'s `androidMain`. `applicationId = com.jvillada.movi`; module `namespace = com.jvillada.movi.app`. `MainActivity` is a **`FragmentActivity`** (not `ComponentActivity`): AndroidX `BiometricPrompt` — «Entrar con huella», see `:shared` `platform/HuellaDelAparato.android.kt` — mounts itself as a fragment and finds no host otherwise. It (Kotlin package `com.jvillada.movi`) calls `App()` from `:shared` and `DatabaseDriverFactory.init` from `:core` — the phone runs the full Movi app; the SMS-capture setup UI lives inside it (Mensajes del banco → «Captura en este teléfono»), not in a separate sensor screen.
 
 ### webApp module
 
