@@ -10,6 +10,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -40,6 +41,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.BeforeTest
@@ -77,12 +79,15 @@ class StatementRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Subscriptions, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                Documents, Subscriptions, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImportMatches, StatementImports, Budgets, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, Subscriptions, StatementImportMatches,
+                // El importe le cuelga la cuenta al extracto archivado, así que la tabla de
+                // documentos también tiene que existir acá.
+                Documents,
             )
 
             // ── User A ────────────────────────────────────────────────────────
@@ -481,5 +486,221 @@ class StatementRoutesTest {
         val filas = transaction { Events.selectAll().where { Events.accountId eq accountAId }.map { it[Events.amount] to it[Events.timestamp] } }
         assertEquals(listOf(11_000L), filas.map { it.first }, "la ilegible no se importa")
         assertEquals(java.time.LocalDate.of(2026, 5, 28), com.jvillada.movi.server.time.epochMillisToAppDate(filas.single().second))
+    }
+
+    // ── Un importe es todo o nada ─────────────────────────────────────────────────────────────
+
+    /** Una fila de extracto cuya descripción no cabe en la columna: rompe el INSERT a propósito. */
+    private fun filaQueRompe(id: String) =
+        """{"id":"$id","date":"2026-06-20","merchant":"X","amount":1000,"currency":"COP",
+            "type":"EXPENSE","category":"Otros","description":"${"D".repeat(300)}","rawText":""}"""
+
+    private fun sembrarImporte(id: String, cuando: Long, cuenta: String = accountAId) = transaction {
+        StatementImports.insert {
+            it[StatementImports.id] = id
+            it[StatementImports.userId] = userAId
+            it[StatementImports.accountId] = cuenta
+            it[StatementImports.bankName] = "Bancolombia"
+            it[StatementImports.period] = "2026-06"
+            it[StatementImports.importedAt] = cuando
+            it[StatementImports.importedCount] = 1
+            it[StatementImports.reconciledCount] = 0
+        }
+    }
+
+    private fun sembrarVinculo(importe: String, evento: String) = transaction {
+        StatementImportMatches.insert {
+            it[StatementImportMatches.importId] = importe
+            it[StatementImportMatches.eventId] = evento
+            it[StatementImportMatches.userId] = userAId
+        }
+    }
+
+    /**
+     * **Un importe que se cae a la mitad no deja nada escrito.**
+     *
+     * Antes cada fila abría su propia transacción, así que una caída en el medio dejaba tres cosas
+     * incoherentes: movimientos apuntando a un importe que no existe (invisibles en «Extractos
+     * importados», o sea imposibles de deshacer), contadores que cuentan filas que no se
+     * escribieron, y —lo que de verdad muerde— vínculos huérfanos en `statement_import_matches`.
+     * Esa tabla decide a quién le pasa un movimiento cuando se deshace el importe que lo reclama,
+     * así que un huérfano podía quedar elegido como heredero y dejar la compra colgada de un
+     * importe fantasma: viva, sin anular, y fuera de toda pantalla.
+     *
+     * La fila que rompe va DESPUÉS de la conciliación a propósito: es el orden que deja el vínculo
+     * ya escrito cuando llega el error.
+     */
+    @Test
+    fun `un importe que se cae a la mitad no deja ni movimientos ni vinculos`() = testApplication {
+        wireApp()
+        val dia = com.jvillada.movi.server.time.appDateToEpochMillis(java.time.LocalDate.parse("2026-06-14"))
+        sembrarImporte("si_previo", 1_000)
+        sembrar("ev-del-previo", accountAId, 60_000, cuando = dia)
+        transaction {
+            Events.update({ Events.id eq "ev-del-previo" }) { it[statementImportId] = "si_previo" }
+        }
+
+        val body = """{"statementId":"st-atomico","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[],"reconciliations":[
+                ${reconciliacion("r1", "ev-del-previo", 60_000)},
+                {"parsedId":"r2","existingEventId":"","confirm":false,"categorySource":"MANUAL",
+                 "descriptionSource":"MANUAL","merchantSource":"MANUAL","parsed":${filaQueRompe("r2")}}
+            ],"skipped":[]}"""
+        // La ruta puede contestar 500 o reventar contra el cliente de prueba según cómo Ktor
+        // envuelva la excepción; lo que se afirma es el estado de la base, que es lo que importa.
+        runCatching { importar(body) }
+
+        transaction {
+            assertEquals(
+                0L,
+                StatementImportMatches.selectAll().count(),
+                "el vínculo de la conciliación se deshizo con el resto",
+            )
+            assertEquals(
+                listOf("si_previo"),
+                StatementImports.selectAll().map { it[StatementImports.id] },
+                "el importe que falló no queda registrado",
+            )
+            assertEquals(
+                "si_previo",
+                Events.selectAll().where { Events.id eq "ev-del-previo" }.single()[Events.statementImportId],
+                "el movimiento sigue siendo del importe de antes",
+            )
+            assertEquals(
+                listOf("ev-del-previo"),
+                Events.selectAll().map { it[Events.id] },
+                "ninguna fila nueva sobrevivió a la caída",
+            )
+        }
+    }
+
+    // ── Quién hereda un movimiento al deshacer ────────────────────────────────────────────────
+
+    /**
+     * **El heredero es el importe más nuevo, no el id más grande.**
+     *
+     * Antes esto era `importes.max()` sobre cadenas `si_<uuid>`: comparaba UUID al azar, así que
+     * con dos importes vivos reclamando la misma compra el ganador salía de un sorteo. Acá los ids
+     * están puestos para que el sorteo dé **mal**: alfabéticamente gana `si_zzz`, que es el viejo.
+     */
+    @Test
+    fun `al deshacer, el movimiento pasa al importe mas reciente`() = testApplication {
+        wireApp()
+        sembrarImporte("si_uno", 1_000)
+        sembrarImporte("si_zzz_viejo", 2_000)
+        sembrarImporte("si_aaa_nuevo", 3_000)
+        sembrar("ev-compra", accountAId, 80_000, estado = "RECONCILED")
+        transaction {
+            Events.update({ Events.id eq "ev-compra" }) {
+                it[statementImportId] = "si_uno"
+                it[eventSource] = "STATEMENT"
+            }
+        }
+        sembrarVinculo("si_zzz_viejo", "ev-compra")
+        sembrarVinculo("si_aaa_nuevo", "ev-compra")
+
+        val res = client.delete("/api/statements/imports/si_uno") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NoContent, res.status)
+
+        transaction {
+            assertEquals(
+                "si_aaa_nuevo",
+                Events.selectAll().where { Events.id eq "ev-compra" }.single()[Events.statementImportId],
+                "hereda el último extracto que la probó",
+            )
+            assertEquals(0L, VoidEvents.selectAll().count(), "todavía la reclama otro importe: no se anula")
+            // El vínculo del heredero se consume (ya es el dueño); el del otro sigue esperando su turno.
+            assertEquals(
+                listOf("si_zzz_viejo"),
+                StatementImportMatches.selectAll().map { it[StatementImportMatches.importId] },
+            )
+        }
+    }
+
+    /**
+     * **Un vínculo a un importe que ya no existe no hereda nada.**
+     *
+     * Son los huérfanos que dejaba un importe a medias. Elegir uno dejaba el movimiento colgado de
+     * un importe fantasma en vez de anularlo: la compra seguía sumando aunque el extracto que la
+     * trajo ya no estuviera, y no había ninguna pantalla desde donde deshacerlo.
+     */
+    @Test
+    fun `un vinculo huerfano no salva al movimiento de la anulacion, y se limpia`() = testApplication {
+        wireApp()
+        sembrarImporte("si_dos", 1_000)
+        sembrar("ev-huerfana", accountAId, 45_000, estado = "RECONCILED")
+        transaction {
+            Events.update({ Events.id eq "ev-huerfana" }) {
+                it[statementImportId] = "si_dos"
+                it[eventSource] = "STATEMENT"
+            }
+        }
+        sembrarVinculo("si_fantasma", "ev-huerfana")
+
+        val res = client.delete("/api/statements/imports/si_dos") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+        }
+        assertEquals(HttpStatusCode.NoContent, res.status)
+
+        transaction {
+            assertEquals(
+                listOf("ev-huerfana"),
+                VoidEvents.selectAll().map { it[VoidEvents.originalEventId] },
+                "sin heredero de verdad, lo que el importe creó se anula",
+            )
+            assertEquals(0L, StatementImportMatches.selectAll().count(), "y el huérfano se limpia de paso")
+        }
+    }
+
+    // ── El papel archivado queda colgado de su cuenta ─────────────────────────────────────────
+
+    /**
+     * Al SUBIR el extracto todavía no se sabe de qué cuenta es —se elige en la pantalla de
+     * revisión, después—, así que el archivador lo guardaba sin cuenta y ahí se quedaba para
+     * siempre: ningún extracto archivado tenía cuenta, nunca.
+     */
+    @Test
+    fun `el extracto archivado queda colgado de la cuenta contra la que se importo`() = testApplication {
+        wireApp()
+        transaction {
+            listOf("doc-mio" to userAId, "doc-ajeno" to "user-b-statements").forEach { (docId, dueno) ->
+                Documents.insert {
+                    it[id] = docId
+                    it[userId] = dueno
+                    it[name] = "Extracto_2334_06_2026.pdf"
+                    it[kind] = "EXTRACTO"
+                    it[mimeType] = "application/pdf"
+                    it[sizeBytes] = 3
+                    it[uploadedAt] = 1_000
+                    it[content] = byteArrayOf(1, 2, 3)
+                }
+            }
+        }
+
+        val body = """{"statementId":"st-doc","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[${parsedTx("d1", "2026-06-14", "EXITO", 10_000)}],"reconciliations":[],"skipped":[],
+            "documentoId":"doc-mio"}"""
+        assertEquals(HttpStatusCode.OK, importar(body).status)
+
+        transaction {
+            assertEquals(
+                accountAId,
+                Documents.selectAll().where { Documents.id eq "doc-mio" }.single()[Documents.accountId],
+            )
+        }
+
+        // Y el `documentoId` de otro no se toca: el where filtra por dueño.
+        val ajeno = """{"statementId":"st-doc-2","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[${parsedTx("d2", "2026-06-15", "EXITO", 20_000)}],"reconciliations":[],"skipped":[],
+            "documentoId":"doc-ajeno"}"""
+        assertEquals(HttpStatusCode.OK, importar(ajeno).status)
+        transaction {
+            assertEquals(
+                null,
+                Documents.selectAll().where { Documents.id eq "doc-ajeno" }.single()[Documents.accountId],
+            )
+        }
     }
 }

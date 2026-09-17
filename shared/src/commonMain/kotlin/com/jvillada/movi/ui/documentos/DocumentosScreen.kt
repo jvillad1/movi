@@ -42,8 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
+import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.HeaderLeading
@@ -65,6 +68,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.TipoDeDocumento
+import com.jvillada.movi.ui.components.ListaDeCuentasElegibles
 import com.jvillada.movi.ui.components.SheetHandleWithClose
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.launch
@@ -108,6 +112,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     // volvía 404 y mostraba «no encontrado» sobre un borrado que sí se hizo.
     var borrando by remember { mutableStateOf(false) }
     var aEditar by remember { mutableStateOf<Documento?>(null) }
+    // El archivo elegido, todavía sin subir: la hoja de subida pregunta qué es y de qué cuenta.
+    var aSubir by remember { mutableStateOf<ArchivoElegido?>(null) }
+    // Las cuentas, para los dos selectores. Si la lectura falla la pantalla sigue andando: sin
+    // cuentas el selector dice «No tienes cuentas todavía» y el papel se sube sin cuenta, que es
+    // exactamente lo que pasaba antes de que esto existiera.
+    var cuentas by remember { mutableStateOf(emptyList<Account>()) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
@@ -120,6 +130,10 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
         cargando = false
     }
 
+    LaunchedEffect(Unit) {
+        runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
+    }
+
     val elegirArchivo = rememberFilePicker(TiposDeArchivo.TODOS) { nombre, bytes, mime ->
         // El tope se comprueba ACÁ además de en el server: subir 30 MB por datos móviles para
         // que el server conteste «pesa de más» es cobrarle al dueño el error dos veces.
@@ -128,18 +142,20 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 "${pesoLegible(MAX_DOCUMENTO_BYTES)}"
             return@rememberFilePicker
         }
+        aSubir = ArchivoElegido(nombre = nombre, bytes = bytes, mimeType = mime)
+    }
+
+    fun subir(archivo: ArchivoElegido, tipo: TipoDeDocumento, cuentaId: String?) {
+        aSubir = null
         subiendo = true
         coroutine.launch {
             runCatching {
                 Repositories.wallets.uploadDocument(
-                    fileName = nombre,
-                    bytes = bytes,
-                    mimeType = mime,
-                    // El tipo se adivina por el nombre y **se corrige después** tocando «Editar»
-                    // en la fila. No se pregunta antes de subir a propósito: agregar un paso a la
-                    // acción más frecuente de la pantalla cuesta más que el error que evita, y el
-                    // error solo cambia bajo qué encabezado aparece el archivo.
-                    tipo = tipoSugeridoPara(nombre),
+                    fileName = archivo.nombre,
+                    bytes = archivo.bytes,
+                    mimeType = archivo.mimeType,
+                    tipo = tipo,
+                    accountId = cuentaId,
                 )
             }
                 .onSuccess { refreshKey++ }
@@ -227,6 +243,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                         items(delTipo, key = { it.id }) { doc ->
                             FilaDeDocumento(
                                 doc = doc,
+                                cuenta = doc.accountId?.let { id -> cuentas.firstOrNull { it.id == id }?.name },
                                 onAbrir = { abrir(doc) },
                                 onBorrar = { aBorrar = doc },
                                 onEditar = { aEditar = doc },
@@ -243,9 +260,19 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
         )
 
+        aSubir?.let { archivo ->
+            SubirDocumentoSheet(
+                archivo = archivo,
+                cuentas = cuentas,
+                onDismiss = { aSubir = null },
+                onSubir = { tipo, cuentaId -> subir(archivo, tipo, cuentaId) },
+            )
+        }
+
         aEditar?.let { doc ->
             EditarDocumentoSheet(
                 doc = doc,
+                cuentas = cuentas,
                 onDismiss = { aEditar = null },
                 onGuardado = { aEditar = null; refreshKey++ },
             )
@@ -323,6 +350,8 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
 @Composable
 private fun FilaDeDocumento(
     doc: Documento,
+    /** El nombre de la cuenta a la que está colgado, o `null` si no cuelga de ninguna. */
+    cuenta: String?,
     onAbrir: () -> Unit,
     onBorrar: () -> Unit,
     onEditar: () -> Unit,
@@ -339,10 +368,13 @@ private fun FilaDeDocumento(
             Column(Modifier.weight(1f)) {
                 Text(doc.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(2.dp))
-                // Peso, fecha y período en un renglón: son los tres datos con los que uno
-                // reconoce cuál de tres extractos parecidos es el que busca.
+                // Cuenta, peso, fecha y período en un renglón: son los datos con los que uno
+                // reconoce cuál de tres extractos parecidos es el que busca. La cuenta va PRIMERO
+                // y no al final: entre «Extracto_08_2026.pdf» repetidos, lo que los distingue es
+                // de qué cuenta son, y es lo primero que se corta si la fila no entra.
                 Text(
                     text = listOfNotNull(
+                        cuenta,
                         pesoLegible(doc.bytes),
                         etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
                         doc.periodo,
@@ -388,25 +420,32 @@ private fun FilaDeDocumento(
 }
 
 /**
- * Corregir un documento ya subido: cómo se llama, qué es, de qué período y qué anotaste.
+ * Corregir un documento ya subido: cómo se llama, qué es, **de qué cuenta**, de qué período y qué
+ * anotaste.
  *
  * Nace de un hueco que la revisión encontró: el tipo se adivinaba por el nombre del archivo y un
  * comentario prometía que «se puede corregir después», pero no existía forma de hacerlo. Un
  * `IMG_4821.jpg` que es la escritura del apartamento quedaba en «Otros» para siempre.
+ *
+ * La CUENTA llegó por el mismo camino, una revisión después: el campo existía en el modelo desde
+ * el primer día y **no había forma de llenarlo**, así que todo papel caía en «Sin cuenta asociada»
+ * y preguntarle a Movi «¿qué tienes guardado de la cuenta 2334?» devolvía la lista entera.
  *
  * **No cambia los bytes.** Para reemplazar el archivo se sube otro y se borra este — dejar que un
  * documento cambie de contenido conservando su id es justamente lo que uno no quiere de un
  * archivo que existe para ser prueba de algo.
  */
 @Composable
-private fun EditarDocumentoSheet(
+internal fun EditarDocumentoSheet(
     doc: Documento,
+    cuentas: List<Account>,
     onDismiss: () -> Unit,
     onGuardado: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     var nombre by remember { mutableStateOf(doc.nombre) }
     var tipo by remember { mutableStateOf(doc.tipo) }
+    var cuenta by remember { mutableStateOf(doc.accountId) }
     var periodo by remember { mutableStateOf(doc.periodo ?: "") }
     var notas by remember { mutableStateOf(doc.notas ?: "") }
     var guardando by remember { mutableStateOf(false) }
@@ -433,6 +472,9 @@ private fun EditarDocumentoSheet(
                     EdicionDeDocumento(
                         nombre = nombre.trim(),
                         tipo = tipo,
+                        // Igual que el período y las notas: la cadena vacía DESCUELGA el papel de
+                        // su cuenta, que es la única forma de deshacer una elección equivocada.
+                        accountId = cuenta.orEmpty(),
                         // La cadena vacía BORRA, y es a propósito: es la única forma de sacar una
                         // nota escrita por error. `null` querría decir «no lo toques», que acá
                         // nunca es lo que el dueño quiso al vaciar el campo a mano.
@@ -446,92 +488,30 @@ private fun EditarDocumentoSheet(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(enabled = !guardando, onClick = onDismiss),
-    ) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Movi.colores.tarjeta)
-                .clickable(enabled = false) {}
-                .padding(horizontal = 20.dp),
-        ) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = !guardando)
-            // Con el teclado abierto esta hoja no cabe en un teléfono chico: es la misma lección
-            // de las siete hojas que nacieron sin scroll.
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .weight(1f, fill = false),
-            ) {
-                CampoDeTexto("NOMBRE", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
-                Spacer(Modifier.height(14.dp))
+    HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = !guardando) {
+        CampoDeTexto("NOMBRE", nombre, { nombre = it.take(255) }, "Extracto agosto.pdf")
+        Spacer(Modifier.height(14.dp))
 
-                Text("TIPO", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-                Spacer(Modifier.height(8.dp))
-                TipoDeDocumento.entries.forEach { t ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable(enabled = !guardando) { tipo = t }
-                            .padding(vertical = 10.dp, horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            nombreDeTipo(t),
-                            style = Movi.textos.cuerpo,
-                            color = if (t == tipo) Movi.colores.texto else Movi.colores.textoMedio,
-                            fontWeight = if (t == tipo) FontWeight.Medium else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        // Mismo motivo que en `CreditTermsSheet`: la fuente del navegador no
-                        // trae U+2713 y el carácter sale como un rectángulo vacío.
-                        if (t == tipo) {
-                            Icon(
-                                Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = Movi.colores.marca,
-                                modifier = Modifier.size(15.dp),
-                            )
-                        }
-                    }
-                }
+        SelectorDeTipo(tipo, enabled = !guardando) { tipo = it }
 
-                Spacer(Modifier.height(14.dp))
-                CampoDeTexto("PERÍODO", periodo, { periodo = it.take(50) }, "agosto 2026")
-                Spacer(Modifier.height(14.dp))
-                CampoDeTexto("NOTAS", notas, { notas = it.take(500) }, "Para qué lo guardaste")
+        Spacer(Modifier.height(14.dp))
+        SelectorDeCuenta(cuentas, cuenta, enabled = !guardando) { cuenta = it }
 
-                Spacer(Modifier.height(20.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (nombre.isNotBlank()) Movi.colores.texto else Movi.colores.textoApagado)
-                        .clickable(enabled = !guardando && nombre.isNotBlank()) { guardar() }
-                        .padding(vertical = 15.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (guardando) "Guardando…" else "Guardar",
-                        color = Movi.colores.fondo,
-                        style = Movi.textos.cuerpo,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-                error?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                }
-                Spacer(Modifier.height(20.dp))
-            }
+        Spacer(Modifier.height(14.dp))
+        CampoDeTexto("PERÍODO", periodo, { periodo = it.take(50) }, "agosto 2026")
+        Spacer(Modifier.height(14.dp))
+        CampoDeTexto("NOTAS", notas, { notas = it.take(500) }, "Para qué lo guardaste")
+
+        Spacer(Modifier.height(20.dp))
+        BotonDeLaHoja(
+            texto = if (guardando) "Guardando…" else "Guardar",
+            habilitado = !guardando && nombre.isNotBlank(),
+        ) { guardar() }
+        error?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
@@ -564,5 +544,215 @@ private fun CampoDeTexto(
             cursorBrush = SolidColor(Movi.colores.marca),
             modifier = Modifier.fillMaxWidth().onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
         )
+    }
+}
+
+/**
+ * Un archivo ya elegido del disco y todavía **sin subir**.
+ *
+ * Existe porque la subida dejó de ser un solo toque: entre elegir el archivo y mandarlo hay una
+ * hoja que pregunta qué es y de qué cuenta (ver [SubirDocumentoSheet]), y los bytes tienen que
+ * esperar ahí.
+ */
+internal class ArchivoElegido(
+    val nombre: String,
+    val bytes: ByteArray,
+    val mimeType: String,
+)
+
+/**
+ * **Qué es este papel y de qué cuenta**, antes de subirlo.
+ *
+ * Hasta acá la subida no preguntaba nada: se elegía el archivo y se iba, con el tipo adivinado por
+ * el nombre y sin cuenta. El argumento escrito entonces era que agregar un paso a la acción más
+ * frecuente costaba más que el error que evitaba, «y el error solo cambia bajo qué encabezado
+ * aparece el archivo».
+ *
+ * Eso dejó de ser cierto cuando el asistente empezó a leer los documentos guardados: la cuenta no
+ * es un encabezado, es **lo que hace contestable** «¿qué tienes guardado de la cuenta 2334?». Y
+ * nadie la iba a poner después, en una pantalla que solo se abre cuando algo no cuadra.
+ *
+ * El paso se cobra barato a propósito: todo llega elegido —el tipo adivinado, «Sin cuenta»
+ * puesta— así que quien no quiera decidir nada toca «Subir» y listo.
+ */
+@Composable
+internal fun SubirDocumentoSheet(
+    archivo: ArchivoElegido,
+    cuentas: List<Account>,
+    onDismiss: () -> Unit,
+    onSubir: (TipoDeDocumento, String?) -> Unit,
+) {
+    var tipo by remember { mutableStateOf(tipoSugeridoPara(archivo.nombre)) }
+    var cuenta by remember { mutableStateOf<String?>(null) }
+
+    HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = true) {
+        // El nombre y el peso, de solo lectura: acá no se renombra —eso es «Editar»— pero sí hace
+        // falta ver QUÉ se está subiendo, porque el selector del sistema ya se cerró.
+        Text(archivo.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            pesoLegible(archivo.bytes.size.toLong()),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+        )
+
+        Spacer(Modifier.height(16.dp))
+        SelectorDeTipo(tipo, enabled = true) { tipo = it }
+
+        Spacer(Modifier.height(14.dp))
+        SelectorDeCuenta(cuentas, cuenta, enabled = true) { cuenta = it }
+
+        Spacer(Modifier.height(20.dp))
+        BotonDeLaHoja(texto = "Subir", habilitado = true) { onSubir(tipo, cuenta) }
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+/** Las cuatro opciones de tipo, una por fila. Compartidas por las dos hojas. */
+@Composable
+private fun SelectorDeTipo(
+    elegido: TipoDeDocumento,
+    enabled: Boolean,
+    onElegir: (TipoDeDocumento) -> Unit,
+) {
+    EtiquetaDeCampo("TIPO")
+    Spacer(Modifier.height(8.dp))
+    TipoDeDocumento.entries.forEach { t ->
+        FilaElegible(nombreDeTipo(t), elegida = t == elegido, enabled = enabled) { onElegir(t) }
+    }
+}
+
+/**
+ * **De qué cuenta es el papel**, con «Sin cuenta» como primera opción.
+ *
+ * Reusa [ListaDeCuentasElegibles] —la misma lista, con el mismo «Ver todas las cuentas», que ya
+ * usan el SMS y la revisión de extractos— en vez de escribir un selector propio: este repo ya se
+ * comió dos veces el defecto de copiar una regla de cuentas en vez de compartirla.
+ *
+ * «Sin cuenta» no es un hueco sino una respuesta: la póliza de vida y la escritura del apartamento
+ * no cuelgan de ninguna cuenta, y es además la única forma de descolgar un papel mal asignado.
+ */
+@Composable
+private fun SelectorDeCuenta(
+    cuentas: List<Account>,
+    elegida: String?,
+    enabled: Boolean,
+    onElegir: (String?) -> Unit,
+) {
+    EtiquetaDeCampo("CUENTA")
+    Spacer(Modifier.height(8.dp))
+    FilaElegible("Sin cuenta", elegida = elegida == null, enabled = enabled) { onElegir(null) }
+    ListaDeCuentasElegibles(
+        // `conservar` sostiene la cuenta ya puesta aunque hoy no se ofreciera —el papel puede ser
+        // de una cuenta que después cambió de tipo—: sin eso, abrir la hoja la escondería.
+        cuentas = cuentasPara(cuentas, UsoDeCuenta.PAPEL_GUARDADO, conservar = elegida),
+        uso = UsoDeCuenta.PAPEL_GUARDADO,
+        selectedId = elegida,
+        onPick = { if (enabled) onElegir(it) },
+        modifier = Modifier.padding(horizontal = 8.dp),
+    )
+}
+
+/** El rótulo en versalitas de un campo de las hojas de documentos. */
+@Composable
+private fun EtiquetaDeCampo(texto: String) {
+    Text(
+        texto,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.4.sp,
+    )
+}
+
+/** Una opción de una lista de una sola elección, con su tilde cuando está puesta. */
+@Composable
+private fun FilaElegible(
+    texto: String,
+    elegida: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            texto,
+            style = Movi.textos.cuerpo,
+            color = if (elegida) Movi.colores.texto else Movi.colores.textoMedio,
+            fontWeight = if (elegida) FontWeight.Medium else FontWeight.Normal,
+            modifier = Modifier.weight(1f),
+        )
+        // Mismo motivo que en `CreditTermsSheet`: la fuente del navegador no trae U+2713 y el
+        // carácter sale como un rectángulo vacío.
+        if (elegida) {
+            Icon(
+                Icons.Rounded.Check,
+                contentDescription = null,
+                tint = Movi.colores.marca,
+                modifier = Modifier.size(15.dp),
+            )
+        }
+    }
+}
+
+/** El botón ancho del pie de una hoja. */
+@Composable
+private fun BotonDeLaHoja(texto: String, habilitado: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (habilitado) Movi.colores.texto else Movi.colores.textoApagado)
+            .clickable(enabled = habilitado, onClick = onClick)
+            .padding(vertical = 15.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(texto, color = Movi.colores.fondo, style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium)
+    }
+}
+
+/**
+ * El armazón de las dos hojas de documentos: el velo, el panel de abajo, el asa con su «cerrar» y
+ * el scroll.
+ *
+ * El scroll no es decoración: con el teclado abierto ninguna de las dos cabe en un teléfono chico,
+ * que es la misma lección de las siete hojas que nacieron sin él.
+ */
+@Composable
+private fun HojaDeDocumento(
+    onDismiss: () -> Unit,
+    cerrarHabilitado: Boolean,
+    contenido: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(enabled = cerrarHabilitado, onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(Movi.colores.tarjeta)
+                .clickable(enabled = false) {}
+                .padding(horizontal = 20.dp),
+        ) {
+            SheetHandleWithClose(onClose = onDismiss, enabled = cerrarHabilitado)
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false),
+            ) {
+                contenido()
+            }
+        }
     }
 }

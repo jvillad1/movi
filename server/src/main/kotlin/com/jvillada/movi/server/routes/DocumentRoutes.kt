@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.auth.JwtConfig
+import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
@@ -164,6 +165,13 @@ fun Route.documentRoutes() {
         if (bytes.isEmpty()) {
             return@post call.respond(HttpStatusCode.BadRequest, "No llegó ningún archivo")
         }
+        // La cuenta se comprueba ANTES de escribir, igual que en el PATCH: el campo lo manda el
+        // cliente y el registro es público, así que sin esto cualquiera podía colgar un papel suyo
+        // de la cuenta de otro — y el id ajeno volvía en la respuesta.
+        val cuentaPedida = accountId
+        if (cuentaPedida != null && !dbQuery { esSuCuenta(uid, cuentaPedida) }) {
+            return@post call.respond(HttpStatusCode.BadRequest, CUENTA_QUE_NO_ES_SUYA)
+        }
 
         val doc = Documento(
             id = "doc_${java.util.UUID.randomUUID()}",
@@ -216,10 +224,16 @@ fun Route.documentRoutes() {
     }
 
     /**
-     * Corrige nombre, tipo, período o notas. Lo que no venga en el cuerpo **no se toca**.
+     * Corrige nombre, tipo, **cuenta**, período o notas. Lo que no venga en el cuerpo **no se
+     * toca**.
      *
-     * La cadena vacía sí borra: es la única forma de sacar una nota escrita por error, y es
-     * distinguible de «no lo mandes» sin tener que mirar las claves del JSON.
+     * La cadena vacía sí borra: es la única forma de sacar una nota escrita por error —o de
+     * descolgar un papel de la cuenta equivocada— y es distinguible de «no lo mandes» sin tener
+     * que mirar las claves del JSON.
+     *
+     * La cuenta, además, se **comprueba**: tiene que ser una del mismo dueño. Es el único campo de
+     * esta ruta que no es texto libre suyo sino una referencia, y una referencia sin comprobar es
+     * la puerta por la que un papel termina colgado de la cuenta de otro.
      */
     patch("/api/documents/{id}") {
         val uid = call.userId()
@@ -233,14 +247,22 @@ fun Route.documentRoutes() {
         //
         // Un PATCH que no cambia nada no es un error: se contesta el documento tal como está.
         val nombreNuevo = cambios.nombre?.trim()?.takeIf { it.isNotBlank() }?.take(255)
+        // `null` no toca la cuenta; la cadena vacía la descuelga; cualquier otra cosa tiene que
+        // ser una cuenta suya. Se comprueba antes del update para que un id ajeno no llegue nunca
+        // a la columna: el `where` del update filtra por documento, no por cuenta.
+        val cuentaNueva = cambios.accountId?.trim()?.takeIf { it.isNotBlank() }
+        if (cuentaNueva != null && !dbQuery { esSuCuenta(uid, cuentaNueva) }) {
+            return@patch call.respond(HttpStatusCode.BadRequest, CUENTA_QUE_NO_ES_SUYA)
+        }
         val hayCambios = nombreNuevo != null || cambios.tipo != null ||
-            cambios.periodo != null || cambios.notas != null
+            cambios.accountId != null || cambios.periodo != null || cambios.notas != null
 
         if (hayCambios) {
             val actualizados = dbQuery {
                 Documents.update({ (Documents.id eq id) and (Documents.userId eq uid) }) {
                     nombreNuevo?.let { n -> it[Documents.name] = n }
                     cambios.tipo?.let { t -> it[Documents.kind] = t.name }
+                    cambios.accountId?.let { _ -> it[Documents.accountId] = cuentaNueva }
                     cambios.periodo?.let { pe -> it[Documents.period] = pe.trim().take(50).takeIf { v -> v.isNotBlank() } }
                     cambios.notas?.let { no -> it[Documents.notes] = no.trim().take(500).takeIf { v -> v.isNotBlank() } }
                 }
@@ -322,6 +344,19 @@ fun Route.documentContentRoutes() {
         call.respondBytes(fila[Documents.content], mime)
     }
 }
+
+/**
+ * El mensaje de una cuenta que no es del que pide. **Uno solo, y sin detalle**: no dice si la
+ * cuenta no existe o si es de otro, porque las dos respuestas juntas convierten la ruta en un
+ * oráculo para saber qué ids están ocupados.
+ */
+internal const val CUENTA_QUE_NO_ES_SUYA = "Esa cuenta no existe"
+
+/** ¿Esa cuenta es de [uid]? Dentro de una transacción; el caller ya abrió la suya. */
+internal fun esSuCuenta(uid: String, accountId: String): Boolean =
+    Accounts.select(listOf(Accounts.id))
+        .where { (Accounts.id eq accountId) and (Accounts.userId eq uid) }
+        .any()
 
 /** Guarda la fila con su contenido. Fuera de las rutas para que el importador también la use. */
 fun guardarDocumento(uid: String, doc: Documento, bytes: ByteArray) {

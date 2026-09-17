@@ -37,6 +37,15 @@ data class StatementParseResult(
      * del banco — que proponía «Bancolombia Ahorros» para el extracto de la Master Black.
      */
     val numerosDeCuenta: List<String> = emptyList(),
+    /**
+     * **El papel que esta lectura archivó**, o `null` si no se pudo archivar.
+     *
+     * Viaja de vuelta para que la importación le pueda colgar la cuenta que el dueño eligió (ver
+     * [ImportDecision.documentoId]). Al subir todavía no se sabe cuál es: la cuenta se elige en la
+     * pantalla de revisión, después. Si el archivo ya estaba guardado —subirlo, mirarlo, volver
+     * atrás y volver a subirlo— es el id del que ya estaba, no uno nuevo.
+     */
+    val documentoId: String? = null,
 )
 
 @Serializable
@@ -62,6 +71,14 @@ data class ImportDecision(
     val imports: List<ParsedTransaction>,
     val reconciliations: List<ReconciliationDecision>,
     val skipped: List<String>,
+    /**
+     * El documento que archivó la lectura de este extracto (ver [StatementParseResult.documentoId]).
+     * El importe le cuelga [accountId]: el papel es de la cuenta contra la que se importó.
+     *
+     * Opcional a propósito: un cliente viejo no lo manda y la importación funciona igual, solo que
+     * el extracto archivado se queda sin cuenta —que es exactamente como estaba antes.
+     */
+    val documentoId: String? = null,
 )
 
 @Serializable

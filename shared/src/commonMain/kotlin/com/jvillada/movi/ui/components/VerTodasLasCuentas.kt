@@ -109,4 +109,6 @@ private fun explicacionDeLasOtrasCuentas(uso: UsoDeCuenta): String = when (uso) 
     UsoDeCuenta.CUENTA_DEL_EXTRACTO ->
         "Estas no suelen mandar extracto: del efectivo no hay nada que importar, y un crédito ya " +
             "desembolsado se mueve con su cuota. Puedes elegirlas igual."
+    UsoDeCuenta.PAPEL_GUARDADO ->
+        "Del efectivo no suele haber papeles que guardar. Puedes elegirlo igual."
 }
