@@ -146,7 +146,15 @@ class CuotaPagadaEnMovimientosTest {
         montar()
         esperarTexto("YA OCURRIERON")
 
-        composeRule.onNodeWithText("Cuota Crediágil 3090", useUnmergedTree = true).assertIsDisplayed()
+        // `onAllNodes` y no `onNode`: desde que el chip encabeza con el checklist del período, una
+        // cuota pagada dentro del período en curso se nombra dos veces —tildada arriba y con su
+        // explicación acá—. Cuántas veces salga el nombre depende del calendario del día en que
+        // corra la prueba; lo que esta prueba afirma es que la fila de «Ya ocurrieron» está.
+        assertEquals(
+            true,
+            composeRule.onAllNodesWithText("Cuota Crediágil 3090", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
         composeRule
             .onNodeWithText("Ya ocurrió en septiembre · lo prueba un pago de $26.485", useUnmergedTree = true)
             .assertIsDisplayed()
