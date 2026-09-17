@@ -87,10 +87,11 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
             )
         }
 
-        val totalSaved  = goals.sumOf { it.saved }
-        val totalTarget = goals.sumOf { it.target }
-        val overallPct  = if (totalTarget > 0) (totalSaved.toFloat() / totalTarget.toFloat()).coerceIn(0f, 1f) else 0f
-        val pctLabel    = "${(overallPct * 100).toInt()}%"
+        // Ver [ResumenDeMetas]: dos metas sobre la misma cuenta veían el mismo saldo, y el
+        // encabezado lo sumaba dos veces. Acá cada cuenta cuenta una vez.
+        val resumen    = resumenDeMetas(goals)
+        val overallPct = resumen.porcentaje
+        val pctLabel   = "${(overallPct * 100).toInt()}%"
 
         if (!noSeLeyo) LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
@@ -135,8 +136,18 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Total ahorrado", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             Spacer(Modifier.height(6.dp))
-                            Text(formatCOP(totalSaved), fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.7).sp)
-                            Text("de ${formatCOP(totalTarget)} · ${goals.size} metas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp))
+                            Text(formatCOP(resumen.ahorrado), fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.7).sp)
+                            Text("de ${formatCOP(resumen.objetivo)} · ${resumen.rotuloDeCantidad}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp))
+                            if (resumen.hayCuentasCompartidas) {
+                                // Sin esta línea el total parece más chico de lo que el dueño
+                                // esperaría al sumar las metas de a una, y no se entiende por qué.
+                                Text(
+                                    "Hay metas que comparten cuenta: esa plata se cuenta una sola vez.",
+                                    style = Movi.textos.apoyo,
+                                    color = Movi.colores.textoMedio,
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -158,7 +169,12 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         goals.forEach { g ->
                             val pct = if (g.target > 0) (g.saved.toFloat() / g.target.toFloat()).coerceIn(0f, 1f) else 0f
-                            val done = g.target > 0 && g.saved >= g.target
+                            // El anillo sigue midiendo el saldo de la cuenta contra ESTA meta —
+                            // es lo que la tarjeta quiere decir. Lo que no se puede es cantar
+                            // «completada» con plata que otra meta ya reclamó: si dos metas
+                            // están sobre la misma cuenta, la tarjeta dice que la comparten.
+                            val comparte = resumen.comparteCuenta(g)
+                            val done = g.target > 0 && g.saved >= g.target && !comparte
                             MinCard(
                                 modifier = Modifier.fillMaxWidth().clickable {
                                     // F26: tocar una meta la abre para editar o eliminar —
@@ -184,6 +200,8 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                                             Text(g.name, style = Movi.textos.titulo, color = Movi.colores.texto)
                                             if (done) {
                                                 Text("COMPLETADA", style = Movi.textos.rotulo, color = Movi.colores.entra)
+                                            } else if (comparte) {
+                                                Text("COMPARTE CUENTA", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
                                             }
                                         }
                                         // F26: la fecha objetivo es opcional — sin ella no se

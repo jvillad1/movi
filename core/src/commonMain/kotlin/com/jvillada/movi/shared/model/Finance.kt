@@ -590,12 +590,32 @@ data class Budget(
     val monthlyLimit: Long,
 )
 
-// F17: cuerpo de PUT /api/budgets/{category}/rename — la categoría vieja va en la URL, la
-// nueva en el body. Tipo propio (no reusar Budget) porque el monto no se manda: el server
-// conserva el límite existente, renombrar y cambiar el monto son dos operaciones separadas.
+// F17: cuerpo de renombrar un presupuesto. Tipo propio (no reusar Budget) porque el monto no
+// se manda: el server conserva el límite existente, renombrar y cambiar el monto son dos
+// operaciones separadas.
 @Serializable
 data class RenameBudgetRequest(
     val newCategory: String,
+    /**
+     * El nombre ACTUAL. Va acá en `POST /api/budgets/rename` — el camino nuevo, el que usan
+     * los clientes de hoy. Es null en la ruta vieja (`PUT /api/budgets/{category}/rename`),
+     * donde el nombre actual viaja en la URL; queda con default para que el APK ya instalado
+     * siga deserializando. Ver [DeleteBudgetRequest].
+     */
+    val category: String? = null,
+)
+
+/**
+ * Cuerpo de `POST /api/budgets/delete`.
+ *
+ * Borrar es un POST y no un DELETE porque el nombre viaja en el cuerpo, y un DELETE con cuerpo
+ * es terreno pantanoso entre los cuatro motores HTTP que usa la app (OkHttp, Darwin, fetch).
+ * El porqué de sacar el nombre de la ruta está en el comentario de las rutas nuevas en
+ * `FinanceRoutes.kt`.
+ */
+@Serializable
+data class DeleteBudgetRequest(
+    val category: String,
 )
 
 /**

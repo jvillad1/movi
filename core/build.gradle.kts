@@ -59,6 +59,13 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        jvmTest.dependencies {
+            // MockEngine: para mirar QUÉ pide WalletRepositoryImpl (ruta y cuerpo) sin levantar
+            // un server. Ver `PresupuestoConBarraEnElNombreTest`.
+            implementation(libs.ktor.client.mock)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
+        }
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)
         }

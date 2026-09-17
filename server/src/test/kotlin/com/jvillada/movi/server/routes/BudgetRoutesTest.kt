@@ -14,6 +14,7 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -130,11 +131,29 @@ class BudgetRoutesTest {
             setBody("""{"category":"$category","monthlyLimit":$limit}""")
         }
 
+    /**
+     * Renombrar por el camino de hoy: los dos nombres en el CUERPO. La ruta vieja con el nombre
+     * pegado sigue viva por el APK instalado y tiene su propia prueba más abajo.
+     */
     private suspend fun ApplicationTestBuilder.rename(category: String, newCategory: String, asToken: String = token) =
-        client.put("/api/budgets/$category/rename") {
+        client.post("/api/budgets/rename") {
             header(HttpHeaders.Authorization, "Bearer $asToken")
             header(HttpHeaders.ContentType, "application/json")
-            setBody("""{"newCategory":"$newCategory"}""")
+            setBody("""{"category":"$category","newCategory":"$newCategory"}""")
+        }
+
+    private suspend fun ApplicationTestBuilder.editBudget(category: String, limit: Long) =
+        client.put("/api/budgets") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"category":"$category","monthlyLimit":$limit}""")
+        }
+
+    private suspend fun ApplicationTestBuilder.removeBudget(category: String) =
+        client.post("/api/budgets/delete") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"category":"$category"}""")
         }
 
     private suspend fun ApplicationTestBuilder.budgets(): List<kotlinx.serialization.json.JsonObject> =
@@ -231,5 +250,91 @@ class BudgetRoutesTest {
         val list = budgets()
         assertEquals(1, list.size)
         assertEquals("Mercado", list[0]["category"]!!.jsonPrimitive.content, "el de A sigue con su nombre viejo")
+    }
+
+    // ── El nombre viaja en el cuerpo ──────────────────────────────────────────
+    // Cuando el nombre iba en la ruta, «Luz/Agua» se creaba bien (el POST siempre lo mandó en
+    // el cuerpo) y después era 404 para siempre: son dos segmentos y `{category}` hace coincidir
+    // uno solo. «50%» directamente no sobrevivía al decode del path.
+
+    @Test
+    fun `un presupuesto con barra en el nombre se edita, se renombra y se borra`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postBudget("Luz/Agua", 300_000).status)
+
+        assertEquals(HttpStatusCode.OK, editBudget("Luz/Agua", 450_000).status)
+        assertEquals(450_000L, budgets().single()["monthlyLimit"]!!.jsonPrimitive.long)
+
+        assertEquals(HttpStatusCode.OK, rename("Luz/Agua", "Servicios/Casa").status)
+        assertEquals("Servicios/Casa", budgets().single()["category"]!!.jsonPrimitive.content)
+        assertEquals(450_000L, budgets().single()["monthlyLimit"]!!.jsonPrimitive.long, "renombrar conserva el límite")
+
+        assertEquals(HttpStatusCode.NoContent, removeBudget("Servicios/Casa").status)
+        assertEquals(0, budgets().size)
+    }
+
+    @Test
+    fun `un presupuesto con porcentaje en el nombre se edita, se renombra y se borra`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, postBudget("Ahorro 50%", 200_000).status)
+
+        assertEquals(HttpStatusCode.OK, editBudget("Ahorro 50%", 250_000).status)
+        assertEquals(250_000L, budgets().single()["monthlyLimit"]!!.jsonPrimitive.long)
+
+        assertEquals(HttpStatusCode.OK, rename("Ahorro 50%", "Ahorro 100%").status)
+        assertEquals("Ahorro 100%", budgets().single()["category"]!!.jsonPrimitive.content)
+
+        assertEquals(HttpStatusCode.NoContent, removeBudget("Ahorro 100%").status)
+        assertEquals(0, budgets().size)
+    }
+
+    @Test
+    fun `editar o borrar un presupuesto que no existe sigue siendo 404`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.NotFound, editBudget("Luz/Agua", 1_000).status)
+        assertEquals(HttpStatusCode.NotFound, removeBudget("Luz/Agua").status)
+        assertEquals(HttpStatusCode.NotFound, rename("Luz/Agua", "Otra").status)
+    }
+
+    @Test
+    fun `editar sin categoria en el cuerpo es 400 y con limite en cero tambien`() = testApplication {
+        wireApp()
+        postBudget("Mercado", 500_000)
+        assertEquals(HttpStatusCode.BadRequest, editBudget("   ", 1_000).status)
+        assertEquals(HttpStatusCode.BadRequest, removeBudget("   ").status)
+        assertEquals(HttpStatusCode.BadRequest, editBudget("Mercado", 0).status)
+        assertEquals(500_000L, budgets().single()["monthlyLimit"]!!.jsonPrimitive.long)
+    }
+
+    /**
+     * El APK que el dueño tiene instalado manda el nombre en la ruta. Esas tres rutas se quedan
+     * y hacen lo mismo — con nombres sin «/» ni «%», que es todo lo que ese APK podía manejar.
+     */
+    @Test
+    fun `las rutas viejas con el nombre en la ruta siguen funcionando`() = testApplication {
+        wireApp()
+        postBudget("Mercado", 500_000)
+
+        val editado = client.put("/api/budgets/Mercado") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"category":"Mercado","monthlyLimit":600000}""")
+        }
+        assertEquals(HttpStatusCode.OK, editado.status)
+        assertEquals(600_000L, budgets().single()["monthlyLimit"]!!.jsonPrimitive.long)
+
+        val renombrado = client.put("/api/budgets/Mercado/rename") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"newCategory":"Supermercado"}""")
+        }
+        assertEquals(HttpStatusCode.OK, renombrado.status)
+        assertEquals("Supermercado", budgets().single()["category"]!!.jsonPrimitive.content)
+
+        val borrado = client.delete("/api/budgets/Supermercado") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        assertEquals(HttpStatusCode.NoContent, borrado.status)
+        assertEquals(0, budgets().size)
     }
 }

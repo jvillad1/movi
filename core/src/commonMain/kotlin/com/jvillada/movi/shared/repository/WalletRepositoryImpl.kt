@@ -29,6 +29,7 @@ import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.DeleteBudgetRequest
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -260,23 +261,33 @@ class WalletRepositoryImpl(
             setBody(budget)
         }.body()
 
+    // El nombre del presupuesto viaja en el CUERPO, nunca en la ruta — la misma regla que está
+    // escrita unas líneas más abajo para Categorías, y por el mismo motivo: es texto libre del
+    // dueño. Interpolarlo en el path dejaba sin editar ni borrar cualquier presupuesto con
+    // «/», «#» o «%» en el nombre: «Luz/Agua» se creaba bien (el POST lo manda en el cuerpo) y
+    // después daba 404 para siempre, porque el server hace coincidir UN solo segmento de ruta.
+    // El server sigue atendiendo las rutas viejas con el nombre en el path: el APK que el dueño
+    // tiene instalado todavía las llama.
     override suspend fun updateBudget(category: String, budget: Budget): Budget =
-        client.put("$baseUrl/api/budgets/$category") {
+        client.put("$baseUrl/api/budgets") {
             contentType(ContentType.Application.Json)
-            setBody(budget)
+            setBody(budget.copy(category = category))
         }.body()
 
     override suspend fun deleteBudget(category: String) {
-        client.delete("$baseUrl/api/budgets/$category")
+        client.post("$baseUrl/api/budgets/delete") {
+            contentType(ContentType.Application.Json)
+            setBody(DeleteBudgetRequest(category))
+        }
     }
 
     // Mismo idioma que adjustCreditBalance/updateEventCategory: 404 (no existe) y 409 (el
     // nombre nuevo ya está en uso) traen su propio texto del server y se pierden si se
     // deserializa a ciegas.
     override suspend fun renameBudget(category: String, newCategory: String): Budget {
-        val response = client.put("$baseUrl/api/budgets/$category/rename") {
+        val response = client.post("$baseUrl/api/budgets/rename") {
             contentType(ContentType.Application.Json)
-            setBody(RenameBudgetRequest(newCategory))
+            setBody(RenameBudgetRequest(newCategory = newCategory, category = category))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
