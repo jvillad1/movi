@@ -424,10 +424,18 @@ fun validarInteresReal(
 /**
  * El desglose de una cuota cuyo interés **vino del extracto**, no de la estimación.
  *
- * Solo aritmética: `capital = cuota − interesReal − seguro − otros cargos`. Ni la tasa ni el saldo entran, así
- * que sirve igual para un crédito sin tasa registrada — ahí la estimación no puede separar nada
- * y el extracto sí. Exige que [validarInteresReal] haya pasado: un capital negativo acá no es
- * un caso a clampar, es un pago mal escrito que se rechazó antes.
+ * Casi solo aritmética: `capital = cuota − interesReal − seguro − otros cargos`. Ni la tasa ni el saldo
+ * entran, así que sirve igual para un crédito sin tasa registrada — ahí la estimación no puede
+ * separar nada y el extracto sí. Exige que [validarInteresReal] haya pasado: un capital negativo
+ * acá no es un caso a clampar, es un pago mal escrito que se rechazó antes.
+ *
+ * ### Lo único que no es aritmética: el seguro ya cobrado
+ *
+ * El interés escrito es el de ESTE pago y se cobra entero. El seguro y los otros cargos **no**:
+ * salen de las condiciones del crédito (`credit_terms`), son del MES, y el mes se cobra una sola
+ * vez. Sin esto, el ·9695 (seguro $124.800) cobraba el seguro en el primer pago parcial de la
+ * cuota y **otra vez** en el segundo, y ese segundo cargo salía del capital: $604.064 de abono
+ * con la estimación contra $6.037 escribiendo el interés del extracto.
  */
 fun desglosarCuotaConInteresReal(
     cuota: Long,
@@ -436,17 +444,40 @@ fun desglosarCuotaConInteresReal(
     seguroMensual: Long?,
     /** Ver [desglosarCuota]: sin default, olvidarlo no compila. */
     otrosCargosMensuales: Long?,
+    /**
+     * Ver [desglosarCuota]. Acá descuenta **solo los cargos fijos** —el seguro y los otros—, nunca
+     * el interés: [interesReal] es lo que el banco cobró por este pago y va entero.
+     *
+     * Lo ya cobrado se reparte en el mismo orden que usa la estimación (interés, seguro, otros),
+     * o sea que la parte que el mes ya gastó en interés **no** alcanza para tapar el seguro. Con
+     * otro orden, un primer pago que apenas cubrió el interés dejaría el seguro sin cobrar y la
+     * deuda quedaría por debajo de la real, que es el lado caro de equivocarse.
+     *
+     * Sin default, por lo mismo que los otros cargos: es plata que decide cuánto baja la deuda.
+     */
+    yaCobradoEnElMes: Long,
 ): DesgloseDeCuota {
     require(validarInteresReal(interesReal, cuota, tipoDeLaDeuda, seguroMensual, otrosCargosMensuales) == null) {
         "Un interés real inválido se rechaza antes de desglosar; llama a validarInteresReal primero"
     }
-    val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
-    val otros = (otrosCargosMensuales ?: 0L).coerceAtLeast(0L)
+    var faltaDescontar = yaCobradoEnElMes.coerceAtLeast(0L)
+    fun menosLoYaCobrado(cargo: Long): Long {
+        val descontado = minOf(cargo, faltaDescontar)
+        faltaDescontar -= descontado
+        return cargo - descontado
+    }
+    // El interés **consume** lo ya cobrado pero no se achica con él: consumir mantiene el mismo
+    // orden de reparto que la estimación; no achicarlo es la decisión de arriba.
+    menosLoYaCobrado(interesReal.coerceAtLeast(0L))
+    val seguro = menosLoYaCobrado((seguroMensual ?: 0L).coerceAtLeast(0L))
+    val otros = menosLoYaCobrado((otrosCargosMensuales ?: 0L).coerceAtLeast(0L))
     return DesgloseDeCuota(
         cuota = cuota,
         interes = interesReal,
         seguro = seguro,
         otrosCargos = otros,
+        // Nunca negativo: [validarInteresReal] ya garantizó que cabe con el seguro ENTERO, y acá
+        // el seguro solo puede ser menor.
         capital = cuota - interesReal - seguro - otros,
         motivo = MotivoDelDesglose.INTERES_REAL,
     )
@@ -470,13 +501,16 @@ fun desglosarCuotaRegistrada(
     /** Ver [desglosarCuota]: sin default, olvidarlo no compila. */
     otrosCargosMensuales: Long?,
     interesReal: Long?,
-    /** Ver [desglosarCuota]. Con el interés real no se usa: ese número ya es el de ESTE pago. */
+    /**
+     * Ver [desglosarCuota]. Con el interés real **sigue contando para el seguro y los otros
+     * cargos** —son del mes y se cobran una vez— y no para el interés, que ya es el de ESTE pago.
+     */
     yaCobradoEnElMes: Long,
     /** Ver [desglosarCuota]. Con el interés real no se usa: manda lo que dice el extracto. */
     sinIntereses: Boolean = false,
 ): DesgloseDeCuota =
     if (interesReal != null) {
-        desglosarCuotaConInteresReal(cuota, tipoDeLaDeuda, interesReal, seguroMensual, otrosCargosMensuales)
+        desglosarCuotaConInteresReal(cuota, tipoDeLaDeuda, interesReal, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes)
     } else {
         desglosarCuota(cuota, tipoDeLaDeuda, saldoDeLaDeuda, rateEa, seguroMensual, otrosCargosMensuales, yaCobradoEnElMes, sinIntereses)
     }

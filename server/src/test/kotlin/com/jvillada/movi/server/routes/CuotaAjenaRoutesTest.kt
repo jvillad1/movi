@@ -165,6 +165,39 @@ class CuotaAjenaRoutesTest {
             .map { Triple(it[Events.amount], it[Events.noAmortiza], it[Events.description]) }
     }
 
+    /** La fila de la cuota de [periodo], por su id —hay otras filas en la cuenta. */
+    private fun filaDeLaCuotaDelMes(periodo: String) = transaction {
+        Events.selectAll()
+            .where { Events.id eq "ev_cuota_${libranza}_$periodo" }
+            .map { Triple(it[Events.amount], it[Events.noAmortiza], it[Events.description]) }
+            .single()
+    }
+
+    /** La cuenta de la que sale un abono parcial hecho a mano antes del descuento de la nómina. */
+    private val ahorros = "acc-ahorros-del-dueno"
+
+    private fun crearAhorros() = transaction {
+        Accounts.insert {
+            it[id] = ahorros
+            it[userId] = duenoId
+            it[name] = "Ahorros"
+            it[type] = "SAVINGS"
+            it[currency] = "COP"
+        }
+    }
+
+    /** Un pago parcial de la cuota por la OTRA ruta, la que arma un par de patas. */
+    private suspend fun ApplicationTestBuilder.abonoParcial(monto: Long, fecha: java.time.LocalDate) =
+        client.post("/api/payments/installment") {
+            header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"fromAccountId":"$ahorros","debtAccountId":"$libranza","amount":$monto,
+                    "timestamp":${com.jvillada.movi.server.time.appDateToEpochMillis(fecha) + 12 * 3_600_000L},
+                    "transferId":"tr-abono-parcial","fromEventId":"ev-abono-dinero","toEventId":"ev-abono-deuda"}""",
+            )
+        }
+
     private fun deuda(): Long = transaction {
         Events.selectAll().where { Events.accountId eq libranza }.sumOf { fila ->
             val monto = fila[Events.amount]
@@ -328,5 +361,44 @@ class CuotaAjenaRoutesTest {
                 .toSet()
         }
         assertEquals(setOf(haceDos, haceUno), meses)
+    }
+
+    // ── Lo que un abono parcial cubrió de verdad ────────────────────────────────
+
+    /**
+     * **Un abono parcial no deja la cuota del mes «ya cobrada».**
+     *
+     * Las filas guardan en `noAmortiza` el cargo ENTERO del mes aunque el pago no lo alcance —a
+     * propósito, para poder recalcular si después se corrige el monto—. Esta ruta las leía tal
+     * cual (pasaba `{ null }` a `cargosYaCobradosEnElMes`, o sea «ninguna fila tiene par»), así
+     * que un abono de $3.000.000 contra los $3.646.011 de interés de la cuota de la libranza
+     * ·4818 le descontaba los $3.646.011 enteros: el descuento de la nómina salía con interés $0,
+     * abonaba la cuota completa ($6.040.259) y la deuda quedaba **$646.011** por debajo de la
+     * real, sin un solo aviso.
+     *
+     * Ahora cada fila aporta lo menor entre lo guardado y lo que salió de la cuenta —la otra pata
+     * de su par—, igual que en `POST /api/payments/installment`: quedan $646.011 de interés por
+     * cobrar y la cuota abona $5.394.248. Entre los dos movimientos, el interés del mes se cobra
+     * una vez y completo: $3.000.000 + $646.011 = $3.646.011.
+     */
+    @Test
+    fun `un abono parcial solo cubre lo que pago, y la nomina cobra el interes que falta`() = testApplication {
+        condiciones()
+        crearAhorros()
+        wireApp()
+
+        // 5 de septiembre: la cuota que vence el 30 de agosto, pagada a medias.
+        val abono = abonoParcial(3_000_000L, java.time.LocalDate.of(2026, 9, 5))
+        assertEquals(HttpStatusCode.Created, abono.status, abono.bodyAsText())
+        assertEquals(262_386_162L, deuda(), "un abono que no alcanza a cubrir el interés no baja la deuda")
+
+        val res = registrarCon("""{"periodo":"2026-08"}""")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        val (capital, noAmortiza, _) = filaDeLaCuotaDelMes("2026-08")
+        assertEquals(646_011L, noAmortiza, "3.646.011 − 3.000.000: el interés que el abono NO cubrió")
+        assertEquals(5_394_248L, capital, "6.040.259 − 646.011; antes abonaba los 6.040.259 enteros")
+        assertEquals(262_386_162L - 5_394_248L, deuda(), "la deuda baja el capital, ni más ni menos")
+        assertEquals(3_646_011L, 3_000_000L + 646_011L, "el interés del mes, cobrado una sola vez")
     }
 }
