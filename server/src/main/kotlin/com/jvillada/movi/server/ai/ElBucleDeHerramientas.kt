@@ -48,6 +48,22 @@ interface ElModeloConHerramientas {
  */
 const val VUELTAS_MAXIMAS = 3
 
+/** Una consulta que el asistente hizo y lo que le devolvió. Sale del bucle para poder guardarla. */
+data class ConsultaHecha(
+    val herramienta: String,
+    val argumentos: Map<String, String>,
+    val devolvio: String,
+)
+
+/**
+ * Lo que dejó una conversación: la respuesta y **por dónde pasó para llegar a ella**.
+ *
+ * Las consultas salen acá y no se quedan adentro del bucle porque son la mitad del diagnóstico:
+ * cuando una respuesta sale mal, lo primero que hay que saber es si consultó y qué le contestaron.
+ * Ver `guardarLaConversacion`.
+ */
+data class LoQuePaso(val texto: String, val consultas: List<ConsultaHecha> = emptyList())
+
 /**
  * **El bucle.** Termina siempre, y termina con texto:
  *
@@ -68,23 +84,26 @@ suspend fun conversarConHerramientas(
     modelo: ElModeloConHerramientas,
     ejecutar: suspend (LlamadaDeHerramienta) -> String,
     vueltasMaximas: Int = VUELTAS_MAXIMAS,
-): String {
+): LoQuePaso {
+    val hechas = mutableListOf<ConsultaHecha>()
     repeat(vueltasMaximas) { vuelta ->
         val esLaUltima = vuelta == vueltasMaximas - 1
         when (val respuesta = modelo.siguienteVuelta(puedeUsarHerramientas = !esLaUltima)) {
-            is RespuestaDelModelo.Texto -> return respuesta.texto
+            is RespuestaDelModelo.Texto -> return LoQuePaso(respuesta.texto, hechas)
             is RespuestaDelModelo.PideHerramientas -> {
-                if (esLaUltima) return SIN_RESPUESTA
+                if (esLaUltima) return LoQuePaso(SIN_RESPUESTA, hechas)
                 val resultados = respuesta.llamadas.map { llamada ->
-                    llamada.id to runCatching { ejecutar(llamada) }.getOrElse { falla ->
+                    val devolvio = runCatching { ejecutar(llamada) }.getOrElse { falla ->
                         "No pude consultar eso: ${falla.message ?: "error desconocido"}"
                     }
+                    hechas += ConsultaHecha(llamada.nombre, llamada.argumentos, devolvio)
+                    llamada.id to devolvio
                 }
                 modelo.anotarResultados(resultados)
             }
         }
     }
-    return SIN_RESPUESTA
+    return LoQuePaso(SIN_RESPUESTA, hechas)
 }
 
 /**

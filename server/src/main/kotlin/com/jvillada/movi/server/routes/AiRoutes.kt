@@ -34,6 +34,7 @@ import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.server.ai.ElModeloDeAnthropic
 import com.jvillada.movi.server.ai.conversarConHerramientas
 import com.jvillada.movi.server.ai.ejecutarHerramienta
+import com.jvillada.movi.server.ai.guardarLaConversacion
 import io.ktor.server.application.log
 import com.jvillada.movi.server.ai.laPreguntaPideCriterio
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
@@ -205,7 +206,26 @@ fun Route.aiRoutes() {
             "movi-ai uid=$uid criterio=$pideCriterio entrada=${elModelo.fichasDeEntrada} " +
                 "cache=${elModelo.fichasLeidasDeCache} salida=${elModelo.fichasDeSalida}",
         )
-        reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it))) }
+        // Y la conversación queda guardada, que es lo que hace diagnosticable «el asistente no
+        // supo»: sin la pregunta, lo que consultó y lo que contestó, del lado del server solo
+        // quedaban las fichas. Guardar NUNCA puede romper la respuesta — ver
+        // `guardarLaConversacion`, que no lanza.
+        reply.getOrNull()?.let { paso ->
+            val guardado = guardarLaConversacion(
+                uid = uid,
+                pregunta = ultima.content,
+                respuesta = paso.texto,
+                consultas = paso.consultas,
+                modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
+                criterio = pideCriterio,
+                fichasEntrada = elModelo.fichasDeEntrada,
+                fichasCache = elModelo.fichasLeidasDeCache,
+                fichasSalida = elModelo.fichasDeSalida,
+                hayImagen = ultima.imageBase64 != null,
+            )
+            if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
+        }
+        reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it.texto))) }
             .onFailure {
                 call.respond(
                     HttpStatusCode.InternalServerError,
