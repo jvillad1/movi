@@ -82,18 +82,93 @@ class ElModeloDeAnthropicTest {
         return elModelo to conHerramientas
     }
 
+    /**
+     * **Las herramientas van SIEMPRE, y lo que cambia es el permiso.** Son parte del prefijo que se
+     * cachea: quitarlas en la última vuelta —como se hacía al principio— cambiaba el prefijo y
+     * tiraba la caché de esa llamada entera, que es justo la más larga de la conversación.
+     */
     @Test
-    fun `cuando puede usar herramientas van las dos, y cuando no, ninguna`() = runBlocking {
-        val (elModelo, conHerramientas) = modelo(respuestaConTexto("Listo."))
+    fun `las herramientas viajan en todas las vueltas, y en la ultima se le prohibe usarlas`() = runBlocking {
+        val (elModelo, _) = modelo(respuestaConTexto("Listo."))
+
+        val conPermiso = elModelo.armarLlamada(puedeUsarHerramientas = true)
+        val sinPermiso = elModelo.armarLlamada(puedeUsarHerramientas = false)
+
+        assertEquals(LAS_HERRAMIENTAS.size, conPermiso.tools().orElse(emptyList()).size)
+        assertEquals(
+            LAS_HERRAMIENTAS.size,
+            sinPermiso.tools().orElse(emptyList()).size,
+            "el prefijo tiene que ser el mismo o la caché no pega",
+        )
+        assertTrue(conPermiso.toolChoice().isEmpty, "con permiso, que elija él")
+        assertTrue(sinPermiso.toolChoice().orElseThrow().isNone(), "sin permiso, tool_choice: none")
+    }
+
+    /** Pensar se cobra como salida: solo se enciende en el camino caro, el de los consejos. */
+    @Test
+    fun `no piensa salvo que se lo pidan`() {
+        val (barato, _) = modelo(respuestaConTexto("Listo."))
+        assertTrue(barato.armarLlamada(puedeUsarHerramientas = true).thinking().isEmpty)
+
+        val caro = ElModeloDeAnthropic(
+            modelo = MODELO_DE_PRUEBA,
+            persona = "p",
+            contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
+            piensa = true,
+            llamar = { respuestaConTexto("Listo.") },
+        )
+        assertTrue(caro.armarLlamada(puedeUsarHerramientas = true).thinking().isPresent)
+    }
+
+    /** Las dos partes del sistema se cachean: la PERSONA es lo más estable que hay. */
+    @Test
+    fun `la persona y los datos viajan cacheados`() {
+        val (elModelo, _) = modelo(respuestaConTexto("Listo."))
+
+        val bloques = elModelo.armarLlamada(puedeUsarHerramientas = true).system().orElseThrow()
+            .textBlockParams().orElseThrow()
+
+        assertEquals(2, bloques.size)
+        assertTrue(bloques.all { it.cacheControl().isPresent }, "las dos partes tienen que cachearse")
+    }
+
+    /**
+     * Un id de modelo es un texto que viaja a la API. Si uno dejara de estar disponible en esta
+     * cuenta, sin respaldo el asistente se caería entero; con respaldo, el peor caso es una
+     * respuesta más cara.
+     */
+    @Test
+    fun `si el modelo falla, reintenta una vez con el de respaldo`() = runBlocking {
+        val modelosPedidos = mutableListOf<String>()
+        val elModelo = ElModeloDeAnthropic(
+            modelo = "modelo-que-no-existe",
+            persona = "p",
+            contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
+            modeloDeRespaldo = MODELO_DE_PRUEBA,
+            llamar = { params ->
+                modelosPedidos += params.model().toString()
+                if (modelosPedidos.size == 1) error("404 model not found")
+                respuestaConTexto("Listo.")
+            },
+        )
+
+        val respuesta = elModelo.siguienteVuelta(puedeUsarHerramientas = true)
+
+        assertEquals("Listo.", (respuesta as RespuestaDelModelo.Texto).texto)
+        assertEquals(listOf("modelo-que-no-existe", MODELO_DE_PRUEBA), modelosPedidos)
+    }
+
+    @Test
+    fun `cuenta las fichas que se gastaron`() = runBlocking {
+        val (elModelo, _) = modelo(respuestaConTexto("Listo."))
 
         elModelo.siguienteVuelta(puedeUsarHerramientas = true)
         elModelo.siguienteVuelta(puedeUsarHerramientas = false)
 
-        assertEquals(listOf(true, false), conHerramientas)
-        assertEquals(
-            LAS_HERRAMIENTAS.size,
-            elModelo.armarLlamada(puedeUsarHerramientas = true).tools().orElse(emptyList()).size,
-        )
+        assertEquals(20, elModelo.fichasDeEntrada, "diez por llamada, dos llamadas")
+        assertEquals(10, elModelo.fichasDeSalida)
     }
 
     @Test

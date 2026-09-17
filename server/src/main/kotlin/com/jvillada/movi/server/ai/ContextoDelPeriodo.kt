@@ -48,34 +48,16 @@ import kotlin.math.roundToLong
  *    asistente dijera otra cosa que la pantalla, el error sería peor que no tener asistente.
  * 2. **El período del dueño, no el mes de calendario.** Su corte es el 25; un contexto que hable
  *    de «septiembre» contesta sobre una ventana que él no usa.
- * 3. **Acotado, y cuando no alcanza lo DICE.** Van los recurrentes, los créditos, las
- *    suscripciones activas, las metas y —desde la ola 23— los movimientos del período **uno por
- *    uno**. Los movimientos entraron porque sin ellos el asistente contesta totales y nada más:
- *    no puede decir en qué restaurante, ni si un gasto se repitió, ni qué hay detrás de
- *    «Comida: \$1.200.000», que es justo lo que el dueño pregunta. Lo que no entra es la
- *    HISTORIA: solo el período en curso, y con tope ([CUANTOS_MOVIMIENTOS_CABEN]).
+ * 3. **Lo que se repite en cada mensaje va acá; lo que se pregunta a veces, no.** Van los totales
+ *    del período, los recurrentes, los créditos, las suscripciones y las metas: cabe en unas
+ *    líneas y sirve para casi cualquier pregunta.
  *
- *    El tope se anuncia en el texto («y N más que no caben»). Un corte silencioso es peor que no
- *    tener el dato: el asistente sumaría lo que ve y contestaría una cifra que no coincide con la
- *    pantalla, sin que nada lo delate.
+ *    Los movimientos **uno por uno** estuvieron acá unas horas y se fueron: eran 126 renglones
+ *    —ocho mil caracteres— viajando en CADA mensaje para responder una pregunta de cada cinco, y
+ *    desde que el asistente puede consultarlos (`buscar_movimientos`) mandarlos siempre es pagar
+ *    por adelantado algo que casi nunca se usa. Misma historia con los documentos. Una consulta
+ *    de más cuesta una vuelta; el bloque de más costaba en cada mensaje de cada conversación.
  */
-
-/**
- * **Cuántos movimientos del período entran en el contexto.** Con los datos del dueño (unos 40 por
- * período) no se alcanza; existe para el día que sí, y para que ese día el texto lo diga en vez de
- * cortar callado.
- */
-internal const val CUANTOS_MOVIMIENTOS_CABEN = 150
-
-/** Un movimiento del período, como lo lee el asistente. */
-internal data class MovimientoParaContexto(
-    val fecha: String,
-    val nombre: String,
-    val categoria: String,
-    val monto: Long,
-    val esIngreso: Boolean,
-    val cuenta: String,
-)
 
 /** Un recurrente del dueño, con lo único que hace falta para hablar de él. */
 internal data class RecurrenteParaContexto(
@@ -138,10 +120,6 @@ internal data class ContextoDelPeriodo(
     val metas: List<Triple<String, Long, String?>>,
     val smsPorConfirmar: Int,
     val movimientosPorConfirmar: Int,
-    /** Los del período, del más nuevo al más viejo, ya recortados a [CUANTOS_MOVIMIENTOS_CABEN]. */
-    val movimientos: List<MovimientoParaContexto> = emptyList(),
-    /** Cuántos quedaron afuera por el tope. Se dice en el texto; nunca se calla. */
-    val movimientosQueNoCaben: Int = 0,
 )
 
 /** Todo lo de arriba, leído de la base en una sola pasada. */
@@ -290,22 +268,6 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             metas = metas,
             smsPorConfirmar = smsPendientes,
             movimientosPorConfirmar = porConfirmar,
-            // Del más nuevo al más viejo: si algo se cae por el tope, que sea lo más viejo — y
-            // cuántos se cayeron se dice abajo, en el texto.
-            movimientos = delPeriodo
-                .sortedByDescending { it[Events.timestamp] }
-                .take(CUANTOS_MOVIMIENTOS_CABEN)
-                .map { fila ->
-                    MovimientoParaContexto(
-                        fecha = fechaLegible(fila[Events.timestamp]),
-                        nombre = fila[Events.description],
-                        categoria = fila[Events.category],
-                        monto = fila[Events.amount],
-                        esIngreso = fila[Events.type] == TransactionType.INCOME.name,
-                        cuenta = nombreDeCuenta[fila[Events.accountId]] ?: "otra cuenta",
-                    )
-                },
-            movimientosQueNoCaben = (delPeriodo.size - CUANTOS_MOVIMIENTOS_CABEN).coerceAtLeast(0),
         )
     }
 }
@@ -327,20 +289,6 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
             .forEach { (categoria, monto) -> appendLine("- $categoria: \$$monto") }
     }
     appendLine()
-
-    if (movimientos.isNotEmpty()) {
-        appendLine("== Los movimientos de este período, uno por uno ==")
-        movimientos.forEach { m ->
-            val signo = if (m.esIngreso) "+" else "-"
-            appendLine("- ${m.fecha} · ${m.nombre} (${m.categoria}, ${m.cuenta}): $signo\$${m.monto}")
-        }
-        if (movimientosQueNoCaben > 0) {
-            // Se dice, siempre. Un corte callado haría que el asistente sumara lo que ve y
-            // contestara una cifra que no coincide con la pantalla, sin nada que lo delate.
-            appendLine("- (y $movimientosQueNoCaben movimientos más de este período que no caben aquí: para esos, usa los totales por categoría de arriba)")
-        }
-        appendLine()
-    }
 
     appendLine("== Pagos recurrentes ==")
     if (recurrentes.isEmpty()) {
@@ -423,12 +371,6 @@ private fun rangoLegible(inicio: Long, finExclusivo: Long): String {
     val d1 = Instant.ofEpochMilli(inicio).atZone(zona).toLocalDate()
     val d2 = Instant.ofEpochMilli(finExclusivo - 1).atZone(zona).toLocalDate()
     return "${d1.dayOfMonth} de ${MESES[d1.monthValue - 1]} al ${d2.dayOfMonth} de ${MESES[d2.monthValue - 1]}"
-}
-
-/** «14 de septiembre», que es como el dueño la lee — y en su zona horaria, no en UTC. */
-private fun fechaLegible(momento: Long): String {
-    val fecha = Instant.ofEpochMilli(momento).atZone(AppClock.zone).toLocalDate()
-    return "${fecha.dayOfMonth} de ${MESES[fecha.monthValue - 1]}"
 }
 
 private fun diasHasta(finExclusivo: Long): Int {
