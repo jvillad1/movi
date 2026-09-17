@@ -4,6 +4,7 @@ import com.jvillada.movi.server.balance.cargosYaCobradosEnElMes
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.Events
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.debtAdjustmentEventFor
@@ -556,11 +557,33 @@ fun Route.creditRoutes() {
                 interesReal = pedido.interesReal,
                 // La cuota de [periodo], no la del mes de hoy: registrar el 2 de septiembre la cuota de
                 // agosto no puede descontar lo que ya cobró… septiembre.
-                yaCobradoEnElMes = cargosYaCobradosEnElMes(
-                    loadNonVoidedEvents(uid, accountId).filter { it.id != idDelMes && it.currency == cuenta.currency },
-                    vencimientoDelPeriodo,
-                    terms.dayOfMonth,
-                ) { null },
+                yaCobradoEnElMes = run {
+                    val delMes = loadNonVoidedEvents(uid, accountId)
+                        .filter { it.id != idDelMes && it.currency == cuenta.currency && it.noAmortiza != null }
+                    // **Cubierto, no guardado**, igual que en la ruta del pago (ver
+                    // `cargosYaCobradosEnElMes`): una fila guarda el cargo ENTERO del mes aunque el
+                    // pago no lo haya alcanzado, así que lo que de verdad cubrió es la plata que
+                    // salió de la cuenta —la otra pata de su par—.
+                    //
+                    // Acá antes iba un `{ null }` fijo, o sea «ninguna fila tiene par», y eso le
+                    // regalaba a la cuota de la nómina un interés que nadie pagó: contra los
+                    // $3.646.011 de interés del mes de la libranza ·4818, un abono parcial de
+                    // $3.000.000 el día 5 descontaba los $3.646.011 enteros, la cuota de la nómina
+                    // cobraba $646.011 menos de interés y la deuda quedaba $646.011 por debajo de
+                    // la real, sin que nada lo dijera.
+                    val pares = delMes.mapNotNull { it.transferId }.toSet()
+                    val pagadoPorPar = if (pares.isEmpty()) emptyMap() else dbQuery {
+                        Events.selectAll()
+                            .where { (Events.userId eq uid) and (Events.transferId inList pares) and (Events.accountId neq accountId) }
+                            .associate { it[Events.transferId]!! to it[Events.amount] }
+                    }
+                    cargosYaCobradosEnElMes(delMes, vencimientoDelPeriodo, terms.dayOfMonth) { fila ->
+                        // `null` queda solo para la fila que de verdad no tiene par: la cuota que
+                        // paga la nómina o un tercero se escribe sola, sin pata del dinero, y ahí
+                        // lo guardado ES lo cubierto.
+                        fila.transferId?.let { pagadoPorPar[it] }
+                    }
+                },
             )
             val amortiza = desglose.motivo == MotivoDelDesglose.AMORTIZA || desglose.motivo == MotivoDelDesglose.INTERES_REAL
             val base = if (terms.payrollDeduction) "Cuota descontada de la nómina" else "Cuota pagada por $quienPaga"

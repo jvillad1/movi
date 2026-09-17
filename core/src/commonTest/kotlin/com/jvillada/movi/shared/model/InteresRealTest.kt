@@ -78,7 +78,7 @@ class InteresRealTest {
     fun la_pata_de_la_deuda_guarda_el_interes_real_mas_el_seguro() {
         // Lo que después lee la corrección del monto (`montoDeLaHermanaAlCorregir`): con el
         // interés real guardado, corregir la cuota vuelve a dar el capital correcto.
-        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 473_227L, 124_800L, null)
+        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 473_227L, 124_800L, null, yaCobradoEnElMes = 0L)
         val (dinero, deuda) = pagoDeCuotaLegs(peticion(473_227L), ahorros, nueveSeisNueveCinco, d)
 
         assertEquals(1_204_064L, dinero.amount, "la plata que salió es la cuota entera")
@@ -105,7 +105,7 @@ class InteresRealTest {
     fun cero_es_un_interes_valido() {
         // «El banco no cobró interés este mes» es una afirmación legítima, y distinta de «no sé».
         assertNull(validarInteresReal(0L, 1_204_064L, AccountType.LOAN, 124_800L, null))
-        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 0L, 124_800L, null)
+        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 0L, 124_800L, null, yaCobradoEnElMes = 0L)
         assertEquals(1_204_064L - 124_800L, d.capital)
     }
 
@@ -130,7 +130,7 @@ class InteresRealTest {
     fun interes_mas_seguro_igual_a_la_cuota_se_acepta_y_deja_el_capital_en_cero() {
         // El borde: nada abona a capital, pero la deuda tampoco sube. Es un pago que existe.
         assertNull(validarInteresReal(473_227L, 598_027L, AccountType.LOAN, 124_800L, null))
-        assertEquals(0L, desglosarCuotaConInteresReal(598_027L, AccountType.LOAN, 473_227L, 124_800L, null).capital)
+        assertEquals(0L, desglosarCuotaConInteresReal(598_027L, AccountType.LOAN, 473_227L, 124_800L, null, yaCobradoEnElMes = 0L).capital)
     }
 
     @Test
@@ -144,11 +144,98 @@ class InteresRealTest {
         // La validación va antes. Si alguien la saltea, que no compile en silencio un capital
         // negativo: que reviente donde se ve.
         assertFailsWith<IllegalArgumentException> {
-            desglosarCuotaConInteresReal(500_000L, AccountType.LOAN, 473_227L, 124_800L, null)
+            desglosarCuotaConInteresReal(500_000L, AccountType.LOAN, 473_227L, 124_800L, null, yaCobradoEnElMes = 0L)
         }
         assertFailsWith<IllegalArgumentException> {
-            desglosarCuotaConInteresReal(1_000_000L, AccountType.CREDIT_CARD, 10_000L, null, null)
+            desglosarCuotaConInteresReal(1_000_000L, AccountType.CREDIT_CARD, 10_000L, null, null, yaCobradoEnElMes = 0L)
         }
+    }
+
+    // ── El seguro del mes se cobra UNA vez, también con el interés escrito ─────
+
+    /**
+     * **La cuota pagada en dos partes, con el interés del extracto escrito en las dos.**
+     *
+     * El ·9695, seguro $124.800. El primer pago parcial cubrió el interés ($473.227) y el seguro:
+     * su pata guardó `noAmortiza = 598.027`. El segundo pago de la misma cuota, $604.064:
+     *
+     * - estimando, abona **$604.064** a capital —el mes ya cobró sus cargos—;
+     * - escribiendo el interés del extracto abonaba **$6.037**, porque el seguro se volvía a
+     *   cobrar entero y el interés escrito encima. $598.027 de amortización perdidos, y la deuda
+     *   quedaba esa plata por encima de la real.
+     *
+     * Ahora el interés escrito se cobra (es el de ESTE pago) pero el seguro ya cobrado no:
+     * capital **$130.837**, y el seguro del mes suma $124.800 entre los dos pagos, no $249.600.
+     */
+    @Test
+    fun el_segundo_pago_de_la_cuota_no_vuelve_a_cobrar_el_seguro() {
+        val yaCobrado = 473_227L + 124_800L
+
+        val conElExtracto = desglosarCuotaRegistrada(
+            cuota = 604_064L,
+            tipoDeLaDeuda = AccountType.LOAN,
+            saldoDeLaDeuda = 40_710_555L,
+            rateEa = 11.27,
+            seguroMensual = 124_800L,
+            otrosCargosMensuales = null,
+            interesReal = 473_227L,
+            yaCobradoEnElMes = yaCobrado,
+        )
+
+        assertEquals(0L, conElExtracto.seguro, "el seguro del mes ya lo cobró el primer pago")
+        assertEquals(473_227L, conElExtracto.interes, "el interés escrito sí es el de ESTE pago")
+        assertEquals(130_837L, conElExtracto.capital, "604.064 − 473.227")
+        assertEquals(6_037L, 604_064L - 473_227L - 124_800L, "lo que daba antes, con el seguro doble")
+        assertEquals(conElExtracto.cuota, conElExtracto.interes + conElExtracto.seguro + conElExtracto.otrosCargos + conElExtracto.capital)
+    }
+
+    @Test
+    fun estimando_el_mismo_segundo_pago_abona_la_cuota_entera() {
+        // El otro lado de la misma cuota, para que la diferencia quede medida y no contada: sin
+        // interés escrito, el segundo pago abona los $604.064 completos porque el mes ya cobró.
+        val estimando = desglosarCuotaRegistrada(
+            cuota = 604_064L,
+            tipoDeLaDeuda = AccountType.LOAN,
+            saldoDeLaDeuda = 40_710_555L,
+            rateEa = 11.27,
+            seguroMensual = 124_800L,
+            otrosCargosMensuales = null,
+            interesReal = null,
+            yaCobradoEnElMes = 473_227L + 124_800L,
+        )
+
+        assertEquals(0L, estimando.seguro)
+        assertEquals(604_064L, estimando.capital)
+    }
+
+    @Test
+    fun lo_ya_cobrado_que_solo_alcanzo_para_el_interes_no_borra_el_seguro() {
+        // El reparto sigue el mismo orden que la estimación: interés, seguro, otros. Un primer
+        // abono de $200.000 contra un interés de $473.227 no llegó al seguro, así que el segundo
+        // pago tiene que cobrarlo entero —descontarlo igual dejaría la deuda por debajo de la real.
+        val d = desglosarCuotaConInteresReal(1_204_064L, AccountType.LOAN, 473_227L, 124_800L, null, yaCobradoEnElMes = 200_000L)
+
+        assertEquals(124_800L, d.seguro, "el seguro del mes todavía no se cobró")
+        assertEquals(606_037L, d.capital, "1.204.064 − 473.227 − 124.800")
+    }
+
+    @Test
+    fun los_otros_cargos_tampoco_se_cobran_dos_veces() {
+        // El Vehículo 8761: cuota $4.101.123, seguro $89.100 y otros conceptos $25.000. Si el mes
+        // ya cobró los tres renglones, el segundo pago de esa cuota solo carga su interés escrito
+        // —antes cargaba también $114.100 de seguro y otros que ya estaban pagos.
+        val d = desglosarCuotaConInteresReal(
+            cuota = 4_101_123L,
+            tipoDeLaDeuda = AccountType.LOAN,
+            interesReal = 2_478_738L,
+            seguroMensual = 89_100L,
+            otrosCargosMensuales = 25_000L,
+            yaCobradoEnElMes = 2_478_738L + 89_100L + 25_000L,
+        )
+
+        assertEquals(0L, d.seguro)
+        assertEquals(0L, d.otrosCargos)
+        assertEquals(1_622_385L, d.capital, "4.101.123 − 2.478.738; antes daba 1.508.285")
     }
 
     // ── Un crédito sin tasa también lo acepta ──────────────────────────────────

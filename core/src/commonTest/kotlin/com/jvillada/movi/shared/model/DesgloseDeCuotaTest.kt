@@ -97,6 +97,7 @@ class DesgloseDeCuotaTest {
             interesReal = 2_478_738,
             seguroMensual = 89_100,
             otrosCargosMensuales = 25_000,
+            yaCobradoEnElMes = 0L,
         )
         val comoEstabaAntes = desglosarCuotaConInteresReal(
             cuota = 4_101_123,
@@ -104,6 +105,7 @@ class DesgloseDeCuotaTest {
             interesReal = 2_478_738,
             seguroMensual = 89_100,
             otrosCargosMensuales = null,
+            yaCobradoEnElMes = 0L,
         )
 
         // El capital al peso contra el papel del banco, que es el punto entero del cambio.
