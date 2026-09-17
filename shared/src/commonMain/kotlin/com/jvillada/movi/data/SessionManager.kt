@@ -25,31 +25,15 @@ private const val KEY_REMEMBERED_EMAIL = "remembered_email"
 // y también el comportamiento de siempre en Android/iOS, que no tienen la casilla).
 private const val KEY_REMEMBER_PREF = "remember_email_pref"
 
-// «Entrar con huella» (ver EntrarConHuella.kt). Cuatro claves y ninguna es un secreto en claro:
-// el interruptor, la respuesta a un ofrecimiento, y la sesión ya CIFRADA con su vector de
-// inicialización. Lo cifrado se guarda acá —y no en un archivo aparte de Android— porque la llave
-// vive en el Keystore del teléfono, que es lo que hace que estos bytes no le sirvan a nadie que
-// los copie con `adb`.
+// «Entrar con huella» (ver EntrarConHuella.kt). Dos claves, y ninguna es un secreto: si hay que
+// pedir la huella al abrir, y si ya se le ofreció y dijo que no.
+//
+// **No hay una tercera con la sesión cifrada, y es a propósito.** La huella es la puerta para
+// abrir Movi; el token se guarda como cualquier app guarda el suyo, porque los procesos que
+// Android levanta solo (`SmsBackfillWorker` cada 6 horas, `SmsSyncWorker` tras un reinicio)
+// tienen que poder leerlo sin nadie delante del teléfono. Ver el encabezado de EntrarConHuella.kt.
 private const val KEY_HUELLA = "entrar_con_huella"
 private const val KEY_HUELLA_RECHAZADA = "entrar_con_huella_rechazada"
-private const val KEY_CAJA_IV = "sesion_bajo_llave_iv"
-private const val KEY_CAJA_DATOS = "sesion_bajo_llave"
-
-/**
- * **Lo que, con la huella activada, deja de escribirse en el almacenamiento común.**
- *
- * Sin esto la función no protegería nada: el token seguiría en las SharedPreferences en texto
- * plano —legibles con el teléfono desbloqueado y `adb`— y el prompt biométrico sería un trámite
- * decorativo encima de un secreto que ya está a la vista. Con la huella prendida, estas claves
- * viven cifradas en [SessionManager.sesionBajoLlave] y, mientras la app esté abierta, en la copia
- * en memoria de acá arriba.
- *
- * **Lo que eso cuesta, dicho acá para que no se descubra en el teléfono:** un proceso que Android
- * levante por su cuenta (el receptor de SMS tras un reinicio, el worker del barrido) arranca sin
- * copia en memoria y sin token, así que la captura de SMS en segundo plano queda en pausa hasta
- * que el dueño abra Movi y ponga la huella. Perfil lo dice con todas las letras.
- */
-private val CLAVES_BAJO_LLAVE = setOf(KEY_TOKEN, KEY_USER_ID, KEY_NAME, KEY_EMAIL, KEY_AVATAR_COLOR)
 
 /**
  * **El almacenamiento del dispositivo, que puede no existir.**
@@ -154,15 +138,8 @@ private fun leer(key: String): String? = runCatching {
 
 private fun guardar(key: String, value: String?) {
     recordar(key, value)
-    // Con «Entrar con huella» prendida, las claves de [CLAVES_BAJO_LLAVE] NO vuelven al
-    // almacenamiento común: se borran de ahí y quedan solo en memoria mientras la app viva, más
-    // la copia cifrada que abre el Keystore.
-    //
-    // El orden de las tres condiciones importa y no es estético: `key in CLAVES_BAJO_LLAVE` corta
-    // antes de leer `huellaActivada`, que a su vez llama a `leer()`. Invertirlas sería recursión.
-    val soloEnMemoria = value != null && key in CLAVES_BAJO_LLAVE && SessionManager.huellaActivada
     runCatching {
-        if (value == null || soloEnMemoria) sessionSettings.remove(key) else sessionSettings[key] = value
+        if (value == null) sessionSettings.remove(key) else sessionSettings[key] = value
     }
 }
 
@@ -226,8 +203,19 @@ object SessionManager {
     /**
      * ¿Está prendido «Entrar con huella» en ESTE aparato? Es una preferencia del teléfono, no de
      * la cuenta: entrar en otro aparato no hereda nada. Se apaga sola en [clear] — ver allá.
+     *
+     * Prenderlo **no mueve la sesión de lugar**: lo único que cambia es que al abrir la app se
+     * pide el dedo antes de dibujar nada. Los procesos de fondo siguen leyendo [token] como
+     * siempre, que es exactamente el punto de este diseño.
      */
-    val huellaActivada: Boolean get() = leer(KEY_HUELLA) == "1"
+    var huellaActivada: Boolean
+        get() = leer(KEY_HUELLA) == "1"
+        set(v) {
+            guardar(KEY_HUELLA, if (v) "1" else null)
+            // Prenderla borra un «ahora no» viejo: si lo prendió, quiere que se le vuelva a
+            // ofrecer la próxima vez que haga falta.
+            if (v) guardar(KEY_HUELLA_RECHAZADA, null)
+        }
 
     /**
      * Ya se le ofreció y dijo que no. Ofrecer lo mismo en cada entrada sería acoso; el
@@ -239,48 +227,6 @@ object SessionManager {
     var huellaRechazada: Boolean
         get() = leer(KEY_HUELLA_RECHAZADA) == "1"
         set(v) = guardar(KEY_HUELLA_RECHAZADA, if (v) "1" else null)
-
-    /**
-     * La sesión cifrada tal como la dejó el aparato: `(vector de inicialización, datos)`, los dos
-     * en hexadecimal. `null` si no hay nada guardado. **Nadie de commonMain puede leer lo que hay
-     * adentro**: la llave está en el Keystore del teléfono y solo la suelta una huella.
-     */
-    val sesionBajoLlave: Pair<String, String>?
-        get() {
-            val iv = leer(KEY_CAJA_IV)
-            val datos = leer(KEY_CAJA_DATOS)
-            return if (iv != null && datos != null) iv to datos else null
-        }
-
-    /**
-     * Prende la huella: guarda lo cifrado y **saca del almacenamiento común** lo que ahora vive
-     * bajo llave. La sesión de este momento no se corta — sigue en la copia en memoria.
-     */
-    fun activarHuella(iv: String, datos: String) {
-        guardar(KEY_CAJA_IV, iv)
-        guardar(KEY_CAJA_DATOS, datos)
-        guardar(KEY_HUELLA, "1")
-        guardar(KEY_HUELLA_RECHAZADA, null)
-        CLAVES_BAJO_LLAVE.forEach { clave -> runCatching { sessionSettings.remove(clave) } }
-    }
-
-    /**
-     * Apaga la huella: olvida lo cifrado y **devuelve la sesión de ahora al almacenamiento
-     * común**, que es el comportamiento de siempre. Sin ese segundo paso, apagar el interruptor
-     * dejaría al dueño sin sesión al próximo reinicio y sin entender por qué.
-     */
-    fun desactivarHuella() {
-        olvidarLoCifrado()
-        guardar(KEY_HUELLA, null)
-        CLAVES_BAJO_LLAVE.forEach { clave ->
-            sessionMemoria[clave]?.let { valor -> runCatching { sessionSettings[clave] = valor } }
-        }
-    }
-
-    private fun olvidarLoCifrado() {
-        guardar(KEY_CAJA_IV, null)
-        guardar(KEY_CAJA_DATOS, null)
-    }
 
     /** Last email used to log in. Persists across logout so the login form can pre-fill it. */
     var rememberedEmail: String?
@@ -334,22 +280,15 @@ object SessionManager {
         // a JS —donde `moviPush` puede no existir, o venir cacheado de una versión anterior— y
         // quedarse con la sesión a medio cerrar sería mucho peor que no soltar la suscripción.
         runCatching { PushOptIn.disableForLogout() }
-        // «Entrar con huella» se apaga al cerrar sesión, y lo cifrado se olvida. Las dos mitades
-        // son necesarias:
+        // «Entrar con huella» se apaga al cerrar sesión. Sin esto, el token vencido dejaba un
+        // bucle: `clear()` también corre cuando el servidor contesta 401 tres veces seguidas, y
+        // con el interruptor prendido el próximo arranque pediría el dedo para abrir una app que
+        // igual iba a rebotar al login. Apagado, el arranque siguiente muestra el formulario
+        // directo — que es lo único que puede funcionar con un token que ya no vale.
         //
-        // - **Olvidar lo cifrado** es lo que corta el bucle del token vencido. `clear()` también
-        //   corre cuando el servidor contesta 401 tres veces seguidas; si la caja fuerte
-        //   sobreviviera, el próximo arranque pediría la huella para soltar el MISMO token
-        //   muerto, y volvería a rebotar. Con esto, el arranque siguiente pide la contraseña.
-        // - **Apagar el interruptor** evita el estado fantasma «activada pero sin nada que
-        //   abrir». Volver a prenderla cuesta un toque tras la próxima entrada, y ese
-        //   ofrecimiento aparece solo.
-        //
-        // Lo que NO hace: borrar la llave del Keystore. Sin los datos cifrados no abre nada, y la
-        // próxima activación la reemplaza. Borrarla pediría código de Android, y este archivo es
-        // común a las cuatro plataformas.
+        // Volver a prenderla cuesta un toque tras la próxima entrada, y ese ofrecimiento aparece
+        // solo (ver `ofrecerHuellaTrasEntrar`).
         guardar(KEY_HUELLA, null)
-        olvidarLoCifrado()
         guardar(KEY_TOKEN, null)
         guardar(KEY_USER_ID, null)
         guardar(KEY_NAME, null)

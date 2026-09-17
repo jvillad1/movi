@@ -2,8 +2,8 @@ package com.jvillada.movi.platform
 
 import androidx.compose.runtime.Composable
 import com.jvillada.movi.data.EstadoDeHuella
+import com.jvillada.movi.data.PropositoDeHuella
 import com.jvillada.movi.data.ResultadoDeHuella
-import com.jvillada.movi.data.SesionGuardada
 
 /**
  * **El lector de huellas de ESTE aparato, o nada.**
@@ -14,34 +14,23 @@ import com.jvillada.movi.data.SesionGuardada
  * que ya tenía [PushOptIn] con su `supported = false`, pero con un `null` en vez de un flag,
  * porque acá no hay ningún método que tenga sentido llamar cuando no hay lector.
  *
- * Las cuatro operaciones son **asíncronas con callback** y no `suspend` a propósito: el prompt
- * biométrico de Android contesta en su propio callback, y envolverlo en una corrutina obligaría
- * a cancelarla a mano cuando la pantalla se va. El callback puede no llegar nunca (la persona
- * deja el diálogo abierto y mata la app); ninguna pantalla depende de que llegue.
+ * **Son dos métodos y ninguno guarda nada.** El lector no custodia la sesión: la deja pasar o no
+ * la deja pasar, y el interruptor que dice si hay que preguntarle vive en `SessionManager`. Ver
+ * el encabezado de `EntrarConHuella.kt` para por qué el token NO está bajo una llave del Keystore
+ * y qué se ganó a cambio.
+ *
+ * [pedir] es **asíncrono con callback** y no `suspend` a propósito: el prompt de Android contesta
+ * en su propio callback, y envolverlo en una corrutina obligaría a cancelarla a mano cuando la
+ * pantalla se va. El callback puede no llegar nunca (la persona deja el diálogo abierto y mata la
+ * app); ninguna pantalla depende de que llegue.
  */
 interface HuellaDelAparato {
 
     /** Qué puede hacer el aparato **ahora**. Se pregunta cada vez: las huellas se agregan y borran. */
     fun estado(): EstadoDeHuella
 
-    /** ¿Quedó una sesión cifrada de una vez anterior? */
-    fun haySesionGuardada(): Boolean
-
-    /**
-     * Cifra [sesion] con una llave del Keystore que solo se desbloquea con huella, y la guarda.
-     * Pide la huella una vez, para confirmar. No guarda la contraseña: [SesionGuardada] no la tiene.
-     */
-    fun guardar(sesion: SesionGuardada, alTerminar: (ResultadoDeHuella) -> Unit)
-
-    /** Pide la huella y, si sale bien, devuelve lo que estaba guardado. */
-    fun abrir(alTerminar: (ResultadoDeHuella, SesionGuardada?) -> Unit)
-
-    /**
-     * Borra lo cifrado y apaga el interruptor. Lo llaman el logout, el apagado desde Perfil, y
-     * todo camino donde lo guardado ya no sirva (ver
-     * [com.jvillada.movi.data.quePasaTrasLaHuella]).
-     */
-    fun olvidar()
+    /** Muestra el prompt del sistema. [proposito] solo cambia lo que dice el diálogo. */
+    fun pedir(proposito: PropositoDeHuella, alTerminar: (ResultadoDeHuella) -> Unit)
 }
 
 /** El `actual` de cada plataforma. `internal`: las pantallas entran por [Huella.deEsteAparato]. */

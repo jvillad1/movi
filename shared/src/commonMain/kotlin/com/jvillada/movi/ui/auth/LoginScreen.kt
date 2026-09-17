@@ -34,13 +34,13 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.ArranqueDeSesion
 import com.jvillada.movi.data.EXPLICACION_HUELLA
 import com.jvillada.movi.data.MENSAJE_SIN_REGISTRAR
+import com.jvillada.movi.data.PropositoDeHuella
 import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.data.SesionGuardada
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.decidirArranque
+import com.jvillada.movi.data.motivoDeLaHuella
 import com.jvillada.movi.data.ofrecerHuellaTrasEntrar
-import com.jvillada.movi.data.quePasaTrasLaHuella
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.shared.model.LoginRequest
 import com.jvillada.movi.shared.model.PasswordResetRequest
@@ -63,34 +63,34 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     // «Entrar con huella» — solo Android tiene lector; en iOS y la web esto es `null` y todo lo
     // que sigue queda apagado, sin una sola diferencia con la pantalla de antes.
     val huella = Huella.deEsteAparato()
-    // No `null` mientras se le está ofreciendo activar la huella recién entrado. Guarda la sesión
-    // que acaba de abrir porque es justo lo que hay que cifrar si dice que sí.
-    var ofrecimiento by remember { mutableStateOf<SesionGuardada?>(null) }
+    // true mientras se le está ofreciendo activar la huella recién entrado.
+    var ofreciendo by remember { mutableStateOf(false) }
     var pidiendoHuella by remember { mutableStateOf(false) }
 
-    /** Pide la huella y suelta la sesión guardada. Lo llaman el arranque y el enlace de reintento. */
+    /**
+     * **La puerta.** Con el interruptor prendido, App.kt arranca en esta pantalla aunque la sesión
+     * esté viva: el dedo no abre ninguna caja fuerte, solo deja pasar. Por eso el éxito navega al
+     * Inicio sin guardar nada — la sesión ya estaba ahí, y siguió ahí todo el tiempo.
+     *
+     * Lo llaman el arranque y el enlace de reintento de más abajo.
+     */
     fun desbloquear() {
         val lector = huella ?: return
         if (pidiendoHuella) return
         pidiendoHuella = true
         error = null
         notice = null
-        lector.abrir { resultado, sesion ->
+        lector.pedir(PropositoDeHuella.ENTRAR) { resultado ->
             pidiendoHuella = false
-            val que = quePasaTrasLaHuella(resultado, sesion)
-            // Lo que ya no se puede abrir se borra ACÁ, y no en el próximo arranque: si no,
-            // la app volvería a ofrecer una huella que no abre nada, para siempre.
-            if (que.olvidarLoGuardado) lector.olvidar()
-            notice = que.mensaje
-            que.sesion?.let { abierta ->
-                SessionManager.save(abierta.token, abierta.userId, abierta.nombre, abierta.correo)
-                onNavigate(Screen.Dashboard)
-            }
+            // Ningún resultado borra la sesión: fallar la huella no puede costarle nada, porque
+            // la huella nunca custodió nada. Se dice el motivo y quedan las dos salidas — el dedo
+            // otra vez, o la contraseña, que sigue debajo.
+            notice = motivoDeLaHuella(resultado)
+            if (resultado == ResultadoDeHuella.EXITO) onNavigate(Screen.Dashboard)
         }
     }
 
-    // El arranque: se evalúa UNA vez por visita a esta pantalla. Volver acá tras un logout no
-    // debe disparar el prompt —`clear()` ya olvidó lo guardado— y `decidirArranque` lo confirma.
+    // El arranque: se evalúa UNA vez por visita a esta pantalla.
     var arranqueEvaluado by remember { mutableStateOf(false) }
     LaunchedEffect(huella) {
         if (arranqueEvaluado) return@LaunchedEffect
@@ -98,24 +98,17 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         val lector = huella ?: return@LaunchedEffect
         when (
             decidirArranque(
-                sesionViva = SessionManager.isLoggedIn,
+                haySesion = SessionManager.isLoggedIn,
                 huellaActivada = SessionManager.huellaActivada,
-                haySesionGuardada = lector.haySesionGuardada(),
                 estado = lector.estado(),
             )
         ) {
-            // App.kt ya no habría mostrado esta pantalla con la sesión abierta; la rama existe
-            // para que el `when` sea exhaustivo y no haya un `else` que tape un caso nuevo.
-            ArranqueDeSesion.ENTRAR_DIRECTO -> Unit
+            // La puerta no se interpone: esta pantalla es el login de siempre.
+            ArranqueDeSesion.SIN_PUERTA -> Unit
             ArranqueDeSesion.PEDIR_HUELLA -> desbloquear()
-            ArranqueDeSesion.PEDIR_CONTRASENA ->
-                // Quedó algo guardado que este teléfono ya no puede abrir (le borraron las
-                // huellas). Se olvida y se dice por qué, en vez de dejar un interruptor prendido
-                // que no hace nada.
-                if (SessionManager.huellaActivada) {
-                    huella.olvidar()
-                    notice = MENSAJE_SIN_REGISTRAR
-                }
+            // El interruptor sigue prendido y la sesión intacta: lo único que falta es un dedo que
+            // este teléfono ya no puede leer. Se dice, y el formulario de abajo lo deja entrar.
+            ArranqueDeSesion.PEDIR_CONTRASENA -> notice = MENSAJE_SIN_REGISTRAR
         }
     }
 
@@ -141,11 +134,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                     yaActivada = SessionManager.huellaActivada,
                     yaLoRechazo = SessionManager.huellaRechazada,
                 )
-                if (vale) {
-                    ofrecimiento = SesionGuardada(resp.token, resp.userId, resp.name, resp.email)
-                } else {
-                    onNavigate(Screen.Dashboard)
-                }
+                if (vale) ofreciendo = true else onNavigate(Screen.Dashboard)
             }.onFailure {
                 // Ver AuthErrors.kt: acá se decidía a ciegas que la culpa era de la contraseña,
                 // pasara lo que pasara. Ahora el 401 —y solo el 401— dice eso.
@@ -204,8 +193,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         Text("Finanzas personales", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(40.dp))
 
-        val paraOfrecer = ofrecimiento
-        if (paraOfrecer != null) {
+        if (ofreciendo) {
             // Ya entró: lo único que falta es si quiere que la próxima vez sea con la huella.
             // El formulario no se dibuja debajo — no hay nada más que escribir.
             var avisoDelOfrecimiento by remember { mutableStateOf<String?>(null) }
@@ -217,15 +205,18 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                     if (lector != null && !pidiendoHuella) {
                         pidiendoHuella = true
                         avisoDelOfrecimiento = null
-                        lector.guardar(paraOfrecer) { resultado ->
+                        // Se pide el dedo una vez antes de prender el interruptor: prenderlo sin
+                        // comprobar que el lector de verdad lo acepta sería dejarlo con una puerta
+                        // que recién falla la próxima vez que abra la app.
+                        lector.pedir(PropositoDeHuella.ACTIVAR) { resultado ->
                             pidiendoHuella = false
                             if (resultado == ResultadoDeHuella.EXITO) {
+                                SessionManager.huellaActivada = true
                                 onNavigate(Screen.Dashboard)
                             } else {
                                 // No se entra a la fuerza ni se sigue de largo callado: la
-                                // sesión ya está abierta, así que puede activar o seguir.
-                                avisoDelOfrecimiento =
-                                    "No se pudo activar en este teléfono. Puedes intentarlo otra vez o seguir sin huella."
+                                // sesión ya está abierta, así que puede reintentar o seguir.
+                                avisoDelOfrecimiento = motivoDeLaHuella(resultado)
                             }
                         }
                     }
@@ -276,7 +267,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
 
             // El reintento. Cancelar el prompt no deja al dueño encerrado en el formulario hasta
             // el próximo arranque: acá vuelve a pedirlo cuando quiera.
-            if (huella != null && SessionManager.huellaActivada && huella.haySesionGuardada()) {
+            if (huella != null && SessionManager.huellaActivada && SessionManager.isLoggedIn) {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     if (pidiendoHuella) "Esperando tu huella…" else "Entrar con huella",

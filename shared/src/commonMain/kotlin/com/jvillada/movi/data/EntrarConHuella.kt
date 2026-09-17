@@ -4,15 +4,27 @@ package com.jvillada.movi.data
  * # «Entrar con huella», la parte que se puede probar sin un teléfono
  *
  * Todo lo de este archivo es **decisión pura**: funciones sin Compose, sin Android y sin estado
- * propio. Lo que sí necesita un lector de huellas vive en
- * [com.jvillada.movi.platform.HuellaDelAparato], y lo que hay que guardar vive en
- * [SessionManager]. Acá está lo único que puede equivocarse de verdad: **cuándo se pide la
- * huella, y qué pasa cuando no sale bien**.
+ * propio. Lo que necesita un lector vive en [com.jvillada.movi.platform.HuellaDelAparato]; el
+ * interruptor vive en [SessionManager]. Acá está lo único que puede equivocarse de verdad:
+ * **cuándo se pide la huella, y qué se dice cuando no sale bien**.
  *
- * Está separado a propósito. Una pantalla que decide sola «¿pido la huella?» solo se puede probar
- * montando la pantalla, y el prompt biométrico no existe en la JVM: las cuatro ramas que importan
- * —cancelar, no tener huellas registradas, que cambien las huellas del teléfono, y un token que el
- * servidor ya no acepta— quedarían sin una sola prueba. Acá son cuatro llamadas a una función.
+ * ## Qué es y qué NO es esta función
+ *
+ * Es **la puerta para abrir Movi en este teléfono**, y nada más. La sesión sigue guardándose
+ * exactamente donde la guardaba antes —el almacenamiento privado de la app—, sin cifrar y sin
+ * depender de ninguna huella.
+ *
+ * Eso es a propósito, y el dueño lo eligió con el costo a la vista. La alternativa —dejar el
+ * token bajo una llave del Keystore que solo suelta una huella— protegía contra alguien con el
+ * teléfono desbloqueado y un cable, pero **rompía la captura de SMS**: los procesos que Android
+ * levanta por su cuenta (`SmsBackfillWorker` cada 6 horas, `SmsSyncWorker` tras un reinicio)
+ * arrancan sin nadie que ponga el dedo, así que se quedaban sin token y dejaban de subir los
+ * mensajes del banco hasta que él abriera la app. Ese costo diario es peor, para él, que la
+ * amenaza que la otra cubría.
+ *
+ * Decirlo de frente: **esto es comodidad, no blindaje**. Quien tenga el teléfono desbloqueado y
+ * herramientas puede llegar a la sesión igual que antes de este cambio. Lo que la huella evita es
+ * que cualquiera que agarre el teléfono desbloqueado **abra Movi y vea su plata**.
  */
 
 /** Lo que el aparato puede hacer AHORA, preguntado cada vez (el dueño puede borrar sus huellas). */
@@ -27,107 +39,76 @@ enum class EstadoDeHuella {
     NO_DISPONIBLE,
 }
 
+/** Para qué se está pidiendo la huella. Solo cambia lo que dice el diálogo del sistema. */
+enum class PropositoDeHuella { ENTRAR, ACTIVAR }
+
 /** Cómo terminó un pedido de huella. */
 enum class ResultadoDeHuella {
     EXITO,
 
-    /** La persona tocó «Usar mi contraseña», el botón de atrás, o el sistema canceló el diálogo. */
+    /** Tocó «Usar mi contraseña», el botón de atrás, o el sistema canceló el diálogo. */
     CANCELADA,
 
     /** El teléfono se quedó sin huellas registradas entre que se activó y ahora. */
     SIN_REGISTRAR,
 
-    /**
-     * La llave del Keystore ya no sirve: alguien agregó o borró una huella en el teléfono.
-     * Android invalida la llave a propósito, y lo cifrado con ella **no se puede recuperar**.
-     */
-    LLAVE_INVALIDA,
-
-    /** Cualquier otra cosa: lector ocupado, hardware con problemas, un descifrado que no cuadra. */
+    /** Cualquier otra cosa: lector ocupado, hardware con problemas, un prompt que no se pudo abrir. */
     FALLA,
 }
 
-/**
- * Lo que se guarda cifrado en el teléfono. **La contraseña no está acá, ni en ningún otro lado**:
- * lo que se guarda es el mismo token de sesión que el servidor ya había emitido, que caduca a los
- * 30 días y que se puede invalidar cerrando sesión.
- */
-data class SesionGuardada(
-    val token: String,
-    val userId: String,
-    val nombre: String,
-    val correo: String,
-)
-
-/** Qué hacer cuando la app arranca sin sesión viva en memoria. */
+/** Qué se interpone —o no— entre abrir la app y ver el Inicio. */
 enum class ArranqueDeSesion {
-    /** Ya hay sesión: no hay nada que preguntar. */
-    ENTRAR_DIRECTO,
+    /**
+     * La puerta no se interpone y la app arranca como siempre: con el Inicio si hay sesión, o con
+     * el formulario de siempre si no la hay.
+     */
+    SIN_PUERTA,
 
-    /** Hay una sesión guardada bajo llave y el aparato puede abrirla: se muestra el prompt. */
+    /** Hay sesión y el interruptor está prendido: el prompt del sistema antes de mostrar nada. */
     PEDIR_HUELLA,
 
-    /** No hay nada que abrir, o este teléfono ya no puede: el formulario de siempre. */
+    /**
+     * Hay sesión y el interruptor prendido, pero este teléfono ya no puede pedir huella (le
+     * borraron las huellas, o el lector murió). Se muestra el formulario con el motivo.
+     *
+     * **No se apaga el interruptor solo, y no se borra la sesión.** Apagarlo sería bajarle la
+     * guardia sin avisarle; borrarla, castigarlo por algo que no hizo. Cuando vuelva a registrar
+     * una huella, la puerta funciona de nuevo sin que él toque nada.
+     */
     PEDIR_CONTRASENA,
 }
 
 /**
  * **La decisión del arranque.**
  *
- * El orden de las guardas no es casual:
- *
- * 1. Una sesión viva gana sobre todo lo demás — pedir la huella con la sesión ya abierta sería
- *    un trámite que no protege nada.
- * 2. Sin nada guardado no hay nada que abrir, aunque el interruptor haya quedado prendido.
- * 3. Un teléfono al que le borraron las huellas **no puede** abrir lo guardado. Se pide la
- *    contraseña en vez de mostrar un prompt que va a fallar.
+ * Sin sesión no hay nada que tapar: la app muestra el login de siempre, que ya es una puerta. El
+ * interruptor apagado tampoco se interpone. Recién con sesión viva **y** el interruptor prendido
+ * aparece el prompt — o, si el aparato ya no puede, el formulario con el motivo.
  */
 fun decidirArranque(
-    sesionViva: Boolean,
+    haySesion: Boolean,
     huellaActivada: Boolean,
-    haySesionGuardada: Boolean,
     estado: EstadoDeHuella,
 ): ArranqueDeSesion = when {
-    sesionViva -> ArranqueDeSesion.ENTRAR_DIRECTO
-    !huellaActivada || !haySesionGuardada -> ArranqueDeSesion.PEDIR_CONTRASENA
-    estado != EstadoDeHuella.LISTA -> ArranqueDeSesion.PEDIR_CONTRASENA
-    else -> ArranqueDeSesion.PEDIR_HUELLA
+    !haySesion || !huellaActivada -> ArranqueDeSesion.SIN_PUERTA
+    estado == EstadoDeHuella.LISTA -> ArranqueDeSesion.PEDIR_HUELLA
+    else -> ArranqueDeSesion.PEDIR_CONTRASENA
 }
 
 /**
- * Qué hacer con lo que devolvió el prompt.
+ * Qué decirle cuando el prompt no terminó en un dedo aceptado. `null` para [ResultadoDeHuella.EXITO],
+ * que no tiene nada que explicar.
  *
- * @param sesion lo que se pudo descifrar, si se pudo.
- * @param olvidarLoGuardado si lo cifrado ya no sirve y hay que borrarlo. **Sin esto se entra en
- *   bucle**: el próximo arranque volvería a ofrecer una huella que no puede abrir nada.
- * @param mensaje qué decirle a la persona en la pantalla de login. `null` cuando entró bien.
+ * **Ningún resultado borra la sesión.** Es la diferencia entera con un token guardado bajo llave:
+ * acá la huella no abre nada, solo deja pasar, así que fallar no puede costarle la sesión. Siempre
+ * quedan las dos salidas a mano: volver a poner el dedo, o escribir la contraseña.
  */
-data class TrasLaHuella(
-    val sesion: SesionGuardada?,
-    val olvidarLoGuardado: Boolean,
-    val mensaje: String?,
-)
-
-fun quePasaTrasLaHuella(resultado: ResultadoDeHuella, sesion: SesionGuardada?): TrasLaHuella =
-    when (resultado) {
-        // Un éxito sin sesión adentro no es un éxito: el descifrado dio algo que no se pudo leer.
-        // Se trata como llave rota, que es lo único que puede haberlo causado.
-        ResultadoDeHuella.EXITO -> if (sesion != null) {
-            TrasLaHuella(sesion, olvidarLoGuardado = false, mensaje = null)
-        } else {
-            TrasLaHuella(null, olvidarLoGuardado = true, mensaje = MENSAJE_LLAVE_INVALIDA)
-        }
-        // Cancelar NO borra nada: la próxima vez se vuelve a ofrecer.
-        ResultadoDeHuella.CANCELADA ->
-            TrasLaHuella(null, olvidarLoGuardado = false, mensaje = MENSAJE_CANCELADA)
-        ResultadoDeHuella.SIN_REGISTRAR ->
-            TrasLaHuella(null, olvidarLoGuardado = true, mensaje = MENSAJE_SIN_REGISTRAR)
-        ResultadoDeHuella.LLAVE_INVALIDA ->
-            TrasLaHuella(null, olvidarLoGuardado = true, mensaje = MENSAJE_LLAVE_INVALIDA)
-        // Un fallo pasajero (lector ocupado) tampoco borra nada.
-        ResultadoDeHuella.FALLA ->
-            TrasLaHuella(null, olvidarLoGuardado = false, mensaje = MENSAJE_FALLA)
-    }
+fun motivoDeLaHuella(resultado: ResultadoDeHuella): String? = when (resultado) {
+    ResultadoDeHuella.EXITO -> null
+    ResultadoDeHuella.CANCELADA -> MENSAJE_CANCELADA
+    ResultadoDeHuella.SIN_REGISTRAR -> MENSAJE_SIN_REGISTRAR
+    ResultadoDeHuella.FALLA -> MENSAJE_FALLA
+}
 
 /**
  * ¿Se ofrece activar la huella después de entrar con contraseña?
@@ -143,16 +124,21 @@ fun ofrecerHuellaTrasEntrar(
 ): Boolean = estado == EstadoDeHuella.LISTA && !yaActivada && !yaLoRechazo
 
 // Los textos viven acá y no en la pantalla para que las pruebas afirmen lo que el dueño lee,
-// y no una constante que podría decir otra cosa.
-const val MENSAJE_CANCELADA = "Cancelaste la huella. Entra con tu contraseña."
+// y no una constante que podría decir otra cosa. Los tres nombran las DOS salidas: el dedo otra
+// vez, o la contraseña. Ninguna pantalla puede quedar sin camino.
+const val MENSAJE_CANCELADA =
+    "Cancelaste la huella. Puedes ponerla otra vez o entrar con tu contraseña."
 const val MENSAJE_SIN_REGISTRAR =
-    "Este teléfono ya no tiene huellas registradas, así que Movi olvidó la sesión guardada. Entra con tu contraseña."
-const val MENSAJE_LLAVE_INVALIDA =
-    "Cambiaron las huellas de este teléfono, así que Movi olvidó la sesión guardada. Entra con tu contraseña y vuelve a activarla."
-const val MENSAJE_FALLA = "No se pudo leer la huella. Entra con tu contraseña."
+    "Este teléfono no tiene huellas registradas. Entra con tu contraseña, o registra una en los ajustes del teléfono."
+const val MENSAJE_FALLA =
+    "No se pudo leer la huella. Intenta otra vez o entra con tu contraseña."
 
 /**
- * La línea honesta, la misma en el ofrecimiento y en Perfil: qué se guarda, dónde, y qué no.
+ * La línea honesta, la misma en el ofrecimiento y en Perfil.
+ *
+ * Dice las tres cosas que él necesita saber y que nadie adivina: para qué sirve la huella (abrir
+ * Movi), dónde queda la sesión (donde la deja cualquier app), y qué NO se guarda (la contraseña).
+ * No promete cifrado, porque no lo hay.
  */
 const val EXPLICACION_HUELLA =
-    "Movi guarda tu sesión cifrada en este teléfono y la abre con tu huella. Tu contraseña no se guarda nunca."
+    "Tu huella abre Movi en este teléfono. La sesión se guarda como la guarda cualquier app, y tu contraseña no se guarda nunca."
