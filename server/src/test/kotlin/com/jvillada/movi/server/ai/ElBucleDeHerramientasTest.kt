@@ -39,9 +39,10 @@ class ElBucleDeHerramientasTest {
     fun `si el modelo contesta de una, eso es la respuesta`() = runBlocking {
         val modelo = ModeloDeGuion(listOf(RespuestaDelModelo.Texto("Gastaste \$1.200.000 en Comida.")))
 
-        val texto = conversarConHerramientas(modelo, ejecutar = { "no debería pedirse" })
+        val paso = conversarConHerramientas(modelo, ejecutar = { "no debería pedirse" })
 
-        assertEquals("Gastaste \$1.200.000 en Comida.", texto)
+        assertEquals("Gastaste \$1.200.000 en Comida.", paso.texto)
+        assertTrue(paso.consultas.isEmpty(), "no consultó nada, y eso tiene que quedar dicho")
         assertEquals(1, modelo.vueltas, "una respuesta directa no gasta más vueltas")
     }
 
@@ -52,12 +53,18 @@ class ElBucleDeHerramientasTest {
         )
         val pedidas = mutableListOf<LlamadaDeHerramienta>()
 
-        val texto = conversarConHerramientas(
+        val paso = conversarConHerramientas(
             modelo,
             ejecutar = { llamada -> pedidas += llamada; "Comida: 900000" },
         )
 
-        assertEquals("En agosto: \$900.000.", texto)
+        assertEquals("En agosto: \$900.000.", paso.texto)
+        // Y queda anotado QUÉ consultó y qué le devolvieron: es la mitad del diagnóstico cuando
+        // una respuesta sale mal (ver `guardarLaConversacion`).
+        assertEquals(
+            listOf(ConsultaHecha(TOTALES_POR_CATEGORIA, mapOf("desde" to "2026-08-01"), "Comida: 900000")),
+            paso.consultas,
+        )
         assertEquals(listOf("2026-08-01"), pedidas.map { it.argumentos["desde"] })
         assertEquals(
             listOf(listOf("tu_0$TOTALES_POR_CATEGORIA" to "Comida: 900000")),
@@ -101,9 +108,9 @@ class ElBucleDeHerramientasTest {
     fun `un modelo que solo pide y nunca contesta termina igual, y lo dice`() = runBlocking {
         val modelo = ModeloDeGuion(listOf(pide(BUSCAR_MOVIMIENTOS)))
 
-        val texto = conversarConHerramientas(modelo, ejecutar = { "ok" }, vueltasMaximas = 3)
+        val paso = conversarConHerramientas(modelo, ejecutar = { "ok" }, vueltasMaximas = 3)
 
-        assertEquals(SIN_RESPUESTA, texto)
+        assertEquals(SIN_RESPUESTA, paso.texto)
         assertEquals(3, modelo.vueltas, "no se queda dando vueltas para siempre")
     }
 
@@ -117,9 +124,13 @@ class ElBucleDeHerramientasTest {
             listOf(pide(BUSCAR_MOVIMIENTOS), RespuestaDelModelo.Texto("No pude ver eso, pero…")),
         )
 
-        val texto = conversarConHerramientas(modelo, ejecutar = { error("la base se cayó") })
+        val paso = conversarConHerramientas(modelo, ejecutar = { error("la base se cayó") })
 
-        assertEquals("No pude ver eso, pero…", texto)
+        assertEquals("No pude ver eso, pero…", paso.texto)
+        assertTrue(
+            paso.consultas.single().devolvio.contains("la base se cayó"),
+            "lo que falló también se guarda: es lo que explica la respuesta",
+        )
         assertTrue(
             modelo.resultadosRecibidos.single().single().second.contains("la base se cayó"),
             "el modelo tiene que enterarse de qué falló: ${modelo.resultadosRecibidos}",

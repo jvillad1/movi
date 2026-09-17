@@ -434,6 +434,47 @@ object SmsMessages : Table("sms_messages") {
     init { index("idx_sms_messages_user_id", false, userId) }
 }
 
+/**
+ * **Lo que el dueño le preguntó al asistente y lo que este le contestó.**
+ *
+ * Nació de un diagnóstico imposible: el chat vivía solo en el teléfono, así que cuando una
+ * respuesta salía mal lo único que quedaba del lado del server eran las fichas gastadas. «El
+ * asistente no supo» no se puede arreglar sin saber qué se preguntó, qué consultó y qué contestó.
+ *
+ * **Es la tabla más sensible de Movi**, y por eso tiene reglas propias, todas a propósito:
+ *
+ * - **No hay endpoint que la lea.** Se consulta por `psql`, como todo lo demás que es de
+ *   diagnóstico. Una tabla con las preguntas de alguien sobre su plata no necesita además una
+ *   puerta HTTP que alguien tenga que proteger bien para siempre.
+ * - **Las imágenes no entran.** Una foto de un recibo es justo lo que no hay que duplicar: en
+ *   [imagen] queda que la hubo, no la foto.
+ * - **Se recorta y se caduca.** Cada campo tiene tope y de cada dueño se guardan las últimas
+ *   [CUANTAS_CONVERSACIONES_SE_GUARDAN]: lo que sirve para diagnosticar es lo de ayer, no lo del
+ *   año pasado, y un historial infinito es un riesgo que crece solo.
+ * - **Guardar nunca puede romper una respuesta.** Ver `guardarLaConversacion`.
+ */
+object AiTurns : Table("ai_turns") {
+    val id        = varchar("id", 50)
+    val userId    = varchar("user_id", 50)
+    val creadoEn  = long("created_at")
+    /** Lo último que escribió el dueño: es lo que hay que reproducir cuando algo sale mal. */
+    val pregunta  = text("pregunta")
+    val respuesta = text("respuesta")
+    /** Qué consultó y qué le devolvió cada consulta, en JSON. Vacío cuando contestó de memoria. */
+    val consultas = text("consultas")
+    val modelo    = varchar("modelo", 60)
+    /** Si se escaló al modelo caro (ver `laPreguntaPideCriterio`). */
+    val criterio  = bool("criterio")
+    val vueltas   = integer("vueltas")
+    val fichasEntrada = long("fichas_entrada")
+    val fichasCache   = long("fichas_cache")
+    val fichasSalida  = long("fichas_salida")
+    /** Hubo una foto adjunta. La foto NO se guarda. */
+    val imagen    = bool("imagen")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_ai_turns_user", false, userId) }
+}
+
 object Credits : Table("credit_terms") {
     /**
      * Libranza: la cuota se descuenta de la nómina. Nullable y se lee como `false` — las filas
