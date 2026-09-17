@@ -4,6 +4,8 @@ import at.favre.lib.crypto.bcrypt.BCrypt
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.server.db.PasswordResetTokens
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
@@ -63,8 +65,11 @@ class UserRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(Users)
-            SchemaUtils.create(Users)
+            // Las dos tablas de al lado están porque cambiar la contraseña ahora también sella
+            // los enlaces de recuperación pendientes y suelta las suscripciones push de la
+            // cuenta — sin ellas el endpoint fallaría acá con «table not found».
+            SchemaUtils.drop(PushSubscriptions, PasswordResetTokens, Users)
+            SchemaUtils.create(Users, PasswordResetTokens, PushSubscriptions)
             Users.insert {
                 it[id]           = userId
                 it[email]        = userEmail

@@ -31,11 +31,32 @@ object RateLimiter {
     private val callsSinceSweep = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**
+     * **Tope del largo de la clave.** El mapa retiene cada clave hasta una hora ([RETENTION_MS]),
+     * y desde que hay baldes por correo parte de la clave viene del cuerpo de la petición. Sin
+     * este corte, un `email` de megabytes POSTeado sin autenticar a `/api/auth/login` se guardaba
+     * entero, una vez por valor distinto: unos pocos pedidos y el proceso —el mismo por el que el
+     * teléfono sincroniza— se queda sin memoria. El barrido no ayuda, porque durante esa hora las
+     * claves están vivas.
+     *
+     * 320 es holgado para cualquier clave legítima (el correo más largo que las rutas aceptan son
+     * 255 caracteres, y los otros baldes usan un id o una IP). Las rutas además rechazan el correo
+     * largo con un 400 antes de llegar acá; esto es el corte estructural, el que cubre a cualquier
+     * llamador futuro que arme una clave con algo de afuera y se olvide de validarlo.
+     *
+     * Lo que se paga: dos claves que solo se diferencien después del carácter 320 comparten balde.
+     * Es imposible por accidente con los prefijos que se usan hoy, y compartir de más nunca afloja
+     * un límite.
+     */
+    private const val MAX_KEY_LENGTH = 320
+
+    /**
      * Returns `true` if the caller identified by [key] is allowed to proceed
      * (fewer than [maxAttempts] calls in the last [windowMs] milliseconds).
      * Returns `false` when the limit is exceeded — the attempt is NOT recorded.
      */
     fun allow(key: String, maxAttempts: Int, windowMs: Long): Boolean {
+        // Lo que se guarda es siempre la clave recortada — ver [MAX_KEY_LENGTH].
+        val clave = key.take(MAX_KEY_LENGTH)
         val now = System.currentTimeMillis()
         val cutoff = now - windowMs
 
@@ -46,7 +67,7 @@ object RateLimiter {
 
         // getOrPut is not atomic across threads, but the synchronized block below
         // ensures correctness for the list itself.
-        val list = attempts.getOrPut(key) { mutableListOf() }
+        val list = attempts.getOrPut(clave) { mutableListOf() }
 
         synchronized(list) {
             list.removeAll { it < cutoff }

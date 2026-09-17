@@ -1,23 +1,30 @@
 package com.jvillada.movi.server.routes
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.auth.PasswordReset
 import com.jvillada.movi.server.auth.PasswordResetMailer
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.db.PasswordResetTokens
+import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.PasswordPolicy
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.auth.authenticate
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -72,8 +79,8 @@ class AuthRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(PasswordResetTokens, Users)
-            SchemaUtils.create(Users, PasswordResetTokens)
+            SchemaUtils.drop(PushSubscriptions, PasswordResetTokens, Users)
+            SchemaUtils.create(Users, PasswordResetTokens, PushSubscriptions)
             // Usuario "viejo": su contraseña de 6 caracteres es anterior al piso nuevo.
             Users.insert {
                 it[id]           = legacyUserId
@@ -107,6 +114,49 @@ class AuthRoutesTest {
             configureSerialization()
             routing { authRoutes() }
         }
+    }
+
+    /**
+     * Como [wireApp] pero con la mitad autenticada montada: hace falta para los casos donde lo
+     * que se prueba CRUZA los dos lados de la puerta —cambiar la contraseña desde adentro y
+     * después intentar canjear un enlace de recuperación de afuera—, que es justamente el agujero
+     * que nadie veía mientras cada archivo se probaba por su cuenta. El token lo firma
+     * [JwtConfig], el mismo que verifica `configureAuth()`.
+     */
+    private fun ApplicationTestBuilder.wireAppConSesion() {
+        application {
+            configureSerialization()
+            configureAuth()
+            routing {
+                authRoutes()
+                authenticate("jwt") { userRoutes() }
+            }
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.cambiarContrasenaDesdeAdentro(
+        userId: String,
+        email: String,
+        current: String,
+        new: String,
+    ) = client.put("/api/users/me/password") {
+        header(HttpHeaders.Authorization, "Bearer ${JwtConfig.makeToken(userId, email)}")
+        header(HttpHeaders.ContentType, "application/json")
+        setBody("""{"current":"$current","new":"$new"}""")
+    }
+
+    private fun sembrarSuscripcionPush(userId: String, endpoint: String) = transaction {
+        PushSubscriptions.insert {
+            it[PushSubscriptions.endpoint] = endpoint
+            it[PushSubscriptions.userId]   = userId
+            it[p256dh]                     = "clave-publica-de-mentira"
+            it[auth]                       = "secreto-de-mentira"
+            it[createdAt]                  = System.currentTimeMillis()
+        }
+    }
+
+    private fun suscripcionesDe(userId: String): Int = transaction {
+        PushSubscriptions.selectAll().where { PushSubscriptions.userId eq userId }.count().toInt()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -639,6 +689,206 @@ class AuthRoutesTest {
         mailerResult = false
         val res = requestReset(legacyEmail)
         assertEquals(HttpStatusCode.Accepted, res.status)
+    }
+
+    // ── Cambiar la contraseña desde adentro cierra la puerta de afuera ────────
+    //
+    // El agujero: `PUT /api/users/me/password` cambiaba el hash y NADA MÁS, mientras que el
+    // camino del reset sí sella todos los tokens pendientes del usuario. Y el confirm solo mira
+    // `usedAt` y `expiresAt`. O sea que un enlace que alguien se llevó del correo seguía sirviendo
+    // DESPUÉS de que el dueño cambiara la contraseña — y cambiarla es lo único que él puede hacer
+    // cuando sospecha. La única remediación a su alcance no cerraba la ventana.
+
+    @Test
+    fun `cambiar la contrasena desde adentro invalida el enlace de recuperacion pendiente`() = testApplication {
+        wireAppConSesion()
+
+        // 1) Se pide un enlace (o alguien lo pide por él) y queda vivo en la casilla.
+        requestReset(legacyEmail)
+        val token = tokenFromLastEmail()
+
+        // 2) El dueño cambia su contraseña desde adentro.
+        val cambio = cambiarContrasenaDesdeAdentro(legacyUserId, legacyEmail, legacyShortPassword, strongPassword)
+        assertEquals(HttpStatusCode.OK, cambio.status, cambio.bodyAsText())
+
+        // 3) El enlace de antes ya no sirve.
+        val canje = confirmReset(token, "otra-contrasena-larga-y-ajena")
+        assertEquals(HttpStatusCode.BadRequest, canje.status, canje.bodyAsText())
+
+        // Y la contraseña que quedó es la del dueño, no la del enlace.
+        assertTrue(BCrypt.verifyer().verify(strongPassword.toCharArray(), storedHashFor(legacyUserId)).verified)
+        assertFalse(
+            BCrypt.verifyer().verify("otra-contrasena-larga-y-ajena".toCharArray(), storedHashFor(legacyUserId)).verified,
+        )
+    }
+
+    @Test
+    fun `cambiar la contrasena desde adentro sella TODOS los enlaces pendientes`() = testApplication {
+        wireAppConSesion()
+        requestReset(legacyEmail)
+        requestReset(legacyEmail)   // el segundo ya invalida al primero; los dos tienen que morir igual
+
+        cambiarContrasenaDesdeAdentro(legacyUserId, legacyEmail, legacyShortPassword, strongPassword)
+
+        val pendientes = transaction {
+            PasswordResetTokens.selectAll()
+                .where { PasswordResetTokens.userId eq legacyUserId }
+                .count { it[PasswordResetTokens.usedAt] == null }
+        }
+        assertEquals(0, pendientes, "no puede quedar ningún enlace vivo después del cambio")
+    }
+
+    @Test
+    fun `una contrasena actual equivocada no sella nada`() = testApplication {
+        wireAppConSesion()
+        requestReset(legacyEmail)
+        val token = tokenFromLastEmail()
+
+        val cambio = cambiarContrasenaDesdeAdentro(legacyUserId, legacyEmail, "no-es-la-actual", strongPassword)
+        assertEquals(HttpStatusCode.Forbidden, cambio.status)
+
+        // El enlace del dueño sigue siendo válido: un intento fallido de otro no puede dejarlo
+        // sin su propia recuperación.
+        assertEquals(HttpStatusCode.OK, confirmReset(token, strongPassword).status)
+    }
+
+    // ── Las notificaciones de un dispositivo no sobreviven al cierre de la puerta ──
+
+    @Test
+    fun `cambiar la contrasena borra las suscripciones push de esa cuenta`() = testApplication {
+        wireAppConSesion()
+        sembrarSuscripcionPush(legacyUserId, "https://push.example/ajeno")
+        sembrarSuscripcionPush("otro-usuario", "https://push.example/de-otro")
+
+        cambiarContrasenaDesdeAdentro(legacyUserId, legacyEmail, legacyShortPassword, strongPassword)
+
+        assertEquals(0, suscripcionesDe(legacyUserId), "el navegador ajeno seguiría recibiendo los vencimientos")
+        assertEquals(1, suscripcionesDe("otro-usuario"), "y las de otra cuenta no se tocan")
+    }
+
+    @Test
+    fun `el reset borra las suscripciones push de esa cuenta`() = testApplication {
+        wireApp()
+        sembrarSuscripcionPush(legacyUserId, "https://push.example/ajeno")
+        sembrarSuscripcionPush("otro-usuario", "https://push.example/de-otro")
+
+        requestReset(legacyEmail)
+        assertEquals(HttpStatusCode.OK, confirmReset(tokenFromLastEmail(), strongPassword).status)
+
+        assertEquals(0, suscripcionesDe(legacyUserId))
+        assertEquals(1, suscripcionesDe("otro-usuario"))
+    }
+
+    // ── El canje es de UNO solo, aunque lleguen dos a la vez ──────────────────
+
+    /**
+     * Antes el confirm leía el token en una transacción y escribía la contraseña en otra: entre
+     * las dos había una ventana donde dos canjes simultáneos pasaban los DOS el chequeo de
+     * `usedAt` y escribían los DOS una contraseña. Ahora decide el `WHERE used_at IS NULL` del
+     * propio UPDATE, así que uno gana y el otro no cambia nada.
+     *
+     * La prueba vale igual si el runtime los serializa: lo que se fija es la propiedad —un solo
+     * OK, y la contraseña que queda es la de ese OK—, no la carrera.
+     */
+    @Test
+    fun `dos confirm con el mismo token no pueden prosperar los dos`() = testApplication {
+        wireApp()
+        requestReset(legacyEmail)
+        val token = tokenFromLastEmail()
+
+        val primera = "la-primera-contrasena-larga"
+        val segunda = "la-segunda-contrasena-larga"
+        val respuestas = coroutineScope {
+            val a = async { confirmReset(token, primera) }
+            val b = async { confirmReset(token, segunda) }
+            listOf(a.await() to primera, b.await() to segunda)
+        }
+
+        val ganadoras = respuestas.filter { it.first.status == HttpStatusCode.OK }
+        assertEquals(1, ganadoras.size, "exactamente un canje puede prosperar")
+        respuestas.filter { it.first.status != HttpStatusCode.OK }.forEach {
+            assertEquals(HttpStatusCode.BadRequest, it.first.status)
+        }
+
+        val hash = storedHashFor(legacyUserId)
+        assertTrue(
+            BCrypt.verifyer().verify(ganadoras.single().second.toCharArray(), hash).verified,
+            "la contraseña guardada tiene que ser la del canje que contestó que sí",
+        )
+    }
+
+    // ── Un correo enorme no puede quedarse en el limitador ────────────────────
+    //
+    // `login` y el pedido de reset arman la clave del balde con el correo del cuerpo, y
+    // RateLimiter la retiene una hora. Sin tope, unos pocos POST sin autenticar con un correo de
+    // megabytes llenan la memoria del proceso — el mismo por el que el teléfono sincroniza.
+
+    /** 256 caracteres: uno más que la columna. */
+    private val correoDemasiadoLargo = "a".repeat(MAX_EMAIL_LENGTH + 1) + "@movi.test"
+
+    @Test
+    fun `el login rechaza un correo mas largo que la columna`() = testApplication {
+        wireApp()
+        val res = login(correoDemasiadoLargo, strongPassword)
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertTrue(res.bodyAsText().contains("$MAX_EMAIL_LENGTH"), res.bodyAsText())
+    }
+
+    @Test
+    fun `el pedido de reset rechaza un correo mas largo que la columna`() = testApplication {
+        wireApp()
+        val res = requestReset(correoDemasiadoLargo)
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+    }
+
+    /**
+     * El corte va ANTES del limitador, así que un correo enorme no llega a ocupar un balde: se
+     * puede repetir muchas más veces que el límite del balde por correo (5 en 15 min) sin que
+     * ninguna respuesta cambie a 429. Si alguna vez se moviera el corte para abajo, este test
+     * empieza a ver un 429 y avisa.
+     */
+    @Test
+    fun `un correo enorme no consume ningun balde`() = testApplication {
+        wireApp()
+        repeat(12) {
+            assertEquals(HttpStatusCode.BadRequest, requestReset(correoDemasiadoLargo + it).status)
+        }
+    }
+
+    @Test
+    fun `el registro rechaza un correo mas largo que la columna`() = testApplication {
+        wireApp()
+        val res = register(correoDemasiadoLargo, strongPassword)
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertEquals(0L, transaction { Users.selectAll().where { Users.email eq correoDemasiadoLargo }.count() })
+    }
+
+    /**
+     * Crear y editar tienen que estar de acuerdo sobre la misma columna: la edición ya rechazaba
+     * un nombre de más de [MAX_NAME_LENGTH] con un 400, y el registro lo dejaba pasar hasta el
+     * INSERT, donde salía como un 500 pelado.
+     */
+    @Test
+    fun `el registro rechaza un nombre mas largo que la columna`() = testApplication {
+        wireApp()
+        val res = client.post("/api/auth/register") {
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"email":"nombrote@movi.test","name":"${"n".repeat(MAX_NAME_LENGTH + 1)}","password":"$strongPassword"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, res.status, res.bodyAsText())
+        assertTrue(res.bodyAsText().contains("$MAX_NAME_LENGTH"), res.bodyAsText())
+    }
+
+    @Test
+    fun `el registro acepta exactamente el ancho de las columnas`() = testApplication {
+        wireApp()
+        val email = "b".repeat(MAX_EMAIL_LENGTH - "@movi.test".length) + "@movi.test"
+        assertEquals(MAX_EMAIL_LENGTH, email.length)
+        val res = client.post("/api/auth/register") {
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"email":"$email","name":"${"n".repeat(MAX_NAME_LENGTH)}","password":"$strongPassword"}""")
+        }
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
     }
 
     // ── Compatibilidad: nada de esto cambió la forma de las respuestas ────────
