@@ -82,6 +82,25 @@ class RestrictedSettingsHintTest {
         // instalación de tienda no puede tener el interruptor gris por esta razón.
         assertFalse(shouldHintRestrictedSettings(35, InstallSource.STORE))
     }
+
+    /**
+     * **El acceso a las notificaciones se restringe DOS versiones antes que el permiso de SMS.**
+     *
+     * Los ajustes restringidos de Android 13 nacieron cubriendo accesibilidad y escucha de
+     * notificaciones; el permiso de SMS entró recién en Android 15. Reusar el gate de SMS para la
+     * tarjeta de notificaciones habría callado la pista justo en Android 13 y 14, donde el
+     * interruptor sí aparece gris — y el APK del dueño llega por Drive, nunca por una tienda.
+     */
+    @Test
+    fun `el acceso a notificaciones recibe la pista desde Android 13`() {
+        assertTrue(shouldHintRestrictedNotificationAccess(33, InstallSource.SIDELOADED))
+        assertTrue(shouldHintRestrictedNotificationAccess(34, InstallSource.UNKNOWN))
+        assertTrue(shouldHintRestrictedNotificationAccess(35, InstallSource.SIDELOADED))
+        // Antes de 13 el mecanismo no existe…
+        assertFalse(shouldHintRestrictedNotificationAccess(32, InstallSource.SIDELOADED))
+        // …y desde una tienda la pista sería afirmativamente falsa.
+        assertFalse(shouldHintRestrictedNotificationAccess(35, InstallSource.STORE))
+    }
 }
 
 /**

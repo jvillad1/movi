@@ -124,6 +124,41 @@ class SmsFilterConfigTest {
     }
 
     /**
+     * **El mismo endpoint sirve la lista de apps cuyas NOTIFICACIONES se capturan.**
+     *
+     * Un endpoint, un cache y un Worker de refresco para los dos sensores (ver
+     * `SmsFilterConfigStore.loadNotificationApps`). Si alguien borra esta clave, todo teléfono
+     * vuelve a sus paquetes compilados —que hoy son una conjetura— sin que nada avise.
+     */
+    @Test
+    fun `filter config trae también los paquetes de las apps que avisan`() = testApplication {
+        wireApp()
+        val res = client.get("/api/sms/filter-config")
+        val obj = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        val paquetes = obj["appPackages"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("com.todo1.mobile"), paquetes)
+    }
+
+    /**
+     * **Un paquete, no una palabra suelta.** El cliente compara por IGUALDAD exacta contra el
+     * nombre de paquete de la app que publicó la notificación (`FiltroDeNotificaciones`), así que
+     * un «bancolombia» a secas acá no capturaría de más: no capturaría nada, en silencio, y el
+     * dueño volvería a teclear sus movimientos a mano sin enterarse de por qué.
+     */
+    @Test
+    fun `cada paquete tiene forma de nombre de paquete`() = testApplication {
+        wireApp()
+        val res = client.get("/api/sms/filter-config")
+        val paquetes = Json.parseToJsonElement(res.bodyAsText())
+            .jsonObject["appPackages"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+        val formaDePaquete = Regex("""^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)+$""")
+        paquetes.forEach { p ->
+            assertEquals(true, formaDePaquete.matches(p), "«$p» no es un nombre de paquete de Android")
+        }
+    }
+
+    /**
      * **Ninguna keyword puede ser tan corta que aparezca dentro de palabras comunes.**
      *
      * El cliente compara por substring (`lower.contains(keyword)`, ver `BankSenderFilter`), y lo

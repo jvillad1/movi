@@ -5,14 +5,26 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.notificaciones.AlmacenDeNotificaciones
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** Valor de la clave `origen` para una captura que vino de una notificación de una app. */
+const val ORIGEN_NOTIFICACION = "notificacion"
+
 /**
- * Sube UN SMS bancario capturado al endpoint idempotente /api/sms/sync (ver SmsSync.kt,
+ * Sube UN mensaje capturado al endpoint idempotente /api/sms/sync (ver SmsSync.kt,
  * compartido con el backfill de la pantalla).
  * Sin token (deslogueado) → failure sin retry. IOException/5xx → retry con backoff.
  * 401 → la racha de SessionManager decide el logout; mientras la sesión viva, retry acotado.
+ *
+ * Lo usan los DOS sensores en tiempo real: `SmsRealtimeReceiver` (un SMS del banco) y
+ * `EscuchaDeNotificaciones` (una notificación de una app del banco). Comparten Worker a propósito
+ * —mismo payload, mismo auth, mismo manejo de códigos, misma política de reintento— y se
+ * distinguen solo por la clave `origen` del inputData, que decide QUÉ marca de tiempo se toca al
+ * subir con éxito. Esa marca no es cosmética: «última captura de SMS» es el único indicador de que
+ * el receiver de SMS quedó mudo, y si una notificación la escribiera, la mudez del banco —el
+ * defecto que la captura por notificaciones vino a tapar— quedaría invisible para siempre.
  */
 class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -26,6 +38,7 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val sender = inputData.getString("sender").orEmpty()
         val body = inputData.getString("body").orEmpty()
         val ts = inputData.getLong("ts", System.currentTimeMillis())
+        val deNotificacion = inputData.getString("origen") == ORIGEN_NOTIFICACION
 
         val payload = buildSmsSyncPayload(listOf(captureItem(id, sender, body, ts)))
 
@@ -37,7 +50,13 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // "consecutivos" y desloguearían por sorpresa — justo el perfil del
                 // teléfono-sensor que vive semanas sin abrir la app.
                 SessionManager.onAuthSuccess()
-                SmsFilterConfigStore.markLastCapture(applicationContext)
+                // Cada sensor escribe SU marca: ver el KDoc de la clase y el de
+                // AlmacenDeNotificaciones. Mezclarlas escondería la mudez del otro.
+                if (deNotificacion) {
+                    AlmacenDeNotificaciones.marcarUltima(applicationContext)
+                } else {
+                    SmsFilterConfigStore.markLastCapture(applicationContext)
+                }
                 // La captura volvió a subir: si quedó una marca de 401 de un episodio
                 // anterior, ya no describe la realidad — sin esto, la sección de captura
                 // seguiría contando una pausa que terminó.

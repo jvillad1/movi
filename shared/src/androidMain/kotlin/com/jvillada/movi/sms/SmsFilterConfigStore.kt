@@ -2,6 +2,9 @@ package com.jvillada.movi.sms
 
 import android.content.Context
 import com.jvillada.movi.data.apiBaseUrl
+import com.jvillada.movi.notificaciones.AppsQueAvisan
+import com.jvillada.movi.notificaciones.FiltroDeNotificaciones
+import com.jvillada.movi.notificaciones.appsQueAvisan
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -44,6 +47,26 @@ object SmsFilterConfigStore {
         val json = prefs(context).getString(KEY_JSON, null)
         val remote = json?.let { parseConfigJson(it) }
         return if (remote != null) withDefaults(remote) else BankSenderFilter.DEFAULTS
+    }
+
+    /**
+     * **La lista de apps cuyas notificaciones se capturan**, del MISMO JSON cacheado que el filtro
+     * de SMS: un endpoint (`GET /api/sms/filter-config`), un cache, un TTL y un Worker de refresco
+     * para las dos cosas. Agregar un segundo endpoint habría duplicado las cuatro.
+     *
+     * **Reemplaza, no une** —al revés que [load]— y esa asimetría es deliberada: leé el KDoc de
+     * [com.jvillada.movi.notificaciones.AppsQueAvisan]. Resumido: los códigos de remitente
+     * compilados son remitentes bancarios verificados y el server solo puede sumarles; los paquetes
+     * compilados son conjeturas, y una conjetura equivocada captura las notificaciones de otra app,
+     * así que el server tiene que poder QUITARLOS sin un APK nuevo.
+     *
+     * Sin cache, con cache corrupta o servida por un server viejo (sin la clave `appPackages`) cae
+     * a los defaults compilados. Una lista remota vacía SÍ se respeta: es la forma de apagar la
+     * captura por notificaciones de todos los teléfonos desde el server.
+     */
+    fun loadNotificationApps(context: Context): AppsQueAvisan {
+        val json = prefs(context).getString(KEY_JSON, null) ?: return FiltroDeNotificaciones.DEFAULTS
+        return appsQueAvisan(json) ?: FiltroDeNotificaciones.DEFAULTS
     }
 
     /**

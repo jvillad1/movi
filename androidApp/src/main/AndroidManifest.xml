@@ -33,6 +33,30 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Captura de los movimientos que las apps del banco publican como notificación
+            (com.jvillada.movi.notificaciones.EscuchaDeNotificaciones). Existe porque el banco
+            dejó de mandar SMS y la tarjeta Glim nunca los mandó.
+
+            android:permission="...BIND_NOTIFICATION_LISTENER_SERVICE" es obligatorio: es lo que
+            declara que SOLO el sistema puede enchufar este servicio. Sin eso, cualquier app del
+            teléfono podría bindearlo. No se declara como <uses-permission>: es de firma, la tiene
+            el sistema, y pedirla no hace nada.
+
+            El servicio queda declarado pero INERTE hasta que el dueño lo habilite a mano en
+            Ajustes → Acceso a las notificaciones. Android no lo llama antes, y no hay diálogo que
+            la app pueda lanzar: la sección «Captura en este teléfono» lleva a esa pantalla.
+        -->
+        <service
+            android:name="com.jvillada.movi.notificaciones.EscuchaDeNotificaciones"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name="com.jvillada.movi.sms.SmsRealtimeReceiver"
             android:exported="true"

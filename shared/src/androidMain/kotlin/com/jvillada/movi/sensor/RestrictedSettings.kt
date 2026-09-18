@@ -146,6 +146,23 @@ internal fun shouldHintRestrictedSettings(sdkInt: Int, installSource: InstallSou
     sdkInt >= RESTRICTED_SETTINGS_MIN_SDK && installSource != InstallSource.STORE
 
 /**
+ * Lo mismo, pero para el **acceso a las notificaciones** — y por eso el umbral es OTRO.
+ *
+ * Los ajustes restringidos de Android 13 nacieron cubriendo exactamente dos cosas:
+ * accesibilidad y **escucha de notificaciones**. El permiso de SMS entró recién en Android 15
+ * (ver [RESTRICTED_SETTINGS_MIN_SDK]). O sea que en un Android 13 o 14 sideloadeado el
+ * interruptor de SMS se deja tocar y el de notificaciones NO: reusar el gate de arriba habría
+ * callado la pista justo en las dos versiones donde el bloqueo es más viejo que el otro.
+ *
+ * No es hipotético para este repo: el APK de Movi llega por Drive, nunca por una tienda.
+ *
+ * Misma disciplina que el otro gate — esto habilita una CONDICIONAL («si aparece gris…»), no una
+ * acusación, así que UNKNOWN también pasa y STORE es el único excluido.
+ */
+internal fun shouldHintRestrictedNotificationAccess(sdkInt: Int, installSource: InstallSource): Boolean =
+    sdkInt >= Build.VERSION_CODES.TIRAMISU && installSource != InstallSource.STORE
+
+/**
  * Traduce lo que reporta el sistema sobre el origen de la instalación.
  *
  * [packageSource] es `InstallSourceInfo.getPackageSource()` (API 33+, null si no está
