@@ -32,10 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.notificaciones.AlmacenDeNotificaciones
 import com.jvillada.movi.sensor.InstallSource
 import com.jvillada.movi.sensor.OnResume
 import com.jvillada.movi.sensor.SmsPermissionVerdict
 import com.jvillada.movi.sensor.SmsPermissions
+import com.jvillada.movi.sensor.abrirAjustesDeNotificaciones
 import com.jvillada.movi.sensor.canShowRationale
 import com.jvillada.movi.sensor.canShowRationaleFor
 import com.jvillada.movi.sensor.findComponentActivity
@@ -47,10 +49,12 @@ import com.jvillada.movi.sensor.openAppSettings
 import com.jvillada.movi.sensor.openHibernationSettings
 import com.jvillada.movi.sensor.readInstallSource
 import com.jvillada.movi.sensor.readPermissionAsked
+import com.jvillada.movi.sensor.shouldHintRestrictedNotificationAccess
 import com.jvillada.movi.sensor.shouldHintRestrictedSettings
 import com.jvillada.movi.sensor.shouldOpenSettings
 import com.jvillada.movi.sensor.shouldWarnAboutHibernation
 import com.jvillada.movi.sensor.smsPermissionVerdict
+import com.jvillada.movi.sensor.tieneAccesoANotificaciones
 import com.jvillada.movi.sms.BackfillOutcome
 import com.jvillada.movi.sms.SmsBackfill
 import com.jvillada.movi.sms.SmsFilterConfigStore
@@ -96,6 +100,9 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
     Spacer(Modifier.height(18.dp))
     MinSectionHeader(title = "Captura en este teléfono")
     SensorPermissionsCard(installSource)
+    // El segundo sensor, y hoy el que más falta hace: el banco dejó de mandar SMS (el más nuevo
+    // del teléfono del dueño es del 15-sep) pero sigue publicando una notificación por movimiento.
+    SensorNotificationsCard(installSource)
     // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para no
     // dejar un hueco doble cuando la app ya está exenta.
     SensorHibernationCard()
@@ -187,6 +194,104 @@ private fun SensorPermissionsCard(installSource: InstallSource) {
                         color = Movi.colores.textoMedio,
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * **Acceso a las notificaciones**: el permiso del segundo sensor.
+ *
+ * No es un permiso normal. No hay `requestPermissions` que lo pida, no hay diálogo que la app pueda
+ * lanzar y no aparece en la ficha de permisos: se concede a mano en una pantalla del sistema que
+ * lista todas las apps que lo piden. Por eso acá solo hay estado y un botón que lleva ahí.
+ *
+ * El texto dice el alcance completo —qué se lee y qué no— y no lo adorna. Conceder esto es dejar
+ * que una app vea TODAS las notificaciones del teléfono; que Movi solo mire las de una lista corta
+ * es una decisión de su código, no un límite que el sistema imponga, y quien lo concede merece
+ * leerlo en esos términos.
+ */
+@Composable
+private fun SensorNotificationsCard(installSource: InstallSource) {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findComponentActivity() }
+    var concedido by remember { mutableStateOf(tieneAccesoANotificaciones(context)) }
+    var ultima by remember { mutableStateOf(AlmacenDeNotificaciones.ultimaAt(context)) }
+
+    // Se concede y se revoca FUERA de la app, como los permisos de SMS: sin releer al volver, la
+    // tarjeta seguiría diciendo «Falta» sobre un acceso ya concedido.
+    OnResume(activity) {
+        concedido = tieneAccesoANotificaciones(context)
+        ultima = AlmacenDeNotificaciones.ultimaAt(context)
+    }
+
+    Spacer(Modifier.height(10.dp))
+    MinCard(modifier = Modifier.fillMaxWidth(), variant = MinCardVariant.Elevated) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Acceso a notificaciones", fontSize = 14.sp, color = Movi.colores.texto)
+            Text(
+                if (concedido) "Concedido" else "Falta",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (concedido) Movi.colores.entra else Movi.colores.sale,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Hay bancos que ya no mandan un SMS por cada movimiento, pero su app sí muestra una " +
+                "notificación. Con este acceso, Movi lee esas notificaciones y las deja en " +
+                "«Mensajes del banco», igual que un SMS: tú decides cuáles se anotan.",
+            fontSize = 13.sp,
+            color = Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Movi solo lee las notificaciones de las apps de banco que tiene en su lista, y solo " +
+                "esas salen de este teléfono. Las de cualquier otra app —tus chats, tu correo, " +
+                "todo lo demás— se descartan sin leerlas y sin contarlas.",
+            fontSize = 12.sp,
+            color = Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Movi no toca la notificación: no la abre, no la borra y no responde por ti.",
+            fontSize = 12.sp,
+            color = Movi.colores.textoMedio,
+        )
+        if (concedido || ultima > 0L) {
+            Spacer(Modifier.height(10.dp))
+            // Línea propia, separada de las dos del historial de SMS: si esta fecha es reciente y
+            // la de la captura de SMS no, el banco dejó de mandar mensajes y las notificaciones
+            // están tapando el hueco. Mezclarlas escondería justo eso.
+            Text(
+                "Última notificación capturada: ${formatCaptureDate(ultima, "ninguna aún")}",
+                fontSize = 12.sp,
+                color = Movi.colores.textoMedio,
+            )
+        }
+        if (!concedido) {
+            Spacer(Modifier.height(12.dp))
+            SensorButton("Dar acceso a las notificaciones") { abrirAjustesDeNotificaciones(context) }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Se abre la lista del sistema: busca Movi y activa su interruptor. Android te " +
+                    "pedirá confirmar. Al volver aquí, esta tarjeta dice «Concedido».",
+                fontSize = 12.sp,
+                color = Movi.colores.textoMedio,
+            )
+            // El umbral acá es Android 13, no 15: la escucha de notificaciones fue de lo PRIMERO
+            // que entró en los ajustes restringidos, dos versiones antes que el permiso de SMS.
+            // Ver shouldHintRestrictedNotificationAccess.
+            if (shouldHintRestrictedNotificationAccess(Build.VERSION.SDK_INT, installSource)) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Si el interruptor de Movi aparece gris y no te deja activarlo, es porque la " +
+                        "app no se instaló desde una tienda: ve a los ajustes de la app, menú de " +
+                        "tres puntos (arriba a la derecha) → «Permitir ajustes restringidos», y " +
+                        "vuelve a intentarlo.",
+                    fontSize = 12.sp,
+                    color = Movi.colores.textoMedio,
+                )
             }
         }
     }
