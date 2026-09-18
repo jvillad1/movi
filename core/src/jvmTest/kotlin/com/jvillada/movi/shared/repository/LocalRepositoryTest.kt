@@ -31,14 +31,18 @@ import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.openingEventFor
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.toInstant
+import java.util.concurrent.Executors
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -2246,6 +2250,264 @@ class LocalRepositoryTest {
         assertEquals(1_200L, conServer.getEvents("acc-master").single().amount, "la deuda baja en dólares")
         assertEquals(20_000_000L - 4_800_000L, repo.getAccount("acc-banco").balance)
         assertEquals(0L, repo.getAccount("acc-master").balance, "la tarjeta no debe pesos")
+    }
+
+    // ── Lo que el server ya no tiene NO VUELVE ────────────────────────────────
+    //
+    // La regla anti-fantasma existía, pero vivía en una variable local que moría con la respuesta:
+    // se tachaba la fila remota de ESA lectura y el espejo quedaba intacto. O sea que el saber «el
+    // server ya no tiene esto» se tiraba en el mismo instante en que se aprendía, y el respaldo
+    // local —el que contesta sin red, y también el que contesta cuando la red tarda más que
+    // PRESUPUESTO_DE_RED_MS, que es lo normal en el bus— volvía a mostrarlo todo.
+
+    /** Un "server" que puede quedarse sin red, para movimientos y cuentas a la vez. */
+    private class ServidorDeMovimientos : NoOpRepository() {
+        var falla = false
+
+        override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
+            if (falla) error("sin red: no se pudo leer la lista de movimientos")
+            return super.getEvents(accountId)
+        }
+
+        override suspend fun getAccounts(): List<Account> {
+            if (falla) error("sin red: no se pudo leer la lista de cuentas")
+            return super.getAccounts()
+        }
+    }
+
+    /** Lo que el server devuelve por un movimiento que ya conoce. */
+    private fun eventoRemoto(id: String, accountId: String, monto: Long) =
+        event(id, accountId, TransactionType.EXPENSE, monto).copy(syncedAt = 1_700_000_000_000L)
+
+    /**
+     * **Un movimiento anulado desde la web no reaparece porque la red se puso lenta.**
+     *
+     * Medido antes del arreglo: desaparecía con red buena y volvía en la lectura siguiente si
+     * `getEvents` fallaba o simplemente tardaba más que el presupuesto de red — y no volvía solo a
+     * la lista: volvía al total del día, que decía −85.000 en el teléfono contra −5.000 en la web.
+     */
+    @Test
+    fun getEvents_lo_anulado_en_la_web_no_vuelve_cuando_la_red_falla() = runBlocking {
+        repo.createAccount(Account("acc-bus", "Bancolombia", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-anulado", "acc-bus", TransactionType.EXPENSE, 80_000L))
+        repo.postEvent(event("ev-vivo", "acc-bus", TransactionType.EXPENSE, 5_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "ev-anulado")
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "ev-vivo")
+
+        val server = ServidorDeMovimientos()
+        server.cuentasDelServer += Account("acc-bus", "Bancolombia", AccountType.SAVINGS, 0L)
+        server.eventosDelServer += eventoRemoto("ev-vivo", "acc-bus", 5_000L)
+        val conRed = LocalRepository(db = db, remote = server, userId = { testUserId })
+
+        assertEquals(listOf("ev-vivo"), conRed.getEvents().map { it.id }, "con red buena se va")
+        assertTrue(
+            db.voidEventQueries.selectUnsynced().executeAsList().isEmpty(),
+            "la lápida se escribe sellada: no se le empuja al server algo que el server ya no tiene",
+        )
+
+        server.falla = true
+        assertEquals(
+            listOf("ev-vivo"),
+            conRed.getEvents().map { it.id },
+            "y sin red sigue ido: la decisión está en la base, no en la respuesta",
+        )
+        assertEquals(
+            listOf("ev-vivo"),
+            conRed.getEvents("acc-bus").map { it.id },
+            "el detalle de la cuenta cuenta lo mismo",
+        )
+        assertEquals(-5_000L, conRed.getEventsByDay().single().total, "y el total del día también")
+        assertTrue(
+            db.financialEventQueries.selectById("ev-anulado", testUserId).executeAsOneOrNull() != null,
+            "esconder no es borrar: la fila sigue entera",
+        )
+    }
+
+    /**
+     * **El camino de vuelta.** Si el server vuelve a devolver el movimiento —lo restauraron, o el
+     * GET anterior se cruzó con una escritura— la lápida se saca y el movimiento reaparece. Sin
+     * esto, esconder sería un borrado disfrazado del que no se sale nunca.
+     */
+    @Test
+    fun getEvents_devuelve_el_movimiento_que_el_server_vuelve_a_mandar() = runBlocking {
+        repo.createAccount(Account("acc-vuelve", "Bancolombia", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-restaurado", "acc-vuelve", TransactionType.EXPENSE, 30_000L))
+        repo.postEvent(event("ev-vivo-2", "acc-vuelve", TransactionType.EXPENSE, 1_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "ev-restaurado")
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "ev-vivo-2")
+
+        val server = ServidorDeMovimientos()
+        server.cuentasDelServer += Account("acc-vuelve", "Bancolombia", AccountType.SAVINGS, 0L)
+        server.eventosDelServer += eventoRemoto("ev-vivo-2", "acc-vuelve", 1_000L)
+        val conRed = LocalRepository(db = db, remote = server, userId = { testUserId })
+        assertEquals(listOf("ev-vivo-2"), conRed.getEvents().map { it.id })
+
+        server.eventosDelServer += eventoRemoto("ev-restaurado", "acc-vuelve", 30_000L)
+
+        assertEquals(
+            setOf("ev-restaurado", "ev-vivo-2"),
+            conRed.getEvents().map { it.id }.toSet(),
+            "vuelve el que el server volvió a mandar",
+        )
+        server.falla = true
+        assertEquals(
+            setOf("ev-restaurado", "ev-vivo-2"),
+            conRed.getEvents().map { it.id }.toSet(),
+            "y sigue de vuelta sin red: la lápida se borró de verdad",
+        )
+    }
+
+    /**
+     * **La anulación del dueño no es una lápida, y no se toca.**
+     *
+     * Entre que el dueño anula en el teléfono y el `SyncEngine` empuja esa anulación, el server
+     * sigue devolviendo el movimiento. Si el camino de vuelta borrara cualquier fila de
+     * `void_event` —y no solo las lápidas— el movimiento reaparecería en esa ventana, con el saldo
+     * ya descontado, y volvería a irse al rato. Un movimiento que parpadea es peor que uno que se
+     * queda.
+     */
+    @Test
+    fun getEvents_no_le_saca_la_tacha_a_lo_que_el_dueno_anulo_en_el_telefono() = runBlocking {
+        repo.createAccount(Account("acc-tacha", "Bancolombia", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-anulado-aca", "acc-tacha", TransactionType.EXPENSE, 12_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "ev-anulado-aca")
+
+        val server = ServidorDeMovimientos()
+        server.cuentasDelServer += Account("acc-tacha", "Bancolombia", AccountType.SAVINGS, 0L)
+        server.eventosDelServer += eventoRemoto("ev-anulado-aca", "acc-tacha", 12_000L)
+        val conRed = LocalRepository(db = db, remote = server, userId = { testUserId })
+        conRed.voidEvent("ev-anulado-aca", null)
+
+        assertTrue(conRed.getEvents().isEmpty(), "anulado acá no se muestra, aunque el server lo mande")
+        assertEquals(
+            1,
+            db.voidEventQueries.selectAllVoidedIds().executeAsList().size,
+            "una sola anulación: la del dueño, sin lápida encima",
+        )
+        assertEquals(
+            1,
+            db.voidEventQueries.selectUnsynced().executeAsList().size,
+            "y sigue encolada para el SyncEngine",
+        )
+    }
+
+    /**
+     * **La cuenta borrada desde la web tampoco vuelve.** Volvía con sus $500.000 sumando a «Tu
+     * plata» y al patrimonio en cuanto la lectura siguiente no alcanzaba a contestar.
+     */
+    @Test
+    fun getAccounts_la_cuenta_borrada_en_la_web_no_vuelve_cuando_la_red_falla() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(
+            listOf(cuentaServer("acc-banco", "Bancolombia"), cuentaServer("acc-nequi", "Nequi", 500_000L)),
+        )
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        assertEquals(2, repoConServer.getAccounts().size)
+
+        server.cuentas = server.cuentas.filterNot { it.id == "acc-nequi" }
+        assertEquals(listOf("acc-banco"), repoConServer.getAccounts().map { it.id })
+
+        server.falla = true
+        val sinRed = repoConServer.getAccounts()
+        assertEquals(listOf("acc-banco"), sinRed.map { it.id }, "sin red sigue sin estar")
+        assertEquals(0L, sinRed.sumOf { it.balance }, "y sus 500.000 no vuelven a sumar")
+        assertTrue(
+            db.accountQueries.selectById("acc-nequi").executeAsOneOrNull() != null,
+            "esconder no es borrar: la fila y sus movimientos siguen enteros",
+        )
+    }
+
+    /** Y su camino de vuelta: el server la vuelve a devolver y vuelve a la lista. */
+    @Test
+    fun getAccounts_devuelve_la_cuenta_que_el_server_vuelve_a_mandar() = runBlocking {
+        val db = createDatabase("test.db")
+        val server = ServerAccountsRepository(listOf(cuentaServer("acc-nequi", "Nequi", 500_000L)))
+        val repoConServer = LocalRepository(db = db, remote = server, userId = { testUserId })
+        repoConServer.getAccounts()
+
+        server.cuentas = emptyList()
+        assertTrue(repoConServer.getAccounts().isEmpty())
+
+        server.cuentas = listOf(cuentaServer("acc-nequi", "Nequi", 500_000L))
+        assertEquals(listOf("acc-nequi"), repoConServer.getAccounts().map { it.id })
+
+        server.falla = true
+        assertEquals(
+            listOf("acc-nequi"),
+            repoConServer.getAccounts().map { it.id },
+            "y sigue de vuelta sin red",
+        )
+    }
+
+    /**
+     * **El total del día se calcula con la regla compartida, no con una copia.**
+     *
+     * Acá estaba escrita a mano —moneda, flujo y signo— la misma cuenta que [aporteAlFlujoDelDia]
+     * hace en :core y que el server usa en `/api/events/by-day`. Coincidían, así que el test no
+     * busca una diferencia: busca que sigan siendo la misma cuenta cuando alguien toque una.
+     */
+    @Test
+    fun getEventsByDay_usa_la_regla_compartida_del_flujo_del_dia() = runBlocking {
+        repo.createAccount(Account("acc-plata", "Bancolombia", AccountType.SAVINGS, 0L))
+        repo.createAccount(Account("acc-deuda", "Libranza", AccountType.LOAN, 0L))
+        repo.postEvent(event("ev-gasto-dia", "acc-plata", TransactionType.EXPENSE, 10_000L))
+        repo.postEvent(event("ev-ingreso-dia", "acc-plata", TransactionType.INCOME, 4_000L))
+        // Los dos que la regla deja afuera: lo que no es pesos y lo que no es flujo de caja.
+        repo.postEvent(enMoneda("ev-usd-dia", "acc-plata", TransactionType.EXPENSE, 100L, "USD"))
+        repo.postEvent(event("ev-cuota-dia", "acc-deuda", TransactionType.EXPENSE, 700_000L))
+
+        val dia = repo.getEventsByDay().single()
+
+        assertEquals(4, dia.items.size, "los cuatro se listan")
+        assertEquals(-6_000L, dia.total)
+        assertEquals(
+            dia.items.sumOf { aporteAlFlujoDelDia(it) },
+            dia.total,
+            "el total del día es exactamente la regla de :core",
+        )
+    }
+
+    // ── SQLite fuera del hilo que pinta ───────────────────────────────────────
+
+    /**
+     * **Las lecturas no corren en el hilo del llamador.**
+     *
+     * Todas se llaman desde un `LaunchedEffect`, o sea desde el dispatcher principal, y nada acá
+     * cambiaba de hilo: dos barridos de tabla completa, el espejo y el orden ocurrían en el hilo
+     * que pinta (615 ms la primera lectura con 5.000 movimientos, en una JVM de escritorio). El
+     * stub anota en qué hilo lo llamaron, que es el mismo donde corre todo el cuerpo.
+     */
+    @Test
+    fun las_lecturas_no_corren_en_el_hilo_del_llamador() = runBlocking {
+        repo.createAccount(Account("acc-hilo", "Bancolombia", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("ev-hilo", "acc-hilo", TransactionType.EXPENSE, 1_000L))
+
+        val ejecutor = Executors.newSingleThreadExecutor { Thread(it, "disco-de-prueba") }
+        val server = object : NoOpRepository() {
+            var hiloDeLaLectura: String? = null
+
+            override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
+                hiloDeLaLectura = Thread.currentThread().name
+                return super.getEvents(accountId)
+            }
+        }
+        val enSuDisco = LocalRepository(
+            db = db,
+            remote = server,
+            userId = { testUserId },
+            disco = ejecutor.asCoroutineDispatcher(),
+        )
+
+        val hiloDelLlamador = Thread.currentThread().name
+        assertEquals(listOf("ev-hilo"), enSuDisco.getEvents().map { it.id }, "y contesta lo mismo")
+        // `startsWith` y no igualdad: con el modo debug de coroutines el nombre del hilo lleva
+        // pegado el «@coroutine#N» de quien lo esté usando.
+        assertTrue(
+            server.hiloDeLaLectura?.startsWith("disco-de-prueba") == true,
+            "el cuerpo tenía que correr en el dispatcher inyectado; corrió en ${server.hiloDeLaLectura}",
+        )
+        assertNotEquals(hiloDelLlamador, server.hiloDeLaLectura)
+        ejecutor.shutdown()
     }
 
     /** Un [event] con moneda, para los tests de arriba. */
