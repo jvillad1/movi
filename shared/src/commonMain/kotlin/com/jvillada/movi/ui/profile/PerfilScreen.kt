@@ -39,6 +39,7 @@ import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
@@ -545,7 +546,13 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         }
     }
 
+    // Las cuatro hojas de esta pantalla se anotan en la pila de hojas: el «atrás» del teléfono
+    // tiene que cerrar la hoja abierta, no sacar Perfil de la navegación. Es el caso que motivó
+    // el mecanismo (ver `PilaDeHojas`): el dueño escribía las dos contraseñas, apretaba atrás
+    // para cerrar la hoja y aterrizaba en «Más» con todo lo tipeado perdido. La lambda es la
+    // MISMA que el `onDismiss` de al lado — atrás y la X cierran igual.
     if (showEditProfile) {
+        AtrasCierraEstaHoja { showEditProfile = false }
         EditProfileSheet(
             initialName = profile?.name ?: SessionManager.userName ?: "",
             initialColor = profile?.avatarColor ?: SessionManager.avatarColor,
@@ -554,6 +561,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         )
     }
     if (showChangePassword) {
+        AtrasCierraEstaHoja { showChangePassword = false }
         ChangePasswordSheet(
             onDismiss = { showChangePassword = false },
             onSaved = { showChangePassword = false },
@@ -565,6 +573,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     // pidió, y que se parece a su ajuste actual.
     val perfil = profile
     if (showAviso && perfil != null) {
+        AtrasCierraEstaHoja { showAviso = false; errorAviso = null }
         DiasDeAvisoSheet(
             diasActuales = perfil.reminderLeadDays,
             saving = guardandoAviso,
@@ -585,6 +594,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         )
     }
     if (showPeriodo && perfil != null) {
+        AtrasCierraEstaHoja { showPeriodo = false; errorPeriodo = null }
         PeriodoSheet(
             cutoffActual = perfil.periodCutoffDay,
             saving = guardandoPeriodo,
