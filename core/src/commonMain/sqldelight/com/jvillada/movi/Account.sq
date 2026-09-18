@@ -35,7 +35,17 @@ CREATE TABLE account (
     -- `deleteById`, que cascadea y corre solo cuando el dueño lo pide — una lectura corta no puede
     -- costar datos. Y se limpia sola: si el server vuelve a devolver la cuenta, `mostrar` la
     -- devuelve a la lista.
-    hiddenAt   INTEGER
+    hiddenAt   INTEGER,
+    -- **La edad de esta versión de la cuenta.** NULL = nadie la editó, que es la verdad de todo lo
+    -- que ya está en el teléfono. Espejo de `accounts.last_edited_at` del server; el porqué
+    -- completo está en `Account.lastEditedAt` (:core).
+    --
+    -- El resumen: el `POST /api/accounts` es un upsert por id y `SyncEngine.syncAccounts` reenvía
+    -- cada 30 segundos toda cuenta sin sellar. Si ese POST ya había llegado —y solo se perdió la
+    -- respuesta— y mientras tanto el dueño renombró la cuenta en la web, el reenvío le pisaba el
+    -- nombre. Con esta columna el reenvío viaja con la edad de su versión y el server lo deja
+    -- perder contra una edición más nueva (`pisaElReenvio`, en EventRoutes.kt).
+    lastEditedAt INTEGER
 );
 
 -- Mismo criterio que `GET /api/accounts` (ver AccountRoutes.kt, donde está escrito por qué se
@@ -82,14 +92,29 @@ SELECT * FROM account WHERE syncedAt IS NULL AND userId = :userId;
 -- una cuenta que el server acaba de devolver la vuelve a dejar visible sola. Igual que `mostrar`,
 -- que es la forma explícita de lo mismo para cuando no se reescribe la fila entera.
 insert:
-INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt, conditionedTo)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt, conditionedTo, lastEditedAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateBalance:
 UPDATE account SET balance = :balance WHERE id = :id;
 
 markSynced:
 UPDATE account SET syncedAt = :syncedAt WHERE id = :id;
+
+-- **Esta cuenta se acaba de corregir en este teléfono**, con el reloj de este teléfono. Gemela de
+-- `marcarEditado` en FinancialEvent.sq, y por el mismo motivo: una corrección local que no selle
+-- sale diciendo «yo no edité nada» y el server se la hace perder contra la copia de la web — el
+-- mismo defecto al revés, esta vez perdiendo lo que el dueño escribió en el teléfono.
+marcarEditado:
+UPDATE account SET lastEditedAt = :lastEditedAt WHERE id = :id AND userId = :userId;
+
+-- Renombrar sin señal, sobre una cuenta que todavía no subió. Ver `LocalRepository.renameAccount`.
+actualizarNombre:
+UPDATE account SET name = :name WHERE id = :id AND userId = :userId;
+
+-- Marcar (o quitar) la condición de uso sin señal, mismo caso que `actualizarNombre`.
+actualizarCondicion:
+UPDATE account SET conditionedTo = :conditionedTo WHERE id = :id AND userId = :userId;
 
 -- El server no la devolvió: se deja de listar, sin borrarle nada. Ver `hiddenAt`.
 ocultar:

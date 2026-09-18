@@ -3,6 +3,7 @@ package com.jvillada.movi.server
 import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.db.DatabaseFactory
 import com.jvillada.movi.server.plugins.configureAuth
+import com.jvillada.movi.server.plugins.configureAutoHead
 import com.jvillada.movi.server.plugins.configureCORS
 import com.jvillada.movi.server.plugins.configureConditionalHeaders
 import com.jvillada.movi.server.plugins.configureMonitoring
@@ -37,6 +38,8 @@ fun Application.module() {
     // Antes de routing: le da a lo estático la etiqueta con la que el navegador revalida
     // (ver ConditionalHeaders.kt — es la otra mitad del `no-cache` del bundle).
     configureConditionalHeaders()
+    // Y la respuesta a un HEAD sobre lo estático deja de ser un 404 (ver AutoHead.kt).
+    configureAutoHead()
     configureAuth()
     configureRouting()
     startReminderScheduler()  // no-op if RESEND_API_KEY is absent

@@ -102,6 +102,20 @@ object Accounts : Table("accounts") {
      * sin condición porque el campo no existía. Ver `Account.condicionadaA` en :core.
      */
     val conditionedTo = varchar("conditioned_to", 60).nullable()
+    /**
+     * **La edad de esta versión de la cuenta.** NULL = nadie la editó, que es la verdad de toda
+     * cuenta que ya existe — nacieron antes de que la columna existiera.
+     *
+     * Es lo que le deja al `POST /api/accounts` (un upsert por id) hacer perder al reenvío del
+     * teléfono contra un renombre más nuevo hecho en la web. Ver
+     * [com.jvillada.movi.shared.model.Account.lastEditedAt] y `pisaElReenvio` en `EventRoutes.kt`,
+     * que es la misma función que decide para los movimientos.
+     *
+     * NULLABLE y sin backfill, por el mismo motivo que la de arriba y que `last_edited_at` de
+     * `financial_events`: el ALTER que emite `createMissingTablesAndColumns` corre DENTRO de la
+     * transacción de arranque y no puede fallar sobre una tabla con datos.
+     */
+    val lastEditedAt = long("last_edited_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

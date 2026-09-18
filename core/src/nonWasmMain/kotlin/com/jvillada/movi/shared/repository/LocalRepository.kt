@@ -120,6 +120,9 @@ private fun com.jvillada.movi.Account.toAccountModel() = Account(
     // base vieja migrada (columna NULL) o de una escritura de otra versión del cliente. Ver
     // [normalizarCondicion]: es la MISMA función que usan el server y la UI.
     condicionadaA = normalizarCondicion(conditionedTo),
+    // La edad de esta versión, tal como la dejó la última corrección (de este teléfono o del
+    // server). Viaja en el reenvío y es lo que decide quién gana: ver [Account.lastEditedAt].
+    lastEditedAt = lastEditedAt,
 )
 
 /**
@@ -404,6 +407,7 @@ class LocalRepository(
                 created.balance, created.currency, uid,
                 Clock.System.now().toEpochMilliseconds(),
                 created.condicionadaA,
+                created.lastEditedAt,
             )
             created
         } catch (e: Exception) {
@@ -412,6 +416,9 @@ class LocalRepository(
                 resolved.balance, resolved.currency, uid,
                 null,
                 resolved.condicionadaA,
+                // Null en un alta: una cuenta que nace no tiene ninguna versión anterior a la que
+                // ganarle (ver [Account.lastEditedAt]). Lo escriben las correcciones.
+                resolved.lastEditedAt,
             )
             resolved
         }
@@ -631,23 +638,70 @@ class LocalRepository(
         return@enDisco summary
     }
 
+    /**
+     * **Si la cuenta todavía no subió, se renombra acá y no se llama al server** — mismo esqueleto
+     * que [updateEventCategory] para un movimiento pendiente, y por el mismo motivo: no hay a qué
+     * cuenta apuntar todavía. `PUT /api/accounts/{id}/name` contestaría 404 y el dueño se quedaba
+     * sin poder corregirle el nombre a una cuenta creada sin señal hasta que el sync la empujara.
+     *
+     * Y la corrección **sella su edad** ([marcarEditadaLaCuenta]). Es la mitad frágil del arreglo:
+     * `SyncEngine.syncAccounts` va a empujar esta fila con el nombre nuevo, y si saliera sin sello
+     * diría «yo no edité nada» — o sea que perdería contra cualquier edición guardada en el server,
+     * que es el mismo defecto al revés, esta vez borrando lo que el dueño escribió en el teléfono.
+     *
+     * Para una cuenta **ya sincronizada** no hay rama local, igual que antes: manda el server y la
+     * fila local se pisa con lo que contestó. Un renombre que solo pasara acá no lo empujaría
+     * nadie (no entra en `selectUnsynced`) y la próxima lectura con red lo borraría en silencio.
+     */
     override suspend fun renameAccount(id: String, name: String): Account = enDisco {
+        val uid = userId()
+        val resueltaLocal = db.transactionWithResult {
+            val local = db.accountQueries.selectById(id).executeAsOneOrNull()
+            if (local != null && local.userId == uid && local.syncedAt == null) {
+                db.accountQueries.actualizarNombre(name, id, uid)
+                marcarEditadaLaCuenta(id, uid)
+                db.accountQueries.selectById(id).executeAsOne().toAccountModel()
+            } else {
+                null
+            }
+        }
+        if (resueltaLocal != null) return@enDisco resueltaLocal
+
         val actualizada = remote.renameAccount(id, name)
         db.transaction { mirrorAccountLocally(actualizada) }
         return@enDisco actualizada
     }
 
     /**
-     * Igual que [renameAccount]: el server manda y la fila local se pisa con lo que contestó.
+     * Igual que [renameAccount], con sus dos ramas y el mismo motivo para cada una.
      *
-     * **El espejo no es cosmético acá**, es la mitad del arreglo. Sin él —y sin la columna
+     * **Cuenta ya sincronizada: el server manda** y la fila local se pisa con lo que contestó. El
+     * espejo no es cosmético acá, es la mitad del arreglo: sin él —y sin la columna
      * `account.conditionedTo`— el Inicio volvía a sumar la plata condicionada apenas `getAccounts`
      * contestaba con lo local, que pasa en modo avión y también cuando la red tarda más que
-     * `PRESUPUESTO_DE_RED_MS`. Sin red no hay fallback local: marcar una condición solo en el
-     * teléfono sería un dato que el `SyncEngine` nunca empujaría (no es una creación, así que no
-     * entra en `selectUnsynced`) y que la próxima lectura con red borraría en silencio.
+     * `PRESUPUESTO_DE_RED_MS`. Y sin red no hay fallback: marcar una condición solo en el teléfono
+     * sobre una cuenta que el server ya conoce sería un dato que el `SyncEngine` nunca empujaría
+     * (no es una creación, así que no entra en `selectUnsynced`) y que la próxima lectura con red
+     * borraría en silencio.
+     *
+     * **Cuenta todavía sin subir: se resuelve acá**, sellando la edad. Esa fila SÍ la va a empujar
+     * `syncAccounts` —con su condición y con su sello— así que el dato no se pierde ni se queda
+     * mudo frente al server.
      */
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = enDisco {
+        val uid = userId()
+        val resueltaLocal = db.transactionWithResult {
+            val local = db.accountQueries.selectById(id).executeAsOneOrNull()
+            if (local != null && local.userId == uid && local.syncedAt == null) {
+                db.accountQueries.actualizarCondicion(normalizarCondicion(condicionadaA), id, uid)
+                marcarEditadaLaCuenta(id, uid)
+                db.accountQueries.selectById(id).executeAsOne().toAccountModel()
+            } else {
+                null
+            }
+        }
+        if (resueltaLocal != null) return@enDisco resueltaLocal
+
         val actualizada = remote.updateAccountCondition(id, condicionadaA)
         db.transaction { mirrorAccountLocally(actualizada) }
         return@enDisco actualizada
@@ -1685,6 +1739,9 @@ class LocalRepository(
             account.balance, account.currency, userId(),
             Clock.System.now().toEpochMilliseconds(),
             account.condicionadaA,
+            // La edad que diga el server: esta fila es su copia, y sobrescribir con `null` acá
+            // haría que un reenvío posterior arrancara la comparación de cero.
+            account.lastEditedAt,
         )
     }
 
@@ -1780,6 +1837,7 @@ class LocalRepository(
                 summary.account.balance, summary.account.currency, uid,
                 Clock.System.now().toEpochMilliseconds(),
                 summary.account.condicionadaA,
+                summary.account.lastEditedAt,
             )
         }
         return@enDisco summary
@@ -2051,6 +2109,18 @@ class LocalRepository(
      */
     private fun marcarEditado(id: String, uid: String) {
         db.financialEventQueries.marcarEditado(Clock.System.now().toEpochMilliseconds(), id, uid)
+    }
+
+    /**
+     * Lo mismo que [marcarEditado], para una CUENTA: deja escrito que esta fila se corrigió en este
+     * teléfono, con el reloj de este teléfono. Corre dentro de la transacción de quien llama.
+     *
+     * La carrera que cierra es la misma —`POST /api/accounts` es un upsert por id y el teléfono
+     * reenvía cada 30 segundos lo que no selló— y la decide la misma función del server
+     * (`pisaElReenvio`). Ver [com.jvillada.movi.shared.model.Account.lastEditedAt].
+     */
+    private fun marcarEditadaLaCuenta(id: String, uid: String) {
+        db.accountQueries.marcarEditado(Clock.System.now().toEpochMilliseconds(), id, uid)
     }
 
     private fun com.jvillada.movi.Financial_event.toModel(

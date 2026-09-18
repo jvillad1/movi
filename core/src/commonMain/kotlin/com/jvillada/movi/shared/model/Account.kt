@@ -1,10 +1,14 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 @Serializable
 enum class AccountType { CASH, CHECKING, SAVINGS, CREDIT_CARD, LOAN, INVESTMENT }
 
+// `@EncodeDefault` sobre `lastEditedAt`: ver el porqué en su KDoc.
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class Account(
     val id: String,
@@ -36,6 +40,46 @@ data class Account(
      * dueño, que es el que la conoce.
      */
     val condicionadaA: String? = null,
+
+    /**
+     * **La edad de esta versión de la cuenta**, en milisegundos epoch. `null` = nadie la editó.
+     *
+     * Es el gemelo de [FinancialEvent.lastEditedAt], y existe por el mismo agujero, esta vez sobre
+     * el nombre: `POST /api/accounts` es un upsert por id desde que se volvió idempotente, y
+     * [com.jvillada.movi.shared.SyncEngine.syncAccounts] reenvía cada 30 segundos toda cuenta que
+     * el teléfono no logró sellar. Si ese POST había LLEGADO y solo se perdió la respuesta —se
+     * cortó la señal a mitad, se murió el proceso—, la fila local se queda pendiente aunque el
+     * server ya tenga la cuenta. Y si en esa ventana el dueño la renombra **en la web** (el caso
+     * real: «Libranza 4817» donde iba «4818», un dígito que identifica la obligación contra el
+     * extracto), el reenvío del teléfono pisaba ese nombre sin decir nada.
+     *
+     * Con este campo el reenvío **pierde contra una edición más nueva**: el server compara lo que
+     * llega contra lo guardado y solo pisa si la versión que entra no es más vieja (`pisaElReenvio`,
+     * en `EventRoutes.kt` — es la MISMA función para los dos, no una segunda regla parecida). Los
+     * empates van para el que llega, así que el reenvío idéntico —el caso normal— sigue siendo
+     * inofensivo.
+     *
+     * ### Quién lo escribe
+     *
+     * **Los dos lados, cada uno con su reloj, y solo al EDITAR.** El server lo sella en cada ruta
+     * que cambia la cuenta (`PUT /{id}/name` y `PUT /{id}/conditioned-to`, que hoy son todas); el
+     * teléfono lo sella cuando resuelve una edición sin señal sobre una cuenta que todavía no
+     * subió (ver `LocalRepository.renameAccount`). Crearla no lo escribe: una cuenta recién creada
+     * no tiene ninguna versión anterior a la que ganarle.
+     *
+     * Los relojes no se sincronizan, y está acotado a propósito: esto no entra en ningún total ni
+     * decide ningún saldo. Solo desempata entre dos versiones del mismo id.
+     *
+     * ### Por qué viaja siempre, incluso en `null`
+     *
+     * Por lo mismo que [FinancialEvent.lastEditedAt]: con `encodeDefaults = false` un `null` no se
+     * serializaría y el cuerpo saldría **sin la clave** — indistinguible del que manda un APK
+     * viejo, que no conoce el campo (el del dueño es el 1.31). Y los dos significan cosas opuestas:
+     * «sé de ediciones y esta copia no se editó» (pierde contra lo guardado) contra «no sé nada de
+     * esto» (se atiende como antes, pisando). Lo fija `CuentaEditadaEnElWireTest`.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val lastEditedAt: Long? = null,
 )
 
 /**

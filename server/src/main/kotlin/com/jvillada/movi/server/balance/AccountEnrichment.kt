@@ -17,6 +17,9 @@ fun ResultRow.toAccount() = Account(
     // Mismo helper que usan la escritura (`POST`/`PUT /{id}/conditioned-to`) y el espejo local:
     // una fila con espacios en blanco no puede salir de «Tu plata» solo en un lado.
     condicionadaA = normalizarCondicion(this[Accounts.conditionedTo]),
+    // La edad de la versión guardada. Viaja en toda respuesta para que el espejo local del
+    // cliente la conserve: ver `Account.lastEditedAt`.
+    lastEditedAt = this[Accounts.lastEditedAt],
 )
 
 /** Reemplaza el balance almacenado por los derivados de eventos (por moneda + estimado COP). */
