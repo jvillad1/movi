@@ -39,9 +39,9 @@ import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.*
-import com.jvillada.movi.shared.model.DEFAULT_REMINDER_LEAD_DAYS
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 
 @Composable
@@ -53,6 +53,10 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     // SessionManager al día (ver el bloque de abajo) para que AvatarButton en otras pantallas
     // también tenga el color correcto.
     var profile by remember { mutableStateOf<UserProfile?>(null) }
+    // **Qué pasó con la lectura**, que no es lo mismo que «todavía no llegó». Sin esta variable
+    // la pantalla no podía distinguir «se está cargando» de «falló», y las dos filas de abajo
+    // pintaban el valor por defecto como si fuera el suyo. Ver [AJUSTES_NO_LEIDOS].
+    var falloElPerfil by remember { mutableStateOf(false) }
     var showEditProfile by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showPeriodo by remember { mutableStateOf(false) }
@@ -63,10 +67,18 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
     LaunchedEffect(profileReloadKey) {
+        falloElPerfil = false
         runCatching { Repositories.wallets.getUserProfile() }.onSuccess {
             profile = it
             SessionManager.userName = it.name
             SessionManager.avatarColor = it.avatarColor
+        }.onFailure {
+            // Antes acá no había nada: la lectura fallaba en silencio, `profile` se quedaba en
+            // `null` para siempre —nada reintentaba— y las filas de «Inicio del mes» y del aviso
+            // mostraban el valor por defecto como si fuera el ajuste guardado. Con corte 25, un
+            // toque en «Guardar» le cambiaba el mes entero a mes de calendario y con él TODAS las
+            // cifras de Movimientos, Presupuestos, Créditos e Inicio. Ahora se dice y se reintenta.
+            falloElPerfil = true
         }
     }
 
@@ -145,6 +157,20 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                 }
             }
 
+            // Lo que no se pudo leer se dice, con su reintento — mismo componente que Cuentas,
+            // Créditos y Metas. Va arriba de las filas que dependen del perfil para que se lea
+            // antes de tocarlas, no después.
+            if (falloElPerfil) {
+                item {
+                    Spacer(Modifier.height(14.dp))
+                    NoSePudoLeer(
+                        texto = AJUSTES_NO_LEIDOS,
+                        onReintentar = { profileReloadKey++ },
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+            }
+
             // Cuenta
             item {
                 Spacer(Modifier.height(14.dp))
@@ -165,22 +191,29 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                         // El día en que arranca el período. Vive en «Cuenta» y no escondido en
                         // una pantalla aparte porque cambia el significado de TODAS las cifras
                         // del mes: quien lo busca lo busca acá.
+                        // Mientras el corte no se sepa, esta fila NO dice «Mes de calendario» ni
+                        // se deja tocar: ese texto era el valor por defecto disfrazado del suyo, y
+                        // la hoja que abría llegaba con el día 1 preseleccionado y un «Guardar»
+                        // que lo escribía de verdad.
+                        val cutoff = profile?.periodCutoffDay
+                        val abrirPeriodo: (() -> Unit)? =
+                            if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true })
                         CardRow(
                             left = {
                                 Column {
                                     Text("Inicio del mes", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
-                                        text = profile?.periodCutoffDay?.let { d ->
+                                        text = cutoff?.let { d ->
                                             if (d == 1) "Mes de calendario" else "Cada día $d"
-                                        } ?: "Mes de calendario",
+                                        } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
                             },
-                            showChevron = true,
+                            showChevron = cutoff != null,
                             isLast = true,
-                            onClick = { errorPeriodo = null; showPeriodo = true },
+                            onClick = abrirPeriodo,
                         )
                     }
                 }
@@ -353,20 +386,26 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                     ) {
                         // Cuántos días antes avisar. Vivía SOLO como variable de entorno del
                         // server: global para todos y fuera del alcance de cualquier usuario.
+                        // Mismo trato que «Inicio del mes»: sin el perfil no se afirma cuántos
+                        // días antes avisa, porque lo que se afirmaría es el valor por defecto.
+                        val diasDeAviso = profile?.reminderLeadDays
+                        val abrirAviso: (() -> Unit)? =
+                            if (diasDeAviso == null) null else ({ errorAviso = null; showAviso = true })
                         CardRow(
                             left = {
                                 Column {
                                     Text("Avisarme antes de un vencimiento", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                                     Text(
-                                        text = reminderLeadHint(profile?.reminderLeadDays ?: DEFAULT_REMINDER_LEAD_DAYS),
+                                        text = diasDeAviso?.let { reminderLeadHint(it) }
+                                            ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
                             },
-                            showChevron = true,
+                            showChevron = diasDeAviso != null,
                             isLast = true,
-                            onClick = { errorAviso = null; showAviso = true },
+                            onClick = abrirAviso,
                         )
                     }
                 }
@@ -507,7 +546,13 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         }
     }
 
+    // Las cuatro hojas de esta pantalla se anotan en la pila de hojas: el «atrás» del teléfono
+    // tiene que cerrar la hoja abierta, no sacar Perfil de la navegación. Es el caso que motivó
+    // el mecanismo (ver `PilaDeHojas`): el dueño escribía las dos contraseñas, apretaba atrás
+    // para cerrar la hoja y aterrizaba en «Más» con todo lo tipeado perdido. La lambda es la
+    // MISMA que el `onDismiss` de al lado — atrás y la X cierran igual.
     if (showEditProfile) {
+        AtrasCierraEstaHoja { showEditProfile = false }
         EditProfileSheet(
             initialName = profile?.name ?: SessionManager.userName ?: "",
             initialColor = profile?.avatarColor ?: SessionManager.avatarColor,
@@ -516,15 +561,21 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
         )
     }
     if (showChangePassword) {
+        AtrasCierraEstaHoja { showChangePassword = false }
         ChangePasswordSheet(
             onDismiss = { showChangePassword = false },
             onSaved = { showChangePassword = false },
         )
     }
     val alcancePeriodo = rememberCoroutineScope()
-    if (showAviso) {
+    // `profile?.let` y no `?: DEFAULT_...`: si el perfil no llegó, la hoja no se abre. Un default
+    // en el `initial` de una hoja con botón de guardar es una propuesta de cambio que el dueño no
+    // pidió, y que se parece a su ajuste actual.
+    val perfil = profile
+    if (showAviso && perfil != null) {
+        AtrasCierraEstaHoja { showAviso = false; errorAviso = null }
         DiasDeAvisoSheet(
-            diasActuales = profile?.reminderLeadDays ?: DEFAULT_REMINDER_LEAD_DAYS,
+            diasActuales = perfil.reminderLeadDays,
             saving = guardandoAviso,
             error = errorAviso,
             onDismiss = { showAviso = false; errorAviso = null },
@@ -542,9 +593,10 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
             },
         )
     }
-    if (showPeriodo) {
+    if (showPeriodo && perfil != null) {
+        AtrasCierraEstaHoja { showPeriodo = false; errorPeriodo = null }
         PeriodoSheet(
-            cutoffActual = profile?.periodCutoffDay ?: 1,
+            cutoffActual = perfil.periodCutoffDay,
             saving = guardandoPeriodo,
             error = errorPeriodo,
             onDismiss = { showPeriodo = false; errorPeriodo = null },
@@ -570,3 +622,12 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
     }
     }
 }
+
+/** Lo que dice la tarjeta de reintento cuando el perfil del dueño no se pudo leer. */
+const val AJUSTES_NO_LEIDOS: String = "No pudimos cargar tus ajustes"
+
+/** Subtítulo de una fila cuyo valor guardado todavía viaja. */
+const val CARGANDO: String = "Cargando…"
+
+/** Subtítulo de una fila cuyo valor guardado no se pudo leer. Nunca el valor por defecto. */
+const val NO_PUDIMOS_LEERLO: String = "No pudimos leerlo"

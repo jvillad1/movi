@@ -4,6 +4,7 @@ import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.db.DatabaseFactory
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureCORS
+import com.jvillada.movi.server.plugins.configureConditionalHeaders
 import com.jvillada.movi.server.plugins.configureMonitoring
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
@@ -33,6 +34,9 @@ fun Application.module() {
     configureSerialization()
     configureStatusPages()
     configureMonitoring()
+    // Antes de routing: le da a lo estático la etiqueta con la que el navegador revalida
+    // (ver ConditionalHeaders.kt — es la otra mitad del `no-cache` del bundle).
+    configureConditionalHeaders()
     configureAuth()
     configureRouting()
     startReminderScheduler()  // no-op if RESEND_API_KEY is absent

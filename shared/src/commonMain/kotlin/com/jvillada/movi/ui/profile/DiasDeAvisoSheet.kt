@@ -51,7 +51,10 @@ fun DiasDeAvisoSheet(
     saving: Boolean = false,
     error: String? = null,
 ) {
-    var dias by remember { mutableStateOf(diasActuales.coerceIn(0, 30)) }
+    // Con clave, por lo mismo que `PeriodoSheet`: sin ella una hoja abierta antes de que llegara
+    // el perfil se quedaba en el valor por defecto y «Guardar» lo escribía como si fuera elección
+    // del dueño.
+    var dias by remember(diasActuales) { mutableStateOf(diasActuales.coerceIn(0, 30)) }
 
     Column(
         modifier = Modifier
