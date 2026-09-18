@@ -8,8 +8,6 @@ import com.jvillada.movi.ui.components.NavTab
 sealed class Screen {
     data object Login            : Screen()
     data object Register         : Screen()
-    data object OnboardingWelcome : Screen()
-    data object OnboardingProfile : Screen()
     data object Dashboard : Screen()
     /**
      * Movimientos. [chipInicial] es el índice del chip con el que arranca (ver
@@ -82,7 +80,7 @@ sealed class Screen {
 
 /**
  * A qué destino de la navegación principal pertenece cada pantalla; null = sin chrome de
- * navegación (auth, onboarding, flujos a pantalla completa). App.kt lo usa para resaltar el
+ * navegación (auth, flujos a pantalla completa). App.kt lo usa para resaltar el
  * ítem activo en la barra (teléfono) y en el rail (pantalla ancha), que son los únicos
  * lugares donde se pinta la navegación — ninguna pantalla arma su propia barra.
  *
@@ -162,6 +160,44 @@ object NavStack {
     /** true si `screen` debe apilarse — evita duplicar la pantalla de arriba. */
     fun shouldPush(stack: List<Screen>, screen: Screen): Boolean =
         stack.isEmpty() || stack.last() != screen
+
+    /** Las pantallas de antes de tener sesión: entrar y crear cuenta. */
+    fun esDeAutenticacion(screen: Screen): Boolean =
+        screen == Screen.Login || screen == Screen.Register
+
+    /**
+     * ¿Ir a [screen] tiene que **reemplazar la pila entera** en vez de apilar encima?
+     *
+     * Sí cuando se está saliendo de la autenticación: la pila arranca en [Screen.Login] y
+     * entrar apilaba el Inicio encima, dejando `[Login, Dashboard]`. Nada la limpiaba, así que
+     * el botón «atrás» del teléfono devolvía al formulario de entrada —con la contraseña en
+     * blanco— a alguien que acababa de entrar. Con «Entrar con huella» prendido era peor:
+     * aterrizar de nuevo en `LoginScreen` re-dispara su efecto de arranque y el prompt del
+     * lector aparece solo, sin que nadie lo haya pedido. Por Registro la pila era
+     * `[Login, Register, Dashboard]` y «atrás» mostraba un «Crear cuenta» a quien recién creaba
+     * una.
+     *
+     * La regla mira el FONDO de la pila, no el tope: así cubre por igual la entrada directa y la
+     * que pasa por Registro, y no necesita que cada pantalla de auth se acuerde de pedir nada.
+     * Moverse entre Login y Register sigue apilando — ahí volver sí tiene sentido.
+     */
+    fun shouldReplaceAll(stack: List<Screen>, screen: Screen): Boolean =
+        stack.isNotEmpty() && esDeAutenticacion(stack.first()) && !esDeAutenticacion(screen)
+
+    /**
+     * Aplica una navegación sobre la pila: reemplazar todo (ver [shouldReplaceAll]), apilar
+     * (ver [shouldPush]) o no hacer nada. App.kt la llama sobre su `SnapshotStateList`, que es
+     * un `MutableList` como cualquier otro — y así la regla se puede probar sin Compose.
+     */
+    fun navegar(stack: MutableList<Screen>, screen: Screen) {
+        when {
+            shouldReplaceAll(stack, screen) -> {
+                stack.clear()
+                stack.add(screen)
+            }
+            shouldPush(stack, screen) -> stack.add(screen)
+        }
+    }
 
     /**
      * Resultado de pedir "volver": si hay historial, se saca el tope (Pop); si la
