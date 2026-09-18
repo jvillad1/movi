@@ -679,6 +679,69 @@ class SyncEngineTest {
         assertNull(db.financialEventQueries.selectById("ev-sin-red", testUserId).executeAsOne().intentosFallidos)
     }
 
+    /**
+     * **«La cuenta todavía no subió» y «la cuenta no está en este teléfono» no son lo mismo.**
+     *
+     * El descarte de [SyncEngine.syncEvents] estaba escrito como
+     * `selectById(...)?.syncedAt == null`, y con el operador seguro una fila AUSENTE daba
+     * `null == null` = «no subió». O sea: cualquier rechazo real del server (un 422, un 400) sobre
+     * un movimiento cuya cuenta no está espejada acá se tragaba sin escribir el `syncError`, y el
+     * aviso de Movimientos —el único lugar donde el dueño se entera de que algo no llegó— no se
+     * encendía nunca para esos.
+     *
+     * La diferencia importa porque los dos casos tienen arreglos opuestos: una cuenta pendiente la
+     * empuja `syncAccounts` en el ciclo siguiente y el 404 se cura solo, pero una cuenta que no
+     * está no la va a empujar nadie — callarse el motivo no arregla nada, solo lo esconde.
+     */
+    @Test
+    fun syncEvents_avisa_del_rechazo_aunque_la_cuenta_no_este_espejada_en_este_telefono() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-fantasma", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-sin-cuenta", "acc-fantasma", TransactionType.EXPENSE, 9_000L))
+        // La cuenta deja de estar en el espejo local (borrada desde la web, o nunca bajada).
+        db.accountQueries.deleteById("acc-fantasma")
+        assertNull(db.accountQueries.selectById("acc-fantasma").executeAsOneOrNull())
+
+        val remote = object : NoOpRepository() {
+            override suspend fun createAccount(account: Account): Account = account
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent =
+                throw ApiException(422, "Esa categoría no se puede anotar.")
+        }
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        val rechazado = local.getMovimientosRechazados().single()
+        assertEquals("ev-sin-cuenta", rechazado.evento.id)
+        assertEquals("Esa categoría no se puede anotar.", rechazado.motivo)
+    }
+
+    /**
+     * La otra mitad, que es la que el descarte existe para proteger: si la cuenta SÍ está acá y
+     * todavía no subió, el 404 del server («Account not found») se arregla solo en el ciclo
+     * siguiente y no merece un aviso. Va junto con el de arriba a propósito: sin este, el arreglo
+     * podría ser «avisar siempre», que reencendería el aviso de un caso que se cura solo.
+     */
+    @Test
+    fun syncEvents_sigue_sin_avisar_cuando_la_cuenta_esta_aca_pero_no_subio() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-pendiente", "Efectivo", AccountType.CASH, 0L))
+        local.postEvent(event("ev-espera", "acc-pendiente", TransactionType.EXPENSE, 9_000L))
+        assertNull(
+            db.accountQueries.selectById("acc-pendiente").executeAsOne().syncedAt,
+            "la cuenta está espejada pero sin sellar",
+        )
+
+        // OrderSensitiveRemote rechaza con el mismo 404 que da el server real mientras no conoce
+        // la cuenta.
+        SyncEngine(db = db, remote = OrderSensitiveRemote(), userId = { testUserId }).syncEvents()
+
+        assertTrue(
+            local.getMovimientosRechazados().isEmpty(),
+            "ese 404 se cura solo cuando syncAccounts empuje la cuenta",
+        )
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

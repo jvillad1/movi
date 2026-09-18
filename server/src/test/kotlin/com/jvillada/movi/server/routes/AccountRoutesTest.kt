@@ -544,6 +544,163 @@ class AccountRoutesTest {
             assertEquals(accountBalance("acc-libranza"), cuerpo["balance"]!!.jsonPrimitive.long)
         }
 
+    // ── POST /api/accounts es idempotente ───────────────────────────────────────
+
+    /**
+     * **Volver a mandar la misma cuenta no es un error, es la misma cuenta que vuelve.**
+     *
+     * Era un `INSERT` pelado contra una clave primaria que pone el cliente, así que el id repetido
+     * salía por el 500 genérico. Y el reenvío pasa de verdad: `LocalRepository.createAccount` deja
+     * la fila local sin sellar cuando el POST llegó pero la respuesta se perdió (se cortó la señal,
+     * se murió el proceso), y `SyncEngine.syncAccounts` la reenvía cada 30 segundos — 500, log, sin
+     * sellar, otra vez en 30 segundos, para siempre.
+     *
+     * Ahora contesta 200 con lo guardado, sin duplicar la fila y con los campos del reenvío. Y el
+     * **saldo de la respuesta es el derivado de los eventos**, no la columna cruda `accounts.balance`
+     * —el saldo del día que se creó—: el cliente espeja esta respuesta en su fila local
+     * (`mirrorAccountLocally`), así que devolver el crudo le escribiría un saldo falso justo al
+     * sellar. Es el mismo defecto que ya tenían `PUT /{id}/name` y `PUT /{id}/conditioned-to`.
+     */
+    @Test
+    fun `POST del mismo id del mismo dueno contesta 200, no duplica la fila y actualiza los campos`() =
+        testApplication {
+            wireApp()
+            assertEquals(HttpStatusCode.Created, createAccount("acc-reenvio", "SAVINGS", 1_000_000L).status)
+            postOpeningEvent("acc-reenvio", "INCOME", 1_000_000L, "Saldo inicial")
+            // Un gasto real: el derivado deja de coincidir con la columna cruda.
+            client.post("/api/events") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody(
+                    """{"id":"","accountId":"acc-reenvio","type":"EXPENSE","amount":400000,
+                        "category":"Otros","description":"Mercado","timestamp":0}""",
+                )
+            }
+            assertEquals(600_000L, accountBalance("acc-reenvio"), "el derivado, antes del reenvío")
+
+            val res = client.post("/api/accounts") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody("""{"id":"acc-reenvio","name":"Ahorros Nequi","type":"SAVINGS","balance":1000000,"currency":"COP"}""")
+            }
+
+            assertEquals(HttpStatusCode.OK, res.status, "el reenvío no es un error")
+            assertEquals(
+                1,
+                transaction { Accounts.selectAll().where { Accounts.id eq "acc-reenvio" }.count().toInt() },
+                "una sola fila: el reenvío no duplica nada",
+            )
+            val cuerpo = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+            assertEquals("Ahorros Nequi", cuerpo["name"]!!.jsonPrimitive.content, "el reenvío es la versión vigente")
+            assertEquals(
+                600_000L,
+                cuerpo["balance"]!!.jsonPrimitive.long,
+                "con la columna cruda contestaría 1.000.000: el saldo del día que se creó",
+            )
+            assertEquals(accountBalance("acc-reenvio"), cuerpo["balance"]!!.jsonPrimitive.long)
+            // Y los eventos siguen siendo los mismos: el reenvío no fabrica ninguna apertura.
+            assertEquals(2, eventsInDb(), "el reenvío no crea eventos")
+        }
+
+    /** El reenvío vuelve a llegar y a llegar: el segundo y el tercero contestan lo mismo. */
+    @Test
+    fun `el reenvio se puede repetir sin que cambie el resultado`() = testApplication {
+        wireApp()
+        createAccount("acc-repetido", "CASH", 0L)
+        repeat(3) {
+            assertEquals(HttpStatusCode.OK, createAccount("acc-repetido", "CASH", 0L).status)
+        }
+        assertEquals(1, transaction { Accounts.selectAll().where { Accounts.id eq "acc-repetido" }.count().toInt() })
+    }
+
+    /**
+     * **Un id de OTRO usuario es un choque real: 409 y no se escribe nada.**
+     *
+     * La clave primaria de `accounts` es el id a secas (no `id + user_id`), así que sin esta rama
+     * el `INSERT` fallaría igual — pero con un 500 mudo. Y un `UPDATE` sin el filtro de dueño
+     * sería peor todavía: reescribirle la cuenta a otro.
+     */
+    @Test
+    fun `POST con un id que es de otro usuario contesta 409 y no toca nada`() = testApplication {
+        wireApp()
+        val otherUserId = "user-b-accounts"
+        transaction {
+            Users.insert {
+                it[id]           = otherUserId
+                it[email]        = "b@accounts.test"
+                it[name]         = "User B"
+                it[passwordHash] = "hash-b"
+            }
+        }
+        createAccount("acc-de-a", "SAVINGS", 500_000L)
+
+        val res = client.post("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(otherUserId, "b@accounts.test")}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"id":"acc-de-a","name":"Mia ahora","type":"CASH","balance":9,"currency":"USD"}""")
+        }
+
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        val fila = transaction { Accounts.selectAll().where { Accounts.id eq "acc-de-a" }.single() }
+        assertEquals(userId, fila[Accounts.userId], "la cuenta sigue siendo de A")
+        assertEquals("Cuenta", fila[Accounts.name], "nada de B se escribió")
+        assertEquals("SAVINGS", fila[Accounts.type])
+        assertEquals("COP", fila[Accounts.currency])
+        assertEquals(500_000L, fila[Accounts.balance])
+    }
+
+    /**
+     * **El reenvío no le borra al dueño la condición que marcó desde la web.**
+     *
+     * `SyncEngine.syncAccounts` arma la cuenta a mano, y un APK anterior a este arreglo la manda
+     * sin `condicionadaA`: pisar la columna con el `null` del default le borraría la marca de
+     * «solo para vivienda» que el dueño puso con `PUT /{id}/conditioned-to` —un dato que el
+     * reenviante nunca tuvo—. Por eso el campo solo se toca si el pedido trae la clave, el mismo
+     * criterio con el que `POST /api/events` mira si el cliente MANDÓ la moneda.
+     */
+    @Test
+    fun `el reenvio sin la clave de condicion no borra la que ya estaba`() = testApplication {
+        wireApp()
+        createAccount("acc-skandia", "INVESTMENT", 106_000_000L)
+        assertEquals(
+            HttpStatusCode.OK,
+            client.put("/api/accounts/acc-skandia/conditioned-to") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody("""{"condicionadaA":"Vivienda"}""")
+            }.status,
+        )
+
+        // El reenvío de un cliente que no conoce el campo: la clave no viene.
+        val res = createAccount("acc-skandia", "INVESTMENT", 106_000_000L)
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(
+            "Vivienda",
+            transaction { Accounts.selectAll().where { Accounts.id eq "acc-skandia" }.single()[Accounts.conditionedTo] },
+            "sin la clave en el pedido, la condición se queda como estaba",
+        )
+    }
+
+    /** Y cuando SÍ la manda, manda: eso es lo que hace que la clave signifique algo. */
+    @Test
+    fun `el reenvio con la clave de condicion si la cambia`() = testApplication {
+        wireApp()
+        createAccount("acc-condicion", "INVESTMENT", 0L)
+
+        val res = client.post("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"id":"acc-condicion","name":"Cuenta","type":"INVESTMENT","balance":0,"condicionadaA":"Vivienda"}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(
+            "Vivienda",
+            transaction { Accounts.selectAll().where { Accounts.id eq "acc-condicion" }.single()[Accounts.conditionedTo] },
+        )
+    }
+
     private suspend fun ApplicationTestBuilder.createNamedAccount(id: String, name: String) =
         client.post("/api/accounts") {
             header(HttpHeaders.Authorization, "Bearer $token")

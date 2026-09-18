@@ -13,6 +13,7 @@ import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -37,6 +38,8 @@ import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.slf4j.LoggerFactory
 import io.ktor.server.routing.put
 import com.jvillada.movi.shared.model.RenameAccountRequest
@@ -205,12 +208,86 @@ fun Route.accountRoutes() {
             call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
         }
 
+        /**
+         * Crear una cuenta — **y volver a mandar la misma cuenta no es un error.**
+         *
+         * Era un `INSERT` pelado contra una clave primaria que pone el cliente, así que un id
+         * repetido salía por el 500 genérico (`StatusPages` solo traduce `BadRequestException` y
+         * `SerializationException`). Y ese 500 no era teórico: [com.jvillada.movi.shared.SyncEngine]
+         * empuja cada cuenta pendiente cada 30 segundos, y `LocalRepository.createAccount` deja la
+         * fila local **sin sellar** cuando no llega a ver la respuesta —se cortó la señal a mitad
+         * del POST, se murió el proceso, venció el timeout de conexión— aunque el server ya la
+         * tenga guardada. A partir de ahí el teléfono reenviaba el mismo id para siempre: 500,
+         * log, sin sellar, otra vez en 30 segundos. Y como los movimientos de una cuenta sin
+         * sellar tampoco marcan rechazo (ver el mismo arreglo del lado del cliente, en
+         * `SyncEngine.syncEvents`), la cuenta quedaba varada en silencio.
+         *
+         * Ahora es idempotente, igual que `POST /api/events`: si el id ya existe **y es de quien
+         * llama**, se toma como la misma cuenta que vuelve, se actualizan sus campos y se contesta
+         * **200 con lo guardado**. Para el teléfono eso es la verdad —la cuenta llegó— así que
+         * sella y deja de reenviar.
+         *
+         * **Qué se actualiza y qué no.** El nombre, el tipo, la moneda y la columna cruda
+         * `balance` se pisan con lo que llega: son lo que el cliente escribió al crearla y nada
+         * más puede haberlos cambiado desde entonces (la moneda y el tipo no tienen ruta de
+         * edición; el `balance` crudo no se lee para derivar nada). La **condición de uso**
+         * (`condicionadaA`) solo se toca **si el pedido trae la clave**, y esto no es un detalle:
+         * `SyncEngine.syncAccounts` reenvía la cuenta armada a mano y un APK anterior a este
+         * arreglo la manda sin ese campo — pisarla con el `null` del default le borraría al dueño
+         * la condición que marcó desde la web (`PUT /{id}/conditioned-to`), un dato que el
+         * reenviante nunca tuvo. Es el mismo criterio con el que `POST /api/events` mira si el
+         * cliente MANDÓ la moneda en vez de confiar en el default.
+         *
+         * **Un id de OTRO usuario es un choque real: 409 y no se escribe nada.** La clave primaria
+         * de `accounts` es el id a secas (no `id + user_id`), así que sin esta rama el `INSERT`
+         * fallaría igual — pero fallaría con un 500 mudo, y encima un `UPDATE` sin el filtro de
+         * dueño sería peor: reescribir la cuenta de otro.
+         *
+         * **La respuesta del reenvío va ENRIQUECIDA**, como `GET /{id}`, `PUT /{id}/name` y
+         * `PUT /{id}/conditioned-to`: el cliente espeja esta respuesta en su fila local
+         * (`mirrorAccountLocally`), y `toAccount()` a secas trae la columna cruda `accounts.balance`
+         * —el saldo del día que se creó, que no se actualiza nunca más—. Devolverla sin enriquecer
+         * le escribiría al teléfono un saldo falso justo al sellar la cuenta.
+         *
+         * Lo que NO cambia: una cuenta de verdad nueva se sigue insertando y contestando **201**,
+         * y esta ruta sigue sin fabricar un evento de apertura a partir de `balance` (ver el
+         * comentario largo más arriba).
+         */
         post {
-            val body = call.receive<Account>()
+            // El JSON crudo además del objeto, para saber si el cliente MANDÓ la condición de uso
+            // (ver arriba): un `null` por omisión y un `null` explícito significan cosas distintas.
+            val crudo = call.receive<JsonObject>()
+            val body = jsonDeLaApi.decodeFromJsonElement<Account>(crudo)
+            val mandoLaCondicion = "condicionadaA" in crudo
             val uid = call.userId()
             val account = body.copy(
                 id = body.id.ifBlank { "acc_${System.currentTimeMillis()}" }
             )
+
+            val reenvio = dbQuery {
+                val existente = Accounts.selectAll().where { Accounts.id eq account.id }.firstOrNull()
+                    ?: return@dbQuery null
+                if (existente[Accounts.userId] != uid) return@dbQuery HttpStatusCode.Conflict to null
+                Accounts.update({ (Accounts.id eq account.id) and (Accounts.userId eq uid) }) {
+                    it[Accounts.name]     = account.name
+                    it[Accounts.type]     = account.type.name
+                    it[Accounts.balance]  = account.balance
+                    it[Accounts.currency] = account.currency
+                    if (mandoLaCondicion) it[Accounts.conditionedTo] = normalizarCondicion(account.condicionadaA)
+                }
+                HttpStatusCode.OK to Accounts.selectAll()
+                    .where { (Accounts.id eq account.id) and (Accounts.userId eq uid) }
+                    .first().toAccount()
+            }
+            if (reenvio != null) {
+                val (estado, guardada) = reenvio
+                return@post if (guardada == null) call.respond(estado, "Ese id ya existe")
+                else call.respond(
+                    estado,
+                    enrichWith(guardada, loadNonVoidedEvents(uid, guardada.id), FxRateService.usdToCop()),
+                )
+            }
+
             dbQuery {
                 Accounts.insert {
                     it[id]       = account.id
