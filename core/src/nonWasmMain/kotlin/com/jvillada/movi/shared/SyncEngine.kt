@@ -71,6 +71,12 @@ class SyncEngine(
                         id = row.id, name = row.name,
                         type = AccountType.valueOf(row.type),
                         balance = row.balance, currency = row.currency,
+                        // **La condición de uso viaja con la cuenta.** Se guarda local al crearla
+                        // (`LocalRepository.createAccount`) y acá se quedaba afuera: una cuenta
+                        // creada sin señal y marcada «solo para vivienda» llegaba al server sin la
+                        // marca, y el Inicio volvía a sumar esa plata como disponible. Ver
+                        // `Account.condicionadaA`.
+                        condicionadaA = row.conditionedTo,
                     )
                 )
                 db.accountQueries.markSynced(Clock.System.now().toEpochMilliseconds(), created.id)
@@ -186,7 +192,19 @@ class SyncEngine(
                 // reintentar solo no lo arregla. Se guarda el motivo para que Movimientos lo diga.
                 // Salvo que la cuenta todavía no haya subido: ese 404 se arregla solo en el ciclo
                 // siguiente, cuando syncAccounts la empuje.
-                val cuentaSinSubir = db.accountQueries.selectById(row.accountId).executeAsOneOrNull()?.syncedAt == null
+                // **«Todavía no subió» y «no está acá» no son lo mismo**, y confundirlos tragaba
+                // rechazos de verdad. Esto era `selectById(...)?.syncedAt == null`, y con el
+                // operador seguro una fila AUSENTE también daba `null == null` = «no subió»: o
+                // sea que cualquier 4xx de un movimiento cuya cuenta no está espejada en este
+                // teléfono se descartaba sin escribir el `syncError`, y el aviso de Movimientos
+                // no se encendía nunca para esos. Pasa de verdad: la cuenta puede haberse
+                // borrado desde la web, o el espejo local puede no tenerla todavía.
+                //
+                // Solo la fila que EXISTE y está sin sellar merece el descarte, porque ese 404
+                // se arregla solo en el ciclo siguiente cuando `syncAccounts` empuje la cuenta.
+                // Si no está, nadie la va a empujar y callar el motivo no arregla nada.
+                val filaDeLaCuenta = db.accountQueries.selectById(row.accountId).executeAsOneOrNull()
+                val cuentaSinSubir = filaDeLaCuenta != null && filaDeLaCuenta.syncedAt == null
                 if (e.status in 400..499 && e.status != 401 && e.status != 408 && e.status != 429 && !cuentaSinSubir) {
                     db.financialEventQueries.markSyncError(
                         e.serverMessage?.takeIf { it.isNotBlank() && it.length <= 200 } ?: "El servidor no lo aceptó (${e.status}).",
