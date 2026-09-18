@@ -58,7 +58,12 @@ fun PeriodoSheet(
     saving: Boolean = false,
     error: String? = null,
 ) {
-    var dia by remember { mutableStateOf(cutoffActual.coerceIn(1, 31)) }
+    // `remember(cutoffActual)` y no `remember {}` a secas: una hoja abierta mientras el perfil
+    // todavía viajaba se quedaba **para siempre** en el día que tenía al abrirse —el 1 por
+    // defecto— aunque el corte real (25) llegara un segundo después. El botón «Guardar» seguía
+    // activo, así que un toque escribía 1 encima del 25 y le movía el mes entero. Con la clave,
+    // el valor que llega manda; es el mismo patrón que ya usa `InicioDelPeriodoSheet`.
+    var dia by remember(cutoffActual) { mutableStateOf(cutoffActual.coerceIn(1, 31)) }
     val settings = remember(dia) { PeriodSettings(cutoffDay = dia) }
     val hoy = remember(dia) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
 

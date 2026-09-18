@@ -1,0 +1,4 @@
+Fixture de test, no es una fuente de verdad. Ocupa la misma ruta que la fuente que sirve el
+bundle real (scripts/desplegar.sh verifica exactamente esta URL contra producción) para poder
+afirmar que las fuentes se sirven con la MISMA regla de caché que el resto: su ruta no lleva
+hash de contenido, así que un `immutable` largo dejaría clavada la fuente vieja.

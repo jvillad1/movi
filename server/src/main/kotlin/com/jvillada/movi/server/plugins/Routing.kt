@@ -101,6 +101,26 @@ fun Application.configureRouting() {
             contentType { url ->
                 if (url.path.endsWith(".wasm")) ContentType("application", "wasm") else null
             }
+            // **El navegador tiene que preguntar antes de reusar el bundle.**
+            //
+            // Hasta acá esto salía sin NINGUNA instrucción de caché —ni `Cache-Control`, ni
+            // `Last-Modified`, ni `ETag`— y un navegador sin instrucciones es libre de aplicar su
+            // heurística (RFC 9111 §4.2.2): puede servir `composeApp.js` o el `.wasm` desde su
+            // disco, sin preguntar, después de un despliegue, y dejar al dueño mirando la app de
+            // antes mientras `/version` jura que el commit nuevo está arriba. Los nombres no
+            // llevan hash (se mantienen estables a propósito, el Dockerfile los copia por nombre)
+            // y no hay parámetro de versión, así que no hay nada más que rompa el empate.
+            // `push-sw.js` ya se niega a cachear por exactamente este motivo.
+            //
+            // `no-cache` **no** es «no guardes»: es «guarda, pero pregunta siempre». Y para que
+            // preguntar sea barato está `configureConditionalHeaders()` —la otra mitad de esto—,
+            // que hace que la petición condicional se conteste 304 sin cuerpo cuando nada cambió.
+            //
+            // Va parejo para todo, fuentes incluidas: viven en una ruta fija
+            // (`composeResources/…/font/space_grotesk_regular.ttf`), sin hash de contenido, así
+            // que un `immutable` de un año dejaría clavada la fuente vieja el día que cambie. Un
+            // 304 de cinco archivos es un precio bajo por no tener esa trampa.
+            cacheControl { listOf(CacheControl.NoCache(null)) }
         }
     }
 }
