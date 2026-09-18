@@ -20,7 +20,22 @@ CREATE TABLE account (
     -- PRESUPUESTO_DE_RED_MS— la pensión voluntaria volvía a sumar y el hero saltaba de $31,6M a
     -- $137,6M. No es un caso raro: el segundo camino se alcanza con red mala, que es el modo
     -- normal en el bus.
-    conditionedTo TEXT
+    conditionedTo TEXT,
+    -- **«El server ya no tiene esta cuenta.»** NULL = a la vista, que es la verdad de todo lo que
+    -- ya está en el teléfono; un instante = la última lectura con red preguntó y el server no la
+    -- devolvió, así que se deja de listar (ver `selectVisible`).
+    --
+    -- Antes esa conclusión era una variable local de `getAccounts` que moría con la respuesta: la
+    -- cuenta borrada desde la web desaparecía con red buena y **volvía** —con sus $500.000 sumando
+    -- a «Tu plata» y al patrimonio— apenas el siguiente GET fallaba o tardaba más que
+    -- `PRESUPUESTO_DE_RED_MS`. Escrita acá, la respuesta sin red dice lo mismo que la respuesta con
+    -- red.
+    --
+    -- **No es un borrado**: la fila y sus movimientos siguen enteros. Es la diferencia con
+    -- `deleteById`, que cascadea y corre solo cuando el dueño lo pide — una lectura corta no puede
+    -- costar datos. Y se limpia sola: si el server vuelve a devolver la cuenta, `mostrar` la
+    -- devuelve a la lista.
+    hiddenAt   INTEGER
 );
 
 -- Mismo criterio que `GET /api/accounts` (ver AccountRoutes.kt, donde está escrito por qué se
@@ -43,8 +58,19 @@ CREATE TABLE account (
 -- sella con `markSynced`, que es un UPDATE y no toca el rowid— pero sí `mirrorAccountLocally`
 -- (al crear un crédito o una tarjeta) y `adjustCreditBalance` (al corregir el saldo de una): con
 -- una tarjeta en la app, ajustarle el saldo la manda al final de la lista.
+
+-- TODAS las filas, incluidas las ocultas. Es la foto que `getAccounts` toma ANTES de preguntarle
+-- al server (una cuenta oculta que el server vuelva a devolver tiene que poder volver a la lista)
+-- y la que resuelve el tipo de cuenta de cada movimiento: los movimientos de una cuenta oculta
+-- siguen existiendo y siguen necesitando su tipo para saber si son flujo de caja.
 selectAll:
 SELECT * FROM account WHERE userId = :userId ORDER BY lower(name) ASC, id ASC;
+
+-- Lo que se muestra: igual que `selectAll` pero sin lo que el server ya no tiene (ver `hiddenAt`).
+-- Este es el respaldo sin red de `getAccounts`, y por eso el filtro vive en la consulta y no en
+-- Kotlin: la lista tiene que decir lo mismo con red y sin ella.
+selectVisible:
+SELECT * FROM account WHERE userId = :userId AND hiddenAt IS NULL ORDER BY lower(name) ASC, id ASC;
 
 selectById:
 SELECT * FROM account WHERE id = :id;
@@ -52,6 +78,9 @@ SELECT * FROM account WHERE id = :id;
 selectUnsynced:
 SELECT * FROM account WHERE syncedAt IS NULL AND userId = :userId;
 
+-- `hiddenAt` queda a propósito fuera de la lista de columnas: al ser `INSERT OR REPLACE`, espejar
+-- una cuenta que el server acaba de devolver la vuelve a dejar visible sola. Igual que `mostrar`,
+-- que es la forma explícita de lo mismo para cuando no se reescribe la fila entera.
 insert:
 INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt, conditionedTo)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
@@ -61,6 +90,16 @@ UPDATE account SET balance = :balance WHERE id = :id;
 
 markSynced:
 UPDATE account SET syncedAt = :syncedAt WHERE id = :id;
+
+-- El server no la devolvió: se deja de listar, sin borrarle nada. Ver `hiddenAt`.
+ocultar:
+UPDATE account SET hiddenAt = :hiddenAt WHERE id = :id;
+
+-- El camino de vuelta: el server volvió a devolverla (la restauraron, o fue una carrera) y vuelve
+-- a la lista con todo lo suyo intacto. Sin esto, «oculta» sería un borrado disfrazado y
+-- permanente.
+mostrar:
+UPDATE account SET hiddenAt = NULL WHERE id = :id;
 
 -- F55: espejo local de DELETE /api/accounts/{id}. Sin userId acá porque `id` ya es la PK y el
 -- server es quien decide "de quién es la cuenta" antes de borrar — este delete corre DESPUÉS

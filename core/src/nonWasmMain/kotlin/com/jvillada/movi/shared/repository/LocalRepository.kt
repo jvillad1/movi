@@ -82,12 +82,15 @@ import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
+import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.shared.model.rechazoDeLosTextos
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.time.epochMillisToAppDate
@@ -154,11 +157,38 @@ private fun deltaDelEspejo(
 /** La moneda que la columna `account.balance` sabe acumular. Ver [deltaDelEspejo]. */
 private const val MONEDA_DEL_ESPEJO = "COP"
 
+/**
+ * **Dónde corre SQLite**, y por qué no puede ser donde corría.
+ *
+ * Todas las lecturas de este repo se llaman desde un `LaunchedEffect` —Movimientos, el detalle de
+ * una cuenta, Presupuestos—, y un `LaunchedEffect` corre en el dispatcher principal: el mismo hilo
+ * que pinta. Nada de acá cambiaba de hilo, así que cada lectura hacía **en el hilo de la UI** dos
+ * barridos de tabla completa, el barrido de tipos de cuenta, el de anulados, la transacción que
+ * espeja lo que contestó el server y el orden final. Medido en JVM de escritorio con 5.000
+ * movimientos: 615 ms la primera lectura, 110 ms en régimen, 139 ms `getEventsByDay`. En un
+ * teléfono, con la base en disco y dos años de SMS del banco, eso es territorio de ANR.
+ *
+ * Es un parámetro y no una constante para que una prueba pueda pasar el suyo —y comprobar, por
+ * ejemplo, que la lectura no ocurre en el hilo del llamador—. Por omisión, el `Dispatchers.IO` de
+ * cada plataforma (ver [dispatcherDeDisco]): el pool pensado para trabajo que bloquea esperando
+ * disco, que es exactamente lo que hace SQLite.
+ */
 class LocalRepository(
     private val db: MoviDatabase,
     private val remote: WalletRepository,
     private val userId: () -> String,
+    private val disco: CoroutineDispatcher = dispatcherDeDisco(),
 ) : WalletRepository {
+
+    /**
+     * Corre [bloque] fuera del hilo que pinta. Ver el KDoc de la clase.
+     *
+     * Envuelve el cuerpo ENTERO de cada operación que toca SQLite, no solo la consulta: varias
+     * intercalan trabajo de base con la llamada al server, y partirlas en tres saltos de
+     * dispatcher costaría más que el trabajo que ahorra. La llamada remota no sufre por correr
+     * acá: Ktor suspende y no se queda pegada a este hilo.
+     */
+    private suspend fun <T> enDisco(bloque: suspend () -> T): T = withContext(disco) { bloque() }
 
     // ── Accounts ──────────────────────────────────────────────────────────────
 
@@ -237,7 +267,7 @@ class LocalRepository(
      * que es el mismo criterio que `GET /api/accounts` — el emparejamiento entre el teléfono y
      * la web se mantiene y no se reordena nada en Kotlin.
      */
-    override suspend fun getAccounts(): List<Account> {
+    override suspend fun getAccounts(): List<Account> = enDisco {
         val uid = userId()
         // El fotograma va ANTES de preguntar: es lo que hace que la regla de abajo solo pueda
         // ocultar cuentas por las que el server ya fue consultado. Ver el KDoc.
@@ -245,12 +275,15 @@ class LocalRepository(
         val selladasAntesDePreguntar = filasAntesDePreguntar
             .filter { it.syncedAt != null }
             .mapTo(mutableSetOf()) { it.id }
+        val ocultasAntesDePreguntar = filasAntesDePreguntar
+            .filter { it.hiddenAt != null }
+            .mapTo(mutableSetOf()) { it.id }
         val habiaAlgoLocal = filasAntesDePreguntar.isNotEmpty()
 
         val remotas = try {
             if (habiaAlgoLocal) {
                 withTimeoutOrNull(PRESUPUESTO_DE_RED_MS) { remote.getAccounts() }
-                    ?: return leerCuentasLocales(uid)
+                    ?: return@enDisco leerCuentasLocales(uid)
             } else {
                 remote.getAccounts()
             }
@@ -263,22 +296,41 @@ class LocalRepository(
             // Vacío + no se pudo preguntar = no se sabe, y «no tienes cuentas» sería una
             // afirmación sin respaldo. Con algo local, eso es la mejor respuesta que hay.
             if (locales.isEmpty()) throw e
-            return locales
+            return@enDisco locales
         }
 
-        db.transaction { remotas.forEach { mirrorAccountLocally(it) } }
         val porId = remotas.associateBy { it.id }
         val fantasmas = selladasAntesDePreguntar - porId.keys
-        // El orden sale de la DB; el contenido de cada cuenta que el server conoce, del server;
-        // y las que el server ya no tiene se dejan de mostrar (sin borrarles nada).
-        return leerCuentasLocales(uid)
-            .filterNot { it.id in fantasmas }
-            .map { porId[it.id] ?: it }
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        db.transaction {
+            remotas.forEach { mirrorAccountLocally(it) }
+            // **El camino de vuelta, primero.** Una cuenta que se había ocultado y que el server
+            // vuelve a devolver —la restauraron, o el GET anterior se cruzó con una escritura—
+            // vuelve a la lista con todo lo suyo. Sin esto, «oculta» sería un borrado disfrazado
+            // del que no se sale.
+            remotas.filter { it.id in ocultasAntesDePreguntar }
+                .forEach { db.accountQueries.mostrar(it.id) }
+            // Y la decisión que antes moría con la respuesta: queda escrita en la misma
+            // transacción que espeja lo que el server contestó. Ver `account.hiddenAt`.
+            fantasmas.forEach { db.accountQueries.ocultar(ahora, it) }
+        }
+        // El orden sale de la DB; el contenido de cada cuenta que el server conoce, del server; y
+        // las que el server ya no tiene ni siquiera salen de la consulta (`selectVisible`), así
+        // que la lista dice lo mismo con red y sin ella.
+        leerCuentasLocales(uid).map { porId[it.id] ?: it }
     }
 
-    /** Las cuentas de la DB local, en el orden de `Account.sq`. Respaldo sin red de [getAccounts]. */
+    /**
+     * Las cuentas visibles de la DB local, en el orden de `Account.sq`. Respaldo sin red de
+     * [getAccounts].
+     *
+     * «Visibles» = sin las que el server dejó de devolver (ver `account.hiddenAt` y
+     * `selectVisible`). Ese filtro es lo que hace que el respaldo sin red diga lo mismo que la
+     * última respuesta con red: antes el fantasma se tachaba en memoria, sobre la respuesta del
+     * server, y volvía entero apenas la red fallaba o tardaba más que [PRESUPUESTO_DE_RED_MS].
+     */
     private fun leerCuentasLocales(uid: String): List<Account> =
-        db.accountQueries.selectAll(uid).executeAsList().map { it.toAccountModel() }
+        db.accountQueries.selectVisible(uid).executeAsList().map { it.toAccountModel() }
 
     /**
      * Mismo criterio que [getAccounts]: el server primero, la fila local como respaldo.
@@ -296,7 +348,7 @@ class LocalRepository(
      * Un 404 no la esconde —para eso está el filtro de la lista, que es donde el fantasma hacía
      * daño (sumaba al patrimonio y se podía elegir en un recurrente)—.
      */
-    override suspend fun getAccount(id: String): Account =
+    override suspend fun getAccount(id: String): Account = enDisco {
         try {
             remote.getAccount(id).also { mirrorAccountLocally(it) }
         } catch (e: CancellationException) {
@@ -304,6 +356,7 @@ class LocalRepository(
         } catch (e: Exception) {
             db.accountQueries.selectById(id).executeAsOneOrNull()?.toAccountModel() ?: throw e
         }
+    }
 
     /**
      * Crea la cuenta contra el server y **espeja el resultado en SQLDelight** — mismo patrón que
@@ -337,14 +390,14 @@ class LocalRepository(
      * crear) es peor que reintentarla cada 30s; ver el KDoc de `SyncEngine.syncAccounts` para el
      * mismo trade-off en la otra punta.
      */
-    override suspend fun createAccount(account: Account): Account {
+    override suspend fun createAccount(account: Account): Account = enDisco {
         // Red de seguridad, no la vía principal: la UI ya manda `id = newId("acc")` (ver
         // com.jvillada.movi.ui.accounts.CreateAccountSheet). Nunca insertar con PK "" — con
         // INSERT OR REPLACE, una segunda cuenta creada antes de que la primera tuviera id
         // reemplazaría a la primera en vez de agregarse.
         val resolved = if (account.id.isBlank()) account.copy(id = newId("acc")) else account
         val uid = userId()
-        return try {
+        return@enDisco try {
             val created = remote.createAccount(resolved)
             db.accountQueries.insert(
                 created.id, created.name, created.type.name,
@@ -387,7 +440,7 @@ class LocalRepository(
      * sacarla salvo borrando los datos de la app. Hoy [getAccounts] ni siquiera la muestra, pero
      * la salida tiene que existir igual: es la que hace que un fantasma no pueda ser permanente.
      */
-    override suspend fun deleteAccount(id: String) {
+    override suspend fun deleteAccount(id: String) = enDisco {
         try {
             remote.deleteAccount(id)
         } catch (e: ApiException) {
@@ -427,7 +480,7 @@ class LocalRepository(
 
     // ── Events ────────────────────────────────────────────────────────────────
 
-    override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+    override suspend fun postEvent(event: FinancialEvent): FinancialEvent = enDisco {
         // La guarda simétrica de la del server (`POST /api/events` rechaza esto con 422), y hace
         // falta acá porque el espejo local escribe PRIMERO y pregunta después. Sin ella el daño
         // era silencioso y permanente: `isCashFlow` deja fuera del mes a cualquier evento con la
@@ -519,7 +572,7 @@ class LocalRepository(
                 db.accountQueries.updateBalance(acct.balance + delta, acct.id)
             }
         }
-        return resolved
+        return@enDisco resolved
     }
 
     /**
@@ -569,19 +622,19 @@ class LocalRepository(
      * lectura con red.
      */
     /** El descuento nace en el server (es idempotente allá) y se espeja como cualquier ajuste. */
-    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
+    override suspend fun registerPayrollDeduction(accountId: String): CreditSummary = enDisco {
         val summary = remote.registerPayrollDeduction(accountId)
         mirrorAccountLocally(summary.account)
         summary.adjustmentEvent?.let { evento ->
             db.transaction { mirrorEventLocally(evento, userId()) }
         }
-        return summary
+        return@enDisco summary
     }
 
-    override suspend fun renameAccount(id: String, name: String): Account {
+    override suspend fun renameAccount(id: String, name: String): Account = enDisco {
         val actualizada = remote.renameAccount(id, name)
         db.transaction { mirrorAccountLocally(actualizada) }
-        return actualizada
+        return@enDisco actualizada
     }
 
     /**
@@ -594,13 +647,13 @@ class LocalRepository(
      * teléfono sería un dato que el `SyncEngine` nunca empujaría (no es una creación, así que no
      * entra en `selectUnsynced`) y que la próxima lectura con red borraría en silencio.
      */
-    override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
+    override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = enDisco {
         val actualizada = remote.updateAccountCondition(id, condicionadaA)
         db.transaction { mirrorAccountLocally(actualizada) }
-        return actualizada
+        return@enDisco actualizada
     }
 
-    override suspend fun getEvents(accountId: String?): List<FinancialEvent> {
+    override suspend fun getEvents(accountId: String?): List<FinancialEvent> = enDisco {
         val uid = userId()
         // La foto va ANTES de preguntar, igual que en getAccounts: es lo que hace que la regla
         // de los fantasmas solo pueda ocultar filas por las que el server ya fue consultado.
@@ -626,7 +679,7 @@ class LocalRepository(
         val remotos = try {
             if (habiaAlgoLocal) {
                 withTimeoutOrNull(PRESUPUESTO_DE_RED_MS) { remote.getEvents(null) }
-                    ?: return leerEventosLocales(uid, accountId)
+                    ?: return@enDisco leerEventosLocales(uid, accountId)
             } else {
                 remote.getEvents(null)
             }
@@ -637,7 +690,7 @@ class LocalRepository(
         } catch (e: Exception) {
             val locales = leerEventosLocales(uid, accountId)
             if (locales.isEmpty()) throw e
-            return locales
+            return@enDisco locales
         }
 
         // **Solo se escribe lo que cambió.** Antes se reescribían las N filas en cada lectura,
@@ -651,9 +704,6 @@ class LocalRepository(
         // misma función.
         val localesPorId = filasAntesDePreguntar.associateBy { it.id }
         val cambiados = remotos.filter { remoto -> difiereDeLoGuardado(remoto, localesPorId[remoto.id]) }
-        if (cambiados.isNotEmpty()) {
-            db.transaction { cambiados.forEach { mirrorEventLocally(it, uid) } }
-        }
         val porId = remotos.associateBy { it.id }
         // La regla de los fantasmas ya corre igual pidan una cuenta o todas, porque arriba
         // siempre se pide el conjunto entero: «no vino» solo puede significar «se anuló o se
@@ -664,11 +714,35 @@ class LocalRepository(
         // dueño haya borrado su historia entera, sino un filtro nuevo, un `uid` mal resuelto o un
         // cambio de alcance del endpoint. Ante la duda se muestra de más — una lista vacía no es
         // evidencia suficiente para hacer desaparecerle el mes a alguien.
-        val fantasmas = if (remotos.isEmpty()) emptySet() else selladasAntesDePreguntar - porId.keys
+        //
+        // Y lo anulado en este teléfono no vuelve a marcarse: ya está escondido por su propia
+        // anulación, y una lápida encima solo agregaría una fila que después habría que explicar.
+        val anulados = db.voidEventQueries.selectAllVoidedIds().executeAsList().toSet()
+        val fantasmas =
+            if (remotos.isEmpty()) emptySet()
+            else selladasAntesDePreguntar - porId.keys - anulados
+        // El camino de vuelta: el server volvió a devolver un movimiento que se había tachado.
+        // Se le saca la lápida y reaparece con todo lo suyo — si no, esconderlo sería un borrado
+        // disfrazado y permanente. Solo se borran lápidas; una anulación del dueño no se toca.
+        val lapidasQueSobran = db.voidEventQueries.selectFantasmaIds().executeAsList()
+            .filter { it in porId }
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        if (cambiados.isNotEmpty() || fantasmas.isNotEmpty() || lapidasQueSobran.isNotEmpty()) {
+            // **Todo en la misma transacción que espeja la respuesta**, que es el punto: antes lo
+            // que el server ya no tenía se tachaba en una variable local, y esa conclusión se
+            // perdía con la respuesta. Escrita en `void_event`, la lectura sin red dice lo mismo
+            // que la lectura con red, y `leerEventosLocales` la respeta gratis —ya filtraba por
+            // `selectAllVoidedIds`— igual en Movimientos, en el detalle de la cuenta y en el total
+            // del día.
+            db.transaction {
+                cambiados.forEach { mirrorEventLocally(it, uid) }
+                fantasmas.forEach { db.voidEventQueries.insertFantasma(it, ahora) }
+                lapidasQueSobran.forEach { db.voidEventQueries.olvidarFantasma(it) }
+            }
+        }
         // El contenido de lo que el server conoce sale del server; lo que solo existe acá (todavía
-        // sin subir) sale del espejo; y lo que el server ya no tiene se deja de mostrar.
-        return leerEventosLocales(uid, accountId)
-            .filterNot { it.id in fantasmas }
+        // sin subir) sale del espejo; y lo que el server ya no tiene lo deja fuera la consulta.
+        leerEventosLocales(uid, accountId)
             // Misma regla que en el espejo, y por el mismo motivo: **una fila sin sellar gana**.
             // Sin sello significa que el teléfono tiene algo que el server todavía no sabe —una
             // recategorización, una fecha corregida—, así que devolver la versión remota le
@@ -749,7 +823,7 @@ class LocalRepository(
             .masRecientePrimero()
     }
 
-    override suspend fun getEventsByDay(): List<EventDay> =
+    override suspend fun getEventsByDay(): List<EventDay> = enDisco {
         getEvents()
             // Explícito, aunque [getEvents] ya venga ordenado: es el mismo lugar donde lo hace
             // `GET /api/events/by-day`, y el día que alguien cambie de dónde salen los eventos
@@ -763,21 +837,21 @@ class LocalRepository(
                     // es flujo de caja, así que los movimientos de cuentas de deuda no entran.
                     // El renglón se sigue listando; solo no encabeza el día.
                     date = date,
-                    // `currency == "COP"` NO es de adorno: es la mitad del criterio que usa el
-                    // server (ver `/api/events/by-day`) y acá faltaba. Mientras el espejo local
-                    // solo tenía lo que este teléfono había escrito no se notaba; desde que baja
-                    // lo del server, un gasto en dólares entraba al total como si fueran pesos —
-                    // con un COP de $10.000 y un USD de 100, el server decía −10.000 y el
-                    // teléfono −10.100. Hasta la migración 8 la columna `currency` ni siquiera
-                    // existía en el espejo —todo se leía como COP—, así que sin este filtro la
-                    // diferencia era invisible.
-                    total = items.filter { it.currency == "COP" && it.countsAsCashFlow }.sumOf {
-                        if (it.type == TransactionType.INCOME) it.amount else -it.amount
-                    },
+                    // **La regla del total del día se llama, no se copia.** Acá estaba escrita a
+                    // mano —el filtro por moneda, el filtro de flujo y el signo— y era la misma
+                    // que [aporteAlFlujoDelDia] ya calcula en :core, que es la que usa el server
+                    // (ver `/api/events/by-day`). Coincidían, así que no se veía; pero el KDoc de
+                    // esa función dice con todas las letras que vive en :core para que el número
+                    // no se calcule dos veces con dos reglas, y dos copias solo empatan hasta que
+                    // alguien toque una. Cuando aparezca la próxima moneda —o la próxima
+                    // categoría que no es flujo— el teléfono y la web van a seguir diciendo lo
+                    // mismo sin que nadie se acuerde de este archivo.
+                    total = items.sumOf { aporteAlFlujoDelDia(it) },
                     items = items,
                 )
             }
             .sortedByDescending { it.date }
+    }
 
     /**
      * Anula un movimiento en el espejo local y deja la anulación encolada para el `SyncEngine`.
@@ -792,7 +866,7 @@ class LocalRepository(
      * contra un 409 "Already voided" eterno: quedaría sin sellar y el ciclo de 30s la reintentaría
      * para siempre, ensuciando el log con un error que no significa nada.
      */
-    override suspend fun voidEvent(id: String, reason: String?): VoidEvent {
+    override suspend fun voidEvent(id: String, reason: String?): VoidEvent = enDisco {
         val now = Clock.System.now().toEpochMilliseconds()
         val voidId = "${now}_${id.take(8)}"
         val uid = userId()
@@ -827,7 +901,7 @@ class LocalRepository(
                 db.accountQueries.updateBalance(acct.balance - originalDelta, acct.id)
             }
         }
-        return VoidEvent(id = voidId, originalEventId = id, reason = reason, timestamp = now)
+        return@enDisco VoidEvent(id = voidId, originalEventId = id, reason = reason, timestamp = now)
     }
 
     /**
@@ -847,7 +921,7 @@ class LocalRepository(
      * `selectUnsynced` deja fuera cualquier fila con `transferId` justamente para que este ciclo
      * no pueda subir una pata suelta.
      */
-    override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
+    override suspend fun createTransfer(request: CreateTransferRequest): TransferResult = enDisco {
         val result = try {
             remote.createTransfer(request)
         } catch (e: ApiException) {
@@ -872,7 +946,7 @@ class LocalRepository(
             TransferResult(from = fromLeg, to = toLeg)
         }
         mirrorTransferLocally(result, request.transferId)
-        return result
+        return@enDisco result
     }
 
     /** Una cuenta de la DB local como modelo, o null si este dispositivo todavía no la conoce. */
@@ -947,7 +1021,7 @@ class LocalRepository(
      * próximo ciclo y `syncEvents` ya manda `row.category`, así que la categoría corregida viaja
      * sola, sin necesidad de tocar el server acá.
      */
-    override suspend fun updateEventCategory(id: String, category: String): FinancialEvent {
+    override suspend fun updateEventCategory(id: String, category: String): FinancialEvent = enDisco {
         val uid = userId()
         val types = accountTypes(uid)
         // Leer y escribir en una transacción, y **revalidar** adentro: esto cierra SOLO LA MITAD
@@ -1040,11 +1114,11 @@ class LocalRepository(
                 null
             }
         }
-        if (resolvedLocally != null) return resolvedLocally
+        if (resolvedLocally != null) return@enDisco resolvedLocally
 
         val updated = remote.updateEventCategory(id, category)
         db.financialEventQueries.updateCategory(updated.category, updated.id, uid)
-        return updated
+        return@enDisco updated
     }
 
     /**
@@ -1064,11 +1138,11 @@ class LocalRepository(
      * «Comida» a media transferencia — que además volvería a contar como gasto del mes
      * (`isCashFlow` decide por el nombre) hasta la próxima lectura.
      */
-    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse {
+    override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse = enDisco {
         val uid = userId()
         val resultado = remote.recategorizarEnLote(ids, category)
         resultado.cambiados.forEach { db.financialEventQueries.updateCategory(category, it, uid) }
-        return resultado
+        return@enDisco resultado
     }
 
     /**
@@ -1095,10 +1169,10 @@ class LocalRepository(
      * **Lo que el server rechazó**: filas que nunca subieron y tienen el motivo que marcó el
      * `SyncEngine` ante un 4xx. Un traspaso rechazado aparece por cada pata.
      */
-    override suspend fun getMovimientosRechazados(): List<MovimientoRechazado> {
+    override suspend fun getMovimientosRechazados(): List<MovimientoRechazado> = enDisco {
         val uid = userId()
         val types = accountTypes(uid)
-        return db.financialEventQueries.selectRechazados(uid).executeAsList()
+        return@enDisco db.financialEventQueries.selectRechazados(uid).executeAsList()
             .map { MovimientoRechazado(it.toModel(types), it.syncError.orEmpty()) }
     }
 
@@ -1109,7 +1183,7 @@ class LocalRepository(
      * que contestó. Tampoco mueve plata de lugar —solo decide si la fila cuenta en «Gastos» e
      * «Ingresos» o espera en «Por confirmar»—, así que no lleva guardas propias.
      */
-    override suspend fun confirmEvent(id: String): FinancialEvent {
+    override suspend fun confirmEvent(id: String): FinancialEvent = enDisco {
         val uid = userId()
         val types = accountTypes(uid)
         val resolvedLocally = db.transactionWithResult {
@@ -1122,14 +1196,14 @@ class LocalRepository(
                 null
             }
         }
-        if (resolvedLocally != null) return resolvedLocally
+        if (resolvedLocally != null) return@enDisco resolvedLocally
 
         val updated = remote.confirmEvent(id)
         db.financialEventQueries.updateReconciliationStatus(updated.reconciliationStatus.name, updated.id, uid)
-        return updated
+        return@enDisco updated
     }
 
-    override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
+    override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent = enDisco {
         val uid = userId()
         val types = accountTypes(uid)
         val resolvedLocally = db.transactionWithResult {
@@ -1142,11 +1216,11 @@ class LocalRepository(
                 null
             }
         }
-        if (resolvedLocally != null) return resolvedLocally
+        if (resolvedLocally != null) return@enDisco resolvedLocally
 
         val updated = remote.updateEventRepeats(id, repeats)
         db.financialEventQueries.updateNoSeRepite(siNoSeRepite(updated.noSeRepite), updated.id, uid)
-        return updated
+        return@enDisco updated
     }
 
 
@@ -1173,7 +1247,7 @@ class LocalRepository(
      * diseño una pata nunca está pendiente de sincronizar —`createTransfer` es remote-first—, así
      * que el camino local de la cascada es la red de seguridad, no el habitual.)
      */
-    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent {
+    override suspend fun updateEventTimestamp(id: String, timestamp: Long): FinancialEvent = enDisco {
         val uid = userId()
         val types = accountTypes(uid)
         // **Las mismas guardas que el server, ANTES de decidir por qué camino se resuelve.**
@@ -1221,7 +1295,7 @@ class LocalRepository(
                 null
             }
         }
-        if (resolvedLocally != null) return resolvedLocally
+        if (resolvedLocally != null) return@enDisco resolvedLocally
 
         // **El sello de recurrente lo suelta el server** (ver `PUT /api/events/{id}/timestamp`),
         // así que el camino local de arriba no tiene qué soltar: `recurring_occurrences` es una
@@ -1235,7 +1309,7 @@ class LocalRepository(
         } else {
             db.financialEventQueries.updateTimestamp(updated.timestamp, updated.id, uid)
         }
-        return updated
+        return@enDisco updated
     }
 
     /**
@@ -1283,7 +1357,7 @@ class LocalRepository(
      * `account.balance` acumula solo pesos —es lo que el server manda en `Account.balance`, ver
      * [deltaDelEspejo]—, así que corregir el monto de un movimiento en dólares no lo toca.
      */
-    override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent {
+    override suspend fun updateEvent(id: String, cambios: EdicionDeMovimiento): FinancialEvent = enDisco {
         val uid = userId()
         val types = accountTypes(uid)
 
@@ -1357,7 +1431,7 @@ class LocalRepository(
                 null
             }
         }
-        if (resolvedLocally != null) return resolvedLocally
+        if (resolvedLocally != null) return@enDisco resolvedLocally
 
         val updated = remote.updateEvent(id, cambios)
         db.transaction {
@@ -1377,7 +1451,7 @@ class LocalRepository(
                 )
             }
         }
-        return updated
+        return@enDisco updated
     }
 
     /**
@@ -1529,14 +1603,14 @@ class LocalRepository(
      * — pero el saldo espejado ya lo incluye, que es lo que Cuentas muestra. Traerlo requeriría
      * ampliar el wire (como `adjustmentEvent`); queda anotado como deferido, no como olvido.
      */
-    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary {
+    override suspend fun createCredit(request: CreateCreditRequest): CreditSummary = enDisco {
         val summary = remote.createCredit(request)
         mirrorAccountLocally(summary.account)
         // Ola 16: si el alta trajo desembolso, sus DOS patas se espejan acá. Sin esto, en el
         // teléfono el crédito aparecía con su deuda pero la plata no llegaba nunca a la cuenta
         // corriente: Movimientos y Cuentas leen de SQLDelight y el SyncEngine solo empuja.
         summary.disbursement?.let { mirrorDisbursementLocally(it, summary.account.id) }
-        return summary
+        return@enDisco summary
     }
 
     /**
@@ -1592,8 +1666,9 @@ class LocalRepository(
     override suspend fun getCards(): List<CardSummary> =
         leerConCache("cards") { remote.getCards() }
     /** Mismo espejo (y mismo porqué) que [createCredit]: sin él la tarjeta no aparece en Cuentas de Android. */
-    override suspend fun createCard(request: CreateCardRequest): CardSummary =
+    override suspend fun createCard(request: CreateCardRequest): CardSummary = enDisco {
         remote.createCard(request).also { mirrorAccountLocally(it.account) }
+    }
     // Los términos de tarjeta no viven en la DB local: se leen siempre del server, como los créditos.
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = remote.putCardTerms(terms)
     override suspend fun deleteCardTerms(accountId: String) = remote.deleteCardTerms(accountId)
@@ -1673,7 +1748,7 @@ class LocalRepository(
      * server lo deriva de todos los eventos con el signo correcto por tipo de cuenta, y para una
      * cuenta LOAN el delta local de [postEvent] tiene el signo al revés.
      */
-    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
+    override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary = enDisco {
         val summary = remote.adjustCreditBalance(accountId, targetBalance)
         val uid = userId()
         val event = summary.adjustmentEvent
@@ -1707,7 +1782,7 @@ class LocalRepository(
                 summary.account.condicionadaA,
             )
         }
-        return summary
+        return@enDisco summary
     }
     override suspend fun getSubscriptions(): SubscriptionsResult = remote.getSubscriptions()
     override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
@@ -1799,17 +1874,17 @@ class LocalRepository(
      * caso acotado (un movimiento anotado offline entre el rename y el próximo sync) pero no es
      * cero, y decirlo redondo sería el tipo de tranquilidad falsa que este KDoc vino a corregir.
      */
-    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
+    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult = enDisco {
         val result = remote.renameCategory(from, to)
         db.financialEventQueries.renameCategory(newCategory = result.name, oldCategory = from, userId = userId())
-        return result
+        return@enDisco result
     }
 
     /** Igual que [renameCategory]: el server reescribe, y acá se espeja lo que confirmó. */
-    override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult {
+    override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult = enDisco {
         val result = remote.mergeCategory(from, into)
         db.financialEventQueries.renameCategory(newCategory = result.name, oldCategory = from, userId = userId())
-        return result
+        return@enDisco result
     }
 
 

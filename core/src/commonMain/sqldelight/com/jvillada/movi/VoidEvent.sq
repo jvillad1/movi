@@ -3,7 +3,18 @@ CREATE TABLE void_event (
     originalEventId TEXT    NOT NULL,
     reason          TEXT,
     timestamp       INTEGER NOT NULL,
-    syncedAt        INTEGER
+    syncedAt        INTEGER,
+    -- **De dónde salió esta anulación.** NULL = la anuló el dueño (y es la verdad de todo lo que ya
+    -- estaba en el teléfono cuando se agregó la columna); `'fantasma'` = la lápida que escribe
+    -- `LocalRepository.getEvents` por un movimiento que este teléfono tenía sellado y que el
+    -- server, preguntado, no devolvió — o sea, anulado o borrado en otro lado.
+    --
+    -- La distinción existe para el camino de VUELTA, que es lo único que las dos clases de fila no
+    -- comparten: si el server vuelve a devolver el movimiento, la lápida se borra (`olvidarFantasma`)
+    -- y el movimiento reaparece, mientras que una anulación del dueño no se toca nunca — ni siquiera
+    -- la de la pata hermana de un traspaso, que se escribe sellada y que el server sigue devolviendo
+    -- hasta que el `SyncEngine` empuje la del evento que el dueño tocó.
+    origen          TEXT
 );
 
 selectUnsynced:
@@ -48,3 +59,26 @@ SELECT COUNT(*) FROM void_event WHERE originalEventId = :originalEventId;
 -- desaparecer al rato. Un movimiento que parpadea es peor que uno que se queda.
 selectAllVoidedIds:
 SELECT originalEventId FROM void_event;
+
+-- **La lápida de un movimiento que el server ya no tiene.**
+--
+-- Se escribe YA SELLADA (`syncedAt` = el mismo instante) a propósito: `selectUnsynced` la dejaría
+-- entrar en el ciclo del `SyncEngine` y el teléfono le mandaría al server un `POST .../void` de algo
+-- que el server ya no tiene — un 404 eterno cada 30 segundos por algo que ya está como se quiere.
+--
+-- El `id` es determinista (`fantasma_<id del evento>`) y no lleva reloj: con `INSERT OR IGNORE`, dos
+-- lecturas seguidas escriben una sola fila.
+insertFantasma:
+INSERT OR IGNORE INTO void_event(id, originalEventId, reason, timestamp, syncedAt, origen)
+VALUES ('fantasma_' || :originalEventId, :originalEventId, NULL, :timestamp, :timestamp, 'fantasma');
+
+-- Qué movimientos se están escondiendo por fantasmas —y no porque el dueño los anulara—, para poder
+-- devolverlos si el server los vuelve a mandar.
+selectFantasmaIds:
+SELECT originalEventId FROM void_event WHERE origen = 'fantasma';
+
+-- El camino de vuelta: el server volvió a devolver el movimiento (lo restauraron, o fue una carrera
+-- con una escritura de este mismo teléfono), así que la lápida sobra. Solo borra lápidas: una
+-- anulación del dueño sobre el mismo movimiento se queda donde está.
+olvidarFantasma:
+DELETE FROM void_event WHERE originalEventId = :originalEventId AND origen = 'fantasma';

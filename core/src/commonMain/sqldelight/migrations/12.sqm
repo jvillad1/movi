@@ -1,0 +1,24 @@
+-- Migración 12 → 13: **lo que el server ya no tiene deja de volver apenas la red se pone lenta.**
+--
+-- Las dos lecturas que bajan del server (`LocalRepository.getAccounts` y `getEvents`) ya sabían
+-- reconocer un fantasma —una fila que este teléfono tenía sellada y que el server, preguntado, no
+-- devolvió— pero ese saber vivía en una variable local que moría con la respuesta: alcanzaba con
+-- que el siguiente GET fallara, o tardara más que `PRESUPUESTO_DE_RED_MS` (5 s, lo normal en el
+-- bus), para que el respaldo local volviera a mostrar el movimiento anulado desde la web —en la
+-- lista y en el total del día— y la cuenta borrada con sus $500.000 sumando a «Tu plata».
+--
+-- Estas dos columnas son esa decisión escrita en disco, y ninguna de las dos borra un solo dato:
+--
+--   * `account.hiddenAt` — «el server ya no tiene esta cuenta»: la fila y sus movimientos siguen
+--     enteros, solo se deja de listar (ver `selectVisible` en Account.sq). No se cascadea el
+--     borrado como hace `deleteAccount` justamente porque esto corre desde una LECTURA, donde una
+--     respuesta corta se volvería pérdida de datos.
+--   * `void_event.origen` — de dónde salió esta anulación. `NULL` es «la anuló el dueño», que es
+--     la verdad de todo lo que ya está en el teléfono; `'fantasma'` es la lápida que escribe
+--     `getEvents` por un movimiento que el server dejó de devolver. La distinción existe para el
+--     camino de vuelta: si el server vuelve a devolver ese movimiento —lo restauraron, o era una
+--     carrera— la lápida se borra y el movimiento reaparece, mientras que una anulación del dueño
+--     (incluida la pata hermana de un traspaso, que se escribe sellada y no se empuja) no se toca
+--     nunca.
+ALTER TABLE account ADD COLUMN hiddenAt INTEGER;
+ALTER TABLE void_event ADD COLUMN origen TEXT;
