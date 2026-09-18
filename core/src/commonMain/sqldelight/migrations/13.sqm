@@ -1,0 +1,18 @@
+-- Migración 13 → 14: agrega account.lastEditedAt — **la edad de esta versión de la cuenta**.
+--
+-- Mismo agujero que tapó `financial_event.lastEditedAt` (migración 10), esta vez sobre el nombre de
+-- la cuenta. `POST /api/accounts` es un upsert por id desde que se volvió idempotente, y el
+-- teléfono reenvía cada 30 segundos toda cuenta que no logró sellar. Si ese POST había LLEGADO y
+-- solo se perdió la respuesta —se cortó la señal, se murió el proceso—, la fila local se queda
+-- pendiente aunque el server ya tenga la cuenta; y si en esa ventana el dueño la renombra desde la
+-- web —«Libranza 4818» donde decía «4817», el dígito que la identifica contra el extracto—, el
+-- reenvío de la copia vieja le pisaba el nombre sin decir nada.
+--
+-- Con esta columna el reenvío viaja con la edad de su versión y el server lo deja perder contra una
+-- edición más nueva (ver `pisaElReenvio` en EventRoutes.kt, que es la MISMA función que ya decide
+-- la carrera de los movimientos). La escribe cada corrección local que se resuelve sin señal
+-- (`marcarEditado` en Account.sq).
+--
+-- Nullable y sin backfill: `null` es «nadie la editó», que es la verdad de todo lo que ya está en el
+-- teléfono — y lo que hace que estas filas se sigan comportando exactamente como hasta hoy.
+ALTER TABLE account ADD COLUMN lastEditedAt INTEGER;

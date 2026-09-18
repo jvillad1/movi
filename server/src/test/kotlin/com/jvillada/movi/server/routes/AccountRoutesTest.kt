@@ -48,6 +48,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /**
  * Hallazgo Critical de la revisión de la Ola 1b: hasta acá, `POST /api/accounts` fabricaba un
@@ -707,4 +708,168 @@ class AccountRoutesTest {
             header(HttpHeaders.ContentType, "application/json")
             setBody("""{"id":"$id","name":"$name","type":"SAVINGS","balance":0}""")
         }
+
+    // ── El reenvío contra el renombre de la web: quién gana ─────────────────────
+    //
+    // El agujero que quedó abierto cuando el `POST /api/accounts` se volvió idempotente: el POST
+    // del teléfono LLEGA pero la respuesta no vuelve (se cortó la señal, se murió el proceso), así
+    // que la fila local se queda sin sellar y `SyncEngine.syncAccounts` la reenvía cada 30 s. Si en
+    // esa ventana el dueño renombró la cuenta **en la web** —«Libranza 4818» donde decía «4817»,
+    // el dígito que la identifica contra el extracto— el upsert pisaba ese nombre sin decir nada.
+    // Ver `Account.lastEditedAt` y `pisaElReenvio`, que es la misma función que decide para los
+    // movimientos.
+
+    /** El cuerpo tal como lo arma un cliente que conoce el campo: la clave viaja SIEMPRE. */
+    private suspend fun ApplicationTestBuilder.reenviarCuenta(id: String, name: String, edicion: Long?) =
+        client.post("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"$id","name":"$name","type":"SAVINGS","balance":0,"currency":"COP",
+                    "lastEditedAt":${edicion ?: "null"}}""",
+            )
+        }
+
+    private suspend fun ApplicationTestBuilder.renombrar(id: String, name: String) =
+        client.put("/api/accounts/$id/name") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"name":"$name"}""")
+        }
+
+    private fun nombreGuardado(id: String) =
+        transaction { Accounts.selectAll().where { Accounts.id eq id }.single()[Accounts.name] }
+
+    private fun edicionGuardadaDe(id: String) =
+        transaction { Accounts.selectAll().where { Accounts.id eq id }.single()[Accounts.lastEditedAt] }
+
+    /**
+     * Lo primero que no se puede romper: una cuenta que el server NO tiene se inserta igual, traiga
+     * la clave o no. Sin esto, la guarda nueva convertiría el camino normal —el alta— en un rechazo
+     * silencioso.
+     */
+    @Test
+    fun `la primera entrega de una cuenta nueva se sigue insertando`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, reenviarCuenta("acc-primera", "Nequi", null).status)
+        assertEquals("Nequi", nombreGuardado("acc-primera"))
+        assertEquals(null, edicionGuardadaDe("acc-primera"), "crearla no es editarla")
+    }
+
+    /**
+     * El caso que dispara todo esto: el POST llegó, la respuesta no. El teléfono reenvía lo MISMO.
+     * Tiene que ser un no-op tranquilo (200), no un error ni una fila de más — si no, el ciclo de
+     * 30 s lo reintentaría para siempre.
+     */
+    @Test
+    fun `un reenvio identico de la cuenta es un no-op, no un error`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, reenviarCuenta("acc-igual", "Nequi", null).status)
+        val res = reenviarCuenta("acc-igual", "Nequi", null)
+
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals(1, transaction { Accounts.selectAll().where { Accounts.id eq "acc-igual" }.count().toInt() })
+        assertEquals("Nequi", nombreGuardado("acc-igual"))
+    }
+
+    /**
+     * **El bug, con su dígito.** El teléfono sube «Libranza 4817» y no ve la respuesta; el dueño lo
+     * corrige a «Libranza 4818» desde la web; el ciclo siguiente reenvía el nombre viejo. Antes
+     * volvía el «4817» sin decir nada: ni un error, ni un aviso, la corrección deshecha.
+     */
+    @Test
+    fun `el reenvio viejo no revierte el renombre hecho en la web`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, reenviarCuenta("acc-libranza-web", "Libranza 4817", null).status)
+        assertEquals(HttpStatusCode.OK, renombrar("acc-libranza-web", "Libranza 4818").status)
+
+        val reenvio = reenviarCuenta("acc-libranza-web", "Libranza 4817", null)
+
+        assertEquals(HttpStatusCode.OK, reenvio.status, "el teléfono tiene que poder sellarla y dejar de reenviar")
+        assertEquals("Libranza 4818", nombreGuardado("acc-libranza-web"), "el renombre de la web manda")
+        assertEquals(
+            "Libranza 4818",
+            Json.parseToJsonElement(reenvio.bodyAsText()).jsonObject["name"]!!.jsonPrimitive.content,
+            "y la respuesta dice la verdad de lo guardado, no el eco de lo que se mandó",
+        )
+    }
+
+    /** La otra puerta que sella edad: marcar para qué sirve la plata de esa cuenta. */
+    @Test
+    fun `el reenvio viejo tampoco revierte la condicion marcada en la web`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, reenviarCuenta("acc-cond-web", "Skandia", null).status)
+        assertEquals(
+            HttpStatusCode.OK,
+            client.put("/api/accounts/acc-cond-web/conditioned-to") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(HttpHeaders.ContentType, "application/json")
+                setBody("""{"condicionadaA":"Vivienda"}""")
+            }.status,
+        )
+
+        // El reenvío trae la clave de condición en null Y es más viejo: no puede borrarla.
+        val res = client.post("/api/accounts") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(
+                """{"id":"acc-cond-web","name":"Skandia","type":"SAVINGS","balance":0,
+                    "condicionadaA":null,"lastEditedAt":null}""",
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(
+            "Vivienda",
+            transaction { Accounts.selectAll().where { Accounts.id eq "acc-cond-web" }.single()[Accounts.conditionedTo] },
+        )
+    }
+
+    /**
+     * **Y el lado que NO se puede romper por arreglar el otro:** renombrar sin señal una cuenta que
+     * todavía no subió es un caso real del teléfono, y ese nombre tiene que ganarle a la copia más
+     * vieja del server. Una guarda que hiciera perder siempre al reenvío sería el mismo bug al
+     * revés.
+     */
+    @Test
+    fun `el renombre hecho en el telefono sin senal si gana`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, reenviarCuenta("acc-tel", "Libranza 4817", null).status)
+        assertEquals(HttpStatusCode.OK, renombrar("acc-tel", "Libranza 4818").status)
+
+        // El dueño la renombra en el teléfono DESPUÉS (su reloj, un minuto más tarde).
+        val despues = System.currentTimeMillis() + 60_000L
+        assertEquals(HttpStatusCode.OK, reenviarCuenta("acc-tel", "Libranza del banco", despues).status)
+
+        assertEquals("Libranza del banco", nombreGuardado("acc-tel"))
+        assertEquals(despues, edicionGuardadaDe("acc-tel"), "y la próxima se compara contra ESTA")
+    }
+
+    /**
+     * **El APK que el dueño tiene instalado (1.31) no manda la clave, y sigue pisando.** Es la
+     * misma decisión que ya tomó `POST /api/events`, y por el mismo motivo: sin la clave no hay
+     * forma de saber qué tan vieja es su copia, y tratar la ausencia como «editada en el año 0» la
+     * haría perder SIEMPRE, incluso cuando es el renombre que él acaba de escribir sin señal. El
+     * agujero se cierra para ese APK el día que instale el nuevo, no antes.
+     */
+    @Test
+    fun `un APK viejo que no manda la clave se sigue atendiendo como antes`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, createNamedAccount("acc-apk-viejo", "Libranza 4817").status)
+        assertEquals(HttpStatusCode.OK, renombrar("acc-apk-viejo", "Libranza 4818").status)
+
+        assertEquals(HttpStatusCode.OK, createNamedAccount("acc-apk-viejo", "Libranza 4817").status)
+        assertEquals("Libranza 4817", nombreGuardado("acc-apk-viejo"))
+    }
+
+    /** Renombrar sella la edad: sin eso el reenvío no tendría contra qué perder. */
+    @Test
+    fun `renombrar sella la edad de la version`() = testApplication {
+        wireApp()
+        createNamedAccount("acc-sello", "Libranza 4817")
+        assertNull(edicionGuardadaDe("acc-sello"), "crearla no sella nada")
+
+        assertEquals(HttpStatusCode.OK, renombrar("acc-sello", "Libranza 4818").status)
+        assertNotNull(edicionGuardadaDe("acc-sello"))
+    }
 }

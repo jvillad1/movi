@@ -158,7 +158,13 @@ fun Route.accountRoutes() {
                 return@put call.respond(HttpStatusCode.BadRequest, "El nombre no puede superar los $MAX_ACCOUNT_NAME_LENGTH caracteres")
             }
             val filas = dbQuery {
-                Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) { it[Accounts.name] = nombre }
+                Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) {
+                    it[Accounts.name] = nombre
+                    // **La edad de esta corrección** (ver `Account.lastEditedAt`): sin este sello,
+                    // el reenvío del teléfono —que puede estar en vuelo justo ahora, con el nombre
+                    // viejo— no tendría contra qué perder y volvería a escribir «Libranza 4817».
+                    it[Accounts.lastEditedAt] = System.currentTimeMillis()
+                }
             }
             if (filas == 0) return@put call.respond(HttpStatusCode.NotFound)
             val base = dbQuery {
@@ -193,6 +199,9 @@ fun Route.accountRoutes() {
             val filas = dbQuery {
                 Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) {
                     it[conditionedTo] = condicion
+                    // Ídem `PUT /{id}/name`: toda ruta que cambie la cuenta sella su edad, o el
+                    // reenvío del teléfono le gana a una marca que este nunca tuvo.
+                    it[Accounts.lastEditedAt] = System.currentTimeMillis()
                 }
             }
             if (filas == 0) return@put call.respond(HttpStatusCode.NotFound)
@@ -228,9 +237,13 @@ fun Route.accountRoutes() {
          * sella y deja de reenviar.
          *
          * **Qué se actualiza y qué no.** El nombre, el tipo, la moneda y la columna cruda
-         * `balance` se pisan con lo que llega: son lo que el cliente escribió al crearla y nada
-         * más puede haberlos cambiado desde entonces (la moneda y el tipo no tienen ruta de
-         * edición; el `balance` crudo no se lee para derivar nada). La **condición de uso**
+         * `balance` se pisan con lo que llega — **salvo que lo guardado sea una edición más
+         * nueva**, que es lo que agregó `Account.lastEditedAt`: el nombre SÍ tiene ruta de edición
+         * (`PUT /{id}/name`), así que «nada más pudo haberlos cambiado desde entonces» era falso
+         * para él, y el reenvío del teléfono le deshacía al dueño el renombre que acababa de hacer
+         * en la web. La comparación de edades está en [pisaElReenvio] —la misma que decide la
+         * carrera de los movimientos— y su resultado se aplica al UPDATE entero: o gana el reenvío
+         * con todos sus campos, o no se escribe nada. La **condición de uso**
          * (`condicionadaA`) solo se toca **si el pedido trae la clave**, y esto no es un detalle:
          * `SyncEngine.syncAccounts` reenvía la cuenta armada a mano y un APK anterior a este
          * arreglo la manda sin ese campo — pisarla con el `null` del default le borraría al dueño
@@ -259,6 +272,10 @@ fun Route.accountRoutes() {
             val crudo = call.receive<JsonObject>()
             val body = jsonDeLaApi.decodeFromJsonElement<Account>(crudo)
             val mandoLaCondicion = "condicionadaA" in crudo
+            // Y si el cliente sabe de ediciones, por el mismo camino: una clave ausente es un APK
+            // que no conoce el campo (el del dueño es el 1.31) y una presente en `null` es uno que
+            // sí lo conoce y dice «esta copia no la editó nadie». Ver el bloque de abajo.
+            val mandoLaEdicion = "lastEditedAt" in crudo
             val uid = call.userId()
             val account = body.copy(
                 id = body.id.ifBlank { "acc_${System.currentTimeMillis()}" }
@@ -268,12 +285,32 @@ fun Route.accountRoutes() {
                 val existente = Accounts.selectAll().where { Accounts.id eq account.id }.firstOrNull()
                     ?: return@dbQuery null
                 if (existente[Accounts.userId] != uid) return@dbQuery HttpStatusCode.Conflict to null
-                Accounts.update({ (Accounts.id eq account.id) and (Accounts.userId eq uid) }) {
-                    it[Accounts.name]     = account.name
-                    it[Accounts.type]     = account.type.name
-                    it[Accounts.balance]  = account.balance
-                    it[Accounts.currency] = account.currency
-                    if (mandoLaCondicion) it[Accounts.conditionedTo] = normalizarCondicion(account.condicionadaA)
+                // **Y el reenvío pierde contra un renombre más nuevo.** Es la misma función que
+                // decide la carrera de los movimientos ([pisaElReenvio], en `EventRoutes.kt`), a
+                // propósito: la carrera es la misma. El POST pudo haber LLEGADO sin que el teléfono
+                // viera la respuesta, así que su fila local se queda pendiente y `syncAccounts` la
+                // reenvía cada 30 s; si en esa ventana el dueño corrigió el nombre **en la web**,
+                // este UPDATE lo pisaba sin decir nada. Cuando pierde no se escribe nada y se
+                // contesta igual **200 con lo guardado** —para el teléfono la cuenta llegó, así que
+                // sellarla y dejar de reenviar es la verdad— y la próxima lectura le baja el nombre
+                // bueno.
+                if (pisaElReenvio(
+                        mandoLaEdicion = mandoLaEdicion,
+                        edicionQueLlega = account.lastEditedAt,
+                        edicionGuardada = existente[Accounts.lastEditedAt],
+                    )
+                ) {
+                    Accounts.update({ (Accounts.id eq account.id) and (Accounts.userId eq uid) }) {
+                        it[Accounts.name]     = account.name
+                        it[Accounts.type]     = account.type.name
+                        it[Accounts.balance]  = account.balance
+                        it[Accounts.currency] = account.currency
+                        if (mandoLaCondicion) it[Accounts.conditionedTo] = normalizarCondicion(account.condicionadaA)
+                        // La edad de la versión que acaba de ganar, para que la próxima se compare
+                        // contra ella. Solo si vino: un APK viejo no tiene ninguna que ofrecer y la
+                        // guardada se deja como está.
+                        if (account.lastEditedAt != null) it[Accounts.lastEditedAt] = account.lastEditedAt
+                    }
                 }
                 HttpStatusCode.OK to Accounts.selectAll()
                     .where { (Accounts.id eq account.id) and (Accounts.userId eq uid) }
@@ -297,6 +334,11 @@ fun Route.accountRoutes() {
                     it[balance]  = account.balance
                     it[currency] = account.currency
                     it[conditionedTo] = normalizarCondicion(account.condicionadaA)
+                    // Casi siempre null: crear una cuenta no es editarla. No lo es cuando la
+                    // cuenta se creó Y se renombró sin señal, y ahí importa que la edición viaje
+                    // con ella — si no, el server la guardaría como «nunca editada» y la
+                    // comparación del próximo reenvío arrancaría de cero.
+                    it[Accounts.lastEditedAt] = account.lastEditedAt
                 }
             }
             call.respond(HttpStatusCode.Created, account)

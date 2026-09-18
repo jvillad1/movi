@@ -124,6 +124,12 @@ internal val ORIGENES_YA_REVISADOS = setOf(EventSource.MANUAL, EventSource.SMS)
  * **¿El reenvío del teléfono pisa lo que el server ya tiene?** La regla entera de la carrera entre
  * los dos dispositivos, en un solo lugar y sin tocar la base, para poder probarla sola.
  *
+ * **Decide para los movimientos y también para las cuentas** (`POST /api/accounts`, ver
+ * `AccountRoutes.kt`): la carrera es la misma —un POST idempotente por id que el teléfono reenvía
+ * cada 30 s contra una corrección hecha en la web— y una segunda regla parecida sería una segunda
+ * verdad que mantener. Lo único distinto es de dónde sale cada edad: `FinancialEvent.lastEditedAt`
+ * o `Account.lastEditedAt`.
+ *
  * Tres casos, y cada uno tiene su motivo:
  *
  * 1. **El cliente no mandó la clave** ([mandoLaEdicion] `false`) → **pisa**, igual que antes de

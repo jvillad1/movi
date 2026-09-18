@@ -77,6 +77,12 @@ class SyncEngine(
                         // marca, y el Inicio volvía a sumar esa plata como disponible. Ver
                         // `Account.condicionadaA`.
                         condicionadaA = row.conditionedTo,
+                        // **Y la edad de esta versión.** Es lo que le deja al server decidir la
+                        // carrera contra una corrección hecha en la web: `null` dice «esta copia es
+                        // la original» (y pierde contra lo que el server tenga editado), un instante
+                        // dice «la corregí sin señal» (y gana). Ver `Account.lastEditedAt` y
+                        // `pisaElReenvio` en EventRoutes.kt.
+                        lastEditedAt = row.lastEditedAt,
                     )
                 )
                 db.accountQueries.markSynced(Clock.System.now().toEpochMilliseconds(), created.id)

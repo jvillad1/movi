@@ -65,6 +65,11 @@ class SchemaDeArranqueTest {
         // «No cobra intereses»: la casilla que separa un préstamo familiar sin tasa de una tasa
         // que no se conoce. Toda consulta de créditos la nombra (`toCreditTerms`).
         "credit_terms" to "sin_intereses",
+        // La edad de la versión de una cuenta, que es lo que hace perder al reenvío del teléfono
+        // contra un renombre hecho en la web. `accounts` existe en producción con todas las
+        // cuentas del dueño adentro, y `toAccount()` —o sea TODA lectura de cuentas— nombra esta
+        // columna: sin el ALTER, la app no muestra una sola cuenta.
+        "accounts" to "last_edited_at",
     )
 
     /**
