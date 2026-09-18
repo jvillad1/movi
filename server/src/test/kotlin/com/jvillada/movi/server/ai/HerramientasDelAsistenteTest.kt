@@ -186,6 +186,49 @@ class HerramientasDelAsistenteTest {
         assertFalse("300020" in texto, "no se pueden haber sumado:\n$texto")
     }
 
+    /**
+     * **De qué bolsillo salió la plata.** Entró por una pregunta que el asistente no supo
+     * contestar —«gastos desde Bancolombia del período»— y que además pidió aclaración en vez de
+     * inventar, que es lo correcto: no había forma de responderla. El contexto trae los saldos de
+     * cada cuenta y el gasto por categoría, y nada que cruce las dos cosas.
+     */
+    @Test
+    fun `los totales dicen de que cuenta salio cada peso`() {
+        anotar("e1", "Mercado", "Comida", 300_000, "2026-08-05")
+        anotar("e2", "Almuerzo", "Comida", 40_000, "2026-08-06", cuenta = "tc")
+        anotar("e3", "Nómina", "Salario", 8_500_000, "2026-08-01", tipo = TransactionType.INCOME)
+
+        val texto = preguntar(TOTALES_POR_CATEGORIA, "desde" to "2026-08-01", "hasta" to "2026-08-31")
+
+        assertTrue("De qué cuenta salió:" in texto, texto)
+        assertTrue("Bancolombia Ahorros: 300000" in texto, texto)
+        assertTrue("Master Black: 40000" in texto, texto)
+        // Los ingresos no entran en «de qué cuenta SALIÓ».
+        assertFalse("8500000" in texto.substringAfter("De qué cuenta salió:"), texto)
+    }
+
+    @Test
+    fun `buscar por cuenta no exige el nombre completo`() {
+        anotar("e1", "Mercado", "Comida", 300_000, "2026-08-05")
+        anotar("e2", "Almuerzo", "Comida", 40_000, "2026-08-06", cuenta = "tc")
+
+        // Él dice «Bancolombia»; la cuenta se llama «Bancolombia Ahorros».
+        val texto = preguntar(BUSCAR_MOVIMIENTOS, "desde" to "2026-08-01", "hasta" to "2026-08-31", "cuenta" to "bancolombia")
+
+        assertTrue("Mercado" in texto, texto)
+        assertFalse("Almuerzo" in texto, "eso salió de la tarjeta:\n$texto")
+    }
+
+    @Test
+    fun `una cuenta que no existe lo dice, y dice qué buscó`() {
+        anotar("e1", "Mercado", "Comida", 300_000, "2026-08-05")
+
+        val texto = preguntar(BUSCAR_MOVIMIENTOS, "desde" to "2026-08-01", "hasta" to "2026-08-31", "cuenta" to "Davivienda")
+
+        assertTrue("Sin movimientos" in texto, texto)
+        assertTrue("Davivienda" in texto, texto)
+    }
+
     // ── Los bordes ───────────────────────────────────────────────────────────
 
     @Test

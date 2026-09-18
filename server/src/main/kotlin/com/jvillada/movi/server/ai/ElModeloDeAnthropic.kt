@@ -224,6 +224,10 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
                         .putAdditionalProperty("desde", texto("Fecha de calendario AAAA-MM-DD, inclusive."))
                         .putAdditionalProperty("hasta", texto("Fecha de calendario AAAA-MM-DD, inclusive."))
                         .putAdditionalProperty("categoria", texto("Nombre exacto de una categoría del usuario, por ejemplo «Comida»."))
+                        .putAdditionalProperty(
+                            "cuenta",
+                            texto("Parte del nombre de una cuenta suya, «Bancolombia» o «Nu». Para «¿qué gasté desde tal cuenta?»."),
+                        )
                         .putAdditionalProperty("texto", texto("Parte del nombre del movimiento; no distingue mayúsculas ni tildes."))
                         .putAdditionalProperty("tipo", texto("«gasto» o «ingreso». Sin esto vienen los dos."))
                         .putAdditionalProperty("limite", texto("Cuántos devolver, de 1 a $TOPE_DE_RESULTADOS."))
@@ -238,9 +242,10 @@ internal val LAS_HERRAMIENTAS: List<Tool> = listOf(
     Tool.builder()
         .name(TOTALES_POR_CATEGORIA)
         .description(
-            "Cuánto entró y cuánto salió entre dos fechas, y el gasto sumado por categoría. Úsala " +
-                "para cualquier pregunta de cuánto («¿cuánto gasté en Comida en agosto?», «¿gasté " +
-                "más que el mes pasado?»). Suma TODOS los movimientos del rango, sin tope. Las " +
+            "Cuánto entró y cuánto salió entre dos fechas, el gasto sumado por categoría y DE QUÉ " +
+                "CUENTA salió cada peso. Úsala para cualquier pregunta de cuánto («¿cuánto gasté " +
+                "en Comida en agosto?», «¿gasté más que el mes pasado?», «¿qué gasté desde " +
+                "Bancolombia este período?»). Suma TODOS los movimientos del rango, sin tope. Las " +
                 "monedas nunca se suman entre sí: cada una viene aparte.",
         )
         .inputSchema(

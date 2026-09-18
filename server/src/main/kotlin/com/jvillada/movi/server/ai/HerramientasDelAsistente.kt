@@ -114,6 +114,7 @@ private suspend fun buscarMovimientos(uid: String, args: Map<String, String>): S
     val desde = fechaDe(args["desde"]) ?: AppClock.today().minusMonths(MESES_HACIA_ATRAS_POR_DEFECTO)
     val hasta = fechaDe(args["hasta"]) ?: AppClock.today()
     val categoria = args["categoria"]?.takeIf { it.isNotBlank() }
+    val cuenta = args["cuenta"]?.takeIf { it.isNotBlank() }
     val texto = args["texto"]?.takeIf { it.isNotBlank() }
     val soloGastos = args["tipo"]?.lowercase()?.startsWith("gast") == true
     val soloIngresos = args["tipo"]?.lowercase()?.startsWith("ingres") == true
@@ -121,6 +122,9 @@ private suspend fun buscarMovimientos(uid: String, args: Map<String, String>): S
 
     val todas = filasDe(uid, desde, hasta)
         .filter { categoria == null || normalizarParaBuscar(it.categoria) == normalizarParaBuscar(categoria) }
+        // La cuenta se compara CONTENIDA y no igual: él dice «Bancolombia» y la cuenta se llama
+        // «Bancolombia Ahorros». Exigir el nombre exacto sería pedirle que lo copie de la pantalla.
+        .filter { cuenta == null || normalizarParaBuscar(cuenta) in normalizarParaBuscar(it.cuenta) }
         .filter { texto == null || normalizarParaBuscar(texto) in normalizarParaBuscar(it.nombre) }
         .filter { !soloGastos || !it.esIngreso }
         .filter { !soloIngresos || it.esIngreso }
@@ -128,6 +132,7 @@ private suspend fun buscarMovimientos(uid: String, args: Map<String, String>): S
     if (todas.isEmpty()) {
         return "Sin movimientos entre $desde y $hasta" +
             (categoria?.let { " en la categoría «$it»" } ?: "") +
+            (cuenta?.let { " en cuentas que digan «$it»" } ?: "") +
             (texto?.let { " que digan «$it»" } ?: "") + "."
     }
 
@@ -165,6 +170,17 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
                 .forEach { (categoria, monto) ->
                     appendLine("- $categoria: $monto")
                 }
+            // **Y de qué cuenta salió.** Esto entró por una pregunta que el asistente no supo
+            // contestar: «gastos desde Bancolombia del período». Es una pregunta obvia —de qué
+            // bolsillo salió la plata— y no había forma de responderla: el contexto trae los
+            // saldos de cada cuenta y el gasto por categoría, pero nada que cruce las dos cosas.
+            if (gastos.isNotEmpty()) {
+                appendLine("De qué cuenta salió:")
+                gastos.groupBy { it.cuenta }
+                    .mapValues { (_, dela) -> dela.sumOf { it.monto } }
+                    .entries.sortedByDescending { it.value }
+                    .forEach { (cuenta, monto) -> appendLine("- $cuenta: $monto") }
+            }
         }
     }.trim()
 }
