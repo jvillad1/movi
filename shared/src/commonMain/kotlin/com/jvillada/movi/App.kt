@@ -33,7 +33,12 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.documentos.DocumentosScreen
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.LocalNavigate
+import com.jvillada.movi.ui.LocalPilaDeHojas
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.AtrasCierraEstaHoja
+import com.jvillada.movi.ui.PilaDeHojas
+import com.jvillada.movi.ui.atras
+import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.navTabFor
@@ -52,8 +57,6 @@ import com.jvillada.movi.ui.extractos.ExtractosScreen
 import com.jvillada.movi.ui.mas.MasScreen
 import com.jvillada.movi.ui.ocr.OCRCaptureScreen
 import com.jvillada.movi.ui.ocr.OCRConfirmScreen
-import com.jvillada.movi.ui.onboarding.OnboardingProfileScreen
-import com.jvillada.movi.ui.onboarding.WelcomeScreen
 import com.jvillada.movi.ui.profile.PerfilScreen
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -127,6 +130,9 @@ fun App() {
             // apilarla dejaba la pila en una pantalla sin pestaña (`navTabFor` → null) y App.kt
             // escondía el rail y la barra, así que la hoja quedaba flotando sobre un vacío negro.
             var quickAdd by remember { mutableStateOf<Screen.QuickAdd?>(null) }
+            // Qué hojas modales hay abiertas AHORA, las de este archivo y las que dibuja cada
+            // pantalla por su cuenta (Perfil y sus cuatro). Ver [PilaDeHojas].
+            val pilaDeHojas = remember { PilaDeHojas() }
             // Sube cada vez que se guarda algo desde la hoja. Las pantallas que leen datos lo
             // usan como key de su LaunchedEffect — sin esto, la de atrás (que ahora nunca sale de
             // la composición) seguiría mostrando la lista de antes de guardar. Ver [LocalRefreshTick].
@@ -174,18 +180,20 @@ fun App() {
                     // saltar a Escanear recibo, y dejarla abierta encima del destino nuevo sería
                     // una hoja huérfana sobre una pantalla que no la pidió.
                     quickAdd = null
-                    if (NavStack.shouldPush(backStack, screen)) backStack.add(screen)
+                    // Entrar (o crear la cuenta) REEMPLAZA la pila en vez de apilar encima: ver
+                    // [NavStack.shouldReplaceAll] para el «atrás» que devolvía al formulario de
+                    // entrada, y para el prompt de la huella que se abría solo al aterrizar ahí.
+                    NavStack.navegar(backStack, screen)
                 }
             }
             val goBack: () -> Unit = {
                 // Las hojas primero: el botón «atrás» del teléfono tiene que cerrar la modal
-                // antes de tocar la pila, igual que haría con cualquier diálogo. La de crear el
-                // recurrente va ANTES que la de Agregar porque, cuando las dos existen, es la
-                // que está encima — y sin ella acá el «atrás» desde Inicio se salía de la app
-                // con el formulario a medio llenar (Ola 9 · B).
-                if (hojaRecurrentePrellenada != null) hojaRecurrentePrellenada = null
-                else if (quickAdd != null) quickAdd = null
-                else if (backStack.size > 1) backStack.removeLast()
+                // antes de tocar la pila, igual que haría con cualquier diálogo. Quién está
+                // encima de quién ya no se escribe acá — lo sabe [PilaDeHojas], donde cada hoja
+                // se anota sola con `AtrasCierraEstaHoja`. Antes esta lista conocía DOS hojas
+                // (las que viven en este archivo) y las cuatro de Perfil no existían para el
+                // «atrás»: apretarlo sacaba el tope de la pila y se perdía lo tipeado.
+                atras(pilaDeHojas, backStack)
             }
             // F22: «volver» real para las flechas ‹ de cada pantalla. Si hay
             // historial, saca el tope de la pila (vuelve a donde de verdad
@@ -208,12 +216,20 @@ fun App() {
             }
 
             BackHandlerEffect(
-                enabled = quickAdd != null || hojaRecurrentePrellenada != null || backStack.size > 1,
+                enabled = hayAdondeVolver(pilaDeHojas, backStack),
                 onBack = goBack,
             )
 
             LaunchedEffect(SessionManager.loggedIn) {
                 if (!SessionManager.loggedIn) {
+                    // Las hojas ANTES que la pila. Sin esto, si el token vencía con «Agregar»
+                    // abierta y un monto escrito, la pila se reseteaba a Login y la hoja seguía
+                    // pintada encima: se podía seguir tipeando y tocar Guardar contra una sesión
+                    // que ya no existía.
+                    quickAdd = null
+                    hojaRecurrentePrellenada = null
+                    ofrecimientoRecurrente = null
+                    movimientoRecienGuardado = null
                     backStack.clear()
                     backStack.add(Screen.Login)
                 }
@@ -243,6 +259,9 @@ fun App() {
                     LocalWindowWidthClass provides widthClass,
                     LocalRefreshTick provides refreshTick,
                     LocalRelevoDeScroll provides relevoDeScroll,
+                    // Para que cualquier pantalla pueda anotar su hoja sin que App.kt tenga que
+                    // conocerla (Perfil y sus cuatro overlays). Ver [PilaDeHojas].
+                    LocalPilaDeHojas provides pilaDeHojas,
                 ) {
                 Row(modifier = Modifier.fillMaxSize()) {
                 if (showRail) {
@@ -268,8 +287,6 @@ fun App() {
                 when (currentScreen) {
                 Screen.Login             -> LoginScreen(navigate)
                 Screen.Register          -> RegisterScreen(navigate)
-                Screen.OnboardingWelcome -> WelcomeScreen(navigate)
-                Screen.OnboardingProfile -> OnboardingProfileScreen(navigate)
                 Screen.Dashboard         -> DashboardScreen(navigate)
                 is Screen.Transactions   -> TransactionsScreen(navigate, chipInicial = currentScreen.chipInicial)
                 // Inalcanzable: `navigate` desvía QuickAdd al overlay de más abajo antes de que
@@ -324,6 +341,8 @@ fun App() {
                 // La pantalla de atrás no se descompone —sigue en `SaveableStateProvider`— así
                 // que vuelve intacta al cerrar la hoja.
                 quickAdd?.let { request ->
+                    // La línea que pone esta hoja bajo el «atrás» del sistema. Ver [PilaDeHojas].
+                    AtrasCierraEstaHoja { quickAdd = null }
                     CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
                         QuickAddScreen(
                             onDismiss = { quickAdd = null },
@@ -364,6 +383,9 @@ fun App() {
                     )
                 }
                 hojaRecurrentePrellenada?.let { propuesta ->
+                    // Se compone DESPUÉS de la de Agregar, así que se anota después: cuando las
+                    // dos están abiertas es la de arriba, y el «atrás» la cierra primero.
+                    AtrasCierraEstaHoja { hojaRecurrentePrellenada = null }
                     CreateRecurringRuleSheet(
                         onDismiss = { hojaRecurrentePrellenada = null },
                         onSaved = {

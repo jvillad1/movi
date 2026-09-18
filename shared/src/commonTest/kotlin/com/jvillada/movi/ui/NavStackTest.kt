@@ -67,6 +67,62 @@ class NavStackTest {
         assertEquals(Screen.Dashboard, (result as NavStack.BackResult.Fallback).screen)
     }
 
+    // ── Entrar no deja el login atrás ─────────────────────────────────────────
+
+    /**
+     * El defecto: `navigate` APILABA, así que entrar dejaba la pila en `[Login, Dashboard]` y
+     * nada la limpiaba. El «atrás» del teléfono devolvía al formulario de entrada —con la
+     * contraseña en blanco— a alguien que acababa de entrar, y con «Entrar con huella» prendido
+     * volver ahí re-dispara el efecto de arranque de esa pantalla: el prompt del lector se abría
+     * solo, sin que nadie lo pidiera.
+     */
+    @Test
+    fun `entrar reemplaza la pila - el login no queda atras`() {
+        val pila = mutableListOf<Screen>(Screen.Login)
+        NavStack.navegar(pila, Screen.Dashboard)
+        assertEquals(listOf<Screen>(Screen.Dashboard), pila.toList())
+    }
+
+    @Test
+    fun `crear la cuenta tampoco deja nada atras`() {
+        // Por Registro la pila era `[Login, Register, Dashboard]`, y «atrás» le mostraba un
+        // «Crear cuenta» a quien acababa de crear una.
+        val pila = mutableListOf<Screen>(Screen.Login)
+        NavStack.navegar(pila, Screen.Register)
+        assertEquals(listOf<Screen>(Screen.Login, Screen.Register), pila.toList(), "entre Login y Registro sí se apila")
+
+        NavStack.navegar(pila, Screen.Dashboard)
+        assertEquals(listOf<Screen>(Screen.Dashboard), pila.toList())
+    }
+
+    @Test
+    fun `desde el Inicio para adelante se apila como siempre`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard)
+        NavStack.navegar(pila, Screen.Mas)
+        NavStack.navegar(pila, Screen.Credits)
+        assertEquals(listOf<Screen>(Screen.Dashboard, Screen.Mas, Screen.Credits), pila.toList())
+
+        NavStack.navegar(pila, Screen.Credits)
+        assertEquals(3, pila.size, "no se duplica la de arriba")
+    }
+
+    @Test
+    fun `la regla mira el fondo de la pila, no el tope`() {
+        assertTrue(NavStack.shouldReplaceAll(listOf(Screen.Login), Screen.Dashboard))
+        assertTrue(NavStack.shouldReplaceAll(listOf(Screen.Login, Screen.Register), Screen.Dashboard))
+        assertFalse(NavStack.shouldReplaceAll(listOf(Screen.Login), Screen.Register))
+        assertFalse(NavStack.shouldReplaceAll(listOf(Screen.Dashboard, Screen.Mas), Screen.Credits))
+        assertFalse(NavStack.shouldReplaceAll(emptyList(), Screen.Dashboard))
+    }
+
+    @Test
+    fun `entrar y crear cuenta son las pantallas de antes de la sesion`() {
+        assertTrue(NavStack.esDeAutenticacion(Screen.Login))
+        assertTrue(NavStack.esDeAutenticacion(Screen.Register))
+        listOf(Screen.Dashboard, Screen.Mas, Screen.Profile, Screen.Transactions())
+            .forEach { assertFalse(NavStack.esDeAutenticacion(it), "$it") }
+    }
+
     // ── Ola 4: pestaña activa por pantalla (barra y rail) ─────────────────────
 
     @Test
