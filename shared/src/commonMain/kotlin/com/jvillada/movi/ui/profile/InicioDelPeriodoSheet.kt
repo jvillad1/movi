@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.inicioDelPeriodo
@@ -114,17 +113,17 @@ fun InicioDelPeriodoSheet(
             ) {
                 Text(
                     text = "¿Cuándo empezó ${nombreDe(periodo)}?",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    style = Movi.textos.titulo,
                     color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = "Normalmente arranca el ${natural.dayOfMonth}. Si este mes tu sueldo entró " +
                         "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
-                    fontSize = 12.5.sp,
+                    // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
+                    style = Movi.textos.cuerpo,
+                    fontWeight = FontWeight.Normal,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
                 )
                 Spacer(Modifier.height(16.dp))
 
@@ -146,7 +145,7 @@ fun InicioDelPeriodoSheet(
                             ) {
                                 Text(
                                     text = d.toString(),
-                                    fontSize = 13.sp,
+                                    style = Movi.textos.cuerpo,
                                     fontWeight = if (esElElegido) FontWeight.SemiBold else FontWeight.Normal,
                                     color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
                                     textAlign = TextAlign.Center,
@@ -159,11 +158,11 @@ fun InicioDelPeriodoSheet(
 
                 previsualizacion?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(text = it, fontSize = 12.5.sp, color = Movi.colores.textoMedio)
+                    Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(text = it, fontSize = 12.5.sp, color = Movi.colores.sale, lineHeight = 17.sp)
+                    Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(18.dp))
@@ -178,8 +177,7 @@ fun InicioDelPeriodoSheet(
                 ) {
                     Text(
                         text = if (saving) "Guardando…" else "Este mes empezó el $dia",
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.cuerpo,
                         color = if (!saving) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
@@ -191,7 +189,7 @@ fun InicioDelPeriodoSheet(
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = if (saving) "Guardando…" else "Volver al día ${natural.dayOfMonth} de siempre",
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         fontWeight = FontWeight.Medium,
                         color = if (saving) Movi.colores.textoApagado else Movi.colores.marca,
                         modifier = Modifier.clickable(enabled = !saving) { onSave(null) },
