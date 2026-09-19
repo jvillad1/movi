@@ -14,10 +14,21 @@ import kotlin.test.fail
  * del dueño —se veía, pero no respondía a un clic— y el teléfono no lo delató porque en Android la
  * zona sí existe. Las pruebas corren en la JVM, donde tampoco lanza: por eso esto es un escaneo del
  * código y no una prueba de comportamiento.
+ *
+ * Además de la llamada directa, atrapa los dos atajos que la esconderían del texto `TimeZone.of(`:
+ * pedirla por `TimeZone.Companion.of` (con o sin `import ... as`) y renombrar la clase con
+ * `import kotlinx.datetime.TimeZone as Otro`. Un alias de la clase es raro y no hay ninguno: se
+ * prohíbe entero en vez de seguir el nombre nuevo por todo el archivo.
  */
 class ZonaHorariaPorNombreScanTest {
 
     private val permitidos = setOf("AppTimeZone.kt")
+
+    private val prohibidos = listOf(
+        "TimeZone.of(",
+        "TimeZone.Companion.of",
+        "import kotlinx.datetime.TimeZone as ",
+    )
 
     @Test
     fun `el codigo compartido no llama TimeZone of fuera de AppTimeZone`() {
@@ -32,7 +43,7 @@ class ZonaHorariaPorNombreScanTest {
                     .forEach { archivo ->
                         archivo.readLines().forEachIndexed { i, linea ->
                             val codigo = linea.substringBefore("//").trim()
-                            if (!codigo.startsWith("*") && "TimeZone.of(" in codigo) {
+                            if (!codigo.startsWith("*") && prohibidos.any { it in codigo }) {
                                 violaciones += "${archivo.relativeTo(raiz)}:${i + 1}: $codigo"
                             }
                         }
