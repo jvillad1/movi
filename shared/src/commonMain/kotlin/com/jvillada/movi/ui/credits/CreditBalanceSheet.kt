@@ -88,7 +88,7 @@ fun CreditBalanceSheet(
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SectionLabel("AJUSTAR SALDO")
                 Spacer(Modifier.height(8.dp))
-                Text(credit.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                 Spacer(Modifier.height(16.dp))
 
                 Row(
@@ -96,10 +96,9 @@ fun CreditBalanceSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Deuda en Movi", fontSize = 13.sp, color = Movi.colores.textoMedio)
+                    Text("Deuda en Movi", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     Text(
                         formatCOP(current),
-                        fontSize = 14.sp,
                         style = Movi.textos.monto,
                         fontWeight = FontWeight.Medium,
                         color = Movi.colores.texto,
@@ -122,21 +121,19 @@ fun CreditBalanceSheet(
                         delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."
                         else           -> "Se registrará un abono de ${formatCOP(-delta)} para bajar la deuda."
                     },
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Queda como un movimiento visible en la cuenta, no como un número editado a mano.",
-                    fontSize = 11.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
-                    lineHeight = 16.sp,
                 )
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
 
@@ -153,8 +150,7 @@ fun CreditBalanceSheet(
                 Text(
                     if (saving) "Registrando…" else "Registrar ajuste",
                     color = Movi.colores.fondo,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.cuerpo,
                 )
             }
             Spacer(Modifier.height(20.dp))
