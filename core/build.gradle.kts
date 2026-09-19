@@ -126,3 +126,24 @@ sqldelight {
         }
     }
 }
+
+// **Las pruebas de calidad leen fuentes de OTROS módulos**: `VoseoScanTest` (los textos que ve el
+// usuario), `LosTamanosSueltosSoloBajanTest` (la escala de letra) y
+// `ElTecladoNoTapaLoQueEscribisTest` (la columna raíz). Gradle decide si una prueba está «al día»
+// mirando solo las entradas de ESTE módulo, así que un cambio que tocara únicamente una pantalla
+// dejaba `:core:jvmTest` en verde sin correrla: la guarda existía y no miraba. CI no se entera
+// porque corre con `--rerun-tasks`; quien se entera es el que prueba en su máquina y cree que pasó.
+tasks.withType<Test>().configureEach {
+    listOf(
+        "shared/src/commonMain",
+        "shared/src/androidMain",
+        "server/src/main/kotlin",
+        "androidApp/src/main/kotlin",
+    ).forEach { ruta ->
+        inputs.dir(rootProject.file(ruta))
+            .withPropertyName("fuentesQueSeEscanean_" + ruta.replace('/', '_'))
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    }
+    inputs.file(rootProject.file("webApp/src/wasmJsMain/resources/index.html"))
+        .withPropertyName("indexDelWebApp")
+}
