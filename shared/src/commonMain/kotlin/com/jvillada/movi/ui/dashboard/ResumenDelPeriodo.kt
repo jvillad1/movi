@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -10,7 +11,6 @@ import com.jvillada.movi.shared.model.ventanaDe
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
@@ -271,7 +271,10 @@ internal fun epochDeFecha(iso: String): Long {
     val mes = partes[1].toIntOrNull() ?: return 0L
     val dia = partes[2].toIntOrNull() ?: return 0L
     return LocalDateTime(anio, mes, dia, 12, 0)
-        .toInstant(TimeZone.of("America/Bogota"))
+        // `AppTimeZone.zone` y NO `TimeZone.of("America/Bogota")`: en la web (wasm) no viene la
+        // base de zonas IANA y ese `of` LANZA. Pasó el 19-sep: el Inicio del dueño se congelaba en
+        // la web —se veía pero no respondía un clic— con `IllegalTimeZoneException` en consola.
+        .toInstant(AppTimeZone.zone)
         .toEpochMilliseconds()
 }
 
