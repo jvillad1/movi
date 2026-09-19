@@ -19,7 +19,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -179,22 +178,23 @@ fun VoidEventSheet(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = event.description,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
+                                style = Movi.textos.cuerpo,
                                 color = Movi.colores.texto,
                             )
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 text = "${event.category} · ${event.source.name}",
-                                fontSize = 11.sp,
+                                style = Movi.textos.apoyo,
                                 color = Movi.colores.textoMedio,
                             )
                         }
                         Spacer(Modifier.width(12.dp))
-                        Cifra(
+                        Text(
                             text = signedAmount,
-                            fontSize = 14f,
+                            style = Movi.textos.monto,
+                            fontWeight = FontWeight.Medium,
                             color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
+                            letterSpacing = (-0.3).sp,
                         )
                     }
                 }
@@ -208,10 +208,8 @@ fun VoidEventSheet(
                     Spacer(Modifier.height(18.dp))
                     Text(
                         text = "AL ANULAR",
-                        fontSize = 11.sp,
+                        style = Movi.textos.rotulo,
                         color = Movi.colores.textoMedio,
-                        letterSpacing = 0.4.sp,
-                        fontWeight = FontWeight.Medium,
                     )
                     Spacer(Modifier.height(10.dp))
                     loQuePasa.forEach { efecto ->
@@ -235,9 +233,8 @@ fun VoidEventSheet(
                                     nombres[efecto.accountId],
                                     formatMoney(efecto.monto, efecto.currency),
                                 ),
-                                fontSize = 13.5.sp,
+                                style = Movi.textos.cuerpo,
                                 color = Movi.colores.texto,
-                                lineHeight = 18.sp,
                             )
                         }
                     }
@@ -246,9 +243,8 @@ fun VoidEventSheet(
                     // error de la app.
                     Text(
                         text = ANULAR_DESHACE_LAS_DOS_MITADES,
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 17.sp,
                     )
                 }
 
@@ -266,9 +262,8 @@ fun VoidEventSheet(
                     Spacer(Modifier.height(14.dp))
                     Text(
                         text = avisoDeLaEspera,
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 17.sp,
                     )
                 }
 
@@ -277,10 +272,8 @@ fun VoidEventSheet(
                 // Reason label
                 Text(
                     text = "MOTIVO (OPCIONAL)",
-                    fontSize = 11.sp,
+                    style = Movi.textos.rotulo,
                     color = Movi.colores.textoMedio,
-                    letterSpacing = 0.4.sp,
-                    fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.height(8.dp))
 
@@ -300,13 +293,13 @@ fun VoidEventSheet(
                         value = campo.valor,
                         onValueChange = campo::alCambiar,
                         cursorBrush = SolidColor(Movi.colores.texto),
-                        textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+                        textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                             .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
                         decorationBox = { inner ->
                             if (reason.isEmpty()) {
-                                Text("Ej: Movimiento duplicado", fontSize = 14.sp, color = Movi.colores.textoMedio)
+                                Text("Ej: Movimiento duplicado", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                             }
                             inner()
                         },
@@ -327,7 +320,7 @@ fun VoidEventSheet(
                 ) {
                     Text(
                         text = if (voiding) "Anulando…" else "Anular movimiento",
-                        fontSize = 15.sp,
+                        style = Movi.textos.titulo,
                         fontWeight = FontWeight.Medium,
                         color = if (!voiding) Movi.colores.sale else Movi.colores.textoApagado,
                     )

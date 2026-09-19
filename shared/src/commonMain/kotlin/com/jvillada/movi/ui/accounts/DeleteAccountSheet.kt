@@ -140,10 +140,9 @@ fun DeleteAccountSheet(
 
                 Text(
                     text = "Eliminar cuenta",
-                    fontSize = 16.sp,
+                    style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
-                    letterSpacing = (-0.2).sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 )
 
@@ -151,9 +150,10 @@ fun DeleteAccountSheet(
                 Text(
                     text = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
                         "Esto no se puede deshacer.",
-                    fontSize = 14.sp,
+                    style = Movi.textos.cuerpo,
+                    // Un párrafo de explicación: con el peso de una fila se leería pesado.
+                    fontWeight = FontWeight.Normal,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 19.sp,
                 )
 
                 // Y la consecuencia que no cabe en la frase de arriba, porque no ocurre en esta
@@ -180,9 +180,10 @@ fun DeleteAccountSheet(
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = avisos.joinToString("\n\n"),
-                        fontSize = 14.sp,
+                        // El mismo cuerpo que el párrafo de arriba (ver el comentario del bloque).
+                        style = Movi.textos.cuerpo,
+                        fontWeight = FontWeight.Normal,
                         color = Movi.colores.texto,
-                        lineHeight = 19.sp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
@@ -193,7 +194,7 @@ fun DeleteAccountSheet(
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -211,7 +212,7 @@ fun DeleteAccountSheet(
                             .clickable(enabled = !deleting, onClick = onDismiss),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                        Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                     }
                     Box(
                         modifier = Modifier
@@ -224,7 +225,7 @@ fun DeleteAccountSheet(
                     ) {
                         Text(
                             text = if (deleting) "Eliminando…" else "Eliminar cuenta",
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = if (!deleting) Movi.colores.sale else Movi.colores.textoApagado,
                         )
