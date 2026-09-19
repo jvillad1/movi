@@ -62,6 +62,10 @@ fun Application.configureRouting() {
         authRoutes()                     // public — no auth required
         pushPublicRoutes()                // public — no auth required
         smsFilterConfigRoutes()           // public — no auth required
+        // El webhook del proveedor de correo entrante. Público porque Postmark/Mailgun no tienen
+        // sesión; lo protege un secreto compartido y se apaga solo si falta la env var. Ver
+        // CorreoEntranteRoutes.kt.
+        correoEntranteRoutes()
         // El CONTENIDO de un documento va fuera del bloque autenticado a propósito: se abre
         // desde el navegador, que no puede mandar `Authorization`. Lo protege un token de
         // descarga aparte —otra audiencia, un solo documento, cinco minutos—. Ver
@@ -85,6 +89,7 @@ fun Application.configureRouting() {
             pushRoutes()
             reminderRoutes()
             smsRoutes()
+            direccionDeCorreoRoutes()
             aiRoutes()
             statementRoutes()
             documentRoutes()
