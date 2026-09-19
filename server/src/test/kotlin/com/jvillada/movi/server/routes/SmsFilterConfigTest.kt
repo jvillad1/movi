@@ -128,7 +128,7 @@ class SmsFilterConfigTest {
      *
      * Un endpoint, un cache y un Worker de refresco para los dos sensores (ver
      * `SmsFilterConfigStore.loadNotificationApps`). Si alguien borra esta clave, todo teléfono
-     * vuelve a sus paquetes compilados —que hoy son una conjetura— sin que nada avise.
+     * vuelve a sus paquetes compilados sin que nada avise.
      */
     @Test
     fun `filter config trae también los paquetes de las apps que avisan`() = testApplication {
@@ -136,7 +136,9 @@ class SmsFilterConfigTest {
         val res = client.get("/api/sms/filter-config")
         val obj = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         val paquetes = obj["appPackages"]!!.jsonArray.map { it.jsonPrimitive.content }
-        assertEquals(listOf("com.todo1.mobile"), paquetes)
+        // Leídos del teléfono del dueño el 19-sep, no conjeturados: la app de Bancolombia y la que
+        // contiene el bolsillo Glim. Si alguien los cambia sin mirar un teléfono, esta prueba lo frena.
+        assertEquals(listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas"), paquetes)
     }
 
     /**

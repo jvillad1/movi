@@ -60,15 +60,19 @@ private data class SmsFilterConfig(
 private val CURRENT_FILTER = SmsFilterConfig(
     senderCodes = listOf("85540", "891333", "87400"),
     bodyKeywords = listOf("bancolombia", "nubank"),
-    // **Paquetes exactos, y hoy conjeturados.** `com.todo1.mobile` es el paquete publicado de
-    // «Bancolombia App Personas» (Todo1 es su proveedor móvil), pero no está verificado contra el
-    // teléfono del dueño: cuando esto se escribió el teléfono estaba desconectado. El de Glim no se
-    // conoce — apenas se lea (Ajustes → Apps → Glim, o `adb shell pm list packages`), se agrega
-    // acá y se despliega la web: los teléfonos lo toman en 24 h sin reinstalar el APK.
+    // **Paquetes exactos, leídos del teléfono del dueño (19-sep) y ya no conjeturados.** La
+    // conjetura anterior, `com.todo1.mobile`, era falsa: Todo1 es el proveedor de **Davivienda**
+    // (`com.todo1.davivienda.mobileapp` sí está instalado), y la app de Bancolombia se llama
+    // `co.com.bancolombia.personas.superapp`. Con la lista vieja no se habría capturado nada, que
+    // es justo el fallo silencioso que esta lista server-side existe para poder arreglar sin APK.
+    //
+    // Glim no tiene app propia: el bolsillo vive dentro de `com.app.prontomas`, que es lo que
+    // notifica sus compras (McDonald's, Rappi, Carulla). Se leyó buscando «glim» en el dumpsys de
+    // los 176 paquetes instalados.
     //
     // El cliente compara por IGUALDAD, no por substring, así que acá no cabe ni un prefijo ni un
     // «bancolombia» suelto: tiene que ser el nombre de paquete completo.
-    appPackages = listOf("com.todo1.mobile"),
+    appPackages = listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas"),
 )
 
 fun Route.smsFilterConfigRoutes() {
