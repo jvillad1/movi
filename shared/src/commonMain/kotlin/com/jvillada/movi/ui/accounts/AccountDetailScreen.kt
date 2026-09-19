@@ -121,7 +121,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             leida = true
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable, no Exception: en la web un fetch caído llega como `kotlin.Error`, y lo
+            // que se escapa de este efecto congela la app entera. Ver ExcepcionesDeRedScanTest.
             error = e.toUserMessage()
         }
         loading = false

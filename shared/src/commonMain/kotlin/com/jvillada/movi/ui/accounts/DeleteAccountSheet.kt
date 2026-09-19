@@ -97,7 +97,7 @@ fun DeleteAccountSheet(
                 onDeleted()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 error = "No se pudo eliminar — revisa tu conexión"
                 deleting = false
             }

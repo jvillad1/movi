@@ -104,7 +104,7 @@ fun VoidEventSheet(
             // La hoja se cerró en el medio. Se propaga en vez de tragarse —un `runCatching` acá
             // convertiría un cierre normal en «no se pudo leer», que es un error inventado.
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             LaOtraMitad.NoSePudo
         }
     }
@@ -119,7 +119,7 @@ fun VoidEventSheet(
                 onVoided()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 error = e.toUserMessage()
                 voiding = false
             }

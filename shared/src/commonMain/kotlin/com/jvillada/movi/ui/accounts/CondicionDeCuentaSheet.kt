@@ -84,7 +84,7 @@ fun CondicionDeCuentaSheet(
                 onGuardada(Repositories.wallets.updateAccountCondition(account.id, normalizada))
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 error = e.toUserMessage()
                 guardando = false
             }

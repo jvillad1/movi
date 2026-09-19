@@ -124,6 +124,19 @@
         .lg-note { color: var(--textoMedio); font-size: 13px; line-height: 1.45; margin-bottom: 16px; }
         .lg-ok { color: var(--entra); font-size: 13px; line-height: 1.45; }
         .lg-ok:not(:empty) { margin-bottom: 14px; }
+
+        /* Aviso de que la app se cayó. Una excepción que nadie atrapa en Compose/wasm no cierra
+           nada: deja el canvas congelado en su último cuadro y deja de contestar a los clics, sin
+           un solo mensaje. Esto va encima del canvas y dice lo único que sirve: recargar. */
+        #crash-overlay {
+            position: fixed; inset: 0; z-index: 20;
+            background: var(--fondo);
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        #crash-overlay.hidden { display: none; }
+        #crash-overlay .lg-box { text-align: center; }
+        #crash-overlay .lg-sub { margin: 6px 0 22px; }
     </style>
 </head>
 <body>
@@ -225,6 +238,17 @@
                     </form>
                     <button class="lg-alt" id="register-back" type="button">¿Ya tienes cuenta? Entra</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aviso de que la app se cayó (oculto; ver el script de abajo, antes de composeApp.js) -->
+    <div id="crash-overlay" class="hidden" role="alertdialog" aria-labelledby="crash-title">
+        <div class="lg-card">
+            <div class="lg-box">
+                <div class="lg-title" id="crash-title">Algo falló.</div>
+                <div class="lg-sub">Recarga la página.</div>
+                <button class="lg-btn" id="crash-reload" type="button">Recargar</button>
             </div>
         </div>
     </div>
@@ -550,6 +574,97 @@
                 // pedido que dio origen a este archivo.
                 var o = document.getElementById('login-overlay');
                 if (o) o.classList.add('hidden');
+            }
+        })();
+    </script>
+    <script>
+        // ── Si la app se cae, decirlo ──────────────────────────────────────────────
+        // En Compose/wasm una excepción que nadie atrapa deja el canvas congelado en su último
+        // cuadro: se ve, pero no contesta un clic, y nada se lo dice a la persona (así estuvo la
+        // web del dueño el 19-sep). No siempre llega como evento `error` del navegador: la que
+        // se escapa de un efecto (`LaunchedEffect`) termina en el último recurso de
+        // kotlinx.coroutines, que en wasm solo hace `console.error(excepcion.toString())`. Por
+        // eso se escuchan tres cosas: `error`, `unhandledrejection` y `console.error`.
+        //
+        // Qué cuenta como caída:
+        //  - `console.error` cuyo primer argumento es un texto con forma de excepción de Kotlin
+        //    («IllegalStateException: …», «kotlinx.datetime.IllegalTimeZoneException: …»,
+        //    «kotlin.Error: Fail to fetch»). Los errores de JS con nombre propio (TypeError,
+        //    AbortError, DOMException…) no: esos los escribe el navegador o una librería.
+        //  - `error` / `unhandledrejection` que vienen del wasm (un `WebAssembly.Exception`, una
+        //    pila con marcos de wasm o de composeApp.js) o cuyo texto tiene esa misma forma.
+        // Se ignoran los ruidos conocidos (los avisos de WebGL `WEBGL_debug_renderer_info`,
+        // el «ResizeObserver loop» de Chrome), nunca se muestra con el ingreso en pantalla (ahí
+        // no hay app que se haya caído, y el ingreso recarga solo al entrar), y se muestra una
+        // sola vez por carga, un instante después del primer síntoma para juntar los que vienen
+        // en ráfaga. El único botón recarga: no hay forma de quedar encerrado.
+        (function () {
+            var mostrado = false, pendiente = null;
+            var RUIDO = /WEBGL_debug_renderer_info|ResizeObserver loop/i;
+            var U = '^\\s*(?:Uncaught\\s+)?';
+            // Con paquete de Kotlin adelante: seguro es del runtime, sea Exception o Error.
+            var CON_PAQUETE = new RegExp(U + '(?:kotlin|kotlinx|androidx|io\\.ktor|com\\.jvillada)(?:\\.[\\w$]+)*\\.[A-Z][\\w$]*(?:Exception|Error|Throwable)(?::\\s|\\s*$)');
+            // Sin paquete: solo si termina en «Exception» (los «…Error» a secas —TypeError,
+            // AbortError, NetworkError— son de JS o del DOM). DOMException tampoco.
+            var EXCEPCION = new RegExp(U + '(?:[a-z_$][\\w$]*\\.)*(?!DOMException\\b)[A-Z][\\w$]*Exception(?::\\s|\\s*$)');
+            // El fetch caído de Ktor, por si llega sin paquete: «Fail to fetch» lo escribe Ktor,
+            // el navegador dice «Failed to fetch».
+            var FETCH_DE_KTOR = new RegExp(U + '(?:kotlin\\.)?Error:\\s*Fail to fetch');
+
+            function pareceDeKotlin(texto) {
+                if (typeof texto !== 'string' || RUIDO.test(texto)) return false;
+                return CON_PAQUETE.test(texto) || EXCEPCION.test(texto) || FETCH_DE_KTOR.test(texto);
+            }
+
+            function vieneDelWasm(x) {
+                if (!x) return false;
+                if (typeof WebAssembly !== 'undefined' && WebAssembly.Exception && x instanceof WebAssembly.Exception) return true;
+                var pila = (x && typeof x.stack === 'string') ? x.stack : '';
+                if (RUIDO.test(pila) || RUIDO.test(String(x.message || ''))) return false;
+                return /wasm-function|\.wasm\b|composeApp\.js/.test(pila) ||
+                    pareceDeKotlin(String(x.message || '')) || pareceDeKotlin(String(x));
+            }
+
+            function loginEnPantalla() {
+                var o = document.getElementById('login-overlay');
+                return !!o && !o.classList.contains('hidden');
+            }
+
+            function avisar() {
+                if (mostrado || pendiente) return;
+                pendiente = setTimeout(function () {
+                    pendiente = null;
+                    if (mostrado || loginEnPantalla()) return;
+                    var c = document.getElementById('crash-overlay');
+                    if (!c) return;
+                    mostrado = true;
+                    c.classList.remove('hidden');
+                    var b = document.getElementById('crash-reload');
+                    if (b) { b.onclick = function () { window.location.reload(); }; b.focus(); }
+                }, 300);
+            }
+
+            try {
+                var original = console.error;
+                console.error = function () {
+                    try {
+                        if (!mostrado && pareceDeKotlin(arguments[0])) avisar();
+                    } catch (e) {}
+                    return original.apply(console, arguments);
+                };
+                window.addEventListener('error', function (ev) {
+                    try {
+                        if (!mostrado && (vieneDelWasm(ev.error) || pareceDeKotlin(ev.message) ||
+                            /composeApp\.js|\.wasm\b/.test(ev.filename || ''))) avisar();
+                    } catch (e) {}
+                });
+                window.addEventListener('unhandledrejection', function (ev) {
+                    try {
+                        if (!mostrado && vieneDelWasm(ev.reason)) avisar();
+                    } catch (e) {}
+                });
+            } catch (e) {
+                // Si el navegador no deja envolver console.error, la app sigue igual que antes.
             }
         })();
     </script>
