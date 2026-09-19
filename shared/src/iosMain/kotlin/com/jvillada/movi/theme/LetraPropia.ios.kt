@@ -1,19 +1,19 @@
 package com.jvillada.movi.theme
 
 /**
- * **iOS todavía no: falta verlo corriendo, no la versión de Kotlin.**
+ * **iOS lleva la letra propia.**
  *
- * Hasta Kotlin 2.1.21 los recursos de Compose no entraban a un XCFramework, y el plugin lo decía al
- * configurar el build. Desde 2.2 ese aviso ya no aparece, pero que los archivos entren al paquete no
- * alcanza: el framework de Movi es **estático**, y lo que importa es que `Font(recurso)` los
- * encuentre al correr. Si no los encuentra tira `MissingResourceException` adentro de `MoviTheme` y
- * **la app se cae al abrir**.
+ * Hasta Kotlin 2.1.21 los recursos de Compose no entraban a un XCFramework. Desde 2.2 sí, y está
+ * comprobado en el paquete armado: `ComposeApp.xcframework/<variante>/ComposeApp.framework/
+ * composeResources/com.jvillada.movi.resources/font/` trae las cinco fuentes, en `ios-arm64` y
+ * en `ios-arm64_x86_64-simulator`.
  *
- * Eso solo se sabe abriendo la app en un iPhone o en el simulador. Al subir a 2.2 no se pudo: en la
- * Mac de desarrollo `xcrun -f ld` falla porque la licencia de Xcode no está aceptada, así que ni
- * siquiera enlaza el framework.
+ * Y la biblioteca las busca justo ahí: su lector de iOS (`findComposeResourcesPath`) recorre
+ * `<app>/Frameworks/<cada framework>/composeResources` antes de caer a `compose-resources` en la raíz
+ * del paquete. Xcode copia la carpeta del framework entera al embeberlo.
  *
- * Para prenderlo: aceptar la licencia, armar el XCFramework, poner esto en `true` y abrir la app.
- * Si abre y los títulos se ven en Space Grotesk, queda.
+ * Si algo de eso fallara, `Font(recurso)` tiraría `MissingResourceException` adentro de
+ * `MoviTheme` y la app se cerraría al abrir. Por eso este cambio no se mergea sin abrir la app en
+ * un iPhone.
  */
-internal actual val laPlataformaTraeLasFuentes: Boolean = false
+internal actual val laPlataformaTraeLasFuentes: Boolean = true
