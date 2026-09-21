@@ -16,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Goal
@@ -163,15 +162,14 @@ fun GoalSheet(
                 ) {
                     Text(
                         text = if (isEditMode) "Editar meta" else "Nueva meta",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.titulo,
                         color = Movi.colores.texto,
                         modifier = Modifier.weight(1f),
                     )
                     if (isEditMode) {
                         Text(
                             text = if (saving) "…" else "Eliminar",
-                            fontSize = 13.sp,
+                            style = Movi.textos.cuerpo,
                             color = Movi.colores.sale,
                             modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
                         )
@@ -206,7 +204,7 @@ fun GoalSheet(
                 if (cuentas.vacio) {
                     Text(
                         "No tienes cuentas de Dinero o Inversión — crea una en Cuentas primero",
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
                 } else {
@@ -238,7 +236,7 @@ fun GoalSheet(
 
                 if (error != null) {
                     Spacer(Modifier.height(8.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -258,8 +256,7 @@ fun GoalSheet(
                             isEditMode -> "Guardar cambios"
                             else       -> "Crear meta"
                         },
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.titulo,
                         color = if (canSave) Movi.colores.marca else Movi.colores.textoApagado,
                     )
                 }
@@ -267,7 +264,7 @@ fun GoalSheet(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = missingFieldMessage,
-                        fontSize = 12.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
@@ -291,6 +288,6 @@ private fun GoalAccountRow(label: String, selected: Boolean, onClick: () -> Unit
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 13.5.sp, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Text(label, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }
