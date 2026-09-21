@@ -1966,9 +1966,9 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                                 )
                                 Text(
                                     text = "${if (day.total > 0) "+" else ""}${formatCOP(day.total)}",
-                                    fontSize = 11.sp,
                                     color = Movi.colores.textoMedio,
-                                    style = Movi.textos.monto,
+                                    // Plata en la línea de apoyo: la talla del apoyo, tabular como un monto.
+                                    style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
                                 )
                             }
                         }
@@ -2261,11 +2261,9 @@ private fun TransferRow(
         Text(
             // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos.
             text = formatMoney(row.amount, row.out.currency),
-            fontSize = 14.5.sp,
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tonoDelRenglon(row), Movi.colores),
-            letterSpacing = (-0.3).sp,
         )
     }
 }
@@ -2406,11 +2404,9 @@ private fun MovementSingleRow(
                 // igual, con el mismo criterio de NEUTRO: sin signo.
                 TonoDelMonto.NEUTRO, TonoDelMonto.ENTRE_CUENTAS -> formatMoney(tx.amount, tx.currency)
             },
-            fontSize = 14.5.sp,
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
             color = colorDelTono(tono, Movi.colores),
-            letterSpacing = (-0.3).sp,
         )
     }
 }
@@ -2455,6 +2451,7 @@ private fun ResumenFlujoLibreCard(
         // cifras se muestran; la que manda es la que ya descontó lo comprometido.
         Text(
             text = cifras?.let { formatCOP(it.disponible) } ?: "—",
+            // Sin estilo a propósito: cifra de una tarjeta, no de la pantalla; `cifra` (42) la infla y `titular` (19) la achica.
             fontSize = 28.sp,
             style = Movi.textos.monto,
             color = Movi.colores.texto,
