@@ -172,9 +172,10 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(8.dp))
-                            Cifra(
+                            // La cifra protagonista de esta pantalla: `Movi.textos.cifra`, que se
+                            // achica sola si un patrimonio largo no entra en un renglón.
+                            CifraProtagonista(
                                 text = formatCOP(balance.patrimonio), // formatCOP ya trae el signo (F36) — no duplicarlo acá
-                                fontSize = 28f,
                                 // Ola 9: **neutro en los dos signos**, como el patrimonio del Inicio.
                                 // Antes era verde/rojo según el signo, y la línea nueva del Inicio
                                 // («Patrimonio neto», en gris) NAVEGA acá: el dueño veía −$1.492,7M en
@@ -186,7 +187,6 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // desglose de acá abajo (Activos en verde, Deudas en rojo) es el que
                                 // carga la lectura de signo, con más información que un solo color.
                                 color = Movi.colores.texto,
-                                fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(
@@ -405,9 +405,10 @@ private fun AccountsGroup(
                     },
                     sub = typeLabel,
                     right = {
-                        Cifra(
+                        Text(
                             text = saldo.texto,
-                            fontSize = 14.5f,
+                            style = Movi.textos.monto,
+                            fontWeight = FontWeight.Medium,
                             // Verde es «tengo»: un saldo en contra —una cuenta en descubierto—
                             // pintado de verde dice lo contrario de lo que pasó. Mismo criterio
                             // que el hero del detalle de la cuenta.

@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.UsoDeCuenta
 
@@ -60,7 +59,7 @@ fun VerTodasLasCuentas(
         ) {
             Text(
                 text = if (expandido) "Ver solo las de siempre" else "Ver todas las cuentas ($cuantas más)",
-                fontSize = 14.sp,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.weight(1f),
             )
@@ -74,8 +73,7 @@ fun VerTodasLasCuentas(
         if (expandido) {
             Text(
                 text = explicacionDeLasOtrasCuentas(uso),
-                fontSize = 11.5.sp,
-                lineHeight = 15.sp,
+                style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
                 modifier = Modifier.padding(bottom = 10.dp),
             )

@@ -151,7 +151,9 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
             Text(
                 text = "Lo que conviene tener listo para que las cifras de Movi digan la verdad. " +
                     "Puedes volver aquí cuando quieras.",
-                fontSize = 13.sp,
+                // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Normal,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(horizontal = 18.dp).padding(top = 4.dp, bottom = 14.dp),
             )
@@ -164,15 +166,15 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
                     Text(
                         text = "No pudimos revisar qué te falta. Puede ser la conexión.",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
+                        fontWeight = FontWeight.Normal,
                         color = Movi.colores.textoMedio,
                     )
                     Spacer(Modifier.height(10.dp))
                     Text(
                         text = "Reintentar",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.marca,
-                        fontWeight = FontWeight.Medium,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { refreshKey++ }

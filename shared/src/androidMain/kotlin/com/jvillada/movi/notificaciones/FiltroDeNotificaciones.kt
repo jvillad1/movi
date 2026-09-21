@@ -52,7 +52,13 @@ enum class MotivoDeDescarte {
     /** El cabezal que Android arma cuando una app agrupa varias: no trae el movimiento. */
     RESUMEN_DE_GRUPO,
 
-    /** Sin cuerpo. Un título solo («Bancolombia») no dice cuánta plata se movió. */
+    /**
+     * Sin cuerpo. Un título solo («Bancolombia») no dice cuánta plata se movió: no hay parser que
+     * lo vuelva un movimiento, así que subirlo es peor que no subirlo —ensucia la bandeja del
+     * dueño con una fila que solo se puede borrar a mano—. Una descartada no llega al Worker, y
+     * por lo tanto tampoco corre la marca de «última captura»: ver el KDoc de
+     * `AlmacenDeNotificaciones.marcarUltima`.
+     */
     SIN_TEXTO,
 }
 
@@ -131,6 +137,89 @@ fun decidirNotificacion(
         return DecisionDeNotificacion.Descartar(MotivoDeDescarte.SIN_TEXTO)
     }
     return DecisionDeNotificacion.Subir(textoDeLaNotificacion(notificacion.titulo, notificacion.texto))
+}
+
+/**
+ * **Los extras de Android de los que puede salir el título o el cuerpo.** Los valores son los
+ * mismos de `Notification.EXTRA_*`, escritos acá como literales para que [cuerpoDeLaNotificacion]
+ * sea una función pura —sin `Bundle` ni `android.jar` de por medio— y se pueda fijar en una prueba
+ * común. `FiltroDeNotificacionesTest` las compara contra las constantes reales: si alguna se
+ * desincroniza, el cuerpo volvería a llegar vacío y eso tiene que romper una prueba, no un mes de
+ * capturas.
+ */
+object LlavesDeNotificacion {
+    /** `Notification.EXTRA_TITLE`. */
+    const val TITULO = "android.title"
+
+    /** `Notification.EXTRA_TITLE_BIG`: el título que reemplaza al otro cuando la alerta se expande. */
+    const val TITULO_GRANDE = "android.title.big"
+
+    /** `Notification.EXTRA_TEXT`: el renglón corto de la vista colapsada. */
+    const val TEXTO = "android.text"
+
+    /** `Notification.EXTRA_BIG_TEXT`: el texto completo de una `BigTextStyle`. */
+    const val TEXTO_GRANDE = "android.bigText"
+
+    /** `Notification.EXTRA_TEXT_LINES`: las líneas de una `InboxStyle` (un `Array<CharSequence>`). */
+    const val LINEAS = "android.textLines"
+
+    /** `Notification.EXTRA_SUMMARY_TEXT`: el resumen de la alerta. */
+    const val RESUMEN = "android.summaryText"
+}
+
+/** El orden en que se busca el cuerpo. El porqué de cada escalón, en [cuerpoDeLaNotificacion]. */
+private val ORDEN_DEL_CUERPO = listOf(
+    LlavesDeNotificacion.TEXTO_GRANDE,
+    LlavesDeNotificacion.TEXTO,
+    LlavesDeNotificacion.LINEAS,
+    LlavesDeNotificacion.RESUMEN,
+)
+
+/**
+ * **De dónde sale el cuerpo que se sube, y en qué orden.** [extras] es el bundle de la notificación
+ * pasado a mapa plano: plano a propósito, para que esta regla —como [decidirNotificacion]— se
+ * pruebe sin Android.
+ *
+ * 1. **[LlavesDeNotificacion.TEXTO_GRANDE] primero**, y esto es lo importante: las alertas del banco
+ *    son largas —«Compraste $12.345,00 en PRUEBA DE MOVI con tu T.Deb *4057, el 21/09/2026 a las
+ *    14:00.»— y Android guarda la cadena entera ahí, mientras que `EXTRA_TEXT` lleva el renglón de
+ *    la vista colapsada, que la app recorta (a veces con un «…») para que entre en una línea. Leer
+ *    el corto primero le comería al parser el comercio, la tarjeta o la fecha —justo lo que hace
+ *    que un mensaje se vuelva un movimiento— y nadie lo notaría: llegaría una fila, solo que mocha.
+ * 2. [LlavesDeNotificacion.TEXTO] cuando no hay texto grande, que es la forma más común.
+ * 3. [LlavesDeNotificacion.LINEAS] para las apps que juntan varios avisos en una `InboxStyle`. Se
+ *    unen en UNA línea porque el parser del server lee un SMS, y un SMS es una sola.
+ * 4. [LlavesDeNotificacion.RESUMEN] al final: casi siempre es un rótulo («3 movimientos nuevos»),
+ *    pero un rótulo con plata adentro es más que nada.
+ *
+ * Cada escalón se saltea si viene **en blanco**, no solo si viene nulo. Un `?:` sobre nulos no
+ * alcanza: una app que publica `bigText("")` junto a un `text` bueno existe, y ahí el elvis se
+ * quedaría con el vacío y [decidirNotificacion] tiraría un movimiento de verdad por [MotivoDeDescarte.SIN_TEXTO].
+ */
+fun cuerpoDeLaNotificacion(extras: Map<String, Any?>): String =
+    ORDEN_DEL_CUERPO.firstNotNullOfOrNull { llave -> comoTextoPlano(extras[llave]).ifBlank { null } }.orEmpty()
+
+/**
+ * El título, con su propia caída: una notificación expandida puede traerlo solo en
+ * [LlavesDeNotificacion.TITULO_GRANDE]. Que quede vacío no rompe nada —[textoDeLaNotificacion] sube
+ * el cuerpo tal cual—; el que no puede quedar vacío es el cuerpo.
+ */
+fun tituloDeLaNotificacion(extras: Map<String, Any?>): String =
+    comoTextoPlano(extras[LlavesDeNotificacion.TITULO])
+        .ifBlank { comoTextoPlano(extras[LlavesDeNotificacion.TITULO_GRANDE]) }
+
+/**
+ * Un valor del bundle, como texto. Android guarda `CharSequence`, no `String` —un `SpannableString`
+ * con el monto en negrita es lo normal—, así que se aplana; un arreglo o una lista (las líneas de
+ * una `InboxStyle`) se juntan en una sola línea salteando las vacías; cualquier otra cosa no es
+ * texto y no se inventa.
+ */
+private fun comoTextoPlano(valor: Any?): String = when (valor) {
+    null -> ""
+    is CharSequence -> valor.toString().trim()
+    is Array<*> -> valor.mapNotNull { comoTextoPlano(it).ifBlank { null } }.joinToString(" ")
+    is Iterable<*> -> valor.mapNotNull { comoTextoPlano(it).ifBlank { null } }.joinToString(" ")
+    else -> ""
 }
 
 /**
