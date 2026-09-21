@@ -13,7 +13,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.CardRow
@@ -70,8 +69,7 @@ fun NotificationsPanel(
 
                 Text(
                     text = "Notificaciones",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    style = Movi.textos.titulo,
                     color = Movi.colores.texto,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
@@ -81,7 +79,9 @@ fun NotificationsPanel(
                     // original de F5.
                     Text(
                         text = "No tienes notificaciones por ahora",
-                        fontSize = 13.5.sp,
+                        // Una frase, no el rótulo de una fila: la talla del cuerpo con el peso de la prosa.
+                        style = Movi.textos.cuerpo,
+                        fontWeight = FontWeight.Normal,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.padding(bottom = 24.dp),
                     )
@@ -89,7 +89,7 @@ fun NotificationsPanel(
                     Column(modifier = Modifier.padding(bottom = 8.dp)) {
                         rows.forEachIndexed { index, row ->
                             CardRow(
-                                left = { Text(row.text, fontSize = 14.sp, color = Movi.colores.texto) },
+                                left = { Text(row.text, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
                                 showChevron = true,
                                 isLast = index == rows.lastIndex,
                                 onClick = { onDismiss(); onRowClick(row.target) },

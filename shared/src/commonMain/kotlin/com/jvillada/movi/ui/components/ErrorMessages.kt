@@ -6,7 +6,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.repository.ApiException
 
@@ -102,9 +101,8 @@ fun BarraDeError(mensaje: String?) {
     Hairline()
     Text(
         text = mensaje,
-        fontSize = 12.5.sp,
+        style = Movi.textos.apoyo,
         color = Movi.colores.sale,
-        lineHeight = 17.sp,
         modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
     )
 }

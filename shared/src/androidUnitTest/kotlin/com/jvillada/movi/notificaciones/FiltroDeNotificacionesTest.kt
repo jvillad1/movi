@@ -1,5 +1,6 @@
 package com.jvillada.movi.notificaciones
 
+import android.app.Notification
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -118,6 +119,143 @@ class FiltroDeNotificacionesTest {
         assertEquals("Notificación · Bancolombia", marcaDeOrigen("Bancolombia"))
         assertTrue(marcaDeOrigen("N".repeat(300)).length <= MAX_MARCA_DE_ORIGEN)
         assertEquals("Notificación · otra app", marcaDeOrigen("   "))
+    }
+
+    // ── De dónde sale el cuerpo ────────────────────────────────────
+
+    /**
+     * La alerta de compra tal como la escribe Bancolombia: larga, con el comercio, la tarjeta y la
+     * fecha. Es la que el 21-sep se probó de punta a punta contra el teléfono del dueño.
+     */
+    private val COMPRA_REAL =
+        "Bancolombia: Compraste \$12.345,00 en PRUEBA DE MOVI con tu T.Deb *4057, el 21/09/2026 a las 14:00."
+
+    @Test
+    fun `el texto grande le gana al corto, que es el recortado`() {
+        // El caso de todos los días: la misma alerta, entera en bigText y mocha en text.
+        val cuerpo = cuerpoDeLaNotificacion(
+            mapOf(
+                LlavesDeNotificacion.TEXTO_GRANDE to COMPRA_REAL,
+                LlavesDeNotificacion.TEXTO to "Compraste \$12.345,00 en PRUEBA…",
+            )
+        )
+        assertEquals(COMPRA_REAL, cuerpo)
+    }
+
+    @Test
+    fun `solo texto grande`() {
+        assertEquals(COMPRA_REAL, cuerpoDeLaNotificacion(mapOf(LlavesDeNotificacion.TEXTO_GRANDE to COMPRA_REAL)))
+    }
+
+    @Test
+    fun `solo texto corto`() {
+        assertEquals(COMPRA_REAL, cuerpoDeLaNotificacion(mapOf(LlavesDeNotificacion.TEXTO to COMPRA_REAL)))
+    }
+
+    @Test
+    fun `un texto grande en blanco cae al corto en vez de tirar el movimiento`() {
+        // Un `?:` sobre nulos se quedaba con el vacío: la llave ESTÁ, solo que no dice nada.
+        assertEquals(
+            COMPRA_REAL,
+            cuerpoDeLaNotificacion(
+                mapOf(LlavesDeNotificacion.TEXTO_GRANDE to "   ", LlavesDeNotificacion.TEXTO to COMPRA_REAL)
+            ),
+        )
+    }
+
+    @Test
+    fun `las líneas de una bandeja se juntan en una sola línea`() {
+        // `InboxStyle`: la app agrupa varios avisos y el cuerpo vive en un arreglo, no en un texto.
+        val cuerpo = cuerpoDeLaNotificacion(
+            mapOf(
+                LlavesDeNotificacion.LINEAS to arrayOf<CharSequence>(
+                    "Compra por \$10.000 en TIENDA",
+                    "   ",
+                    "Compra por \$20.000 en OTRA",
+                )
+            )
+        )
+        assertEquals("Compra por \$10.000 en TIENDA Compra por \$20.000 en OTRA", cuerpo)
+    }
+
+    @Test
+    fun `el resumen es el último recurso, pero es mejor que nada`() {
+        assertEquals(
+            "Movimiento por \$5.000",
+            cuerpoDeLaNotificacion(mapOf(LlavesDeNotificacion.RESUMEN to "Movimiento por \$5.000")),
+        )
+    }
+
+    @Test
+    fun `sin ninguna llave con texto el cuerpo es vacío`() {
+        assertEquals("", cuerpoDeLaNotificacion(emptyMap()))
+        assertEquals(
+            "",
+            cuerpoDeLaNotificacion(
+                mapOf(
+                    LlavesDeNotificacion.TEXTO_GRANDE to "",
+                    LlavesDeNotificacion.TEXTO to "  ",
+                    LlavesDeNotificacion.LINEAS to arrayOf<CharSequence>(" "),
+                    LlavesDeNotificacion.RESUMEN to null,
+                )
+            ),
+        )
+    }
+
+    @Test
+    fun `una notificación con título y sin cuerpo se descarta, no se sube`() {
+        // La fila «Bancolombia:» a secas no la puede parsear nadie y solo se saca a mano.
+        val extras = mapOf<String, Any?>(LlavesDeNotificacion.TITULO to "Bancolombia")
+        assertEquals("", cuerpoDeLaNotificacion(extras))
+        assertEquals(
+            DecisionDeNotificacion.Descartar(MotivoDeDescarte.SIN_TEXTO),
+            decidirNotificacion(
+                entrante(titulo = tituloDeLaNotificacion(extras), texto = cuerpoDeLaNotificacion(extras)),
+                soloBancolombia,
+            ),
+        )
+    }
+
+    @Test
+    fun `el título cae al título grande cuando la alerta viene expandida`() {
+        assertEquals("Bancolombia", tituloDeLaNotificacion(mapOf(LlavesDeNotificacion.TITULO_GRANDE to "Bancolombia")))
+        assertEquals(
+            "Bancolombia",
+            tituloDeLaNotificacion(
+                mapOf(LlavesDeNotificacion.TITULO to " ", LlavesDeNotificacion.TITULO_GRANDE to "Bancolombia")
+            ),
+        )
+        assertEquals("", tituloDeLaNotificacion(emptyMap()))
+    }
+
+    @Test
+    fun `la compra real del teléfono sube entera, no solo el título`() {
+        // La medición del 21-sep: título «Bancolombia» y la compra larga en el texto grande.
+        val extras = mapOf<String, Any?>(
+            LlavesDeNotificacion.TITULO to "Bancolombia",
+            LlavesDeNotificacion.TEXTO_GRANDE to COMPRA_REAL,
+        )
+        val decision = decidirNotificacion(
+            entrante(titulo = tituloDeLaNotificacion(extras), texto = cuerpoDeLaNotificacion(extras)),
+            soloBancolombia,
+        )
+        // El cuerpo ya empieza con el título, así que no se repite: sube la frase del banco tal cual.
+        assertEquals(DecisionDeNotificacion.Subir(COMPRA_REAL), decision)
+        // Y lo que sube es lo que `parseSms` sabe leer —el monto, el comercio y la tarjeta siguen
+        // ahí—; el server lo fija en `ElTextoDeUnaNotificacionSeParseaTest`.
+        assertTrue(COMPRA_REAL.contains("\$12.345,00") && COMPRA_REAL.contains("PRUEBA DE MOVI"))
+    }
+
+    @Test
+    fun `las llaves son las de Android, no una copia que se desincronizó`() {
+        // Si Android renombrara un extra —o si alguien tipeara mal un literal— el cuerpo volvería a
+        // llegar vacío en silencio. Son constantes de compilación: acá no se toca android.jar.
+        assertEquals(Notification.EXTRA_TITLE, LlavesDeNotificacion.TITULO)
+        assertEquals(Notification.EXTRA_TITLE_BIG, LlavesDeNotificacion.TITULO_GRANDE)
+        assertEquals(Notification.EXTRA_TEXT, LlavesDeNotificacion.TEXTO)
+        assertEquals(Notification.EXTRA_BIG_TEXT, LlavesDeNotificacion.TEXTO_GRANDE)
+        assertEquals(Notification.EXTRA_TEXT_LINES, LlavesDeNotificacion.LINEAS)
+        assertEquals(Notification.EXTRA_SUMMARY_TEXT, LlavesDeNotificacion.RESUMEN)
     }
 
     // ── La memoria de lo ya subido ────────────────────────────────────────────

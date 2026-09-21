@@ -1230,6 +1230,7 @@ private fun EditorBody(
                         } else {
                             Text(
                                 text = key,
+                                // Sin estilo a propósito: tecla del teclado numérico; `titular` (19) la achica y `cifra` (42) no cabe.
                                 fontSize = 22.sp,
                                 style = Movi.textos.monto,
                                 fontWeight = FontWeight.Normal,
