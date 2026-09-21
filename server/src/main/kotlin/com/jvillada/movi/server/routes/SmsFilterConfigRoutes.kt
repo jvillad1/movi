@@ -72,7 +72,16 @@ private val CURRENT_FILTER = SmsFilterConfig(
     //
     // El cliente compara por IGUALDAD, no por substring, así que acá no cabe ni un prefijo ni un
     // «bancolombia» suelto: tiene que ser el nombre de paquete completo.
-    appPackages = listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas"),
+    appPackages = listOf(
+        "co.com.bancolombia.personas.superapp",
+        "com.app.prontomas",
+        // Google Wallet: los pagos sin contacto los notifica ella, no el banco.
+        "com.google.android.apps.walletnfcrel",
+        // TEMPORAL (21-sep): `cmd notification post` solo publica como com.android.shell, y es la
+        // única forma de probar el camino entero sin esperar una compra real. Se quita apenas
+        // la prueba pase.
+        "com.android.shell",
+    ),
 )
 
 fun Route.smsFilterConfigRoutes() {

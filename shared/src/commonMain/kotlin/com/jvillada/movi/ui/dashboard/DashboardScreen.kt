@@ -463,8 +463,8 @@ internal fun PrimerosPasosCard(
         padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Primeros pasos", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Movi.colores.texto, modifier = Modifier.weight(1f))
-            Text("${steps.count { it }} de ${steps.size}", fontSize = 12.sp, color = Movi.colores.textoMedio)
+            Text("Primeros pasos", style = Movi.textos.titulo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
+            Text("${steps.count { it }} de ${steps.size}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         Spacer(Modifier.height(2.dp))
 
@@ -491,7 +491,7 @@ internal fun PrimerosPasosCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Deja que la app se llene sola", fontSize = 12.5.sp, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
+            Text("Deja que la app se llene sola", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
             AccesoLink("Extractos") { onNavigate(Screen.Extractos) }
             if (isAndroid) AccesoLink("SMS del banco") { onNavigate(Screen.SMSInbox) }
         }
@@ -522,12 +522,11 @@ private fun PasoRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.cuerpo,
                 color = if (done) Movi.colores.textoMedio else Movi.colores.texto,
             )
             if (subtitle != null) {
-                Text(text = subtitle, fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 1.dp))
+                Text(text = subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 1.dp))
             }
         }
         if (!done) ChevronRight()
@@ -538,7 +537,7 @@ private fun PasoRow(
 private fun AccesoLink(label: String, onClick: () -> Unit) {
     Text(
         text = label,
-        fontSize = 12.5.sp,
+        style = Movi.textos.apoyo,
         fontWeight = FontWeight.Medium,
         color = Movi.colores.marca,
         modifier = Modifier.clickable(onClick = onClick).padding(vertical = 4.dp),

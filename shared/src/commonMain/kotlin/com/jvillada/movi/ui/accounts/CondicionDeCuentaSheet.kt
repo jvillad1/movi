@@ -30,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -116,10 +115,9 @@ fun CondicionDeCuentaSheet(
             ) {
                 Text(
                     text = "¿Esta plata solo sirve para algo?",
-                    fontSize = 16.sp,
+                    style = Movi.textos.titulo,
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
-                    letterSpacing = (-0.2).sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 )
 
@@ -131,9 +129,10 @@ fun CondicionDeCuentaSheet(
                         "voluntaria, las cesantías, una cuenta AFC. Si escribes para qué sirve, " +
                         "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
                         "Tu patrimonio no cambia: la plata sigue siendo tuya.",
-                    fontSize = 13.5.sp,
+                    style = Movi.textos.cuerpo,
+                    // Un párrafo de explicación: con el peso de una fila se leería pesado.
+                    fontWeight = FontWeight.Normal,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 19.sp,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -147,7 +146,7 @@ fun CondicionDeCuentaSheet(
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                 ) {
                     if (texto.isEmpty()) {
-                        Text("Vivienda", fontSize = 14.sp, color = Movi.colores.textoApagado, maxLines = 1)
+                        Text("Vivienda", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado, maxLines = 1)
                     }
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                     // [esAtajoDeSeleccionarTodo]. El recorte de abajo sigue siendo el de siempre:
@@ -160,7 +159,7 @@ fun CondicionDeCuentaSheet(
                     BasicTextField(
                         value = campo.valor,
                         onValueChange = campo::alCambiar,
-                        textStyle = TextStyle(fontSize = 14.sp, color = Movi.colores.texto),
+                        textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                         cursorBrush = SolidColor(Movi.colores.texto),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         singleLine = true,
@@ -177,13 +176,13 @@ fun CondicionDeCuentaSheet(
                     } else {
                         "Déjalo vacío si puedes usar esta plata para lo que quieras."
                     },
-                    fontSize = 11.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
                 )
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error!!, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(text = error!!, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -201,7 +200,7 @@ fun CondicionDeCuentaSheet(
                             .clickable(enabled = !guardando, onClick = onDismiss),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("Cancelar", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                        Text("Cancelar", style = Movi.textos.cuerpo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                     }
                     Box(
                         modifier = Modifier
@@ -214,7 +213,7 @@ fun CondicionDeCuentaSheet(
                     ) {
                         Text(
                             text = if (guardando) "Guardando…" else "Guardar",
-                            fontSize = 14.sp,
+                            style = Movi.textos.cuerpo,
                             fontWeight = FontWeight.Medium,
                             color = if (cambio && !guardando) Movi.colores.marca else Movi.colores.textoApagado,
                         )
