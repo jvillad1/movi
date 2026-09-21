@@ -27,9 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.platform.PushOptIn
@@ -221,9 +219,8 @@ fun ReminderOptInField(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Recordarme unos días antes",
-                    fontSize = 14.sp,
+                    style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
-                    fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.height(2.dp))
                 // Con la casilla marcada, una línea por cosa que se sabe (ver
@@ -236,9 +233,8 @@ fun ReminderOptInField(
                     if (i > 0) Spacer(Modifier.height(2.dp))
                     Text(
                         text = linea,
-                        fontSize = 12.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 16.sp,
                     )
                 }
             }
@@ -324,10 +320,8 @@ fun ReminderWarningBanner(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (optIn) "Este recordatorio no te va a llegar" else "Tus recordatorios no te van a llegar",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.cuerpo,
                     color = Movi.colores.texto,
-                    letterSpacing = (-0.1).sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -341,16 +335,14 @@ fun ReminderWarningBanner(
                         else ->
                             "Tienes pagos próximos, pero las notificaciones están apagadas y no hay otro canal activo para avisarte. Actívalas para no perderte un vencimiento."
                     },
-                    fontSize = 12.5.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 17.sp,
                 )
                 if (!denied) {
                     Spacer(Modifier.height(10.dp))
                     Text(
                         text = "Activar notificaciones",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.marca,
                         modifier = Modifier.clickable(onClick = onEnable),
                     )
