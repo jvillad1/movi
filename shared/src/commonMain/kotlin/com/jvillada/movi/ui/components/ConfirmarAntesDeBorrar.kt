@@ -18,9 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 
 /**
@@ -52,9 +50,9 @@ fun ConfirmacionEnLinea(
             .background(Movi.colores.fondo)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Text(pregunta, fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+        Text(pregunta, style = Movi.textos.cuerpo, color = Movi.colores.texto)
         Spacer(Modifier.height(6.dp))
-        Text(detalle, fontSize = 12.5.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+        Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(12.dp))
         BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar)
     }
@@ -84,9 +82,9 @@ fun ConfirmarEnHoja(
                 .clickable(enabled = false) {}
                 .padding(horizontal = 20.dp, vertical = 22.dp),
         ) {
-            Text(pregunta, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+            Text(pregunta, style = Movi.textos.titulo, color = Movi.colores.texto)
             Spacer(Modifier.height(8.dp))
-            Text(detalle, fontSize = 12.5.sp, color = Movi.colores.textoMedio, lineHeight = 17.sp)
+            Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             Spacer(Modifier.height(20.dp))
             BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar)
         }
@@ -98,9 +96,8 @@ private fun BotonesDeConfirmar(textoConfirmar: String, ocupado: Boolean, onConfi
     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
         Text(
             "Cancelar",
-            fontSize = 14.sp,
+            style = Movi.textos.cuerpo,
             color = Movi.colores.textoMedio,
-            fontWeight = FontWeight.Medium,
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(enabled = !ocupado, onClick = onCancelar)
@@ -109,9 +106,8 @@ private fun BotonesDeConfirmar(textoConfirmar: String, ocupado: Boolean, onConfi
         Spacer(Modifier.padding(horizontal = 4.dp))
         Text(
             if (ocupado) "…" else textoConfirmar,
-            fontSize = 14.sp,
+            style = Movi.textos.cuerpo,
             color = Movi.colores.sale,
-            fontWeight = FontWeight.Medium,
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(enabled = !ocupado, onClick = onConfirmar)

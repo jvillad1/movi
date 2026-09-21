@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -112,8 +111,7 @@ fun SelectorDeFecha(
             )
             Text(
                 text = etiquetaDeMes(mesVisible),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
+                style = Movi.textos.cuerpo,
                 color = Movi.colores.texto,
                 modifier = Modifier.weight(1f),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -132,7 +130,7 @@ fun SelectorDeFecha(
             // abreviatura de una letra que usa todo el mundo acá.
             listOf("L", "M", "M", "J", "V", "S", "D").forEach { dia ->
                 Box(modifier = Modifier.weight(1f).height(20.dp), contentAlignment = Alignment.Center) {
-                    Text(dia, fontSize = 11.sp, color = Movi.colores.textoApagado)
+                    Text(dia, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                 }
             }
         }
@@ -178,8 +176,7 @@ private fun AtajoDeFecha(
     ) {
         Text(
             text = texto,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
+            style = Movi.textos.cuerpo,
             color = if (activo) Movi.colores.marca else Movi.colores.texto,
         )
     }
@@ -234,7 +231,7 @@ private fun CasillaDeDia(
         ) {
             Text(
                 text = dia.dayOfMonth.toString(),
-                fontSize = 13.sp,
+                style = Movi.textos.cuerpo,
                 fontWeight = if (seleccionada) FontWeight.Medium else FontWeight.Normal,
                 color = when {
                     seleccionada -> Movi.colores.marca

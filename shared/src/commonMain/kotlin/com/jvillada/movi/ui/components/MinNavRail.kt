@@ -68,6 +68,7 @@ fun MinNavRail(
     ) {
         Text(
             "movi",
+            // Tamaño suelto a propósito: es el logotipo del riel, no un título; ningún estilo de la escala es ese papel.
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = Movi.colores.marca,
@@ -137,10 +138,9 @@ private fun RailItem(
         )
         Text(
             text = label,
-            fontSize = 13.sp,
+            style = Movi.textos.cuerpo,
             fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
             color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
-            letterSpacing = 0.2.sp,
         )
     }
 }

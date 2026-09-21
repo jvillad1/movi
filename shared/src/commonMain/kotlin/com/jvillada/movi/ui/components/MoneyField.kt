@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -269,7 +268,6 @@ fun MoneyField(
                 // edita son solo dígitos, y el campo se anuncia como monto esté vacío o lleno.
                 Text(
                     text = prefix,
-                    fontSize = 14.sp,
                     style = Movi.textos.monto,
                     color = if (digits.isEmpty()) Movi.colores.textoApagado else Movi.colores.textoMedio,
                 )
@@ -282,7 +280,7 @@ fun MoneyField(
                         // a 360dp en «Términos del crédito»).
                         Text(
                             text = placeholder.removePrefix(prefix).trim().ifEmpty { "0" },
-                            fontSize = 14.sp,
+                            style = Movi.textos.monto,
                             color = Movi.colores.textoApagado,
                             maxLines = 1,
                             softWrap = false,
@@ -300,11 +298,7 @@ fun MoneyField(
                             // tuvo.
                             onValueChange(parseMoneyDigits(siguiente.text))
                         },
-                        textStyle = TextStyle(
-                            fontSize = 14.sp,
-                            color = Movi.colores.texto,
-                            fontFeatureSettings = "tnum",
-                        ),
+                        textStyle = Movi.textos.monto.copy(color = Movi.colores.texto),
                         cursorBrush = SolidColor(Movi.colores.texto),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
