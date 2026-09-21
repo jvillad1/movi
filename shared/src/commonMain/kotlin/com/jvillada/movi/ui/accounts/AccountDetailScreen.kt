@@ -227,10 +227,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         ) {
                             Text(
                                 text = if (isCard) "DEUDA ACTUAL" else "SALDO ACTUAL",
-                                fontSize = 11.sp,
+                                style = Movi.textos.rotulo,
                                 color = Movi.colores.textoMedio,
-                                letterSpacing = 0.4.sp,
-                                fontWeight = FontWeight.Medium,
                             )
                             Spacer(Modifier.height(8.dp))
                             if (isCard) {
@@ -241,25 +239,23 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 // qué significa el menos era exactamente cómo se llegaba a un
                                 // «Debes −$50.000» en la otra pantalla.
                                 val saldo = saldoDeDeuda(debt)
-                                Cifra(
+                                // La cifra protagonista de esta pantalla: `Movi.textos.cifra`, que se
+                                // achica sola si una deuda larga no entra en un renglón.
+                                CifraProtagonista(
                                     text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
-                                    fontSize = 28f,
                                     color = if (saldo.aFavor) Movi.colores.entra else Movi.colores.sale,
-                                    fontWeight = FontWeight.Medium,
                                 )
                             } else {
-                                Cifra(
+                                CifraProtagonista(
                                     text = formatCOP(acc.balance), // formatCOP ya trae el signo (F36)
-                                    fontSize = 28f,
                                     color = if (acc.balance >= 0) Movi.colores.entra else Movi.colores.sale,
-                                    fontWeight = FontWeight.Medium,
                                 )
                             }
                             if (typeLabel.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = if (isCard) typeLabel else "COP · $typeLabel",
-                                    fontSize = 11.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                 )
                             }
@@ -289,8 +285,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     left = {
                                         Text(
                                             "¿Solo sirve para algo?",
-                                            fontSize = 14.5.sp,
-                                            fontWeight = FontWeight.Medium,
+                                            style = Movi.textos.cuerpo,
                                             color = Movi.colores.texto,
                                         )
                                     },
@@ -333,7 +328,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Text("Sin movimientos aún", fontSize = 14.sp, color = Movi.colores.textoMedio)
+                            Text("Sin movimientos aún", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
@@ -344,8 +339,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             ) {
                                 Text(
                                     text = "+ Registrar el primero",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    style = Movi.textos.cuerpo,
                                     color = Movi.colores.marca,
                                 )
                             }
@@ -364,19 +358,22 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
+                                    // Igual que el encabezado de cada día en Movimientos.
                                     text = day.date.uppercase(),
-                                    fontSize = 11.sp,
+                                    style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     fontWeight = FontWeight.Medium,
                                     letterSpacing = 0.4.sp,
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
-                                    Cifra(
+                                    Text(
                                         // Se pasa el valor absoluto: el signo ya lo pone el if de acá
                                         // (siempre "+" o "−", incluso en 0) — pasarle el total con signo
                                         // a formatCOP (F36) duplicaría el "−" cuando el día cierra en rojo.
                                         text = "${if (day.total >= 0) "+" else "−"}${formatCOP(kotlin.math.abs(day.total))}",
-                                        fontSize = 11f,
+                                        // El tamaño del rótulo del día que tiene al lado, con dígitos
+                                        // tabulares como todo monto.
+                                        style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
                                         color = Movi.colores.textoMedio,
                                     )
                                 }
@@ -404,10 +401,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                 ) {
                                                     Text(
                                                         text = event.description,
-                                                        fontSize = 14.5.sp,
-                                                        fontWeight = FontWeight.Medium,
+                                                        style = Movi.textos.cuerpo,
                                                         color = Movi.colores.texto,
-                                                        letterSpacing = (-0.1).sp,
                                                     )
                                                     if (event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
                                                         StatusDot(Movi.colores.aviso)
@@ -418,12 +413,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                 ) {
-                                                    Text(event.category, fontSize = 12.sp, color = Movi.colores.textoMedio)
+                                                    Text(event.category, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                                     StatusDot(Movi.colores.textoApagado, 2.dp)
                                                     Text(
                                                         text = event.source.name,
-                                                        fontSize = 11.sp,
-                                                        style = Movi.textos.monto,
+                                                        style = Movi.textos.apoyo,
                                                         color = Movi.colores.textoMedio,
                                                         letterSpacing = 0.3.sp,
                                                     )
@@ -441,7 +435,6 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                             // inicial» tampoco está exento acá desde siempre.
                                             Text(
                                                 text = "${if (isIncome) "+" else "−"}${formatMoney(event.amount, event.currency)}",
-                                                fontSize = 14.5.sp,
                                                 style = Movi.textos.monto,
                                                 fontWeight = FontWeight.Medium,
                                                 color = if (isIncome) Movi.colores.entra else Movi.colores.texto,
@@ -471,8 +464,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         ) {
                             Text(
                                 text = "Eliminar cuenta",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
+                                style = Movi.textos.cuerpo,
                                 color = Movi.colores.sale,
                             )
                         }
