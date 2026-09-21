@@ -456,7 +456,7 @@ private fun LoanCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(credit.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
-            Text(credit.terms?.let { if (it.sinIntereses) "Sin intereses" else "${it.rateEa}% EA" } ?: "", fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
+            Text(credit.terms?.let { if (it.sinIntereses) "Sin intereses" else "${it.rateEa}% EA" } ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             EditTermsIcon(onEdit)
         }
         Text(credit.terms?.bank ?: "Sin términos registrados", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
@@ -682,7 +682,7 @@ private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> 
         ) {
             Text(card.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.1).sp, modifier = Modifier.weight(1f))
             if (currency != "COP") {
-                Text(currency, fontSize = 11.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
+                Text(currency, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
             EditTermsIcon(onEdit)
         }
@@ -695,7 +695,7 @@ private fun CreditCardCard(card: CardSummary, onOpen: () -> Unit, onEdit: () -> 
         ) {
             Text(formatMoney(debt, currency), style = Movi.textos.monto, fontWeight = FontWeight.Medium, color = Movi.colores.texto, letterSpacing = (-0.3).sp)
             card.available?.let {
-                Text("Disponible ${formatMoney(it, currency)}", fontSize = 12.sp, style = Movi.textos.monto, color = Movi.colores.textoMedio)
+                Text("Disponible ${formatMoney(it, currency)}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
         card.terms?.let { t ->
