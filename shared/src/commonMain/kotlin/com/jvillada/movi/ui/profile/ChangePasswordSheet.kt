@@ -14,12 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.PasswordPolicy
@@ -113,13 +111,13 @@ fun ChangePasswordSheet(
                 ) {
                     Text(
                         "Listo, tu contraseña quedó actualizada.",
-                        fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Movi.colores.entra,
+                        style = Movi.textos.cuerpo, color = Movi.colores.entra,
                         textAlign = TextAlign.Center,
                     )
                 }
             } else {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                    Text("Contraseña actual", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Contraseña actual", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
                     AuthField(
                         value = current,
                         onChange = { current = it },
@@ -128,7 +126,7 @@ fun ChangePasswordSheet(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                     )
                     Spacer(Modifier.height(14.dp))
-                    Text("Contraseña nueva", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Contraseña nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
                     AuthField(
                         value = new,
                         onChange = { new = it },
@@ -137,7 +135,7 @@ fun ChangePasswordSheet(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                     )
                     Spacer(Modifier.height(14.dp))
-                    Text("Repetir la nueva", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+                    Text("Repetir la nueva", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
                     AuthField(
                         value = repeat,
                         onChange = { repeat = it },
@@ -149,7 +147,7 @@ fun ChangePasswordSheet(
 
                     error?.let {
                         Spacer(Modifier.height(10.dp))
-                        Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                        Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                     }
                 }
 
@@ -163,13 +161,13 @@ fun ChangePasswordSheet(
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(if (saving) "Cambiando…" else "Cambiar contraseña", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
                 }
                 if (!canSave && !saving && missingFieldMessage != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = missingFieldMessage,
-                        fontSize = 12.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
