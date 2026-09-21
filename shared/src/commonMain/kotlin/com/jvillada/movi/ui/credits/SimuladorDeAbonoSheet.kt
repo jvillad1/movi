@@ -91,7 +91,7 @@ fun SimuladorDeAbonoSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Deuda hoy", fontSize = 13.sp, color = Movi.colores.textoMedio)
+                    Text("Deuda hoy", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                     Text(
                         formatCOP(saldo),
                         style = Movi.textos.monto,

@@ -152,7 +152,7 @@ fun CardTermsSheet(
                 if (editing != null) {
                     SectionLabel("TARJETA")
                     Spacer(Modifier.height(8.dp))
-                    Text(editing.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
+                    Text(editing.account.name, style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
                     Spacer(Modifier.height(16.dp))
                 } else {
                     FieldBox("Nombre (p.ej. Visa Bancolombia)", name, { name = it })
@@ -207,9 +207,8 @@ fun CardTermsSheet(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = TEXTO_DE_AYUDA_DEL_MINIMO,
-                    fontSize = 11.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoApagado,
-                    lineHeight = 15.sp,
                 )
 
                 Spacer(Modifier.height(8.dp))
@@ -230,7 +229,7 @@ fun CardTermsSheet(
 
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
 
@@ -244,13 +243,13 @@ fun CardTermsSheet(
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (saving) "Guardando…" else "Guardar tarjeta", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(if (saving) "Guardando…" else "Guardar tarjeta", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
             }
             if (!canSave && !saving && missingFieldMessage != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = missingFieldMessage,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -271,7 +270,7 @@ fun CardTermsSheet(
                 } else {
                     Text(
                         "Eliminar términos",
-                        fontSize = 13.sp,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.sale,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().clickable(enabled = !saving) { pidiendoBorrar = true }.padding(vertical = 8.dp),
@@ -300,7 +299,7 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            style = Movi.textos.cuerpo,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
         )
