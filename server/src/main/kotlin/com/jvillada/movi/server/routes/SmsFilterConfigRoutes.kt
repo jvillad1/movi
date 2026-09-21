@@ -77,10 +77,6 @@ private val CURRENT_FILTER = SmsFilterConfig(
         "com.app.prontomas",
         // Google Wallet: los pagos sin contacto los notifica ella, no el banco.
         "com.google.android.apps.walletnfcrel",
-        // TEMPORAL (21-sep): `cmd notification post` solo publica como com.android.shell, y es la
-        // única forma de probar el camino entero sin esperar una compra real. Se quita apenas
-        // la prueba pase.
-        "com.android.shell",
     ),
 )
 
