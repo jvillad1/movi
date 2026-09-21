@@ -23,9 +23,29 @@ class BudgetProgressTest {
         // —24 bits de mantisa— puede estar mal por más de un punto. Los de este dueño son de
         // cientos de millones.
         assertEquals(60, progreso(121_210, 200_000).pct)
-        assertEquals(160, progreso(321_210, 200_000).pct)
+        assertEquals(161, progreso(321_210, 200_000).pct, "160,6 % pasado el límite sube a 161")
         assertEquals(100, progreso(767_800_000, 767_800_000).pct)
-        assertEquals(100, progreso(767_800_001, 767_800_000).pct, "101 pesos de más no llegan a 101 %")
+    }
+
+    /**
+     * Comida con $1.008.737 de $1.000.000 decía «100% · Sobrepasado · $8.737»: el truncado bajaba
+     * el 100,87 % a 100 y el porcentaje contradecía al rótulo. Pasado el límite se redondea hacia
+     * arriba; hasta el límite, no.
+     */
+    @Test
+    fun pasado_el_limite_el_porcentaje_nunca_dice_100() {
+        assertEquals(101, progreso(1_008_737, 1_000_000).pct)
+        assertEquals(101, progreso(1_000_001, 1_000_000).pct, "un peso de más ya es 101 %")
+        assertEquals(101, progreso(767_800_001, 767_800_000).pct, "también con montos de cientos de millones")
+        assertEquals(117, progreso(1_163_000, 1_000_000).pct, "116,3 % → 117")
+        assertEquals(150, progreso(1_500_000, 1_000_000).pct, "exacto no se redondea")
+    }
+
+    @Test
+    fun justo_en_el_limite_o_debajo_se_sigue_truncando() {
+        assertEquals(100, progreso(1_000_000, 1_000_000).pct)
+        assertEquals(99, progreso(999_999, 1_000_000).pct, "99,9999 % no se vende como 100")
+        assertEquals(79, progreso(799_999, 1_000_000).pct)
     }
 
     @Test

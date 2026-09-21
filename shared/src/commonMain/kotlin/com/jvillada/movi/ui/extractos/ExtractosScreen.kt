@@ -29,6 +29,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.Hairline
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
+import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.toUserMessage
@@ -210,10 +211,11 @@ fun ExtractosScreen(onNavigate: (Screen) -> Unit) {
             // Import history section
             item(key = "imports-header") {
                 Spacer(Modifier.height(28.dp))
-                Text(
-                    "IMPORTACIONES ANTERIORES",
-                    style = Movi.textos.apoyo, color = Movi.colores.textoMedio, letterSpacing = 0.8.sp,
-                    modifier = Modifier.padding(bottom = 12.dp),
+                // El mismo rótulo de sección que el resto de la app («CATEGORÍAS · 4» en
+                // Presupuestos): antes era un Text suelto con otro estilo y otro espaciado.
+                MinSectionHeader(
+                    title = "Importaciones anteriores",
+                    count = imports.size.takeIf { importsError == null && it > 0 },
                 )
             }
 
