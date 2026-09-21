@@ -14,11 +14,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.PasswordPolicy
@@ -80,12 +78,12 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Crear cuenta", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Movi.colores.texto)
-        Text("Ingresa tus datos para empezar", fontSize = 14.sp, color = Movi.colores.textoMedio)
+        Text("Crear cuenta", style = Movi.textos.titular, color = Movi.colores.texto)
+        Text("Ingresa tus datos para empezar", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(32.dp))
 
         MinCard(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(), variant = MinCardVariant.Elevated, padding = PaddingValues(20.dp)) {
-            Text("Nombre", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Nombre", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = name,
                 onChange = { name = it },
@@ -97,7 +95,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 keyboardActions = KeyboardActions(onNext = { emailFocus.requestFocus() }),
             )
             Spacer(Modifier.height(14.dp))
-            Text("Correo", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Correo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = email,
                 onChange = { email = it },
@@ -110,7 +108,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier.focusRequester(emailFocus),
             )
             Spacer(Modifier.height(14.dp))
-            Text("Contraseña", fontSize = 12.sp, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Contraseña", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(bottom = 6.dp))
             AuthField(
                 value = password,
                 onChange = { password = it },
@@ -126,7 +124,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
 
             error?.let {
                 Spacer(Modifier.height(12.dp))
-                Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
             }
 
             Spacer(Modifier.height(20.dp))
@@ -146,7 +144,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 } else {
                     Text(
                         "Crear cuenta",
-                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        style = Movi.textos.titulo,
                         color = Movi.colores.fondo,
                     )
                 }
@@ -154,7 +152,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Text("¿Ya tienes cuenta? Entra", fontSize = 13.sp, color = Movi.colores.marca,
+        Text("¿Ya tienes cuenta? Entra", style = Movi.textos.cuerpo, color = Movi.colores.marca,
             modifier = Modifier.noRippleClickable { onNavigate(Screen.Login) })
     }
 }
