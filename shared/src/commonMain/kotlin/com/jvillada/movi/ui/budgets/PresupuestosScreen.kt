@@ -412,6 +412,7 @@ private fun AlertBadge(label: String, count: Int, color: Color) {
     Column {
         Text(
             text = "$count",
+            // Tamaño suelto a propósito: el número grande de un contador en la tarjeta; `cifra` (42) no cabe y `titular` (19) es para títulos.
             fontSize = 22.sp,
             style = Movi.textos.monto,
             fontWeight = FontWeight.Medium,
@@ -479,8 +480,8 @@ private fun BudgetCard(p: BudgetProgress, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     text = "${p.pct}%",
-                    fontSize = 12.sp,
-                    style = Movi.textos.monto,
+                    // Dato de apoyo junto al chevron: la talla del apoyo, tabular como un monto.
+                    style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
                     color = pctColor,
                     fontWeight = FontWeight.Medium,
                 )
@@ -796,8 +797,8 @@ private fun BudgetSheet(
                     )
                     Text(
                         text = formatCOP(movimientos.sumOf { it.amount }),
-                        fontSize = 12.sp,
-                        style = Movi.textos.monto,
+                        // Plata en la línea del rótulo: la talla del apoyo, tabular como un monto.
+                        style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
                         color = Movi.colores.textoMedio,
                     )
                 }
@@ -854,6 +855,7 @@ private fun BudgetSheet(
                 Text(
                     // F14: separador de miles mientras se escribe, no solo al guardar.
                     text = "$" + formatAmountKeypadDisplay(amount),
+                    // Tamaño suelto a propósito: el monto que se está tecleando; ningún estilo de la escala llega a 48.
                     fontSize = 48.sp,
                     style = Movi.textos.monto,
                     fontWeight = FontWeight.Normal,
@@ -891,6 +893,7 @@ private fun BudgetSheet(
                                 } else {
                                     Text(
                                         text = key,
+                                        // Tamaño suelto a propósito: tecla del teclado numérico; `titular` (19) no es para dígitos y `cifra` (42) no cabe.
                                         fontSize = 20.sp,
                                         style = Movi.textos.monto,
                                         fontWeight = FontWeight.Normal,
