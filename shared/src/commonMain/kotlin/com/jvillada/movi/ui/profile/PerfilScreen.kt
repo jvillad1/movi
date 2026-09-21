@@ -136,6 +136,7 @@ fun PerfilScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit) {
                                 .background(avatarColor),
                             contentAlignment = Alignment.Center,
                         ) {
+                            // Tamaño suelto a propósito: las iniciales son el dibujo del avatar, a la medida del círculo de 56 dp; ningún estilo de la escala es ese papel.
                             Text(initials.ifEmpty { "U" }, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, letterSpacing = (-0.5).sp)
                         }
                         Column(modifier = Modifier.weight(1f)) {

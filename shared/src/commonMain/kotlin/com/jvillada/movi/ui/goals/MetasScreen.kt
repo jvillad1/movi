@@ -136,6 +136,7 @@ fun MetasScreen(onNavigate: (Screen) -> Unit) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Total ahorrado", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             Spacer(Modifier.height(6.dp))
+                            // Tamaño suelto a propósito: la cifra de una tarjeta con ícono al lado; `cifra` (42) no cabe y `titular` (19) no es para plata.
                             Text(formatCOP(resumen.ahorrado), fontSize = 22.sp, style = Movi.textos.monto, color = Movi.colores.texto, letterSpacing = (-0.7).sp)
                             Text("de ${formatCOP(resumen.objetivo)} · ${resumen.rotuloDeCantidad}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.padding(top = 4.dp))
                             if (resumen.hayCuentasCompartidas) {

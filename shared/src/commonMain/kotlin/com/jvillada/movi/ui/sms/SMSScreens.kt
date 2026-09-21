@@ -807,6 +807,7 @@ private fun Detail(
             if (ok) {
                 Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.entra, modifier = Modifier.size(12.dp))
             } else {
+                // Sin estilo a propósito: el «?» hace de ícono (como el ✓ de 12 dp) dentro del círculo de 18 dp.
                 Text("?", fontSize = 10.sp, color = Movi.colores.aviso, fontWeight = FontWeight.Bold)
             }
         }

@@ -17,11 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.shared.model.UpdateProfileRequest
@@ -90,7 +88,7 @@ fun EditProfileSheet(
             SheetHandleWithClose(onClose = onDismiss, enabled = !saving)
 
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
-                Text("ALIAS", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
+                Text("ALIAS", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(8.dp))
                 FieldBox(
                     placeholder = "Tu nombre",
@@ -100,7 +98,7 @@ fun EditProfileSheet(
                 )
 
                 Spacer(Modifier.height(20.dp))
-                Text("COLOR DEL AVATAR", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
+                Text("COLOR DEL AVATAR", style = Movi.textos.rotulo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(10.dp))
                 for (row in AvatarPalette.COLORS.chunked(4)) {
                     Row(
@@ -116,7 +114,7 @@ fun EditProfileSheet(
 
                 error?.let {
                     Spacer(Modifier.height(6.dp))
-                    Text(it, fontSize = 12.sp, color = Movi.colores.sale)
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
             }
 
@@ -130,13 +128,13 @@ fun EditProfileSheet(
                     .padding(vertical = 15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(if (saving) "Guardando…" else "Guardar", color = Movi.colores.fondo, style = Movi.textos.cuerpo)
             }
             if (!canSave && !saving && missingFieldMessage != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = missingFieldMessage,
-                    fontSize = 12.sp,
+                    style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
