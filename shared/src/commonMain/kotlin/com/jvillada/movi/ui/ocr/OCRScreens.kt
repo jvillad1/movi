@@ -63,6 +63,7 @@ fun OCRCaptureScreen(onNavigate: (Screen) -> Unit) {
                     .background(Color(0xFFF5F2EA))
                     .padding(14.dp),
             ) {
+                // Maqueta de un tiquete de caja: sus tamaños imitan el papel térmico, no son de la escala.
                 Column {
                     Text("ÉXITO COUNTRY", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF222222), fontFamily = FontFamily.Monospace, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Text("Cra 15 # 82-12 · Bogotá", fontSize = 9.sp, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -162,12 +163,12 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                     variant = MinCardVariant.Elevated,
                     padding = PaddingValues(22.dp),
                 ) {
-                    Text("Total a registrar", fontSize = 12.sp, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
+                    Text("Total a registrar", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(10.dp))
                     // La cifra protagonista de la pantalla: iba a 38 sp a mano.
                     CifraProtagonista("−\$312.400", color = Movi.colores.sale)
                     Spacer(Modifier.height(12.dp))
-                    Text("OCR · 5 ítems detectados", fontSize = 12.sp, color = Movi.colores.textoMedio, style = Movi.textos.monto, letterSpacing = 0.4.sp)
+                    Text("OCR · 5 ítems detectados", color = Movi.colores.textoMedio, style = Movi.textos.apoyo, letterSpacing = 0.4.sp)
                 }
             }
 
@@ -203,7 +204,7 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Text(name, fontSize = 13.5.sp, color = Movi.colores.texto)
+                                    Text(name, style = Movi.textos.cuerpo, color = Movi.colores.texto)
                                     Text(formatCOP(value), style = Movi.textos.monto, color = Movi.colores.textoMedio, letterSpacing = (-0.3).sp)
                                 }
                                 if (i < 4) Hairline()
@@ -211,7 +212,7 @@ fun OCRConfirmScreen(onNavigate: (Screen) -> Unit) {
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("+ Agregar ítem", fontSize = 13.sp, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
+                    Text("+ Agregar ítem", style = Movi.textos.cuerpo, color = Movi.colores.texto)
                 }
             }
         }

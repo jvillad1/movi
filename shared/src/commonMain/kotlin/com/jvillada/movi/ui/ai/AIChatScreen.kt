@@ -128,10 +128,8 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             action = {
                 Text(
                     "BETA",
-                    fontSize = 9.sp,
                     color = Movi.colores.textoMedio,
                     style = Movi.textos.rotulo,
-                    letterSpacing = 0.6.sp,
                 )
             },
         )
@@ -165,7 +163,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.textoMedio, modifier = Modifier.size(16.dp))
                     Text(
                         text = pendingImage?.fileName ?: "",
-                        fontSize = 12.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
@@ -176,7 +174,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                         modifier = Modifier.size(16.dp).clickable { pendingImage = null },
                     )
                 } else {
-                    Text(text = attachError ?: "", fontSize = 12.sp, color = Movi.colores.sale, modifier = Modifier.weight(1f))
+                    Text(text = attachError ?: "", style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.weight(1f))
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -208,7 +206,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                     onValueChange = campo::alCambiar,
                     enabled = !loading,
                     cursorBrush = SolidColor(Movi.colores.texto),
-                    textStyle = TextStyle(color = Movi.colores.texto, fontSize = 14.sp),
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                     // Ola 8 · V2: mismo agujero que tenía la nota de Agregar. El `Box(weight)`
                     // reserva el ancho, pero el área que responde al toque es la del campo, y
                     // con el texto vacío mide cero: se tocaba «Pregúntale a Movi…» y no pasaba
@@ -220,7 +218,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                         if (input.isEmpty()) {
                             Text(
                                 "Pregúntale a Movi…",
-                                fontSize = 13.5.sp,
+                                style = Movi.textos.cuerpo,
                                 color = Movi.colores.textoMedio,
                             )
                         }
@@ -238,6 +236,7 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 if (loading) {
+                    // Glifo de espera dentro del botón de enviar: va al tamaño del botón, no es texto de la escala.
                     Text(text = "…", fontSize = 20.sp, color = if (canSend) Movi.colores.fondo else Movi.colores.textoMedio, fontWeight = FontWeight.Bold)
                 } else {
                     // Ola 2 #5 (F11): "›" como texto suelto salía roto en la web, igual que "‹".
@@ -270,12 +269,12 @@ private fun AIMsgUser(text: String, hasImage: Boolean = false) {
                 if (hasImage) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Rounded.Image, contentDescription = null, tint = Movi.colores.fondo, modifier = Modifier.size(13.dp))
-                        Text("Imagen adjunta", fontSize = 11.sp, color = Movi.colores.fondo)
+                        Text("Imagen adjunta", style = Movi.textos.apoyo, color = Movi.colores.fondo)
                     }
                     if (text.isNotBlank()) Spacer(Modifier.height(4.dp))
                 }
                 if (text.isNotBlank()) {
-                    Text(text = text, fontSize = 13.5.sp, color = Movi.colores.fondo, lineHeight = 20.sp)
+                    Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = Movi.colores.fondo, lineHeight = 20.sp)
                 }
             }
         }
@@ -300,7 +299,7 @@ private fun AIMsgAI(text: String) {
         }
         Spacer(Modifier.width(10.dp))
         Box(modifier = Modifier.widthIn(max = 290.dp)) {
-            Text(text = text, fontSize = 13.5.sp, color = Movi.colores.texto, lineHeight = 20.sp)
+            Text(text = text, style = Movi.textos.cuerpo, fontWeight = FontWeight.Normal, color = Movi.colores.texto, lineHeight = 20.sp)
         }
     }
 }

@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.nombreDe
@@ -102,17 +101,17 @@ fun PeriodoSheet(
 
                 Text(
                     text = "¿Qué día empieza tu mes?",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
+                    style = Movi.textos.titulo,
                     color = Movi.colores.texto,
                     modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
                 )
                 Text(
                     text = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
                         "Si te pagan el 26, elige 26 y el mes te va a cuadrar con el sueldo.",
-                    fontSize = 13.sp,
+                    // Párrafo, no rótulo de fila: la talla del cuerpo con el peso normal de la prosa.
+                    style = Movi.textos.cuerpo,
+                    fontWeight = FontWeight.Normal,
                     color = Movi.colores.textoMedio,
-                    lineHeight = 18.sp,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
 
@@ -126,21 +125,20 @@ fun PeriodoSheet(
                 ) {
                     Text(
                         text = "Hoy estarías en ${nombreDe(hoy)}",
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.titulo,
                         color = Movi.colores.texto,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = rangoLegibleDe(hoy, settings) ?: "Del 1 al último día del mes",
-                        fontSize = 12.5.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
                     if (settings.esMesDeCalendario) {
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = "Es el mes de calendario, como viene por defecto.",
-                            fontSize = 11.5.sp,
+                            style = Movi.textos.apoyo,
                             color = Movi.colores.textoApagado,
                         )
                     }
@@ -182,7 +180,7 @@ fun PeriodoSheet(
                             ) {
                                 Text(
                                     text = d.toString(),
-                                    fontSize = 13.sp,
+                                    style = Movi.textos.cuerpo,
                                     fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal,
                                     color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
                                     textAlign = TextAlign.Center,
@@ -199,15 +197,14 @@ fun PeriodoSheet(
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = "En los meses que no tienen día $dia, el corte cae el último día del mes.",
-                        fontSize = 12.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
-                        lineHeight = 16.sp,
                     )
                 }
 
                 if (error != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(text = error, fontSize = 12.5.sp, color = Movi.colores.sale, lineHeight = 17.sp)
+                    Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -224,8 +221,7 @@ fun PeriodoSheet(
                     Text(
                         text = if (saving) "Guardando…" else "Guardar",
                         color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.cuerpo,
                     )
                 }
 

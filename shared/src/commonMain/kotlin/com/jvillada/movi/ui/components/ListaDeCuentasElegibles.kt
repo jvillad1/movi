@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.CuentasDelPicker
 import com.jvillada.movi.shared.model.UsoDeCuenta
@@ -67,7 +66,9 @@ fun ListaDeCuentasElegibles(
         if (cuentas.vacio) {
             Text(
                 "No tienes cuentas todavía.",
-                fontSize = 13.5.sp,
+                // Una frase, no el rótulo de una fila: la talla del cuerpo con el peso de la prosa.
+                style = Movi.textos.cuerpo,
+                fontWeight = FontWeight.Normal,
                 color = Movi.colores.textoMedio,
                 modifier = Modifier.padding(vertical = 14.dp),
             )
@@ -83,7 +84,7 @@ fun ListaDeCuentasElegibles(
                 ) {
                     Text(
                         account.name,
-                        fontSize = 14.5.sp,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.texto,
                         fontWeight = if (account.id == selectedId) FontWeight.Medium else FontWeight.Normal,
                         modifier = Modifier.weight(1f),
