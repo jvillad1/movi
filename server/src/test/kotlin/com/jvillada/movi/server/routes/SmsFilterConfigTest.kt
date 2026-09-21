@@ -139,7 +139,7 @@ class SmsFilterConfigTest {
         // Leídos del teléfono del dueño el 19-sep, no conjeturados: la app de Bancolombia y la que
         // contiene el bolsillo Glim. Si alguien los cambia sin mirar un teléfono, esta prueba lo frena.
         assertEquals(
-            listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas", "com.google.android.apps.walletnfcrel", "com.android.shell"),
+            listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas", "com.google.android.apps.walletnfcrel"),
             paquetes,
         )
     }
