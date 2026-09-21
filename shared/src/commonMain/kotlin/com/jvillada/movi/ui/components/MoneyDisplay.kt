@@ -8,7 +8,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.theme.Movi
@@ -160,6 +159,7 @@ private fun BreakdownRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(text = label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        Cifra(text = value, fontSize = 12f, color = Movi.colores.textoMedio)
+        // La talla del rótulo que tiene al lado, con dígitos tabulares como todo monto.
+        Text(text = value, style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"), color = Movi.colores.textoMedio)
     }
 }
