@@ -22,9 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
  * Ola 9 · B — la barra que ofrece convertir en recurrente el movimiento recién guardado.
@@ -59,7 +57,7 @@ fun RecurringOfferBar(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Guardado",
-                        fontSize = 12.sp,
+                        style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
                     Spacer(Modifier.height(2.dp))
@@ -67,10 +65,8 @@ fun RecurringOfferBar(
                         // Una sola línea de pregunta, corta: si necesita dos renglones para
                         // entenderse, ya es una interrupción y no un ofrecimiento.
                         text = "¿\"${prefill.name}\" se repite todos los meses?",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.texto,
-                        lineHeight = 19.sp,
                     )
                 }
                 // Ícono, no el carácter "✕": la fuente del canvas no trae ese glifo y salía un
@@ -96,8 +92,7 @@ fun RecurringOfferBar(
                 ) {
                     Text(
                         text = "Sí, anótalo",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = Movi.textos.cuerpo,
                         color = Movi.colores.marca,
                     )
                 }
