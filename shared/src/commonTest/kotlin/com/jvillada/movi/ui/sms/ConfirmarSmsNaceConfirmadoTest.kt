@@ -35,6 +35,7 @@ class ConfirmarSmsNaceConfirmadoTest {
             leido = leido,
             categoria = "Mercado",
             momento = 1_000L,
+            textoDelSms = "Compraste USD15,44 en ANTHROPIC, asociada a T.Cred *3684.",
         )
 
         assertEquals(ReconciliationStatus.RECONCILED, ev.reconciliationStatus)
@@ -46,5 +47,9 @@ class ConfirmarSmsNaceConfirmadoTest {
         assertEquals(15L, ev.amount)
         assertEquals("USD", ev.currency)
         assertEquals(1_000L, ev.timestamp)
+        // **Y el texto del banco queda guardado con el movimiento.** Es el único dato que sobrevive
+        // a que el dueño le cambie el nombre, y de él depende que «lo que le mandé a Caro» siga
+        // encontrando un envío ya renombrado. Ver `vaHaciaElDestino` en :core.
+        assertEquals("Compraste USD15,44 en ANTHROPIC, asociada a T.Cred *3684.", ev.rawPayload)
     }
 }

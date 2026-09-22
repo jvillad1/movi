@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -213,24 +214,30 @@ fun CardRow(
  * seis arman la maqueta de un tiquete de caja —ahí la monoespaciada no es estilo, es el papel
  * térmico que imita— y el séptimo es el cuerpo crudo de un SMS del banco, citado tal cual.
  *
- * @param fontSize en sp, como `Float`, tal cual lo pedían las 18 llamadas que ya existían. Es el
- *   único parámetro que no sale del sistema todavía: el tamaño de una cifra depende de si es el
- *   número protagonista o un renglón, y eso lo sabe la pantalla, no el componente.
+ * @param estilo un estilo de la escala (`Movi.textos.*`), elegido por el PAPEL de la cifra: un
+ *   monto en una fila es [TextosDeMovi.monto]; un desglose chico o un saldo que se dice en gris,
+ *   [TextosDeMovi.apoyo]; una cifra que encabeza un bloque, [TextosDeMovi.titulo]. Antes era un
+ *   `fontSize: Float` suelto y las llamadas pedían 11,5, 12, 12,5, 13,5, 14,5 y 15 — seis tamaños
+ *   para tres papeles, y el trinquete de tamaños sueltos no los veía porque no decían
+ *   `fontSize =`. Del estilo salen el tamaño y el interlineado; las cifras tabulares se fuerzan
+ *   acá, porque [TextosDeMovi.apoyo] y [TextosDeMovi.titulo] no las traen y una cifra sin `tnum`
+ *   baila en la columna.
+ * @param fontWeight manda sobre el peso del estilo, como antes: una cifra va en Medium aunque su
+ *   estilo sea Normal o SemiBold.
  */
 @Composable
 fun Cifra(
     text: String,
-    fontSize: Float,
+    estilo: TextStyle = Movi.textos.monto,
     color: Color = Movi.colores.texto,
     fontWeight: FontWeight = FontWeight.Medium,
 ) {
     Text(
         text = text,
-        style = Movi.textos.monto.copy(
-            fontSize = fontSize.sp,
-            lineHeight = (fontSize * 1.33f).sp,
+        style = estilo.copy(
             fontWeight = fontWeight,
             letterSpacing = (-0.3).sp,
+            fontFeatureSettings = "tnum",
         ),
         color = color,
     )

@@ -172,6 +172,15 @@ open class NoOpRepository(
     override suspend fun createGoal(goal: Goal) = goal.copy(id = goal.id.ifBlank { "goal-stub" })
     override suspend fun updateGoal(id: String, goal: Goal) = goal.copy(id = id)
     override suspend fun deleteGoal(id: String) {}
+    // Cuentas de otros: este «server» no tiene ninguna registrada, que es el caso normal. Los
+    // destinos son remote-only (no hay espejo local), así que no hay nada más que imitar acá.
+    override suspend fun getDestinos() = emptyList<DestinoConocido>()
+    override suspend fun createDestino(destino: DestinoConocido) =
+        destino.copy(id = destino.id.ifBlank { "dst-stub" })
+    override suspend fun updateDestino(id: String, destino: DestinoConocido) = destino.copy(id = id)
+    override suspend fun deleteDestino(id: String) {}
+    override suspend fun getMovimientosDelDestino(id: String) =
+        MovimientosDelDestino(destino = DestinoConocido(id = id, nombre = "stub", numero = "0000"), movimientos = emptyList())
     override suspend fun getSmsMessages() = emptyList<SmsMessage>()
     override suspend fun getSms(id: String) = error("stub")
     override suspend fun parseSms(id: String) = error("stub")

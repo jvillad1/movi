@@ -13,9 +13,11 @@ import com.jvillada.movi.server.push.WebPushSender
 import com.jvillada.movi.server.push.buildSmsPushPayload
 import com.jvillada.movi.server.sms.SmsDedupeIndex
 import com.jvillada.movi.server.sms.memoriaDe
+import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
+import com.jvillada.movi.shared.model.conElDestinoConocido
 import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
@@ -305,7 +307,14 @@ fun Route.smsRoutes() {
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
         // La historia del dueño entra acá y no adentro de `parseSms`: ese mismo parseo lo usan el
         // sync y la push, donde no hay a quién consultarle nada.
-        call.respond(conLoQueMoviRecuerda(parsed, dbQuery { memoriaDe(uid) }))
+        //
+        // **Y las cuentas de otros van DESPUÉS de la memoria**, no antes. Ese orden es la decisión:
+        // si el dueño a ese número ya lo llamó «Mercado», sigue diciendo «Mercado» — el nombre que
+        // él puso es suyo. El destino solo habla donde no hablaba nadie, que es el caso real («a la
+        // cuenta *31973270756» no lo puede leer ningún humano). Ver `conElDestinoConocido`.
+        val memoria = dbQuery { memoriaDe(uid) }
+        val destinos = dbQuery { destinosDelDueno(uid) }
+        call.respond(conElDestinoConocido(conLoQueMoviRecuerda(parsed, memoria), sms.text, destinos))
     }
 
     get("/api/sms/{id}/coincidencias") {
@@ -424,7 +433,13 @@ fun Route.smsRoutes() {
         val realtimeCaptures = inserted.filter { it.id.startsWith("sms_rt_") }
         if (realtimeCaptures.isNotEmpty() && WebPushSender.isConfigured()) {
             runCatching {
-                val parsed = realtimeCaptures.mapNotNull { parseSms(it.text) }
+                // La push también dice el nombre del destino: sin esto el aviso del teléfono decía
+                // «Transferencia a la cuenta *31973270756» mientras la pantalla —que sí pasa por
+                // /parse— decía «Transferencia a Caro». El mismo hecho, con dos nombres.
+                val destinos = dbQuery { destinosDelDueno(uid) }
+                val parsed = realtimeCaptures.mapNotNull { msg ->
+                    parseSms(msg.text)?.let { conElDestinoConocido(it, msg.text, destinos) }
+                }
                 if (parsed.isNotEmpty()) WebPushSender.sendToUser(uid, buildSmsPushPayload(parsed))
             }.onFailure {
                 if (it is kotlinx.coroutines.CancellationException) throw it

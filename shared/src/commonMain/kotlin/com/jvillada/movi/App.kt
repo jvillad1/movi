@@ -49,6 +49,7 @@ import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.ai.AIChatScreen
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.categorias.CategoriasScreen
+import com.jvillada.movi.ui.destinos.DestinosScreen
 import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.dashboard.DashboardScreen
 import com.jvillada.movi.ui.dashboard.PrimerosPasosScreen
@@ -307,6 +308,7 @@ fun App() {
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
                 Screen.Categorias        -> CategoriasScreen(navigate)
+                Screen.Destinos          -> DestinosScreen(navigate)
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
