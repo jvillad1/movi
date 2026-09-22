@@ -274,7 +274,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(Movi.espacios.corto))
-                        Cifra(cuenta.monto, 11.5f, color = Movi.colores.textoMedio)
+                        Cifra(cuenta.monto, Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
                 }
             }
@@ -305,7 +305,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                     )
                     Cifra(
                         formatMoneyCompact(balance.patrimonio),
-                        15f,
+                        Movi.textos.titulo,
                         color = Movi.colores.texto,
                         fontWeight = FontWeight.Medium,
                     )
@@ -350,7 +350,7 @@ private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNa
                 Column(modifier = Modifier.weight(1f)) {
                     Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(Movi.espacios.minimo + 2.dp))
-                    Cifra(value, 14.5f, color = color)
+                    Cifra(value, Movi.textos.titulo, color = color)
                 }
             }
         }
@@ -392,9 +392,9 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
                         // renderers); el estilo lo elige cada pantalla: un saldo va en gris y más
                         // chico porque no es una cifra que vaya a salir de la cuenta.
                         if (p.rule.montoEsSaldo) {
-                            Cifra(textoDelMonto(p.rule), 12.5f, color = Movi.colores.textoApagado)
+                            Cifra(textoDelMonto(p.rule), Movi.textos.apoyo, color = Movi.colores.textoApagado)
                         } else {
-                            Cifra(textoDelMonto(p.rule), 14.5f, color = if (urgent) Movi.colores.sale else Movi.colores.texto)
+                            Cifra(textoDelMonto(p.rule), Movi.textos.monto, color = if (urgent) Movi.colores.sale else Movi.colores.texto)
                         }
                     },
                     isLast = i == rows.lastIndex,
@@ -455,7 +455,7 @@ private fun QuickLinksSection(section: ScreenSection, data: DashboardData, onNav
                     // El subtítulo escrito en el Editor manda sobre el calculado.
                     sub = card.subtitle ?: figure.sub,
                     right = figure.value?.let { value ->
-                        { Cifra(value, 14.5f, color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
+                        { Cifra(value, Movi.textos.monto, color = if (figure.isAlert) Movi.colores.sale else Movi.colores.texto) }
                     },
                     showChevron = card.action != null,
                     isLast = i == section.cards.lastIndex,

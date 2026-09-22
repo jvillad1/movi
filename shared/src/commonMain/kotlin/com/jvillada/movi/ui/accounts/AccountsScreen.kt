@@ -197,7 +197,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 // que la cifra grande del Inicio, y compartir la palabra es lo
                                 // que hace obvio que son la misma cosa vista dos veces.
                                 Text("Tu plata", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                                Cifra(formatCOP(balance.tuPlata), 12f, color = Movi.colores.entra)
+                                Cifra(formatCOP(balance.tuPlata), Movi.textos.apoyo, color = Movi.colores.entra)
                             }
                             // El renglón que faltaba: sin él, tu plata − deudas no daba el
                             // patrimonio de arriba y el lector no tenía forma de cerrar la resta.
@@ -212,7 +212,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
-                                    Cifra(formatCOP(balance.condicionado), 12f, color = Movi.colores.textoMedio)
+                                    Cifra(formatCOP(balance.condicionado), Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
                             }
                             if (balance.deudas > 0) {
@@ -222,7 +222,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text("Deudas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                                    Cifra("−${formatCOP(balance.deudas)}", 12f, color = Movi.colores.sale)
+                                    Cifra("−${formatCOP(balance.deudas)}", Movi.textos.apoyo, color = Movi.colores.sale)
                                 }
                             }
                         }
@@ -366,7 +366,7 @@ private fun AccountsGroup(
                 Text(title.uppercase(), style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
                 Text(" · ${accounts.size}", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
-            Cifra(formatCOP(accounts.sumOf { valorEnPesos(it) }), 12f, color = Movi.colores.textoMedio)
+            Cifra(formatCOP(accounts.sumOf { valorEnPesos(it) }), Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         MinCard(
             modifier = Modifier.fillMaxWidth(),

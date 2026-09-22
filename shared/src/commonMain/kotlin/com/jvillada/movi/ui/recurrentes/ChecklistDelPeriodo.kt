@@ -183,7 +183,7 @@ private fun GrupoDelChecklist(
             modifier = Modifier.weight(1f),
         )
         if (total != null && total > 0) {
-            Cifra(formatCOP(total), 13.5f, color = Movi.colores.texto)
+            Cifra(formatCOP(total), Movi.textos.monto, color = Movi.colores.texto)
         }
     }
     if (filas.isEmpty()) {
@@ -245,7 +245,7 @@ private fun FilaDelChecklistCompleto(pago: PagoDelPeriodo, enVuelo: Boolean, onT
         }
         Cifra(
             textoDelMontoDelChecklist(pago),
-            if (pago.montoEsSaldo) 12.5f else 13.5f,
+            if (pago.montoEsSaldo) Movi.textos.apoyo else Movi.textos.monto,
             color = when {
                 pago.montoEsSaldo -> Movi.colores.textoApagado
                 pago.pagado -> Movi.colores.textoApagado
