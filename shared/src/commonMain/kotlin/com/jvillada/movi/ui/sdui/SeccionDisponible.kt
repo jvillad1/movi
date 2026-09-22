@@ -72,9 +72,17 @@ internal fun DisponibleDelPeriodoSection(
             if (disponible.hayMargen) {
                 FilaConBarra("Este período", disponible.periodo, pieDelPeriodo(disponible))
                 Spacer(Modifier.height(Movi.espacios.medio))
-                FilaConBarra("Esta semana", disponible.semana, pieDeLaVentana(disponible.semana))
-                Spacer(Modifier.height(Movi.espacios.medio))
-                FilaConBarra("Hoy", disponible.hoy, pieDeLaVentana(disponible.hoy))
+                if (disponible.porDiaParaLoQueQueda != null) {
+                    FilaConBarra("Esta semana", disponible.semana, pieDeLaVentana(disponible.semana))
+                    Spacer(Modifier.height(Movi.espacios.medio))
+                    FilaConBarra("Hoy", disponible.hoy, pieDeLaVentana(disponible.hoy))
+                } else {
+                    // Con el período ya gastado, la parte de la semana y la de hoy no existen: decir
+                    // «te quedan $1,1M esta semana» debajo de «te pasaste por $13,4M» se contradice.
+                    // Queda solo lo gastado, como cuando no hay margen.
+                    FilaSinMargen("Esta semana", disponible.semana.gastado)
+                    FilaSinMargen("Hoy", disponible.hoy.gastado)
+                }
                 Spacer(Modifier.height(Movi.espacios.medio))
                 Text(
                     text = disponible.porDiaParaLoQueQueda
@@ -211,9 +219,13 @@ internal fun pieDeLaVentana(ventana: VentanaDelDisponible): String =
 
 /** Lo mismo que [pieDeLaVentana], con los días que quedan del período. */
 internal fun pieDelPeriodo(d: DisponibleDelPeriodo): String {
-    val dias = when (d.diasQueQuedan) {
-        1 -> "último día"
-        else -> "quedan ${d.diasQueQuedan} días"
+    // Se dice como en «Tu plata», que cuenta los días DESPUÉS de hoy: con las dos tarjetas una
+    // encima de la otra, «quedan 2 días» arriba y «quedan 3 días» abajo parecía un error. La cuenta
+    // por día sí incluye hoy (`diasQueQuedan`); solo cambia cómo se nombra.
+    val dias = when (val despuesDeHoy = d.diasQueQuedan - 1) {
+        0 -> "último día"
+        1 -> "queda 1 día"
+        else -> "quedan $despuesDeHoy días"
     }
     return "${pieDeLaVentana(d.periodo)} · $dias"
 }

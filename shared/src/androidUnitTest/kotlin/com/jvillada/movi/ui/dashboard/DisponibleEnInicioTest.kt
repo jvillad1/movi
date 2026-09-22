@@ -87,6 +87,22 @@ class DisponibleEnInicioTest {
         composeRule.onNodeWithText("\$150.000 de \$222.580", useUnmergedTree = true).assertIsDisplayed()
         // (6.900.000 − 150.000) ÷ 4 días = $1.687.500.
         composeRule.onNodeWithText("Para lo que queda: \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
+        // El 21 quedan el 22, el 23 y el 24: los mismos «3 días» que dice «Tu plata» arriba, aunque
+        // la cuenta por día reparta entre 4 (hoy incluido).
+        composeRule.onNodeWithText("· quedan 3 días", substring = true, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `con el periodo ya gastado la semana y hoy no prometen lo que queda`() {
+        // $6,9M de disponible y $8M gastados el 1-sep: el período está pasado. La semana y hoy no
+        // pueden decir «te quedan» debajo de «te pasaste».
+        montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-01" to 8_000_000L)))
+
+        composeRule.onNodeWithText("Te pasaste por", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Te quedan", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Esta semana", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Hoy", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Ya gastaste todo el disponible del período", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
