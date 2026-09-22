@@ -214,13 +214,37 @@ interface WalletRepository {
     suspend fun getOccurrenceStates(): List<OccurrenceState>
 
     /**
-     * Sella un periodo como ocurrido. [eventId] `null` = «ya lo pagué / ya me llegó», sin
-     * movimiento que emparejar. Volver a llamarlo con otro movimiento reemplaza el sello.
+     * Sella un periodo como ocurrido, **anclado al movimiento que el dueño confirmó**. Volver a
+     * llamarlo con otro movimiento reemplaza el sello.
+     *
+     * **[eventId] `null` sigue existiendo, pero la app ya no lo manda.** Era el «ya lo pagué / ya
+     * me llegó»: cerraba el periodo sin ninguna evidencia, y el dueño pidió cerrar esa puerta —*«no
+     * me debería dejar hacer check sin que el movimiento asociado exista»*—. El server lo sigue
+     * aceptando porque en su base hay sellos viejos hechos así y romperlos sería peor; la app los
+     * muestra como «marcado a mano, sin movimiento» y ofrece quitarlos, y no crea ninguno nuevo.
+     * Si vas a agregar un llamador con `null`, ese es el debate que estás reabriendo.
      */
     suspend fun markOccurrence(ruleId: String, period: String, eventId: String? = null): RecurringOccurrence
 
     /** Deshacer el sello: el recurrente vuelve a estar pendiente en ese periodo. */
     suspend fun unmarkOccurrence(ruleId: String, period: String)
+
+    /**
+     * **«No, ese movimiento no es esto»** — y que se acuerde.
+     *
+     * El rechazo vivía solo en la pantalla (`descartadas`), y mientras la app apenas PROPONÍA eso
+     * alcanzaba: la propuesta volvía a ofrecerse y el dueño volvía a ignorarla, gratis. Desde que
+     * Movi **empareja solo** cuando está seguro, un «no» que se olvida al recargar deja el periodo
+     * dándose por ocurrido otra vez en la siguiente lectura, sin que nadie lo toque. Por eso ahora
+     * el «no» viaja al server (ver [com.jvillada.movi.shared.model.RechazarOcurrenciaRequest]).
+     *
+     * La clave es **(regla, movimiento)**, nunca el movimiento solo: el pago del gas se propone en
+     * «Agua», «Gas» e «Internet» —las tres en «Servicios»—, y decir que no en Agua no puede
+     * quitárselo a Gas, que es donde sí era el bueno.
+     *
+     * Idempotente: repetirlo no falla ni cambia nada. 204 sin cuerpo.
+     */
+    suspend fun rechazarOcurrencia(ruleId: String, eventId: String)
     suspend fun chatAi(request: AiChatRequest): AiChatResponse
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account

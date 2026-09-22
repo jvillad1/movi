@@ -26,10 +26,40 @@ sealed class Screen {
      * es lo correcto.
      */
     data class Transactions(val chipInicial: Int? = null) : Screen()
-    // F10: cuando se abre "para registrar el primero" desde el detalle de una cuenta puntual,
-    // esa cuenta viene preseleccionada — sin esto QuickAdd caía siempre en la primera cuenta de
-    // la lista, sin importar desde dónde se entró.
-    data class QuickAdd(val presetAccountId: String? = null) : Screen()
+    /**
+     * La hoja de «Agregar», opcionalmente **prellenada**.
+     *
+     * F10 abrió esta puerta con un solo dato: cuando se entra «para registrar el primero» desde el
+     * detalle de una cuenta puntual, esa cuenta viene preseleccionada — sin [presetAccountId],
+     * QuickAdd caía siempre en la primera cuenta de la lista, sin importar desde dónde se entró.
+     *
+     * El resto de los `preset*` son la misma idea llevada hasta el final, y nacen del checklist del
+     * período: ahí una fila sin movimiento ofrece **«Anotar el movimiento»**, y lo que hace es
+     * abrir esta hoja con lo que el recurrente ya sabe (el nombre, el monto, la categoría, la
+     * cuenta y la fecha en que vencía). Sin ellos, «anotar el movimiento» significaba teclear a
+     * mano cinco datos que la app tenía en pantalla — y cualquiera de los cinco escrito distinto
+     * rompe el emparejamiento automático que después tendría que tildar la fila sola.
+     *
+     * **Todos son sugerencias, no imposiciones.** La hoja los pone en sus campos y el dueño los
+     * corrige si hacen falta; nada se guarda sin que toque «Guardar movimiento».
+     *
+     * @param presetMonto en la moneda de la cuenta que se elija, igual que si lo hubiera tecleado.
+     *   `null` cuando no hay un monto que sugerir con honestidad — el «monto» de una tarjeta es su
+     *   SALDO, no lo que se va a pagar (ver `RecurringRule.montoEsSaldo`).
+     * @param presetEsIngreso abre la hoja en la pestaña «Ingreso» en vez de «Gasto». Un sueldo no
+     *   se paga: llega.
+     * @param presetFecha ISO `"2026-09-05"`. La fecha en que ese recurrente vencía, que es la que
+     *   hace que el movimiento caiga en el período correcto — el default de la hoja es hoy, y con
+     *   una fila vencida hace dos semanas ese default sella el mes equivocado.
+     */
+    data class QuickAdd(
+        val presetAccountId: String? = null,
+        val presetNota: String? = null,
+        val presetMonto: Long? = null,
+        val presetCategoria: String? = null,
+        val presetFecha: String? = null,
+        val presetEsIngreso: Boolean = false,
+    ) : Screen()
     data object Profile : Screen()
     data object AIChat : Screen()
     data object Credits : Screen()

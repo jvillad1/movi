@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
@@ -152,17 +153,111 @@ data class PagoDelPeriodo(
      * la misma moneda que [monto]: mezclar dólares con pesos acá sería peor que no saberlo.
      */
     val montoPagado: Long? = null,
+    /**
+     * **Lo emparejó Movi sola**, no lo marcó nadie. Ver
+     * [com.jvillada.movi.shared.model.OccurrenceState.automatica]: el server encontró un único
+     * movimiento concluyente en la ventana del vencimiento y lo dio por hecho.
+     *
+     * Viaja hasta la fila por dos motivos, y los dos son de honestidad: el subtítulo lo **dice**
+     * («Movi lo emparejó con…», no «lo marcaste»), y es lo único que habilita el «No fue este» —
+     * la única salida que tiene el dueño cuando Movi dedujo mal.
+     */
+    val automatica: Boolean = false,
+    /**
+     * **El movimiento que hay detrás de esta fila**, cuando lo hay: el que Movi emparejó solo, el
+     * que el dueño confirmó, o el que prueba una cuota. `null` en lo pendiente y en un sello viejo
+     * hecho a mano.
+     *
+     * Es el dato que el «No fue este» necesita mandar: el rechazo se guarda por el par
+     * (regla, movimiento), nunca por el movimiento solo.
+     */
+    val eventId: String? = null,
+    /**
+     * **Lo que Movi propone como esta ocurrencia**, del más probable al menos, cuando NO estuvo
+     * seguro. Vacío significa dos cosas muy distintas según [pagado]: en una fila ya lista, que no
+     * hay nada que proponer porque ya está resuelta; en una pendiente, que el server miró y **no
+     * encontró ningún movimiento** — y ahí la fila ofrece anotarlo.
+     *
+     * Que la lista NO esté vacía es, en sí, la señal de que Movi tuvo dudas: con un único
+     * movimiento concluyente empareja solo y no propone nada (ver `ocurrenciaConcluyente`).
+     */
+    val candidatos: List<FinancialEvent> = emptyList(),
+    /**
+     * La categoría de la regla y la cuenta de la que sale (o a la que entra), si la tiene.
+     *
+     * Existen para **«Anotar el movimiento»**: el checklist abre la hoja de Agregar con estos dos
+     * ya puestos. No es comodidad — son justo los dos datos que `esConcluyente` compara en el
+     * server, así que un movimiento anotado con otra categoría o en otra cuenta no vuelve a
+     * emparejarse solo, y la fila que se venía a tildar se queda sin tildar.
+     */
+    val categoria: String = "",
+    val cuentaId: String? = null,
 ) {
     val vencido: Boolean get() = !pagado && diasParaVencer < 0
 
     /**
-     * ¿Esta fila se puede tildar (o destildar) desde el checklist?
+     * **Qué le pasa a esta fila**, que es lo único que decide qué dice y qué ofrece.
      *
-     * Las dos puertas que el server ya cierra, dichas antes de dibujar el control: sin período que
-     * sellar no hay nada que mandar, y lo derivado de un movimiento no se desmarca. Una casilla que
-     * no hace nada es peor que no tener casilla — este repo ya pagó ese error una vez.
+     * Desde esta ola la casilla del checklist **no es un control**: es un reflejo. El dueño lo
+     * pidió con todas las letras —*«no me debería dejar hacer check sin que el movimiento asociado
+     * exista, y esto debería ser read only, que sea inteligente tipo, se detecta este movimiento
+     * asociado … o que pregunte si ya sucedió si la app tiene dudas»*— y el motivo es el de
+     * siempre acá adentro: tildar sin evidencia apagaba el aviso de una deuda que podía seguir
+     * viva. Ver [EstadoDeLaFila].
      */
-    val seMarca: Boolean get() = periodoDelSello != null && !derivado
+    val estado: EstadoDeLaFila get() = when {
+        // Lo derivado y lo automático primero: los dos vienen con `pagado`, y los dos tienen un
+        // movimiento detrás aunque nadie haya sellado nada.
+        pagado && (derivado || automatica || eventId != null) -> EstadoDeLaFila.LISTO
+        // Un sello viejo, de cuando la casilla SÍ marcaba sin movimiento. No se pueden crear más;
+        // los que ya están en la base no se pueden dejar sin salida.
+        pagado -> EstadoDeLaFila.MARCADA_A_MANO
+        // Sin período que sellar el server ni siquiera está preguntando: el vencimiento no llegó.
+        periodoDelSello == null -> EstadoDeLaFila.AUN_NO_VENCE
+        candidatos.isNotEmpty() -> EstadoDeLaFila.CON_DUDAS
+        else -> EstadoDeLaFila.SIN_MOVIMIENTO
+    }
+}
+
+/**
+ * Los cinco estados en que puede estar una fila del checklist — y, sobre todo, **lo que cada uno
+ * puede ofrecer sin mentir**.
+ *
+ * Hasta esta ola había dos: tildada y sin tildar, con una casilla que sellaba el período **sin
+ * ninguna evidencia**. Eso se fue entero. Lo que queda es una lista de solo lectura donde el estado
+ * lo decide el movimiento, no el dedo.
+ */
+enum class EstadoDeLaFila {
+    /**
+     * Hay un movimiento detrás. El subtítulo dice **cuál de los tres grados** es —lo emparejó Movi,
+     * lo confirmó el dueño, o lo prueba el movimiento que bajó la deuda— porque son certezas
+     * distintas y no deberían sonar igual.
+     */
+    LISTO,
+
+    /**
+     * Sellada a mano, sin movimiento, **antes de esta ola**. Se muestra como lista y lo dice; lo
+     * único que ofrece es «Quitar la marca», que es la única forma de deshacer algo que no tiene
+     * evidencia detrás. No se pueden crear nuevas.
+     */
+    MARCADA_A_MANO,
+
+    /** El período está abierto y hay candidatos: la fila **pregunta**, con el mejor a la vista. */
+    CON_DUDAS,
+
+    /**
+     * Abierto y sin un solo candidato: pagó en efectivo, desde una cuenta que Movi no lleva, o el
+     * banco nunca avisó. La fila lo dice y ofrece **anotar el movimiento**, con los datos del
+     * recurrente ya puestos. Deliberadamente **no** ofrece «marcar sin movimiento»: esa era la
+     * puerta que esta ola vino a cerrar.
+     */
+    SIN_MOVIMIENTO,
+
+    /**
+     * Todavía no vence, así que el server no emitió ocurrencia y no hay nada que preguntar ni nada
+     * que anotar. Se lista con su fecha y su monto, y nada más.
+     */
+    AUN_NO_VENCE,
 }
 
 /**
@@ -236,6 +331,14 @@ fun checklistDelPeriodo(
                     ?.takeIf { it.occurred }
                     ?.takeIf { (it.monedaDelPago ?: pago.rule.currency) == pago.rule.currency }
                     ?.montoDelPago,
+                // Lo que la fila necesita para ser de SOLO LECTURA y aun así ofrecer algo útil:
+                // de dónde salió el tilde (o si no salió de ningún lado), qué movimiento hay
+                // detrás para poder decir «no fue este», y qué propone Movi cuando tuvo dudas.
+                automatica = ocurrencia?.automatica == true,
+                eventId = ocurrencia?.eventId,
+                candidatos = ocurrencia?.candidates.orEmpty(),
+                categoria = pago.rule.category,
+                cuentaId = pago.rule.accountId,
             )
         }
         .sortedWith(

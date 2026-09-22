@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.recurrentes
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PlanDelCredito
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.Hairline
@@ -36,6 +37,7 @@ import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.dashboard.EstadoDeLaFila
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.ui.dashboard.avanceDelChecklist
 import com.jvillada.movi.ui.dashboard.faltaPorPagar
@@ -60,12 +62,35 @@ import com.jvillada.movi.ui.dashboard.yaMarcados
  * `ProximosPagosSection.kt` documenta haber evitado a propósito.
  *
  * Así que el checklist es lo PRIMERO del chip, y debajo siguen las tres secciones que ya estaban,
- * que contestan otra cosa: «Próximos» propone qué movimiento fue cada pago («Sí, fue este»),
- * «Sin confirmar» junta lo que dejó de urgir y «Ya ocurrieron» explica de dónde salió cada sello.
- * El checklist no propone ni explica nada: enumera el período, dice cuánto y cuándo, y se tilda.
+ * que contestan otra cosa: «Próximos» ordena por urgencia, «Sin confirmar» junta lo que dejó de
+ * urgir y «Ya ocurrieron» lista los sellos. El checklist enumera el período entero, dice cuánto y
+ * cuándo, y **refleja** lo que la evidencia dice de cada fila.
  *
- * Y marca por el MISMO camino: `onMarcar`/`onDeshacer` son los `marcarOcurrio`/`deshacerOcurrio` de
- * la pantalla, con el período que la fila trae del server (ver [PagoDelPeriodo.periodoDelSello]).
+ * ## La casilla dejó de ser un control, y esa es la ola
+ *
+ * Hasta acá tildaba: `onMarcar(ruleId, period, null)` sellaba el período **sin ninguna evidencia**.
+ * El dueño lo cortó de raíz: *«ahí tengo la lista tipo checklist pero no me debería dejar hacer
+ * check sin que el movimiento asociado exista, y esto debería ser read only, que sea inteligente
+ * tipo, se detecta este movimiento asociado a uno de estos items de recurrentes y que lo vaya
+ * marcando como listo o que pregunte si ya sucedió si la app tiene dudas o encuentra ambigüedad»*.
+ *
+ * Y tenía razón por donde más duele: un tilde sin movimiento apaga el aviso de una deuda que puede
+ * seguir viva, y después no queda nada en pantalla que permita notarlo. Ahora el estado de cada
+ * fila lo decide el movimiento (ver [com.jvillada.movi.ui.dashboard.EstadoDeLaFila]) y lo único
+ * que la fila ofrece son acciones sobre esa evidencia: confirmar cuál fue, decir que no fue esa, o
+ * **anotar el movimiento que falta** — que es la salida que el dueño eligió para lo que pagó en
+ * efectivo, desde una cuenta que Movi no lleva, o que el banco nunca avisó. Pidió explícitamente
+ * que NO quedara un «marcar sin movimiento» como último recurso.
+ *
+ * El «Ya lo pagué» de «Próximos» se fue por lo mismo y en la misma ola: dejarlo vivo ahí habría
+ * movido el agujero un toque más allá en vez de cerrarlo.
+ *
+ * ## Una sola pieza que dibuja una propuesta
+ *
+ * La pregunta de «¿fue este?» ya existía en `ProximosPagosSection.kt`. Traerla acá se hizo
+ * **reusando** [PropuestaDeMovimiento] y [AccionesDeLaFila], no copiándolas: el archivo de al lado
+ * documenta cómo termina copiar un renderer de plata (la decisión «saldo o cuota» faltaba en uno
+ * de cuatro), y acá lo copiado serían los botones que sellan un período.
  *
  * ## Y desde esta ola: cuánto hay que pagar, no solo cuánto se pactó
  *
@@ -79,14 +104,24 @@ import com.jvillada.movi.ui.dashboard.yaMarcados
 const val TITULO_CHECKLIST_DEL_PERIODO = "Checklist del período"
 
 /**
- * **Lo que se paga en este período, entero y tildable.**
+ * **Lo que se paga en este período, entero y de solo lectura.**
  *
  * @param checklist ya armado por `checklistDelPeriodo` — esta función no decide qué entra.
  * @param cargando todavía no contestaron los vencimientos: no se pinta nada. Una tarjeta vacía que
  *   diga «no hay pagos» mientras la lista viaja es una afirmación sin respaldo.
  * @param pudoLeer `false` cuando la lectura falló. Ahí se dice que no se pudo leer y se ofrece
  *   reintentar, en vez de mostrar un checklist a medias que parecería completo.
- * @param marcando reglas con una marca en vuelo: su casilla no acepta otro toque hasta que vuelva.
+ * @param marcando reglas con una escritura en vuelo: sus acciones no aceptan otro toque hasta que
+ *   vuelva.
+ * @param descartadas los «no fue este» de ESTA sesión de pantalla, para que la propuesta siguiente
+ *   aparezca sin esperar el viaje de red (el rechazo igual se persiste, ver `rechazarOcurrencia`).
+ *   Ver [claveDescartada]: la clave es (regla, movimiento).
+ * @param onConfirmar «Sí, fue este»: sella el período **anclado a ese movimiento**.
+ * @param onNoFueEste «No fue este»: guarda el rechazo y, si había un sello, lo borra.
+ * @param onAnotarMovimiento «Anotar el movimiento»: abre la hoja de Agregar con lo que el
+ *   recurrente ya sabe. Quien llama decide a dónde lleva — la cuota de un crédito se anota en
+ *   Créditos, no como un gasto suelto.
+ * @param onQuitarLaMarca la única salida de un sello viejo hecho a mano, sin movimiento detrás.
  * @param planesDeCuotas el plan de cada crédito, por id de regla (ver [planesDeLasCuotas]). Vacío
  *   —porque la lectura no llegó, o falló— deja las filas como estaban: sin estimación. Una cuota
  *   sin su reparto se ve igual que antes de esta ola; una cuota con un reparto que no se pudo
@@ -98,16 +133,20 @@ fun SeccionChecklistDelPeriodo(
     cargando: Boolean,
     pudoLeer: Boolean,
     marcando: Set<String>,
-    onMarcar: (ruleId: String, period: String) -> Unit,
-    onDeshacer: (ruleId: String, period: String) -> Unit,
+    onConfirmar: (pago: PagoDelPeriodo, eventId: String) -> Unit,
+    onNoFueEste: (pago: PagoDelPeriodo, eventId: String) -> Unit,
+    onAnotarMovimiento: (pago: PagoDelPeriodo) -> Unit,
+    onQuitarLaMarca: (pago: PagoDelPeriodo) -> Unit,
     onReintentar: () -> Unit,
     modifier: Modifier = Modifier,
     planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
+    descartadas: Set<String> = emptySet(),
 ) {
     val pendientes = pagosPendientes(checklist)
     val porCobrar = ingresosPendientes(checklist)
     val marcados = yaMarcados(checklist)
     val (pagados, total) = avanceDelChecklist(checklist)
+    val acciones = AccionesDelChecklist(onConfirmar, onNoFueEste, onAnotarMovimiento, onQuitarLaMarca)
 
     Column(modifier = modifier) {
         MinSectionHeader(
@@ -143,23 +182,23 @@ fun SeccionChecklistDelPeriodo(
                     filas = pendientes,
                     vacio = lineaDeLoQueFalta(checklist),
                     marcando = marcando,
-                    onMarcar = onMarcar,
-                    onDeshacer = onDeshacer,
+                    descartadas = descartadas,
+                    acciones = acciones,
                     planesDeCuotas = planesDeCuotas,
                 )
                 if (porCobrar.isNotEmpty()) {
                     Spacer(Modifier.height(Movi.espacios.medio))
                     GrupoDelChecklist(
-                        // Un sueldo no se paga: llega. Mismo criterio que «Ya me llegó» en la
-                        // propuesta de ocurrencia — decirle «¿ya lo pagaste?» a su nómina es la
-                        // clase de detalle que hace sentir que la app no entiende lo que uno anotó.
+                        // Un sueldo no se paga: llega. Mismo criterio que el título de la propuesta
+                        // («¿Ya te llegó?») — decirle «¿ya lo pagaste?» a su nómina es la clase de
+                        // detalle que hace sentir que la app no entiende lo que uno anotó.
                         titulo = "Por cobrar",
                         total = null,
                         filas = porCobrar,
                         vacio = null,
                         marcando = marcando,
-                        onMarcar = onMarcar,
-                        onDeshacer = onDeshacer,
+                        descartadas = descartadas,
+                        acciones = acciones,
                     )
                 }
                 if (marcados.isNotEmpty()) {
@@ -170,14 +209,28 @@ fun SeccionChecklistDelPeriodo(
                         filas = marcados,
                         vacio = null,
                         marcando = marcando,
-                        onMarcar = onMarcar,
-                        onDeshacer = onDeshacer,
+                        descartadas = descartadas,
+                        acciones = acciones,
                     )
                 }
             }
         }
     }
 }
+
+/**
+ * Las cuatro cosas que una fila puede pedirle a la pantalla, en un solo paquete.
+ *
+ * Viajan juntas porque viajan siempre juntas: la sección no elige cuál ofrecer —lo elige el estado
+ * de cada fila— así que pasarlas sueltas por tres niveles de composable era repetir cuatro
+ * parámetros en cada firma y abrir la puerta a que un grupo se quedara con tres.
+ */
+internal data class AccionesDelChecklist(
+    val onConfirmar: (pago: PagoDelPeriodo, eventId: String) -> Unit,
+    val onNoFueEste: (pago: PagoDelPeriodo, eventId: String) -> Unit,
+    val onAnotarMovimiento: (pago: PagoDelPeriodo) -> Unit,
+    val onQuitarLaMarca: (pago: PagoDelPeriodo) -> Unit,
+)
 
 @Composable
 private fun GrupoDelChecklist(
@@ -186,8 +239,8 @@ private fun GrupoDelChecklist(
     filas: List<PagoDelPeriodo>,
     vacio: String?,
     marcando: Set<String>,
-    onMarcar: (ruleId: String, period: String) -> Unit,
-    onDeshacer: (ruleId: String, period: String) -> Unit,
+    descartadas: Set<String>,
+    acciones: AccionesDelChecklist,
     planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -214,10 +267,8 @@ private fun GrupoDelChecklist(
             pago = pago,
             enVuelo = pago.ruleId in marcando,
             estimacion = estimacionDeLaFila(pago, planesDeCuotas),
-            onTildar = {
-                val periodo = pago.periodoDelSello ?: return@FilaDelChecklistCompleto
-                if (pago.pagado) onDeshacer(pago.ruleId, periodo) else onMarcar(pago.ruleId, periodo)
-            },
+            propuesta = propuestaDeLaFila(pago, descartadas),
+            acciones = acciones,
         )
         if (i < filas.lastIndex) Hairline()
     }
@@ -237,13 +288,30 @@ private fun GrupoDelChecklist(
 }
 
 /**
- * Una fila del checklist: la casilla, el nombre, **cuándo vence y cuánto**, en su moneda.
+ * **La propuesta que toca mostrar en esta fila**, o `null` si no queda ninguna.
  *
- * La casilla es un control de verdad —tildar sella el período y destildar lo borra, por el mismo
- * endpoint que el «Ya lo pagué» de siempre— salvo en las dos filas donde no puede serlo
- * ([PagoDelPeriodo.seMarca]): la que todavía no vence, que el server rechaza, y la que quedó pagada
- * por un movimiento, que solo se revierte borrándolo. Esas se dibujan sin toque y lo dicen.
+ * Gemela de [propuestaActual], que hace lo mismo sobre un `OccurrenceState`; acá la fila ya trae
+ * sus candidatos ([PagoDelPeriodo.candidatos]) y no hay estado que buscar. [descartadas] es la capa
+ * optimista de «no fue este» —el rechazo de verdad lo guarda el server— y por eso la clave es la
+ * misma, (regla, movimiento): decir que no en «Agua» no puede quitarle su candidato bueno a «Gas».
  *
+ * Si todas quedaron descartadas, la fila cae al estado «sin movimiento» y ofrece anotarlo. Es lo
+ * correcto: el dueño acaba de decir que ninguno de los que Movi propone es este.
+ */
+internal fun propuestaDeLaFila(pago: PagoDelPeriodo, descartadas: Set<String>): FinancialEvent? =
+    pago.candidatos.firstOrNull { claveDescartada(pago.ruleId, it.id) !in descartadas }
+
+/**
+ * Una fila del checklist: la casilla, el nombre, **cuándo vence y cuánto**, en su moneda — y
+ * debajo, lo único que esa fila puede ofrecer sin mentir.
+ *
+ * **La casilla no se toca.** No es un control disfrazado de reflejo ni al revés: es un reflejo, y
+ * la fila entera dejó de ser clickeable con él. Lo que se puede hacer está escrito con todas las
+ * letras abajo (ver [AccionesDeLaFila]), donde se puede leer antes de tocar.
+ *
+ * @param propuesta el mejor candidato que queda, ya resuelto por [propuestaDeLaFila]. `null` en
+ *   toda fila que no esté preguntando — y también en una que preguntaba y se quedó sin candidatos
+ *   porque el dueño los rechazó a todos.
  * @param estimacion el reparto que Movi estima para esta cuota, o `null` si no hay ninguno que dar
  *   (ver [estimacionDeLaFila]). Va **debajo** de la fecha y no al lado del monto: el monto es la
  *   cuota registrada —un dato del contrato— y la estimación es otra cosa; pegarlas en el mismo
@@ -253,62 +321,178 @@ private fun GrupoDelChecklist(
 private fun FilaDelChecklistCompleto(
     pago: PagoDelPeriodo,
     enVuelo: Boolean,
-    onTildar: () -> Unit,
+    acciones: AccionesDelChecklist,
+    propuesta: FinancialEvent? = null,
     estimacion: String? = null,
 ) {
-    val fila = Modifier
-        .fillMaxWidth()
-        .then(if (pago.seMarca) Modifier.clickable { if (!enVuelo) onTildar() } else Modifier)
-        .padding(vertical = 12.dp)
-    Row(
-        modifier = fila,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
-        CasillaDeChecklist(marcada = pago.pagado, apagada = !pago.seMarca)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = pago.nombre,
-                style = Movi.textos.cuerpo,
-                fontWeight = FontWeight.Medium,
-                // Lo pagado baja de tono en vez de tacharse: un texto tachado en una lista de plata
-                // se lee como «anulado», que en Movi significa otra cosa.
-                color = if (pago.pagado) Movi.colores.textoMedio else Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = if (enVuelo) "Guardando…" else subtituloDeLaFila(pago),
-                style = Movi.textos.apoyo,
-                color = if (pago.vencido) Movi.colores.sale else Movi.colores.textoApagado,
-            )
-            // **Lo que Movi estima que trae esta cuota.** No va con el color de vencido: es una
-            // cuenta sobre el crédito, no un aviso sobre la fecha.
-            if (estimacion != null && !enVuelo) {
-                Spacer(Modifier.height(2.dp))
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+        ) {
+            CasillaDeChecklist(marcada = pago.pagado, apagada = !pago.pagado)
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = estimacion,
+                    text = pago.nombre,
+                    style = Movi.textos.cuerpo,
+                    fontWeight = FontWeight.Medium,
+                    // Lo pagado baja de tono en vez de tacharse: un texto tachado en una lista de
+                    // plata se lee como «anulado», que en Movi significa otra cosa.
+                    color = if (pago.pagado) Movi.colores.textoMedio else Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (enVuelo) "Guardando…" else subtituloDeLaFila(pago),
                     style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+                    color = if (pago.vencido) Movi.colores.sale else Movi.colores.textoApagado,
                     lineHeight = 16.sp,
                 )
+                // **Lo que Movi estima que trae esta cuota.** No va con el color de vencido: es una
+                // cuenta sobre el crédito, no un aviso sobre la fecha.
+                if (estimacion != null && !enVuelo) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = estimacion,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        lineHeight = 16.sp,
+                    )
+                }
             }
+            Cifra(
+                textoDelMontoDelChecklist(pago),
+                if (pago.montoEsSaldo) Movi.textos.apoyo else Movi.textos.monto,
+                color = when {
+                    pago.montoEsSaldo -> Movi.colores.textoApagado
+                    pago.pagado -> Movi.colores.textoApagado
+                    pago.esIngreso -> Movi.colores.entra
+                    pago.vencido -> Movi.colores.sale
+                    else -> Movi.colores.texto
+                },
+            )
         }
-        Cifra(
-            textoDelMontoDelChecklist(pago),
-            if (pago.montoEsSaldo) Movi.textos.apoyo else Movi.textos.monto,
-            color = when {
-                pago.montoEsSaldo -> Movi.colores.textoApagado
-                pago.pagado -> Movi.colores.textoApagado
-                pago.esIngreso -> Movi.colores.entra
-                pago.vencido -> Movi.colores.sale
-                else -> Movi.colores.texto
-            },
-        )
+        LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones)
     }
 }
 
-/** La casilla del checklist. [apagada] = esta fila no se puede tildar (ver [PagoDelPeriodo.seMarca]). */
+/**
+ * **Lo único que esta fila puede ofrecer**, según lo que la evidencia diga de ella.
+ *
+ * Sangrado para que se lea como algo que cuelga de la fila y no como una fila más — el mismo
+ * recurso que usa la propuesta de «Próximos».
+ */
+@Composable
+private fun LoQueOfreceLaFila(
+    pago: PagoDelPeriodo,
+    propuesta: FinancialEvent?,
+    enVuelo: Boolean,
+    acciones: AccionesDelChecklist,
+) {
+    // Una fila sin nada que ofrecer no deja ni un hueco: la mayoría del checklist son filas que
+    // todavía no vencen o cuotas que el movimiento ya probó.
+    val hayQueOfrecer = when (pago.estado) {
+        EstadoDeLaFila.AUN_NO_VENCE -> false
+        // La cuota de un crédito y el pago de una tarjeta no discuten: ahí el movimiento MOVIÓ la
+        // deuda, y lo único que revierte eso es borrarlo. Mismo criterio que el «Deshacer» que esa
+        // fila tampoco tiene (ver [sePuedeDeshacer]).
+        //
+        // **`automatica` va primero**, y no es un detalle: lo que Movi empareja solo viaja también
+        // con `derivado = true` (no hay sello que borrar, ver `OccurrenceState.automatica`), así
+        // que mirar solo `derivado` le quitaba el «No fue este» justo a la única fila que lo
+        // necesita — la que Movi dedujo y puede haber deducido mal.
+        EstadoDeLaFila.LISTO -> pago.automatica || (pago.eventId != null && !pago.derivado)
+        else -> true
+    }
+    if (!hayQueOfrecer) return
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 32.dp, top = 8.dp)) {
+        when (pago.estado) {
+            EstadoDeLaFila.LISTO -> AccionesDeLaFila(
+                acciones = listOf(
+                    AccionDeOcurrencia(ETIQUETA_NO_FUE_ESTE, primary = false) {
+                        pago.eventId?.let { acciones.onNoFueEste(pago, it) }
+                    },
+                ),
+                enVuelo = enVuelo,
+            )
+            EstadoDeLaFila.MARCADA_A_MANO -> AccionesDeLaFila(
+                acciones = listOf(
+                    AccionDeOcurrencia(ETIQUETA_QUITAR_LA_MARCA, primary = false) {
+                        acciones.onQuitarLaMarca(pago)
+                    },
+                ),
+                enVuelo = enVuelo,
+            )
+            // Con candidatos se pregunta; sin ninguno (o con todos rechazados en esta sesión) la
+            // fila cae a la misma salida que una que nunca tuvo: anotar el movimiento que falta.
+            EstadoDeLaFila.CON_DUDAS -> if (propuesta != null) {
+                Text(
+                    text = tituloPropuesta(
+                        if (pago.esIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
+                        pago.periodoDelSello.orEmpty(),
+                    ),
+                    style = Movi.textos.apoyo,
+                    fontWeight = FontWeight.Medium,
+                    color = Movi.colores.texto,
+                )
+                Spacer(Modifier.height(4.dp))
+                PropuestaDeMovimiento(
+                    propuesta = propuesta,
+                    // El aviso de «no es el monto que anotaste» vive en «Próximos», que tiene la
+                    // regla entera a mano para saber si comparar significa algo (en una tarjeta el
+                    // monto es el SALDO). Acá la fila no la tiene — y tampoco hace falta: el monto
+                    // esperado está a la derecha del nombre, dos renglones arriba, y la propuesta
+                    // muestra el suyo, que es exactamente la comparación que el aviso escribía.
+                    aviso = null,
+                    enVuelo = enVuelo,
+                    onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
+                    onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
+                )
+            } else {
+                SinMovimiento(pago, enVuelo, acciones)
+            }
+            EstadoDeLaFila.SIN_MOVIMIENTO -> SinMovimiento(pago, enVuelo, acciones)
+            EstadoDeLaFila.AUN_NO_VENCE -> Unit
+        }
+    }
+}
+
+/** Lo dice y ofrece la única salida honesta: que el movimiento exista. */
+@Composable
+private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: AccionesDelChecklist) {
+    Text(
+        text = TEXTO_SIN_MOVIMIENTO,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        lineHeight = 16.sp,
+    )
+    Spacer(Modifier.height(8.dp))
+    AccionesDeLaFila(
+        acciones = listOf(
+            AccionDeOcurrencia(ETIQUETA_ANOTAR, primary = true) { acciones.onAnotarMovimiento(pago) },
+        ),
+        enVuelo = enVuelo,
+    )
+}
+
+/**
+ * Lo que dice una fila abierta a la que Movi no le encontró **nada**.
+ *
+ * Nombra a Movi a propósito, en vez de un «sin movimiento» pelado: la fila está afirmando que
+ * BUSCÓ y no encontró, que es distinto de no haber mirado. Si se leyera como «no hay movimiento» a
+ * secas, el dueño que sí pagó —en efectivo, o desde una cuenta que Movi no lleva— entendería que la
+ * app le está diciendo que no pagó.
+ */
+const val TEXTO_SIN_MOVIMIENTO = "Sin movimiento: Movi no encontró ninguno"
+
+/**
+ * La casilla del checklist. **No es un control: es un reflejo** — nada de lo que la dibuja acepta
+ * un toque, y lo que hay que hacer con la fila está escrito debajo (ver [LoQueOfreceLaFila]).
+ *
+ * [apagada] baja el borde a un hilo. Lo llevan todas las filas sin tildar desde que la casilla dejó
+ * de marcar: un borde de control sobre algo que no se puede tocar es una promesa que no se cumple.
+ */
 @Composable
 fun CasillaDeChecklist(marcada: Boolean, apagada: Boolean = false) {
     Box(
@@ -344,10 +528,25 @@ fun CasillaDeChecklist(marcada: Boolean, apagada: Boolean = false) {
  *
  * La fecha va siempre, también en lo ya marcado: el dueño pidió *«valor y fecha»*, y un «Pagado»
  * pelado no deja comprobar que se tildó el mes que uno creía.
+ *
+ * **Y en lo ya marcado el estado dice de DÓNDE salió**, no «pagado». Son cuatro certezas distintas
+ * —lo emparejó Movi, lo confirmó él, lo prueba el movimiento que bajó la deuda, o es un sello viejo
+ * hecho a mano sin nada detrás— y desde que la casilla dejó de ser un control, ese renglón es lo
+ * único que las separa. Un «pagado» parejo para las cuatro era justamente lo que dejaba que un
+ * tilde sin evidencia se leyera igual que uno anclado a plata que se puede mirar. La media frase la
+ * escribe [origenDeLoOcurrido], que es la misma que usa «Ya ocurrieron».
  */
 internal fun subtituloDeLaFila(pago: PagoDelPeriodo): String {
     val fecha = fechaLegibleDelChecklist(pago.vence)
-    val estado = estadoDelChecklist(pago)
+    val estado = if (!pago.pagado) estadoDelChecklist(pago) else origenDeLoOcurrido(
+        automatica = pago.automatica,
+        derivada = pago.derivado,
+        hayMovimiento = pago.eventId != null,
+        // `montoPagado` ya viene filtrado por moneda: si el movimiento fue en otra, llega `null` y
+        // la frase se queda sin cifra en vez de decir una que no es (ver [PagoDelPeriodo]).
+        monto = pago.montoPagado,
+        moneda = pago.moneda,
+    )
     return if (fecha.isEmpty()) estado else "$fecha · $estado"
 }
 
@@ -360,10 +559,16 @@ internal fun fechaLegibleDelChecklist(vence: String): String {
     return if (mes.isEmpty()) "" else "$dia de $mes"
 }
 
-/** «pagado», «recibido», «vence hoy», «venció hace 2 días». En minúscula: va después de la fecha. */
+/**
+ * «vence hoy», «vence mañana», «venció hace 2 días». En minúscula: va después de la fecha.
+ *
+ * **Solo habla de lo PENDIENTE.** Tenía además un «pagado» / «recibido», y se fue con la casilla:
+ * una fila ya lista dice ahora de dónde salió el tilde (ver [subtituloDeLaFila] y
+ * [origenDeLoOcurrido]), que es lo que separa un emparejamiento automático de un sello viejo hecho
+ * a mano. Dejar acá un «pagado» de respaldo habría sido dejar el texto que borraba esa diferencia
+ * esperando a que alguien lo volviera a enchufar.
+ */
 internal fun estadoDelChecklist(pago: PagoDelPeriodo): String = when {
-    pago.pagado && pago.esIngreso -> "recibido"
-    pago.pagado -> "pagado"
     pago.diasParaVencer < 0 -> {
         val dias = -pago.diasParaVencer
         if (dias == 1) "venció ayer" else "venció hace $dias días"

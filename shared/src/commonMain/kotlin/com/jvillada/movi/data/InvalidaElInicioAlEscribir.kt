@@ -77,6 +77,9 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun deleteRecurringRule(id: String): Unit = trasEscribir { delegado.deleteRecurringRule(id) }
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence = trasEscribir { delegado.markOccurrence(ruleId, period, eventId) }
     override suspend fun unmarkOccurrence(ruleId: String, period: String): Unit = trasEscribir { delegado.unmarkOccurrence(ruleId, period) }
+    // Un «no fue este» sobre un emparejamiento automático devuelve el período a pendiente, así que
+    // cambia el checklist del Inicio igual que un sello: entra por la misma puerta.
+    override suspend fun rechazarOcurrencia(ruleId: String, eventId: String): Unit = trasEscribir { delegado.rechazarOcurrencia(ruleId, eventId) }
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = trasEscribir { delegado.chatAi(request) }
     override suspend fun createAccount(account: Account): Account = trasEscribir { delegado.createAccount(account) }
     override suspend fun deleteAccount(id: String): Unit = trasEscribir { delegado.deleteAccount(id) }

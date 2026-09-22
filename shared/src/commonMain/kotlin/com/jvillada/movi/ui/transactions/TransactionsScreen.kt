@@ -103,6 +103,7 @@ import com.jvillada.movi.ui.recurrentes.avisoDeMinimosQueFaltan
 import com.jvillada.movi.ui.recurrentes.candidatasSinConfirmar
 import com.jvillada.movi.ui.recurrentes.claveDeNombre
 import com.jvillada.movi.ui.recurrentes.claveDescartada
+import com.jvillada.movi.ui.recurrentes.hojaParaAnotar
 import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
@@ -1070,12 +1071,19 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
      * dato, una lectura caída se veía igual que una lenta — para siempre.
      */
     var recurrentesNoSePudieronLeer by remember { mutableStateOf(false) }
-    // Lo que el dueño rechazó con «no fue este», mientras dure esta pantalla. Las claves son
-    // (regla, movimiento) — ver [claveDescartada]. No se persiste: rechazar una propuesta no es un
-    // hecho sobre su plata, a diferencia de confirmarla.
+    /**
+     * Lo que el dueño rechazó con «no fue este», **mientras dure esta pantalla**. Las claves son
+     * (regla, movimiento) — ver [claveDescartada].
+     *
+     * Ya no es la única memoria del rechazo: desde que Movi empareja solo, el «no» se guarda en el
+     * server (ver `rechazarOcurrencia`), porque uno que se olvida al recargar dejaría al
+     * emparejamiento automático volviendo a dar por ocurrido lo mismo en la siguiente lectura. Esto
+     * que queda acá es la capa optimista: la propuesta siguiente aparece en el cuadro siguiente, sin
+     * esperar el viaje de red. Las dos usan la misma clave a propósito.
+     */
     var descartadas by remember { mutableStateOf<Set<String>>(emptySet()) }
-    // Reglas con una marca en vuelo. Un conjunto y no un id: sellar el salario no puede congelar
-    // el «Ya lo pagué» del arriendo — son dos hechos independientes.
+    // Reglas con una escritura en vuelo. Un conjunto y no un id: confirmar el salario no puede
+    // congelar la pregunta del arriendo — son dos hechos independientes.
     var marcando by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Para el aviso ámbar de «pediste que te recordemos y no tenemos por dónde». Ver
     // [shouldShowReminderWarning]: `canales == null` es «todavía no se sabe» y ahí NO se avisa.
@@ -1226,17 +1234,51 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     val pidieronRecordatorios = hayRecordatoriosPedidos(upcomingRecurrentes)
 
     /**
-     * Sellar «esto ya ocurrió» — con el movimiento que el dueño confirmó, o sin ninguno.
+     * Sellar «esto ya ocurrió», **anclado al movimiento que el dueño confirmó**.
      *
      * Después de esto el recurrente deja de leerse como vencido y deja de avisar **ese mes**: su
      * vencimiento vigente pasa a ser el del mes que viene (lo decide el server, ver `dueDateFor`).
      * Al mes siguiente vuelve a estar pendiente solo.
+     *
+     * **[eventId] ya no puede ser `null`.** El server lo sigue aceptando —hay sellos viejos hechos
+     * así en la base del dueño y romperlos sería peor— pero la app no lo manda desde ningún lado:
+     * era la puerta de «marcar sin que el movimiento exista» que esta ola vino a cerrar, y dejarla
+     * abierta en la firma es dejarla abierta.
      */
-    fun marcarOcurrio(ruleId: String, period: String, eventId: String?) {
+    fun marcarOcurrio(ruleId: String, period: String, eventId: String) {
         if (ruleId in marcando) return
         marcando = marcando + ruleId
         coroutineRecurrentes.launch {
             runCatching { Repositories.wallets.markOccurrence(ruleId, period, eventId) }
+                .onSuccess { recurrentesReloadKey++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - ruleId
+        }
+    }
+
+    /**
+     * **«No fue este»** — el movimiento que Movi propuso (o emparejó solo) no es esta ocurrencia.
+     *
+     * Dos escrituras, y el orden importa: primero el rechazo, que es el hecho que tiene que
+     * sobrevivir a un F5; después, **si había un sello guardado**, el DELETE que lo borra. Al revés,
+     * un corte entre las dos dejaría el período abierto y el emparejamiento automático volviendo a
+     * proponer —o a dar por hecho— exactamente lo que se acaba de rechazar.
+     *
+     * [periodoDelSello] es `null` cuando no hay nada que borrar, que es el caso normal: lo que Movi
+     * empareja solo se deriva en cada lectura y no escribe ninguna fila (ver
+     * `OccurrenceState.automatica`). Solo lo que el dueño confirmó a mano tiene sello.
+     */
+    fun noFueEste(ruleId: String, eventId: String, periodoDelSello: String?) {
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
+        descartadas = descartadas + claveDescartada(ruleId, eventId)
+        coroutineRecurrentes.launch {
+            runCatching {
+                Repositories.wallets.rechazarOcurrencia(ruleId, eventId)
+                if (periodoDelSello != null) {
+                    Repositories.wallets.unmarkOccurrence(ruleId, periodoDelSello)
+                }
+            }
                 .onSuccess { recurrentesReloadKey++ }
                 .onFailure { error = it.toUserMessage() }
             marcando = marcando - ruleId
@@ -1697,11 +1739,22 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             cargando = !recurrentesNoSePudieronLeer && !(vencimientosOk && ocurrenciasOk),
                             pudoLeer = !recurrentesNoSePudieronLeer,
                             marcando = marcando,
-                            // El MISMO camino que «Ya lo pagué»: sin movimiento que emparejar, que
-                            // es lo que una casilla puede prometer. Emparejar un movimiento sigue
-                            // siendo cosa de la propuesta de «Próximos», que para eso los propone.
-                            onMarcar = { ruleId, period -> marcarOcurrio(ruleId, period, null) },
-                            onDeshacer = { ruleId, period -> deshacerOcurrio(ruleId, period) },
+                            descartadas = descartadas,
+                            // Las cuatro acciones que reemplazaron a la casilla. Ninguna sella nada
+                            // sin un movimiento detrás — ver el KDoc de [SeccionChecklistDelPeriodo].
+                            onConfirmar = { pago, eventId ->
+                                pago.periodoDelSello?.let { marcarOcurrio(pago.ruleId, it, eventId) }
+                            },
+                            // El sello solo existe si lo puso el dueño: lo que Movi empareja solo se
+                            // deriva en cada lectura y no escribe ninguna fila que borrar.
+                            onNoFueEste = { pago, eventId ->
+                                val sello = pago.periodoDelSello?.takeIf { pago.pagado && !pago.automatica }
+                                noFueEste(pago.ruleId, eventId, sello)
+                            },
+                            onAnotarMovimiento = { pago -> onNavigate(hojaParaAnotar(pago)) },
+                            onQuitarLaMarca = { pago ->
+                                pago.periodoDelSello?.let { deshacerOcurrio(pago.ruleId, it) }
+                            },
                             onReintentar = { recurrentesReloadKey++ },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                             planesDeCuotas = planesDeCuotas,
@@ -1735,9 +1788,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             }
                         },
                         onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
-                        onDescartarPropuesta = { ruleId, eventId ->
-                            descartadas = descartadas + claveDescartada(ruleId, eventId)
-                        },
+                        // El «no» ahora se guarda: sin eso, el emparejamiento automático volvería a
+                        // proponer lo mismo en la siguiente lectura. Ver [noFueEste].
+                        onDescartarPropuesta = { ruleId, eventId -> noFueEste(ruleId, eventId, null) },
+                        onAnotarMovimiento = { pago -> onNavigate(hojaParaAnotar(pago.rule, pago.dueDate)) },
                         modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                     )
                 }
@@ -1750,8 +1804,13 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             descartadas = descartadas,
                             marcando = marcando,
                             onMarcar = { ruleId, period, eventId -> marcarOcurrio(ruleId, period, eventId) },
-                            onDescartarPropuesta = { ruleId, eventId ->
-                                descartadas = descartadas + claveDescartada(ruleId, eventId)
+                            onDescartarPropuesta = { ruleId, eventId -> noFueEste(ruleId, eventId, null) },
+                            onAnotarMovimiento = { rule ->
+                                // La fecha sale de la ocurrencia abierta de ESA regla, que es la que
+                                // esta sección está preguntando; el `dueDate` de «Próximos» ya rodó.
+                                val vence = abiertasRecurrentes.firstOrNull { it.first.id == rule.id }
+                                    ?.second?.dueDate.orEmpty()
+                                onNavigate(hojaParaAnotar(rule, vence))
                             },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
                         )

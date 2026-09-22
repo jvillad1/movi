@@ -166,16 +166,25 @@ internal fun UpcomingPaymentRow(payment: UpcomingPayment, onClick: () -> Unit) {
  * asimetría del riesgo manda: dar por ocurrido algo que no ocurrió apaga el aviso de una deuda
  * real, y eso cuesta plata; el ruido de hoy cuesta un toque.
  *
- * Tres salidas, en orden de certeza:
+ * Tres salidas, y ninguna sella nada sin evidencia:
  *
  *  1. **«Sí, fue este»** — el emparejamiento exacto. El periodo queda cerrado *y anclado* a un
  *     movimiento que se puede mirar.
- *  2. **«No fue este»** — pasa a la propuesta siguiente. Sin esto, una propuesta equivocada
- *     tapaba a la buena y el único camino era ignorarlas todas.
- *  3. **«Ya lo pagué» / «Ya me llegó»** — cierra el periodo sin movimiento que emparejar (pagó en
- *     efectivo, todavía no lo anotó, lo anotó en otra cuenta). Está siempre, también cuando no
- *     hay ninguna propuesta: es la salida que hace que la función sirva aunque el emparejamiento
- *     no encuentre nada.
+ *  2. **«No fue este»** — pasa a la propuesta siguiente, y el «no» se guarda (ver
+ *     `rechazarOcurrencia`). Sin esto, una propuesta equivocada tapaba a la buena y el único
+ *     camino era ignorarlas todas.
+ *  3. **«Anotar el movimiento»**, cuando no hay ninguna propuesta: abre la hoja de Agregar con los
+ *     datos del recurrente puestos. Pagó en efectivo, desde una cuenta que Movi no lleva, o el
+ *     banco nunca avisó — y la salida es que ese movimiento EXISTA, no que se tilde una casilla.
+ *
+ * ## Lo que se fue de acá, y por qué
+ *
+ * Hasta hoy la tercera salida era **«Ya lo pagué» / «Ya me llegó»**: sellaba el periodo con
+ * `eventId = null`, o sea sin ninguna evidencia. El dueño pidió cerrar esa puerta —*«no me debería
+ * dejar hacer check sin que el movimiento asociado exista»*— y no alcanzaba con sacarla del
+ * checklist: mientras viviera acá, el agujero seguía abierto un toque más allá. Se fue de las dos.
+ * El server sigue aceptando `eventId = null` porque hay sellos viejos hechos así y romperlos sería
+ * peor, pero la app ya no lo manda desde ningún lado.
  *
  * **El monto se muestra aunque no coincida, y se dice que no coincide.** El monto de un recurrente
  * es un estimado —«otros meses puede ser menos o más dependiendo de retenciones»—, así que no
@@ -190,7 +199,7 @@ internal fun PropuestaOcurrencia(
     enVuelo: Boolean,
     onConfirmar: (FinancialEvent) -> Unit,
     onDescartar: (FinancialEvent) -> Unit,
-    onCerrarSinMovimiento: () -> Unit,
+    onAnotarMovimiento: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, bottom = 14.dp)) {
         Text(
@@ -201,68 +210,115 @@ internal fun PropuestaOcurrencia(
         )
         if (propuesta != null) {
             Spacer(Modifier.height(4.dp))
-            // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
-            // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación
-            // el monto quedaba pegado al texto — dos datos distintos leyéndose como uno.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Text(
-                    text = descripcionPropuesta(propuesta),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = formatMoney(propuesta.amount, propuesta.currency),
-                    style = Movi.textos.monto,
-                    color = Movi.colores.texto,
-                    lineHeight = 16.sp,
-                )
-            }
-            // `avisaMontoDistinto` y no `difiereDelEsperado` a secas: en una tarjeta el monto de
-            // la regla es el SALDO, no un pago esperado, así que la comparación daba `true` todos
-            // los meses y esta advertencia salía siempre — repitiéndole al dueño como «lo que
-            // anotaste» justamente la cifra que el resto de la pantalla dejó de mostrar como su
-            // pago. Ver `RecurringRule.montoEsSaldo`.
-            if (avisaMontoDistinto(rule, propuesta.amount, propuesta.currency)) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "No es el monto que anotaste (${formatCOP(rule.amount)}). " +
-                        "Puede ser: revísalo antes de confirmar.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    lineHeight = 15.sp,
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (propuesta != null) {
-                ActionChip(label = if (enVuelo) "Guardando…" else "Sí, fue este", primary = true) {
-                    if (!enVuelo) onConfirmar(propuesta)
-                }
-                ActionChip(label = "No fue este", primary = false) {
-                    if (!enVuelo) onDescartar(propuesta)
-                }
-            } else {
-                ActionChip(
-                    label = if (enVuelo) "Guardando…" else etiquetaCierreManual(rule.type),
-                    primary = true,
-                ) { if (!enVuelo) onCerrarSinMovimiento() }
-            }
-        }
-        if (propuesta != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = etiquetaCierreManual(rule.type) + ", sin emparejar ningún movimiento",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.marca,
-                modifier = Modifier.clickable { if (!enVuelo) onCerrarSinMovimiento() },
+            PropuestaDeMovimiento(
+                propuesta = propuesta,
+                aviso = avisoDeMontoDistinto(rule, propuesta),
+                enVuelo = enVuelo,
+                onConfirmar = { onConfirmar(propuesta) },
+                onDescartar = { onDescartar(propuesta) },
             )
+        } else {
+            Spacer(Modifier.height(10.dp))
+            AccionesDeLaFila(
+                acciones = listOf(AccionDeOcurrencia(ETIQUETA_ANOTAR, primary = true, onClick = onAnotarMovimiento)),
+                enVuelo = enVuelo,
+            )
+        }
+    }
+}
+
+/**
+ * **Una propuesta dibujada: qué fue, cuánto, el aviso si el monto no cuadra, y las dos salidas.**
+ *
+ * Es LA pieza que dibuja una propuesta, y es una sola a propósito. Nació al llevar la pregunta al
+ * checklist del período: la alternativa era una segunda copia del mismo bloque, y este archivo ya
+ * documenta —en su encabezado— cómo termina eso («la decisión de si una tarjeta muestra saldo o
+ * cuota faltaba en uno de los cuatro renderers de un monto»). Acá el riesgo es peor, porque los
+ * botones sellan un periodo con la plata del dueño adentro.
+ *
+ * @param aviso el texto de «no es el monto que anotaste», ya resuelto por [avisoDeMontoDistinto], o
+ *   `null` si no hay nada que advertir. Lo decide quien llama porque depende de la REGLA (en una
+ *   tarjeta el monto es el saldo y la comparación no significa nada) y acá solo llega el
+ *   movimiento.
+ */
+@Composable
+internal fun PropuestaDeMovimiento(
+    propuesta: FinancialEvent,
+    aviso: String?,
+    enVuelo: Boolean,
+    onConfirmar: () -> Unit,
+    onDescartar: () -> Unit,
+) {
+    // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
+    // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación
+    // el monto quedaba pegado al texto — dos datos distintos leyéndose como uno.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = descripcionPropuesta(propuesta),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            lineHeight = 16.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = formatMoney(propuesta.amount, propuesta.currency),
+            style = Movi.textos.monto,
+            color = Movi.colores.texto,
+            lineHeight = 16.sp,
+        )
+    }
+    if (aviso != null) {
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = aviso,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            lineHeight = 15.sp,
+        )
+    }
+    Spacer(Modifier.height(10.dp))
+    AccionesDeLaFila(
+        acciones = listOf(
+            AccionDeOcurrencia(ETIQUETA_SI_FUE_ESTE, primary = true, onClick = onConfirmar),
+            AccionDeOcurrencia(ETIQUETA_NO_FUE_ESTE, primary = false, onClick = onDescartar),
+        ),
+        enVuelo = enVuelo,
+    )
+}
+
+/** Los rótulos que la pantalla y sus pruebas tienen que nombrar igual. */
+const val ETIQUETA_SI_FUE_ESTE = "Sí, fue este"
+const val ETIQUETA_NO_FUE_ESTE = "No fue este"
+const val ETIQUETA_ANOTAR = "Anotar el movimiento"
+const val ETIQUETA_QUITAR_LA_MARCA = "Quitar la marca"
+
+/** Una acción ofrecida sobre una ocurrencia: qué dice, si es la principal, y qué hace. */
+internal data class AccionDeOcurrencia(
+    val label: String,
+    val primary: Boolean,
+    val onClick: () -> Unit,
+)
+
+/**
+ * La fila de botones de una ocurrencia, con **una sola** regla de «en vuelo» para todos.
+ *
+ * Mientras una escritura viaja, el botón principal dice «Guardando…» y ninguno acepta un toque. Se
+ * dice una vez acá y no en cada llamador porque los tres lugares que ofrecen estas acciones
+ * —«Próximos», «Sin confirmar» y el checklist— comparten el mismo `marcando` por regla: si uno de
+ * ellos se olvidara de mirarlo, un doble toque mandaría dos veces el mismo sello.
+ */
+@Composable
+internal fun AccionesDeLaFila(acciones: List<AccionDeOcurrencia>, enVuelo: Boolean) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        acciones.forEachIndexed { i, accion ->
+            val etiqueta = if (enVuelo && i == 0) "Guardando…" else accion.label
+            ActionChip(label = etiqueta, primary = accion.primary) {
+                if (!enVuelo) accion.onClick()
+            }
         }
     }
 }
@@ -308,8 +364,9 @@ fun SeccionProximosPagos(
     cargando: Boolean,
     conteoVisible: Boolean,
     onAbrirPago: (UpcomingPayment) -> Unit,
-    onMarcar: (ruleId: String, period: String, eventId: String?) -> Unit,
+    onMarcar: (ruleId: String, period: String, eventId: String) -> Unit,
     onDescartarPropuesta: (ruleId: String, eventId: String) -> Unit,
+    onAnotarMovimiento: (UpcomingPayment) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -347,7 +404,7 @@ fun SeccionProximosPagos(
                             enVuelo = payment.rule.id in marcando,
                             onConfirmar = { ev -> onMarcar(payment.rule.id, estado.period, ev.id) },
                             onDescartar = { ev -> onDescartarPropuesta(payment.rule.id, ev.id) },
-                            onCerrarSinMovimiento = { onMarcar(payment.rule.id, estado.period, null) },
+                            onAnotarMovimiento = { onAnotarMovimiento(payment) },
                         )
                     }
                     if (i < proximos.size - 1) Hairline()
@@ -375,8 +432,9 @@ fun SeccionSinConfirmar(
     abiertas: List<Pair<RecurringRule, OccurrenceState>>,
     descartadas: Set<String>,
     marcando: Set<String>,
-    onMarcar: (ruleId: String, period: String, eventId: String?) -> Unit,
+    onMarcar: (ruleId: String, period: String, eventId: String) -> Unit,
     onDescartarPropuesta: (ruleId: String, eventId: String) -> Unit,
+    onAnotarMovimiento: (RecurringRule) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (abiertas.isEmpty()) return
@@ -423,7 +481,7 @@ fun SeccionSinConfirmar(
                     enVuelo = rule.id in marcando,
                     onConfirmar = { ev -> onMarcar(rule.id, estado.period, ev.id) },
                     onDescartar = { ev -> onDescartarPropuesta(rule.id, ev.id) },
-                    onCerrarSinMovimiento = { onMarcar(rule.id, estado.period, null) },
+                    onAnotarMovimiento = { onAnotarMovimiento(rule) },
                 )
                 if (i < abiertas.size - 1) Hairline()
             }

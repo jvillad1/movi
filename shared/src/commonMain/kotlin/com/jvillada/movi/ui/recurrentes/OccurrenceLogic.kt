@@ -1,11 +1,16 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
+import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
 
 /**
@@ -156,10 +161,6 @@ fun tituloPropuesta(tipo: TransactionType, period: String): String {
     return if (tipo == TransactionType.INCOME) "¿Ya te llegó$deMes?" else "¿Ya pagaste$deMes?"
 }
 
-/** El cierre sin movimiento que emparejar: «lo pagué en efectivo», «me llegó y no lo anoté». */
-fun etiquetaCierreManual(tipo: TransactionType): String =
-    if (tipo == TransactionType.INCOME) "Ya me llegó" else "Ya lo pagué"
-
 /**
  * Cómo se lee una fila ya cerrada.
  *
@@ -197,19 +198,45 @@ fun textoYaOcurrio(estado: OccurrenceState): String {
     // viejo no lo manda y se cae al mes del vencimiento, que era lo de antes.
     val mes = nombreDelMes(estado.periodoDelDueno ?: estado.period)
     val cuando = if (mes.isEmpty()) "Ya ocurrió" else "Ya ocurrió en $mes"
-    val monto = estado.montoDelPago
-    return when {
-        // Lo automático va ANTES que lo derivado, porque toda automática es además derivada (ver
-        // el KDoc de `OccurrenceState.automatica`) y con el orden al revés nunca se leería.
-        estado.automatica && monto != null ->
-            "$cuando · Movi lo emparejó con un movimiento de ${formatMoney(monto, estado.monedaDelPago ?: "COP")}"
-        estado.automatica -> "$cuando · lo emparejó Movi"
-        estado.derivadaDeUnMovimiento && monto != null ->
-            "$cuando · lo prueba un pago de ${formatMoney(monto, estado.monedaDelPago ?: "COP")}"
-        estado.derivadaDeUnMovimiento -> "$cuando · lo prueba un movimiento"
-        estado.eventId != null -> "$cuando · con un movimiento"
-        else -> cuando
-    }
+    return "$cuando · " + origenDeLoOcurrido(
+        automatica = estado.automatica,
+        derivada = estado.derivadaDeUnMovimiento,
+        hayMovimiento = estado.eventId != null,
+        monto = estado.montoDelPago,
+        moneda = estado.monedaDelPago,
+    )
+}
+
+/**
+ * **De dónde sale un «ya ocurrió»**, en media frase y sin el «cuándo» adelante.
+ *
+ * Vive aparte de [textoYaOcurrio] porque hay dos pantallas que tienen que decir exactamente lo
+ * mismo con la fecha puesta de otra manera: «Ya ocurrieron» arma «Ya ocurrió en septiembre · …» y
+ * el checklist del período arma «5 de septiembre · …», que es la forma que ya tenían todas sus
+ * filas. Escribir estos cinco casos dos veces era garantizar que el día que se agregue un sexto
+ * quede en uno solo — y justo acá el texto **es** la diferencia entre cuatro certezas distintas.
+ *
+ * El último caso es el único sin movimiento detrás, y lo dice: un sello viejo hecho a mano. La app
+ * ya no puede crear ninguno (ver [com.jvillada.movi.ui.dashboard.EstadoDeLaFila]), pero en la base
+ * del dueño hay varios, y una fila tildada que no explique por qué está tildada es exactamente lo
+ * que esta ola vino a terminar.
+ */
+internal fun origenDeLoOcurrido(
+    automatica: Boolean,
+    derivada: Boolean,
+    hayMovimiento: Boolean,
+    monto: Long?,
+    moneda: String?,
+): String = when {
+    // Lo automático va ANTES que lo derivado, porque toda automática es además derivada (ver
+    // el KDoc de `OccurrenceState.automatica`) y con el orden al revés nunca se leería.
+    automatica && monto != null ->
+        "Movi lo emparejó con un movimiento de ${formatMoney(monto, moneda ?: "COP")}"
+    automatica -> "lo emparejó Movi"
+    derivada && monto != null -> "lo prueba un pago de ${formatMoney(monto, moneda ?: "COP")}"
+    derivada -> "lo prueba un movimiento"
+    hayMovimiento -> "con un movimiento"
+    else -> "marcado a mano, sin movimiento"
 }
 
 /**
@@ -302,3 +329,91 @@ fun avisaMontoDistinto(rule: RecurringRule, real: Long, monedaReal: String = "CO
     // «no es el monto que anotaste» sobre un pago en dólares normal — mismo criterio que la
     // tarjeta: sin un esperado comparable, no se afirma nada.
     monedaReal == "COP" && !rule.montoEsSaldo && difiereDelEsperado(rule.amount, real)
+
+/**
+ * El aviso de que la propuesta no vale lo que el dueño anotó, **ya escrito**, o `null` si no hay
+ * nada que advertir.
+ *
+ * Es [avisaMontoDistinto] con su texto pegado, y existe por lo mismo que [origenDeLoOcurrido]: la
+ * propuesta se dibuja ahora en dos lugares —«Próximos» y el checklist del período— y el aviso tiene
+ * que decir lo mismo en los dos. La decisión (cuándo advertir) y la redacción (qué decir) viajan
+ * juntas a propósito: separadas, cualquiera de las dos pantallas podía quedarse con la decisión
+ * vieja o con la frase vieja, y las dos maneras de equivocarse terminan en el dueño confirmando un
+ * movimiento que no era.
+ */
+fun avisoDeMontoDistinto(rule: RecurringRule, event: FinancialEvent): String? =
+    if (!avisaMontoDistinto(rule, event.amount, event.currency)) null
+    else "No es el monto que anotaste (${formatCOP(rule.amount)}). Puede ser: revísalo antes de confirmar."
+
+/**
+ * **A dónde lleva «Anotar el movimiento»**, con todo lo que el recurrente ya sabe puesto.
+ *
+ * Es la salida que el dueño eligió para la fila sin ninguna evidencia —pagó en efectivo, pagó desde
+ * una cuenta que Movi no lleva, o el banco nunca avisó—: en vez de dejarlo tildar sin movimiento,
+ * la app lo lleva a **crear el movimiento que falta**. Al guardarlo, el emparejamiento automático
+ * del server lo reconoce en la siguiente lectura y la fila se tilda sola; por eso los datos van
+ * prellenados y no es comodidad: la categoría y la cuenta son justo lo que `esConcluyente` compara.
+ *
+ * ## La cuota de un crédito y el pago de una tarjeta van a Créditos
+ *
+ * Esas reglas son SINTÉTICAS: no se sellan, se derivan del movimiento que bajó la deuda (ver
+ * `OccurrenceState.derivadaDeUnMovimiento`). Un gasto suelto anotado en la hoja de Agregar **no**
+ * baja ninguna deuda, así que la fila se quedaría sin tildar igual y encima habría quedado un gasto
+ * duplicado. El movimiento que esa fila necesita se registra en Créditos, y ahí es donde lleva —
+ * mismo criterio que el toque sobre su renglón en «Próximos».
+ *
+ * @param venceIso la fecha del vencimiento, que es la que hace que el movimiento caiga en el
+ *   período correcto. Vacía o ilegible se deja pasar tal cual: la hoja se cae a hoy sola.
+ */
+fun hojaParaAnotar(
+    ruleId: String,
+    nombre: String,
+    monto: Long,
+    montoEsSaldo: Boolean,
+    categoria: String,
+    cuentaId: String?,
+    venceIso: String,
+    esIngreso: Boolean,
+): Screen {
+    if (ruleId.startsWith(CREDIT_RULE_PREFIX) || ruleId.startsWith(CARD_RULE_PREFIX)) {
+        return Screen.Credits
+    }
+    return Screen.QuickAdd(
+        presetAccountId = cuentaId,
+        presetNota = nombre,
+        // El «monto» de una tarjeta es su SALDO, no lo que se va a pagar (ver
+        // `RecurringRule.montoEsSaldo`): prellenarlo sería escribirle $27.501.150 en la caja del
+        // monto a alguien que va a pagar el mínimo. Sin dato, campo vacío.
+        presetMonto = monto.takeIf { !montoEsSaldo && it > 0 },
+        presetCategoria = categoria,
+        presetFecha = venceIso,
+        presetEsIngreso = esIngreso,
+    )
+}
+
+/** [hojaParaAnotar] desde una fila del checklist, que ya trae los ocho datos. */
+fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
+    ruleId = pago.ruleId,
+    nombre = pago.nombre,
+    monto = pago.monto,
+    montoEsSaldo = pago.montoEsSaldo,
+    categoria = pago.categoria,
+    cuentaId = pago.cuentaId,
+    venceIso = pago.vence,
+    esIngreso = pago.esIngreso,
+)
+
+/**
+ * [hojaParaAnotar] desde una regla, para «Próximos» y «Sin confirmar», que tienen la regla entera y
+ * la fecha del vencimiento por separado.
+ */
+fun hojaParaAnotar(rule: RecurringRule, venceIso: String): Screen = hojaParaAnotar(
+    ruleId = rule.id,
+    nombre = rule.name,
+    monto = rule.amount,
+    montoEsSaldo = rule.montoEsSaldo,
+    categoria = rule.category,
+    cuentaId = rule.accountId,
+    venceIso = venceIso,
+    esIngreso = rule.type == TransactionType.INCOME,
+)

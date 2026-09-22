@@ -85,6 +85,8 @@ open class RepositorioDePrueba : WalletRepository {
     // Tipo de retorno explícito: sin él Kotlin lo infiere `Nothing` y ninguna prueba puede
     // sobrescribirlo con la implementación que de verdad devuelve `Unit`.
     override suspend fun unmarkOccurrence(ruleId: String, period: String): Unit = noUsado("unmarkOccurrence")
+    // Tipo de retorno explícito por lo mismo que el de arriba.
+    override suspend fun rechazarOcurrencia(ruleId: String, eventId: String): Unit = noUsado("rechazarOcurrencia")
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = noUsado("chatAi")
     override suspend fun getAccounts(): List<Account> = noUsado("getAccounts")
     override suspend fun getAccount(id: String): Account = noUsado("getAccount")

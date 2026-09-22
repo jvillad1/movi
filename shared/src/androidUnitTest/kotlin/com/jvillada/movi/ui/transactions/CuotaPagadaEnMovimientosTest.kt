@@ -6,8 +6,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -180,13 +184,21 @@ class CuotaPagadaEnMovimientosTest {
         )
     }
 
-    /** Y el «Deshacer» que sí existe sigue funcionando: esto no rompió el camino de vuelta. */
+    /**
+     * Y el «Deshacer» que sí existe sigue funcionando: esto no rompió el camino de vuelta.
+     *
+     * Por la acción semántica y no con un clic real: «Ya ocurrieron» vive debajo del checklist y de
+     * «Próximos», así que en la pantalla de prueba queda más abajo de lo que se ve y un clic por
+     * coordenadas no llega — se vio, el toque no hacía nada y la prueba moría esperando. Y en el
+     * árbol MEZCLADO, porque el `Modifier.clickable` va sobre el propio `Text`.
+     */
     @Test
     fun `el sello a mano sigue teniendo su Deshacer`() {
         montar()
         esperarTexto("YA OCURRIERON")
 
-        composeRule.onNodeWithText("Deshacer", useUnmergedTree = true).performClick()
+        composeRule.onAllNodes(hasText("Deshacer") and hasClickAction())
+            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.waitUntil(timeoutMillis = 5_000) { desmarcadas == 1 }
         assertEquals(1, desmarcadas)

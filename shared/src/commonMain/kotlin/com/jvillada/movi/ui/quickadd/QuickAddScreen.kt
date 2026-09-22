@@ -64,6 +64,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import kotlinx.datetime.LocalDate
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 
 /**
@@ -138,6 +139,19 @@ internal fun movimientoDeLaHoja(
 )
 
 /**
+ * La fecha que viene prellenada, o `null` si no vino ninguna **o si no se entiende**.
+ *
+ * Se parsea acá y no en el llamador por lo de siempre en este repo: una fecha mal formada no puede
+ * ser una excepción que tumbe la hoja, y tampoco puede inventarse. `null` significa «no sé», y
+ * quien llama ya tiene un default honesto para eso — hoy.
+ */
+internal fun fechaDelPreset(iso: String?): LocalDate? {
+    val texto = iso?.trim().orEmpty()
+    if (texto.isEmpty()) return null
+    return runCatching { LocalDate.parse(texto) }.getOrNull()
+}
+
+/**
  * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
  * @param onSaved se guardó algo. Distinto de [onDismiss] a propósito: la pantalla de atrás sigue
  *   viva detrás de esta hoja (es una modal, ver `opensAsOverlay`), así que además de cerrar hay
@@ -152,6 +166,23 @@ fun QuickAddScreen(
     onNavigate: (Screen) -> Unit = {},
     presetAccountId: String? = null,
     /**
+     * **Lo que ya se sabe del movimiento que se viene a anotar** — ver [Screen.QuickAdd], donde
+     * está el porqué largo. Llegan del checklist del período, cuando una fila ofrece «Anotar el
+     * movimiento»: la app tiene el nombre, el monto, la categoría y la fecha del recurrente a la
+     * vista, y hacérselos teclear de nuevo es a la vez trabajo y la forma más fácil de que el
+     * emparejamiento automático después no los reconozca.
+     *
+     * Son valores INICIALES, no ataduras: se escriben una vez al abrir la hoja (en el `remember`
+     * de cada campo) y desde ahí manda el dueño. Un preset vacío o `null` deja el campo como
+     * siempre estuvo.
+     */
+    presetNota: String? = null,
+    presetMonto: Long? = null,
+    presetCategoria: String? = null,
+    /** ISO `"2026-09-05"`. Algo que no se entienda deja la fecha en hoy, que es el default. */
+    presetFecha: String? = null,
+    presetEsIngreso: Boolean = false,
+    /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
      * salió bien, junto con [onSaved] — nunca antes: primero se guarda, después se ofrece.
@@ -162,8 +193,11 @@ fun QuickAddScreen(
     onSavedEvent: (FinancialEvent) -> Unit = {},
 ) {
     val coroutine = rememberCoroutineScope()
-    var amount by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
+    // El monto viaja como cadena de dígitos, que es lo que teclea el teclado numérico: un preset
+    // se escribe igual que si lo hubiera tecleado él. Un cero o un negativo no se pone —«0» dejaría
+    // el botón deshabilitado con un campo que parece lleno— y se cae al vacío de siempre.
+    var amount by remember { mutableStateOf(presetMonto?.takeIf { it > 0 }?.toString() ?: "") }
+    var note by remember { mutableStateOf(presetNota?.trim().orEmpty()) }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
     // "Mercado" — ahora es texto libre con sugerencias (CategoryField), no una lista fija.
     //
@@ -174,9 +208,16 @@ fun QuickAddScreen(
     // categoría que el dueño acababa de retirar. La pantalla donde más se equivoca es esta.
     var category by remember {
         mutableStateOf(
-            categoriaPorDefectoPara(
-                TransactionType.EXPENSE, UsedCategoriesCache.used, UsedCategoriesCache.prefs,
-            ),
+            // Un preset gana: viene de un recurrente que el dueño ya categorizó, y es JUSTO el dato
+            // del que depende que el emparejamiento automático reconozca después este movimiento
+            // (ver `esConcluyente` en el server). Una reservada no se acepta ni de preset: la hoja
+            // no deja guardarla, así que ponerla sería nacer con el botón bloqueado.
+            presetCategoria?.trim()?.takeIf { it.isNotEmpty() && !isReservedCategory(it) }
+                ?: categoriaPorDefectoPara(
+                    if (presetEsIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
+                    UsedCategoriesCache.used,
+                    UsedCategoriesCache.prefs,
+                ),
         )
     }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
@@ -205,7 +246,12 @@ fun QuickAddScreen(
      * **No lo escribas a mano: pasa siempre por [pasarA]**, que es el que graba el
      * desplazamiento en el toque — antes de que el cambio de estado vuelva a medir la hoja.
      */
-    var pickers by remember { mutableStateOf(PickersDeLaHoja()) }
+    var pickers by remember {
+        // Un sueldo no se paga: llega. Abrir «Anotar el movimiento» de un recurrente de ingreso en
+        // la pestaña «Gasto» lo anotaría con el signo al revés, que es el error más caro que esta
+        // hoja puede cometer en silencio.
+        mutableStateOf(PickersDeLaHoja(typeIndex = if (presetEsIngreso) 1 else 0))
+    }
 
     // ── Las tres medidas de la hoja, y el desplazamiento que las une ──────────────────
     //
@@ -311,7 +357,11 @@ fun QuickAddScreen(
     // y el guardado preguntaran cada uno por su cuenta, una hoja abierta a las 23:59:59 podría
     // decir «Hoy» y guardar la fecha de mañana.
     val hoy = remember { hoyEnAppZone() }
-    var fecha by remember { mutableStateOf(hoy) }
+    // Un preset gana sobre «hoy», y no es un detalle: el checklist ofrece anotar una fila que pudo
+    // haber vencido hace dos semanas, y con la fecha de hoy ese movimiento cae en el período
+    // siguiente — o sea, la fila que se venía a tildar se quedaría sin tildar igual. Una fecha que
+    // no se entienda no se inventa: se cae a hoy, que es el default de siempre.
+    var fecha by remember { mutableStateOf(fechaDelPreset(presetFecha) ?: hoy) }
     /**
      * **El id del movimiento que se está escribiendo. Se genera una vez por borrador, no una vez
      * por toque de «Guardar».**
