@@ -350,16 +350,20 @@ fun CreateRecurringRuleSheet(
                         // acá no se habló de cuentas. Ver [cuentaParaElWire] — antes esto era
                         // `accountId ?: ""` y una lectura fallida bastaba para borrar la cuenta.
                         accountId = cuentaParaElWire(accountId, elDuenoEligioSinCuenta),
-                        // **Desde cuándo corre la regla**, y es lo que evita que Movi le proponga
-                        // otra vez el pago que la originó. Una regla que nace de un movimiento ya
-                        // ocurrido trae la fecha de ESE movimiento, así que su primer vencimiento
-                        // cae en el período siguiente (ver `dueDateFor`). Una regla escrita a mano
-                        // desde Recurrentes no trae ninguna y corre desde siempre, como hasta hoy.
+                        // **Desde cuándo corre la regla**: el PERÍODO del movimiento que la
+                        // originó es el primero que existe, y los anteriores no (ver
+                        // `RecurringRule.activeFrom`). Una regla escrita a mano desde Recurrentes
+                        // no trae ninguna y corre desde siempre, como hasta hoy.
                         //
                         // Al EDITAR se manda `null`, que el server lee como «no la toques» y
                         // conserva la que ya tenía: la hoja no ofrece cambiar esta fecha, así que
                         // mandar cualquier otra cosa sería inventar una decisión que nadie tomó.
                         activeFrom = if (isEditMode) null else prefill?.activeFrom,
+                        // **Y el movimiento que la originó, para que quede como su evidencia**:
+                        // el server sella con él el período de ese movimiento y así no vuelve a
+                        // preguntar por el pago que el dueño acaba de convertir en regla. Solo al
+                        // crear: editar una regla no la origina ningún movimiento.
+                        eventoDeOrigen = if (isEditMode) null else prefill?.eventId,
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }

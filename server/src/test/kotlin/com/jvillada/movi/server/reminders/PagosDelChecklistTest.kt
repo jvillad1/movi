@@ -236,15 +236,52 @@ class PagosDelChecklistTest {
 
     @Test
     fun `una regla cuyo vencimiento no cae en el periodo no reclama nada`() {
-        // El 5-sep, con corte 25, el período va del 25-ago al 24-sep. Una regla que arranca el
-        // 10-sep (creada desde un movimiento) todavía no tiene ocurrencia en él.
+        // Con corte 25, el período que contiene al 12-sep va del 25-ago al 24-sep. Una regla que
+        // arranca en el período SIGUIENTE (un movimiento del 10-oct) todavía no tiene ocurrencia
+        // en éste: su piso es el 25-sep.
         val arriendo = RecurringRule(
             "rr_arriendo", "Arriendo", "Vivienda", 1_800_000, 5, TransactionType.EXPENSE,
-            activeFrom = "2026-09-10",
+            activeFrom = "2026-10-10",
         )
         assertNull(vencimientoEnElChecklist(arriendo, LocalDate.of(2026, 9, 12), corte25, emptySet()))
         val eventos = listOf(evento("pago", "Arriendo", 1_800_000, "2026-09-10", "Vivienda"))
         assertEquals(emptyMap(), parteFija(listOf(arriendo), emptyList(), eventos, hoy = LocalDate.of(2026, 9, 12)))
+    }
+
+    /**
+     * **Y el contrafactual, que es el bug que esta rama cierra.** La MISMA regla creada desde un
+     * movimiento de ESTE período sí aparece en el checklist, con el vencimiento de este período.
+     *
+     * Antes el piso de `activeFrom` era la fecha exacta y se comía el período entero: «Coomeva
+     * Familiar» y «Tía Caro» —las dos creadas desde un movimiento de septiembre— no salían en el
+     * checklist del período en curso aunque el pago que las prueba estuviera ahí, y hubo que poner
+     * `active_from = NULL` a mano en la base para destrabarlas.
+     */
+    @Test
+    fun `una regla creada desde un movimiento de este periodo si aparece en el checklist`() {
+        val arriendo = RecurringRule(
+            "rr_arriendo", "Arriendo", "Vivienda", 1_800_000, 5, TransactionType.EXPENSE,
+            activeFrom = "2026-09-10",
+        )
+        assertEquals(
+            LocalDate.of(2026, 9, 5),
+            vencimientoEnElChecklist(arriendo, LocalDate.of(2026, 9, 12), corte25, emptySet()),
+        )
+    }
+
+    /** Coomeva (día 30) y Tía Caro (día 1), con las fechas exactas de producción. */
+    @Test
+    fun `las dos reglas reales del dueno aparecen en el checklist de su periodo`() {
+        val coomeva = RecurringRule(
+            "rr_coomeva", "Coomeva Familiar", "Salud", 138_600, 30, TransactionType.EXPENSE,
+            activeFrom = "2026-09-05",
+        )
+        val tia = RecurringRule(
+            "rr_tia", "Tía Caro", "Familia", 100_000, 1, TransactionType.EXPENSE,
+            activeFrom = "2026-09-01",
+        )
+        assertEquals(LocalDate.of(2026, 8, 30), vencimientoEnElChecklist(coomeva, hoy, corte25, emptySet()))
+        assertEquals(LocalDate.of(2026, 9, 1), vencimientoEnElChecklist(tia, hoy, corte25, emptySet()))
     }
 
     @Test

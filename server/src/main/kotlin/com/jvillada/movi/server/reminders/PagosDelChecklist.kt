@@ -81,7 +81,7 @@ fun vencimientoEnElChecklist(
 ): LocalDate? {
     val dias = diasDelPeriodo(hoy, settings, zone)
     val emitida = ocurrenciaPorPreguntar(hoy, rule, settings, zone = zone)
-        ?.takeIf { ruleIsActiveOn(rule, it) }
+        ?.takeIf { ruleIsActiveOn(rule, it, settings, zone) }
         ?.takeIf { periodOf(it) in periodosSellados || !it.isAfter(hoy) }
     if (emitida != null && emitida in dias) return emitida
     return dueDateFor(rule, hoy, DEFAULT_GRACE_DAYS, periodosSellados, settings).takeIf { it in dias }

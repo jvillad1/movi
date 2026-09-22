@@ -453,19 +453,76 @@ data class RecurringRule(
     /**
      * **Desde cuándo corre esta regla.** ISO `"2026-09-01"`, o `null` = desde siempre.
      *
-     * Existe por la cuota de un crédito. El dueño registró un préstamo desembolsado el 1 de
+     * **La unidad es el PERÍODO del dueño, no el día**: una ocurrencia que cae en un período
+     * **anterior** al que contiene esta fecha no existe; el período de esta fecha sí existe. Lo
+     * calcula `arranqueDeLaRegla` en el server, con el corte configurable del dueño
+     * ([PeriodSettings]) y no con el mes de calendario — con corte 25 son cosas distintas.
+     *
+     * ## De dónde viene, y por qué dejó de ser «el día»
+     *
+     * Nació por la cuota de un crédito. El dueño registró un préstamo desembolsado el 1 de
      * septiembre con pago el día 1, y Movi le anunció la primera cuota **para ese mismo día**:
      * *«no entiendo por qué quedó cargado el desembolso el mismo día que es la cuota; normalmente
-     * un desembolso es un mes aproximadamente antes de la primera cuota»*. Tenía razón — la regla
-     * sintética se armaba solo con el día del mes e ignoraba la fecha de desembolso.
+     * un desembolso es un mes aproximadamente antes de la primera cuota»*. La regla sintética se
+     * armaba solo con el día del mes e ignoraba la fecha de desembolso.
      *
-     * Con esto, una ocurrencia **anterior o igual** a esta fecha no existe: la primera cuota es
-     * la primera vez que cae el día de pago **después** del desembolso.
+     * El remedio fue «una ocurrencia anterior **o igual** a esta fecha no existe», y con eso
+     * también se resolvía el otro caso: convertir un movimiento ya anotado en recurrente sin que
+     * Movi preguntara «¿ya pagaste el arriendo de agosto?» sobre el arriendo que el dueño acababa
+     * de anotar.
+     *
+     * **Pero ese remedio se pasaba de largo: se comía el período ENTERO del movimiento que
+     * originó la regla.** Caso real de producción: «Coomeva Familiar» (día 30, creada desde un
+     * pago del 5 de septiembre) y «Tía Caro» (día 1, desde un pago del 1 de septiembre) no
+     * aparecían en el checklist del período en curso, aunque el pago que las prueba estaba ahí.
+     * Hubo que poner `active_from = NULL` a mano en la base para destrabarlo.
+     *
+     * ## Por qué el remedio ya no hace falta así
+     *
+     * Porque ahora hay una forma mejor de decir «ese pago ya ocurrió»: **marcarlo**, en vez de
+     * esconder el período. El server empareja solo el recurrente con su movimiento cuando hay
+     * exactamente un candidato concluyente (`ocurrenciaConcluyente`), y el alta de una regla a
+     * partir de un movimiento sella el período de ese movimiento con ese mismo `eventId` (ver
+     * [eventoDeOrigen]). El período aparece en el checklist, tildado y con su evidencia a la
+     * vista, que es lo que el dueño esperaba ver.
+     *
+     * ## Y no, esto no cuenta el pago dos veces
+     *
+     * El movimiento aporta su plata **una sola vez** a los totales del período: los totales los
+     * suman los movimientos, no las reglas. Una `RecurringOccurrence` es un **sello** —«este
+     * recurrente ya ocurrió en este período»— y no un asiento: no tiene monto y nadie la suma.
+     * El «doble conteo» que el remedio viejo temía nunca fue de plata: era la MOLESTIA de que
+     * Movi volviera a preguntar por un pago ya hecho, y de que el dueño lo anotara otra vez para
+     * contestar. Esa molestia la cierra el sello, sin tener que borrar el período del mapa.
      *
      * `null` para las reglas que el dueño escribió a mano (un salario, un gimnasio): esas no
      * tienen «desembolso» y corren desde siempre, como hasta ahora.
      */
     val activeFrom: String? = null,
+
+    /**
+     * **El movimiento que originó esta regla.** Solo de ida: es un campo del `POST
+     * /api/recurring-rules` y **no** una columna de `recurring_rules`.
+     *
+     * Cuando el alta viene de un movimiento («Esto se repite» desde el detalle, o la barra de
+     * después de guardar), el server sella el período de ESE movimiento como ya ocurrido, con ese
+     * mismo id como evidencia — el mismo camino y las mismas guardas que
+     * `POST /api/recurring-rules/{id}/occurrence` (nada de traspasos, nada de categorías
+     * reservadas, nada de un movimiento que ya use otra regla).
+     *
+     * Existe porque el emparejamiento automático cubre casi todos los casos pero no todos: con
+     * dos candidatos concluyentes, `ocurrenciaConcluyente` prefiere preguntar. Sin este sello,
+     * ahí volvería exactamente la molestia que [activeFrom] vino a evitar — Movi preguntando por
+     * el pago que el dueño acaba de convertir en regla.
+     *
+     * **Si el sellado no se puede hacer, la regla se crea igual.** Una regla sin sello es una
+     * pregunta de más; una regla que no se creó es el pedido del dueño perdido.
+     *
+     * La respuesta del alta lo devuelve en `null`: dice lo que quedó guardado en la fila, y en la
+     * fila esto no queda. `GET /api/recurring-rules` tampoco lo trae nunca. Un cliente viejo ni
+     * lo ve (`encodeDefaults` apagado + `ignoreUnknownKeys` en los tres `Platform`).
+     */
+    val eventoDeOrigen: String? = null,
 
     /**
      * **El monto de esta regla es un SALDO, no lo que se va a pagar.**
