@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
@@ -43,9 +44,11 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
-import com.jvillada.movi.ui.credits.textoDelPagoQueNoFueLaCuota
+import com.jvillada.movi.ui.credits.textosDeLosPagosQueNoFueronLaCuota
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import kotlinx.coroutines.CancellationException
+import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -75,16 +78,30 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
      */
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
     /**
-     * **La cuota pactada de este crédito**, o `null` si esta cuenta no es un préstamo, si no tiene
-     * condiciones cargadas, o si la lectura falló.
+     * **Las condiciones de este crédito** (la cuota pactada y su día de pago), o `null` si esta
+     * cuenta no es un préstamo, si no tiene condiciones cargadas, o si la lectura falló.
      *
      * Es el único dato que esta pantalla no tenía para poder explicar un pago que no fue la cuota
-     * (ver [textoDelPagoQueNoFueLaCuota]): la fila de la deuda ya trae su capital y su
-     * `noAmortiza`. Se lee **solo en una cuenta LOAN** y junto con los movimientos, así que una
-     * cuenta de ahorros no paga ningún viaje de más. Si no llega, la línea no se dibuja: es una
+     * (ver [textosDeLosPagosQueNoFueronLaCuota]): la fila de la deuda ya trae su capital y su
+     * `noAmortiza`. Viaja con el día de pago, que decide a qué cuota va cada pago. Se lee **solo
+     * en una cuenta LOAN** y junto con los movimientos, así que una cuenta de ahorros no paga
+     * ningún viaje de más. Si no llega, la línea no se dibuja: es una
      * explicación de más, no un dato sin el cual la pantalla mienta.
      */
-    var cuotaPactada by remember { mutableStateOf<Long?>(null) }
+    var condiciones by remember { mutableStateOf<CreditTerms?>(null) }
+    val lineasDeLaCuota = remember(days, condiciones) {
+        val terms = condiciones
+        if (terms == null) {
+            emptyMap()
+        } else {
+            textosDeLosPagosQueNoFueronLaCuota(
+                movimientos = days.flatMap { it.items },
+                cuotaPactada = terms.installment,
+                diaDePago = terms.dayOfMonth,
+                hoy = Clock.System.now().toLocalDateTime(AppTimeZone.zone).date,
+            )
+        }
+    }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var showCondicion by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -135,10 +152,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             // que corte la lectura: sin la cuota la pantalla se ve como siempre, y hacer fallar el
             // detalle entero por una línea explicativa sería cambiar un dato que falta por una
             // pantalla que no carga.
-            cuotaPactada = if (acc.type == AccountType.LOAN) {
+            condiciones = if (acc.type == AccountType.LOAN) {
                 runCatching { Repositories.wallets.getCredits() }.getOrNull()
                     ?.firstOrNull { it.account.id == accountId }
-                    ?.terms?.installment
+                    ?.terms
             } else {
                 null
             }
@@ -451,13 +468,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                 // pero no dice que el monto no era el pactado —y
                                                 // eso es justo lo que el dueño no podía ver cuando
                                                 // pagó $77.040 de más. Ver
-                                                // [textoDelPagoQueNoFueLaCuota].
-                                                textoDelPagoQueNoFueLaCuota(
-                                                    capitalAbonado = event.amount,
-                                                    noAmortiza = event.noAmortiza,
-                                                    cuotaPactada = cuotaPactada ?: 0L,
-                                                    moneda = event.currency,
-                                                )?.let { linea ->
+                                                // [textosDeLosPagosQueNoFueronLaCuota]: se
+                                                // juzga la cuota entera, en su último pago.
+                                                lineasDeLaCuota[event.id]?.let { linea ->
                                                     Spacer(Modifier.height(4.dp))
                                                     Text(
                                                         text = linea,

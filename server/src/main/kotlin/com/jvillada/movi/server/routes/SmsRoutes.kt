@@ -88,6 +88,50 @@ private val cuentaDestinoRegex = Regex("""\ba\s+(?:la\s+)?cuenta\s+\*?\s?(\d{4,}
 private val NO_SON_MOVIMIENTOS = listOf("ampliacion de plazo", "ampliación de plazo", "bienvenido", "inscribiste")
 
 /**
+ * **Lo que el banco intentó y no pasó**, de cualquier banco: una compra rechazada trae el monto y el
+ * comercio igual que una aprobada, y leída como gasto era plata que nunca salió. Nació con Nu
+ * («Compra rechazada: Tu compra en RAPPI por $45.000,00 … fue rechazada.»), que se captura entera
+ * desde #346, pero Bancolombia manda lo mismo («Transacción rechazada»). Mismo mecanismo que
+ * [NO_SON_MOVIMIENTOS]: aparece la frase y no hay movimiento.
+ */
+private val NO_PASARON = listOf(
+    "rechazada", "rechazado",
+    "declinada", "declinado",
+    "no aprobada", "no aprobado", "no fue aprobada", "no fue aprobado",
+    "no exitosa", "no exitoso", "no fue exitosa", "no fue exitoso",
+)
+
+/** El rótulo de origen nombra a Nu como palabra («Notificación · Nu»). El mismo criterio que `tarjetaDeNu`. */
+private val origenNu = Regex("""\bnu(?:bank)?\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * Avisos de Nu que traen plata pero no son una compra ni un pago: la factura que vence, el pago
+ * mínimo, lo que rindió la Cajita. Van ANTES de la lista de lo que sí es movimiento porque «tu pago
+ * mínimo» dice «pago».
+ */
+private val NU_NO_SON_MOVIMIENTOS = listOf(
+    "pago mínimo", "pago minimo", "fecha límite", "fecha limite", "rendimiento", "cajita",
+)
+
+/** «Tu pago de $X fue recibido», «Recibimos tu pago»: el abono a la tarjeta. */
+private val pagoDeNu = Regex("""recibimos tu pago|\bpago\b.*\b(recibido|aplicado|abonado)\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * **De Nu solo se lee lo que es una compra aprobada o un pago.** Desde #346 el teléfono sube TODAS
+ * las notificaciones de `com.nu.production`, y el lector genérico convierte en gasto cualquier
+ * texto con un monto: la factura del mes, una promoción, lo que rindió la Cajita. En vez de ir
+ * tachando avisos a medida que aparecen, con Nu se pide la forma de un movimiento: la compra que
+ * dice «aprobada» o el pago recibido. Lo demás no es un movimiento.
+ *
+ * Solo aplica cuando el origen dice Nu: un SMS de Bancolombia no pasa por acá.
+ */
+private fun loDeNuEsUnMovimiento(minusculas: String): Boolean {
+    if (NU_NO_SON_MOVIMIENTOS.any { it in minusculas }) return false
+    val esCompra = "compra" in minusculas && ("aprobada" in minusculas || "aprobado" in minusculas)
+    return esCompra || pagoDeNu.containsMatchIn(minusculas)
+}
+
+/**
  * **Cuánta plata dice un SMS**, sin importar si el banco escribió a la colombiana o a la gringa.
  *
  * ### El bug que esto arregla, y por qué era peor de lo que parecía
@@ -140,9 +184,15 @@ internal fun montoDelSms(raw: String): Double? {
         .toDoubleOrNull()
 }
 
-internal fun parseSms(text: String): ParsedSms? {
+/**
+ * @param origen el rótulo `bank` de la fila («85540», «Notificación · Nu», «Correo · Bancolombia»).
+ *   Solo decide si aplica la regla de Nu ([loDeNuEsUnMovimiento]); sin él se lee como siempre.
+ */
+internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     val minusculas = text.lowercase()
     if (NO_SON_MOVIMIENTOS.any { it in minusculas }) return null
+    if (NO_PASARON.any { it in minusculas }) return null
+    if (origen != null && origenNu.containsMatchIn(origen) && !loDeNuEsUnMovimiento(minusculas)) return null
     val conPrefijo = amountRegex.find(text)
     val rawAmount = conPrefijo?.groupValues?.get(2) ?: amountPorRegex.find(text)?.groupValues?.get(1) ?: return null
     val amount = montoDelSms(rawAmount) ?: return null
@@ -309,7 +359,7 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        val parsed = parseSms(sms.text)
+        val parsed = parseSms(sms.text, sms.bank)
             // No es un error de la app: el mensaje no trae un movimiento (un aviso, una ampliación de
             // plazo). Se dice así, porque la pantalla muestra este texto.
             ?: return@get call.respond(HttpStatusCode.UnprocessableEntity, "Este mensaje no trae un movimiento para anotar. Puedes ignorarlo.")
@@ -333,7 +383,7 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        val parsed = parseSms(sms.text) ?: return@get call.respond(emptyList<FinancialEvent>())
+        val parsed = parseSms(sms.text, sms.bank) ?: return@get call.respond(emptyList<FinancialEvent>())
         val momento = momentoDelSms(sms.time, ahora = System.currentTimeMillis())
         val margen = DIAS_PARA_COINCIDIR * 86_400_000L
         val eventos = dbQuery { loadEventsBetween(uid, momento - margen, momento + margen + 1) }
@@ -446,7 +496,7 @@ fun Route.smsRoutes() {
                 // /parse— decía «Transferencia a Caro». El mismo hecho, con dos nombres.
                 val destinos = dbQuery { destinosDelDueno(uid) }
                 val parsed = realtimeCaptures.mapNotNull { msg ->
-                    parseSms(msg.text)?.let { conElDestinoConocido(it, msg.text, destinos) }
+                    parseSms(msg.text, msg.bank)?.let { conElDestinoConocido(it, msg.text, destinos) }
                 }
                 if (parsed.isNotEmpty()) WebPushSender.sendToUser(uid, buildSmsPushPayload(parsed))
             }.onFailure {
