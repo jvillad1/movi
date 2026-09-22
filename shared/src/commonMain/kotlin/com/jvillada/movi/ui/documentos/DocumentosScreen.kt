@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -311,7 +312,7 @@ private fun ConfirmarBorrado(doc: Documento, onCancelar: () -> Unit, onConfirmar
         ) {
             Text("¿Borrar este documento?", style = Movi.textos.titulo, fontWeight = FontWeight.Medium, color = Movi.colores.texto)
             Spacer(Modifier.height(8.dp))
-            Text(doc.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            Text(nombreQueSePartePorSusSeparadores(doc.nombre), style = Movi.textos.cuerpo, color = Movi.colores.texto)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Se borra del todo. Movi no guarda una copia y no se puede deshacer.",
@@ -356,67 +357,73 @@ private fun FilaDeDocumento(
     onBorrar: () -> Unit,
     onEditar: () -> Unit,
 ) {
+    // El texto arriba a todo el ancho y las acciones en un renglón DEBAJO. Con las tres acciones a
+    // la derecha, en un teléfono de ~390 dp se comían un tercio de la fila y el nombre del archivo
+    // se partía a mitad de palabra: «Portal_Beneficios_3037_movimi / entos_09_2026.jpeg».
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(onClick = onAbrir)
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(doc.nombre, style = Movi.textos.cuerpo, color = Movi.colores.texto, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(2.dp))
-                // Cuenta, peso, fecha y período en un renglón: son los datos con los que uno
-                // reconoce cuál de tres extractos parecidos es el que busca. La cuenta va PRIMERO
-                // y no al final: entre «Extracto_08_2026.pdf» repetidos, lo que los distingue es
-                // de qué cuenta son, y es lo primero que se corta si la fila no entra.
-                Text(
-                    text = listOfNotNull(
-                        cuenta,
-                        pesoLegible(doc.bytes),
-                        etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
-                        doc.periodo,
-                    ).joinToString(" · "),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-                doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
-                    Spacer(Modifier.height(2.dp))
-                    Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
+            // Con cortes invisibles después de `_`, `-` y `.`: si no entra, parte en un separador.
+            // Solo lo que se pinta; `doc.nombre` sigue intacto para editar y para «Abrir».
             Text(
-                "Abrir",
-                style = Movi.textos.apoyo,
+                nombreQueSePartePorSusSeparadores(doc.nombre),
+                style = Movi.textos.cuerpo,
+                color = Movi.colores.texto,
                 fontWeight = FontWeight.Medium,
-                color = Movi.colores.marca,
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.height(2.dp))
+            // Cuenta, peso, fecha y período en un renglón: son los datos con los que uno
+            // reconoce cuál de tres extractos parecidos es el que busca. La cuenta va PRIMERO
+            // y no al final: entre «Extracto_08_2026.pdf» repetidos, lo que los distingue es
+            // de qué cuenta son, y es lo primero que se corta si la fila no entra.
             Text(
-                "Editar",
+                text = listOfNotNull(
+                    cuenta,
+                    pesoLegible(doc.bytes),
+                    etiquetaDeFecha(fechaDeEpoch(doc.subidoEn), hoyEnAppZone()),
+                    doc.periodo,
+                ).joinToString(" · "),
                 style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onEditar)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                color = Movi.colores.textoApagado,
             )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "Borrar",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.sale,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onBorrar)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+            doc.notas?.takeIf { it.isNotBlank() }?.let { nota ->
+                Spacer(Modifier.height(2.dp))
+                Text(nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            Spacer(Modifier.height(4.dp))
+            // Corrido 8 dp a la izquierda para que la PALABRA «Abrir» —no su zona de toque— quede
+            // alineada con el nombre de arriba.
+            Row(
+                modifier = Modifier.offset(x = (-8).dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                AccionDeFila("Abrir", Movi.colores.marca, FontWeight.Medium, onAbrir)
+                AccionDeFila("Editar", Movi.colores.textoMedio, null, onEditar)
+                // «Borrar» no borra: abre la confirmación (ver `aBorrar` en la pantalla).
+                AccionDeFila("Borrar", Movi.colores.sale, null, onBorrar)
+            }
         }
         Hairline()
     }
+}
+
+@Composable
+private fun AccionDeFila(texto: String, color: Color, peso: FontWeight?, onClick: () -> Unit) {
+    Text(
+        texto,
+        style = Movi.textos.apoyo,
+        fontWeight = peso,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
 }
 
 /**

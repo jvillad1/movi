@@ -114,7 +114,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun uploadDocument(fileName: String, bytes: ByteArray, mimeType: String, tipo: TipoDeDocumento, accountId: String?, periodo: String?, notas: String?): Documento = noUsado("uploadDocument")
     override suspend fun getDocumentLink(id: String): EnlaceDeDescarga = noUsado("getDocumentLink")
     override suspend fun updateDocument(id: String, cambios: EdicionDeDocumento): Documento = noUsado("updateDocument")
-    override suspend fun deleteDocument(id: String) = noUsado("deleteDocument")
+    override suspend fun deleteDocument(id: String): Unit = noUsado("deleteDocument")
     override suspend fun importStatement(decision: ImportDecision) = noUsado("importStatement")
     override suspend fun getStatementImports(): List<StatementImport> = noUsado("getStatementImports")
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail = noUsado("getStatementImportDetail")

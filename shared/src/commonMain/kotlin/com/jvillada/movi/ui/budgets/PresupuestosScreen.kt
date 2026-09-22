@@ -71,8 +71,22 @@ internal data class BudgetProgress(
      * enteros. Con los montos del dueño —una hipoteca de 767.800.000— la división pierde
      * precisión, así que un porcentaje sacado de ahí puede estar mal por más de un punto. En pesos
      * colombianos eso no es una hipótesis de laboratorio: es el orden de magnitud normal.
+     *
+     * ### Pasado el límite, redondea hacia ARRIBA
+     *
+     * Hasta el límite se trunca, como siempre: 79,9 % dice «79%» y no promete un «80%» que todavía
+     * no llegó. Pero pasado el límite truncar se contradice con el rótulo de al lado: Comida con
+     * $1.008.737 de $1.000.000 decía «100% · Sobrepasado · $8.737». Así que cuando se pasó —aunque
+     * sea por un peso— se redondea hacia arriba: 100,87 % → «101%», 116,3 % → «117%». Justo en el
+     * límite la división es exacta y sigue diciendo «100%», que es lo que dice «Sin margen».
      */
-    val pct: Int get() = if (budget.monthlyLimit == 0L) 0 else (spent * 100 / budget.monthlyLimit).toInt()
+    val pct: Int get() {
+        val limite = budget.monthlyLimit
+        if (limite == 0L) return 0
+        val centuplo = spent * 100
+        val truncado = centuplo / limite
+        return (if (spent > limite && centuplo % limite != 0L) truncado + 1 else truncado).toInt()
+    }
     val state: EstadoDePresupuesto get() = estadoDePresupuesto(spent, budget.monthlyLimit)
 }
 

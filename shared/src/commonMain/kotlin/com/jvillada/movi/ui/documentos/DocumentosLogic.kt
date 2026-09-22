@@ -62,3 +62,29 @@ fun porTipo(documentos: List<Documento>): List<Pair<TipoDeDocumento, List<Docume
     ).mapNotNull { tipo ->
         documentos.filter { it.tipo == tipo }.takeIf { it.isNotEmpty() }?.let { tipo to it }
     }
+
+/** Espacio de ancho cero: no se ve, pero le dice al texto «acá se puede partir el renglón». */
+internal const val CORTE_POSIBLE = '​'
+
+private const val SEPARADORES = "_-."
+
+/**
+ * El nombre del archivo tal como se **muestra**, con permiso de partirse en sus separadores.
+ *
+ * «Portal_Beneficios_3037_movimientos_09_2026.jpeg» no tiene espacios, así que en un teléfono el
+ * renglón se cortaba donde se acabara el ancho: «…_movimi / entos_09…». Con un [CORTE_POSIBLE]
+ * después de cada `_`, `-` y `.` el texto prefiere partir ahí, y la palabra queda entera.
+ *
+ * Es SOLO para pintar: el nombre guardado, el que se edita y el que «Abrir» descarga siguen siendo
+ * `Documento.nombre` tal cual — un carácter invisible metido en el nombre real rompería la búsqueda
+ * y el archivo que baja.
+ */
+fun nombreQueSePartePorSusSeparadores(nombre: String): String = buildString(nombre.length + 8) {
+    nombre.forEachIndexed { i, c ->
+        append(c)
+        // Ni al final (no queda nada que bajar de renglón) ni entre dos separadores seguidos
+        // (en «a__b» basta un corte, después del último).
+        val siguiente = nombre.getOrNull(i + 1)
+        if (c in SEPARADORES && siguiente != null && siguiente !in SEPARADORES) append(CORTE_POSIBLE)
+    }
+}

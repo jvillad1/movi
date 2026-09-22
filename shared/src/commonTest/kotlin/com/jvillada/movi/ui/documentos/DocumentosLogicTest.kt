@@ -92,4 +92,36 @@ class DocumentosLogicTest {
         assertEquals(todos.size, porTipo(todos).sumOf { it.second.size })
         assertTrue(TipoDeDocumento.entries.all { tipo -> porTipo(todos).any { it.first == tipo } })
     }
+
+    private val z = CORTE_POSIBLE
+
+    @Test
+    fun el_nombre_largo_se_puede_partir_despues_de_cada_separador() {
+        assertEquals(
+            "Portal_${z}Beneficios_${z}3037_${z}movimientos_${z}09_${z}2026.${z}jpeg",
+            nombreQueSePartePorSusSeparadores("Portal_Beneficios_3037_movimientos_09_2026.jpeg"),
+        )
+        assertEquals("extracto-${z}nu.${z}pdf", nombreQueSePartePorSusSeparadores("extracto-nu.pdf"))
+    }
+
+    @Test
+    fun los_separadores_seguidos_y_el_final_no_llevan_corte() {
+        assertEquals("a__${z}b", nombreQueSePartePorSusSeparadores("a__b"))
+        assertEquals("a._${z}b", nombreQueSePartePorSusSeparadores("a._b"))
+        assertEquals("fin_", nombreQueSePartePorSusSeparadores("fin_"))
+    }
+
+    @Test
+    fun un_nombre_sin_separadores_queda_igual() {
+        assertEquals("Contrato arriendo", nombreQueSePartePorSusSeparadores("Contrato arriendo"))
+        assertEquals("", nombreQueSePartePorSusSeparadores(""))
+    }
+
+    @Test
+    fun sin_los_cortes_vuelve_a_ser_el_nombre_real() {
+        // Lo que se pinta, quitándole lo invisible, es exactamente lo guardado: nada se pierde ni
+        // se agrega de verdad.
+        val nombre = "Portal_Beneficios_3037_movimientos_09_2026.jpeg"
+        assertEquals(nombre, nombreQueSePartePorSusSeparadores(nombre).replace(z.toString(), ""))
+    }
 }
