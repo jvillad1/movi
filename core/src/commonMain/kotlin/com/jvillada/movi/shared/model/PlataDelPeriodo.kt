@@ -160,8 +160,16 @@ fun plataDelPeriodo(
         }
         .sumOf { it.amount }
 
+    // **Aperturas y ajustes dentro del período cuentan como «lo que tenías».** Una cuenta que Movi
+    // empezó a llevar a mitad del período (la Fiducuenta abrió el 6-sep con $113.264) o un ajuste
+    // al cuadrar con el banco no son plata que entró: ya estaba, y Movi se enteró tarde. Sin esto
+    // nadie los cuenta, Tu plata hoy los tiene, y lo que queda salía corto por esa suma.
+    val correcciones = vivos
+        .filter { (it.category == OPENING_CATEGORY || it.category == ADJUSTMENT_CATEGORY) && cuentaDe(it)?.esTuPlata == true }
+        .sumOf { if (it.type == TransactionType.INCOME) it.amount else -it.amount }
+
     return PlataDelPeriodo(
-        saldoAlInicio = saldoAlInicio,
+        saldoAlInicio = saldoAlInicio + correcciones,
         ingresos = ingresos,
         desdeFuera = desdeFuera,
         pagadoDesdeFuera = pagadoDesdeFuera,
