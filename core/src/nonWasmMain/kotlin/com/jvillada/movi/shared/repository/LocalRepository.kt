@@ -1,6 +1,8 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.MovimientoRechazado
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.MovimientosDelDestino
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.Instant
 import com.jvillada.movi.shared.time.AppTimeZone
@@ -1863,6 +1865,23 @@ class LocalRepository(
     override suspend fun createGoal(goal: Goal): Goal = remote.createGoal(goal)
     override suspend fun updateGoal(id: String, goal: Goal): Goal = remote.updateGoal(id, goal)
     override suspend fun deleteGoal(id: String) = remote.deleteGoal(id)
+
+    /**
+     * **Las cuentas de otros van siempre al server, y sin caché.**
+     *
+     * No es pereza: [DestinoConocido.totales] sale de cruzar TODOS los movimientos del dueño, y el
+     * teléfono tiene una foto que puede estar corrida (las filas que todavía no sincronizó). Una
+     * caché acá haría que «lo que le mandé a Caro» diga una cifra en el teléfono y otra en la web,
+     * que es peor que no poder verla sin señal — y el registro en sí se edita una vez: un número de
+     * cuenta ajena no cambia. Mismo criterio que `getFinanceSummary`.
+     */
+    override suspend fun getDestinos(): List<DestinoConocido> = remote.getDestinos()
+    override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = remote.createDestino(destino)
+    override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido =
+        remote.updateDestino(id, destino)
+    override suspend fun deleteDestino(id: String) = remote.deleteDestino(id)
+    override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
+        remote.getMovimientosDelDestino(id)
     override suspend fun getSmsMessages(): List<SmsMessage> = remote.getSmsMessages()
     override suspend fun getSms(id: String): SmsMessage = remote.getSms(id)
     override suspend fun parseSms(id: String): ParsedSms = remote.parseSms(id)

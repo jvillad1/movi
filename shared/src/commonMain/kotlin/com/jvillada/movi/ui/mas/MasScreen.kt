@@ -61,6 +61,10 @@ private val items = listOf(
     // cruza con el gasto POR NOMBRE DE CATEGORÍA—, que es donde el dueño va a acordarse de que
     // quería arreglar un nombre.
     MasItem("Categorías",   Icons.AutoMirrored.Rounded.Label, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Categorias),
+    // Ola 24: las cuentas de OTROS — la de su esposa, la del papá. Va acá y no en «Cuentas» a
+    // propósito: esa pantalla lista la plata de él, y esto no es su plata (ver DestinoConocido).
+    // El rótulo es el mismo que el título de la pantalla, como en toda ficha de Más.
+    MasItem("Cuentas de otros", Icons.Rounded.Diversity3, Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Destinos),
     // Ola 18: los papeles. Va PEGADO a «Extractos» porque el importador archiva ahí lo que pasa
     // por él — quien sube un extracto y después se pregunta «¿dónde quedó el PDF?» busca al lado.
     MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),

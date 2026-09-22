@@ -47,6 +47,18 @@ sealed class Screen {
     data object Categorias : Screen()
 
     /**
+     * **«Más → Cuentas de otros»** — el registro de cuentas ajenas: verlas, registrarlas,
+     * renombrarlas y borrarlas, y ver qué se le mandó a cada una.
+     *
+     * Vive en Más y no en Cuentas **a propósito**, y no es una decisión de dibujo: `Screen.Accounts`
+     * lista la plata del dueño, y una cuenta de otra persona no es su plata (ver `DestinoConocido`).
+     * Ponerlas en la misma pantalla invitaría exactamente a la confusión que el modelo evita.
+     * Misma puerta que [Categorias] y [Documentos]: una ficha de Más, que es una lista que nadie
+     * está borrando, y no un enlace escondido dentro de otra pantalla.
+     */
+    data object Destinos : Screen()
+
+    /**
      * «Documentos» — los papeles del dueño guardados en Movi (extractos, nóminas, contratos).
      * Ficha de Más, junto a «Extractos»: el importador archiva ahí lo que pasa por él.
      */
@@ -108,7 +120,8 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // mantenimiento, no un lugar al que se vuelva todos los días.
     // Ola 14: la guía de arranque se abre desde Más y se vuelve a Más — no es un destino de
     // todos los días, es un sitio al que se va a mirar si quedó algo pendiente.
-    Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos -> NavTab.MORE
+    // Ola 24: «Cuentas de otros» igual — se abre desde Más y se vuelve a Más.
+    Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Destinos -> NavTab.MORE
     else -> null
 }
 

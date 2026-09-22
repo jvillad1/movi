@@ -695,6 +695,29 @@ object Goals : Table("goals") {
     init { index("idx_goals_user_id", false, userId) }
 }
 
+/**
+ * **Las cuentas de otros** — el registro de números de cuenta ajenos, con nombre y de quién son.
+ * Ver `DestinoConocido` en `:core` para el porqué de que esto NO sea una `Account`.
+ *
+ * No guarda totales: `totales` y `cuantos` se derivan en cada lectura cruzando los movimientos del
+ * dueño (ver `DestinoRoutes.kt`), por el mismo motivo que `goals` no guarda su «ahorrado» — un
+ * número guardado aparte se desincroniza del que está bien.
+ *
+ * `numero` son **solo dígitos** (lo normaliza `soloLosDigitos` antes de escribir): el dueño va a
+ * pegar el número como se lo mandó el banco y dos formas del mismo número no pueden verse como dos
+ * destinos.
+ */
+object KnownDestinations : Table("known_destinations") {
+    val id        = varchar("id", 50)
+    val userId    = varchar("user_id", 50)
+    val nombre    = varchar("nombre", 60)
+    val numero    = varchar("numero", 30)
+    val deQuien   = varchar("de_quien", 40).nullable()
+    val createdAt = long("created_at")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_known_destinations_user_id", false, userId) }
+}
+
 object Screens : Table("screen_definitions") {
     val slug         = varchar("slug", 64)
     val version      = integer("version")

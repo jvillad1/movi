@@ -99,7 +99,7 @@ class SchemaDeArranqueTest {
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
-        StatementImportMatches,
+        StatementImportMatches, KnownDestinations,
     )
 
     @BeforeTest

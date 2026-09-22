@@ -29,6 +29,7 @@ import com.jvillada.movi.server.parsing.StatementParser
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.ByteArrayInputStream
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.storage.Stores
 import com.jvillada.movi.server.subscriptions.runSubscriptionDetection
 import com.jvillada.movi.shared.model.*
@@ -223,6 +224,12 @@ fun Route.statementRoutes() {
         val matches = mutableListOf<ReconciliationMatch>()
         val newTransactions = mutableListOf<ParsedTransaction>()
 
+        // Las cuentas de otros que el dueño registró: una fila que dice «a la cuenta *31973270756»
+        // se propone como «Transferencia a Caro», igual que un SMS. Se leen UNA vez para todo el
+        // extracto. Ver `conElDestinoConocido` en :core para cuándo NO renombra (cuando el papel ya
+        // trajo un nombre de verdad).
+        val destinos = dbQuery { destinosDelDueno(uid) }
+
         // Cada movimiento anotado puede ser la pareja de UNA sola fila. Antes el mismo movimiento
         // se proponía para todas las filas iguales: dos compras de $50.000 en días seguidos
         // quedaban emparejadas con el único SMS, y al confirmar las dos la segunda compra real no
@@ -259,7 +266,7 @@ fun Route.statementRoutes() {
                     matchConfidence = if (sameDay) 0.95f else 0.7f,
                 )
             } else {
-                newTransactions += tx
+                newTransactions += conElDestinoConocido(tx, destinos)
             }
         }
 
