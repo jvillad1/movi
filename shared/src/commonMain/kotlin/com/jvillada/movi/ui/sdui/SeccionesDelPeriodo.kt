@@ -115,7 +115,7 @@ private fun FilaDeCategoria(categoria: CategoriaDelPeriodo) {
             Spacer(Modifier.size(Movi.espacios.corto))
             Cifra(
                 formatMoneyCompact(categoria.gastado),
-                13.5f,
+                Movi.textos.monto,
                 color = if (categoria.superada) Movi.colores.sale else Movi.colores.texto,
             )
         }
@@ -283,7 +283,7 @@ private fun FilaDelChecklist(pago: PagoDelPeriodo, onClick: () -> Unit) {
                 pago.montoEsSaldo -> formatMoneyCompact(pago.monto)
                 else -> formatCOP(pago.monto)
             },
-            if (pago.montoEsSaldo) 12.5f else 13.5f,
+            if (pago.montoEsSaldo) Movi.textos.apoyo else Movi.textos.monto,
             color = if (pago.montoEsSaldo) Movi.colores.textoApagado else colorDelMonto,
         )
     }
