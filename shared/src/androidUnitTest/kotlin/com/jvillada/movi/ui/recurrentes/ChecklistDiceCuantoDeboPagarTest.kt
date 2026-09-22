@@ -1,0 +1,162 @@
+package com.jvillada.movi.ui.recurrentes
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performSemanticsAction
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/**
+ * # La estimación llega a la pantalla, y la casilla sigue tildando
+ *
+ * `CuantoDeboPagarTest` prueba que las funciones devuelven el texto correcto. Falta el pedazo que
+ * de verdad se rompe en este repo: **que el texto llegue a la fila**, y que agregarle un renglón a
+ * la fila no se lleve puesto lo único que la fila hacía — tildar el período.
+ *
+ * Las filas montadas son las dos que conviven en su base: la cuota del Vehículo ·8761, con todo
+ * cargado, y una cuota sin tasa registrada, que **no** puede mostrar estimación.
+ *
+ * Lo que NO cubre: es Robolectric, así que no dice nada de cómo parte el renglón en la web ni de
+ * dónde queda la línea a 390 dp.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(qualifiers = "w411dp-h731dp-xhdpi")
+class ChecklistDiceCuantoDeboPagarTest {
+
+    @get:Rule val composeRule = createComposeRule()
+
+    private val vehiculo = CreditSummary(
+        account = Account("acc_8761", "Vehículo 8761", AccountType.LOAN, balance = 177_052_715L),
+        terms = CreditTerms(
+            accountId = "acc_8761", bank = "Banco de Occidente", principal = 190_000_000L,
+            rateEa = 18.16, termMonths = 60, installment = 4_101_123L, dayOfMonth = 19,
+            startDate = "2025-09-19", insuranceMonthly = 89_100L,
+        ),
+        paidPct = 0.07,
+    )
+
+    /** Tasa 0 como marcador y sin la casilla «No cobra intereses»: no se sabe, no se estima. */
+    private val techo = CreditSummary(
+        account = Account("acc_techo", "Crédito Techo Gardenera", AccountType.LOAN, balance = 10_000_000L),
+        terms = CreditTerms(
+            accountId = "acc_techo", bank = "Constructora", principal = 10_000_000L, rateEa = 0.0,
+            termMonths = 1, installment = 10_000_000L, dayOfMonth = 30, startDate = "2026-08-30",
+        ),
+        paidPct = 0.0,
+    )
+
+    private fun filaDe(credito: CreditSummary, dias: Int) = PagoDelPeriodo(
+        ruleId = CREDIT_RULE_PREFIX + credito.account.id,
+        nombre = "Cuota ${credito.account.name}",
+        monto = credito.terms!!.installment,
+        pagado = false,
+        diasParaVencer = dias,
+        vence = "2026-09-19",
+        periodoDelSello = "2026-09",
+    )
+
+    private val marcados = mutableListOf<Pair<String, String>>()
+
+    private fun montar(conCreditos: Boolean) {
+        marcados.clear()
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    SeccionChecklistDelPeriodo(
+                        checklist = listOf(filaDe(vehiculo, dias = 3), filaDe(techo, dias = 9)),
+                        cargando = false,
+                        pudoLeer = true,
+                        marcando = emptySet(),
+                        onMarcar = { ruleId, periodo -> marcados += ruleId to periodo },
+                        onDeshacer = { _, _ -> },
+                        onReintentar = {},
+                        planesDeCuotas = if (conCreditos) {
+                            planesDeLasCuotas(listOf(vehiculo, techo))
+                        } else {
+                            emptyMap()
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun hay(texto: String) =
+        composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun la_fila_de_la_cuota_muestra_el_reparto_estimado_y_de_donde_sale() {
+        montar(conCreditos = true)
+
+        assertTrue(hay("Cuota Vehículo 8761"), "la fila de la cuota sigue estando")
+        assertTrue(hay("\$4.101.123"), "el monto de la cuota registrada sigue estando")
+        assertTrue(
+            hay("Movi estima: \$2.479.256 de interés · \$89.100 el seguro · \$1.532.767 a capital"),
+            "la estimación del período tiene que estar en la fila",
+        )
+        // Y el pie que dice que es una estimación sobre la deuda de hoy, una sola vez.
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText(ESTIMADO_SOBRE_LA_DEUDA_DE_HOY, useUnmergedTree = true)
+                .fetchSemanticsNodes().size,
+        )
+    }
+
+    @Test
+    fun la_cuota_sin_tasa_no_muestra_ninguna_estimacion() {
+        montar(conCreditos = true)
+
+        assertTrue(hay("Cuota Crédito Techo Gardenera"), "la fila sin tasa sigue estando")
+        // Solo una fila estima, así que solo hay un «Movi estima» en pantalla.
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText(ETIQUETA_ESTIMADO, substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().size,
+        )
+    }
+
+    @Test
+    fun sin_los_creditos_cargados_la_fila_se_ve_como_antes() {
+        montar(conCreditos = false)
+
+        assertTrue(hay("Cuota Vehículo 8761"))
+        assertTrue(!hay(ETIQUETA_ESTIMADO), "sin plan no se estima nada")
+        assertTrue(!hay(ESTIMADO_SOBRE_LA_DEUDA_DE_HOY), "y el pie no explica lo que no está")
+    }
+
+    @Test
+    fun tildar_la_fila_sigue_sellando_el_periodo() {
+        montar(conCreditos = true)
+
+        // En el árbol MEZCLADO, porque lo tocable es la fila entera y el texto está en sus hijos:
+        // `Modifier.clickable` mezcla a sus descendientes, así que el nodo con la acción es el que
+        // lleva el nombre. Y se toca por la acción semántica y no con un clic real: el checklist es
+        // más alto que la pantalla de prueba.
+        val filas = composeRule.onAllNodes(
+            hasText("Cuota Vehículo 8761", substring = true) and hasClickAction(),
+        )
+        assertTrue(filas.fetchSemanticsNodes().isNotEmpty(), "la fila tiene que seguir siendo tocable")
+        filas[0].performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(listOf("credit_acc_8761" to "2026-09"), marcados)
+    }
+}
