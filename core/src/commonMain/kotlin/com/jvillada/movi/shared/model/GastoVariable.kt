@@ -10,53 +10,63 @@ package com.jvillada.movi.shared.model
  * como gasto los descontaría dos veces.
  *
  * Así que el gasto variable es **lo que cuenta como «Gastos» en el Inicio**
- * ([cuentaEnGastosEIngresos], solo pesos, solo egresos) **menos los pagos del checklist del
- * período**. Un movimiento es el pago de un ítem del checklist por uno de dos vínculos que ya
- * existen, y no se inventa ningún otro:
+ * ([cuentaEnGastosEIngresos], solo pesos, solo egresos) **menos la parte de cada movimiento que
+ * paga un ítem del checklist del período**:
  *
- * - **el sello de «ya ocurrió» con movimiento** (`recurring_occurrences.event_id`): cuando el
- *   dueño dice «sí, fue este» sobre un recurrente, ese movimiento queda atado a la regla;
- * - **la categoría [CUOTA_CATEGORY]**: es la que escribe el pago de una cuota (ver
+ * - **la categoría [CUOTA_CATEGORY]** sale entera: es la que escribe el pago de una cuota (ver
  *   `pagoDeCuotaLegs`), y la misma con la que el server deduce que una cuota quedó pagada
  *   (`PagosDeDeuda.kt`). El pago de tarjeta no hace falta nombrarlo: ya no es flujo de caja.
+ * - **lo que paga un recurrente del checklist** sale en la parte que diga [parteFija], que arma
+ *   el server (`PagosDelChecklist.kt`) con el mismo emparejador que la pantalla usa para el «¿Es
+ *   este?». Es una parte y no un sí/no porque la regla tiene un monto y el movimiento otro: un
+ *   colegio de $4.000.000 pagado con $3.000.000 + $1.000.000 saca los dos; un gimnasio de
+ *   $180.000 pagado con un movimiento de $200.000 saca $180.000 y deja $20.000 como variable. Así
+ *   fijos + variable suman siempre lo que de verdad salió, sin contar nada dos veces ni perderlo.
  *
- * Lo que NO se puede ver: un recurrente sellado a mano sin decir con qué movimiento. Ese pago
- * sigue contando como variable y además como fijo. Es el lado ruidoso de equivocarse —el
- * disponible sale más chico, no más grande— y se arregla eligiendo el movimiento al marcar.
+ * **Fijos contra variable, la regla de oro:** los fijos del período son el monto de cada ítem del
+ * checklist, pagado o pendiente (ver `fijosDelPeriodo` en la UI). Todo lo que acá se saca del
+ * variable tiene que estar sumado allá; lo contrario haría ver el disponible mejor de lo que es.
  */
-
-/** ¿[evento] es el pago de un ítem fijo del período? Ver el KDoc del archivo por los dos vínculos. */
-fun esPagoDeUnFijo(evento: FinancialEvent, idsSellados: Set<String>): Boolean =
-    evento.id in idsSellados || evento.category == CUOTA_CATEGORY
 
 /**
- * ¿[evento] suma al gasto variable? Egreso en pesos que cuenta en «Gastos» (sin traspasos, sin
- * «Por confirmar»; los anulados ya no llegan) y que no es el pago de un fijo.
+ * ¿[evento] suma al gasto variable, en principio? Egreso en pesos que cuenta en «Gastos» (sin
+ * traspasos, sin «Por confirmar»; los anulados ya no llegan) y que no es la cuota de un crédito.
+ * Cuánto suma lo decide [parteVariable].
  */
-fun cuentaComoGastoVariable(evento: FinancialEvent, idsSellados: Set<String>): Boolean =
+fun cuentaComoGastoVariable(evento: FinancialEvent): Boolean =
     evento.type == TransactionType.EXPENSE &&
         evento.currency == "COP" &&
         cuentaEnGastosEIngresos(evento) &&
-        !esPagoDeUnFijo(evento, idsSellados)
+        evento.category != CUOTA_CATEGORY
+
+/**
+ * Cuánto de [evento] es gasto variable: su monto menos la parte que paga un fijo del checklist,
+ * nunca menos de cero.
+ */
+fun parteVariable(evento: FinancialEvent, parteFija: Map<String, Long>): Long =
+    if (!cuentaComoGastoVariable(evento)) 0L
+    else (evento.amount - (parteFija[evento.id] ?: 0L)).coerceAtLeast(0L)
 
 /**
  * **El gasto variable de cada día**, `"YYYY-MM-DD"` → pesos.
  *
  * Viaja por día y no ya sumado por ventana porque las ventanas (el período, la semana, hoy) las
  * arma el cliente con su propio «hoy», y así el server no tiene que saber qué semana mira nadie.
+ * Un día cuyo gasto quedó entero como fijo no aparece.
  *
  * @param eventos los movimientos vivos (no anulados) de la ventana del período, con
  *   `countsAsCashFlow` ya derivado.
- * @param idsSellados los movimientos atados a un sello de «ya ocurrió».
+ * @param parteFija id de movimiento → la parte de su monto que paga un ítem del checklist.
  * @param diaDe la fecha civil de un instante, en la zona de la app. Entra por parámetro para que
  *   el server use su propia zona configurada y esto no toque ninguna tabla de zonas.
  */
 fun gastoVariablePorDia(
     eventos: List<FinancialEvent>,
-    idsSellados: Set<String>,
+    parteFija: Map<String, Long>,
     diaDe: (Long) -> String,
 ): Map<String, Long> =
     eventos
-        .filter { cuentaComoGastoVariable(it, idsSellados) }
-        .groupBy { diaDe(it.timestamp) }
-        .mapValues { (_, delDia) -> delDia.sumOf { it.amount } }
+        .map { it to parteVariable(it, parteFija) }
+        .filter { (_, monto) -> monto > 0L }
+        .groupBy({ diaDe(it.first.timestamp) }, { it.second })
+        .mapValues { (_, montos) -> montos.sum() }

@@ -169,7 +169,29 @@ fun occurrenceCandidatesFor(
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     max: Int = MAX_OCCURRENCE_CANDIDATES,
     settings: PeriodSettings = PeriodSettings(),
-): List<FinancialEvent> {
+): List<FinancialEvent> =
+    candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
+        .take(max)
+        .map { it.event }
+
+/**
+ * **Los mismos candidatos que [occurrenceCandidatesFor], sin recortar y con su puntaje a la vista.**
+ *
+ * No es otro emparejador: es el cuerpo de [occurrenceCandidatesFor], que ahora lo llama y se queda
+ * con los tres primeros. Existe porque el gasto variable del Inicio (ver `PagosDelChecklist.kt`)
+ * tiene que repartir movimientos entre VARIAS reglas a la vez, y para eso necesita comparar la
+ * seña de un candidato en una regla contra la del mismo movimiento en otra: el «Crédito Papá»
+ * dicho por su nombre le gana al «Crédito Mamá» que solo comparte la categoría.
+ */
+fun candidatosPuntuados(
+    rule: RecurringRule,
+    dueDate: LocalDate,
+    events: List<FinancialEvent>,
+    usedEventIds: Set<String> = emptySet(),
+    zone: ZoneId = AppClock.zone,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
+): List<CandidatoPuntuado> {
     val claveRegla = claveComparableDeNombre(rule.name)
     val claveCategoria = claveComparableDeNombre(rule.category)
     // La ventana (con su piso en el primer día del mes del vencimiento) sale de
@@ -207,29 +229,30 @@ fun occurrenceCandidatesFor(
             val senas = (if (nombrePega) 3 else 0) +
                 (if (categoriaPega) 1 else 0) +
                 (if (laCuentaPega) 1 else 0)
-            Candidato(
+            CandidatoPuntuado(
                 event = event,
                 senas = senas,
                 distanciaMonto = abs(event.amount - rule.amount),
                 distanciaDias = abs(dias),
             )
         }
-        // Señas primero (identidad), después el monto (lo variable, que ordena y no filtra),
-        // después la cercanía al vencimiento. El id al final para que dos candidatos idénticos
-        // salgan siempre en el mismo orden — una propuesta que baila entre recargas se ve como
-        // un error.
-        .sortedWith(
-            compareByDescending<Candidato> { it.senas }
-                .thenBy { it.distanciaMonto }
-                .thenBy { it.distanciaDias }
-                .thenBy { it.event.id },
-        )
-        .take(max)
-        .map { it.event }
+        .sortedWith(ORDEN_DE_CANDIDATOS)
         .toList()
 }
 
-private data class Candidato(
+/**
+ * Señas primero (identidad), después el monto (lo variable, que ordena y no filtra), después la
+ * cercanía al vencimiento. El id al final para que dos candidatos idénticos salgan siempre en el
+ * mismo orden — una propuesta que baila entre recargas se ve como un error.
+ */
+val ORDEN_DE_CANDIDATOS: Comparator<CandidatoPuntuado> =
+    compareByDescending<CandidatoPuntuado> { it.senas }
+        .thenBy { it.distanciaMonto }
+        .thenBy { it.distanciaDias }
+        .thenBy { it.event.id }
+
+/** Un candidato con lo que lo ordena: sus señas (nombre 3, categoría 1, cuenta 1) y sus distancias. */
+data class CandidatoPuntuado(
     val event: FinancialEvent,
     val senas: Int,
     val distanciaMonto: Long,

@@ -611,19 +611,87 @@ class DashboardRoutesTest {
         event("e-anulado", savings, "EXPENSE", 70_000L, timestamp = ahora)
         voidEvent("e-anulado")
         event("e-otro-usuario", "acc-b", "EXPENSE", 999_000L, timestamp = ahora, uid = otherUserId)
-        transaction {
-            RecurringOccurrences.insert {
-                it[RecurringOccurrences.userId] = this@DashboardRoutesTest.userId
-                it[ruleId] = "rr_arriendo"
-                it[period] = "2026-09"
-                it[eventId] = "e-arriendo"
-                it[confirmedAt] = ahora
-            }
-        }
+        regla("rr_arriendo", "Arriendo", "Vivienda", 1_850_000L)
+        sellar("rr_arriendo", "e-arriendo")
 
         wireApp()
         val gasto = summary()["gastoVariablePorDia"]!!.jsonObject.mapValues { it.value.jsonPrimitive.long }
 
         assertEquals(mapOf(epochMillisToAppDateString(ahora) to 80_000L), gasto)
+    }
+
+    /** Una regla que vence HOY, así su vencimiento cae en el período sea cual sea la fecha. */
+    private fun regla(id: String, nombre: String, categoria: String, monto: Long) = transaction {
+        RecurringRules.insert {
+            it[RecurringRules.id] = id
+            it[RecurringRules.userId] = this@DashboardRoutesTest.userId
+            it[name] = nombre
+            it[category] = categoria
+            it[amount] = monto
+            it[dayOfMonth] = AppClock.today().dayOfMonth
+            it[type] = "EXPENSE"
+        }
+    }
+
+    /** El sello de «ya ocurrió» del vencimiento de hoy, con o sin movimiento. */
+    private fun sellar(ruleId: String, eventId: String?) = transaction {
+        RecurringOccurrences.insert {
+            it[RecurringOccurrences.userId] = this@DashboardRoutesTest.userId
+            it[RecurringOccurrences.ruleId] = ruleId
+            it[period] = java.time.YearMonth.from(AppClock.today()).toString()
+            it[RecurringOccurrences.eventId] = eventId
+            it[confirmedAt] = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * El caso del dueño: marcó «Ya lo pagué» sin elegir el movimiento. Ese pago ya está en los
+     * fijos (el checklist lo cuenta por el monto de la regla) y no puede contar además como gasto
+     * variable. Un segundo gimnasio del mismo monto, con la regla ya completa, sí cuenta.
+     */
+    @Test
+    fun `un fijo sellado sin movimiento no cuenta dos veces, y un segundo pago igual si cuenta`() = testApplication {
+        val ahora = System.currentTimeMillis()
+        regla("rr_gym", "Gimnasio", "Gimnasio", 180_000L)
+        sellar("rr_gym", eventId = null)
+        event("e-gym", savings, "EXPENSE", 180_000L, category = "Gimnasio", description = "Gimnasio", timestamp = ahora)
+        event("e-gym-2", savings, "EXPENSE", 180_000L, category = "Gimnasio", description = "Gimnasio", timestamp = ahora)
+        event("e-almuerzo", savings, "EXPENSE", 30_000L, timestamp = ahora)
+
+        wireApp()
+        val gasto = summary()["gastoVariablePorDia"]!!.jsonObject.mapValues { it.value.jsonPrimitive.long }
+
+        assertEquals(mapOf(epochMillisToAppDateString(ahora) to 210_000L), gasto)
+    }
+
+    /** Pendiente en el checklist = ya está en los fijos: su pago anotado tampoco es variable. */
+    @Test
+    fun `el pago anotado de un fijo sin marcar tampoco cuenta como variable`() = testApplication {
+        val ahora = System.currentTimeMillis()
+        regla("rr_tia", "Tía Caro", "Familia", 100_000L)
+        event("e-tia", savings, "EXPENSE", 100_000L, category = "Familia", description = "Tía Caro", timestamp = ahora)
+
+        wireApp()
+        assertEquals(emptyMap(), summary()["gastoVariablePorDia"]!!.jsonObject)
+    }
+
+    /**
+     * El APK que el dueño tiene instalado lee esta respuesta: el arreglo cambia CUÁNTO dice el
+     * gasto variable, no la forma. Mismas claves que antes, y el mapa sigue siendo día → pesos.
+     */
+    @Test
+    fun `la forma de la respuesta no cambia para un APK viejo`() = testApplication {
+        event("e-almuerzo", savings, "EXPENSE", 30_000L)
+        wireApp()
+        val body = summary()
+        val conocidas = setOf(
+            "scope", "month", "monthIncome", "monthSpent", "spentByCategory", "cardPaymentCandidates",
+            "pendingSms", "smsTotal", "smsLastAt", "smsAlertMuted", "usedCategories", "gastoVariablePorDia",
+        )
+        assertEquals(emptySet(), body.keys - conocidas)
+        body["gastoVariablePorDia"]!!.jsonObject.forEach { (dia, monto) ->
+            java.time.LocalDate.parse(dia)
+            monto.jsonPrimitive.long
+        }
     }
 }
