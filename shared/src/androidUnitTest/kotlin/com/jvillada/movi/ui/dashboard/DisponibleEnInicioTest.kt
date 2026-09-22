@@ -73,36 +73,46 @@ class DisponibleEnInicioTest {
     }
 
     @Test
-    fun `con margen muestra las tres ventanas y lo que queda por dia`() {
+    fun `con margen muestra las tres metas y como viene cada una`() {
         // $10M de ingresos menos $3,1M de arriendo = $6,9M. Hoy se gastaron $150.000.
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 150_000L)))
 
         composeRule.onNodeWithText("DISPONIBLE", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("\$6,9M", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Ingresos \$10M menos fijos \$3,1M", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Este período", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Esta semana", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Hoy", useUnmergedTree = true).assertIsDisplayed()
-        // $6,9M ÷ 31 = $222.580 para hoy.
-        composeRule.onNodeWithText("\$150.000 de \$222.580", useUnmergedTree = true).assertIsDisplayed()
-        // (6.900.000 − 150.000) ÷ 4 días = $1.687.500.
-        composeRule.onNodeWithText("Para lo que queda: \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
+        // $6,9M ÷ 31 = $222.580 por día; por 7, $1,6M por semana.
+        composeRule.onNodeWithText("Meta por semana \$1,6M · Meta por día \$222.580", useUnmergedTree = true)
+            .assertIsDisplayed()
         // El 21 quedan el 22, el 23 y el 24: los mismos «3 días» que dice «Tu plata» arriba, aunque
         // la cuenta por día reparta entre 4 (hoy incluido).
-        composeRule.onNodeWithText("· quedan 3 días", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Este período · quedan 3 días", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Vas \$6,1M por debajo de lo previsto a hoy · te quedan \$6,8M, unos \$1,7M por día",
+            useUnmergedTree = true,
+        ).assertIsDisplayed()
+        // Lunes 21 a jueves 24: la semana se corta con el período.
+        composeRule.onNodeWithText("Esta semana · semana corta: 4 días", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$150.000 de \$890.320", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Vas bien: te quedan \$740.320 para esta semana", useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Hoy", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$150.000 de \$222.580", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Te quedan \$72.580 para hoy", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
-    fun `con el periodo ya gastado la semana y hoy no prometen lo que queda`() {
-        // $6,9M de disponible y $8M gastados el 1-sep: el período está pasado. La semana y hoy no
-        // pueden decir «te quedan» debajo de «te pasaste».
+    fun `con el periodo ya gastado la semana y hoy siguen con su meta`() {
+        // $6,9M de disponible y $8M gastados el 1-sep: el período está pasado. La semana y hoy
+        // siguen midiendo lo suyo contra su meta: el dueño las usa para organizar lo que queda.
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-01" to 8_000_000L)))
 
-        composeRule.onNodeWithText("Te pasaste por", substring = true, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Te quedan", substring = true, useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Esta semana", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Hoy", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Ya gastaste todo el disponible del período", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$8M de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Te pasaste por \$1,1M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$0 de \$890.320", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Vas bien: te quedan \$890.320 para esta semana", useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("\$0 de \$222.580", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Te quedan \$222.580 para hoy", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
@@ -114,6 +124,6 @@ class DisponibleEnInicioTest {
             useUnmergedTree = true,
         ).assertIsDisplayed()
         composeRule.onNodeWithText("Gastado este período", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Para lo que queda", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Meta por", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
 }

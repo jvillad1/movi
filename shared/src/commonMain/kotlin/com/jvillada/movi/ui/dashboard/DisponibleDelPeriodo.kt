@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.components.formatMoneyCompact
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -25,41 +26,63 @@ import kotlinx.datetime.plus
  * Contra eso se mide el **gasto variable** (ver `gastoVariablePorDia` en `:core`): lo que cuenta en
  * «Gastos» menos los pagos del checklist, que ya están restados como fijos.
  *
+ * Después lo precisó: *«dividir el disponible en metas por unidades de tiempo y con eso irme
+ * organizando. El del periodo debe ir sumando todo. El de la semana debe ir sumando el movimiento
+ * de la semana. El del día debe ir sumando el movimiento del día»*. Así que cada ventana tiene una
+ * meta fija (ver [DisponibleDelPeriodo]) y una frase de cómo viene contra ella.
+ *
  * Todo es puro: el «hoy» y los bordes del período entran por parámetro.
  */
 
-/** Cómo va una ventana contra su disponible. Decide el color de la barra y nada más. */
+/**
+ * Cómo va una ventana contra su meta. Decide el color de la barra y de la frase «cómo viene»:
+ * normal, ámbar cuando va por encima del ritmo o pasa del 85 % de la meta, rojo al pasarse.
+ */
 enum class NivelDelGasto { BIEN, CERCA, PASADO }
 
-/** Desde qué parte del disponible gastado la barra avisa: el 85 %. */
+/** Desde qué parte de la meta gastada la barra avisa: el 85 %. */
 private const val PORCENTAJE_DE_AVISO = 85L
 
 /**
- * Una de las tres ventanas: lo gastado y lo que se podía gastar en ella.
+ * Una de las tres ventanas —el período, esta semana, hoy—: lo gastado en ella y su meta.
  *
- * @param disponible puede ser cero o negativo: con los fijos por encima de los ingresos no hay
- *   margen, y ahí la tarjeta no dibuja barras (ver [fraccion]).
+ * @param meta lo que se puede gastar en la ventana entera. Es fija: sale del disponible y de los
+ *   días, no de lo gastado. Cero cuando no hay disponible que dividir (ver [fraccion]).
+ * @param esperadoAHoy lo que, al ritmo de la meta, se esperaba llevar gastado al cerrar hoy. En
+ *   «hoy» es la meta misma: el día entero ya es «a hoy».
  */
-data class VentanaDelDisponible(val gastado: Long, val disponible: Long) {
-    /** Lo que sobra; negativo = se pasó. */
-    val teQuedan: Long get() = disponible - gastado
+data class VentanaDelDisponible(val gastado: Long, val meta: Long, val esperadoAHoy: Long) {
+    /** Lo que sobra de la meta; negativo = se pasó. */
+    val teQuedan: Long get() = meta - gastado
+
+    /** Cuánto va por encima (positivo) o por debajo (negativo) del ritmo a hoy. */
+    val contraElRitmo: Long get() = gastado - esperadoAHoy
 
     /**
-     * El largo de la barra, de 0 a 1, o `null` cuando no hay disponible contra el cual medir.
+     * El largo de la barra, de 0 a 1, o `null` cuando no hay meta contra la cual medir.
      * Nunca divide por cero ni da un largo negativo.
      */
     val fraccion: Float? get() =
-        if (disponible <= 0L) null else (gastado.toDouble() / disponible).toFloat().coerceIn(0f, 1f)
+        if (meta <= 0L) null else (gastado.toDouble() / meta).toFloat().coerceIn(0f, 1f)
 
     val nivel: NivelDelGasto get() = when {
-        disponible <= 0L -> if (gastado > 0L) NivelDelGasto.PASADO else NivelDelGasto.BIEN
-        gastado > disponible -> NivelDelGasto.PASADO
-        gastado * 100 >= disponible * PORCENTAJE_DE_AVISO -> NivelDelGasto.CERCA
+        meta <= 0L -> if (gastado > 0L) NivelDelGasto.PASADO else NivelDelGasto.BIEN
+        gastado > meta -> NivelDelGasto.PASADO
+        gastado > esperadoAHoy -> NivelDelGasto.CERCA
+        gastado * 100 >= meta * PORCENTAJE_DE_AVISO -> NivelDelGasto.CERCA
         else -> NivelDelGasto.BIEN
     }
 }
 
-/** Todo lo que pinta la tarjeta «Disponible». */
+/**
+ * Todo lo que pinta la tarjeta «Disponible».
+ *
+ * **Las metas son fijas para todo el período** (el dueño: *«dividir el disponible en metas por
+ * unidades de tiempo y con eso irme organizando»*): la del período es el disponible, la diaria es
+ * el disponible entre los días del período y la semanal es la diaria por 7. No se recalculan con
+ * lo gastado: un período pasado sigue mostrando la meta de la semana y la de hoy, porque son la
+ * vara con la que se organiza el resto del mes.
+ */
 data class DisponibleDelPeriodo(
     val ingresosRecibidos: Long,
     val ingresosPorRecibir: Long,
@@ -70,6 +93,8 @@ data class DisponibleDelPeriodo(
     val diasQueQuedan: Int,
     /** Días de esta semana (lunes a domingo) que caen dentro del período. */
     val diasDeLaSemana: Int,
+    /** Días de [diasDeLaSemana] que ya pasaron, **contando hoy**. */
+    val diasCorridosDeLaSemana: Int,
     val periodo: VentanaDelDisponible,
     val semana: VentanaDelDisponible,
     val hoy: VentanaDelDisponible,
@@ -78,9 +103,18 @@ data class DisponibleDelPeriodo(
     val disponible: Long get() = ingresos - fijos
     val hayMargen: Boolean get() = disponible > 0L
 
+    /** La meta de un día cualquiera del período. Cero sin margen. */
+    val metaPorDia: Long get() = if (hayMargen) disponible / diasDelPeriodo else 0L
+
+    /** La meta de una semana entera: la diaria por 7. La de esta semana puede ser corta. */
+    val metaPorSemana: Long get() = metaPorDia * 7
+
+    /** Esta semana tiene menos de 7 días en el período: empezó en el anterior o sigue en el próximo. */
+    val semanaCorta: Boolean get() = diasDeLaSemana < 7
+
     /**
-     * **«Para lo que queda: $X por día»**: lo que falta gastar del disponible, repartido entre los
-     * días que quedan (hoy incluido). `null` cuando ya no queda nada que repartir.
+     * Lo que falta gastar del disponible, repartido entre los días que quedan (hoy incluido).
+     * `null` cuando ya no queda nada que repartir.
      */
     val porDiaParaLoQueQueda: Long? get() {
         val resto = disponible - periodo.gastado
@@ -153,6 +187,13 @@ fun disponibleDelPeriodo(
     val hastaSemana = minOf(domingo, ultimoDia)
     val diasDeLaSemana = desdeSemana.daysUntil(hastaSemana) + 1
 
+    val diasCorridosDeLaSemana = desdeSemana.daysUntil(hoy) + 1
+    val diasCorridosDelPeriodo = inicio.daysUntil(hoy) + 1
+
+    // Las metas. Sin margen no hay nada que dividir: van en cero y la tarjeta no dibuja barras.
+    val metaDelPeriodo = disponible.coerceAtLeast(0L)
+    val metaPorDia = metaDelPeriodo / diasDelPeriodo
+
     return DisponibleDelPeriodo(
         ingresosRecibidos = recibidos,
         ingresosPorRecibir = porRecibir,
@@ -160,11 +201,81 @@ fun disponibleDelPeriodo(
         diasDelPeriodo = diasDelPeriodo,
         diasQueQuedan = hoy.daysUntil(finExclusivo),
         diasDeLaSemana = diasDeLaSemana,
-        periodo = VentanaDelDisponible(gastadoEntre(inicio, ultimoDia), disponible),
-        semana = VentanaDelDisponible(
-            gastadoEntre(desdeSemana, hastaSemana),
-            disponible * diasDeLaSemana / diasDelPeriodo,
+        diasCorridosDeLaSemana = diasCorridosDeLaSemana,
+        periodo = VentanaDelDisponible(
+            gastado = gastadoEntre(inicio, ultimoDia),
+            meta = metaDelPeriodo,
+            esperadoAHoy = metaDelPeriodo * diasCorridosDelPeriodo / diasDelPeriodo,
         ),
-        hoy = VentanaDelDisponible(gastadoEntre(hoy, hoy), disponible / diasDelPeriodo),
+        // Una semana corta (en un borde del período) tiene de meta la diaria por sus días, y su
+        // ritmo se mide igual: la diaria por los días que ya corrieron.
+        semana = VentanaDelDisponible(
+            gastado = gastadoEntre(desdeSemana, hastaSemana),
+            meta = metaPorDia * diasDeLaSemana,
+            esperadoAHoy = metaPorDia * diasCorridosDeLaSemana,
+        ),
+        hoy = VentanaDelDisponible(gastado = gastadoEntre(hoy, hoy), meta = metaPorDia, esperadoAHoy = metaPorDia),
     )
+}
+
+// ── Lo que dice cada fila ────────────────────────────────────────────────────
+//
+// Puro y aparte de la pantalla para que las pruebas lean las frases exactas. Todo en tuteo.
+
+/**
+ * El rótulo de la fila del período, con los días que quedan dichos como en «Tu plata», que cuenta
+ * los días DESPUÉS de hoy: con las dos tarjetas una encima de la otra, «quedan 2 días» arriba y
+ * «quedan 3 días» abajo parecía un error. La cuenta por día sí incluye hoy (`diasQueQuedan`).
+ */
+internal fun rotuloDelPeriodo(d: DisponibleDelPeriodo): String {
+    val dias = when (val despuesDeHoy = d.diasQueQuedan - 1) {
+        0 -> "último día"
+        1 -> "queda 1 día"
+        else -> "quedan $despuesDeHoy días"
+    }
+    return "Este período · $dias"
+}
+
+/** «Esta semana», o con la aclaración cuando la semana se recorta en un borde del período. */
+internal fun rotuloDeLaSemana(d: DisponibleDelPeriodo): String =
+    if (d.semanaCorta) "Esta semana · semana corta: ${d.diasDeLaSemana} ${if (d.diasDeLaSemana == 1) "día" else "días"}"
+    else "Esta semana"
+
+/**
+ * **Cómo viene el período**: lo gastado contra lo previsto a hoy (la meta por los días corridos,
+ * hoy incluido, entre los días del período), y lo que queda repartido por día.
+ */
+internal fun comoVieneElPeriodo(d: DisponibleDelPeriodo): String {
+    val v = d.periodo
+    if (v.teQuedan < 0L) return "Te pasaste por ${formatMoneyCompact(-v.teQuedan)}"
+    if (v.teQuedan == 0L) return "Ya usaste todo el disponible del período"
+    // El último día lo previsto a hoy ES la meta: «vas $X por debajo» y «te quedan $X» serían la
+    // misma cifra dicha dos veces.
+    if (d.diasQueQuedan <= 1) return "Te quedan ${formatMoneyCompact(v.teQuedan)} para cerrar el período"
+    val ritmo = when {
+        v.contraElRitmo < 0L -> "Vas ${formatMoneyCompact(-v.contraElRitmo)} por debajo de lo previsto a hoy"
+        v.contraElRitmo > 0L -> "Vas ${formatMoneyCompact(v.contraElRitmo)} por encima de lo previsto a hoy"
+        else -> "Vas justo en lo previsto a hoy"
+    }
+    val porDia = d.porDiaParaLoQueQueda ?: 0L
+    return "$ritmo · te quedan ${formatMoneyCompact(v.teQuedan)}, unos ${formatMoneyCompact(porDia)} por día"
+}
+
+/** **Cómo viene la semana**: lo mismo que el período, dentro de los días de esta semana. */
+internal fun comoVieneLaSemana(d: DisponibleDelPeriodo): String {
+    val v = d.semana
+    return when {
+        v.teQuedan < 0L -> "Te pasaste de la meta de la semana por ${formatMoneyCompact(-v.teQuedan)}"
+        v.contraElRitmo > 0L -> "Vas ${formatMoneyCompact(v.contraElRitmo)} por encima del ritmo de la semana"
+        // Dentro del ritmo pero ya cerca de la meta (los últimos días): sin el «vas bien».
+        v.nivel == NivelDelGasto.CERCA -> "Te quedan ${formatMoneyCompact(v.teQuedan)} para esta semana"
+        else -> "Vas bien: te quedan ${formatMoneyCompact(v.teQuedan)} para esta semana"
+    }
+}
+
+/** **Cómo viene hoy**. */
+internal fun comoVieneHoy(d: DisponibleDelPeriodo): String {
+    val v = d.hoy
+    return if (v.teQuedan < 0L) "Te pasaste de la meta de hoy por ${formatMoneyCompact(-v.teQuedan)}"
+    else "Te quedan ${formatMoneyCompact(v.teQuedan)} para hoy"
 }

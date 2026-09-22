@@ -33,14 +33,19 @@ import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DisponibleDelPeriodo
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
 import com.jvillada.movi.ui.dashboard.VentanaDelDisponible
+import com.jvillada.movi.ui.dashboard.comoVieneElPeriodo
+import com.jvillada.movi.ui.dashboard.comoVieneHoy
+import com.jvillada.movi.ui.dashboard.comoVieneLaSemana
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
+import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
+import com.jvillada.movi.ui.dashboard.rotuloDelPeriodo
 
 /**
- * # «Disponible»: ingresos menos fijos, y cómo va el gasto contra eso
+ * # «Disponible»: ingresos menos fijos, dividido en metas por período, semana y día
  *
- * Tres filas —el período, esta semana, hoy—, cada una con lo gastado contra lo que se podía gastar
- * y una barra que se pone ámbar cerca del tope y roja al pasarlo. Debajo, lo que queda repartido
- * por día.
+ * Tres filas —el período, esta semana, hoy—, cada una con lo gastado en ella contra su meta, una
+ * barra que se pone ámbar al ir por encima del ritmo o cerca del tope y roja al pasarlo, y una
+ * frase de cómo viene. Las metas son fijas: arriba se dicen la de la semana y la del día.
  *
  * Toda la cuenta vive en `DisponibleDelPeriodo.kt`, que es puro y está probado; acá solo hay
  * disposición y color.
@@ -70,27 +75,14 @@ internal fun DisponibleDelPeriodoSection(
             Hairline()
             Spacer(Modifier.height(Movi.espacios.medio))
             if (disponible.hayMargen) {
-                FilaConBarra("Este período", disponible.periodo, pieDelPeriodo(disponible))
+                // Las tres filas siempre, con su meta, aunque el período ya esté pasado: la meta de
+                // la semana y la de hoy son la vara con la que se organiza lo que queda (#353 las
+                // escondía; el dueño las quiere a la vista).
+                FilaConBarra(rotuloDelPeriodo(disponible), disponible.periodo, comoVieneElPeriodo(disponible))
                 Spacer(Modifier.height(Movi.espacios.medio))
-                if (disponible.porDiaParaLoQueQueda != null) {
-                    FilaConBarra("Esta semana", disponible.semana, pieDeLaVentana(disponible.semana))
-                    Spacer(Modifier.height(Movi.espacios.medio))
-                    FilaConBarra("Hoy", disponible.hoy, pieDeLaVentana(disponible.hoy))
-                } else {
-                    // Con el período ya gastado, la parte de la semana y la de hoy no existen: decir
-                    // «te quedan $1,1M esta semana» debajo de «te pasaste por $13,4M» se contradice.
-                    // Queda solo lo gastado, como cuando no hay margen.
-                    FilaSinMargen("Esta semana", disponible.semana.gastado)
-                    FilaSinMargen("Hoy", disponible.hoy.gastado)
-                }
+                FilaConBarra(rotuloDeLaSemana(disponible), disponible.semana, comoVieneLaSemana(disponible))
                 Spacer(Modifier.height(Movi.espacios.medio))
-                Text(
-                    text = disponible.porDiaParaLoQueQueda
-                        ?.let { "Para lo que queda: ${formatMoneyCompact(it)} por día" }
-                        ?: "Ya gastaste todo el disponible del período",
-                    style = Movi.textos.cuerpo,
-                    color = if (disponible.porDiaParaLoQueQueda == null) Movi.colores.sale else Movi.colores.texto,
-                )
+                FilaConBarra("Hoy", disponible.hoy, comoVieneHoy(disponible))
             } else {
                 FilaSinMargen("Gastado este período", disponible.periodo.gastado)
                 FilaSinMargen("Esta semana", disponible.semana.gastado)
@@ -122,7 +114,13 @@ private fun Encabezado(d: DisponibleDelPeriodo) {
         style = Movi.textos.apoyo,
         color = Movi.colores.textoApagado,
     )
-    if (!d.hayMargen) {
+    if (d.hayMargen) {
+        Text(
+            text = "Meta por semana ${formatMoneyCompact(d.metaPorSemana)} · Meta por día ${formatMoneyCompact(d.metaPorDia)}",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+    } else {
         Spacer(Modifier.height(Movi.espacios.corto))
         Text(
             text = if (d.disponible < 0L) {
@@ -142,7 +140,7 @@ private fun Encabezado(d: DisponibleDelPeriodo) {
 }
 
 @Composable
-private fun FilaConBarra(titulo: String, ventana: VentanaDelDisponible, pie: String) {
+private fun FilaConBarra(titulo: String, ventana: VentanaDelDisponible, comoViene: String) {
     val color = colorDelNivel(ventana.nivel)
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -154,7 +152,7 @@ private fun FilaConBarra(titulo: String, ventana: VentanaDelDisponible, pie: Str
             )
             Spacer(Modifier.size(Movi.espacios.corto))
             Cifra(
-                "${formatMoneyCompact(ventana.gastado)} de ${formatMoneyCompact(ventana.disponible)}",
+                "${formatMoneyCompact(ventana.gastado)} de ${formatMoneyCompact(ventana.meta)}",
                 Movi.textos.monto,
                 color = if (ventana.nivel == NivelDelGasto.PASADO) Movi.colores.sale else Movi.colores.texto,
             )
@@ -182,9 +180,13 @@ private fun FilaConBarra(titulo: String, ventana: VentanaDelDisponible, pie: Str
         }
         Spacer(Modifier.height(Movi.espacios.minimo))
         Text(
-            text = pie,
+            text = comoViene,
             style = Movi.textos.apoyo,
-            color = if (ventana.nivel == NivelDelGasto.PASADO) Movi.colores.sale else Movi.colores.textoMedio,
+            color = when (ventana.nivel) {
+                NivelDelGasto.BIEN -> Movi.colores.textoMedio
+                NivelDelGasto.CERCA -> Movi.colores.aviso
+                NivelDelGasto.PASADO -> Movi.colores.sale
+            },
         )
     }
 }
@@ -210,22 +212,4 @@ private fun colorDelNivel(nivel: NivelDelGasto): Color = when (nivel) {
     NivelDelGasto.BIEN -> Movi.colores.marca
     NivelDelGasto.CERCA -> Movi.colores.aviso
     NivelDelGasto.PASADO -> Movi.colores.sale
-}
-
-/** «Te quedan $X» o «Te pasaste por $X». */
-internal fun pieDeLaVentana(ventana: VentanaDelDisponible): String =
-    if (ventana.teQuedan >= 0L) "Te quedan ${formatMoneyCompact(ventana.teQuedan)}"
-    else "Te pasaste por ${formatMoneyCompact(-ventana.teQuedan)}"
-
-/** Lo mismo que [pieDeLaVentana], con los días que quedan del período. */
-internal fun pieDelPeriodo(d: DisponibleDelPeriodo): String {
-    // Se dice como en «Tu plata», que cuenta los días DESPUÉS de hoy: con las dos tarjetas una
-    // encima de la otra, «quedan 2 días» arriba y «quedan 3 días» abajo parecía un error. La cuenta
-    // por día sí incluye hoy (`diasQueQuedan`); solo cambia cómo se nombra.
-    val dias = when (val despuesDeHoy = d.diasQueQuedan - 1) {
-        0 -> "último día"
-        1 -> "queda 1 día"
-        else -> "quedan $despuesDeHoy días"
-    }
-    return "${pieDeLaVentana(d.periodo)} · $dias"
 }
