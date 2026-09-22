@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
@@ -31,8 +32,33 @@ import kotlinx.datetime.plus
  * de la semana. El del día debe ir sumando el movimiento del día»*. Así que cada ventana tiene una
  * meta fija (ver [DisponibleDelPeriodo]) y una frase de cómo viene contra ella.
  *
+ * **Y después lo corrigió** (ver `PlataDelPeriodo.kt` en `:core`): vio «te pasaste por $11M» con
+ * plata en su cuenta principal, porque los gastos grandes se pagaron con un préstamo y con un
+ * ahorro, y lo que tenía el primer día no contaba. Decidió que **lo que tenías al empezar el
+ * período cuenta** y que **la plata que entra de un préstamo o de un ahorro cuenta**. Cuando el
+ * server manda esas cifras ([PlataDelDisponible]):
+ *
+ * - **Disponible** = lo que tenías en «Tu plata» al empezar + lo que entró (ingresos en Tu plata,
+ *   traspasos desde un préstamo o un ahorro, lo que un ahorro pagó directo) − lo que guardaste en
+ *   un ahorro de afuera + los ingresos del checklist que faltan − fijos.
+ *
+ * Con un server anterior a esos campos se sigue usando «ingresos menos fijos».
+ *
  * Todo es puro: el «hoy» y los bordes del período entran por parámetro.
  */
+
+/**
+ * Lo que el server manda de «Tu plata» para el Disponible (ver `DashboardSummary`): lo que había
+ * al empezar el período, lo que entró y lo que se guardó afuera. Todo en pesos.
+ */
+data class PlataDelDisponible(val saldoAlInicio: Long, val entradas: Long, val guardado: Long)
+
+/** [PlataDelDisponible] de la respuesta del server, o `null` si el server es anterior a los campos. */
+fun plataDelDisponibleDe(summary: DashboardSummary): PlataDelDisponible? {
+    val saldo = summary.saldoTuPlataAlInicio ?: return null
+    val entradas = summary.entradasDelPeriodo ?: return null
+    return PlataDelDisponible(saldoAlInicio = saldo, entradas = entradas, guardado = summary.guardadoDelPeriodo ?: 0L)
+}
 
 /**
  * Cómo va una ventana contra su meta. Decide el color de la barra y de la frase «cómo viene»:
@@ -98,9 +124,22 @@ data class DisponibleDelPeriodo(
     val periodo: VentanaDelDisponible,
     val semana: VentanaDelDisponible,
     val hoy: VentanaDelDisponible,
+    /** El día del mes en que empezó el período: el «25» de «Tenías $X el 25». */
+    val diaDeInicio: Int = 1,
+    /**
+     * Lo que tenías al empezar y lo que entró, si el server lo manda. `null` = server viejo: el
+     * disponible vuelve a ser «ingresos menos fijos».
+     */
+    val plata: PlataDelDisponible? = null,
 ) {
     val ingresos: Long get() = ingresosRecibidos + ingresosPorRecibir
-    val disponible: Long get() = ingresos - fijos
+
+    /** Lo que hubo para el período antes de los fijos. */
+    val recursos: Long get() =
+        if (plata == null) ingresos
+        else plata.saldoAlInicio + plata.entradas - plata.guardado + ingresosPorRecibir
+
+    val disponible: Long get() = recursos - fijos
     val hayMargen: Boolean get() = disponible > 0L
 
     /** La meta de un día cualquiera del período. Cero sin margen. */
@@ -143,9 +182,9 @@ fun ingresosPorRecibirDelPeriodo(checklist: List<PagoDelPeriodo>): Long =
         .sumOf { it.monto }
 
 /**
- * La tarjeta entera, o `null` si no hay nada honesto que decir: sin ingresos (un usuario que recién
- * empieza, o que todavía no anotó su sueldo) «ingresos menos fijos» no significa nada, y un
- * «disponible −$1.850.000» a quien solo anotó el arriendo lo asustaría sin razón.
+ * La tarjeta entera, o `null` si no hay nada honesto que decir: sin ingresos ni plata (un usuario
+ * que recién empieza, o que todavía no anotó su sueldo ni sus cuentas) el disponible no significa
+ * nada, y un «disponible −$1.850.000» a quien solo anotó el arriendo lo asustaría sin razón.
  *
  * @param ingresosRecibidos la cifra «Ingresos» del Inicio: lo que ya entró en el período, con la
  *   regla de siempre (sin traspasos, sin «Por confirmar», sin anulados).
@@ -154,6 +193,8 @@ fun ingresosPorRecibirDelPeriodo(checklist: List<PagoDelPeriodo>): Long =
  * @param finExclusivo primer día del período siguiente.
  * @param hoy la fecha de hoy en Bogotá. Fuera del período devuelve `null`: la tarjeta habla del
  *   período en curso y nada más.
+ * @param plata lo que tenías al empezar y lo que entró (ver [PlataDelDisponible]); `null` con un
+ *   server viejo, y entonces el disponible es «ingresos menos fijos».
  */
 fun disponibleDelPeriodo(
     ingresosRecibidos: Long,
@@ -162,15 +203,18 @@ fun disponibleDelPeriodo(
     inicio: LocalDate,
     finExclusivo: LocalDate,
     hoy: LocalDate,
+    plata: PlataDelDisponible? = null,
 ): DisponibleDelPeriodo? {
     val diasDelPeriodo = inicio.daysUntil(finExclusivo)
     if (diasDelPeriodo <= 0 || hoy < inicio || hoy >= finExclusivo) return null
 
     val porRecibir = ingresosPorRecibirDelPeriodo(checklist)
     val recibidos = ingresosRecibidos.coerceAtLeast(0L)
-    if (recibidos + porRecibir <= 0L) return null
+    val recursos = if (plata == null) recibidos + porRecibir
+    else plata.saldoAlInicio + plata.entradas - plata.guardado + porRecibir
+    if (recursos <= 0L) return null
     val fijos = fijosDelPeriodo(checklist)
-    val disponible = recibidos + porRecibir - fijos
+    val disponible = recursos - fijos
 
     val ultimoDia = finExclusivo.minus(1, DateTimeUnit.DAY)
     val gastoPorFecha: Map<LocalDate, Long> = gastoVariablePorDia.mapNotNull { (dia, monto) ->
@@ -215,12 +259,43 @@ fun disponibleDelPeriodo(
             esperadoAHoy = metaPorDia * diasCorridosDeLaSemana,
         ),
         hoy = VentanaDelDisponible(gastado = gastadoEntre(hoy, hoy), meta = metaPorDia, esperadoAHoy = metaPorDia),
+        diaDeInicio = inicio.dayOfMonth,
+        plata = plata,
     )
 }
 
 // ── Lo que dice cada fila ────────────────────────────────────────────────────
 //
 // Puro y aparte de la pantalla para que las pruebas lean las frases exactas. Todo en tuteo.
+
+/**
+ * **De dónde sale el disponible**, en una o dos líneas que caben a 390 px.
+ *
+ * Con lo que manda el server: «Tenías $X el 25 · entraron $Y» y abajo los fijos, precedidos de lo
+ * que falta por recibir y lo que guardaste cuando los hay («Por recibir $P · guardaste $W · fijos
+ * $Z»). Con un server viejo, la línea de siempre: «Ingresos $A menos fijos $B».
+ */
+internal fun desgloseDelDisponible(d: DisponibleDelPeriodo): List<String> {
+    val plata = d.plata ?: return listOf("Ingresos ${formatMoneyCompact(d.ingresos)} menos fijos ${formatMoneyCompact(d.fijos)}")
+    val tenias = "Tenías ${formatMoneyCompact(plata.saldoAlInicio)} el ${d.diaDeInicio}"
+    val primera = "$tenias · entraron ${formatMoneyCompact(plata.entradas)}"
+    val segunda = listOfNotNull(
+        if (d.ingresosPorRecibir > 0L) "por recibir ${formatMoneyCompact(d.ingresosPorRecibir)}" else null,
+        if (plata.guardado > 0L) "guardaste ${formatMoneyCompact(plata.guardado)}" else null,
+        "fijos ${formatMoneyCompact(d.fijos)}",
+    ).joinToString(" · ").replaceFirstChar { it.uppercase() }
+    return listOf(primera, segunda)
+}
+
+/** La frase cuando no hay margen: los fijos se llevan todo, o más de todo. */
+internal fun sinMargen(d: DisponibleDelPeriodo): String {
+    if (d.plata == null) {
+        return if (d.disponible < 0L) "Los fijos del período superan tus ingresos por ${formatMoneyCompact(-d.disponible)}"
+        else "Los fijos del período se llevan todos tus ingresos"
+    }
+    return if (d.disponible < 0L) "Los fijos del período superan lo que tenías y lo que entró por ${formatMoneyCompact(-d.disponible)}"
+    else "Los fijos del período se llevan todo lo que tenías y lo que entró"
+}
 
 /**
  * El rótulo de la fila del período, con los días que quedan dichos como en «Tu plata», que cuenta

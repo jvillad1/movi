@@ -36,12 +36,14 @@ import com.jvillada.movi.ui.dashboard.VentanaDelDisponible
 import com.jvillada.movi.ui.dashboard.comoVieneElPeriodo
 import com.jvillada.movi.ui.dashboard.comoVieneHoy
 import com.jvillada.movi.ui.dashboard.comoVieneLaSemana
+import com.jvillada.movi.ui.dashboard.desgloseDelDisponible
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
+import com.jvillada.movi.ui.dashboard.sinMargen
 import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
 import com.jvillada.movi.ui.dashboard.rotuloDelPeriodo
 
 /**
- * # «Disponible»: ingresos menos fijos, dividido en metas por período, semana y día
+ * # «Disponible»: lo que tenías y lo que entró, menos fijos, dividido en metas por período, semana y día
  *
  * Tres filas —el período, esta semana, hoy—, cada una con lo gastado en ella contra su meta, una
  * barra que se pone ámbar al ir por encima del ritmo o cerca del tope y roja al pasarlo, y una
@@ -50,7 +52,7 @@ import com.jvillada.movi.ui.dashboard.rotuloDelPeriodo
  * Toda la cuenta vive en `DisponibleDelPeriodo.kt`, que es puro y está probado; acá solo hay
  * disposición y color.
  *
- * **Cuando los fijos superan los ingresos lo dice con todas las letras** y no dibuja barras: una
+ * **Cuando los fijos superan lo que hay lo dice con todas las letras** y no dibuja barras: una
  * barra contra un disponible negativo no tiene largo que signifique algo. Las cifras de lo gastado
  * se siguen mostrando, porque son lo único sobre lo que se puede actuar hoy.
  */
@@ -109,11 +111,15 @@ private fun Encabezado(d: DisponibleDelPeriodo) {
         )
     }
     Spacer(Modifier.height(Movi.espacios.minimo))
-    Text(
-        text = "Ingresos ${formatMoneyCompact(d.ingresos)} menos fijos ${formatMoneyCompact(d.fijos)}",
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoApagado,
-    )
+    // De dónde sale: «Tenías $X el 25 · entraron $Y» y abajo los fijos. Dos líneas cortas y no
+    // una larga, para que quepa a 390 px con la letra grande del teléfono.
+    desgloseDelDisponible(d).forEach { linea ->
+        Text(
+            text = linea,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+        )
+    }
     if (d.hayMargen) {
         Text(
             text = "Meta por semana ${formatMoneyCompact(d.metaPorSemana)} · Meta por día ${formatMoneyCompact(d.metaPorDia)}",
@@ -123,11 +129,7 @@ private fun Encabezado(d: DisponibleDelPeriodo) {
     } else {
         Spacer(Modifier.height(Movi.espacios.corto))
         Text(
-            text = if (d.disponible < 0L) {
-                "Los fijos del período superan tus ingresos por ${formatMoneyCompact(-d.disponible)}"
-            } else {
-                "Los fijos del período se llevan todos tus ingresos"
-            },
+            text = sinMargen(d),
             style = Movi.textos.cuerpo,
             color = Movi.colores.sale,
         )

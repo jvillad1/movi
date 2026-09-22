@@ -18,6 +18,12 @@ import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.gastoVariablePorDia
+import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.shared.model.CuentaDelDisponible
+import com.jvillada.movi.shared.model.SumaDeMovimientos
+import com.jvillada.movi.shared.model.normalizarCondicion
+import com.jvillada.movi.shared.model.plataDelPeriodo
+import com.jvillada.movi.shared.model.saldoDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -40,6 +46,7 @@ import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.sum
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
@@ -126,6 +133,14 @@ fun Route.dashboardRoutes() {
             val captura = capturaDeSms(filasDeSms.map { it.first })
             val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
             val sellos = loadOccurrenceRows(uid)
+            // La tarjeta «Disponible» cuenta lo que había en «Tu plata» al empezar el período y lo
+            // que le entró de afuera (un préstamo, un ahorro). Ver `PlataDelPeriodo.kt` en :core.
+            val cuentas = cuentasDelDisponible(uid)
+            val plata = plataDelPeriodo(
+                saldoAlInicio = saldoDeTuPlata(sumasAntesDe(uid, monthStart, voidedIds, cuentas), cuentas),
+                eventos = eventosDelPeriodo,
+                cuentas = cuentas,
+            )
 
             DashboardSummary(
                 scope = scope,
@@ -160,6 +175,9 @@ fun Route.dashboardRoutes() {
                     ),
                     diaDe = { epochMillisToAppDateString(it) },
                 ),
+                saldoTuPlataAlInicio = plata.saldoAlInicio,
+                entradasDelPeriodo = plata.entradas,
+                guardadoDelPeriodo = plata.guardado,
             )
         }
         call.respond(summary)
@@ -200,6 +218,47 @@ private fun Transaction.monthCashFlow(
         .groupBy { it[Events.category] }
         .mapValues { (_, r) -> r.sumOf { it[Events.amount] } }
     return income to spentByCategory
+}
+
+/** Todas las cuentas del usuario con lo que el Disponible necesita saber de cada una. Una consulta. */
+private fun Transaction.cuentasDelDisponible(uid: String): Map<String, CuentaDelDisponible> =
+    Accounts.select(Accounts.id, Accounts.type, Accounts.conditionedTo)
+        .where { Accounts.userId eq uid }
+        .mapNotNull { row ->
+            val tipo = runCatching { AccountType.valueOf(row[Accounts.type]) }.getOrNull() ?: return@mapNotNull null
+            // `normalizarCondicion`: el mismo helper con el que la cuenta sale a la app, para que
+            // una condición en blanco no deje la cuenta fuera de Tu plata solo de este lado.
+            row[Accounts.id] to CuentaDelDisponible(tipo, normalizarCondicion(row[Accounts.conditionedTo]))
+        }
+        .toMap()
+
+/**
+ * Los movimientos en pesos de las cuentas de «Tu plata» **anteriores a [antesDe]**, sumados por
+ * cuenta y tipo en SQL: una sola consulta que devuelve unas pocas filas, sin traer la historia ni
+ * recorrer cuenta por cuenta. Sin anulados; los «Por confirmar» sí, porque el saldo los incluye.
+ */
+private fun Transaction.sumasAntesDe(
+    uid: String,
+    antesDe: Long,
+    voidedIds: Set<String>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): List<SumaDeMovimientos> {
+    val deTuPlata = cuentas.filterValues { it.esTuPlata }.keys.toList()
+    if (deTuPlata.isEmpty()) return emptyList()
+    val total = Events.amount.sum()
+    return Events.select(Events.accountId, Events.type, total)
+        .where {
+            val base = (Events.userId eq uid) and
+                (Events.currency eq "COP") and
+                (Events.timestamp less antesDe) and
+                (Events.accountId inList deTuPlata)
+            if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds.toList())
+        }
+        .groupBy(Events.accountId, Events.type)
+        .mapNotNull { row ->
+            val tipo = runCatching { TransactionType.valueOf(row[Events.type]) }.getOrNull() ?: return@mapNotNull null
+            SumaDeMovimientos(row[Events.accountId], tipo, row[total] ?: 0L)
+        }
 }
 
 /**
