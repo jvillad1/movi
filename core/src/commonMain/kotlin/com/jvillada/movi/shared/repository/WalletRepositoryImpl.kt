@@ -29,6 +29,8 @@ import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.MovimientosDelDestino
 import com.jvillada.movi.shared.model.DeleteBudgetRequest
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
@@ -225,6 +227,41 @@ class WalletRepositoryImpl(
     override suspend fun deleteGoal(id: String) {
         client.delete("$baseUrl/api/goals/$id")
     }
+
+    override suspend fun getDestinos(): List<DestinoConocido> =
+        client.get("$baseUrl/api/destinos").body()
+
+    // Mismo idioma que createGoal/createCard: los tres rechazos de un destino (400 por la forma,
+    // 409 por repetido, 422 por ser una cuenta suya) traen su texto del server, y ese texto es el
+    // que la hoja muestra. Deserializar a ciegas sobre el 4xx lo perdería.
+    override suspend fun createDestino(destino: DestinoConocido): DestinoConocido {
+        val response = client.post("$baseUrl/api/destinos") {
+            contentType(ContentType.Application.Json)
+            setBody(destino)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido {
+        val response = client.put("$baseUrl/api/destinos/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(destino)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    override suspend fun deleteDestino(id: String) {
+        client.delete("$baseUrl/api/destinos/$id")
+    }
+
+    override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino =
+        client.get("$baseUrl/api/destinos/$id/movimientos").body()
 
     override suspend fun getSmsMessages(): List<SmsMessage> =
         client.get("$baseUrl/api/sms").body()

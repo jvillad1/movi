@@ -49,6 +49,13 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun updateGoal(id: String, goal: Goal): Goal = noUsado("updateGoal")
     // `: Unit` explícito: con el tipo inferido (`Nothing`) una prueba no podría sobrescribirlo con uno que vuelve.
     override suspend fun deleteGoal(id: String): Unit = noUsado("deleteGoal")
+    override suspend fun getDestinos(): List<DestinoConocido> = noUsado("getDestinos")
+    override suspend fun createDestino(destino: DestinoConocido): DestinoConocido = noUsado("createDestino")
+    override suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido = noUsado("updateDestino")
+    // `: Unit` explícito, por lo mismo que deleteGoal: con `Nothing` inferido una prueba no podría
+    // sobrescribirlo con un cuerpo que vuelve.
+    override suspend fun deleteDestino(id: String): Unit = noUsado("deleteDestino")
+    override suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino = noUsado("getMovimientosDelDestino")
     override suspend fun getSmsMessages(): List<SmsMessage> = noUsado("getSmsMessages")
     override suspend fun getSms(id: String): SmsMessage = noUsado("getSms")
     override suspend fun parseSms(id: String): ParsedSms = noUsado("parseSms")

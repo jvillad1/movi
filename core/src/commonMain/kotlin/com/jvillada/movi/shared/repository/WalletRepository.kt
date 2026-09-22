@@ -23,6 +23,8 @@ import com.jvillada.movi.shared.model.TransferResult
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.MovimientosDelDestino
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -90,6 +92,34 @@ interface WalletRepository {
     suspend fun createGoal(goal: Goal): Goal
     suspend fun updateGoal(id: String, goal: Goal): Goal
     suspend fun deleteGoal(id: String)
+
+    // ── Cuentas de otros (destinos conocidos) ─────────────────────────────────
+
+    /**
+     * **Las cuentas ajenas que el dueño registró**, con lo que le mandó a cada una ya calculado
+     * (ver [DestinoConocido.totales], derivado en cada lectura).
+     *
+     * **Solo en línea, a propósito**: esto no tiene espejo local. Es un registro que se edita una
+     * vez —un número de cuenta no cambia— y los totales salen de cruzar TODOS los movimientos del
+     * dueño, que es una cuenta que el teléfono haría distinta de la del server mientras tenga filas
+     * sin sincronizar. Un total de plata que da dos números según dónde se mire es peor que un total
+     * que no se puede ver sin señal.
+     */
+    suspend fun getDestinos(): List<DestinoConocido>
+
+    /**
+     * Registra una cuenta ajena. 400 si el nombre o el número no sirven (ver `rechazoDelDestino`),
+     * 409 si ya hay otro destino con esos últimos cuatro dígitos, y **422 si ese número es de una
+     * cuenta suya** — el rechazo que evita que Movi le ponga el nombre de otra persona a un
+     * movimiento propio (ver `cuentaPropiaConEseNumero`).
+     */
+    suspend fun createDestino(destino: DestinoConocido): DestinoConocido
+    suspend fun updateDestino(id: String, destino: DestinoConocido): DestinoConocido
+    suspend fun deleteDestino(id: String)
+
+    /** Los movimientos que fueron a ese destino, del más reciente al más viejo. 404 si no es suyo. */
+    suspend fun getMovimientosDelDestino(id: String): MovimientosDelDestino
+
     suspend fun getSmsMessages(): List<SmsMessage>
     suspend fun getSms(id: String): SmsMessage
     suspend fun parseSms(id: String): ParsedSms

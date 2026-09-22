@@ -85,6 +85,7 @@ fun Application.configureRouting() {
             cardRoutes()
             subscriptionRoutes()
             goalRoutes()
+            destinoRoutes()
             screenRoutes()
             pushRoutes()
             reminderRoutes()

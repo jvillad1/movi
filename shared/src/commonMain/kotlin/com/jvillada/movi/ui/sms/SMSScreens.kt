@@ -430,6 +430,7 @@ fun SMSReconcileScreen(onNavigate: (Screen) -> Unit, smsId: String) {
                     categoria = cat,
                     // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelSms].
                     momento = momentoDelSms(sms?.time.orEmpty(), ahora = Clock.System.now().toEpochMilliseconds()),
+                    textoDelSms = sms?.text.orEmpty(),
                 )
                 Repositories.wallets.postEvent(event)
                 Repositories.wallets.confirmSms(smsId)
@@ -878,6 +879,20 @@ internal fun movimientoConfirmadoDelSms(
     leido: ParsedSms,
     categoria: String,
     momento: Long,
+    /**
+     * **El SMS completo, guardado con el movimiento.**
+     *
+     * Es el mismo papel que ya cumple `rawPayload` en una fila importada de un extracto (ver
+     * `StatementRoutes`): el texto del banco del que salió este movimiento. Hasta acá el camino del
+     * SMS lo tiraba, y eso costaba algo concreto: el número de cuenta que el banco escribió es el
+     * ÚNICO dato que sobrevive a que el dueño le cambie el nombre al movimiento, y sin él «lo que
+     * le mandé a Caro» dejaba de encontrar un envío apenas él lo renombraba a «Mercado» — que es
+     * exactamente lo que hizo con los tres que ya tiene. Ver `vaHaciaElDestino` en `:core`.
+     *
+     * Vacío por defecto no: es obligatorio a propósito. Un default lo habría dejado pasar en
+     * silencio en cualquier call site nuevo, y este dato es el que hace auditable una cifra.
+     */
+    textoDelSms: String,
 ): FinancialEvent = FinancialEvent(
     id = id,
     accountId = cuentaId,
@@ -888,6 +903,7 @@ internal fun movimientoConfirmadoDelSms(
     description = leido.merchant,
     merchant = leido.merchant,
     source = EventSource.SMS,
+    rawPayload = textoDelSms.ifBlank { null },
     reconciliationStatus = ReconciliationStatus.RECONCILED,
     timestamp = momento,
 )
