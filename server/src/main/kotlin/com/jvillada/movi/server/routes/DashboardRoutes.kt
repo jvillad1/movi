@@ -14,6 +14,8 @@ import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.server.reminders.parteFijaDelChecklist
+import com.jvillada.movi.server.reminders.cuotasDelChecklistPagadas
+import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
@@ -23,6 +25,7 @@ import com.jvillada.movi.shared.model.CuentaDelDisponible
 import com.jvillada.movi.shared.model.SumaDeMovimientos
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.shared.model.plataDelPeriodo
+import com.jvillada.movi.shared.model.pagosDeDeudaFueraDelChecklist
 import com.jvillada.movi.shared.model.saldoDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -104,6 +107,11 @@ fun Route.dashboardRoutes() {
         // devuelve el mes civil, igual que antes.
         val month = periodoDe(ahora, periodo).prefijo
 
+        // Las cuotas de los créditos (reglas sintéticas), para saber qué pago de cuota ya está en
+        // los fijos del checklist. Una consulta (créditos con su cuenta), fuera del `dbQuery` de
+        // abajo porque abre el suyo.
+        val reglasDeCredito = loadCreditRulePairs(uid).map { it.first }
+
         val summary = dbQuery {
             val accountTypeById = accountTypesFor(uid)
             val voidedIds = VoidEvents.selectAll()
@@ -142,6 +150,18 @@ fun Route.dashboardRoutes() {
                 cuentas = cuentas,
             )
 
+            val hoy = epochMillisToAppDate(ahora)
+            val parteFija = parteFijaDelChecklist(
+                reglas = RecurringRules.selectAll()
+                    .where { RecurringRules.userId eq uid }
+                    .map { it.toRule() },
+                sellos = sellos,
+                ocurridos = loadOccurredBy(uid, sellos),
+                eventos = eventosDelPeriodo,
+                hoy = hoy,
+                settings = periodo,
+            )
+
             DashboardSummary(
                 scope = scope,
                 month = month,
@@ -163,21 +183,20 @@ fun Route.dashboardRoutes() {
                 // (`gastoVariablePorDia`).
                 gastoVariablePorDia = gastoVariablePorDia(
                     eventos = eventosDelPeriodo,
-                    parteFija = parteFijaDelChecklist(
-                        reglas = RecurringRules.selectAll()
-                            .where { RecurringRules.userId eq uid }
-                            .map { it.toRule() },
-                        sellos = sellos,
-                        ocurridos = loadOccurredBy(uid, sellos),
-                        eventos = eventosDelPeriodo,
-                        hoy = epochMillisToAppDate(ahora),
-                        settings = periodo,
-                    ),
+                    parteFija = parteFija,
                     diaDe = { epochMillisToAppDateString(it) },
                 ),
                 saldoTuPlataAlInicio = plata.saldoAlInicio,
                 entradasDelPeriodo = plata.entradas,
                 guardadoDelPeriodo = plata.guardado,
+                // Lo que salió de Tu plata a una deuda sin que los fijos ni el variable lo cuenten
+                // (ver `pagosDeDeudaFueraDelChecklist` en :core). Lo que ya está en los fijos: la
+                // parte que un recurrente reclamó y la cuota de un crédito del checklist.
+                pagosDeDeudaFueraDelChecklist = pagosDeDeudaFueraDelChecklist(
+                    eventos = eventosDelPeriodo,
+                    cuentas = cuentas,
+                    enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
+                ),
             )
         }
         call.respond(summary)

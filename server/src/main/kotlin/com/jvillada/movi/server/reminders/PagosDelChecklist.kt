@@ -7,6 +7,8 @@ import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.cuentaComoGastoVariable
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -145,7 +147,12 @@ fun parteFijaDelChecklist(
 
     // Solo lo que de verdad cuenta como gasto variable puede pagar un fijo acá: un movimiento en
     // «Por confirmar» no suma en el variable, y si reclamara la regla dejaría afuera al real.
-    val elegibles = eventos.filter { cuentaComoGastoVariable(it) && it.id !in parte }
+    //
+    // Y además un gasto con la categoría de cuota: no suma en el variable (sale entero por su
+    // categoría), pero si un recurrente real —«Crédito Papá»— lo paga, esa plata ya está en los
+    // fijos y no puede volver a restarse como «otro pago de deuda» (ver
+    // `pagosDeDeudaFueraDelChecklist` en :core). Su parte fija no cambia el variable: ya era cero.
+    val elegibles = eventos.filter { (cuentaComoGastoVariable(it) || esCuotaQueSaleDelBolsillo(it)) && it.id !in parte }
     val pares = falta.keys.flatMap { ruleId ->
         val regla = reglaPorId.getValue(ruleId)
         candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings)
@@ -162,4 +169,46 @@ fun parteFijaDelChecklist(
         falta[ruleId] = resto - pagado
     }
     return parte
+}
+
+/** Un gasto en pesos, que cuenta en «Gastos», con la categoría de la cuota de un crédito. */
+private fun esCuotaQueSaleDelBolsillo(evento: FinancialEvent): Boolean =
+    evento.type == TransactionType.EXPENSE &&
+        evento.currency == "COP" &&
+        evento.category == CUOTA_CATEGORY &&
+        cuentaEnGastosEIngresos(evento)
+
+/**
+ * **La plata que pagó la cuota de un crédito del checklist del período**: id del movimiento que
+ * salió de la cuenta → su monto.
+ *
+ * Es la misma fila que `GET /api/payments/occurrences` deriva para la cuota de un crédito (ver
+ * `ReminderRoutes.kt` y [pagosDeDeudaPorPeriodo]): el vencimiento por preguntar, el pago que salda
+ * su período y la plata que de verdad salió ([plataQueSalio]), que es el `montoPagado` con el que
+ * el cliente suma esa cuota en los fijos. Y solo si el vencimiento cae en el período, igual que el
+ * checklist del cliente.
+ *
+ * Lo usa `pagosDeDeudaFueraDelChecklist` (en :core) para no restar dos veces una cuota que ya está
+ * en los fijos. Todo en memoria sobre los movimientos del período que la ruta ya leyó.
+ */
+fun cuotasDelChecklistPagadas(
+    reglasDeCredito: List<RecurringRule>,
+    eventos: List<FinancialEvent>,
+    hoy: LocalDate,
+    settings: PeriodSettings,
+    zone: ZoneId = AppClock.zone,
+): Map<String, Long> {
+    if (reglasDeCredito.isEmpty()) return emptyMap()
+    val pagos = eventos.filter { it.category in CATEGORIAS_QUE_SALDAN }
+    val dias = diasDelPeriodo(hoy, settings, zone)
+    return pagosDeDeudaPorPeriodo(reglasDeCredito, pagos, zone = zone, settings = settings)
+        .mapNotNull { (ruleId, porPeriodo) ->
+            val regla = reglasDeCredito.first { it.id == ruleId }
+            val vence = ocurrenciaPorPreguntar(hoy, regla, settings, zone = zone) ?: return@mapNotNull null
+            if (vence !in dias) return@mapNotNull null
+            val pago = porPeriodo[periodOf(vence)] ?: return@mapNotNull null
+            val salida = plataQueSalio(pago, pagos)
+            salida.id to salida.amount
+        }
+        .toMap()
 }

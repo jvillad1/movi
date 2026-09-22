@@ -40,7 +40,12 @@ import kotlinx.datetime.plus
  *
  * - **Disponible** = lo que tenías en «Tu plata» al empezar + lo que entró (ingresos en Tu plata,
  *   traspasos desde un préstamo o un ahorro, lo que un ahorro pagó directo) − lo que guardaste en
- *   un ahorro de afuera + los ingresos del checklist que faltan − fijos.
+ *   un ahorro de afuera + los ingresos del checklist que faltan − fijos − otros pagos de deuda
+ *   (cuotas que ningún ítem del checklist reclama y pagos de tarjeta que pagan deuda de antes del
+ *   período: plata que sale de Tu plata sin que los fijos ni el gasto variable la cuenten).
+ *
+ * Así cierra la identidad: lo que queda (Disponible − gasto variable) = Tu plata hoy + ingresos por
+ * recibir − fijos pendientes − compras con tarjeta sin pagar.
  *
  * Con un server anterior a esos campos se sigue usando «ingresos menos fijos».
  *
@@ -51,13 +56,31 @@ import kotlinx.datetime.plus
  * Lo que el server manda de «Tu plata» para el Disponible (ver `DashboardSummary`): lo que había
  * al empezar el período, lo que entró y lo que se guardó afuera. Todo en pesos.
  */
-data class PlataDelDisponible(val saldoAlInicio: Long, val entradas: Long, val guardado: Long)
+data class PlataDelDisponible(
+    val saldoAlInicio: Long,
+    val entradas: Long,
+    val guardado: Long,
+    /**
+     * Lo que salió de Tu plata a una deuda sin que los fijos ni el gasto variable lo cuenten: una
+     * cuota que ningún ítem del checklist reclama, o un pago de tarjeta que paga deuda de antes del
+     * período. Ver `pagosDeDeudaFueraDelChecklist` en `:core`. Cero con un server que no lo manda.
+     */
+    val otrosPagosDeDeuda: Long = 0L,
+) {
+    /** Lo que hubo para el período antes de los fijos y de lo que falta por recibir. */
+    val neto: Long get() = saldoAlInicio + entradas - guardado - otrosPagosDeDeuda
+}
 
 /** [PlataDelDisponible] de la respuesta del server, o `null` si el server es anterior a los campos. */
 fun plataDelDisponibleDe(summary: DashboardSummary): PlataDelDisponible? {
     val saldo = summary.saldoTuPlataAlInicio ?: return null
     val entradas = summary.entradasDelPeriodo ?: return null
-    return PlataDelDisponible(saldoAlInicio = saldo, entradas = entradas, guardado = summary.guardadoDelPeriodo ?: 0L)
+    return PlataDelDisponible(
+        saldoAlInicio = saldo,
+        entradas = entradas,
+        guardado = summary.guardadoDelPeriodo ?: 0L,
+        otrosPagosDeDeuda = summary.pagosDeDeudaFueraDelChecklist ?: 0L,
+    )
 }
 
 /**
@@ -137,7 +160,7 @@ data class DisponibleDelPeriodo(
     /** Lo que hubo para el período antes de los fijos. */
     val recursos: Long get() =
         if (plata == null) ingresos
-        else plata.saldoAlInicio + plata.entradas - plata.guardado + ingresosPorRecibir
+        else plata.neto + ingresosPorRecibir
 
     val disponible: Long get() = recursos - fijos
     val hayMargen: Boolean get() = disponible > 0L
@@ -211,7 +234,7 @@ fun disponibleDelPeriodo(
     val porRecibir = ingresosPorRecibirDelPeriodo(checklist)
     val recibidos = ingresosRecibidos.coerceAtLeast(0L)
     val recursos = if (plata == null) recibidos + porRecibir
-    else plata.saldoAlInicio + plata.entradas - plata.guardado + porRecibir
+    else plata.neto + porRecibir
     if (recursos <= 0L) return null
     val fijos = fijosDelPeriodo(checklist)
     val disponible = recursos - fijos
@@ -272,8 +295,9 @@ fun disponibleDelPeriodo(
  * **De dónde sale el disponible**, en una o dos líneas que caben a 390 px.
  *
  * Con lo que manda el server: «Tenías $X el 25 · entraron $Y» y abajo los fijos, precedidos de lo
- * que falta por recibir y lo que guardaste cuando los hay («Por recibir $P · guardaste $W · fijos
- * $Z»). Con un server viejo, la línea de siempre: «Ingresos $A menos fijos $B».
+ * que falta por recibir y lo que guardaste cuando los hay, y seguidos de los otros pagos de deuda
+ * («Por recibir $P · guardaste $W · fijos $Z · otros pagos de deuda $D»). Con un server viejo, la
+ * línea de siempre: «Ingresos $A menos fijos $B».
  */
 internal fun desgloseDelDisponible(d: DisponibleDelPeriodo): List<String> {
     val plata = d.plata ?: return listOf("Ingresos ${formatMoneyCompact(d.ingresos)} menos fijos ${formatMoneyCompact(d.fijos)}")
@@ -283,6 +307,7 @@ internal fun desgloseDelDisponible(d: DisponibleDelPeriodo): List<String> {
         if (d.ingresosPorRecibir > 0L) "por recibir ${formatMoneyCompact(d.ingresosPorRecibir)}" else null,
         if (plata.guardado > 0L) "guardaste ${formatMoneyCompact(plata.guardado)}" else null,
         "fijos ${formatMoneyCompact(d.fijos)}",
+        if (plata.otrosPagosDeDeuda > 0L) "otros pagos de deuda ${formatMoneyCompact(plata.otrosPagosDeDeuda)}" else null,
     ).joinToString(" · ").replaceFirstChar { it.uppercase() }
     return listOf(primera, segunda)
 }
@@ -293,8 +318,10 @@ internal fun sinMargen(d: DisponibleDelPeriodo): String {
         return if (d.disponible < 0L) "Los fijos del período superan tus ingresos por ${formatMoneyCompact(-d.disponible)}"
         else "Los fijos del período se llevan todos tus ingresos"
     }
-    return if (d.disponible < 0L) "Los fijos del período superan lo que tenías y lo que entró por ${formatMoneyCompact(-d.disponible)}"
-    else "Los fijos del período se llevan todo lo que tenías y lo que entró"
+    // Con otros pagos de deuda, los fijos solos pueden no ser los que se llevan todo: se nombran los dos.
+    val quienes = if (d.plata.otrosPagosDeDeuda > 0L) "Los fijos y los otros pagos de deuda" else "Los fijos del período"
+    return if (d.disponible < 0L) "$quienes superan lo que tenías y lo que entró por ${formatMoneyCompact(-d.disponible)}"
+    else "$quienes se llevan todo lo que tenías y lo que entró"
 }
 
 /**
