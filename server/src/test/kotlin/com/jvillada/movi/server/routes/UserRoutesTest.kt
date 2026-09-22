@@ -59,6 +59,13 @@ class UserRoutesTest {
 
     @BeforeTest
     fun setUp() {
+        // Las pruebas de cambio de contraseña hacen `POST /api/auth/login` de verdad, y ese token
+        // lo firma `JwtConfig` (no el `testSecret` de arriba). Sin esta línea la clase dependía de
+        // que otra del mismo fork hubiera resuelto antes el `lazy` del secreto, o de que existiera
+        // un `server/.env`: en un worktree nuevo, o corriéndola sola, fallaba con «JWT_SECRET not
+        // set» — y como Gradle corre primero las clases que fallaron, seguía fallando. Misma
+        // escotilla que `AuthRoutesTest` y `DocumentRoutesTest`.
+        System.setProperty("movi.jwt.secret", "test-secret-for-user-routes-jwtconfig-min-32")
         RateLimiter.reset()
         Database.connect(
             url    = "jdbc:h2:mem:user_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
@@ -81,6 +88,7 @@ class UserRoutesTest {
 
     @AfterTest
     fun tearDown() {
+        System.clearProperty("movi.jwt.secret")
         RateLimiter.reset()
     }
 
