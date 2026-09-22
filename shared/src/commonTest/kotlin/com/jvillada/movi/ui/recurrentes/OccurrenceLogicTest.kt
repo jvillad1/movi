@@ -152,6 +152,30 @@ class OccurrenceLogicTest {
     }
 
     /**
+     * **Lo que Movi emparejó solo lo dice con todas las letras.**
+     *
+     * Una cuota de crédito dice «lo prueba un movimiento» porque ahí el pago movió la deuda y no
+     * hay nada que discutir. Un emparejamiento automático es otra cosa: Movi dedujo cuál era, y
+     * puede haberse equivocado. Si las dos filas sonaran igual, la fila deducida le estaría
+     * pidiendo al dueño la misma confianza que la fila probada — justo donde corresponde revisar,
+     * y donde además tiene un «no fue este» para contestar.
+     */
+    @Test fun `una fila automatica dice que la empareja Movi`() {
+        val automatica = estado(true, "ev_1")
+            .copy(derivadaDeUnMovimiento = true, automatica = true, montoDelPago = 180_000, monedaDelPago = "COP")
+        assertEquals(
+            "Ya ocurrió en agosto · Movi lo emparejó con un movimiento de $180.000",
+            textoYaOcurrio(automatica),
+        )
+    }
+
+    /** Sin monto —que hoy no pasa, pero el default del campo lo permite— se dice igual de dónde sale. */
+    @Test fun `una fila automatica sin monto igual dice quien la emparejo`() {
+        val automatica = estado(true, "ev_1").copy(derivadaDeUnMovimiento = true, automatica = true)
+        assertEquals("Ya ocurrió en agosto · lo emparejó Movi", textoYaOcurrio(automatica))
+    }
+
+    /**
      * **«Deshacer» solo donde hay un sello que borrar.** En una ocurrencia derivada el DELETE
      * contestaría 404 y la pantalla se quedaría igual: un control muerto, el error exacto que este
      * repo ya cometió una vez. Se revierte borrando el movimiento, no desmarcando nada.
@@ -160,6 +184,13 @@ class OccurrenceLogicTest {
         assertTrue(sePuedeDeshacer(estado(true, "ev_1")))
         assertTrue(sePuedeDeshacer(estado(true, null)))
         assertFalse(sePuedeDeshacer(estado(true, "ev_1").copy(derivadaDeUnMovimiento = true)))
+        // Y tampoco la automática: tampoco hay fila que borrar. Se revierte con el rechazo, que es
+        // otro botón y otro endpoint — la pantalla que lo ofrezca lee `automatica`, no esto.
+        assertFalse(
+            sePuedeDeshacer(
+                estado(true, "ev_1").copy(derivadaDeUnMovimiento = true, automatica = true),
+            ),
+        )
     }
 
     @Test fun `la diferencia de monto se dice, no se disimula`() {

@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -90,12 +91,12 @@ class EventRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Credits, SmsMessages, RecurringOccurrences, RecurringRules, VoidEvents, Events,
+                Credits, SmsMessages, RecurringOccurrences, OccurrenceRejections, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, RecurringOccurrences, SmsMessages, Credits,
+                Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits,
                 CardPaymentDismissals,
             )
 

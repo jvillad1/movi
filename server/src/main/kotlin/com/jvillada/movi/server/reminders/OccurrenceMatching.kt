@@ -258,3 +258,101 @@ data class CandidatoPuntuado(
     val distanciaMonto: Long,
     val distanciaDias: Long,
 )
+
+/**
+ * **El movimiento que es, sin lugar a dudas, la ocurrencia de [rule] — o `null`, que quiere decir
+ * «preguntale al dueño».**
+ *
+ * Esto sí marca: lo que devuelve acá sale de `GET /api/payments/occurrences` con `occurred = true`
+ * sin que nadie haya tildado nada. Así que es la única parte de este archivo donde la asimetría
+ * del riesgo —**marcar de más es peor que el ruido**— se paga en serio, y por eso la puerta es
+ * mucho más angosta que la de [occurrenceCandidatesFor].
+ *
+ * ## Por qué hizo falta
+ *
+ * La casilla del «Checklist del período» sellaba con `eventId = null`: daba por pagado **sin
+ * ninguna evidencia**. En los datos reales del dueño quedaron tres sellos así cuyo movimiento SÍ
+ * existía, con el nombre casi calcado: «Mercado» contra «Mercado» de $2.000.000, «Gimnasio Cami»
+ * contra «Gimnasio Cami» de $180.000, «Salario» contra «Salario Septiembre 2026» de $20.308.659
+ * en la misma cuenta y la misma categoría. O sea: la evidencia estaba a la vista y el sello la
+ * ignoraba. Emparejar solo esos casos no es una heurística agresiva — es leer lo que ya está.
+ *
+ * ## Qué cuenta como concluyente
+ *
+ * Un candidato lo es cuando pasa **una** de estas dos puertas:
+ *
+ *  1. **El nombre pega**: la clave comparable de la nota del movimiento (o del comercio que dijo
+ *     el banco) es idéntica a la de la regla. Decirle «Mercado» a un gasto en el mes en que vence
+ *     el recurrente «Mercado» no es una coincidencia que valga la pena poner en duda.
+ *  2. **Pegan las tres circunstancias a la vez**: la categoría, la cuenta y el **monto exacto**.
+ *     Ninguna de las tres sola dice nada (el KDoc de arriba cuenta cómo la cuenta sola proponía el
+ *     mercado del Éxito como el arriendo), pero las tres juntas describen un hecho muy específico:
+ *     tanta plata, esa cifra y no otra, saliendo de esa cuenta, anotada en esa categoría, en la
+ *     ventana del vencimiento. Es lo que hace que «Salario Septiembre 2026» sea el salario aunque
+ *     no se llame «Salario».
+ *
+ * **«Monto exacto» es exacto.** El KDoc de arriba argumenta contra los márgenes de ±10 % elegidos
+ * a ojo, y ese argumento vale doblemente acá: si el monto de un recurrente es un estimado, un
+ * margen inventado no lo vuelve un contrato, solo agranda la puerta. Cuando el monto no es el
+ * mismo, esta función no decide — y eso no pierde nada, porque el candidato sigue apareciendo en
+ * [occurrenceCandidatesFor] para que el dueño confirme.
+ *
+ * ## Y solo con UNO. Con dos, pregunta.
+ *
+ * Con dos o más concluyentes Movi no puede saber cuál es cuál, y elegir «el mejor» sería inventar
+ * un desempate donde no hay información. El caso real: el gimnasio del dueño, con un movimiento
+ * «Gimnasio Cami» de $180.000 y otro «Gimnasio» de $180.000 en la misma cuenta y categoría dentro
+ * de la misma ventana. Son dos pagos de gimnasio iguales; emparejar uno al azar quemaría el
+ * movimiento bueno (un id sellado no se vuelve a proponer) para cerrar el mes con el otro.
+ * Devolver `null` deja los dos en `candidates` y el dueño elige en un toque.
+ *
+ * Con cero, lo mismo: no hay nada que afirmar.
+ *
+ * @param usedEventIds ids ya sellados —o ya emparejados automáticamente en esta misma respuesta,
+ *                     ver `ReminderRoutes`— que no pueden volver a usarse.
+ */
+fun ocurrenciaConcluyente(
+    rule: RecurringRule,
+    dueDate: LocalDate,
+    events: List<FinancialEvent>,
+    usedEventIds: Set<String> = emptySet(),
+    zone: ZoneId = AppClock.zone,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
+): FinancialEvent? {
+    // **Sobre los candidatos SIN recortar**, no sobre los tres que se muestran. Si se mirara la
+    // lista recortada, un cuarto concluyente quedaría invisible y los tres de arriba parecerían
+    // «exactamente uno»: la ambigüedad se taparía justo cuando más movimientos parecidos hay, que
+    // es cuando más caro sale equivocarse.
+    val concluyentes = candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings)
+        .filter { esConcluyente(rule, it.event) }
+    // `singleOrNull`: cero o dos es lo mismo acá — no hay nada que afirmar, se pregunta.
+    return concluyentes.singleOrNull()?.event
+}
+
+/**
+ * Las dos puertas de [ocurrenciaConcluyente], aplicadas a un candidato que ya pasó todos los
+ * filtros de [candidatosPuntuados] (vivo, del tipo correcto, en la ventana, en pesos, no traspaso,
+ * no reservado, no usado).
+ *
+ * No se reusan las `senas` del puntaje aunque midan lo mismo: ahí son un ORDEN —el nombre vale 3,
+ * la categoría 1, la cuenta 1— y acá son una DECISIÓN. Un umbral sobre ese puntaje («5 o más»)
+ * diría lo mismo hoy y mentiría mañana, apenas alguien toque un peso para mejorar el orden.
+ */
+private fun esConcluyente(rule: RecurringRule, event: FinancialEvent): Boolean {
+    val claveRegla = claveComparableDeNombre(rule.name)
+    val nombrePega = claveRegla.isNotEmpty() &&
+        (claveComparableDeNombre(event.description) == claveRegla ||
+            claveComparableDeNombre(event.merchant.orEmpty()) == claveRegla)
+    if (nombrePega) return true
+    val claveCategoria = claveComparableDeNombre(rule.category)
+    val categoriaPega = claveCategoria.isNotEmpty() &&
+        claveComparableDeNombre(event.category) == claveCategoria
+    val laCuentaPega = rule.accountId != null && event.accountId == rule.accountId
+    // La moneda ya la filtró `candidatosPuntuados` (solo COP, que es la moneda de toda regla), pero
+    // comparar montos es justo donde una moneda distinta hace el daño más silencioso: US$180 no es
+    // $180.000. Se vuelve a decir acá para que esta función se sostenga sola si alguien la llama
+    // desde otro lado.
+    val montoExacto = event.currency == MONEDA_DE_LAS_REGLAS && event.amount == rule.amount
+    return categoriaPega && laCuentaPega && montoExacto
+}

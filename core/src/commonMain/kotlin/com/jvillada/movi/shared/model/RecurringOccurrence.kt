@@ -71,6 +71,34 @@ data class MarkOccurrenceRequest(
 )
 
 /**
+ * Body de `POST /api/recurring-rules/{id}/occurrence/rechazo`: **«no, ese movimiento no es esto»**.
+ *
+ * ## Por qué el «no fue este» dejó de vivir en la pantalla
+ *
+ * Hasta hoy el rechazo era un `var` de Compose (`descartadas` en `TransactionsScreen`): se perdía
+ * al recargar, y estaba bien que así fuera, porque rechazar una PROPUESTA no es un hecho sobre la
+ * plata de nadie — la propuesta se volvía a ofrecer y el dueño la volvía a ignorar, gratis.
+ *
+ * Desde que Movi **empareja solo** cuando está seguro, ese razonamiento se dio vuelta. Si el
+ * emparejamiento automático se equivoca y el dueño lo rechaza, un rechazo que solo vive en la
+ * pantalla haría que la siguiente lectura volviera a emparejar lo mismo: el periodo se daría por
+ * ocurrido otra vez, sin que nadie lo tocara, y el único modo de que dejara de pasar sería no
+ * volver a abrir la app. O sea que ahora el «no» sí tiene que sobrevivir a un F5.
+ *
+ * ## La clave es (regla, movimiento), nunca el movimiento solo
+ *
+ * Misma semántica que `claveDescartada` en la pantalla, por el mismo motivo: con «Agua», «Gas» e
+ * «Internet» todas en «Servicios», el pago del gas se propone en las tres. Rechazarlo en la regla
+ * del agua —correcto, no era el agua— no puede quitárselo a la regla del gas, que es donde sí era
+ * el bueno.
+ */
+@Serializable
+data class RechazarOcurrenciaRequest(
+    /** El movimiento que NO es la ocurrencia de esta regla. */
+    val eventId: String,
+)
+
+/**
  * Lo que `GET /api/payments/occurrences` le cuenta a la pantalla sobre **el periodo que está en
  * juego** de un recurrente: si ya se dio por ocurrido, y si no, qué movimientos podrían serlo.
  *
@@ -86,9 +114,10 @@ data class MarkOccurrenceRequest(
  * @param occurred  `true` = el dueño ya lo dio por ocurrido; entonces [candidates] va vacío.
  * @param eventId   con qué movimiento quedó emparejado, si quedó con alguno.
  * @param candidates lo que la app **propone** cuando todavía no está cerrado, del más probable al
- *                  menos. Nunca se marca solo: siempre confirma el dueño (ver
- *                  `occurrenceCandidatesFor` en el server para por qué el monto ordena y no
- *                  filtra).
+ *                  menos (ver `occurrenceCandidatesFor` en el server para por qué el monto ordena
+ *                  y no filtra). Que haya candidatos significa que Movi **no** estuvo seguro: con
+ *                  un único movimiento concluyente empareja solo y esta lista va vacía (ver
+ *                  [OccurrenceState.automatica]); con cero o con dos, pregunta.
  * @param derivadaDeUnMovimiento ver abajo.
  * @param montoDelPago cuánta plata prueba la fila derivada, y con [monedaDelPago] en qué moneda:
  *                  el monto **no** decide si el periodo quedó saldado (no puede), así que se
@@ -104,13 +133,17 @@ data class OccurrenceState(
     val confirmedAt: Long = 0L,
     val candidates: List<FinancialEvent> = emptyList(),
     /**
-     * **Esto no lo marcó nadie: se dedujo de un movimiento que ya existe.**
+     * **No hay sello que borrar: esto se dedujo de un movimiento que ya existe.**
      *
-     * Es `true` solo en las reglas SINTÉTICAS —la cuota de un crédito ([CREDIT_RULE_PREFIX]) y el
-     * pago de una tarjeta ([CARD_RULE_PREFIX])—, que no se sellan en `recurring_occurrences` y
-     * nunca lo harán: ahí el pago **mueve la deuda**, y ese hecho es más fuerte que un sello. El
-     * server lo lee del movimiento (ver `PagosDeDeuda.kt`) en vez de pedirle al dueño que
-     * confirme por segunda vez algo que ya registró.
+     * Es `true` en dos casos, y los dos comparten exactamente esa consecuencia:
+     *
+     *  1. las reglas SINTÉTICAS —la cuota de un crédito ([CREDIT_RULE_PREFIX]) y el pago de una
+     *     tarjeta ([CARD_RULE_PREFIX])—, que no se sellan en `recurring_occurrences` y nunca lo
+     *     harán: ahí el pago **mueve la deuda**, y ese hecho es más fuerte que un sello. El server
+     *     lo lee del movimiento (ver `PagosDeDeuda.kt`) en vez de pedirle al dueño que confirme
+     *     por segunda vez algo que ya registró;
+     *  2. las que Movi **emparejó sola** con un movimiento concluyente (ver [automatica]), que
+     *     tampoco escriben nada: se derivan en cada lectura.
      *
      * ## Por qué la pantalla TIENE que distinguirlo
      *
@@ -120,11 +153,38 @@ data class OccurrenceState(
      * hace nada es un control muerto —el error exacto que este repo ya cometió una vez— así que
      * la fila derivada se pinta sin él y dice de dónde sale.
      *
+     * Por eso este campo viaja también en las automáticas, aunque esas SÍ se puedan revertir: el
+     * botón que corresponde ahí no es «Deshacer» (no hay fila que borrar) sino «no fue este», que
+     * es otro endpoint. Un cliente viejo que solo conoce este campo se queda sin ofrecer nada, que
+     * es lo correcto; uno nuevo lee [automatica] y ofrece el rechazo.
+     *
      * Es un CAMPO nuevo con default y no un valor nuevo en ningún enum, por lo de siempre: un
      * campo lo ignora el cliente que no lo conoce, un valor de enum le revienta la
      * deserialización. (Este endpoint es nuevo igual, pero la regla vale para los dos.)
      */
     val derivadaDeUnMovimiento: Boolean = false,
+    /**
+     * **Además de derivada: esto lo dedujo Movi, y el dueño lo puede rechazar.**
+     *
+     * `true` solo cuando el server encontró **exactamente un** movimiento concluyente en la
+     * ventana del vencimiento y lo emparejó sin preguntar (ver `ocurrenciaConcluyente` en
+     * `OccurrenceMatching.kt`). Nada se escribió en `recurring_occurrences`: la marca se vuelve a
+     * deducir en cada lectura, así que anular o editar el movimiento la hace desaparecer sola.
+     *
+     * ## La diferencia con [derivadaDeUnMovimiento], dicha corta
+     *
+     *  - [derivadaDeUnMovimiento] = «**no hay sello que borrar**». Es lo que la pantalla necesita
+     *    para no pintar un «Deshacer» muerto.
+     *  - [automatica] = «**además, esto lo dedujo Movi**», y por eso se puede rechazar con
+     *    `POST /api/recurring-rules/{id}/occurrence/rechazo` ([RechazarOcurrenciaRequest]). Una
+     *    cuota de crédito no: ahí el movimiento mueve la deuda y no hay nada que discutir; lo
+     *    único que la revierte es borrar o anular el pago.
+     *
+     * Toda automática viene con [derivadaDeUnMovimiento] en `true`, nunca al revés.
+     *
+     * Por qué un campo nuevo y no un valor de enum: lo de siempre (ver arriba).
+     */
+    val automatica: Boolean = false,
     /**
      * El nombre del **período del dueño** en que cae [dueDate] (`"2026-10"`), para decirlo en
      * pantalla. [period] es la clave del sello —el mes de calendario del vencimiento, estable

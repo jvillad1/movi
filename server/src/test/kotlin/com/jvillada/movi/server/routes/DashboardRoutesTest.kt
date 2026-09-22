@@ -11,6 +11,7 @@ import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.PushSubscriptions
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -106,7 +107,7 @@ class DashboardRoutesTest {
                 // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
                 CategoryPrefs,
                 // «Disponible»: el gasto variable descarta los movimientos atados a un sello.
-                RecurringOccurrences,
+                RecurringOccurrences, OccurrenceRejections,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
@@ -114,7 +115,7 @@ class DashboardRoutesTest {
                 // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
                 CategoryPrefs,
                 // «Disponible»: el gasto variable descarta los movimientos atados a un sello.
-                RecurringOccurrences,
+                RecurringOccurrences, OccurrenceRejections,
             )
             listOf(userId to "a@dashboard.test", otherUserId to "b@dashboard.test").forEach { (id, mail) ->
                 Users.insert {

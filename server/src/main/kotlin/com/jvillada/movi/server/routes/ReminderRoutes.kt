@@ -9,6 +9,7 @@ import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
@@ -21,8 +22,10 @@ import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.reminders.loadOccurredBy
 import com.jvillada.movi.server.reminders.loadOccurrenceRows
+import com.jvillada.movi.server.reminders.loadRejectedPairs
 import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
 import com.jvillada.movi.server.reminders.occurrenceCandidatesFor
+import com.jvillada.movi.server.reminders.ocurrenciaConcluyente
 import com.jvillada.movi.server.reminders.occurrenceInMonth
 import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
 import com.jvillada.movi.server.reminders.plataQueSalio
@@ -35,9 +38,11 @@ import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.reminders.upcomingPayments
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MarkOccurrenceRequest
 import com.jvillada.movi.shared.model.OccurrenceState
 
+import com.jvillada.movi.shared.model.RechazarOcurrenciaRequest
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.ReminderChannels
@@ -359,6 +364,10 @@ fun Route.reminderRoutes() {
             val ocurrencias = loadOccurrenceRows(uid).associateBy { it.ruleId to it.period }
             val ocurridos = loadOccurredBy(uid)
             val usados = loadUsedOccurrenceEventIds(uid)
+            // Los «no fue este» guardados: se excluyen de las propuestas Y del emparejamiento
+            // automático. Sin esto, rechazar algo que Movi emparejó solo no serviría de nada —
+            // la lectura siguiente lo volvería a emparejar, para siempre.
+            val rechazados = loadRejectedPairs(uid)
             // Solo la franja donde puede haber candidatos, no todos los movimientos de la vida
             // del usuario: desde el primero del mes (el piso del emparejador) hasta la ventana
             // por delante del vencimiento más tardío posible.
@@ -373,7 +382,11 @@ fun Route.reminderRoutes() {
                 ),
             )
 
-            rules.mapNotNull { rule ->
+            // **Qué reglas tienen algo que decir, y con qué vencimiento.** Se calcula una vez y lo
+            // usan las dos pasadas de abajo. El orden es por id de regla y no el que devolvió la
+            // base: la pasada 1 reserva ids a medida que empareja, así que un orden que cambiara
+            // entre recargas haría que dos reglas se turnaran el mismo movimiento. Ver ahí.
+            val enJuego = rules.sortedBy { it.id }.mapNotNull { rule ->
                 // **La unidad es la ocurrencia del MES EN CURSO**, y punto.
                 //
                 // Antes se usaba `dueDateFor`, o sea la fecha ya rodada por la ventana de gracia,
@@ -396,11 +409,52 @@ fun Route.reminderRoutes() {
                 // Una regla que todavía no arrancó no tiene ocurrencia este mes: es lo que evita
                 // que la primera cuota de un crédito caiga el mismo día del desembolso.
                 if (!ruleIsActiveOn(rule, due)) return@mapNotNull null
+                rule to due
+            }
+
+            // ── Pasada 1: lo que Movi empareja SOLO ──────────────────────────────────
+            //
+            // Hasta acá este endpoint solo proponía: la casilla del checklist sellaba con
+            // `eventId = null` y daba por pagado **sin ninguna evidencia**. En los datos reales
+            // del dueño quedaron tres sellos así cuyo movimiento SÍ existía, con el nombre casi
+            // calcado. Ahora, cuando hay un único movimiento concluyente (ver
+            // `ocurrenciaConcluyente`), la fila sale ya emparejada; con cero o con dos, se
+            // pregunta como siempre.
+            //
+            // **Y no se escribe nada en `recurring_occurrences`.** Esto se DERIVA en cada lectura,
+            // igual que las sintéticas de abajo y por el mismo motivo: un sello sobrevive a que su
+            // evidencia cambie, una derivación no. Si el movimiento se anula, se borra, se le
+            // corrige la fecha o se le cambia el monto, la marca desaparece sola sin que ningún
+            // camino de borrado tenga que acordarse de esta tabla.
+            //
+            // **La reserva de ids.** `reservados` arranca con los ya sellados y va creciendo: un
+            // movimiento que la regla A emparejó no puede ser además el candidato de la regla B en
+            // la misma respuesta (una sola entrada de plata cerrando dos periodos es exactamente
+            // el «marcar de más» que este archivo evita). Se recorre en orden de id de regla, que
+            // es estable, así que ante un empate imposible —el mismo movimiento concluyente para
+            // dos reglas distintas— gana siempre la misma y la respuesta no baila entre recargas.
+            val automaticas = mutableMapOf<String, FinancialEvent>()
+            val reservados = usados.toMutableSet()
+            enJuego.forEach { (rule, due) ->
+                if (periodOf(due) in ocurridos[rule.id].orEmpty()) return@forEach
+                // El día todavía no llegó: no se empareja nada, igual que no se pregunta nada.
+                if (due.isAfter(today)) return@forEach
+                val sinRechazados = eventos.filterNot { (rule.id to it.id) in rechazados }
+                val concluyente =
+                    ocurrenciaConcluyente(rule, due, sinRechazados, reservados, settings = periodo)
+                        ?: return@forEach
+                automaticas[rule.id] = concluyente
+                reservados += concluyente.id
+            }
+
+            // ── Pasada 2: la respuesta ───────────────────────────────────────────────
+            enJuego.mapNotNull { (rule, due) ->
                 // La clave del sello sigue siendo el mes del vencimiento (ver `periodOf`): estable
                 // aunque el dueño cambie su corte. El nombre que se muestra es el del período.
                 val periodoEnCurso = periodOf(due)
                 val nombreDelPeriodo = periodoDelDueno(due, periodo)
                 val cerrado = periodoEnCurso in ocurridos[rule.id].orEmpty()
+                val automatica = automaticas[rule.id]
                 when {
                     cerrado -> {
                         val fila = ocurrencias[rule.id to periodoEnCurso]
@@ -414,6 +468,25 @@ fun Route.reminderRoutes() {
                             periodoDelDueno = nombreDelPeriodo,
                         )
                     }
+                    automatica != null -> OccurrenceState(
+                        ruleId = rule.id,
+                        period = periodoEnCurso,
+                        dueDate = due.toString(),
+                        occurred = true,
+                        eventId = automatica.id,
+                        // No hubo confirmación que fechar —nadie tildó nada—, así que lo más cierto
+                        // que se puede decir es cuándo ocurrió el movimiento que la prueba. Mismo
+                        // criterio que las sintéticas de abajo.
+                        confirmedAt = automatica.timestamp,
+                        // Las dos marcas, y significan cosas distintas: `derivada` = «no hay sello
+                        // que borrar, no le ofrezcas Deshacer»; `automatica` = «además, esto lo
+                        // dedujo Movi y se puede rechazar». Ver el KDoc de `OccurrenceState`.
+                        derivadaDeUnMovimiento = true,
+                        automatica = true,
+                        montoDelPago = automatica.amount,
+                        monedaDelPago = automatica.currency,
+                        periodoDelDueno = nombreDelPeriodo,
+                    )
                     // El día todavía no llegó: no se pregunta nada. Preguntar «¿ya ocurrió?» por
                     // algo que vence dentro de tres semanas es ruido, y peor: invita a cerrar un
                     // periodo antes de que pase.
@@ -423,7 +496,16 @@ fun Route.reminderRoutes() {
                         period = periodoEnCurso,
                         dueDate = due.toString(),
                         occurred = false,
-                        candidates = occurrenceCandidatesFor(rule, due, eventos, usados, settings = periodo),
+                        // `reservados` y no `usados`: lo que otra regla ya emparejó sola no se
+                        // vuelve a ofrecer acá. Y lo rechazado se saca antes de puntuar, para que
+                        // un «no fue este» no se gaste uno de los tres lugares de la propuesta.
+                        candidates = occurrenceCandidatesFor(
+                            rule,
+                            due,
+                            eventos.filterNot { (rule.id to it.id) in rechazados },
+                            reservados,
+                            settings = periodo,
+                        ),
                         periodoDelDueno = nombreDelPeriodo,
                     )
                 }
@@ -595,6 +677,68 @@ fun Route.reminderRoutes() {
                 if (resultado.message == null) call.respond(resultado.code)
                 else call.respond(resultado.code, resultado.message)
         }
+    }
+
+    /**
+     * **«No, ese movimiento no es esto»**, guardado para siempre.
+     *
+     * Es la única forma de revertir un emparejamiento automático, y por eso tiene que persistir:
+     * la marca automática no es una fila que borrar —se deriva en cada lectura— así que un rechazo
+     * que viviera en la pantalla duraría hasta el próximo F5 y después Movi volvería a emparejar
+     * lo mismo. El «no» tiene que sobrevivir a la lectura siguiente o no sirve de nada.
+     *
+     * Sirve igual para bajar una PROPUESTA que el dueño ya descartó, que es lo que la pantalla
+     * hacía en memoria hasta hoy.
+     *
+     * **Idempotente**: repetirlo no falla ni recorre la fecha. Si ya está rechazado, está
+     * rechazado — un doble toque desde una conexión mala no puede ser un error, y mover
+     * `rejectedAt` no agregaría ninguna información (lo que importa es el hecho, no el minuto).
+     *
+     * **No se valida que la regla exista.** Un rechazo sobre una regla borrada no le hace daño a
+     * nadie: nadie lo vuelve a leer. Lo que sí se valida es el movimiento, porque un id ajeno o
+     * inventado en esta tabla sería una forma silenciosa de escribir basura con el nombre de otro.
+     */
+    post("/api/recurring-rules/{id}/occurrence/rechazo") {
+        val uid = call.userId()
+        val ruleId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val body = try {
+            call.receive<RechazarOcurrenciaRequest>()
+        } catch (e: Exception) {
+            return@post call.respond(HttpStatusCode.BadRequest, "No se pudo leer el rechazo: ${e.message}")
+        }
+        val eventId = body.eventId.trim()
+        if (eventId.isEmpty()) {
+            return@post call.respond(HttpStatusCode.BadRequest, "Falta el movimiento que se rechaza.")
+        }
+        // `null` = salió bien. Un tipo propio para «no devuelvo nada» habría obligado a una rama
+        // muerta en el `when` del sellado, que comparte [MarcaResult] y nunca puede dar vacío.
+        val problema: MarcaResult.Error? = dbQuery {
+            val existe = Events.selectAll()
+                .where { (Events.id eq eventId) and (Events.userId eq uid) }
+                .firstOrNull() != null
+            if (!existe) return@dbQuery MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento no existe.")
+            val yaRechazado = OccurrenceRejections.selectAll()
+                .where {
+                    (OccurrenceRejections.userId eq uid) and
+                        (OccurrenceRejections.ruleId eq ruleId) and
+                        (OccurrenceRejections.eventId eq eventId)
+                }
+                .firstOrNull() != null
+            // Se consulta antes en vez de borrar-e-insertar: así `rejectedAt` conserva CUÁNDO se
+            // dijo que no la primera vez, y un reintento no se disfraza de rechazo nuevo.
+            if (!yaRechazado) {
+                OccurrenceRejections.insert {
+                    it[OccurrenceRejections.userId] = uid
+                    it[OccurrenceRejections.ruleId] = ruleId
+                    it[OccurrenceRejections.eventId] = eventId
+                    it[rejectedAt] = System.currentTimeMillis()
+                }
+            }
+            null
+        }
+        if (problema == null) call.respond(HttpStatusCode.NoContent)
+        else if (problema.message == null) call.respond(problema.code)
+        else call.respond(problema.code, problema.message)
     }
 
     /** Deshacer: marcar por error tiene que poder revertirse, y sin ceremonia. */
