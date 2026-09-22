@@ -114,6 +114,25 @@ class PlataDelPeriodoTest {
     }
 
     @Test
+    fun `aperturas y ajustes dentro del periodo suman a lo que tenias, no a lo que entro`() {
+        // La Fiducuenta empezó a llevarse el 6-sep con $113.264 y Ahorros se cuadró con el banco
+        // (+$225.707, −$26). Esa plata ya estaba: Movi se enteró tarde. En Nu (condicionada) no
+        // cuenta, igual que sus ingresos.
+        val p = plataDelPeriodo(
+            saldoAlInicio = 14_912L,
+            eventos = listOf(
+                evento("apertura-fidu", "fiducuenta", TransactionType.INCOME, 113_264, OPENING_CATEGORY),
+                evento("ajuste-sube", "ahorros", TransactionType.INCOME, 225_707, ADJUSTMENT_CATEGORY),
+                evento("ajuste-baja", "ahorros", TransactionType.EXPENSE, 26, ADJUSTMENT_CATEGORY),
+                evento("apertura-nu", "nu", TransactionType.INCOME, 15_305_123, OPENING_CATEGORY),
+            ),
+            cuentas = cuentas,
+        )
+        assertEquals(14_912L + 113_264 + 225_707 - 26, p.saldoAlInicio)
+        assertEquals(0L, p.entradas)
+    }
+
+    @Test
     fun `un ingreso que cae en un ahorro condicionado no cuenta`() {
         val p = calcular(
             listOf(
