@@ -32,7 +32,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -299,9 +298,7 @@ fun MoneyField(
                             // tuvo.
                             onValueChange(parseMoneyDigits(siguiente.text))
                         },
-                        // El `monto` de la escala, pero sin su interlineado de 18: con él, tocar el campo
-                        // dejaba el cursor al principio en vez de al final (lo atrapó MoneyFieldAtajoTest).
-                        textStyle = Movi.textos.monto.copy(color = Movi.colores.texto, lineHeight = TextUnit.Unspecified),
+                        textStyle = Movi.textos.monto.copy(color = Movi.colores.texto),
                         cursorBrush = SolidColor(Movi.colores.texto),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
