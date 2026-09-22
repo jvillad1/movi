@@ -23,12 +23,12 @@ class DashboardDefaultsTest {
         val def = defaultDashboardDefinition()
         assertEquals("dashboard", def.slug)
         assertEquals(DASHBOARD_LAYOUT_VERSION, def.version)
-        // Generación 6: el Inicio es el resumen del período. El checklist reemplaza a
+        // Generación 7 (la 6 más «Disponible»): el Inicio es el resumen del período. El checklist reemplaza a
         // UPCOMING_PAYMENTS (contestaban preguntas distintas y quedaban diciendo lo mismo) y
         // ALERTS pasa a pintarse como «Para revisar» sin cambiar de tipo, para que un APK viejo
         // siga mostrando algo (ver el KDoc de DASHBOARD_LAYOUT_VERSION).
         assertEquals(
-            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
             def.sections.map { it.type },
         )
     }

@@ -64,6 +64,7 @@ private val SECTION_TYPE_LABELS = mapOf(
     "CARD_LIST" to "Lista de tarjetas",
     "LINK_LIST" to "Lista de enlaces",
     "BANNER" to "Aviso",
+    "DISPONIBLE_DEL_PERIODO" to "Disponible",
 )
 
 private val NAVIGATE_TARGET_LABELS = mapOf(
@@ -412,7 +413,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             )
         }
 
-        "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS" -> {
+        "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "DISPONIBLE_DEL_PERIODO" -> {
             // Secciones de datos: el contenido lo pone el cliente con lo que carga del server;
             // solo el título se ajusta desde acá (vacío = el nombre por defecto).
             //
@@ -430,6 +431,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
                 when (section.type) {
                     "UPCOMING_PAYMENTS" -> "Se muestra solo cuando hay pagos en los próximos 7 días."
                     "ALERTS" -> "Se muestra solo cuando hay algo por resolver."
+                    "DISPONIBLE_DEL_PERIODO" -> "Ingresos menos fijos, y lo gastado en el período, la semana y hoy. Se muestra cuando hay ingresos en el período."
                     else -> "Tu plata, el patrimonio neto, ingresos, gastos y flujo del mes: sin más campos. " +
                         "El título de esta sección no se cambia aquí: viaja en la app, no en la pantalla."
                 },

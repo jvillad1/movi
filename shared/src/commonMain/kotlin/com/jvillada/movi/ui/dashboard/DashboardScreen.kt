@@ -275,6 +275,8 @@ fun DashboardScreen(
                             // podía delatarlo era una pantalla de Android que el dueño no abre.
                             captura = CapturaDeSms(total = s.smsTotal, ultimo = s.smsLastAt),
                             capturaSilenciada = s.smsAlertMuted,
+                            // La tarjeta «Disponible». Misma respuesta, ninguna llamada nueva.
+                            gastoVariablePorDia = s.gastoVariablePorDia,
                         )
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por

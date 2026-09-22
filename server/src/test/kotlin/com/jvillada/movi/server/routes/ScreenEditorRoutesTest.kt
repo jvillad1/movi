@@ -339,8 +339,8 @@ class ScreenEditorRoutesTest {
         val seedDashboard = SCREEN_SEED.first { it.slug == "dashboard" }
         val restoredSections = restoreBody["sections"]!!.jsonArray
         assertEquals(seedDashboard.sections.size, restoredSections.size)
-        // Generación 6: HERO_BALANCE, CHECKLIST_DEL_PERIODO, GASTO_POR_CATEGORIA, ALERTS, BANNER.
-        assertEquals(5, restoredSections.size)
+        // Generación 7: HERO_BALANCE, CHECKLIST_DEL_PERIODO, DISPONIBLE_DEL_PERIODO, GASTO_POR_CATEGORIA, ALERTS, BANNER.
+        assertEquals(6, restoredSections.size)
         assertEquals("HERO_BALANCE", restoredSections[0].jsonObject["type"]!!.jsonPrimitive.content)
     }
 

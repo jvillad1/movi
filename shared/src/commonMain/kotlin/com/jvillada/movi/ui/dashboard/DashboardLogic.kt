@@ -40,6 +40,10 @@ import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
 import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
 import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import com.jvillada.movi.shared.model.inicioDelPeriodo
+import com.jvillada.movi.shared.model.periodoSiguiente
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 
 /**
  * Todo lo que el Inicio carga del server, junto, para que el renderer SDUI reciba un solo
@@ -116,6 +120,11 @@ data class DashboardData(
     val ajustesDePeriodo: PeriodSettings = PeriodSettings(),
     /** En qué período estamos, según [ajustesDePeriodo]. `null` mientras no se sepa la fecha. */
     val periodoActual: PeriodoFinanciero? = null,
+    /**
+     * El gasto variable de cada día del período (ver `DashboardSummary.gastoVariablePorDia`).
+     * `null` = no llegó, o el server es anterior al campo: la tarjeta «Disponible» no se pinta.
+     */
+    val gastoVariablePorDia: Map<String, Long>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -682,6 +691,9 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             "ALERTS" -> cosasParaRevisarDe(data).isNotEmpty()
             "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty()
             "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
+            // Solo con todo lo que la cuenta necesita ya leído, y con ingresos que medir. Ver
+            // `disponibleDelInicio`: sin datos no se afirma un disponible.
+            "DISPONIBLE_DEL_PERIODO" -> disponibleDelInicio(data) != null
             "QUICK_LINKS_WITH_TOTALS", "LINK_LIST", "CARD_ROW", "CARD_LIST" -> section.cards.isNotEmpty()
             else -> true
         }
@@ -750,5 +762,33 @@ internal fun checklistDelPeriodoDe(data: DashboardData): List<PagoDelPeriodo> {
         ocurrencias = data.ocurrencias.orEmpty(),
         periodo = periodo,
         settings = data.ajustesDePeriodo,
+    )
+}
+
+/**
+ * La tarjeta «Disponible» de [data], o `null` si falta algo para afirmarla (ver
+ * [disponibleDelPeriodo]).
+ *
+ * Pide las cinco lecturas que la cuenta usa —el período, el resumen, los vencimientos, las
+ * ocurrencias y el gasto variable—, y no se conforma con menos: sin las ocurrencias todo el
+ * checklist parece pendiente, y un sueldo ya cobrado se sumaría dos veces como «por recibir».
+ *
+ * Los fijos salen de [checklistDelPeriodoDe], la MISMA lista que pinta «Falta por pagar».
+ */
+internal fun disponibleDelInicio(
+    data: DashboardData,
+    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+): DisponibleDelPeriodo? {
+    val periodo = data.periodoActual ?: return null
+    val summary = data.summary ?: return null
+    val gasto = data.gastoVariablePorDia ?: return null
+    if (data.upcoming == null || data.ocurrencias == null) return null
+    return disponibleDelPeriodo(
+        ingresosRecibidos = summary.ingresos,
+        checklist = checklistDelPeriodoDe(data),
+        gastoVariablePorDia = gasto,
+        inicio = inicioDelPeriodo(periodo, data.ajustesDePeriodo),
+        finExclusivo = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo),
+        hoy = hoy,
     )
 }
