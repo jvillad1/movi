@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.Hairline
@@ -64,6 +66,13 @@ import com.jvillada.movi.ui.dashboard.yaMarcados
  *
  * Y marca por el MISMO camino: `onMarcar`/`onDeshacer` son los `marcarOcurrio`/`deshacerOcurrio` de
  * la pantalla, con el período que la fila trae del server (ver [PagoDelPeriodo.periodoDelSello]).
+ *
+ * ## Y desde esta ola: cuánto hay que pagar, no solo cuánto se pactó
+ *
+ * La fila de una cuota mostraba el monto de la regla —la cuota registrada— y nada más. El dueño
+ * paga su crédito del carro **de memoria** porque el banco no le publica un valor a pagar, y en
+ * septiembre giró $77.040 de más sin poder saberlo. Debajo de cada cuota pendiente va ahora el
+ * reparto que Movi estima para este período, rotulado como estimación. Ver [estimacionDeLaFila].
  */
 
 /** El rótulo de la sección. Constante para que la pantalla y sus pruebas nombren lo mismo. */
@@ -78,6 +87,10 @@ const val TITULO_CHECKLIST_DEL_PERIODO = "Checklist del período"
  * @param pudoLeer `false` cuando la lectura falló. Ahí se dice que no se pudo leer y se ofrece
  *   reintentar, en vez de mostrar un checklist a medias que parecería completo.
  * @param marcando reglas con una marca en vuelo: su casilla no acepta otro toque hasta que vuelva.
+ * @param planesDeCuotas el plan de cada crédito, por id de regla (ver [planesDeLasCuotas]). Vacío
+ *   —porque la lectura no llegó, o falló— deja las filas como estaban: sin estimación. Una cuota
+ *   sin su reparto se ve igual que antes de esta ola; una cuota con un reparto que no se pudo
+ *   calcular sería una cifra sin respaldo.
  */
 @Composable
 fun SeccionChecklistDelPeriodo(
@@ -89,6 +102,7 @@ fun SeccionChecklistDelPeriodo(
     onDeshacer: (ruleId: String, period: String) -> Unit,
     onReintentar: () -> Unit,
     modifier: Modifier = Modifier,
+    planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
 ) {
     val pendientes = pagosPendientes(checklist)
     val porCobrar = ingresosPendientes(checklist)
@@ -131,6 +145,7 @@ fun SeccionChecklistDelPeriodo(
                     marcando = marcando,
                     onMarcar = onMarcar,
                     onDeshacer = onDeshacer,
+                    planesDeCuotas = planesDeCuotas,
                 )
                 if (porCobrar.isNotEmpty()) {
                     Spacer(Modifier.height(Movi.espacios.medio))
@@ -173,6 +188,7 @@ private fun GrupoDelChecklist(
     marcando: Set<String>,
     onMarcar: (ruleId: String, period: String) -> Unit,
     onDeshacer: (ruleId: String, period: String) -> Unit,
+    planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -197,12 +213,26 @@ private fun GrupoDelChecklist(
         FilaDelChecklistCompleto(
             pago = pago,
             enVuelo = pago.ruleId in marcando,
+            estimacion = estimacionDeLaFila(pago, planesDeCuotas),
             onTildar = {
                 val periodo = pago.periodoDelSello ?: return@FilaDelChecklistCompleto
                 if (pago.pagado) onDeshacer(pago.ruleId, periodo) else onMarcar(pago.ruleId, periodo)
             },
         )
         if (i < filas.lastIndex) Hairline()
+    }
+    // **De dónde salen esas cifras, dicho debajo de las filas que las muestran.** Una sola vez por
+    // grupo: el rótulo «Movi estima» ya viaja pegado a cada cifra (ver [ETIQUETA_ESTIMADO]), y lo
+    // que esto agrega es el cómo, que repetido en seis filas se vuelve decoración. Y solo si hay
+    // alguna estimación: un pie que explica algo que no está en pantalla es ruido.
+    if (filas.any { estimacionDeLaFila(it, planesDeCuotas) != null }) {
+        Spacer(Modifier.height(Movi.espacios.corto))
+        Text(
+            text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+            lineHeight = 16.sp,
+        )
     }
 }
 
@@ -213,9 +243,19 @@ private fun GrupoDelChecklist(
  * endpoint que el «Ya lo pagué» de siempre— salvo en las dos filas donde no puede serlo
  * ([PagoDelPeriodo.seMarca]): la que todavía no vence, que el server rechaza, y la que quedó pagada
  * por un movimiento, que solo se revierte borrándolo. Esas se dibujan sin toque y lo dicen.
+ *
+ * @param estimacion el reparto que Movi estima para esta cuota, o `null` si no hay ninguno que dar
+ *   (ver [estimacionDeLaFila]). Va **debajo** de la fecha y no al lado del monto: el monto es la
+ *   cuota registrada —un dato del contrato— y la estimación es otra cosa; pegarlas en el mismo
+ *   renglón las dejaría pareciendo dos versiones de la misma cifra.
  */
 @Composable
-private fun FilaDelChecklistCompleto(pago: PagoDelPeriodo, enVuelo: Boolean, onTildar: () -> Unit) {
+private fun FilaDelChecklistCompleto(
+    pago: PagoDelPeriodo,
+    enVuelo: Boolean,
+    onTildar: () -> Unit,
+    estimacion: String? = null,
+) {
     val fila = Modifier
         .fillMaxWidth()
         .then(if (pago.seMarca) Modifier.clickable { if (!enVuelo) onTildar() } else Modifier)
@@ -242,6 +282,17 @@ private fun FilaDelChecklistCompleto(pago: PagoDelPeriodo, enVuelo: Boolean, onT
                 style = Movi.textos.apoyo,
                 color = if (pago.vencido) Movi.colores.sale else Movi.colores.textoApagado,
             )
+            // **Lo que Movi estima que trae esta cuota.** No va con el color de vencido: es una
+            // cuenta sobre el crédito, no un aviso sobre la fecha.
+            if (estimacion != null && !enVuelo) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = estimacion,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    lineHeight = 16.sp,
+                )
+            }
         }
         Cifra(
             textoDelMontoDelChecklist(pago),

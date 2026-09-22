@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.credits.textoDelPagoQueNoFueLaCuota
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
@@ -73,6 +74,17 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
      * llegó no puede impedir arreglar una cifra.
      */
     var cuentas by remember { mutableStateOf<List<Account>>(emptyList()) }
+    /**
+     * **La cuota pactada de este crédito**, o `null` si esta cuenta no es un préstamo, si no tiene
+     * condiciones cargadas, o si la lectura falló.
+     *
+     * Es el único dato que esta pantalla no tenía para poder explicar un pago que no fue la cuota
+     * (ver [textoDelPagoQueNoFueLaCuota]): la fila de la deuda ya trae su capital y su
+     * `noAmortiza`. Se lee **solo en una cuenta LOAN** y junto con los movimientos, así que una
+     * cuenta de ahorros no paga ningún viaje de más. Si no llega, la línea no se dibuja: es una
+     * explicación de más, no un dato sin el cual la pantalla mienta.
+     */
+    var cuotaPactada by remember { mutableStateOf<Long?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var showCondicion by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -119,6 +131,17 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             account = acc
             days = grouped
             leida = true
+            // La cuota pactada, solo si esta cuenta es un préstamo. `runCatching` y no un `try`
+            // que corte la lectura: sin la cuota la pantalla se ve como siempre, y hacer fallar el
+            // detalle entero por una línea explicativa sería cambiar un dato que falta por una
+            // pantalla que no carga.
+            cuotaPactada = if (acc.type == AccountType.LOAN) {
+                runCatching { Repositories.wallets.getCredits() }.getOrNull()
+                    ?.firstOrNull { it.account.id == accountId }
+                    ?.terms?.installment
+            } else {
+                null
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -422,7 +445,28 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                                         letterSpacing = 0.3.sp,
                                                     )
                                                 }
-                                            }
+                                                // **Qué le pasó a la deuda si este pago no fue la
+                                                // cuota.** El concepto de la fila ya dice «Abono a
+                                                // capital desde X» cuando la cuota se repartió,
+                                                // pero no dice que el monto no era el pactado —y
+                                                // eso es justo lo que el dueño no podía ver cuando
+                                                // pagó $77.040 de más. Ver
+                                                // [textoDelPagoQueNoFueLaCuota].
+                                                textoDelPagoQueNoFueLaCuota(
+                                                    capitalAbonado = event.amount,
+                                                    noAmortiza = event.noAmortiza,
+                                                    cuotaPactada = cuotaPactada ?: 0L,
+                                                    moneda = event.currency,
+                                                )?.let { linea ->
+                                                    Spacer(Modifier.height(4.dp))
+                                                    Text(
+                                                        text = linea,
+                                                        style = Movi.textos.apoyo,
+                                                        color = Movi.colores.textoMedio,
+                                                        lineHeight = 16.sp,
+                                                    )
+                                                }
+}
                                             // Acá el signo se pinta SIEMPRE, y no es un olvido de
                                             // la ola 15: en Movimientos `rowShowsSign` se lo quita
                                             // a la pata huérfana (y a la apertura) porque ahí el

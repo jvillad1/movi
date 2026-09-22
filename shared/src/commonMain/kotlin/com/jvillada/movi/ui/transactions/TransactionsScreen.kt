@@ -67,6 +67,7 @@ import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
@@ -94,6 +95,7 @@ import com.jvillada.movi.ui.recurrentes.ReminderWarningBanner
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
 import com.jvillada.movi.ui.recurrentes.ResumenRecurrentes
 import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
+import com.jvillada.movi.ui.recurrentes.planesDeLasCuotas
 import com.jvillada.movi.ui.recurrentes.SeccionProximosPagos
 import com.jvillada.movi.ui.recurrentes.SeccionSinConfirmar
 import com.jvillada.movi.ui.recurrentes.SeccionYaOcurrieron
@@ -1126,6 +1128,32 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         }
     }
 
+    /**
+     * **El plan de cada crédito, para poder decir cuánto trae la cuota de este período.**
+     *
+     * El dueño paga su crédito del carro de memoria —el banco no le publica un valor a pagar— y en
+     * septiembre giró $77.040 de más. Con esto, la fila de la cuota en el checklist muestra el
+     * reparto que Movi estima (ver [planesDeLasCuotas] y
+     * [com.jvillada.movi.ui.recurrentes.estimacionDeLaFila]).
+     *
+     * Se pide con el chip activo, igual que los vencimientos y las candidatas, y por la misma caché
+     * del repositorio que ya usa la pestaña «Cuota» de Agregar, así que en el teléfono no cuesta un
+     * viaje cada vez.
+     *
+     * **Un fallo acá NO es un error de la pantalla**, a diferencia de los vencimientos: el mapa se
+     * queda vacío, las filas se ven como antes de esta ola, y el checklist sigue siendo utilizable.
+     * Un cartel rojo por una estimación que no llegó le taparía lo que vino a hacer, que es tildar
+     * lo que ya pagó.
+     */
+    var planesDeCuotas by remember { mutableStateOf<Map<String, PlanDelCredito>>(emptyMap()) }
+    LaunchedEffect(activeFilter, recurrentesReloadKey, refreshTick, refreshKey) {
+        if (activeFilter != CHIP_RECURRENTES) return@LaunchedEffect
+        runCatching { Repositories.wallets.getCredits() }
+            .onSuccess { planesDeCuotas = planesDeLasCuotas(it) }
+            // Sin plan no hay estimación, y eso ya lo dice la ausencia de la línea.
+            .onFailure { planesDeCuotas = emptyMap() }
+    }
+
     // El flujo de permisos del navegador es async (moviPush.js): tras pedirlo se refresca unas
     // veces para que el aviso desaparezca sin reabrir la app. Solo donde el push existe Y con el
     // chip activo — en Android/iOS `status()` es una constante, y en el resto de Movimientos este
@@ -1676,6 +1704,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                             onDeshacer = { ruleId, period -> deshacerOcurrio(ruleId, period) },
                             onReintentar = { recurrentesReloadKey++ },
                             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                            planesDeCuotas = planesDeCuotas,
                         )
                     }
                 }
