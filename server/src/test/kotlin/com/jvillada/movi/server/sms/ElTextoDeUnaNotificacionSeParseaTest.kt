@@ -79,4 +79,65 @@ class ElTextoDeUnaNotificacionSeParseaTest {
         // Lo que no se puede volver un movimiento no tiene que salir del teléfono.
         assertNull(parseSms("Bancolombia:"))
     }
+    // ── Lo que no pasó, y lo de Nu que no es un movimiento ─────────────────────────────────
+
+    private val DE_NU = "Notificación · Nu"
+
+    @Test
+    fun `una compra rechazada no es un gasto, venga de donde venga`() {
+        val rechazadas = listOf(
+            "Compra rechazada: Tu compra en RAPPI por \$45.000,00 con tu tarjeta terminada en 1336 fue rechazada.",
+            "Bancolombia: Transacción rechazada por \$80.000 en EXITO COLINA con tu T.Cred *4057, el 21/09/2026.",
+            "Bancolombia: Tu compra por \$120.000 en FALABELLA fue declinada. Comunícate con nosotros.",
+            "Tu pago por \$300.000 no fue exitoso.",
+            "Compra no aprobada por \$15.000,00 en UBER.",
+        )
+        for (texto in rechazadas) {
+            assertNull(parseSms(texto), "se leyó como movimiento: $texto")
+            assertNull(parseSms(texto, DE_NU), "se leyó como movimiento (Nu): $texto")
+            assertNull(parseSms(texto, "Notificación · Bancolombia"), "se leyó como movimiento (Bancolombia): $texto")
+        }
+    }
+
+    @Test
+    fun `los avisos de Nu que no son compra ni pago no se vuelven gasto`() {
+        val avisos = listOf(
+            "Tu factura está lista: El total a pagar de tu tarjeta es \$1.250.300,00 y vence el 5 de octubre.",
+            "Recuerda tu pago mínimo: Paga al menos \$85.000,00 antes de la fecha límite.",
+            "Tu Cajita creció: Ganaste \$1.234,56 en rendimientos esta semana.",
+            "¡Tienes un beneficio! Hasta \$50.000,00 de cashback en tus compras de octubre.",
+        )
+        for (texto in avisos) {
+            assertNull(parseSms(texto, DE_NU), "se leyó como movimiento: $texto")
+        }
+    }
+
+    @Test
+    fun `las compras aprobadas de Nu se siguen leyendo con el origen de Nu`() {
+        val crepes = assertNotNull(parseSms(COMPRA_NU_CREPES, DE_NU))
+        assertEquals(130_200.0, crepes.amount)
+        assertEquals(TransactionType.EXPENSE, crepes.type)
+        assertEquals("CREPES Y WAFFLES LEMON", crepes.merchant)
+
+        val google = assertNotNull(parseSms(COMPRA_NU_GOOGLE, DE_NU))
+        assertEquals(39_920.0, google.amount)
+        assertEquals("GOOGLE *MINTROCKET", google.merchant)
+    }
+
+    @Test
+    fun `la regla de Nu no toca lo de Bancolombia`() {
+        // Con su propio origen, con el de un SMS (el código del remitente) y sin origen, la compra de
+        // Bancolombia se lee igual que antes: la regla de Nu solo mira el origen de Nu.
+        for (origen in listOf(null, "85540", "Notificación · Bancolombia", "Correo · Bancolombia")) {
+            val parsed = assertNotNull(parseSms(DE_LA_NOTIFICACION, origen), "origen=$origen")
+            assertEquals(12_345.0, parsed.amount)
+            assertEquals(TransactionType.EXPENSE, parsed.type)
+            assertEquals("PRUEBA DE MOVI", parsed.merchant)
+        }
+        // Y al revés: la forma de Bancolombia («Compraste … con tu T.Deb») no tiene la forma de una
+        // compra de Nu, así que un texto así bajo el origen de Nu no se cuela como compra aprobada.
+        assertNull(parseSms(DE_LA_NOTIFICACION, DE_NU))
+        // «Nu» tiene que ser una palabra: un rótulo que solo la contiene no activa la regla.
+        assertNotNull(parseSms(DE_LA_NOTIFICACION, "Notificación · Numeral"))
+    }
 }
