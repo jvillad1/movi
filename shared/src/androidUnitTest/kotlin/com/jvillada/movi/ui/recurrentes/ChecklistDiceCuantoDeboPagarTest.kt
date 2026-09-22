@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -73,10 +74,11 @@ class ChecklistDiceCuantoDeboPagarTest {
         periodoDelSello = "2026-09",
     )
 
-    private val marcados = mutableListOf<Pair<String, String>>()
+    /** Las filas que pidieron «Anotar el movimiento». */
+    private val aAnotar = mutableListOf<String>()
 
     private fun montar(conCreditos: Boolean) {
-        marcados.clear()
+        aAnotar.clear()
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -85,8 +87,10 @@ class ChecklistDiceCuantoDeboPagarTest {
                         cargando = false,
                         pudoLeer = true,
                         marcando = emptySet(),
-                        onMarcar = { ruleId, periodo -> marcados += ruleId to periodo },
-                        onDeshacer = { _, _ -> },
+                        onConfirmar = { _, _ -> },
+                        onNoFueEste = { _, _ -> },
+                        onAnotarMovimiento = { pago -> aAnotar += pago.ruleId },
+                        onQuitarLaMarca = {},
                         onReintentar = {},
                         planesDeCuotas = if (conCreditos) {
                             planesDeLasCuotas(listOf(vehiculo, techo))
@@ -143,20 +147,36 @@ class ChecklistDiceCuantoDeboPagarTest {
         assertTrue(!hay(ESTIMADO_SOBRE_LA_DEUDA_DE_HOY), "y el pie no explica lo que no está")
     }
 
+    /**
+     * **La fila dejó de ser tocable, y lo que la reemplazó es «Anotar el movimiento».**
+     *
+     * Tildarla sellaba el período sin ninguna evidencia. El dueño lo cortó: *«no me debería dejar
+     * hacer check sin que el movimiento asociado exista»*. Lo que queda es la salida honesta —que
+     * el movimiento EXISTA— y para una cuota eso se registra en Créditos, decisión que toma la
+     * pantalla (ver `hojaParaAnotar`), no esta sección.
+     */
     @Test
-    fun tildar_la_fila_sigue_sellando_el_periodo() {
+    fun la_fila_no_se_tilda_y_ofrece_anotar_el_movimiento() {
         montar(conCreditos = true)
 
-        // En el árbol MEZCLADO, porque lo tocable es la fila entera y el texto está en sus hijos:
-        // `Modifier.clickable` mezcla a sus descendientes, así que el nodo con la acción es el que
-        // lleva el nombre. Y se toca por la acción semántica y no con un clic real: el checklist es
-        // más alto que la pantalla de prueba.
         val filas = composeRule.onAllNodes(
             hasText("Cuota Vehículo 8761", substring = true) and hasClickAction(),
         )
-        assertTrue(filas.fetchSemanticsNodes().isNotEmpty(), "la fila tiene que seguir siendo tocable")
-        filas[0].performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(
+            0,
+            filas.fetchSemanticsNodes().size,
+            "la fila es de solo lectura: su estado lo decide el movimiento, no el dedo",
+        )
 
-        assertEquals(listOf("credit_acc_8761" to "2026-09"), marcados)
+        // Y se toca por la acción semántica y no con un clic real: el checklist es más alto que la
+        // pantalla de prueba.
+        val botones = composeRule.onAllNodes(
+            hasAnyDescendant(hasText(ETIQUETA_ANOTAR)) and hasClickAction(),
+            useUnmergedTree = true,
+        )
+        assertTrue(botones.fetchSemanticsNodes().isNotEmpty(), "sin movimiento, la fila ofrece anotarlo")
+        botones[0].performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(listOf("credit_acc_8761"), aAnotar)
     }
 }

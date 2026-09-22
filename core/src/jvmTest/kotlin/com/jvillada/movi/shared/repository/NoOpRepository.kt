@@ -236,6 +236,7 @@ open class NoOpRepository(
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?) =
         com.jvillada.movi.shared.model.RecurringOccurrence(ruleId, period, eventId)
     override suspend fun unmarkOccurrence(ruleId: String, period: String) {}
+    override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) {}
     override suspend fun chatAi(request: AiChatRequest) = error("stub")
     override suspend fun getAccounts(): List<Account> = cuentasDelServer.toList()
     // Tipo de retorno explícito (y no el `Nothing` que infiere `error(...)`): así una subclase

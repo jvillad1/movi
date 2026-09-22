@@ -49,6 +49,7 @@ import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.MarkOccurrenceRequest
 import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.RechazarOcurrenciaRequest
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.Scope
@@ -441,6 +442,19 @@ class WalletRepositoryImpl(
     // hace nada y sin un solo mensaje que se lo diga.
     override suspend fun unmarkOccurrence(ruleId: String, period: String) {
         val response = client.delete("$baseUrl/api/recurring-rules/$ruleId/occurrence/$period")
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+    }
+
+    // Mismo idioma que los dos de arriba, y por el mismo motivo: acá el 400 dice algo que el dueño
+    // necesita leer («Ese movimiento no existe»), y un `.body()` a ciegas sobre un 204 sin cuerpo
+    // reventaría deserializando la nada.
+    override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) {
+        val response = client.post("$baseUrl/api/recurring-rules/$ruleId/occurrence/rechazo") {
+            contentType(ContentType.Application.Json)
+            setBody(RechazarOcurrenciaRequest(eventId = eventId))
+        }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
         }

@@ -356,6 +356,14 @@ fun App() {
                             onSaved = { refreshTick++; quickAdd = null },
                             onNavigate = navigate,
                             presetAccountId = request.presetAccountId,
+                            // El resto del prellenado: lo manda el checklist del período cuando
+                            // una fila sin movimiento ofrece «Anotar el movimiento». Ver
+                            // [Screen.QuickAdd].
+                            presetNota = request.presetNota,
+                            presetMonto = request.presetMonto,
+                            presetCategoria = request.presetCategoria,
+                            presetFecha = request.presetFecha,
+                            presetEsIngreso = request.presetEsIngreso,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },

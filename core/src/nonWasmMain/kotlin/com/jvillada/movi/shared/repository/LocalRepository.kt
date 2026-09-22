@@ -2065,6 +2065,10 @@ class LocalRepository(
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence =
         remote.markOccurrence(ruleId, period, eventId)
     override suspend fun unmarkOccurrence(ruleId: String, period: String) = remote.unmarkOccurrence(ruleId, period)
+    // Y el «no fue este» también: es una fila de `occurrence_rejections`, que el espejo tampoco
+    // tiene. Sin conexión no se puede rechazar, igual que no se puede marcar.
+    override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) =
+        remote.rechazarOcurrencia(ruleId, eventId)
     override suspend fun chatAi(request: AiChatRequest): AiChatResponse = remote.chatAi(request)
     override suspend fun register(request: RegisterRequest): AuthResponse = remote.register(request)
     override suspend fun login(request: LoginRequest): AuthResponse = remote.login(request)

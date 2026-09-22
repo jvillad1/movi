@@ -84,14 +84,15 @@ class OccurrenceLogicTest {
     @Test fun `el idioma sigue al tipo del recurrente, y dice de que mes habla`() {
         assertEquals("¿Ya te llegó el de agosto?", tituloPropuesta(TransactionType.INCOME, "2026-08"))
         assertEquals("¿Ya pagaste el de agosto?", tituloPropuesta(TransactionType.EXPENSE, "2026-08"))
-        assertEquals("Ya me llegó", etiquetaCierreManual(TransactionType.INCOME))
-        assertEquals("Ya lo pagué", etiquetaCierreManual(TransactionType.EXPENSE))
     }
 
     @Test fun `un periodo ilegible no imprime un numero crudo`() {
         // Nunca «el de 13» ni «el de null»: si no se entiende el periodo, la frase se acorta.
         assertEquals("¿Ya te llegó?", tituloPropuesta(TransactionType.INCOME, "basura"))
-        assertEquals("Ya ocurrió", textoYaOcurrio(estado(true, null).copy(period = "2026-99")))
+        assertEquals(
+            "Ya ocurrió · marcado a mano, sin movimiento",
+            textoYaOcurrio(estado(true, null).copy(period = "2026-99")),
+        )
     }
 
     /**
@@ -101,10 +102,25 @@ class OccurrenceLogicTest {
      */
     @Test fun `una fila cerrada nombra el mes y dice si la respalda un movimiento`() {
         assertEquals("Ya ocurrió en agosto · con un movimiento", textoYaOcurrio(estado(true, "ev_1")))
-        assertEquals("Ya ocurrió en agosto", textoYaOcurrio(estado(true, null)))
         assertEquals(
-            "Ya ocurrió en septiembre",
-            textoYaOcurrio(estado(true, null).copy(period = "2026-09")),
+            "Ya ocurrió en septiembre · con un movimiento",
+            textoYaOcurrio(estado(true, "ev_1").copy(period = "2026-09")),
+        )
+    }
+
+    /**
+     * **Un sello sin movimiento lo dice, y eso es nuevo.**
+     *
+     * Decía «Ya ocurrió en agosto» a secas: la fila que MENOS respaldo tiene era la única que no
+     * explicaba de dónde salía, así que se leía igual que una anclada a plata que se puede mirar.
+     * Desde que la casilla del checklist dejó de marcar sin evidencia, estos sellos no se pueden
+     * crear más — pero en la base del dueño hay varios, y lo único honesto es que digan lo que son
+     * y ofrezcan quitarse.
+     */
+    @Test fun `un sello sin movimiento dice que se marco a mano`() {
+        assertEquals(
+            "Ya ocurrió en agosto · marcado a mano, sin movimiento",
+            textoYaOcurrio(estado(true, null)),
         )
     }
 

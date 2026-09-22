@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.jvillada.movi.data.RecurringOfferGate
@@ -32,15 +33,21 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 /**
  * PR 3 del rediseño de Recurrentes (2026-09): «Próximos pagos» y el flujo de «¿esto ya ocurrió?»
  * montados de verdad dentro de [TransactionsScreen], bajo el chip «Recurrentes».
  *
- * Lo que prueba no es que un texto aparezca: es que **los tres botones que sellan un periodo
- * lleguen al repositorio y que la pantalla refleje lo que quedó**. Sellar algo que no ocurrió
- * apaga el aviso de una deuda real, y eso cuesta plata; por eso también se prueba el camino de
- * vuelta («Deshacer»), que en la pantalla vieja vivía en un inventario que no se mudó.
+ * Lo que prueba no es que un texto aparezca: es que **lo que sella un periodo llegue al
+ * repositorio y que la pantalla refleje lo que quedó**. Sellar algo que no ocurrió apaga el aviso
+ * de una deuda real, y eso cuesta plata; por eso también se prueba el camino de vuelta
+ * («Deshacer»), que en la pantalla vieja vivía en un inventario que no se mudó.
+ *
+ * **Y desde esta ola, que la tercera salida ya no selle nada.** Era «Ya lo pagué» / «Ya me llegó»
+ * y cerraba el periodo con `eventId = null`, o sea sin ninguna evidencia. El dueño pidió cerrar esa
+ * puerta en el checklist, y dejarla viva acá la habría movido un toque más allá en vez de
+ * cerrarla: ahora lo que se ofrece es **anotar el movimiento que falta**.
  *
  * Mismo patrón de montaje que [ResumenRecurrentesEnMovimientosTest].
  */
@@ -64,6 +71,7 @@ class ProximosPagosEnMovimientosTest {
 
     private var marcadas = 0
     private var desmarcadas = 0
+    private var rechazados = 0
 
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
@@ -93,6 +101,10 @@ class ProximosPagosEnMovimientosTest {
             desmarcadas++
             estadoDelArriendo = estadoDelArriendo.copy(occurred = false, eventId = null)
         }
+
+        override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) {
+            rechazados++
+        }
     }
 
     private fun montar(chipInicial: Int? = null) {
@@ -114,6 +126,7 @@ class ProximosPagosEnMovimientosTest {
         navegoA = null
         marcadas = 0
         desmarcadas = 0
+        rechazados = 0
         estadoDelArriendo = OccurrenceState(
             ruleId = "rr_arriendo", period = "2026-09", dueDate = "2026-09-05",
             occurred = false, candidates = emptyList(),
@@ -158,37 +171,55 @@ class ProximosPagosEnMovimientosTest {
         // Con `substring`: el vencimiento va en el mismo texto que la categoría («Vencido hace 2 días
         // · Vivienda»), para que no se repartan un renglón y la categoría quede de una letra de ancho.
         composeRule.onNodeWithText("Vencido hace 2 días", substring = true, useUnmergedTree = true).assertIsDisplayed()
-        // La propuesta, con el mes que nombra y su salida sin movimiento que emparejar.
+        // La propuesta, con el mes que nombra. Y sin ningún candidato, su única salida: anotar el
+        // movimiento que falta. El «Ya lo pagué» que sellaba sin evidencia ya no existe.
         composeRule.onNodeWithText("¿Ya pagaste el de septiembre?", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Ya lo pagué", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(
+            true,
+            composeRule.onAllNodesWithText("Anotar el movimiento", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
+        assertEquals(
+            true,
+            composeRule.onAllNodesWithText("Ya lo pagué", useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty(),
+        )
     }
 
     /**
-     * El cierre sin movimiento: pagó en efectivo, o todavía no lo anotó. Sella el periodo, la fila
-     * sale de «Próximos» (su vencimiento vigente ya es el del mes que viene) y aparece en «Ya
-     * ocurrieron», que es donde vive el arrepentimiento.
+     * **Pagó en efectivo, o desde una cuenta que Movi no lleva, o el banco nunca avisó.** La salida
+     * ya no es sellar el periodo a ciegas: es anotar el movimiento que falta, con los datos del
+     * recurrente puestos. Nada se sella hasta que ese movimiento exista.
      */
     @Test
-    fun `Ya lo pague sella el periodo y la fila se muda a Ya ocurrieron`() {
+    fun `Anotar el movimiento abre la hoja prellenada y no sella nada`() {
         montar()
         activarElChip()
-        esperarTexto("Ya lo pagué")
+        esperarTexto("Anotar el movimiento")
 
-        composeRule.onNodeWithText("Ya lo pagué", useUnmergedTree = true).performClick()
+        // `onLast()`: el checklist va arriba y ofrece el mismo rótulo sobre la misma regla; el de
+        // abajo es el de «Próximos», que es el que esta prueba mira.
+        composeRule.onAllNodesWithText("Anotar el movimiento", useUnmergedTree = true)
+            .onLast().performClick()
 
-        esperarTexto("YA OCURRIERON")
-        assertEquals(1, marcadas)
-        composeRule.onNodeWithText("Ya ocurrió en septiembre", useUnmergedTree = true).assertIsDisplayed()
-        // Sellado, ya no se vuelve a preguntar.
-        composeRule.onNodeWithText("¿Ya pagaste el de septiembre?", useUnmergedTree = true).assertDoesNotExist()
+        val hoja = assertIs<Screen.QuickAdd>(navegoA)
+        assertEquals("Arriendo", hoja.presetNota)
+        assertEquals(1_800_000L, hoja.presetMonto)
+        assertEquals("Vivienda", hoja.presetCategoria)
+        assertEquals("2026-09-05", hoja.presetFecha)
+        assertEquals(0, marcadas, "ningún periodo se selló: todavía no hay movimiento que lo pruebe")
     }
 
+    /**
+     * «Deshacer» sobre un sello que ya existe. Se arranca con el periodo sellado en el fixture y no
+     * sellándolo desde la pantalla: la única puerta que hacía eso sin movimiento se cerró, y
+     * reconstruirla acá para poder probar el camino de vuelta sería probar algo que ya no existe.
+     */
     @Test
     fun `Deshacer revierte el sello y la pregunta vuelve`() {
+        estadoDelArriendo = estadoDelArriendo.copy(occurred = true, eventId = "ev_1")
         montar()
         activarElChip()
-        esperarTexto("Ya lo pagué")
-        composeRule.onNodeWithText("Ya lo pagué", useUnmergedTree = true).performClick()
         esperarTexto("YA OCURRIERON")
 
         composeRule.onNodeWithText("Deshacer", useUnmergedTree = true).performClick()
