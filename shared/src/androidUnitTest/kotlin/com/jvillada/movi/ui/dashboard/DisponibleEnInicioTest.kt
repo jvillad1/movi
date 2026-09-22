@@ -79,6 +79,7 @@ class DisponibleEnInicioTest {
 
         composeRule.onNodeWithText("DISPONIBLE", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("\$6,9M", useUnmergedTree = true).assertIsDisplayed()
+        // Sin los campos nuevos (un server viejo) el encabezado es el de siempre.
         composeRule.onNodeWithText("Ingresos \$10M menos fijos \$3,1M", useUnmergedTree = true).assertIsDisplayed()
         // $6,9M ÷ 31 = $222.580 por día; por 7, $1,6M por semana.
         composeRule.onNodeWithText("Meta por semana \$1,6M · Meta por día \$222.580", useUnmergedTree = true)
@@ -113,6 +114,25 @@ class DisponibleEnInicioTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText("\$0 de \$222.580", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Te quedan \$222.580 para hoy", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * Con lo que manda el server nuevo, el encabezado dice de dónde sale el disponible: lo que
+     * tenías el 25, lo que entró (un préstamo, un ahorro) y los fijos, en dos líneas cortas.
+     */
+    @Test
+    fun `con lo que tenias al empezar el encabezado lo desglosa en dos lineas`() {
+        // $1,4M el 25 + $33,9M que entraron − $500.000 guardados − $3,1M de arriendo = $31,7M.
+        montar(
+            datos(ingresos = 22_152_488, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 150_000L))
+                .copy(plataDelDisponible = PlataDelDisponible(1_386_694, 33_930_447, 500_000)),
+        )
+
+        composeRule.onNodeWithText("\$31,7M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Tenías \$1,4M el 25 · entraron \$33,9M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Guardaste \$500.000 · fijos \$3,1M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Ingresos", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Meta por semana", substring = true, useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test

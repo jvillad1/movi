@@ -83,6 +83,20 @@ data class DashboardSummary(
      * Un APK viejo lo ignora (`ignoreUnknownKeys`).
      */
     val gastoVariablePorDia: Map<String, Long>? = null,
+    /**
+     * **Lo que había en «Tu plata» a las 00:00 del primer día del período**, en pesos. Ver
+     * [PlataDelPeriodo.saldoAlInicio].
+     *
+     * Con [entradasDelPeriodo] y [guardadoDelPeriodo] cambia el Disponible de «ingresos menos
+     * fijos» a «lo que tenías + lo que entró − lo que guardaste − fijos». `null` = el server es
+     * anterior a estos campos, y el cliente vuelve a la cuenta de antes. Solo se AGREGAN campos:
+     * un APK viejo los ignora (`ignoreUnknownKeys`).
+     */
+    val saldoTuPlataAlInicio: Long? = null,
+    /** «Entraron» en el período: ver [PlataDelPeriodo.entradas]. */
+    val entradasDelPeriodo: Long? = null,
+    /** Lo que salió de Tu plata a un ahorro o inversión de afuera: ver [PlataDelPeriodo.guardado]. */
+    val guardadoDelPeriodo: Long? = null,
 )
 
 /**

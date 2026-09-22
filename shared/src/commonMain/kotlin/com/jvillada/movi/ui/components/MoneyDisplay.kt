@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.esCuentaDeDeuda
 import com.jvillada.movi.theme.Movi
 
 /**
@@ -30,8 +31,7 @@ fun signedMoney(amount: Long, currency: String): String =
     (if (amount < 0) "−" else "") + formatMoney(amount, currency)
 
 /** True for account types whose balance represents debt (positive = owed). */
-fun isDebtAccount(type: AccountType): Boolean =
-    type == AccountType.CREDIT_CARD || type == AccountType.LOAN
+fun isDebtAccount(type: AccountType): Boolean = esCuentaDeDeuda(type)
 
 /**
  * **Lo que vale una cuenta en pesos**: su estimado con la TRM si tiene plata en otra moneda, o su

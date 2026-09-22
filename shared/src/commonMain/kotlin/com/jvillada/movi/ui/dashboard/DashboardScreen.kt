@@ -277,6 +277,9 @@ fun DashboardScreen(
                             capturaSilenciada = s.smsAlertMuted,
                             // La tarjeta «Disponible». Misma respuesta, ninguna llamada nueva.
                             gastoVariablePorDia = s.gastoVariablePorDia,
+                            // Lo que tenías al empezar el período y lo que entró. Un server viejo
+                            // no lo manda y la tarjeta vuelve a «ingresos menos fijos».
+                            plataDelDisponible = plataDelDisponibleDe(s),
                         )
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por

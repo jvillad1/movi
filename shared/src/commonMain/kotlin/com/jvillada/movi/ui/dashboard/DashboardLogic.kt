@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.dashboard
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
+import com.jvillada.movi.shared.model.esDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
@@ -125,6 +126,12 @@ data class DashboardData(
      * `null` = no llegó, o el server es anterior al campo: la tarjeta «Disponible» no se pinta.
      */
     val gastoVariablePorDia: Map<String, Long>? = null,
+    /**
+     * Lo que había en «Tu plata» al empezar el período y lo que entró (ver [PlataDelDisponible]).
+     * `null` = no llegó o el server es anterior: la tarjeta «Disponible» vuelve a «ingresos menos
+     * fijos».
+     */
+    val plataDelDisponible: PlataDelDisponible? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -319,9 +326,13 @@ fun patrimonioExplicacion(balance: HeroBalance): String {
  * repetir el filtro cada una por su cuenta — dos copias del mismo predicado ya se
  * desalinearon dos veces en este proyecto (Créditos vs. Inicio en la Ola 4, `quickLinkFigure`
  * vs. `assetsDebtsNet` después) y la tercera no iba a ser distinta.
+ *
+ * El predicado mismo vive en `:core` ([esDeTuPlata], en `PlataDelPeriodo.kt`) porque el server
+ * lo necesita para la tarjeta «Disponible»: lo que tenías al empezar el período se suma sobre
+ * estas mismas cuentas.
  */
 private fun cuentasLibres(accounts: List<Account>): List<Account> =
-    accounts.filter { !isDebtAccount(it.type) && it.condicionadaA.isNullOrBlank() }
+    accounts.filter { it.esDeTuPlata() }
 
 /**
  * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no
@@ -790,5 +801,6 @@ internal fun disponibleDelInicio(
         inicio = inicioDelPeriodo(periodo, data.ajustesDePeriodo),
         finExclusivo = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo),
         hoy = hoy,
+        plata = data.plataDelDisponible,
     )
 }

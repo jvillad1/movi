@@ -154,8 +154,10 @@ class DashboardRoutesTest {
         // Confirmado por default: la columna nace «UNCONFIRMED» y eso lo dejaría fuera de todas
         // las cifras. Lo pendiente se pide explícito (ver el test de «Por confirmar»).
         estado: String = "RECONCILED",
+        traspaso: String? = null,
     ) = transaction {
         Events.insert {
+            it[Events.transferId] = traspaso
             it[Events.reconciliationStatus] = estado
             it[Events.id]          = id
             it[Events.userId]      = uid
@@ -681,6 +683,7 @@ class DashboardRoutesTest {
      */
     @Test
     fun `la forma de la respuesta no cambia para un APK viejo`() = testApplication {
+        event("e-sueldo", savings, "INCOME", 3_000_000L, category = "Sueldo")
         event("e-almuerzo", savings, "EXPENSE", 30_000L)
         wireApp()
         val body = summary()
@@ -688,10 +691,71 @@ class DashboardRoutesTest {
             "scope", "month", "monthIncome", "monthSpent", "spentByCategory", "cardPaymentCandidates",
             "pendingSms", "smsTotal", "smsLastAt", "smsAlertMuted", "usedCategories", "gastoVariablePorDia",
         )
-        assertEquals(emptySet(), body.keys - conocidas)
+        // El Disponible que cuenta lo que tenías (APK 1.40+) solo AGREGA campos: un APK ≤ 1.39
+        // los ignora y sigue leyendo los de siempre, con el mismo tipo y el mismo valor.
+        val nuevas = setOf("saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo")
+        assertEquals(emptySet(), body.keys - conocidas - nuevas)
+        assertEquals(3_000_000L, body.long("monthIncome"))
+        assertEquals(30_000L, body.long("monthSpent"))
+        assertEquals(nuevas, body.keys intersect nuevas)
         body["gastoVariablePorDia"]!!.jsonObject.forEach { (dia, monto) ->
             java.time.LocalDate.parse(dia)
             monto.jsonPrimitive.long
         }
+    }
+
+    // ── El Disponible cuenta lo que tenías y lo que entró ────────────────────────
+
+    private fun cuentaCondicionada(id: String, condicion: String) = transaction {
+        Accounts.insert {
+            it[Accounts.id]     = id
+            it[Accounts.userId] = this@DashboardRoutesTest.userId
+            it[name]            = id
+            it[Accounts.type]   = "SAVINGS"
+            it[balance]         = 0L
+            it[conditionedTo]   = condicion
+        }
+    }
+
+    /**
+     * El caso del dueño en chico: lo que había en la cuenta libre antes del período, el préstamo
+     * de su papá anotado como traspaso desde la cuenta del crédito, el colegio pagado desde Nu
+     * (condicionada), los rendimientos de Nu (que no cuentan) y una plata apartada en Nu.
+     */
+    @Test
+    fun `el Disponible trae lo que habia en Tu plata al empezar y lo que entro de afuera`() = testApplication {
+        cuentaCondicionada("acc-nu", "Educación")
+        val inicio = monthStartMillis()
+        val antes = inicio - 24L * 60 * 60 * 1000
+        val ahora = System.currentTimeMillis()
+
+        // Antes del período: $1.000.000 − $200.000 − $100.000 sin confirmar (el saldo sí lo cuenta).
+        event("a-apertura", savings, "INCOME", 1_000_000L, category = OPENING_CATEGORY, timestamp = antes)
+        event("a-gasto", savings, "EXPENSE", 200_000L, timestamp = antes)
+        event("a-sin-confirmar", savings, "EXPENSE", 100_000L, timestamp = antes, estado = "UNCONFIRMED")
+        event("a-anulado", savings, "INCOME", 999_000L, timestamp = antes)
+        voidEvent("a-anulado")
+        event("a-usd", savings, "INCOME", 50L, currency = "USD", timestamp = antes)
+        event("a-nu", "acc-nu", "INCOME", 5_000_000L, category = OPENING_CATEGORY, timestamp = antes)
+        event("a-otro", "acc-b", "INCOME", 7_000_000L, timestamp = antes, uid = otherUserId)
+        // El primer milisegundo del período ya es del período: es ingreso, no saldo al inicio.
+        event("p-sueldo", savings, "INCOME", 3_000_000L, category = "Sueldo", timestamp = inicio)
+
+        // En el período.
+        event("p-techo-sale", loan, "EXPENSE", 10_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-techo")
+        event("p-techo-entra", savings, "INCOME", 10_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-techo")
+        event("p-colegio", "acc-nu", "EXPENSE", 3_000_000L, category = "Educación", timestamp = ahora)
+        event("p-rendimientos", "acc-nu", "INCOME", 1_222_041L, category = "Rendimientos", timestamp = ahora)
+        event("p-a-nu-sale", savings, "EXPENSE", 500_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-nu")
+        event("p-a-nu-entra", "acc-nu", "INCOME", 500_000L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-nu")
+        event("p-tarjeta", card, "EXPENSE", 50_000L, category = "Ropa", timestamp = ahora)
+
+        wireApp()
+        val body = summary()
+
+        assertEquals(700_000L, body.long("saldoTuPlataAlInicio"))
+        // El sueldo + el préstamo + el colegio que pagó Nu. Los rendimientos de Nu, no.
+        assertEquals(3_000_000L + 10_000_000L + 3_000_000L, body.long("entradasDelPeriodo"))
+        assertEquals(500_000L, body.long("guardadoDelPeriodo"))
     }
 }
