@@ -61,7 +61,15 @@ package com.jvillada.movi.shared.model
 // entiende: HERO_BALANCE ahora encabeza con el rango del período y ALERTS se pinta como «Para
 // revisar». Un teléfono sin actualizar sigue viendo su hero y sus alertas de siempre, y las dos
 // secciones nuevas simplemente no le aparecen (ver `renderableSections`).
-const val DASHBOARD_LAYOUT_VERSION = 6
+// Generación 7: entra DISPONIBLE_DEL_PERIODO, justo debajo de «Falta por pagar». El dueño: «en
+// inicio sería genial algo tipo: Disponible en el periodo · por semana · por día». Va después del
+// checklist porque lo que resta como «fijos» son exactamente esas filas: quien lee de arriba abajo
+// ya vio qué es lo fijo antes de ver cuánto queda.
+//
+// Sube la generación porque es una sección nueva en la lista, y eso solo lo propaga el seed (ver
+// Generación 5). Un APK viejo recibe la fila nueva y no pasa nada: el tipo no está en su
+// `SECTION_TYPES`, `renderableSections` lo descarta y su `when` del renderer ni lo ve.
+const val DASHBOARD_LAYOUT_VERSION = 7
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
@@ -69,6 +77,7 @@ fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     sections = listOf(
         ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
         ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Pagos del período"),
+        ScreenSection(type = "DISPONIBLE_DEL_PERIODO", title = "Disponible"),
         ScreenSection(type = "GASTO_POR_CATEGORIA", title = "En qué se fue"),
         ScreenSection(type = "ALERTS", title = "Para revisar"),
         // Sin el "✦" que llevaba antes: en la web salía como ▯ (la fuente no tiene el glifo),

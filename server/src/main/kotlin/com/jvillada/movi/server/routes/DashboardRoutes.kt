@@ -10,6 +10,10 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.reminders.loadEventsBetween
+import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
+import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.gastoVariablePorDia
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
@@ -131,6 +135,15 @@ fun Route.dashboardRoutes() {
                     .where { Users.id eq uid }
                     .firstOrNull()?.get(Users.smsAlertMuted) ?: false,
                 usedCategories = usedCategories(uid),
+                // La tarjeta «Disponible»: el gasto variable del período, día por día. Los mismos
+                // movimientos que suman «Gastos» (vivos, flujo de caja, sin «Por confirmar», en
+                // pesos) menos los pagos del checklist — los atados a un sello de «ya ocurrió» y
+                // las cuotas de crédito. La regla vive en :core (`gastoVariablePorDia`).
+                gastoVariablePorDia = gastoVariablePorDia(
+                    eventos = loadEventsBetween(uid, monthStart, monthEnd),
+                    idsSellados = loadUsedOccurrenceEventIds(uid),
+                    diaDe = { epochMillisToAppDateString(it) },
+                ),
             )
         }
         call.respond(summary)

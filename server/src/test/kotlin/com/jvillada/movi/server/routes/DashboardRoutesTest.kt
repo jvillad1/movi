@@ -11,6 +11,7 @@ import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.PushSubscriptions
+import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
@@ -22,6 +23,9 @@ import com.jvillada.movi.server.time.currentMonthWindow
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
@@ -101,12 +105,16 @@ class DashboardRoutesTest {
                 Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
                 // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
                 CategoryPrefs,
+                // «Disponible»: el gasto variable descarta los movimientos atados a un sello.
+                RecurringOccurrences,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, Cards, Goals, CardPaymentDismissals, PushSubscriptions,
                 // Ola 10: el resumen ahora lee las preferencias de categoría (esconder / tipo fijado).
                 CategoryPrefs,
+                // «Disponible»: el gasto variable descarta los movimientos atados a un sello.
+                RecurringOccurrences,
             )
             listOf(userId to "a@dashboard.test", otherUserId to "b@dashboard.test").forEach { (id, mail) ->
                 Users.insert {
@@ -585,5 +593,37 @@ class DashboardRoutesTest {
             body.long("monthSpent"),
             "sin leer los arranques propios, este gasto caía en el período anterior y el Inicio decía 0",
         )
+    }
+    /**
+     * La tarjeta «Disponible»: el gasto variable del período, día por día. Lo que cuenta en
+     * «Gastos» menos los pagos del checklist —el movimiento atado a un sello de «ya ocurrió» y la
+     * cuota de un crédito—, que ya se restan como fijos.
+     */
+    @Test
+    fun `el gasto variable del periodo deja afuera los pagos de los fijos`() = testApplication {
+        val ahora = System.currentTimeMillis()
+        event("e-almuerzo", savings, "EXPENSE", 30_000L, timestamp = ahora)
+        event("e-compra-tarjeta", card, "EXPENSE", 50_000L, category = "Ropa", timestamp = ahora)
+        event("e-arriendo", savings, "EXPENSE", 1_850_000L, category = "Vivienda", timestamp = ahora)
+        event("e-cuota", savings, "EXPENSE", 900_000L, category = CUOTA_CATEGORY, timestamp = ahora)
+        event("e-traspaso", savings, "EXPENSE", 5_000_000L, category = TRANSFER_CATEGORY, timestamp = ahora)
+        event("e-sin-confirmar", savings, "EXPENSE", 80_000L, timestamp = ahora, estado = "UNCONFIRMED")
+        event("e-anulado", savings, "EXPENSE", 70_000L, timestamp = ahora)
+        voidEvent("e-anulado")
+        event("e-otro-usuario", "acc-b", "EXPENSE", 999_000L, timestamp = ahora, uid = otherUserId)
+        transaction {
+            RecurringOccurrences.insert {
+                it[RecurringOccurrences.userId] = this@DashboardRoutesTest.userId
+                it[ruleId] = "rr_arriendo"
+                it[period] = "2026-09"
+                it[eventId] = "e-arriendo"
+                it[confirmedAt] = ahora
+            }
+        }
+
+        wireApp()
+        val gasto = summary()["gastoVariablePorDia"]!!.jsonObject.mapValues { it.value.jsonPrimitive.long }
+
+        assertEquals(mapOf(epochMillisToAppDateString(ahora) to 80_000L), gasto)
     }
 }

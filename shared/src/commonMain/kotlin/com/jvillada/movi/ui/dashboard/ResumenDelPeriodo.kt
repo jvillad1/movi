@@ -143,6 +143,15 @@ data class PagoDelPeriodo(
     val derivado: Boolean = false,
     /** Un sueldo no se paga: llega. No suma en [faltaPorPagar] ni cuenta como un pago del período. */
     val esIngreso: Boolean = false,
+    /**
+     * **La plata que de verdad salió** por este pago, cuando se sabe: la cuota de un crédito ya
+     * pagada trae el monto del movimiento que la prueba (`OccurrenceState.montoDelPago`). `null` en
+     * lo sellado a mano y en lo pendiente: ahí solo está el monto esperado ([monto]).
+     *
+     * Lo lee la tarjeta «Disponible» para restar lo pagado y no lo pactado. Solo viaja si está en
+     * la misma moneda que [monto]: mezclar dólares con pesos acá sería peor que no saberlo.
+     */
+    val montoPagado: Long? = null,
 ) {
     val vencido: Boolean get() = !pagado && diasParaVencer < 0
 
@@ -223,6 +232,10 @@ fun checklistDelPeriodo(
                 periodoDelSello = ocurrencia?.period,
                 derivado = ocurrencia?.derivadaDeUnMovimiento == true,
                 esIngreso = pago.rule.type == TransactionType.INCOME,
+                montoPagado = ocurrencia
+                    ?.takeIf { it.occurred }
+                    ?.takeIf { (it.monedaDelPago ?: pago.rule.currency) == pago.rule.currency }
+                    ?.montoDelPago,
             )
         }
         .sortedWith(

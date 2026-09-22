@@ -51,6 +51,8 @@ object ScreenTaxonomy {
         // descarta `renderableSections`: es la capa que evita un Inicio en blanco por un typo, y
         // también lo que hace que un APK viejo ignore en silencio una sección que no sabe pintar.
         "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA",
+        // Generación 7: cuánto queda para gastar en el período, la semana y hoy.
+        "DISPONIBLE_DEL_PERIODO",
     )
     val ACTION_TYPES = listOf("NAVIGATE", "OPEN_URL")
     // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.

@@ -157,9 +157,9 @@ class ScreenRoutesTest {
         assertEquals("dashboard", body["slug"]!!.jsonPrimitive.content)
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val sections = body["sections"]!!.jsonArray
-        // Generación 6: el Inicio como resumen del período.
+        // Generación 7: el Inicio como resumen del período, con «Disponible» debajo del checklist.
         assertEquals(
-            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
             sections.map { it.jsonObject["type"]!!.jsonPrimitive.content },
         )
 
@@ -353,7 +353,7 @@ class ScreenRoutesTest {
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals(DASHBOARD_LAYOUT_VERSION, body["version"]!!.jsonPrimitive.content.toInt())
         val types = body["sections"]!!.jsonArray.map { it.jsonObject["type"]!!.jsonPrimitive.content }
-        assertEquals(listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"), types)
+        assertEquals(listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"), types)
         assertTrue("QUICK_LINKS_WITH_TOTALS" !in types, "Explora desaparece tras el deploy, no solo en instalaciones nuevas")
     }
 }

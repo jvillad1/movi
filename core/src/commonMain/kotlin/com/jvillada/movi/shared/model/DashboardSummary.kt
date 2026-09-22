@@ -71,6 +71,18 @@ data class DashboardSummary(
      * Lo consume `com.jvillada.movi.data.UsedCategoriesCache`.
      */
     val usedCategories: List<UsedCategory> = emptyList(),
+    /**
+     * **El gasto variable de cada día del período** (`"YYYY-MM-DD"` → pesos): lo que cuenta en
+     * «Gastos» menos los pagos del checklist. Ver [gastoVariablePorDia].
+     *
+     * Alimenta la tarjeta «Disponible» del Inicio, que mide lo gastado en el período, la semana y
+     * hoy contra lo que queda de «ingresos menos fijos».
+     *
+     * `null` = el server es anterior a este campo: la tarjeta no se pinta, porque sin él no hay
+     * con qué medir lo gastado — un mapa vacío por defecto diría «gastaste $0», que es falso.
+     * Un APK viejo lo ignora (`ignoreUnknownKeys`).
+     */
+    val gastoVariablePorDia: Map<String, Long>? = null,
 )
 
 /**
