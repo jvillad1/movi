@@ -48,8 +48,10 @@ fun Transaction.loadOccurrenceRows(uid: String): List<RecurringOccurrence> =
  * Cuesta como mucho dos consultas chiquitas: la tabla tiene a lo sumo una fila por recurrente y
  * por mes, y solo se miran los ids que ella menciona.
  */
-fun Transaction.loadOccurredBy(uid: String): Map<String, Set<String>> {
-    val rows = loadOccurrenceRows(uid)
+fun Transaction.loadOccurredBy(uid: String): Map<String, Set<String>> = loadOccurredBy(uid, loadOccurrenceRows(uid))
+
+/** Lo mismo que [loadOccurredBy], sobre filas que quien llama ya leyó (así no se leen dos veces). */
+fun Transaction.loadOccurredBy(uid: String, rows: List<RecurringOccurrence>): Map<String, Set<String>> {
     if (rows.isEmpty()) return emptyMap()
     val ids = rows.mapNotNull { it.eventId }.toSet()
     val vivos: Set<String> = if (ids.isEmpty()) {

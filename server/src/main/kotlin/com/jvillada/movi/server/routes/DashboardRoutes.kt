@@ -11,7 +11,11 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.loadEventsBetween
-import com.jvillada.movi.server.reminders.loadUsedOccurrenceEventIds
+import com.jvillada.movi.server.reminders.loadOccurredBy
+import com.jvillada.movi.server.reminders.loadOccurrenceRows
+import com.jvillada.movi.server.reminders.parteFijaDelChecklist
+import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.gastoVariablePorDia
 import com.jvillada.movi.shared.model.AccountType
@@ -120,6 +124,8 @@ fun Route.dashboardRoutes() {
                 .where { SmsMessages.userId eq uid }
                 .map { it[SmsMessages.time] to it[SmsMessages.state] }
             val captura = capturaDeSms(filasDeSms.map { it.first })
+            val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
+            val sellos = loadOccurrenceRows(uid)
 
             DashboardSummary(
                 scope = scope,
@@ -137,11 +143,21 @@ fun Route.dashboardRoutes() {
                 usedCategories = usedCategories(uid),
                 // La tarjeta «Disponible»: el gasto variable del período, día por día. Los mismos
                 // movimientos que suman «Gastos» (vivos, flujo de caja, sin «Por confirmar», en
-                // pesos) menos los pagos del checklist — los atados a un sello de «ya ocurrió» y
-                // las cuotas de crédito. La regla vive en :core (`gastoVariablePorDia`).
+                // pesos) menos las cuotas de crédito y la parte de cada movimiento que paga un
+                // ítem del checklist (`PagosDelChecklist.kt`). La regla vive en :core
+                // (`gastoVariablePorDia`).
                 gastoVariablePorDia = gastoVariablePorDia(
-                    eventos = loadEventsBetween(uid, monthStart, monthEnd),
-                    idsSellados = loadUsedOccurrenceEventIds(uid),
+                    eventos = eventosDelPeriodo,
+                    parteFija = parteFijaDelChecklist(
+                        reglas = RecurringRules.selectAll()
+                            .where { RecurringRules.userId eq uid }
+                            .map { it.toRule() },
+                        sellos = sellos,
+                        ocurridos = loadOccurredBy(uid, sellos),
+                        eventos = eventosDelPeriodo,
+                        hoy = epochMillisToAppDate(ahora),
+                        settings = periodo,
+                    ),
                     diaDe = { epochMillisToAppDateString(it) },
                 ),
             )

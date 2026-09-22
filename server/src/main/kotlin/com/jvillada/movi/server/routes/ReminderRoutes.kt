@@ -64,7 +64,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.reminders.leadDaysOf
 
-private fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
+internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     id = this[RecurringRules.id],
     name = this[RecurringRules.name],
     category = this[RecurringRules.category],

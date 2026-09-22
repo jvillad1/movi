@@ -39,7 +39,7 @@ class GastoVariableTest {
                 evento("mercado", 200_000, "2026-09-21"),
                 evento("taxi", 15_000, "2026-09-20"),
             ),
-            idsSellados = emptySet(),
+            parteFija = emptyMap(),
             diaDe = diaDe,
         )
         assertEquals(mapOf("2026-09-21" to 230_000L, "2026-09-20" to 15_000L), gasto)
@@ -55,13 +55,13 @@ class GastoVariableTest {
                 evento("netflix-usd", 20, "2026-09-21", moneda = "USD"),
                 evento("cafe", 8_000, "2026-09-21"),
             ),
-            idsSellados = emptySet(),
+            parteFija = emptyMap(),
             diaDe = diaDe,
         )
         assertEquals(mapOf("2026-09-21" to 8_000L), gasto)
     }
 
-    /** El arriendo ya se restó como fijo: su pago, atado al sello, no se cuenta otra vez. */
+    /** El arriendo ya se restó como fijo: su pago no se cuenta otra vez. */
     @Test
     fun `el pago de un fijo no se cuenta dos veces`() {
         val gasto = gastoVariablePorDia(
@@ -70,9 +70,34 @@ class GastoVariableTest {
                 evento("cuota-carro", 900_000, "2026-09-05", categoria = CUOTA_CATEGORY),
                 evento("almuerzo", 30_000, "2026-09-05"),
             ),
-            idsSellados = setOf("arriendo"),
+            parteFija = mapOf("arriendo" to 1_850_000L),
             diaDe = diaDe,
         )
         assertEquals(mapOf("2026-09-05" to 30_000L), gasto)
+    }
+
+    /**
+     * Un pago más grande que el fijo que paga deja la diferencia como variable: los fijos restaron
+     * $180.000, así que los otros $20.000 son gasto del período y no pueden perderse.
+     */
+    @Test
+    fun `la parte de un pago que pasa el monto del fijo sigue siendo variable`() {
+        val gasto = gastoVariablePorDia(
+            listOf(evento("gimnasio", 200_000, "2026-09-05", categoria = "Gimnasio")),
+            parteFija = mapOf("gimnasio" to 180_000L),
+            diaDe = diaDe,
+        )
+        assertEquals(mapOf("2026-09-05" to 20_000L), gasto)
+    }
+
+    /** Un día cuyo único gasto fue un fijo no aparece: no hay un «$0» que mandar. */
+    @Test
+    fun `un dia con solo pagos de fijos no aparece`() {
+        val gasto = gastoVariablePorDia(
+            listOf(evento("mercado", 2_000_000, "2026-08-27", categoria = "Mercado")),
+            parteFija = mapOf("mercado" to 2_000_000L),
+            diaDe = diaDe,
+        )
+        assertEquals(emptyMap(), gasto)
     }
 }
