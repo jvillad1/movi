@@ -321,4 +321,69 @@ class FiltroDeNotificacionesTest {
         val config = appsQueAvisan("""{"appPackages":[]}""")
         assertEquals(emptyList(), config!!.paquetes)
     }
+
+    // ── Nu Colombia ───────────────────────────────────────────────────────────
+
+    /** La lista que sirve el server desde este cambio (`SmsFilterConfigRoutes.CURRENT_FILTER`). */
+    private val deLaConfigDelServer = appsQueAvisan(
+        """{"senderCodes":["85540"],"bodyKeywords":["bancolombia","nubank"],"appPackages":[""" +
+            """"co.com.bancolombia.personas.superapp","com.app.prontomas",""" +
+            """"com.google.android.apps.walletnfcrel","com.nu.production"]}""",
+    )!!
+
+    @Test
+    fun `Nu está en la lista del server y en la de respaldo`() {
+        assertTrue(FiltroDeNotificaciones.laAppEstaEnLaLista("com.nu.production", deLaConfigDelServer))
+        assertTrue(FiltroDeNotificaciones.laAppEstaEnLaLista("com.nu.production", FiltroDeNotificaciones.DEFAULTS))
+        // Igualdad exacta, también para Nu.
+        assertFalse(FiltroDeNotificaciones.laAppEstaEnLaLista("com.nu.production.falsa", deLaConfigDelServer))
+    }
+
+    @Test
+    fun `Bancolombia y Glim siguen en las dos listas`() {
+        listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas").forEach { paquete ->
+            assertTrue(FiltroDeNotificaciones.laAppEstaEnLaLista(paquete, deLaConfigDelServer), paquete)
+            assertTrue(FiltroDeNotificaciones.laAppEstaEnLaLista(paquete, FiltroDeNotificaciones.DEFAULTS), paquete)
+        }
+    }
+
+    /**
+     * **Las dos notificaciones reales de Nu**, con el espacio del final que trae su cuerpo. Lo que
+     * sube es título + «: » + cuerpo recortado — la misma cadena que el server fija en
+     * `ElTextoDeUnaNotificacionSeParseaTest`.
+     */
+    @Test
+    fun `las compras de Nu suben con título y cuerpo en una línea`() {
+        val crepes = decidirNotificacion(
+            entrante(
+                paquete = "com.nu.production",
+                titulo = "Compra aprobada por \$130.200,00",
+                texto = "Tu compra en CREPES Y WAFFLES LEMON por \$130.200,00 con tu tarjeta terminada en 1336 ha sido APROBADA. ",
+            ),
+            deLaConfigDelServer,
+        )
+        assertEquals(
+            DecisionDeNotificacion.Subir(
+                "Compra aprobada por \$130.200,00: Tu compra en CREPES Y WAFFLES LEMON por \$130.200,00 " +
+                    "con tu tarjeta terminada en 1336 ha sido APROBADA.",
+            ),
+            crepes,
+        )
+
+        val google = decidirNotificacion(
+            entrante(
+                paquete = "com.nu.production",
+                titulo = "Compra aprobada por \$39.920,00",
+                texto = "Tu compra en GOOGLE *MINTROCKET por \$39.920,00 con tu tarjeta terminada en 1336 ha sido APROBADA. ",
+            ),
+            deLaConfigDelServer,
+        )
+        assertEquals(
+            DecisionDeNotificacion.Subir(
+                "Compra aprobada por \$39.920,00: Tu compra en GOOGLE *MINTROCKET por \$39.920,00 " +
+                    "con tu tarjeta terminada en 1336 ha sido APROBADA.",
+            ),
+            google,
+        )
+    }
 }

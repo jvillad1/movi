@@ -36,6 +36,44 @@ class ElTextoDeUnaNotificacionSeParseaTest {
         assertEquals("PRUEBA DE MOVI", parsed.merchant)
     }
 
+    /**
+     * **Las dos compras de Nu que el dueño tenía en el teléfono**, tal como las junta
+     * `textoDeLaNotificacion` (título + «: » + cuerpo recortado). `FiltroDeNotificacionesTest` fija
+     * del otro lado que el teléfono arma exactamente estas cadenas.
+     *
+     * Antes de este cambio la primera se leía con el comercio «CREPES Y WAFFLES LEMON por $130»: el
+     * lector genérico de «en …» cortaba en el primer punto, que es el de miles del monto.
+     */
+    private val COMPRA_NU_CREPES =
+        "Compra aprobada por \$130.200,00: Tu compra en CREPES Y WAFFLES LEMON por \$130.200,00 " +
+            "con tu tarjeta terminada en 1336 ha sido APROBADA."
+    private val COMPRA_NU_GOOGLE =
+        "Compra aprobada por \$39.920,00: Tu compra en GOOGLE *MINTROCKET por \$39.920,00 " +
+            "con tu tarjeta terminada en 1336 ha sido APROBADA."
+
+    @Test
+    fun `la compra de Nu se lee con monto, comercio y tipo`() {
+        val crepes = assertNotNull(parseSms(COMPRA_NU_CREPES), "no parseó: $COMPRA_NU_CREPES")
+        assertEquals(130_200.0, crepes.amount)
+        assertEquals("COP", crepes.currency)
+        assertEquals(TransactionType.EXPENSE, crepes.type)
+        assertEquals("CREPES Y WAFFLES LEMON", crepes.merchant)
+
+        val google = assertNotNull(parseSms(COMPRA_NU_GOOGLE), "no parseó: $COMPRA_NU_GOOGLE")
+        assertEquals(39_920.0, google.amount)
+        assertEquals("COP", google.currency)
+        assertEquals(TransactionType.EXPENSE, google.type)
+        assertEquals("GOOGLE *MINTROCKET", google.merchant)
+    }
+
+    @Test
+    fun `la compra de Nu no se confunde con un pago de tarjeta`() {
+        // «con tu tarjeta» está en el texto: no puede caer en la regla de plata del abono a la tarjeta.
+        val parsed = assertNotNull(parseSms(COMPRA_NU_CREPES))
+        assertEquals(false, parsed.merchant == "Pago de tarjeta")
+        assertEquals(false, parsed.category == com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY)
+    }
+
     @Test
     fun `un título solo no tiene nada que parsear`() {
         // Lo que no se puede volver un movimiento no tiene que salir del teléfono.

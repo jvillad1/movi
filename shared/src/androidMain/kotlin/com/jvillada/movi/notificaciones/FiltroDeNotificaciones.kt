@@ -97,15 +97,25 @@ internal const val MAX_MARCA_DE_ORIGEN = 100
 object FiltroDeNotificaciones {
 
     /**
-     * **Conjeturas, no verdades.** `com.todo1.mobile` es el paquete publicado de «Bancolombia App
-     * Personas» (Todo1 es su proveedor móvil); no está verificado contra el teléfono del dueño.
-     * El de Glim no se conoce: sin él, Glim no se captura — y agregarlo es editar
-     * `SmsFilterConfigRoutes.CURRENT_FILTER` y desplegar la web, sin tocar el APK.
+     * **El fallback de cuando no hay cache**, no la lista que manda: la que manda es la del server
+     * (`SmsFilterConfigRoutes.CURRENT_FILTER`), que la REEMPLAZA en cuanto el teléfono la baja una
+     * vez. Por eso agregar una app —como Nu— es editar el server y desplegar la web, sin APK.
+     *
+     * Hasta el APK 1.35 esto decía `com.todo1.mobile`, una conjetura que resultó falsa (Todo1 es el
+     * proveedor de Davivienda). Ahora es el espejo de los paquetes leídos del teléfono del dueño el
+     * 19-sep, más Nu: así un teléfono que todavía no bajó la config tampoco queda ciego.
      *
      * Leé el KDoc de [AppsQueAvisan] antes de convertir esto en un piso al estilo de
      * `BankSenderFilter.DEFAULTS`: acá el server TIENE que poder quitar.
      */
-    val DEFAULTS = AppsQueAvisan(paquetes = listOf("com.todo1.mobile"))
+    val DEFAULTS = AppsQueAvisan(
+        paquetes = listOf(
+            "co.com.bancolombia.personas.superapp",
+            "com.app.prontomas",
+            "com.google.android.apps.walletnfcrel",
+            "com.nu.production",
+        ),
+    )
 
     /** Igualdad exacta de paquete, nunca `contains`: `com.malo.com.todo1.mobile` no es Bancolombia. */
     fun laAppEstaEnLaLista(paquete: String, config: AppsQueAvisan = DEFAULTS): Boolean =

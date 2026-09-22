@@ -77,6 +77,9 @@ private val CURRENT_FILTER = SmsFilterConfig(
         "com.app.prontomas",
         // Google Wallet: los pagos sin contacto los notifica ella, no el banco.
         "com.google.android.apps.walletnfcrel",
+        // Nu Colombia: sus compras con tarjeta de crédito solo llegan como notificación de la app
+        // («Compra aprobada por $130.200,00»), nunca por SMS. Paquete leído del teléfono del dueño.
+        "com.nu.production",
     ),
 )
 
