@@ -35,10 +35,18 @@ import org.robolectric.annotation.Config
  * está el defecto original (Compose le hace `preventDefault` a ⌘A y no implementa el suyo), y ni
  * Robolectric ni ningún test de este repo pueden observarlo — se midió con una sonda en la página
  * y un teclado físico. Esto cubre lo que es nuestro; lo otro se confirma a mano en el navegador.
+ *
+ * **Corre en SDK 34 y no en el 24 de siempre, a propósito.** Estas pruebas tocan el campo y miran
+ * dónde cae el cursor, o sea que dependen de la posición horizontal de cada glifo. Robolectric en
+ * SDK 24 con gráficos legacy mide en cero el ancho de todo texto con spans, y un `lineHeight` (el
+ * de `Movi.textos.monto`) hace que Compose le ponga un `LineHeightStyleSpan`: el toque caía siempre
+ * en el offset 0 y lo tipeado iba adelante. En SDK 34 —legacy o nativo, con o sin interlineado— el
+ * cursor queda al final, igual que en un teléfono y en la web (medido 2026-09-21). Antes de esto el
+ * campo le sacaba el interlineado a su estilo para complacer a esta prueba.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h731dp-xhdpi")
+@Config(qualifiers = "w411dp-h731dp-xhdpi", sdk = [34])
 class MoneyFieldAtajoTest {
 
     @get:Rule val composeRule = createComposeRule()
