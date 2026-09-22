@@ -97,6 +97,13 @@ data class DashboardSummary(
     val entradasDelPeriodo: Long? = null,
     /** Lo que salió de Tu plata a un ahorro o inversión de afuera: ver [PlataDelPeriodo.guardado]. */
     val guardadoDelPeriodo: Long? = null,
+    /**
+     * Lo que salió de Tu plata a una deuda y que ni los fijos ni el gasto variable cuentan: cuotas
+     * que ningún ítem del checklist reclama y pagos de tarjeta por encima de lo comprado con esa
+     * tarjeta en el período (deuda de antes). Ver [pagosDeDeudaFueraDelChecklist]. El Disponible
+     * lo resta. `null` = server anterior al campo: se toma como cero. Solo se AGREGA.
+     */
+    val pagosDeDeudaFueraDelChecklist: Long? = null,
 )
 
 /**

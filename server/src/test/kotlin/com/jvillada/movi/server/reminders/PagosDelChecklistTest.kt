@@ -2,6 +2,7 @@ package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -276,4 +277,23 @@ class PagosDelChecklistTest {
         val parte = parteFija(listOf(mama, papa), emptyList(), eventos)
         assertEquals(mapOf("pago-papa" to 4_280_000L), parte)
     }
+
+    /**
+     * Una cuota anotada con la categoría «Cuota de crédito» no suma en el variable, pero si un
+     * recurrente real la paga, su parte fija tiene que figurar: si no, `pagosDeDeudaFueraDelChecklist`
+     * la restaría otra vez como «otro pago de deuda», encima de los fijos.
+     */
+    @Test
+    fun `un recurrente real reclama una cuota anotada con la categoria de cuota`() {
+        val reglas = listOf(regla("rr_papa", "Crédito Papá", "Crédito", 4_280_000, 27))
+        val eventos = listOf(
+            evento("ev_papa", "Crédito Papá", 4_280_000, "2026-08-27", CUOTA_CATEGORY),
+            evento("ev_almuerzo", "Almuerzo", 45_000, "2026-09-10", "Comida"),
+        )
+        val parte = parteFija(reglas, emptyList(), eventos)
+        assertEquals(4_280_000L, parte["ev_papa"])
+        // El variable no cambia: la cuota ya salía entera por su categoría.
+        assertEquals(45_000L, gastoTotal(eventos, parte))
+    }
 }
+

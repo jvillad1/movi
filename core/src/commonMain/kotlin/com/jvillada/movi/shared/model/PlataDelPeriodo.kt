@@ -168,3 +168,131 @@ fun plataDelPeriodo(
         guardado = guardado,
     )
 }
+
+/**
+ * # Otros pagos de deuda del período
+ *
+ * La identidad que hace creíble el Disponible es:
+ *
+ * > lo que queda = Disponible − gasto variable
+ * > = Tu plata hoy + ingresos por recibir − fijos pendientes − compras con tarjeta sin pagar
+ *
+ * Con los datos del dueño no cerraba por unos $6,4M: plata que salió de Tu plata **a una deuda** y
+ * que ni los fijos ni el gasto variable cuentan.
+ *
+ * 1. **Cuotas que ningún ítem del checklist reclama.** El «Crédito Papá» ($4.280.000) y el «Crédito
+ *    Mamá» ($1.300.000), anotados como gastos con la categoría [CUOTA_CATEGORY]: esa categoría sale
+ *    del gasto variable entera (se supone que la cuota ya está en los fijos), pero sus recurrentes
+ *    se borraron y la primera cuota de los créditos en Movi cae más adelante. Nadie los contaba.
+ *    Lo mismo con un traspaso a un préstamo (LOAN) que no sea el pago de una cuota del checklist.
+ * 2. **Pagos de tarjeta que pagan deuda de antes del período.** El pago de una tarjeta no es gasto
+ *    porque la compra ya se contó el día que se hizo. Pero si la compra fue en el período ANTERIOR,
+ *    la plata sale de Tu plata ahora sin que nada la cuente: el pago mínimo de AMEX ($1.008.902) y
+ *    el de Nu Tarjeta ($115.113).
+ *
+ * Esto los suma, sin contar nada dos veces:
+ *
+ * - **Préstamos**: cada salida hacia un LOAN (o un gasto [CUOTA_CATEGORY] sin la otra pata), menos
+ *   la parte que ya está en los fijos ([enLosFijos]: la cuota del checklist que ese movimiento
+ *   pagó, con la misma lógica de `PagosDelChecklist.kt` y `PagosDeDeuda.kt` del server).
+ * - **Tarjetas, una por una**: max(0, lo pagado a la tarjeta en el período − lo comprado con ella
+ *   en el período). Una compra del período pagada en el mismo período no se resta dos veces; lo que
+ *   pasa de las compras del período es deuda de antes. Un pago de tarjeta sin la otra pata (no se
+ *   sabe a cuál tarjeta fue) se compensa contra lo que quede sin pagar de todas.
+ *
+ * «Salida» es plata que sale de Tu plata, o que sale de un ahorro de afuera y [plataDelPeriodo] ya
+ * sumó como «entró» ([PlataDelPeriodo.pagadoDesdeFuera]): sin restarla acá, ese pago inflaría el
+ * Disponible.
+ *
+ * Solo pesos y sin «Por confirmar», igual que el resto de la tarjeta.
+ *
+ * @param eventos los movimientos vivos del período (los mismos de [plataDelPeriodo]).
+ * @param cuentas todas las cuentas del usuario, por id.
+ * @param enLosFijos id de movimiento → la parte de su monto que ya cuenta como fijo del checklist.
+ */
+fun pagosDeDeudaFueraDelChecklist(
+    eventos: List<FinancialEvent>,
+    cuentas: Map<String, CuentaDelDisponible>,
+    enLosFijos: Map<String, Long>,
+): Long {
+    val deuda = pagosYComprasDeDeuda(eventos, cuentas)
+    val prestamos = deuda.aPrestamos.sumOf { (it.amount - (enLosFijos[it.id] ?: 0L)).coerceAtLeast(0L) }
+    var sinPagar = 0L
+    var deAntes = 0L
+    (deuda.pagosPorTarjeta.keys + deuda.comprasPorTarjeta.keys).forEach { tarjeta ->
+        val pagado = deuda.pagosPorTarjeta[tarjeta] ?: 0L
+        val comprado = deuda.comprasPorTarjeta[tarjeta] ?: 0L
+        deAntes += (pagado - comprado).coerceAtLeast(0L)
+        sinPagar += (comprado - pagado).coerceAtLeast(0L)
+    }
+    deAntes += (deuda.aTarjetaSinSaberCual - sinPagar).coerceAtLeast(0L)
+    return prestamos + deAntes
+}
+
+/**
+ * **Las compras con tarjeta del período que siguen sin pagar**: por tarjeta, max(0, lo comprado −
+ * lo pagado), menos lo que se pagó a una tarjeta sin saber a cuál. Es el último término de la
+ * identidad de [pagosDeDeudaFueraDelChecklist], con la misma regla.
+ */
+fun comprasConTarjetaSinPagar(eventos: List<FinancialEvent>, cuentas: Map<String, CuentaDelDisponible>): Long {
+    val deuda = pagosYComprasDeDeuda(eventos, cuentas)
+    val porTarjeta = (deuda.pagosPorTarjeta.keys + deuda.comprasPorTarjeta.keys).sumOf { tarjeta ->
+        ((deuda.comprasPorTarjeta[tarjeta] ?: 0L) - (deuda.pagosPorTarjeta[tarjeta] ?: 0L)).coerceAtLeast(0L)
+    }
+    return (porTarjeta - deuda.aTarjetaSinSaberCual).coerceAtLeast(0L)
+}
+
+private class PagosYComprasDeDeuda(
+    /** Las salidas hacia un préstamo, una por movimiento (la parte en los fijos se descuenta aparte). */
+    val aPrestamos: List<FinancialEvent>,
+    /** tarjeta → lo que se le pagó en el período. */
+    val pagosPorTarjeta: Map<String, Long>,
+    /** Pagos de tarjeta sin la otra pata. */
+    val aTarjetaSinSaberCual: Long,
+    /** tarjeta → lo comprado con ella en el período que cuenta como gasto (variable o fijo). */
+    val comprasPorTarjeta: Map<String, Long>,
+)
+
+private fun pagosYComprasDeDeuda(
+    eventos: List<FinancialEvent>,
+    cuentas: Map<String, CuentaDelDisponible>,
+): PagosYComprasDeDeuda {
+    val vivos = eventos.filter { it.currency == "COP" && !esperaEnPorConfirmar(it.reconciliationStatus) }
+    // La otra pata de cada traspaso, de cualquier categoría: la cuota lleva «Cuota de crédito» y el
+    // pago de tarjeta «Pago de tarjeta», no «Traspaso».
+    val patasPorTraspaso = eventos.filter { it.transferId != null }.groupBy { it.transferId!! }
+
+    val aPrestamos = mutableListOf<FinancialEvent>()
+    val pagosPorTarjeta = mutableMapOf<String, Long>()
+    var sinSaberCual = 0L
+    vivos.forEach { e ->
+        if (e.type != TransactionType.EXPENSE) return@forEach
+        val cuenta = cuentas[e.accountId] ?: return@forEach
+        // De dónde sale: de Tu plata, o de un ahorro de afuera cuando `pagadoDesdeFuera` ya lo sumó
+        // como entrada (la misma condición que allá).
+        val loSumoPagadoDesdeFuera = !cuenta.esTuPlata && !cuenta.esDeuda &&
+            (cuentaEnGastosEIngresos(e) || e.category == CARD_PAYMENT_CATEGORY)
+        if (!cuenta.esTuPlata && !loSumoPagadoDesdeFuera) return@forEach
+
+        val otra = e.transferId?.let { t -> patasPorTraspaso[t].orEmpty().firstOrNull { it.id != e.id } }
+        val otraCuenta = otra?.let { cuentas[it.accountId] }
+        when {
+            otraCuenta?.tipo == AccountType.LOAN -> aPrestamos += e
+            otra != null && otraCuenta?.tipo == AccountType.CREDIT_CARD ->
+                pagosPorTarjeta[otra.accountId] = (pagosPorTarjeta[otra.accountId] ?: 0L) + e.amount
+            // La otra pata cae en una cuenta que no es deuda: es un traspaso entre cuentas, no un pago.
+            otraCuenta != null -> Unit
+            e.category == CUOTA_CATEGORY -> aPrestamos += e
+            e.category == CARD_PAYMENT_CATEGORY -> sinSaberCual += e.amount
+        }
+    }
+
+    // Lo que se compró con cada tarjeta y cuenta como gasto: el variable y lo que un fijo reclamó
+    // (los dos ya restan del Disponible; la plata sale de Tu plata recién al pagar la tarjeta).
+    val comprasPorTarjeta = vivos
+        .filter { cuentas[it.accountId]?.tipo == AccountType.CREDIT_CARD && cuentaComoGastoVariable(it) }
+        .groupBy { it.accountId }
+        .mapValues { (_, compras) -> compras.sumOf { it.amount } }
+
+    return PagosYComprasDeDeuda(aPrestamos, pagosPorTarjeta, sinSaberCual, comprasPorTarjeta)
+}

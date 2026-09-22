@@ -693,7 +693,7 @@ class DashboardRoutesTest {
         )
         // El Disponible que cuenta lo que tenías (APK 1.40+) solo AGREGA campos: un APK ≤ 1.39
         // los ignora y sigue leyendo los de siempre, con el mismo tipo y el mismo valor.
-        val nuevas = setOf("saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo")
+        val nuevas = setOf("saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo", "pagosDeDeudaFueraDelChecklist")
         assertEquals(emptySet(), body.keys - conocidas - nuevas)
         assertEquals(3_000_000L, body.long("monthIncome"))
         assertEquals(30_000L, body.long("monthSpent"))
@@ -757,5 +757,43 @@ class DashboardRoutesTest {
         // El sueldo + el préstamo + el colegio que pagó Nu. Los rendimientos de Nu, no.
         assertEquals(3_000_000L + 10_000_000L + 3_000_000L, body.long("entradasDelPeriodo"))
         assertEquals(500_000L, body.long("guardadoDelPeriodo"))
+    }
+
+    /**
+     * Los pagos de deuda que ni los fijos ni el gasto variable cuentan: una cuota anotada como
+     * gasto que ningún ítem del checklist reclama («Crédito Papá») y el pago de una tarjeta sin
+     * compras en el período (deuda de antes). La cuota del crédito que el checklist SÍ reclama —su
+     * vencimiento es hoy y el pago salda ese período— no se resta otra vez.
+     */
+    @Test
+    fun `el Disponible trae los pagos de deuda que ningun fijo cuenta`() = testApplication {
+        val hoy = AppClock.today()
+        transaction {
+            Credits.insert {
+                it[accountId] = loan
+                it[userId] = this@DashboardRoutesTest.userId
+                it[bank] = "Bancolombia"
+                it[principal] = 2_000_000L
+                it[rateEa] = 0.0
+                it[termMonths] = 24
+                it[installment] = 250_000L
+                it[dayOfMonth] = hoy.dayOfMonth
+                it[startDate] = hoy.minusYears(1).toString()
+            }
+        }
+        val ahora = System.currentTimeMillis()
+        // La cuota del crédito del checklist, con sus dos patas.
+        event("c-cuota-sale", savings, "EXPENSE", 250_000L, category = CUOTA_CATEGORY, timestamp = ahora, traspaso = "t-cuota")
+        event("c-cuota-entra", loan, "INCOME", 250_000L, category = CUOTA_CATEGORY, timestamp = ahora, traspaso = "t-cuota")
+        // Una cuota suelta que nadie reclama.
+        event("c-papa", savings, "EXPENSE", 4_280_000L, category = CUOTA_CATEGORY, description = "Crédito Papá", timestamp = ahora)
+        // El pago mínimo de una tarjeta sin compras en el período, anotado como traspaso.
+        event("c-amex-sale", savings, "EXPENSE", 1_008_902L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-amex")
+        event("c-amex-entra", card, "INCOME", 1_008_902L, category = TRANSFER_CATEGORY, timestamp = ahora, traspaso = "t-amex")
+
+        wireApp()
+        val body = summary()
+
+        assertEquals(4_280_000L + 1_008_902L, body.long("pagosDeDeudaFueraDelChecklist"))
     }
 }

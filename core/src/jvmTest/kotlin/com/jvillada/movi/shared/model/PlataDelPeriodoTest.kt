@@ -161,4 +161,72 @@ class PlataDelPeriodoTest {
         val p = calcular(listOf(evento("huerfana", "ahorros", TransactionType.INCOME, 1_000_000, TRANSFER_CATEGORY, traspaso = "sola")))
         assertEquals(0, p.desdeFuera)
     }
+
+    // ── Otros pagos de deuda del período ─────────────────────────────────────────
+
+    /** Las dos patas de un pago a una deuda, con la categoría que escribe `pagoDeCuotaLegs`. */
+    private fun pago(id: String, desde: String, hacia: String, monto: Long, categoria: String) = listOf(
+        evento("$id-sale", desde, TransactionType.EXPENSE, monto, categoria, traspaso = id),
+        evento("$id-entra", hacia, TransactionType.INCOME, monto, categoria, traspaso = id),
+    )
+
+    private fun otros(vararg eventos: List<FinancialEvent>, enLosFijos: Map<String, Long> = emptyMap()) =
+        pagosDeDeudaFueraDelChecklist(eventos.toList().flatten(), cuentas, enLosFijos)
+
+    @Test
+    fun `una cuota sin la otra pata que ningun fijo reclama se resta entera`() {
+        val papa = listOf(evento("papa", "ahorros", TransactionType.EXPENSE, 4_280_000, CUOTA_CATEGORY))
+        assertEquals(4_280_000, otros(papa))
+        // Si un recurrente la reclama (su parte fija), esa parte ya está en los fijos.
+        assertEquals(280_000, otros(papa, enLosFijos = mapOf("papa" to 4_000_000L)))
+    }
+
+    @Test
+    fun `un traspaso a un prestamo cuenta salvo la parte que ya pago una cuota del checklist`() {
+        val suelto = traspaso("t-techo", "ahorros", "techo", 700_000)
+        val cuota = pago("p-hipo", "ahorros", "hipotecario", 2_500_000, CUOTA_CATEGORY)
+        assertEquals(700_000 + 2_500_000, otros(suelto, cuota))
+        assertEquals(700_000, otros(suelto, cuota, enLosFijos = mapOf("p-hipo-sale" to 2_500_000L)))
+    }
+
+    @Test
+    fun `el pago de una tarjeta solo cuenta lo que pasa de lo comprado con ella en el periodo`() {
+        val compra = listOf(evento("compra", "master", TransactionType.EXPENSE, 1_370_000, "Ropa"))
+        // Paga menos de lo comprado en el período: todo es de este período, nada de antes.
+        assertEquals(0, otros(compra, pago("p1", "ahorros", "master", 300_000, CARD_PAYMENT_CATEGORY)))
+        assertEquals(1_070_000, comprasConTarjetaSinPagar(compra + pago("p1", "ahorros", "master", 300_000, CARD_PAYMENT_CATEGORY), cuentas))
+        // Paga más: lo que pasa es deuda de antes del período. Como traspaso, igual.
+        assertEquals(630_000, otros(compra, traspaso("t2", "ahorros", "master", 2_000_000)))
+        assertEquals(0, comprasConTarjetaSinPagar(compra + traspaso("t2", "ahorros", "master", 2_000_000), cuentas))
+    }
+
+    @Test
+    fun `una compra por confirmar no cubre el pago de la tarjeta`() {
+        val porConfirmar = listOf(
+            evento("nu-compra", "master", TransactionType.EXPENSE, 130_200, "Comida", estado = ReconciliationStatus.UNCONFIRMED),
+        )
+        assertEquals(115_113, otros(porConfirmar, pago("p-nu", "ahorros", "master", 115_113, CARD_PAYMENT_CATEGORY)))
+    }
+
+    @Test
+    fun `un pago de tarjeta sin la otra pata se compensa contra lo que quede sin pagar`() {
+        val compra = listOf(evento("compra", "master", TransactionType.EXPENSE, 400_000, "Ropa"))
+        val suelto = listOf(evento("pago-suelto", "ahorros", TransactionType.EXPENSE, 1_000_000, CARD_PAYMENT_CATEGORY))
+        assertEquals(600_000, otros(compra, suelto))
+        assertEquals(0, comprasConTarjetaSinPagar(compra + suelto, cuentas))
+    }
+
+    @Test
+    fun `lo que paga un ahorro de afuera cuenta porque ya entro, y un traspaso entre cuentas no es pago`() {
+        // Nu paga la tarjeta: `pagadoDesdeFuera` lo suma como entrada, y acá sale.
+        val desdeNu = pago("p-desde-nu", "nu", "master", 500_000, CARD_PAYMENT_CATEGORY)
+        assertEquals(500_000, calcular(desdeNu).pagadoDesdeFuera)
+        assertEquals(500_000, otros(desdeNu))
+        // Un traspaso de Nu al préstamo no entró como nada: tampoco sale.
+        assertEquals(0, otros(traspaso("t-nu-techo", "nu", "techo", 300_000)))
+        // Entre cuentas de Tu plata, o hacia un ahorro, no es un pago de deuda.
+        assertEquals(0, otros(traspaso("t-fidu", "ahorros", "fiducuenta", 1_000_000), traspaso("t-nu", "ahorros", "nu", 500_000)))
+        // En dólares no cuenta: el resto de la tarjeta está en pesos.
+        assertEquals(0, otros(listOf(evento("usd", "ahorros", TransactionType.EXPENSE, 100, CUOTA_CATEGORY, moneda = "USD"))))
+    }
 }
