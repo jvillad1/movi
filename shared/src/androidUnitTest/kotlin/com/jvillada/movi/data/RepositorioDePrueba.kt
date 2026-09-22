@@ -32,6 +32,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun deleteCreditTerms(accountId: String) = noUsado("deleteCreditTerms")
     override suspend fun registerPayrollDeduction(accountId: String): CreditSummary = noUsado("registerPayrollDeduction")
     override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary = noUsado("adjustCreditBalance")
+    override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse = noUsado("adjustAccountBalance")
     override suspend fun getCards(): List<CardSummary> = noUsado("getCards")
     override suspend fun createCard(request: CreateCardRequest): CardSummary = noUsado("createCard")
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = noUsado("putCardTerms")

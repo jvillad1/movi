@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.AuthResponse
@@ -224,6 +225,20 @@ interface WalletRepository {
     suspend fun getAccounts(): List<Account>
     suspend fun getAccount(id: String): Account
     suspend fun createAccount(account: Account): Account
+
+    /**
+     * **Cuadra una cuenta con lo que dice el banco**: deja su saldo en [targetBalance] registrando
+     * el movimiento de ajuste del lado del server.
+     *
+     * Es la hermana de [adjustCreditBalance] —misma mecánica, mismo constructor de eventos y misma
+     * categoría reservada— para las cuentas de Dinero e Inversión. No hay dos formas de ajustar un
+     * saldo: hay una, con dos puertas, porque una deuda se cuadra mirando su plan de pagos y una
+     * cuenta de ahorros no.
+     *
+     * Manda el saldo OBJETIVO y no la diferencia: el saldo que tiene el cliente en pantalla puede
+     * llegar viejo. Si ya coincidía, no se escribe nada y `adjustmentEvent` vuelve en null.
+     */
+    suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse
 
     /**
      * F55: borra la cuenta y TODO lo que le pertenece (sus movimientos, anulaciones, dismissals

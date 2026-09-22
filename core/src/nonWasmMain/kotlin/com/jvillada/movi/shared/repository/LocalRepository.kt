@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.soloLoQueCambia
 import com.jvillada.movi.shared.model.montoDeLaHermanaAlCorregir
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -1844,6 +1845,31 @@ class LocalRepository(
         }
         return@enDisco summary
     }
+
+    /**
+     * Cuadra la cuenta contra el server y **espeja el resultado acá**, por el mismo motivo exacto
+     * que [adjustCreditBalance]: el efecto del cuadre es un movimiento, y los movimientos se leen
+     * de esta base ([getEvents]/[getEventsByDay], y [getAccounts] cuando no hay red) mientras
+     * [com.jvillada.movi.shared.SyncEngine] solo empuja. Sin el espejo, en Android el ajuste no se
+     * vería en Movimientos ni en el detalle de la cuenta, y Cuentas seguiría mostrando el saldo
+     * viejo — mientras la pantalla acaba de prometer que el ajuste queda como un movimiento
+     * visible.
+     *
+     * Se escribe el evento **exacto** que devolvió el server (mismo id, mismo sello) y ya
+     * sincronizado, para que el `SyncEngine` no lo vuelva a subir y duplique el ajuste; y el saldo
+     * de la cuenta se copia del server en vez de sumarle un delta calculado acá, que es lo que
+     * hace [mirrorAccountLocally].
+     */
+    override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse = enDisco {
+        val respuesta = remote.adjustAccountBalance(accountId, targetBalance)
+        val uid = userId()
+        db.transaction {
+            respuesta.adjustmentEvent?.let { mirrorEventLocally(it, uid) }
+            mirrorAccountLocally(respuesta.account)
+        }
+        return@enDisco respuesta
+    }
+
     override suspend fun getSubscriptions(): SubscriptionsResult = remote.getSubscriptions()
     override suspend fun detectSubscriptions(): SubscriptionsResult = remote.detectSubscriptions()
     override suspend fun updateSubscription(id: String, subscription: Subscription): Subscription = remote.updateSubscription(id, subscription)

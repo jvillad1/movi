@@ -80,7 +80,75 @@ data class Account(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val lastEditedAt: Long? = null,
+
+    /**
+     * **Cuándo se cuadró esta cuenta contra el banco por última vez**, en epoch ms. `null` = nunca.
+     *
+     * Es el sello del último movimiento con categoría [ADJUSTMENT_CATEGORY] que sigue vivo (los
+     * anulados no cuentan: el ajuste que se anuló no cuadró nada). Lo **deriva el server** en
+     * `enrichWith`, igual que [balancesByCurrency] y [estimatedTotalCop] — no hay ninguna columna
+     * nueva, y no puede separarse de los movimientos porque sale de ellos.
+     *
+     * Existe por lo que el dueño midió el 21-sep: Movi deriva cada saldo de los movimientos, así
+     * que **todo lo que mueve plata sin emitir un movimiento se desvía para siempre**. Sus
+     * rendimientos de Nu habían crecido $745.856 y los de la Fiducuenta $1.637 sin un solo SMS
+     * que capturar. El ajuste ya existía; lo que no existía era saber **cuáles cuentas hace rato
+     * que nadie mira** (ver `cuentasSinCuadrar` en `:shared`).
+     */
+    val lastAdjustmentAt: Long? = null,
+
+    /**
+     * **El movimiento más viejo de esta cuenta**, en epoch ms. `null` = no tiene ninguno.
+     *
+     * Derivado igual que [lastAdjustmentAt], y está por una sola razón: una cuenta que **nunca**
+     * se cuadró no puede medirse contra la nada. Es la edad de la cuenta dentro de Movi —su
+     * apertura es su primer movimiento— y hace que el aviso de «hace rato que no la cuadras»
+     * cuente desde que la cuenta existe, en vez de reclamarle el primer día a una cuenta que se
+     * acaba de crear.
+     */
+    val firstEventAt: Long? = null,
 )
+
+/**
+ * `POST /api/accounts/{id}/balance-adjustment` — **cuadrar una cuenta contra el banco**.
+ *
+ * Viaja el saldo **objetivo** (lo que dice el banco), no la diferencia: el saldo que ve el cliente
+ * puede llegar viejo, y una diferencia calculada sobre una foto vieja se anota mal. El server resta
+ * contra los movimientos vigentes y registra un movimiento real — el saldo se sigue derivando de
+ * los movimientos (ver `computeBalances`), nunca se sobrescribe.
+ *
+ * Es la MISMA mecánica que `POST /api/credits/{id}/balance-adjustment` y comparte su constructor
+ * de eventos (`balanceAdjustmentEventFor`): una sola forma de ajustar un saldo en toda la app, con
+ * una sola categoría reservada ([ADJUSTMENT_CATEGORY]). Lo que cambia es de qué cuentas habla cada
+ * ruta y qué contesta: la de créditos devuelve el `CreditSummary` con su plan de pagos; esta
+ * devuelve la cuenta.
+ *
+ * En la **moneda de la cuenta**, igual que el saldo que muestra la pantalla.
+ */
+@Serializable
+data class AdjustAccountBalanceRequest(val targetBalance: Long)
+
+/**
+ * Lo que contesta el ajuste: la cuenta ya enriquecida (su saldo NUEVO, derivado) y el movimiento
+ * que se escribió — `null` cuando el saldo del banco ya coincidía y no había nada que anotar.
+ *
+ * El evento viaja para que el espejo local del teléfono pueda escribir **exactamente** el que
+ * guardó el server (mismo id, mismo sello) en vez de reconstruirlo: es el mismo contrato que
+ * `CreditSummary.adjustmentEvent`, y el motivo está en `LocalRepository.adjustCreditBalance`.
+ */
+@Serializable
+data class AdjustAccountBalanceResponse(
+    val account: Account,
+    val adjustmentEvent: FinancialEvent? = null,
+)
+
+/**
+ * Techo defensivo para el saldo objetivo de una cuenta. **Es el mismo número que
+ * [MAX_CREDIT_DEBT_COP], y es el mismo por construcción**: se define como un alias en vez de
+ * copiar la cifra para que no puedan separarse. No es un límite de negocio — atrapa el dedazo de
+ * teclear dígitos de más al copiar el saldo de la banca en línea.
+ */
+const val MAX_ACCOUNT_BALANCE_COP = MAX_CREDIT_DEBT_COP
 
 /**
  * F56 — [AccountType] se queda igual (compat de DB y wire: filas viejas, eventos guardados,

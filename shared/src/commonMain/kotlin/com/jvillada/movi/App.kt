@@ -68,6 +68,7 @@ import com.jvillada.movi.ui.sms.SMSReconcileScreen
 import com.jvillada.movi.ui.transactions.TransactionsScreen
 import com.jvillada.movi.ui.accounts.AccountsScreen
 import com.jvillada.movi.ui.accounts.AccountDetailScreen
+import com.jvillada.movi.ui.cuadre.CuadreDeSaldosScreen
 import com.jvillada.movi.ui.extractos.StatementReviewScreen
 import com.jvillada.movi.ui.extractos.ImportDetailScreen
 import com.jvillada.movi.ui.sdui.editor.ScreenEditorScreen
@@ -318,6 +319,7 @@ fun App() {
                 Screen.Mas               -> MasScreen(navigate)
                 Screen.Extractos         -> ExtractosScreen(navigate)
                 Screen.Accounts         -> AccountsScreen(navigate)
+                Screen.CuadreDeSaldos   -> CuadreDeSaldosScreen(navigate)
                 is Screen.AccountDetail -> AccountDetailScreen(
                     onNavigate = navigate,
                     accountId = currentScreen.accountId,

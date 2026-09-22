@@ -356,7 +356,7 @@ data class CosaParaRevisar(
 )
 
 /** A dónde lleva tocar una sugerencia. Un enum y no una `Screen` para que esto siga siendo puro. */
-enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, SMS, SUSCRIPCIONES }
+enum class DestinoDeRevision { MOVIMIENTOS, RECURRENTES, PRESUPUESTOS, CREDITOS, SMS, SUSCRIPCIONES, CUADRE }
 
 /**
  * **Lo que el Inicio recomienda mirar hoy**, de lo más urgente a lo más opcional.
@@ -376,6 +376,14 @@ fun cosasParaRevisar(
     smsPorConfirmar: Int,
     candidatosAPagoDeTarjeta: Int,
     gastoSinCategoria: Long = 0,
+    /**
+     * El aviso de las cuentas que llevan más de un período sin cuadrarse contra el banco, ya
+     * escrito (ver `textoDelAvisoDeCuadre`); `null` = no hay ninguna y no se dice nada.
+     *
+     * Llega hecho en vez de calcularse acá para que este archivo siga sin saber de cuentas ni de
+     * relojes: la regla vive en `ui/cuadre`, que es donde se resuelve.
+     */
+    avisoDeCuadre: String? = null,
     cuantas: Int = 4,
 ): List<CosaParaRevisar> {
     val todas = buildList {
@@ -431,6 +439,19 @@ fun cosasParaRevisar(
                     // rinde más de una vez.
                     detalle = "Ponles una y Movi reconoce sola a ese mismo destinatario la próxima vez.",
                     destino = DestinoDeRevision.MOVIMIENTOS,
+                ),
+            )
+        }
+        // No es urgente y va abajo de lo que vence: nadie pierde plata hoy por no haber cuadrado.
+        // Lo que sí pasa —y por eso está— es que la diferencia se compone en silencio: los
+        // rendimientos de una cuenta de ahorros no llegan por SMS, así que si nadie los anota, el
+        // saldo de Movi se va quedando corto mes a mes.
+        if (avisoDeCuadre != null) {
+            add(
+                CosaParaRevisar(
+                    texto = avisoDeCuadre,
+                    detalle = "Compara con el saldo del banco: los rendimientos y las cuotas de manejo no avisan.",
+                    destino = DestinoDeRevision.CUADRE,
                 ),
             )
         }

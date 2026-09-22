@@ -69,6 +69,17 @@ sealed class Screen {
      * [Categorias]: una ficha de Más, no un enlace escondido adentro de otra pantalla.
      */
     data object PrimerosPasos : Screen()
+    /**
+     * **«Cuadre de saldos»** — comparar de una sentada lo que Movi cree con lo que dice el banco,
+     * y anotar la diferencia de cada cuenta como un ajuste.
+     *
+     * Se llega desde **Cuentas** (es la pantalla donde se leen esos saldos, así que el error y su
+     * arreglo quedan a un toque), desde **Más** (la puerta que no depende de que ninguna otra
+     * pantalla conserve su enlace — precedente de [Categorias] y [Destinos]) y desde el aviso del
+     * Inicio cuando alguna cuenta lleva demasiado sin cuadrarse.
+     */
+    data object CuadreDeSaldos : Screen()
+
     data object OCRCapture : Screen()
     data object OCRConfirm : Screen()
     data object SMSInbox : Screen()
@@ -109,6 +120,10 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Dashboard -> NavTab.HOME
     is Screen.Transactions -> NavTab.TRANSACTIONS
     Screen.Accounts -> NavTab.ACCOUNTS
+    // El cuadre habla de las cuentas y se vuelve a Cuentas: marca esa pestaña, igual que el
+    // detalle de una cuenta de dinero. Llegar por Más o por el aviso del Inicio no cambia de qué
+    // es la pantalla.
+    Screen.CuadreDeSaldos -> NavTab.ACCOUNTS
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse (una tarjeta abierta desde Créditos marca Créditos).
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))

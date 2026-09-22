@@ -37,6 +37,9 @@ import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.valorEnPesos
 import com.jvillada.movi.ui.credits.totalDebtCop
+import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
+import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
+import kotlinx.datetime.Clock
 
 /**
  * Todo lo que el Inicio carga del server, junto, para que el renderer SDUI reciba un solo
@@ -717,13 +720,21 @@ fun spentByCategoryForPeriod(days: List<EventDay>, ventana: LongRange): Map<Stri
  * Existe para que la sección y la regla que decide si la sección se pinta usen exactamente la misma
  * cuenta: estaban escritas dos veces, y la de acá ya se había quedado sin el gasto sin categoría.
  */
-internal fun cosasParaRevisarDe(data: DashboardData): List<CosaParaRevisar> = cosasParaRevisar(
+internal fun cosasParaRevisarDe(
+    data: DashboardData,
+    // El reloj entra por parámetro para que la lista siga siendo una función de sus datos: el
+    // aviso de cuadre depende del tiempo transcurrido, y una prueba no puede esperar 45 días.
+    ahora: Long = Clock.System.now().toEpochMilliseconds(),
+): List<CosaParaRevisar> = cosasParaRevisar(
     checklist = checklistDelPeriodoDe(data),
     categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
     flujoDelPeriodo = (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
     smsPorConfirmar = data.pendingSms,
     candidatosAPagoDeTarjeta = data.cardCandidates,
     gastoSinCategoria = gastoSinCategoriaDe(data.spentByCategory.orEmpty()),
+    // `data.accounts` en null = las cuentas todavía no contestaron, y entonces no se afirma que
+    // haya ninguna sin cuadrar. Misma disciplina que el resto de este archivo.
+    avisoDeCuadre = textoDelAvisoDeCuadre(cuentasSinCuadrar(data.accounts.orEmpty(), ahora)),
 )
 
 /**
