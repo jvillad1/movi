@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -96,13 +97,13 @@ class CategoryRoutesTest {
             SchemaUtils.drop(
                 Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals, CategoryPrefs,
-                RecurringOccurrences,
+                RecurringOccurrences, OccurrenceRejections,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, CategoryPrefs,
                 // El resumen del Inicio lee los sellos para el gasto variable («Disponible»).
-                RecurringOccurrences,
+                RecurringOccurrences, OccurrenceRejections,
             )
 
             for ((id, email, name) in listOf(

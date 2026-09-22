@@ -97,7 +97,7 @@ class SchemaDeArranqueTest {
 
     private val todasLasTablas = arrayOf(
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
-        RecurringOccurrences, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
+        RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
         StatementImportMatches, KnownDestinations,
     )

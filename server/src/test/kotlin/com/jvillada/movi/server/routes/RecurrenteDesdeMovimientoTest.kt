@@ -10,6 +10,7 @@ import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -89,12 +90,12 @@ class RecurrenteDesdeMovimientoTest {
         transaction {
             SchemaUtils.drop(
                 Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
-                RecurringOccurrences, RecurringRules, VoidEvents, Events, StatementImports,
+                RecurringOccurrences, OccurrenceRejections, RecurringRules, VoidEvents, Events, StatementImports,
                 Budgets, Accounts, Users, CategoryPrefs,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
-                RecurringOccurrences, SmsMessages, Credits, Cards, CardPaymentDismissals,
+                RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, CardPaymentDismissals,
                 Subscriptions, Goals, CategoryPrefs,
             )
             Users.insert {

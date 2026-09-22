@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.Users
@@ -97,13 +98,13 @@ class LaCuotaPagadaNoEstaVencidaTest {
         )
         transaction {
             SchemaUtils.create(
-                Users, Accounts, Events, VoidEvents, RecurringRules, RecurringOccurrences, Credits, Cards,
+                Users, Accounts, Events, VoidEvents, RecurringRules, RecurringOccurrences, OccurrenceRejections, Credits, Cards,
             )
             SchemaUtils.drop(
-                Cards, Credits, RecurringOccurrences, RecurringRules, VoidEvents, Events, Accounts, Users,
+                Cards, Credits, RecurringOccurrences, OccurrenceRejections, RecurringRules, VoidEvents, Events, Accounts, Users,
             )
             SchemaUtils.create(
-                Users, Accounts, Events, VoidEvents, RecurringRules, RecurringOccurrences, Credits, Cards,
+                Users, Accounts, Events, VoidEvents, RecurringRules, RecurringOccurrences, OccurrenceRejections, Credits, Cards,
             )
 
             Users.insert {

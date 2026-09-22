@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -88,10 +89,10 @@ class ReminderRoutesTest {
         transaction {
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
-                Budgets, RecurringRules, RecurringOccurrences, SmsMessages, Credits, Cards,
+                Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards,
             )
-            SchemaUtils.drop(Cards, Credits, RecurringOccurrences, RecurringRules, Users, Accounts)
-            SchemaUtils.create(Users, Accounts, RecurringRules, RecurringOccurrences, Credits, Cards)
+            SchemaUtils.drop(Cards, Credits, RecurringOccurrences, OccurrenceRejections, RecurringRules, Users, Accounts)
+            SchemaUtils.create(Users, Accounts, RecurringRules, RecurringOccurrences, OccurrenceRejections, Credits, Cards)
 
             Users.insert {
                 it[id]           = userAId

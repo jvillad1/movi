@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Documents
@@ -96,7 +97,7 @@ class CondicionDeCuentaRoutesTest {
                 Documents,
                 // Las lee `buildUserContext` desde que el contexto del asistente incluye el
                 // período (los sellos de «ya ocurrió» y las suscripciones).
-                RecurringOccurrences, Subscriptions,
+                RecurringOccurrences, OccurrenceRejections, Subscriptions,
             )
             Users.insert {
                 it[id] = userId

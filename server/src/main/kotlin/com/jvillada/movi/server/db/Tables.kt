@@ -436,6 +436,38 @@ object RecurringOccurrences : Table("recurring_occurrences") {
     override val primaryKey = PrimaryKey(userId, ruleId, period)
 }
 
+/**
+ * **«No, ese movimiento no es esto»** — el rechazo de un emparejamiento, guardado.
+ *
+ * Es la contracara de [RecurringOccurrences]: esa tabla guarda los «sí», esta los «no». Nació
+ * cuando Movi empezó a emparejar solo (`ocurrenciaConcluyente`): hasta entonces el rechazo vivía
+ * en un `var` de la pantalla y estaba bien que así fuera —rechazar una propuesta no es un hecho
+ * sobre la plata de nadie, y al recargar se volvía a ofrecer sin costo—. Con emparejamiento
+ * automático eso deja de alcanzar: si Movi empareja mal, un «no» que se pierde al recargar
+ * significa que la siguiente lectura vuelve a dar el periodo por ocurrido, para siempre.
+ *
+ * **La clave es (usuario, regla, movimiento), no el movimiento solo**, y esto ya costó un bug en
+ * la pantalla: con «Agua», «Gas» e «Internet» todas en «Servicios», el pago del gas se propone en
+ * las tres. Rechazarlo en la regla del agua —correcto, no era el agua— no puede quitárselo a la
+ * del gas, que es donde sí era el bueno.
+ *
+ * Y **no lleva periodo**: un movimiento tiene una sola fecha, así que solo puede ser la ocurrencia
+ * de un periodo; decir «este movimiento no es esta regla» lo dice para siempre, sin que haya que
+ * repetirlo mes a mes.
+ *
+ * La unicidad viaja en la clave primaria compuesta y por lo tanto DENTRO del `CREATE TABLE`: no
+ * queda ningún `CREATE INDEX` suelto que pueda fallar sobre una base con datos y dejar el server
+ * sin arrancar (ver `DatabaseFactory.crearYActualizarSchema`). Mismo criterio que
+ * [RecurringOccurrences].
+ */
+object OccurrenceRejections : Table("occurrence_rejections") {
+    val userId     = varchar("user_id", 50)
+    val ruleId     = varchar("rule_id", 50)
+    val eventId    = varchar("event_id", 50)
+    val rejectedAt = long("rejected_at")
+    override val primaryKey = PrimaryKey(userId, ruleId, eventId)
+}
+
 object SmsMessages : Table("sms_messages") {
     val id     = varchar("id", 50)
     val userId = varchar("user_id", 50)

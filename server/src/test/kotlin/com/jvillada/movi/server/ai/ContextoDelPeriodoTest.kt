@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -58,11 +59,11 @@ class ContextoDelPeriodoTest {
             // primero. Solo las tablas de esta clase, en su propia base.
             SchemaUtils.drop(
                 Documents, VoidEvents, Events, Budgets, Goals, Subscriptions, SmsMessages,
-                RecurringOccurrences, RecurringRules, Credits, Accounts, Users,
+                RecurringOccurrences, OccurrenceRejections, RecurringRules, Credits, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, Events, VoidEvents, Budgets, Documents, RecurringRules,
-                RecurringOccurrences, Credits, Subscriptions, Goals, SmsMessages,
+                RecurringOccurrences, OccurrenceRejections, Credits, Subscriptions, Goals, SmsMessages,
             )
             Users.insert {
                 it[id] = dueno

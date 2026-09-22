@@ -4,6 +4,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Goals
+import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -52,7 +53,7 @@ class DocumentosEnElContextoDeMoviAiTest {
                 Users, Accounts, Events, VoidEvents, Budgets, Documents,
                 // Desde que el contexto del asistente incluye el período (recurrentes, créditos,
                 // suscripciones, metas y lo que espera confirmación), `buildUserContext` las lee.
-                RecurringRules, RecurringOccurrences, Credits, Subscriptions, Goals, SmsMessages,
+                RecurringRules, RecurringOccurrences, OccurrenceRejections, Credits, Subscriptions, Goals, SmsMessages,
             )
             listOf(duenoId to "dueno@movi.test", otroId to "otro@movi.test").forEach { (uid, mail) ->
                 Users.insert {

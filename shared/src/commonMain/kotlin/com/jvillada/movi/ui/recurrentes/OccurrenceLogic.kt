@@ -178,6 +178,13 @@ fun etiquetaCierreManual(tipo: TransactionType): String =
  * dice de dónde sale. Es la mitad visible de que ahí no haya un «Deshacer»: lo que se deshace es
  * el movimiento, no un sello que no existe.
  *
+ * **Y un cuarto, que es el único discutible: el que emparejó Movi solo** ([OccurrenceState.automatica]).
+ * Ahí el hecho no es «la deuda bajó» sino «encontré un movimiento que no puede ser otra cosa», y
+ * por eso su renglón lo dice con todas las letras —«Movi lo emparejó con…»— en vez de esconderse
+ * detrás del «lo prueba un movimiento» de las cuotas. Si el dueño lee eso y no está de acuerdo,
+ * tiene algo que hacer al respecto (el «no fue este», que persiste); con una cuota de crédito no,
+ * y sonar igual en los dos casos le estaría pidiendo confianza donde corresponde revisar.
+ *
  * **Y dice cuánta plata fue.** Un abono de $50.000 sobre un extracto de $1.008.902 salda el
  * periodo igual que un pago completo —el monto no filtra, y no puede: movi no conoce el extracto
  * (ver `PagosDeDeuda.kt` en el server)—, así que si la fila dijera solo «ya ocurrió», el dueño no
@@ -192,6 +199,11 @@ fun textoYaOcurrio(estado: OccurrenceState): String {
     val cuando = if (mes.isEmpty()) "Ya ocurrió" else "Ya ocurrió en $mes"
     val monto = estado.montoDelPago
     return when {
+        // Lo automático va ANTES que lo derivado, porque toda automática es además derivada (ver
+        // el KDoc de `OccurrenceState.automatica`) y con el orden al revés nunca se leería.
+        estado.automatica && monto != null ->
+            "$cuando · Movi lo emparejó con un movimiento de ${formatMoney(monto, estado.monedaDelPago ?: "COP")}"
+        estado.automatica -> "$cuando · lo emparejó Movi"
         estado.derivadaDeUnMovimiento && monto != null ->
             "$cuando · lo prueba un pago de ${formatMoney(monto, estado.monedaDelPago ?: "COP")}"
         estado.derivadaDeUnMovimiento -> "$cuando · lo prueba un movimiento"
@@ -211,6 +223,12 @@ fun textoYaOcurrio(estado: OccurrenceState): String {
  *
  * Para deshacerla de verdad hay un solo camino honesto: borrar o anular el movimiento. Ahí la fila
  * desaparece sola, porque el server la deriva en cada lectura.
+ *
+ * Lo mismo vale para las que emparejó Movi sola ([OccurrenceState.automatica]), que viajan con
+ * [OccurrenceState.derivadaDeUnMovimiento] en `true` justamente por eso: tampoco hay fila que
+ * borrar. Esas sí se pueden revertir, pero con otro botón y otro endpoint —el «no fue este», que
+ * persiste el rechazo— así que la pantalla que lo ofrezca tiene que leer `automatica`, no esta
+ * función. Un cliente viejo que solo conoce este campo no ofrece nada, que es lo correcto.
  */
 fun sePuedeDeshacer(estado: OccurrenceState): Boolean = !estado.derivadaDeUnMovimiento
 
