@@ -59,15 +59,23 @@ import kotlin.test.assertTrue
  * El dueño lo pidió así: *«si no marqué algo recurrente pero lo es, poder hacerlo desde el
  * movimiento luego, y que se agregue el recurrente»*.
  *
- * Lo delicado no es crear la regla: es que **ese pago no se cuente dos veces**. El movimiento que
- * origina la regla ya está en «Gastos del mes» y ya pasó; si la regla naciera venciendo en ese
- * mismo período, Movi le preguntaría «¿ya pagaste el arriendo de agosto?» sobre el arriendo de
- * agosto que acaba de anotar, y se lo ofrecería como respuesta a sí mismo.
+ * Lo delicado no es crear la regla: es que Movi no le **vuelva a preguntar** por ese pago. El
+ * movimiento que origina la regla ya pasó y ya está en «Gastos del mes»; si la regla naciera
+ * venciendo abierta en ese mismo período, Movi le preguntaría «¿ya pagaste el arriendo de agosto?»
+ * sobre el arriendo que acaba de anotar, y se lo ofrecería como respuesta a sí mismo.
  *
- * La pieza que lo evita es `recurring_rules.active_from` —la fecha del movimiento— más el rodado
- * que `dueDateFor` ya hacía (`while (!due.isAfter(inicio))`). Estas pruebas fijan las dos mitades
- * **y su contrafactual**: la misma regla sin esa fecha SÍ propone el movimiento, que es lo que
- * demuestra que la guarda es la que trabaja y no una casualidad del calendario.
+ * **Eso se cierra marcándolo, no escondiéndolo.** El alta manda el id del movimiento
+ * (`eventoDeOrigen`) y el server sella con él el período de ese movimiento, por el mismo camino y
+ * con las mismas guardas que «Ya lo pagué». El período se ve, tildado y con su evidencia al lado,
+ * y `dueDateFor` rueda al siguiente porque el período está sellado — no porque no exista.
+ *
+ * `recurring_rules.active_from` sigue puesto y sigue siendo necesario, pero para lo otro: marca el
+ * piso hacia atrás (nada de cuotas de julio). Antes se comía además el período del propio
+ * movimiento, y eso borraba del checklist reglas reales del dueño; ver `PrimeraCuotaTest`.
+ *
+ * Estas pruebas fijan las dos mitades **y sus contrafactuales**: sin la fecha y sin el id, la
+ * misma regla vence abierta este mes y propone el movimiento — que es lo que demuestra que trabajan
+ * las guardas y no una casualidad del calendario.
  */
 class RecurrenteDesdeMovimientoTest {
 
@@ -148,12 +156,30 @@ class RecurrenteDesdeMovimientoTest {
 
     private fun ApplicationTestBuilder.wireApp() = application { testModule() }
 
-    /** El cuerpo que manda la hoja prellenada desde el movimiento. */
-    private fun cuerpoDeLaRegla(activeFrom: String?, nombre: String = "Arriendo") = buildString {
+    /**
+     * El cuerpo que manda la hoja prellenada desde el movimiento: la fecha de ESE movimiento y,
+     * desde esta ola, también su id — los dos salen del mismo `RecurringPrefill`.
+     */
+    private fun cuerpoDeLaRegla(
+        activeFrom: String?,
+        nombre: String = "Arriendo",
+        eventoDeOrigen: String? = null,
+    ) = buildString {
         append("""{"id":"","name":"$nombre","category":"Vivienda","amount":1800000,""")
         append(""""dayOfMonth":${hoy.dayOfMonth},"type":"EXPENSE","accountId":"$cuentaId"""")
         if (activeFrom != null) append(""","activeFrom":"$activeFrom"""")
+        if (eventoDeOrigen != null) append(""","eventoDeOrigen":"$eventoDeOrigen"""")
         append("}")
+    }
+
+    /** Lo que manda de verdad la hoja: la fecha del movimiento Y su id. */
+    private fun cuerpoDesdeElMovimiento(nombre: String = "Arriendo", eventId: String = "ev-arriendo") =
+        cuerpoDeLaRegla(hoy.toString(), nombre = nombre, eventoDeOrigen = eventId)
+
+    private fun sellosGuardados(): List<Pair<String, String?>> = transaction {
+        RecurringOccurrences.selectAll()
+            .where { RecurringOccurrences.userId eq duenoId }
+            .map { it[RecurringOccurrences.period] to it[RecurringOccurrences.eventId] }
     }
 
     private suspend fun ApplicationTestBuilder.crearRegla(body: String) =
@@ -208,15 +234,69 @@ class RecurrenteDesdeMovimientoTest {
     @Test
     fun `el primer vencimiento es el del mes que viene, no el del movimiento`() = testApplication {
         wireApp()
-        crearRegla(cuerpoDeLaRegla(hoy.toString()))
+        crearRegla(cuerpoDesdeElMovimiento())
 
         val texto = proximos()
         val vencimiento = Regex("\"dueDate\"\\s*:\\s*\"(\\d{4}-\\d{2}-\\d{2})\"").find(texto)!!.groupValues[1]
         assertEquals(
             YearMonth.from(hoy).plusMonths(1),
             YearMonth.from(LocalDate.parse(vencimiento)),
-            "el pago que originó la regla ya se hizo: el recordatorio arranca el mes que viene ($texto)",
+            "el pago que originó la regla ya se hizo y quedó sellado: el recordatorio arranca el mes que viene ($texto)",
         )
+    }
+
+    // ── El movimiento que la originó queda como su EVIDENCIA ───────────────────
+
+    @Test
+    fun `el alta desde un movimiento sella el periodo de ese movimiento con ese movimiento`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, crearRegla(cuerpoDesdeElMovimiento()).status)
+
+        assertEquals(
+            listOf(YearMonth.from(hoy).toString() to "ev-arriendo"),
+            sellosGuardados(),
+            "el período del movimiento tiene que quedar cerrado, y con el movimiento como prueba",
+        )
+    }
+
+    @Test
+    fun `sin el id del movimiento no se sella nada`() = testApplication {
+        wireApp()
+        crearRegla(cuerpoDeLaRegla(hoy.toString()))
+
+        assertEquals(emptyList(), sellosGuardados(), "el sello sale del id que manda el cliente, de nada más")
+    }
+
+    /**
+     * **Un movimiento que ya usa otra regla no puede sellar esta.** Es una de las guardas de
+     * `POST /api/recurring-rules/{id}/occurrence`, y vale acá porque el sellado pasa por ahí: una
+     * sola entrada de plata cerrando dos recurrentes es «marcar de más», que es lo caro.
+     *
+     * Y la regla **se crea igual**: perder el alta por no poder poner un sello sería perder lo que
+     * el dueño pidió.
+     */
+    @Test
+    fun `un movimiento ya usado por otra regla no sella, pero la regla se crea`() = testApplication {
+        wireApp()
+        crearRegla(cuerpoDesdeElMovimiento(nombre = "Arriendo"))
+        val sellosDeLaPrimera = sellosGuardados()
+
+        val res = crearRegla(cuerpoDesdeElMovimiento(nombre = "Administración"))
+
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        assertEquals(2, transaction {
+            RecurringRules.selectAll().where { RecurringRules.userId eq duenoId }.count().toInt()
+        })
+        assertEquals(sellosDeLaPrimera, sellosGuardados(), "el movimiento ya estaba usado: no se sella de nuevo")
+    }
+
+    @Test
+    fun `un id de movimiento inventado no rompe el alta`() = testApplication {
+        wireApp()
+        val res = crearRegla(cuerpoDeLaRegla(hoy.toString(), eventoDeOrigen = "no-existe"))
+
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        assertEquals(emptyList(), sellosGuardados())
     }
 
     /**
@@ -236,18 +316,27 @@ class RecurrenteDesdeMovimientoTest {
 
     // ── Y el movimiento no queda ofrecido como ocurrencia pendiente ────────────
 
+    /**
+     * El movimiento que originó la regla **no se ofrece como pregunta: se muestra como respuesta**.
+     *
+     * Antes este período no existía —`activeFrom` lo escondía— y la prueba fijaba que la respuesta
+     * viniera vacía. Ahora el período está ahí, cerrado, con el movimiento como evidencia: es lo
+     * que el dueño esperaba ver en el checklist y lo que no veía.
+     */
     @Test
-    fun `el movimiento que origino la regla no se ofrece como su ocurrencia de este mes`() = testApplication {
+    fun `el movimiento que origino la regla queda como su evidencia, no como una pregunta`() = testApplication {
         wireApp()
-        crearRegla(cuerpoDeLaRegla(hoy.toString()))
+        crearRegla(cuerpoDesdeElMovimiento())
 
         val texto = ocurrencias()
+        // El `ContentNegotiation` del server sale con `prettyPrint`: se compara sin espacios.
+        val apretado = texto.replace(Regex("\\s"), "")
+        assertTrue(apretado.contains(""""occurred":true"""), texto)
+        assertTrue(apretado.contains(""""eventId":"ev-arriendo""""), texto)
         assertFalse(
-            texto.contains("ev-arriendo"),
-            "no se le puede ofrecer al dueño cerrar el mes con el pago que ORIGINÓ la regla: $texto",
+            apretado.contains(""""candidates""""),
+            "no se le puede PREGUNTAR al dueño por el pago que ORIGINÓ la regla: $texto",
         )
-        // Y la regla directamente no tiene ocurrencia este mes: todavía no arrancó.
-        assertEquals("[]", texto.replace(Regex("\\s"), ""), texto)
     }
 
     /** El contrafactual del anterior: sin `activeFrom`, ese mismo movimiento SÍ se propone. */
@@ -265,7 +354,7 @@ class RecurrenteDesdeMovimientoTest {
     @Test
     fun `un PUT que no habla de la fecha de arranque la conserva`() = testApplication {
         wireApp()
-        crearRegla(cuerpoDeLaRegla(hoy.toString()))
+        crearRegla(cuerpoDesdeElMovimiento())
         val ruleId = transaction {
             RecurringRules.selectAll().where { RecurringRules.userId eq duenoId }.single()[RecurringRules.id]
         }

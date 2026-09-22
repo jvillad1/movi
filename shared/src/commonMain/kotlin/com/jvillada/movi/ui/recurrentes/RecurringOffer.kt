@@ -86,21 +86,31 @@ data class RecurringPrefill(
     /** Ola 9 · D: de qué cuenta salió (o a cuál entró). Puede ser null si el movimiento no la traía. */
     val accountId: String?,
     /**
-     * **La fecha del movimiento que originó la regla**, ISO `"2026-08-15"` — y con eso, la fecha
-     * desde la que la regla corre (ver [RecurringRule.activeFrom]).
+     * **La fecha del movimiento que originó la regla**, ISO `"2026-08-15"` — y con eso, el
+     * PERÍODO desde el que la regla corre (ver [RecurringRule.activeFrom]).
      *
-     * Es la pieza que evita **contar el pago dos veces**, y hace falta en los dos caminos que
-     * llegan acá (la barra de después de guardar y «Esto se repite» desde el detalle del
-     * movimiento). El movimiento que origina la regla YA ocurrió y ya está en «Gastos del mes»;
-     * sin esta fecha, la regla nace con su vencimiento en el período de ese mismo movimiento y
-     * Movi lo propone otra vez —«¿ya pagaste el arriendo de agosto?»— sobre un arriendo que acaba
-     * de anotar. Con ella, `dueDateFor` adelanta el primer vencimiento al período siguiente
-     * (rueda mientras `due <= activeFrom`), que es justo lo que el dueño espera.
+     * Marca el piso hacia atrás: una regla nacida de un pago de septiembre no debe cuotas de
+     * julio ni de agosto. **Lo que ya no hace es saltarse el período del propio movimiento** —eso
+     * escondía del checklist el período que el dueño estaba mirando, con su pago adentro—: ese
+     * período existe y se cierra marcándolo, con [eventId] como evidencia.
      *
-     * `null` = «desde siempre», que es como se comportaban todas las reglas hasta esta ola y como
-     * siguen naciendo las que se escriben a mano en Recurrentes.
+     * `null` = «desde siempre», que es como siguen naciendo las reglas que se escriben a mano en
+     * Recurrentes.
      */
     val activeFrom: String?,
+    /**
+     * **El id del movimiento que originó la regla**, para que quede como su evidencia.
+     *
+     * Viaja en el alta (`POST /api/recurring-rules`) y el server sella con él el período de ese
+     * movimiento, por el mismo camino y con las mismas guardas que «Ya lo pagué» (ver
+     * [RecurringRule.eventoDeOrigen]). Sin esto, el hueco que queda es el de dos candidatos
+     * igual de buenos: ahí el server prefiere preguntar, y la pregunta sería justo por el pago
+     * que el dueño acaba de convertir en regla.
+     *
+     * Lo llenan los dos caminos que crean una regla desde un movimiento —la barra de después de
+     * guardar y «Esto se repite» desde el detalle—, porque los dos pasan por [prefillFrom].
+     */
+    val eventId: String?,
 )
 
 /**
@@ -200,10 +210,12 @@ fun prefillFrom(event: FinancialEvent): RecurringPrefill {
         type = event.type,
         dayOfMonth = fecha.dayOfMonth,
         accountId = event.accountId.takeIf { it.isNotBlank() },
-        // La MISMA fecha del movimiento, y por eso la regla no vuelve a proponerlo — ver
-        // [RecurringPrefill.activeFrom]. Se saca del mismo `fecha` que el día del mes: son dos
-        // caras del mismo dato y calcularlas dos veces era la forma de que se separaran.
+        // La MISMA fecha del movimiento — ver [RecurringPrefill.activeFrom]. Se saca del mismo
+        // `fecha` que el día del mes: son dos caras del mismo dato y calcularlas dos veces era la
+        // forma de que se separaran.
         activeFrom = fecha.toString(),
+        // Y el movimiento mismo, que es lo que cierra su período sin tener que esconderlo.
+        eventId = event.id,
     )
 }
 

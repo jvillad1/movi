@@ -244,10 +244,9 @@ class RecurringOfferTest {
     // ── «Esto se repite», ofrecido desde la hoja del movimiento ──────────────────────
 
     /**
-     * La fecha del movimiento viaja en el prellenado, y es lo único que evita que la regla
-     * proponga otra vez el pago que la originó (ver [RecurringPrefill.activeFrom] y `dueDateFor`
-     * en el server). Sin esta línea, la función compilaba igual y el dueño recibía el
-     * recordatorio del arriendo que acababa de anotar.
+     * La fecha del movimiento viaja en el prellenado y fija el PERÍODO desde el que corre la regla
+     * (ver [RecurringPrefill.activeFrom] y `dueDateFor` en el server). Sin esta línea, la función
+     * compilaba igual y la regla se inventaba historia hacia atrás.
      */
     @Test
     fun `el prellenado lleva la fecha del movimiento como fecha de arranque`() {
@@ -255,6 +254,19 @@ class RecurringOfferTest {
         val prefill = prefillFrom(evento())
         assertEquals("2025-08-05", prefill.activeFrom)
         assertEquals(5, prefill.dayOfMonth, "el día y la fecha salen del mismo instante")
+    }
+
+    /**
+     * **Y el id del movimiento, que es lo que lo deja como evidencia de su período.** Los dos
+     * caminos que crean una regla desde un movimiento —la barra de después de guardar y «Esto se
+     * repite» desde el detalle— pasan por [prefillFrom], así que alcanza con fijarlo acá: sin este
+     * id, el server no tiene con qué cerrar el período y vuelve a preguntar por el pago que el
+     * dueño acaba de convertir en regla (ver `RecurringRule.eventoDeOrigen`).
+     */
+    @Test
+    fun `el prellenado lleva el id del movimiento que la origino`() {
+        val e = evento()
+        assertEquals(e.id, prefillFrom(e).eventId)
     }
 
     @Test

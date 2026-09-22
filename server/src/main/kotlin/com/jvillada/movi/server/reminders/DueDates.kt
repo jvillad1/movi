@@ -128,7 +128,7 @@ fun ocurrenciaPorPreguntar(
     val enJuego = ocurrenciaEnJuego(hoy, rule.dayOfMonth, settings, zone)
     val enGracia = ocurrenciaEnGracia(hoy, rule.dayOfMonth, graceDays)
     val usarLaDeGracia = enGracia != null &&
-        ruleIsActiveOn(rule, enGracia) &&
+        ruleIsActiveOn(rule, enGracia, settings, zone) &&
         (enJuego == null || (enGracia.isBefore(enJuego) && enJuego.isAfter(hoy)))
     return if (usarLaDeGracia) enGracia else enJuego
 }
@@ -213,7 +213,10 @@ fun dueDateFor(
         // Un período sin ocurrencia (acortado a mano) arranca por la primera que venga después.
         primeraOcurrenciaDesde(diasDelPeriodo(today, settings).start, rule.dayOfMonth)
     }
-    val inicio = rule.activeFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    // **El piso de la regla, con granularidad de PERÍODO** (ver [arranqueDeLaRegla]): el primer
+    // día del período del dueño en que cae `activeFrom`. Lo anterior a eso no existe; ese período
+    // sí.
+    val piso = arranqueDeLaRegla(rule, settings)
     // **Antes de rodar hacia adelante, la ocurrencia anterior que sigue en gracia.**
     //
     // `natural` sale del período que contiene hoy, así que al cambiar de período la ocurrencia de
@@ -225,7 +228,7 @@ fun dueDateFor(
     if (enGracia != null &&
         enGracia.isBefore(natural) &&
         periodOf(enGracia) !in occurredPeriods &&
-        (inicio == null || enGracia.isAfter(inicio))
+        (piso == null || !enGracia.isBefore(piso))
     ) {
         return enGracia
     }
@@ -234,21 +237,29 @@ fun dueDateFor(
     } else {
         natural
     }
-    // **Una regla que todavía no arrancó no vence.**
+    // **Una regla no vence en los períodos ANTERIORES al de su arranque.**
     //
-    // La primera cuota de un crédito no cae el mismo día del desembolso. El dueño lo dijo con su
-    // crédito del techo: «el desembolso es ese día pero en realidad la cuota es 1 mes después».
+    // El piso es el arranque del período, no la fecha exacta (ver [arranqueDeLaRegla]): el período
+    // en el que cae `activeFrom` **sí** existe. Lo que esto sigue evitando —y es para lo que
+    // `activeFrom` nació— es que una regla nacida hoy se invente historia hacia atrás: un crédito
+    // desembolsado el 1 de septiembre no debe cuotas de agosto ni de julio.
     //
-    // Esto ya se había arreglado una vez… **en un solo endpoint de tres**. `ruleIsActiveOn` vivía
-    // suelto en `/api/payments/occurrences`, así que «Próximos pagos» del Inicio y el barrido de
-    // avisos seguían mostrando la cuota el día del desembolso — que es justo donde el dueño la
-    // vio. Un filtro que cada consumidor tiene que acordarse de llamar es un filtro que alguno se
-    // va a olvidar; el vencimiento mismo tiene que saberlo.
+    // Lo que **dejó** de evitar es que el período del propio movimiento/desembolso se saltee. Eso
+    // era un remedio de más: se lo comía entero, y las reglas creadas desde un pago del período en
+    // curso desaparecían del checklist de ese período aunque el pago que las prueba estuviera ahí.
+    // Hoy ese período se cierra marcándolo (el emparejamiento automático de `OccurrenceMatching`,
+    // o el sello que escribe `POST /api/recurring-rules`), que es mejor que esconderlo: el pago se
+    // ve, con su evidencia al lado.
+    //
+    // Esto vive acá y no en un filtro suelto por una razón que ya costó una vez: `ruleIsActiveOn`
+    // vivía solo en `/api/payments/occurrences`, así que «Próximos pagos» del Inicio y el barrido
+    // de avisos no lo aplicaban. Un filtro que cada consumidor tiene que acordarse de llamar es un
+    // filtro que alguno se va a olvidar; el vencimiento mismo tiene que saberlo.
     //
     // Rueda mes a mes con el mismo tope que el bucle de abajo: sin él, una fecha de inicio
     // absurda (un año 2400 mal tecleado) daría un bucle infinito en vez de un dato raro.
     var sinArrancar = 0
-    while (inicio != null && !due.isAfter(inicio) && sinArrancar < MAX_OCCURRENCE_ROLLS) {
+    while (piso != null && due.isBefore(piso) && sinArrancar < MAX_OCCURRENCE_ROLLS) {
         due = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
         sinArrancar++
     }
@@ -333,18 +344,51 @@ fun selectDueForReminder(
         .map { it.first }
 
 /**
+ * **El piso de esta regla: el primer día del PERÍODO del dueño en que cae
+ * [RecurringRule.activeFrom]**, o `null` si la regla corre desde siempre.
+ *
+ * La granularidad es el período y no el día, y esa es toda la diferencia con la versión anterior
+ * (ver el KDoc de [RecurringRule.activeFrom] en `:core` para la historia completa). Antes el piso
+ * era la fecha exacta y `dueDateFor` rodaba mientras `due <= activeFrom`, así que una regla nacida
+ * de un movimiento se saltaba **el período entero de ese movimiento**: «Coomeva Familiar» (día 30,
+ * creada desde un pago del 5 de septiembre, corte 25) no aparecía en el checklist del período en
+ * curso aunque el pago que la prueba estuviera ahí.
+ *
+ * Con el piso en el arranque del período, el vencimiento del 30 de agosto —que cae en el período
+ * del dueño que contiene al 5 de septiembre— **existe**, y la protección original se mantiene
+ * entera: no se inventan ocurrencias de julio ni de junio.
+ *
+ * Una fecha ilegible devuelve `null` (la regla corre): ante la duda, mejor avisar de más.
+ */
+fun arranqueDeLaRegla(
+    rule: RecurringRule,
+    settings: PeriodSettings = PeriodSettings(),
+    zone: ZoneId = AppClock.zone,
+): LocalDate? {
+    val desde = rule.activeFrom ?: return null
+    val inicio = runCatching { LocalDate.parse(desde) }.getOrNull() ?: return null
+    return diasDelPeriodo(inicio, settings, zone).start
+}
+
+/**
  * ¿Esta regla ya está corriendo en [date]?
  *
- * Una regla con [RecurringRule.activeFrom] no existe **antes ni el mismo día** de esa fecha. Es lo
- * que hace que la primera cuota de un crédito caiga después del desembolso y no el mismo día: el
- * dueño registró un préstamo desembolsado el 1 de septiembre con pago el día 1, y Movi le anunciaba
- * la cuota para ese mismo 1 de septiembre.
+ * Una regla con [RecurringRule.activeFrom] no existe en los períodos **anteriores** al que
+ * contiene esa fecha. El período de la fecha sí: ver [arranqueDeLaRegla].
+ *
+ * **Se pasa [settings] siempre que se tenga.** Con corte 25 el período del dueño y el mes de
+ * calendario son cosas distintas, y este repo ya se comió ese error una vez: usar el default acá
+ * haría que Recurrentes hablara de un mes y Movimientos de otro sobre el mismo pago.
  *
  * Las reglas escritas a mano (un salario, un gimnasio) tienen `activeFrom = null` y corren desde
  * siempre — no tienen un «desembolso» que marque un antes.
  */
-fun ruleIsActiveOn(rule: RecurringRule, date: LocalDate): Boolean {
-    val desde = rule.activeFrom ?: return true
-    val inicio = runCatching { LocalDate.parse(desde) }.getOrNull() ?: return true
-    return date.isAfter(inicio)
+fun ruleIsActiveOn(
+    rule: RecurringRule,
+    date: LocalDate,
+    settings: PeriodSettings = PeriodSettings(),
+    zone: ZoneId = AppClock.zone,
+): Boolean {
+    val piso = arranqueDeLaRegla(rule, settings, zone) ?: return true
+    return !date.isBefore(piso)
 }

@@ -1,10 +1,13 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.reminders.periodoDelDueno
+import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
 import com.jvillada.movi.server.reminders.DEFAULT_GRACE_DAYS
 import com.jvillada.movi.server.reminders.diasDelPeriodo
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
+import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.reminders.OCCURRENCE_WINDOW_DAYS
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Users
@@ -41,6 +44,7 @@ import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MarkOccurrenceRequest
 import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.PeriodSettings
 
 import com.jvillada.movi.shared.model.RechazarOcurrenciaRequest
 import com.jvillada.movi.shared.model.RecurringOccurrence
@@ -78,9 +82,9 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     type = TransactionType.valueOf(this[RecurringRules.type]),
     remindMe = this[RecurringRules.remindMe],
     accountId = this[RecurringRules.accountId],
-    // Desde que «esto se repite» nace de un movimiento ya ocurrido, esta fecha decide que el
-    // primer vencimiento sea el del período SIGUIENTE (ver `dueDateFor`). Sin leerla acá, la
-    // regla la guardaría y ninguna pantalla la respetaría.
+    // El piso de la regla: los períodos anteriores al de esta fecha no existen (ver
+    // `arranqueDeLaRegla`). Sin leerla acá, la regla la guardaría y ninguna pantalla la
+    // respetaría.
     activeFrom = this[RecurringRules.activeFrom],
 )
 
@@ -153,20 +157,57 @@ fun Route.reminderRoutes() {
                 // (ver [accountIdIfOwned]).
                 it[accountId] = safeAccountId
                 // **Desde cuándo corre.** Lo manda quien crea la regla a partir de un movimiento
-                // que ya ocurrió: con la fecha de ese movimiento acá, `dueDateFor` arranca en el
-                // período SIGUIENTE y ese pago no se vuelve a proponer. Vacío o mal formado se
-                // guarda como NULL —«desde siempre»—, que es como nacen las reglas escritas a
-                // mano y como se comportaban todas hasta esta ola.
+                // que ya ocurrió: con la fecha de ese movimiento acá, la regla no se inventa
+                // ocurrencias en los períodos ANTERIORES. El período de ese movimiento sí existe,
+                // y lo cierra su propio sello (ver `eventoDeOrigen` más abajo). Vacío o mal
+                // formado se guarda como NULL —«desde siempre»—, que es como nacen las reglas
+                // escritas a mano.
                 it[activeFrom] = fechaIsoValida(body.activeFrom)
             }
             safeAccountId
         }
+        // **El movimiento que originó la regla queda como su evidencia.**
+        //
+        // Va en su propia transacción, DESPUÉS de que la regla existe y envuelto en un
+        // `runCatching`, y las dos cosas son la misma decisión: el sellado no puede tumbar el
+        // alta. Si algo sale mal acá —el movimiento no existe, es un traspaso, ya lo usa otra
+        // regla, la base se cayó justo ahí— el dueño igual se queda con su recurrente y, como
+        // mucho, con una pregunta de más que puede contestar con un toque. Al revés (perder el
+        // alta por no poder poner un sello) sería perder lo que pidió.
+        //
+        // Por qué hace falta aunque `ocurrenciaConcluyente` empareje solo: ver
+        // [sellarElMovimientoDeOrigen].
+        val origen = body.eventoDeOrigen?.trim()?.takeIf { it.isNotEmpty() }
+        if (origen != null) {
+            runCatching {
+                dbQuery {
+                    val regla = RecurringRules.selectAll()
+                        .where { (RecurringRules.id eq newId) and (RecurringRules.userId eq uid) }
+                        .firstOrNull()?.toRule()
+                    if (regla != null) {
+                        sellarElMovimientoDeOrigen(
+                            uid = uid,
+                            rule = regla,
+                            eventId = origen,
+                            today = AppClock.today(),
+                            settings = ajustesDelPeriodoSinSuspender(uid),
+                        )
+                    }
+                }
+            }
+        }
         // La respuesta dice lo que QUEDÓ guardado, no lo que se pidió: si la cuenta no era suya
         // se guardó null, y devolver el id igual haría que el cliente pinte una cuenta que la
-        // regla no tiene. Lo mismo con la fecha de arranque.
+        // regla no tiene. Lo mismo con la fecha de arranque. Y `eventoDeOrigen` vuelve en null
+        // porque en la fila no queda: es un campo de ida, no una columna (ver su KDoc).
         call.respond(
             HttpStatusCode.Created,
-            body.copy(id = newId, accountId = storedAccountId, activeFrom = fechaIsoValida(body.activeFrom)),
+            body.copy(
+                id = newId,
+                accountId = storedAccountId,
+                activeFrom = fechaIsoValida(body.activeFrom),
+                eventoDeOrigen = null,
+            ),
         )
     }
 
@@ -208,9 +249,8 @@ fun Route.reminderRoutes() {
             // solo que sin la variante «quítala»: ningún cliente de hoy edita esta fecha —la pone
             // el alta desde un movimiento y nada más— así que un `null` en el body es siempre «no
             // lo toques», nunca «desde siempre». Sin esto, corregirle el monto a una regla creada
-            // desde un movimiento le borraba la fecha de arranque y su vencimiento volvía al
-            // período que ya estaba pagado: el pago duplicado que esta ola vino a evitar,
-            // reintroducido por una edición cualquiera.
+            // desde un movimiento le borraba el piso y la regla volvía a deber los períodos
+            // anteriores, reintroducidos por una edición cualquiera.
             val arranqueActual = filaActual?.get(RecurringRules.activeFrom)
             val arranqueGuardado = fechaIsoValida(body.activeFrom) ?: arranqueActual
             storedActiveFrom = arranqueGuardado
@@ -406,9 +446,10 @@ fun Route.reminderRoutes() {
                 // del 24 sin marcar se sigue ofreciendo («Ya lo pagué») del 25 al 29, en vez de
                 // desaparecer al día siguiente de vencer. Ver `ocurrenciaPorPreguntar`.
                 val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
-                // Una regla que todavía no arrancó no tiene ocurrencia este mes: es lo que evita
-                // que la primera cuota de un crédito caiga el mismo día del desembolso.
-                if (!ruleIsActiveOn(rule, due)) return@mapNotNull null
+                // Una regla no tiene ocurrencia en los períodos ANTERIORES al de su arranque:
+                // un crédito desembolsado este mes no debe cuotas de los meses de antes. El
+                // período del arranque sí la tiene — ver `arranqueDeLaRegla`.
+                if (!ruleIsActiveOn(rule, due, periodo)) return@mapNotNull null
                 rule to due
             }
 
@@ -593,83 +634,7 @@ fun Route.reminderRoutes() {
                 .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
                 .firstOrNull()?.toRule()
                 ?: return@dbQuery MarcaResult.Error(HttpStatusCode.NotFound)
-            // **Techo: el vencimiento de ese periodo tiene que haber LLEGADO — por día, no por
-            // mes.** Es la misma guarda que el GET, escrita igual.
-            //
-            // Fue un techo por mes, y ahí quedaba un hueco: el 27 de agosto, `"2026-08"` sobre
-            // una regla de día 31 pasaba —el mes ya empezó— y le apagaba el vencimiento del 31,
-            // que todavía no había llegado. No es alcanzable desde la pantalla (solo manda el
-            // periodo que le dio el GET), pero este archivo ya argumenta, para las cuatro
-            // puertas, que la UI ofrece y el endpoint no puede confiar en eso. Vale igual acá.
-            val vencimientoDelPeriodo = occurrenceInMonth(YearMonth.parse(body.period), rule.dayOfMonth)
-            if (vencimientoDelPeriodo.isAfter(today)) {
-                return@dbQuery MarcaResult.Error(
-                    HttpStatusCode.BadRequest,
-                    "Ese vencimiento todavía no llegó: no se puede dar por ocurrido.",
-                )
-            }
-            // Y un piso, para que un cliente con un bug no ensucie la tabla con periodos
-            // arqueológicos que además queman ids en `usedEventIds` (un movimiento sellado no
-            // vuelve a proponerse nunca).
-            if (body.period < periodOf(today.minusMonths(MAX_MESES_HACIA_ATRAS))) {
-                return@dbQuery MarcaResult.Error(
-                    HttpStatusCode.BadRequest,
-                    "Ese periodo es demasiado viejo para darlo por ocurrido.",
-                )
-            }
-            val eventId = body.eventId?.trim()?.takeIf { it.isNotEmpty() }
-            if (eventId != null) {
-                val evento = Events.selectAll()
-                    .where { (Events.id eq eventId) and (Events.userId eq uid) }
-                    .firstOrNull()
-                    ?: return@dbQuery MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento no existe.")
-                val anulado = VoidEvents.selectAll()
-                    .where { (VoidEvents.originalEventId eq eventId) and (VoidEvents.userId eq uid) }
-                    .firstOrNull() != null
-                if (anulado) {
-                    return@dbQuery MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento está anulado.")
-                }
-                // Las mismas dos puertas que cierra `occurrenceCandidatesFor`, cerradas también
-                // acá: la UI solo ofrece candidatos, pero el endpoint no puede confiar en eso.
-                if (evento[Events.transferId] != null || isReservedCategory(evento[Events.category])) {
-                    return@dbQuery MarcaResult.Error(
-                        HttpStatusCode.BadRequest,
-                        "Un traspaso o un asiento interno no puede ser la ocurrencia de un recurrente.",
-                    )
-                }
-                // Un mismo movimiento no puede cerrar dos periodos: sería una sola entrada de
-                // plata dando por saldados dos meses.
-                val yaUsado = RecurringOccurrences.selectAll()
-                    .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId eq eventId) }
-                    .any { it[RecurringOccurrences.ruleId] != ruleId || it[RecurringOccurrences.period] != body.period }
-                if (yaUsado) {
-                    return@dbQuery MarcaResult.Error(
-                        HttpStatusCode.Conflict,
-                        "Ese movimiento ya está marcado como la ocurrencia de otro periodo.",
-                    )
-                }
-            }
-            val now = System.currentTimeMillis()
-            RecurringOccurrences.deleteWhere {
-                (RecurringOccurrences.userId eq uid) and
-                    (RecurringOccurrences.ruleId eq ruleId) and
-                    (RecurringOccurrences.period eq body.period)
-            }
-            RecurringOccurrences.insert {
-                it[RecurringOccurrences.userId] = uid
-                it[RecurringOccurrences.ruleId] = ruleId
-                it[RecurringOccurrences.period] = body.period
-                it[RecurringOccurrences.eventId] = eventId
-                it[confirmedAt] = now
-            }
-            MarcaResult.Ok(
-                RecurringOccurrence(
-                    ruleId = ruleId,
-                    period = body.period,
-                    eventId = eventId,
-                    confirmedAt = now,
-                ),
-            )
+            sellarOcurrencia(uid, rule, body.period, body.eventId, today)
         }
         when (resultado) {
             is MarcaResult.Ok -> call.respond(HttpStatusCode.Created, resultado.occurrence)
@@ -781,4 +746,139 @@ private const val MAX_MESES_HACIA_ATRAS: Long = 12
 private sealed interface MarcaResult {
     data class Ok(val occurrence: RecurringOccurrence) : MarcaResult
     data class Error(val code: HttpStatusCode, val message: String? = null) : MarcaResult
+}
+
+/**
+ * **Sellar un período de [rule] como ocurrido, con o sin movimiento que lo pruebe.**
+ *
+ * Es el cuerpo entero de `POST /api/recurring-rules/{id}/occurrence`, extraído para que el alta de
+ * una regla **desde un movimiento** selle por el mismo camino en vez de copiarle las guardas (ver
+ * [com.jvillada.movi.shared.model.RecurringRule.eventoDeOrigen]). Copiarlas habría dejado dos
+ * versiones de un conjunto de reglas de seguridad que está argumentado una por una acá, y la
+ * segunda copia se habría quedado atrás en el primer cambio.
+ *
+ * Idempotente: reescribe la fila del período. Eso es lo que hace que «no fue este, fue aquel»
+ * funcione sin un paso de deshacer en el medio.
+ */
+private fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
+    uid: String,
+    rule: RecurringRule,
+    period: String,
+    eventIdCrudo: String?,
+    today: java.time.LocalDate,
+): MarcaResult {
+    val ruleId = rule.id
+    // **Techo: el vencimiento de ese periodo tiene que haber LLEGADO — por día, no por
+    // mes.** Es la misma guarda que el GET, escrita igual.
+    //
+    // Fue un techo por mes, y ahí quedaba un hueco: el 27 de agosto, `"2026-08"` sobre
+    // una regla de día 31 pasaba —el mes ya empezó— y le apagaba el vencimiento del 31,
+    // que todavía no había llegado. No es alcanzable desde la pantalla (solo manda el
+    // periodo que le dio el GET), pero este archivo ya argumenta, para las cuatro
+    // puertas, que la UI ofrece y el endpoint no puede confiar en eso. Vale igual acá.
+    val vencimientoDelPeriodo = occurrenceInMonth(YearMonth.parse(period), rule.dayOfMonth)
+    if (vencimientoDelPeriodo.isAfter(today)) {
+        return MarcaResult.Error(
+            HttpStatusCode.BadRequest,
+            "Ese vencimiento todavía no llegó: no se puede dar por ocurrido.",
+        )
+    }
+    // Y un piso, para que un cliente con un bug no ensucie la tabla con periodos
+    // arqueológicos que además queman ids en `usedEventIds` (un movimiento sellado no
+    // vuelve a proponerse nunca).
+    if (period < periodOf(today.minusMonths(MAX_MESES_HACIA_ATRAS))) {
+        return MarcaResult.Error(
+            HttpStatusCode.BadRequest,
+            "Ese periodo es demasiado viejo para darlo por ocurrido.",
+        )
+    }
+    val eventId = eventIdCrudo?.trim()?.takeIf { it.isNotEmpty() }
+    if (eventId != null) {
+        val evento = Events.selectAll()
+            .where { (Events.id eq eventId) and (Events.userId eq uid) }
+            .firstOrNull()
+            ?: return MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento no existe.")
+        val anulado = VoidEvents.selectAll()
+            .where { (VoidEvents.originalEventId eq eventId) and (VoidEvents.userId eq uid) }
+            .firstOrNull() != null
+        if (anulado) {
+            return MarcaResult.Error(HttpStatusCode.BadRequest, "Ese movimiento está anulado.")
+        }
+        // Las mismas dos puertas que cierra `occurrenceCandidatesFor`, cerradas también
+        // acá: la UI solo ofrece candidatos, pero el endpoint no puede confiar en eso.
+        if (evento[Events.transferId] != null || isReservedCategory(evento[Events.category])) {
+            return MarcaResult.Error(
+                HttpStatusCode.BadRequest,
+                "Un traspaso o un asiento interno no puede ser la ocurrencia de un recurrente.",
+            )
+        }
+        // Un mismo movimiento no puede cerrar dos periodos: sería una sola entrada de
+        // plata dando por saldados dos meses.
+        val yaUsado = RecurringOccurrences.selectAll()
+            .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId eq eventId) }
+            .any { it[RecurringOccurrences.ruleId] != ruleId || it[RecurringOccurrences.period] != period }
+        if (yaUsado) {
+            return MarcaResult.Error(
+                HttpStatusCode.Conflict,
+                "Ese movimiento ya está marcado como la ocurrencia de otro periodo.",
+            )
+        }
+    }
+    val now = System.currentTimeMillis()
+    RecurringOccurrences.deleteWhere {
+        (RecurringOccurrences.userId eq uid) and
+            (RecurringOccurrences.ruleId eq ruleId) and
+            (RecurringOccurrences.period eq period)
+    }
+    RecurringOccurrences.insert {
+        it[RecurringOccurrences.userId] = uid
+        it[RecurringOccurrences.ruleId] = ruleId
+        it[RecurringOccurrences.period] = period
+        it[RecurringOccurrences.eventId] = eventId
+        it[confirmedAt] = now
+    }
+    return MarcaResult.Ok(
+        RecurringOccurrence(
+            ruleId = ruleId,
+            period = period,
+            eventId = eventId,
+            confirmedAt = now,
+        ),
+    )
+}
+
+/**
+ * **El movimiento que originó la regla queda como su evidencia**: sella el período de ese
+ * movimiento con ese `eventId`.
+ *
+ * Por qué hace falta aunque el server ya empareje solo: `ocurrenciaConcluyente` prefiere preguntar
+ * cuando hay DOS candidatos concluyentes, y ahí volvería la molestia original —Movi preguntando
+ * por el pago que el dueño acaba de convertir en regla—. Sellarlo explícitamente cierra ese hueco
+ * en el único momento en que Movi sabe, sin heurística, cuál es el movimiento: cuando el cliente
+ * se lo dice.
+ *
+ * **La clave del sello es el mes del VENCIMIENTO, no el del movimiento.** Con corte 25 un pago del
+ * 5 de septiembre prueba el vencimiento del 30 de agosto, y ese sello se llama `"2026-08"`: por eso
+ * se busca primero la ocurrencia que cae en el **período del dueño** que contiene al movimiento
+ * ([ocurrenciaEnJuego]) y recién después se la nombra con [periodOf].
+ *
+ * **Nunca falla el alta.** Devuelve `true`/`false` para poder contarlo en una prueba, pero quien
+ * llama ignora el `false`: una regla sin sello es una pregunta de más, una regla que no se creó es
+ * el pedido del dueño perdido. Un período sin ocurrencia (acortado a mano), un movimiento anulado,
+ * un traspaso, un id ajeno o un movimiento que ya usa otra regla: todos caen acá y se van en
+ * silencio.
+ */
+private fun org.jetbrains.exposed.sql.Transaction.sellarElMovimientoDeOrigen(
+    uid: String,
+    rule: RecurringRule,
+    eventId: String,
+    today: java.time.LocalDate,
+    settings: PeriodSettings,
+): Boolean {
+    val fila = Events.selectAll()
+        .where { (Events.id eq eventId) and (Events.userId eq uid) }
+        .firstOrNull() ?: return false
+    val fecha = epochMillisToAppDate(fila[Events.timestamp])
+    val period = ocurrenciaEnJuego(fecha, rule.dayOfMonth, settings)?.let(::periodOf) ?: return false
+    return sellarOcurrencia(uid, rule, period, eventId, today) is MarcaResult.Ok
 }
