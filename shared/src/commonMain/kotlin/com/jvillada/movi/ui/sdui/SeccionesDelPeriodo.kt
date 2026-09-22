@@ -373,4 +373,5 @@ private fun pantallaDe(destino: DestinoDeRevision): Screen = when (destino) {
     DestinoDeRevision.CREDITOS -> Screen.Credits
     DestinoDeRevision.SMS -> Screen.SMSInbox
     DestinoDeRevision.SUSCRIPCIONES -> Screen.Transactions(CHIP_RECURRENTES)
+    DestinoDeRevision.CUADRE -> Screen.CuadreDeSaldos
 }

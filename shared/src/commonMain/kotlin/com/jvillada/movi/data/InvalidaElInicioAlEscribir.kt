@@ -51,6 +51,7 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun deleteCreditTerms(accountId: String): Unit = trasEscribir { delegado.deleteCreditTerms(accountId) }
     override suspend fun registerPayrollDeduction(accountId: String): CreditSummary = trasEscribir { delegado.registerPayrollDeduction(accountId) }
     override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary = trasEscribir { delegado.adjustCreditBalance(accountId, targetBalance) }
+    override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse = trasEscribir { delegado.adjustAccountBalance(accountId, targetBalance) }
     override suspend fun createCard(request: CreateCardRequest): CardSummary = trasEscribir { delegado.createCard(request) }
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = trasEscribir { delegado.putCardTerms(terms) }
     override suspend fun deleteCardTerms(accountId: String): Unit = trasEscribir { delegado.deleteCardTerms(accountId) }

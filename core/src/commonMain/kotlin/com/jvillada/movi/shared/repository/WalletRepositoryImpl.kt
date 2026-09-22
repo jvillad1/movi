@@ -9,6 +9,8 @@ import com.jvillada.movi.shared.model.Documento
 import com.jvillada.movi.shared.model.EdicionDeDocumento
 import com.jvillada.movi.shared.model.EdicionDeMovimiento
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AdjustAccountBalanceRequest
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.AdjustCreditBalanceRequest
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
@@ -129,6 +131,22 @@ class WalletRepositoryImpl(
         val response = client.post("$baseUrl/api/credits/$accountId/balance-adjustment") {
             contentType(ContentType.Application.Json)
             setBody(AdjustCreditBalanceRequest(targetBalance))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    /**
+     * Mismo idioma que [adjustCreditBalance] —y mismo motivo para no usar `.body()` directo—: los
+     * rechazos de esta ruta son texto que el dueño tiene que poder leer en la pantalla (422 si la
+     * cuenta es una deuda, 400 si el monto se fue de rango).
+     */
+    override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse {
+        val response = client.post("$baseUrl/api/accounts/$accountId/balance-adjustment") {
+            contentType(ContentType.Application.Json)
+            setBody(AdjustAccountBalanceRequest(targetBalance))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())

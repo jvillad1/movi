@@ -44,6 +44,10 @@ private val items = listOf(
     // F19: Cuentas era invisible sin al menos una cuenta ya creada (el "Ver todas +" del Inicio
     // solo aparece con la lista no vacía) — entra acá como primer acceso, incondicional.
     MasItem("Cuentas",      Icons.Rounded.AccountBalanceWallet, Color(0xFFB3C8FF), Color(0x24B3C8FF), Screen.Accounts),
+    // El cuadre de saldos va PEGADO a Cuentas: es la misma plata mirada desde el banco. Tiene ficha
+    // propia además del acceso que vive en Cuentas por la razón de siempre (ver Screen.Destinos):
+    // una ficha de Más es una puerta que no depende de que otra pantalla conserve su enlace.
+    MasItem("Cuadre de saldos", Icons.Rounded.Balance, Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.CuadreDeSaldos),
     // Ola 4: Presupuestos dejó su lugar en la barra inferior a Cuentas y entra acá, justo después.
     MasItem("Presupuestos", Icons.Rounded.PieChart,         Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Budgets),
     MasItem("Créditos",     Icons.Rounded.CreditCard,      Color(0xFFFFB4AB), Color(0x1FFFB4AB), Screen.Credits),

@@ -32,10 +32,12 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -871,5 +873,144 @@ class AccountRoutesTest {
 
         assertEquals(HttpStatusCode.OK, renombrar("acc-sello", "Libranza 4818").status)
         assertNotNull(edicionGuardadaDe("acc-sello"))
+    }
+
+    // ── Cuadre de saldos ───────────────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.cuadrar(accountId: String, objetivo: Long) =
+        client.post("/api/accounts/$accountId/balance-adjustment") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"targetBalance":$objetivo}""")
+        }
+
+    private fun JsonObject.evento(): JsonObject? = this["adjustmentEvent"] as? JsonObject
+
+    /**
+     * El caso que motivó la pantalla: los rendimientos de Nu que crecieron $745.856 sin un solo
+     * mensaje del banco que capturar. Cuadrar deja el saldo en la cifra del banco **registrando un
+     * movimiento**, no sobrescribiendo un número.
+     */
+    @Test
+    fun `cuadrar una cuenta de ahorros la deja en el saldo del banco con un movimiento visible`() = testApplication {
+        wireApp()
+        createAccount("acc-nu", "SAVINGS", 0L)
+        postOpeningEvent("acc-nu", "INCOME", 352_082L, "Saldo inicial")
+
+        val res = cuadrar("acc-nu", 1_097_938L)
+        assertEquals(HttpStatusCode.OK, res.status)
+
+        val cuerpo = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        val evento = assertNotNull(cuerpo.evento(), "tiene que venir el movimiento que se escribió")
+        assertEquals("Ajuste de saldo", evento["category"]!!.jsonPrimitive.content)
+        assertEquals("INCOME", evento["type"]!!.jsonPrimitive.content, "subir el saldo de un activo es un ingreso")
+        assertEquals(745_856L, evento["amount"]!!.jsonPrimitive.long)
+        assertEquals(1_097_938L, accountBalance("acc-nu"))
+        assertEquals(2, eventsInDb(), "la apertura y el ajuste, nada más")
+    }
+
+    /** Una cuota de manejo que solo salió en el extracto: el saldo baja y el movimiento es un gasto. */
+    @Test
+    fun `cuadrar hacia abajo registra un gasto por la diferencia`() = testApplication {
+        wireApp()
+        createAccount("acc-fidu", "SAVINGS", 0L)
+        postOpeningEvent("acc-fidu", "INCOME", 352_082L, "Saldo inicial")
+
+        val cuerpo = Json.parseToJsonElement(cuadrar("acc-fidu", 270_730L).bodyAsText()).jsonObject
+        assertEquals("EXPENSE", cuerpo.evento()!!["type"]!!.jsonPrimitive.content)
+        assertEquals(81_352L, cuerpo.evento()!!["amount"]!!.jsonPrimitive.long)
+        assertEquals(270_730L, accountBalance("acc-fidu"))
+    }
+
+    /**
+     * **El ajuste no ensucia el período.** Es toda la honestidad de esta feature: corregir lo que
+     * Movi creía no es plata que entró. El resumen tiene que seguir en cero después de un ajuste de
+     * $745.856 sobre una cuenta de ahorros — donde, a diferencia de un crédito, el evento es un
+     * INCOME común y lo único que lo deja afuera es su categoría reservada.
+     */
+    @Test
+    fun `el ajuste no cuenta como ingreso ni como gasto del periodo`() = testApplication {
+        wireApp()
+        createAccount("acc-nu", "SAVINGS", 0L)
+
+        cuadrar("acc-nu", 745_856L)
+
+        val resumen = summary()
+        assertEquals(0L, resumen["ingresos"]!!.jsonPrimitive.long, "un ajuste no es un ingreso")
+        assertEquals(0L, resumen["egresos"]!!.jsonPrimitive.long)
+        assertEquals(745_856L, accountBalance("acc-nu"), "pero el SALDO sí se movió")
+    }
+
+    /** Cuadrar contra la misma cifra no escribe nada: repetirlo es inofensivo. */
+    @Test
+    fun `cuadrar contra el mismo saldo no registra ningun movimiento`() = testApplication {
+        wireApp()
+        createAccount("acc-nu", "SAVINGS", 0L)
+        postOpeningEvent("acc-nu", "INCOME", 352_082L, "Saldo inicial")
+
+        val res = cuadrar("acc-nu", 352_082L)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertNull(Json.parseToJsonElement(res.bodyAsText()).jsonObject.evento())
+        assertEquals(1, eventsInDb(), "solo la apertura")
+    }
+
+    /**
+     * Las deudas se cuadran en Créditos, con su cuota y sus intereses a la vista — y una tarjeta no
+     * se cuadra: el banco no muestra UN número para ella. La ruta lo dice en vez de escribir un
+     * ajuste contra la cifra equivocada.
+     */
+    @Test
+    fun `una tarjeta o un prestamo no se cuadran por esta ruta`() = testApplication {
+        wireApp()
+        createAccount("acc-card", "CREDIT_CARD", 0L)
+        createAccount("acc-loan", "LOAN", 0L)
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, cuadrar("acc-card", 1_000L).status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, cuadrar("acc-loan", 1_000L).status)
+        assertEquals(0, eventsInDb())
+    }
+
+    /** Un monto negativo o absurdo es un dedazo, y se rechaza antes de escribir nada. */
+    @Test
+    fun `un saldo negativo o fuera de rango se rechaza`() = testApplication {
+        wireApp()
+        createAccount("acc-nu", "SAVINGS", 0L)
+
+        assertEquals(HttpStatusCode.BadRequest, cuadrar("acc-nu", -1L).status)
+        assertEquals(HttpStatusCode.BadRequest, cuadrar("acc-nu", 9_000_000_000_000L).status)
+        assertEquals(0, eventsInDb())
+    }
+
+    /** Una cuenta que no existe (o que es de otro) no se cuadra. */
+    @Test
+    fun `cuadrar una cuenta ajena o inexistente es 404`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.NotFound, cuadrar("acc-de-nadie", 1_000L).status)
+    }
+
+    /**
+     * **Cuándo se cuadró cada cuenta, derivado de los mismos movimientos.** Es lo que la pantalla
+     * lee para decir «Cuadrada el 3 de agosto» y lo que el aviso del Inicio usa para saber cuáles
+     * llevan demasiado. No hay columna nueva: sale de los eventos, así que no puede separarse de
+     * ellos.
+     */
+    @Test
+    fun `la cuenta dice cuando se cuadro por ultima vez y desde cuando existe`() = testApplication {
+        wireApp()
+        createAccount("acc-nu", "SAVINGS", 0L)
+        postOpeningEvent("acc-nu", "INCOME", 352_082L, "Saldo inicial")
+
+        val antes = Json.parseToJsonElement(
+            client.get("/api/accounts/acc-nu") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
+        ).jsonObject
+        assertEquals(null, antes["lastAdjustmentAt"]?.jsonPrimitive?.longOrNull, "todavía no se cuadró nunca")
+        assertNotNull(antes["firstEventAt"]?.jsonPrimitive?.longOrNull, "pero ya tiene movimientos")
+
+        cuadrar("acc-nu", 1_097_938L)
+
+        val despues = Json.parseToJsonElement(
+            client.get("/api/accounts/acc-nu") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
+        ).jsonObject
+        assertNotNull(despues["lastAdjustmentAt"]?.jsonPrimitive?.longOrNull, "ahora sí")
     }
 }

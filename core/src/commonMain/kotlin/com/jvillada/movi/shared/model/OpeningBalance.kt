@@ -64,7 +64,7 @@ fun openingEventFor(account: Account, now: Long, id: String = newId("ev")): Fina
  * está en la lista) y **dónde se arregla**. Los dos caminos de arreglo son reales, distintos y no
  * intercambiables, así que se nombran los dos: el detalle de la cuenta es el único lugar de la app
  * donde esta fila se puede anular, y en un crédito «Ajustar saldo» (pantalla Créditos) deja la
- * deuda en la cifra del banco **registrando un movimiento más** —ver `debtAdjustmentEventFor` en
+ * deuda en la cifra del banco **registrando un movimiento más** —ver `balanceAdjustmentEventFor` en
  * el server— sin tocar la apertura. Para el caso que originó esto (una deuda inicial cargada de
  * más) el segundo camino es el bueno: la apertura sigue contando la historia real y el ajuste la
  * corrige, que es como Movi arregla todo lo demás.

@@ -139,6 +139,31 @@ open class NoOpRepository(
             adjustmentEvent = ajuste,
         )
     }
+    /**
+     * Imita al server para el cuadre de una cuenta de Dinero/Inversión: devuelve la cuenta con el
+     * saldo ya en el objetivo **y** el movimiento que se registró para llegar ahí, que es lo que
+     * [LocalRepository] espeja. Un ajuste de saldo nunca es flujo de caja (ver `isCashFlow`), así
+     * que el stub lo dice explícito.
+     */
+    override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse {
+        val ajuste = FinancialEvent(
+            id                   = "ev-cuadre-$accountId",
+            accountId            = accountId,
+            type                 = TransactionType.INCOME,
+            amount               = 745_856L,
+            category             = "Ajuste de saldo",
+            description          = "Ajuste al saldo del banco",
+            timestamp            = 1_700_000_000_000L,
+            source               = EventSource.MANUAL,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+            countsAsCashFlow     = false,
+        )
+        eventosDelServer += ajuste
+        return AdjustAccountBalanceResponse(
+            account = Account(id = accountId, name = "Ahorros", type = AccountType.SAVINGS, balance = targetBalance),
+            adjustmentEvent = ajuste,
+        )
+    }
     override suspend fun getCards() = emptyList<CardSummary>()
     override suspend fun createCard(request: CreateCardRequest) = CardSummary(
         account = Account(id = "acc-card-stub", name = request.name, type = AccountType.CREDIT_CARD, balance = request.initialDebt, currency = request.currency),

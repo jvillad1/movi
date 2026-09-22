@@ -7,7 +7,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import com.jvillada.movi.server.balance.computeBalances
-import com.jvillada.movi.server.balance.debtAdjustmentEventFor
+import com.jvillada.movi.server.balance.balanceAdjustmentEventFor
 import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
@@ -388,7 +388,7 @@ fun Route.creditRoutes() {
                 val current = computeBalances(account.type, loadNonVoidedEventsIn(uid, accountId))["COP"] ?: 0L
                 // Sin diferencia no se registra nada: un evento de $0 sería ruido en el listado
                 // y no movería el saldo. Eso además hace el endpoint idempotente si se repite.
-                val adjustment = debtAdjustmentEventFor(account, current, target, now = System.currentTimeMillis())
+                val adjustment = balanceAdjustmentEventFor(account, current, target, now = System.currentTimeMillis())
                 if (adjustment != null) insertEventRow(uid, adjustment)
 
                 val terms = Credits.selectAll()

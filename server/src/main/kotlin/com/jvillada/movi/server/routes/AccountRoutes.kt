@@ -1,9 +1,13 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.balanceAdjustmentEventFor
+import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.enrichWith
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.insertEventRow
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Goals
@@ -16,7 +20,12 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.AdjustAccountBalanceRequest
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
+import com.jvillada.movi.shared.model.MAX_ACCOUNT_BALANCE_COP
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.orphanedLegDescription
 import io.ktor.http.HttpStatusCode
@@ -38,6 +47,7 @@ import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.vendors.ForUpdateOption
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.slf4j.LoggerFactory
@@ -215,6 +225,92 @@ fun Route.accountRoutes() {
             // le escribiría al teléfono un saldo falso que se vería hasta la próxima lectura con
             // red, justo en el arreglo que existe para que lo local no mienta.
             call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
+        }
+
+        /**
+         * **Cuadrar una cuenta contra lo que dice el banco.**
+         *
+         * El problema que resuelve, medido el 21-sep sobre los datos reales del dueño: Movi deriva
+         * cada saldo de los movimientos, así que **todo lo que mueve plata sin emitir un
+         * movimiento se desvía para siempre y la diferencia se compone**. Sus rendimientos de Nu
+         * habían crecido $745.856 y los de la Fiducuenta $1.637 sin un solo SMS, notificación ni
+         * fila de extracto que capturar. Lo mismo pasa con una cuota de manejo que solo aparece en
+         * el extracto.
+         *
+         * **No es una segunda forma de ajustar**: es la MISMA que ya existía para los créditos
+         * —mismo constructor ([balanceAdjustmentEventFor]), misma categoría reservada, misma
+         * descripción— abierta a las cuentas donde el banco muestra un saldo que se puede leer de
+         * un vistazo. La de créditos se queda con las deudas porque su respuesta es el
+         * `CreditSummary` (cuota, plan de pagos, próximo vencimiento), que acá no significa nada.
+         *
+         * **Qué cuentas entran, y por qué las deudas no.** Solo Dinero e Inversión, o sea las
+         * cuentas donde «lo que dice el banco» es un número y uno solo. Una **tarjeta** no tiene
+         * esa propiedad: la banca en línea muestra saldo actual, saldo a pagar, cupo disponible y
+         * compras sin facturar, cuatro cifras distintas que no significan lo mismo que la deuda
+         * que Movi acumula compra por compra — cuadrar contra la equivocada escribiría un ajuste
+         * enorme y creíble. Además, la tarjeta ya tiene quien la concilie: el extracto y la
+         * captura de mensajes. Un **préstamo** se cuadra en Créditos, donde la pantalla muestra
+         * al lado la cuota, la tasa y los intereses que explican la diferencia.
+         *
+         * Recibe el saldo OBJETIVO, no el delta, y el delta se calcula acá adentro contra los
+         * eventos vigentes: el saldo que el cliente tiene en pantalla puede llegar viejo. Leer,
+         * escribir y releer ocurren en UNA transacción con la fila de la cuenta bloqueada
+         * (`.forUpdate`), igual que la ruta de créditos — dos cuadres solapados leían la misma
+         * cifra, escribían los dos el mismo delta y el saldo terminaba corrido al doble, mientras
+         * a los dos se les contestaba que había quedado exactamente en el objetivo.
+         *
+         * Sin diferencia no se escribe nada (ver [balanceAdjustmentFor]): contesta 200 con
+         * `adjustmentEvent = null`, así que repetir el mismo cuadre es inofensivo.
+         */
+        post("/{id}/balance-adjustment") {
+            val uid = call.userId()
+            val id = call.parameters["id"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val target = call.receive<AdjustAccountBalanceRequest>().targetBalance
+            if (target < 0L) {
+                return@post call.respond(HttpStatusCode.BadRequest, "El saldo no puede ser negativo")
+            }
+            if (target > MAX_ACCOUNT_BALANCE_COP) {
+                return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisa el monto")
+            }
+            // Fuera de la transacción a propósito: pega contra la red y no debe alargar el lock.
+            val rate = FxRateService.usdToCop()
+
+            val outcome = dbQuery<CuadreOutcome> {
+                val account = Accounts.selectAll()
+                    .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+                    .forUpdate(ForUpdateOption.ForUpdate)
+                    .firstOrNull()?.toAccount()
+                    ?: return@dbQuery CuadreOutcome.NotFound
+                if (account.type.group == AccountGroup.DEUDA) return@dbQuery CuadreOutcome.EsDeuda
+
+                val eventos = loadNonVoidedEventsIn(uid, id)
+                // Contra el saldo EN LA MONEDA DE LA CUENTA, que es el que la pantalla muestra y
+                // el que el dueño está comparando. Tomar `["COP"]` a secas —como hace la ruta de
+                // créditos, que por eso rechaza lo que no sea COP— le mostraría 0 a una cuenta en
+                // dólares y escribiría un ajuste por el saldo entero.
+                val current = computeBalances(account.type, eventos)[account.currency] ?: 0L
+                val ajuste = balanceAdjustmentEventFor(account, current, target, now = System.currentTimeMillis())
+                if (ajuste != null) insertEventRow(uid, ajuste)
+
+                // Relectura DESPUÉS del insert: la respuesta describe el saldo que quedó, no la
+                // foto previa a escribir — y es la que el teléfono espeja en su fila local.
+                CuadreOutcome.Ok(
+                    AdjustAccountBalanceResponse(
+                        account = enrichWith(account, loadNonVoidedEventsIn(uid, id), rate),
+                        adjustmentEvent = ajuste,
+                    ),
+                )
+            }
+
+            when (outcome) {
+                CuadreOutcome.NotFound -> call.respond(HttpStatusCode.NotFound)
+                CuadreOutcome.EsDeuda  -> call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "El saldo de una tarjeta o un préstamo se cuadra en Créditos",
+                )
+                is CuadreOutcome.Ok    -> call.respond(outcome.response)
+            }
         }
 
         /**
@@ -498,4 +594,11 @@ private fun Transaction.desenlazarPatasHermanas(uid: String, accountId: String):
         }
     }
     return hermanas.size
+}
+
+/** Cómo salió un cuadre de saldo (ver `POST /api/accounts/{id}/balance-adjustment`). */
+private sealed interface CuadreOutcome {
+    data object NotFound : CuadreOutcome
+    data object EsDeuda : CuadreOutcome
+    data class Ok(val response: AdjustAccountBalanceResponse) : CuadreOutcome
 }

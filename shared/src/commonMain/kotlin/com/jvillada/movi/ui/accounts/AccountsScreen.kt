@@ -37,7 +37,10 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.transactions.CHIP_ENTRE_CUENTAS
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
+import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
 import com.jvillada.movi.ui.dashboard.heroBalance
+import kotlinx.datetime.Clock
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen) -> Unit) {
@@ -241,6 +244,46 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                         Spacer(Modifier.height(20.dp))
                         AccountsGroup(title = "Inversión", accounts = inversion, onNavigate = onNavigate)
                     }
+                    // **La puerta al cuadre de saldos**, justo debajo de las cuentas cuyo saldo
+                    // se acaba de leer: si alguno de esos números está corrido, esta es la fila
+                    // que lo arregla. Cuando hay cuentas que llevan más de un período sin
+                    // cuadrarse, la segunda línea lo dice — es el mismo dato que el aviso del
+                    // Inicio (ver `cuentasSinCuadrar`), no una regla aparte.
+                    item {
+                        Spacer(Modifier.height(20.dp))
+                        val ahora = remember(accounts) { Clock.System.now().toEpochMilliseconds() }
+                        val atrasadas = cuentasSinCuadrar(accounts, ahora)
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                            onClick = { onNavigate(Screen.CuadreDeSaldos) },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Cuadre de saldos",
+                                        style = Movi.textos.cuerpo,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Movi.colores.texto,
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        text = textoDelAvisoDeCuadre(atrasadas)
+                                            ?: "Compara con lo que dice tu banco y anota la diferencia",
+                                        style = Movi.textos.apoyo,
+                                        color = if (atrasadas.isEmpty()) Movi.colores.textoMedio else Movi.colores.aviso,
+                                    )
+                                }
+                                ChevronRight()
+                            }
+                        }
+                    }
+
                     // **La plata que se movió entre estas cuentas**, que hasta acá era un chip en
                     // Movimientos. El dueño: «Entre cuentas creo que no hace falta acá, debería ir
                     // en cuentas tal vez no?» — y sí: un traspaso, una cuota o un pago de tarjeta

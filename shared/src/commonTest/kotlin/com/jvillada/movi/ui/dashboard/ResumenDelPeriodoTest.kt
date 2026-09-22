@@ -209,6 +209,35 @@ class ResumenDelPeriodoTest {
         assertEquals(revisar.sortedByDescending { it.urgente }, revisar, "lo urgente va primero")
     }
 
+    /**
+     * **El aviso de cuadrar saldos entra por acá**, que es donde el dueño mira todos los días. No
+     * es urgente —nadie pierde plata hoy por no haber cuadrado— pero sí accionable: lleva a la
+     * pantalla donde se resuelve, como todo lo que esta sección propone.
+     */
+    @Test
+    fun `las cuentas sin cuadrar se proponen revisar, sin alarma y con destino propio`() {
+        val revisar = cosasParaRevisar(
+            checklist = emptyList(), categorias = emptyList(), flujoDelPeriodo = 500_000,
+            smsPorConfirmar = 0, candidatosAPagoDeTarjeta = 0,
+            avisoDeCuadre = "Hace más de un mes que no cuadras Nu",
+        )
+
+        val cosa = revisar.single()
+        assertEquals(DestinoDeRevision.CUADRE, cosa.destino)
+        assertEquals("Hace más de un mes que no cuadras Nu", cosa.texto)
+        assertFalse(cosa.urgente, "es una sugerencia, no una alarma")
+    }
+
+    /** Sin cuentas atrasadas no se dice nada: un aviso que aparece siempre enseña a ignorarlo. */
+    @Test
+    fun `sin cuentas atrasadas no aparece el aviso de cuadre`() {
+        val revisar = cosasParaRevisar(
+            checklist = emptyList(), categorias = emptyList(), flujoDelPeriodo = 500_000,
+            smsPorConfirmar = 0, candidatosAPagoDeTarjeta = 0, avisoDeCuadre = null,
+        )
+        assertEquals(emptyList(), revisar)
+    }
+
     @Test
     fun `sin nada que revisar la seccion no dice nada`() {
         val revisar = cosasParaRevisar(
