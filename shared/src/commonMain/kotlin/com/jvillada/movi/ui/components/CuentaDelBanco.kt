@@ -79,8 +79,11 @@ data class CuentaDelBanco(
  *   (contener la cadena vacía es cierto para toda cuenta, y eso volvería a elegir la primera del
  *   abecedario disfrazada de coincidencia).
  */
-/** Los números de cuenta que un mensaje del banco nombra: «de tu cuenta *9586», «a la cuenta * 4308…». */
-private val numerosQueNombraElMensaje = Regex("""\*\s*(\d{4,})""")
+/**
+ * Los números de cuenta que un mensaje del banco nombra: «de tu cuenta *9586», «a la cuenta * 4308…»,
+ * y la forma de Nu, que no lleva asterisco: «con tu tarjeta terminada en 1336».
+ */
+private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
 
 /** Las corridas de dígitos de un nombre de cuenta: «Fiducuenta 9586» → 9586. */
 private val digitosDelNombre = Regex("""\d+""")
@@ -133,6 +136,33 @@ internal fun cuentaPorElNumero(texto: String, candidatas: List<Account>): Accoun
     return null
 }
 
+/** «Nu» o «Nubank» como palabra: no «Número», no «Nuevo», no «Continuar». */
+private val palabraNu = Regex("""\bnu(?:bank)?\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * **La tarjeta de Nu, que no lleva el número en el nombre.**
+ *
+ * Nu avisa sus compras con «Tu compra en … con tu tarjeta terminada en 1336», y la cuenta del dueño
+ * se llama «Nu Tarjeta», sin dígitos: [cuentaPorElNumero] no tiene con qué emparejar. Pero el
+ * rótulo de origen sí lo dice («Notificación · Nu»), y él tiene UNA sola tarjeta de crédito que se
+ * llama Nu. Entonces:
+ *
+ * - el mensaje viene de Nu ([banco] nombra a Nu como palabra),
+ * - habla de una tarjeta,
+ * - y entre las candidatas hay **exactamente una** tarjeta de crédito cuyo nombre dice «Nu».
+ *
+ * Con cero o con dos no se elige ninguna — por lo mismo que el empate de [cuentaPorElNumero]: no
+ * saber y equivocarse no pueden verse igual. La cuenta de ahorros «Nu» no entra: es de ahí de donde
+ * NO sale una compra con tarjeta de crédito.
+ */
+internal fun tarjetaDeNu(banco: String, texto: String, candidatas: List<Account>): Account? {
+    if (!palabraNu.containsMatchIn(banco)) return null
+    if (!texto.contains("tarjeta", ignoreCase = true)) return null
+    return candidatas
+        .filter { it.type == AccountType.CREDIT_CARD && palabraNu.containsMatchIn(it.name) }
+        .singleOrNull()
+}
+
 fun resolverCuentaDelBanco(
     accounts: List<Account>,
     uso: UsoDeCuenta,
@@ -154,6 +184,11 @@ fun resolverCuentaDelBanco(
     // Fiducuenta tiene que caer en la Fiducuenta y no en la primera cuenta que diga «Bancolombia».
     val porElNumero = cuentaPorElNumero(textoDelMensaje, candidatas)
     if (porElNumero != null) return CuentaDelBanco(porElNumero, OrigenDeLaCuentaDelBanco.POR_EL_NUMERO)
+
+    // Nu no escribe el número en el nombre de la cuenta: ver [tarjetaDeNu]. El nombre de la cuenta
+    // («Nu Tarjeta») ya dice por qué está ahí, así que va rotulada como la coincidencia por banco.
+    val deNu = tarjetaDeNu(banco, textoDelMensaje, candidatas)
+    if (deNu != null) return CuentaDelBanco(deNu, OrigenDeLaCuentaDelBanco.POR_EL_BANCO)
 
     val porElBanco = banco.takeIf { it.isNotBlank() }
         ?.let { nombre -> candidatas.firstOrNull { it.name.contains(nombre, ignoreCase = true) } }

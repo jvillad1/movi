@@ -52,6 +52,13 @@ private val amountRegex = Regex("""(\$|\bCOP|\bUSD)\s*([0-9]{1,3}(?:[.,][0-9]{3}
 private val amountPorRegex = Regex("""\bpor\s+([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?)""", RegexOption.IGNORE_CASE)
 private val merchantInRegex = Regex("""\ben\s+(.+?)(?:\s+el\s|\s+a\s+las|\s+con\s+tu\s|\s+de\s+tu\s|,|\.|$)""", RegexOption.IGNORE_CASE)
 private val merchantOfRegex = Regex("""\bde\s+(.+?)(?:\s+por\s|\.|$)""", RegexOption.IGNORE_CASE)
+/**
+ * **La compra de Nu**: «Tu compra en CREPES Y WAFFLES LEMON por $130.200,00 con tu tarjeta terminada
+ * en 1336 ha sido APROBADA.» El comercio va entre «compra en» y «por $…». [merchantInRegex] no
+ * sirve acá: corta en el primer punto, y el primer punto es el de miles del monto, así que leía
+ * «CREPES Y WAFFLES LEMON por $130».
+ */
+private val compraEnPorRegex = Regex("""\bcompra\s+en\s+(?!tu\s)(.+?)\s+por\s+(?:\$|COP\b|USD\b)""", RegexOption.IGNORE_CASE)
 /** «Pagaste $138,600.00 a Coomeva Medicina Prepagada S A desde tu producto 8133». */
 private val destinatarioDesdeRegex = Regex("""\ba\s+(?!la\s|las\s|tu\s)(.+?)\s+desde\s""", RegexOption.IGNORE_CASE)
 /** «… desde tu cuenta *8133 a DANIEL LEONETT el 10/09/26». */
@@ -161,7 +168,8 @@ internal fun parseSms(text: String): ParsedSms? {
             limpio(merchantInRegex.find(text)?.groupValues?.get(1))
                 ?: llaveRegex.find(text)?.let { "Pago QR · llave ${it.groupValues[1]}" }
                 ?: "Pago QR"
-        else -> limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
+        else -> limpio(compraEnPorRegex.find(text)?.groupValues?.get(1))
+            ?: limpio(destinatarioDesdeRegex.find(text)?.groupValues?.get(1))
             ?: limpio(destinatarioElRegex.find(text)?.groupValues?.get(1))
             ?: limpio(merchantInRegex.find(text)?.groupValues?.get(1))
             ?: cuentaDestinoRegex.find(text)?.let { "Transferencia a la cuenta *${it.groupValues[1]}" }
