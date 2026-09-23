@@ -62,6 +62,10 @@ suspend fun guardarLaConversacion(
     fichasSalida: Long,
     hayImagen: Boolean,
     ahora: Long = System.currentTimeMillis(),
+    /** Las que llegaron al dueño sin respaldo (ver `responderSinInventar`). Vacío se guarda NULL. */
+    cifrasSinRespaldo: List<String> = emptyList(),
+    /** Las que dispararon el reintento. Vacío se guarda NULL. */
+    cifrasCorregidas: List<String> = emptyList(),
 ): Boolean = runCatching {
     val comoJson = json.encodeToString(
         consultas.map {
@@ -79,11 +83,15 @@ suspend fun guardarLaConversacion(
             it[AiTurns.consultas] = comoJson
             it[AiTurns.modelo] = modelo
             it[AiTurns.criterio] = criterio
-            it[vueltas] = consultas.size + 1
+            // El reintento del verificador es una vuelta más: sin contarlo, un turno corregido se
+            // vería igual de barato que uno limpio.
+            it[vueltas] = consultas.size + 1 + (if (cifrasCorregidas.isNotEmpty()) 1 else 0)
             it[AiTurns.fichasEntrada] = fichasEntrada
             it[AiTurns.fichasCache] = fichasCache
             it[AiTurns.fichasSalida] = fichasSalida
             it[imagen] = hayImagen
+            it[AiTurns.cifrasSinRespaldo] = cifrasSinRespaldo.comoColumna()
+            it[AiTurns.cifrasCorregidas] = cifrasCorregidas.comoColumna()
         }
         // Y se poda: de cada dueño quedan las últimas N. Se borra por id y no por fecha para que
         // dos turnos del mismo milisegundo no se lleven uno al otro por delante.
@@ -98,3 +106,9 @@ suspend fun guardarLaConversacion(
     }
     true
 }.getOrDefault(false)
+
+/** «$185.831 · 12 %», o NULL: así un `is not null` cuenta los turnos con cifras sin respaldo. */
+private fun List<String>.comoColumna(): String? =
+    takeIf { it.isNotEmpty() }?.joinToString(" · ")?.take(TOPE_CIFRAS)
+
+private const val TOPE_CIFRAS = 1_000

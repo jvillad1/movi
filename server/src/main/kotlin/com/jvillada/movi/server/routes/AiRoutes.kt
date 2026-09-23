@@ -38,8 +38,12 @@ import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.server.ai.ContextoDelPeriodo
+import com.jvillada.movi.server.ai.DatosParaLosHechos
 import com.jvillada.movi.server.ai.ElModeloDeAnthropic
-import com.jvillada.movi.server.ai.conversarConHerramientas
+import com.jvillada.movi.server.ai.cifrasTrampa
+import com.jvillada.movi.server.ai.hechosParaLaPregunta
+import com.jvillada.movi.server.ai.responderSinInventar
 import com.jvillada.movi.server.ai.ejecutarHerramienta
 import com.jvillada.movi.server.ai.guardarLaConversacion
 import io.ktor.server.application.log
@@ -88,7 +92,11 @@ Habla en español neutro latinoamericano, de tú, SIN VOSEO. Esto no es un matiz
 Montos siempre en pesos colombianos con formato ${'$'}X.XXX.XXX.
 Vocabulario de la app: di "gasto"/"gastos", nunca "egreso"/"egresos". La interfaz habla así y tú también.
 
-Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO" y en lo que devuelvan tus herramientas. Nunca estimes ni completes de memoria una cifra que no viniera de ahí.
+Cuando el usuario te pregunte sobre su plata, básate ÚNICAMENTE en los datos del bloque "DATOS DEL USUARIO", en el bloque "DATOS EXACTOS PARA ESTA PREGUNTA" (si su mensaje lo trae) y en lo que devuelvan tus herramientas. Nunca estimes ni completes de memoria una cifra que no viniera de ahí.
+
+CIFRAS — NO CALCULES: toda cifra de plata o porcentaje que escribas tiene que estar en esos datos. Si los datos traen la cuenta hecha (lo que queda de la cuota después de los seguros, cuánto baja o crece una deuda, cuánto falta o cuánto se pasó de un presupuesto), usa ESA cifra con ESE significado: no la rehagas con tu propia resta. Lo único que puedes calcular es una suma o una resta de DOS cifras de los datos, y entonces escribe la operación con las dos ("${'$'}2.613.714 − ${'$'}209.219 = ${'$'}2.404.495"). Si necesitas una cifra que no está, di cuál falta y consúltala con una herramienta o pídesela al usuario. Movi revisa cada cifra de tu respuesta contra los datos.
+El bloque "DATOS EXACTOS PARA ESTA PREGUNTA" lo calcula Movi con las mismas cuentas que sus pantallas: cuando exista, sus cifras mandan sobre cualquier cuenta tuya.
+NO SUPONGAS: si un nombre (una entidad, una cuenta, un tercero) no está explicado en los datos, no le inventes qué es ni para qué sirve, y no supongas de dónde sale su plata más allá de lo que dicen los datos. Está bien decir "no lo sé con estos datos".
 
 Tienes TRES herramientas, y son la única forma de saber algo que no esté en el bloque:
 - buscar_movimientos: hechos concretos. "¿Qué compré en X?", "¿qué hubo entre estas fechas?", "¿esto ya lo había comprado?".
@@ -103,18 +111,19 @@ Si necesitas dos consultas, pídelas EN EL MISMO TURNO: dos juntas cuestan lo mi
 Si una consulta vuelve vacía, dilo: "no encuentro nada" es una respuesta correcta y "creo que gastaste como" no lo es.
 Si la pregunta no se puede contestar ni con los datos ni consultando, dilo claramente y sugiere qué información faltaría.
 
-Cuando el bloque ya traiga un total (gastos del período, total de suscripciones, deuda total, intereses del mes, cuotas al mes, lo que se pasó de un presupuesto, gastos recurrentes que faltan), usa ESE número tal cual: no vuelvas a sumar los renglones ni corrijas el total con tu propia cuenta. Si te piden algo que no viene sumado, suma solo lo que haga falta y muestra la operación.
+Cuando el bloque ya traiga un total (gastos del período, total de suscripciones, deuda total, intereses del mes, cuotas al mes, lo que se pasó de un presupuesto, gastos recurrentes que faltan), usa ESE número tal cual: no vuelvas a sumar los renglones ni corrijas el total con tu propia cuenta.
 
 Tono: directo, empático, accionable. No moralices sobre el gasto.
 Estructura de una pregunta de DATOS (cuánto, cuándo, qué): responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
 
 Cuando te pida CRITERIO (qué le conviene, qué hacer, si le alcanza, cómo bajar algo, qué priorizar), responde con esta forma y nada más:
+Separa siempre lo que DICEN SUS DATOS de lo que TÚ LE RECOMIENDAS.
 1. Diagnóstico en UNA frase, con la cifra de sus datos que lo sostiene.
 2. Dos o tres acciones concretas, una por línea, cada una con números de SUS datos (qué deuda, qué categoría, cuánto, cuándo). Nada de consejos que servirían para cualquiera ("haz un presupuesto", "ahorra más").
 3. Una última línea con el riesgo o lo que habría que confirmar antes de actuar.
 Corto: la respuesta entera cabe en unas 8 líneas.
 
-Antes de recomendar algo sobre una deuda, mira en su renglón QUIÉN PAGA LA CUOTA. Si la descuenta la nómina o la paga un tercero (por ejemplo Skandia desde la AFC), esa cuota NO sale de su cuenta: no le propongas recortar gastos para cubrirla ni la restes de su plata disponible. Abonarle a esa deuda sí sale de su plata. Para comparar deudas usa la tasa EA, el interés del mes y lo que baja la deuda que trae cada renglón; no los recalcules.
+Antes de recomendar algo sobre una deuda, mira en su renglón QUIÉN PAGA LA CUOTA, y di quién es tal como lo dice el renglón (una cuenta suya no es "un seguro" ni "un tercero"). Si la descuenta la nómina, la paga otra cuenta suya o un tercero, esa cuota NO sale de su cuenta del día a día: no le propongas recortar gastos para cubrirla ni la restes de su plata disponible. Abonarle a esa deuda sí sale de su plata. Para comparar deudas usa la tasa EA, el interés del mes y lo que baja la deuda que trae cada renglón; no los recalcules.
 Si la decisión depende de algo que no está en sus datos (impuestos, una inversión puntual, un trámite legal), da tu lectura con lo que ves y dile qué conviene confirmar con un asesor certificado, en una frase.
 No uses emojis ni símbolos decorativos: la interfaz no los renderiza.
 
@@ -180,13 +189,20 @@ fun Route.aiRoutes() {
             return@post
         }
 
-        val context = buildUserContext(call.userId())
+        val datos = cargarDatosDelUsuario(call.userId())
+        val context = datos.comoContexto()
         // **Solo el final del hilo.** El teléfono manda la conversación entera en cada pregunta,
         // así que sin este recorte una charla larga se paga completa cada vez. El `dropWhile` de
         // `mensajesParaElModelo` va DESPUÉS del recorte: si al cortar queda un turno del asistente
         // al principio, la API lo rechaza.
         val paraElModelo = mensajesParaElModelo(body.messages.takeLast(ULTIMOS_MENSAJES_QUE_VIAJAN))
-        val messageParams = paraElModelo.map(::toMessageParam)
+        // **Los datos exactos para ESTA pregunta** van pegados a ella, en el último mensaje del
+        // dueño: DESPUÉS de todo lo cacheado (PERSONA, contexto, herramientas), así que cambian con
+        // cada pregunta sin tirar la caché. Ver `hechosParaLaPregunta`.
+        val hechos = paraElModelo.lastOrNull()?.let { hechosParaLaPregunta(it.content, datos.paraLosHechos()) }
+        val messageParams = paraElModelo.mapIndexed { i, m ->
+            toMessageParam(m, anexo = hechos.takeIf { i == paraElModelo.lastIndex })
+        }
         if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
             call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
             return@post
@@ -211,15 +227,24 @@ fun Route.aiRoutes() {
             piensa = pideCriterio,
             modeloDeRespaldo = MODELO_DE_RESPALDO,
         )
+        val hayImagen = ultima.imageBase64 != null
         val reply = runCatching {
-            conversarConHerramientas(
+            responderSinInventar(
                 modelo = elModelo,
                 ejecutar = { llamada -> ejecutarHerramienta(uid, llamada) },
+                // Todo lo que el modelo tenía delante en este turno: contra esto se revisa cada
+                // cifra. La conversación entra entera —la pregunta y lo que ya se contestó—, porque
+                // repetir una cifra que el dueño escribió no es inventarla.
+                fuentes = listOfNotNull(context, hechos) + paraElModelo.map { it.content },
+                trampas = cifrasTrampa(datos.periodo.creditos),
+                // Con una foto, los montos salen de la imagen y el verificador no la puede leer.
+                verificar = !hayImagen,
             )
         }
         // Lo que costó, en el log. Sin esto el costo se estima; con esto se mira.
         call.application.log.info(
-            "movi-ai uid=$uid criterio=$pideCriterio entrada=${elModelo.fichasDeEntrada} " +
+            "movi-ai uid=$uid criterio=$pideCriterio hechos=${hechos != null} " +
+                "reintento=${reply.getOrNull()?.huboReintento == true} entrada=${elModelo.fichasDeEntrada} " +
                 "cache=${elModelo.fichasLeidasDeCache} salida=${elModelo.fichasDeSalida}",
         )
         // Y la conversación queda guardada, que es lo que hace diagnosticable «el asistente no
@@ -237,7 +262,9 @@ fun Route.aiRoutes() {
                 fichasEntrada = elModelo.fichasDeEntrada,
                 fichasCache = elModelo.fichasLeidasDeCache,
                 fichasSalida = elModelo.fichasDeSalida,
-                hayImagen = ultima.imageBase64 != null,
+                hayImagen = hayImagen,
+                cifrasSinRespaldo = paso.sinRespaldo,
+                cifrasCorregidas = paso.corregidas,
             )
             if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
         }
@@ -299,7 +326,7 @@ internal fun validateChatImages(messages: List<ChatMessage>): String? {
  * usuario escribió algo — mismo patrón que [ClaudeStatementParser.parseImage]. Sin imagen,
  * el comportamiento es idéntico al de antes de F32 (contenido de solo texto).
  */
-internal fun toMessageParam(m: ChatMessage): MessageParam {
+internal fun toMessageParam(m: ChatMessage, anexo: String? = null): MessageParam {
     val role = when (m.role) {
         ChatRole.USER -> MessageParam.Role.USER
         ChatRole.ASSISTANT -> MessageParam.Role.ASSISTANT
@@ -307,8 +334,16 @@ internal fun toMessageParam(m: ChatMessage): MessageParam {
     val builder = MessageParam.builder().role(role)
     val mime = m.imageMime?.let { ClaudeStatementParser.supportedImageMime(it, "") }
     val b64 = m.imageBase64
+    // El anexo (los datos exactos de la pregunta) va como bloque aparte DESPUÉS de lo que escribió
+    // el dueño: así el modelo lee primero la pregunta y después los datos para contestarla.
+    val bloqueDelAnexo = anexo?.let { ContentBlockParam.ofText(TextBlockParam.builder().text(it).build()) }
     if (b64 == null || mime == null) {
-        return builder.content(m.content).build()
+        if (bloqueDelAnexo == null) return builder.content(m.content).build()
+        val bloques = buildList {
+            if (m.content.isNotBlank()) add(ContentBlockParam.ofText(TextBlockParam.builder().text(m.content).build()))
+            add(bloqueDelAnexo)
+        }
+        return builder.contentOfBlockParams(bloques).build()
     }
     val imageSource = Base64ImageSource.builder()
         .data(b64)
@@ -317,6 +352,7 @@ internal fun toMessageParam(m: ChatMessage): MessageParam {
     val blocks = buildList {
         add(ContentBlockParam.ofImage(ImageBlockParam.builder().source(imageSource).build()))
         if (m.content.isNotBlank()) add(ContentBlockParam.ofText(TextBlockParam.builder().text(m.content).build()))
+        bloqueDelAnexo?.let(::add)
     }
     return builder.contentOfBlockParams(blocks).build()
 }
@@ -327,7 +363,27 @@ internal fun toMessageParam(m: ChatMessage): MessageParam {
  * al contestar «¿cuánta plata disponible tengo?» — el mismo error que el Inicio dejó de cometer,
  * ahora en la boca del asistente.
  */
-internal suspend fun buildUserContext(uid: String): String {
+internal suspend fun buildUserContext(uid: String): String = cargarDatosDelUsuario(uid).comoContexto()
+
+/**
+ * **Lo que Movi sabe del dueño, leído UNA vez por pregunta.** Antes `buildUserContext` leía y
+ * escribía el texto en la misma pasada; ahora los mismos datos sirven para dos cosas —el contexto
+ * general y los hechos exactos de la pregunta ([hechosParaLaPregunta])— y leerlos dos veces sería
+ * pagar dos veces la base, y arriesgar que las dos lecturas no coincidan.
+ */
+internal data class DatosDelUsuario(
+    val cuentas: List<Account>,
+    val patrimonio: Patrimonio,
+    val ingresos: Long,
+    val egresos: Long,
+    val periodo: ContextoDelPeriodo,
+    val presupuestos: List<Pair<String, Long>>,
+    val cuantosDocumentos: Int,
+) {
+    fun paraLosHechos() = DatosParaLosHechos(cuentas, patrimonio, periodo, presupuestos)
+}
+
+internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
     val rate = FxRateService.usdToCop()
 
     // Las cuentas con su saldo derivado —sumado en SQL, los mismos saldos que la lista de
@@ -398,6 +454,13 @@ internal suspend fun buildUserContext(uid: String): String {
             .map { it[Budgets.category] to it[Budgets.monthlyLimit] }
     }
 
+    return DatosDelUsuario(cuentas, patrimonio, ingresos, egresos, delPeriodo, budgets, cuantosDocumentos)
+}
+
+/** El texto del contexto general: lo que viaja cacheado en el sistema en cada pregunta. */
+internal fun DatosDelUsuario.comoContexto(): String {
+    val budgets = presupuestos
+    val delPeriodo = periodo
     return buildString {
         appendLine("DATOS DEL USUARIO (Colombia)")
         appendLine()

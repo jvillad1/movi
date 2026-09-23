@@ -320,6 +320,79 @@ class ElModeloDeAnthropicTest {
         assertEquals(1, llamadas)
     }
 
+    // ── Movi AI: un asesor que no inventa ─────────────────────────────────────────────────────
+
+    /**
+     * **Temperatura baja en el camino de datos, y SOLO en Haiku.** Sonnet 5 y Opus 4.7 rechazan
+     * `temperature` con un 400: mandársela al camino que piensa rompería los consejos, y
+     * mandársela al respaldo convertiría el reintento en un segundo error seguro.
+     */
+    @Test
+    fun `haiku lleva temperatura baja y los modelos que la rechazan no la reciben`() {
+        fun llamadaCon(modelo: String, piensa: Boolean = false) = ElModeloDeAnthropic(
+            modelo = modelo, persona = "p", contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
+            piensa = piensa,
+            llamar = { respuestaConTexto("Listo.") },
+        ).armarLlamada(puedeUsarHerramientas = true)
+
+        assertEquals(TEMPERATURA_DEL_CAMINO_DE_DATOS, llamadaCon(MODELO_DE_TODOS_LOS_DIAS).temperature().orElseThrow())
+        assertTrue(llamadaCon(MODELO_PARA_CONSEJOS, piensa = true).temperature().isEmpty, "Sonnet 5 da 400 con temperature")
+        assertTrue(llamadaCon(MODELO_DE_RESPALDO).temperature().isEmpty, "Opus 4.7 da 400 con temperature")
+    }
+
+    /** El respaldo se arma de nuevo para su modelo: no hereda la temperatura de Haiku. */
+    @Test
+    fun `el reintento al respaldo no arrastra la temperatura de haiku`() = runBlocking {
+        val pedidas = mutableListOf<Pair<String, Boolean>>()
+        val elModelo = ElModeloDeAnthropic(
+            modelo = MODELO_DE_TODOS_LOS_DIAS,
+            persona = "p",
+            contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
+            modeloDeRespaldo = MODELO_DE_RESPALDO,
+            llamar = { params ->
+                pedidas += params.model().toString() to params.temperature().isPresent
+                if (pedidas.size == 1) error("529 overloaded")
+                respuestaConTexto("Listo.")
+            },
+        )
+
+        elModelo.siguienteVuelta(puedeUsarHerramientas = true)
+
+        assertEquals(listOf(MODELO_DE_TODOS_LOS_DIAS to true, MODELO_DE_RESPALDO to false), pedidas)
+    }
+
+    /**
+     * **La forma del reintento del verificador.** La respuesta que se corrige vuelve como turno del
+     * asistente y la corrección como turno del usuario, al final: todo después del prefijo cacheado.
+     */
+    @Test
+    fun `la correccion vuelve como turno del asistente y turno del usuario al final`() = runBlocking {
+        val pedidas = mutableListOf<com.anthropic.models.messages.MessageCreateParams>()
+        var i = 0
+        val guion = listOf(respuestaConTexto("La deuda baja \$185.831."), respuestaConTexto("La deuda crece \$23.388."))
+        val elModelo = ElModeloDeAnthropic(
+            modelo = MODELO_DE_TODOS_LOS_DIAS,
+            persona = "p",
+            contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
+            llamar = { params -> pedidas += params; guion[i++] },
+        )
+
+        elModelo.siguienteVuelta(puedeUsarHerramientas = true)
+        elModelo.anotarCorreccion("Estas cifras no están en los datos: \$185.831.")
+        val segunda = elModelo.siguienteVuelta(puedeUsarHerramientas = false)
+
+        assertEquals("La deuda crece \$23.388.", (segunda as RespuestaDelModelo.Texto).texto)
+        val turnos = pedidas.last().messages()
+        assertEquals(listOf(MessageParam.Role.USER, MessageParam.Role.ASSISTANT, MessageParam.Role.USER), turnos.map { it.role() })
+        assertTrue("\$185.831" in turnos[1].toString(), "la respuesta corregida vuelve tal cual")
+        assertTrue("no están en los datos" in turnos[2].toString())
+        assertTrue(pedidas.last().toolChoice().orElseThrow().isNone(), "el reintento no consulta: es UNA llamada")
+        assertEquals(2, pedidas.size)
+    }
+
     /** El camino que piensa, con el guion que se le quiera dar. */
     private fun queOpina(vararg guion: Message): ElModeloDeAnthropic {
         var i = 0

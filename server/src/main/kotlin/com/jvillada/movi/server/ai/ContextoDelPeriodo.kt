@@ -17,6 +17,7 @@ import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.currentPeriodWindow
+import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -179,6 +180,20 @@ internal fun ContextoDelPeriodo.conSaldos(cuentas: List<Account>): ContextoDelPe
     )
 }
 
+/**
+ * Un gasto del período, tal como lo cuenta el Inicio (anulados, «Por confirmar» y lo que no es
+ * flujo de caja ya afuera). **No viaja en el contexto** —esa decisión está arriba, en el KDoc del
+ * archivo—: lo usan los hechos de una pregunta ([hechosParaLaPregunta]) para decir los tres gastos
+ * más grandes de una categoría o de una cuenta SOLO cuando la pregunta la nombra.
+ */
+internal data class GastoDelPeriodo(
+    val fecha: String,
+    val nombre: String,
+    val categoria: String,
+    val cuenta: String,
+    val monto: Long,
+)
+
 internal data class ContextoDelPeriodo(
     val rango: String,
     val diasQueQuedan: Int,
@@ -191,6 +206,8 @@ internal data class ContextoDelPeriodo(
     val metas: List<Triple<String, Long, String?>>,
     val smsPorConfirmar: Int,
     val movimientosPorConfirmar: Int,
+    /** Los gastos del período uno por uno. No se renderizan: ver [GastoDelPeriodo]. */
+    val gastos: List<GastoDelPeriodo> = emptyList(),
 )
 
 /** Todo lo de arriba, leído de la base en una sola pasada. */
@@ -229,6 +246,19 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             .filter { it[Events.type] == TransactionType.EXPENSE.name }
             .groupBy { it[Events.category] }
             .mapValues { (_, filas) -> filas.sumOf { it[Events.amount] } }
+        val nombreDeCuenta = Accounts.selectAll().where { Accounts.userId eq uid }
+            .associate { it[Accounts.id] to it[Accounts.name] }
+        val gastos = delPeriodo
+            .filter { it[Events.type] == TransactionType.EXPENSE.name }
+            .map { fila ->
+                GastoDelPeriodo(
+                    fecha = epochMillisToAppDateString(fila[Events.timestamp]),
+                    nombre = fila[Events.description],
+                    categoria = fila[Events.category],
+                    cuenta = nombreDeCuenta[fila[Events.accountId]] ?: "otra cuenta",
+                    monto = fila[Events.amount],
+                )
+            }
 
         // **El sello se calcula POR REGLA, no una sola vez para todo el período.**
         //
@@ -270,8 +300,6 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             )
         }
 
-        val nombreDeCuenta = Accounts.selectAll().where { Accounts.userId eq uid }
-            .associate { it[Accounts.id] to it[Accounts.name] }
         val creditos = Credits.selectAll().where { Credits.userId eq uid }.map { fila ->
             CreditoParaContexto(
                 accountId = fila[Credits.accountId],
@@ -343,6 +371,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             metas = metas,
             smsPorConfirmar = smsPendientes,
             movimientosPorConfirmar = porConfirmar,
+            gastos = gastos,
         )
     }
 }
@@ -472,7 +501,11 @@ internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
     append("cuota \$${c.cuota} el día ${c.dia}, ")
     if (c.sinIntereses) append("NO cobra intereses") else append("tasa ${c.tasaEa} % EA")
     append(", plazo ${c.plazoMeses} meses")
-    c.seguroMensual?.takeIf { it > 0L }?.let { append(", incluye seguro de vida \$$it al mes") }
+    // **«Seguros», no «seguro de vida».** `insurance_monthly` guarda TODOS los seguros de la cuota:
+    // en el Hipotecario 2334, los $209.219 son vida ($69.600) más incendio y terremoto ($139.619).
+    // Rotulado «seguro de vida», el modelo contestó «el seguro de vida de $209.219» — el único error
+    // que quedó en una respuesta por lo demás correcta, y venía de este rótulo.
+    c.seguroMensual?.takeIf { it > 0L }?.let { append(", incluye seguros por \$$it al mes") }
     c.otrosCargosMensuales?.takeIf { it > 0L }?.let { append(", incluye otros cargos \$$it al mes") }
     append(". ")
     append(

@@ -63,7 +63,7 @@ internal class ElModeloDeAnthropic(
      * una llamada de verdad.
      */
     private val llamar: suspend (MessageCreateParams) -> Message,
-) : ElModeloConHerramientas {
+) : ElModeloQueSeCorrige {
 
     constructor(
         client: AnthropicClient,
@@ -96,7 +96,7 @@ internal class ElModeloDeAnthropic(
         private set
 
     override suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean): RespuestaDelModelo {
-        var respuesta = pedirle(armarLlamada(puedeUsarHerramientas))
+        var respuesta = pedirle { conModelo -> armarLlamada(puedeUsarHerramientas, modeloDeEstaLlamada = conModelo) }
 
         // **El reintento sin pensar.** Si el modelo se quedó sin techo antes de escribir una sola
         // palabra, lo único que hay para devolverle al dueño es una burbuja vacía. Una respuesta
@@ -111,7 +111,7 @@ internal class ElModeloDeAnthropic(
         if (piensa && seCortoSinTexto(respuesta)) {
             avisarQueNoHuboTexto(respuesta, penso, "reintento sin pensar")
             penso = false
-            respuesta = pedirle(armarLlamada(puedeUsarHerramientas, pensando = false))
+            respuesta = pedirle { conModelo -> armarLlamada(puedeUsarHerramientas, pensando = false, modeloDeEstaLlamada = conModelo) }
         }
 
         val pedidos = respuesta.content().mapNotNull { it.toolUse().orElse(null) }
@@ -124,13 +124,20 @@ internal class ElModeloDeAnthropic(
         }
     }
 
-    /** Una llamada, con su reintento al modelo de respaldo y las fichas ya contadas. */
-    private suspend fun pedirle(params: MessageCreateParams): Message {
+    /**
+     * Una llamada, con su reintento al modelo de respaldo y las fichas ya contadas.
+     *
+     * Recibe **cómo armar** la llamada y no la llamada armada, porque el respaldo no es solo otro
+     * id: es otro modelo con otras reglas. La temperatura baja del camino de datos va solo a Haiku
+     * —el respaldo, Opus 4.7, contesta 400 si se la mandan—, así que copiar los params cambiando
+     * el modelo convertía el reintento en un segundo error seguro.
+     */
+    private suspend fun pedirle(armar: (String) -> MessageCreateParams): Message {
         val respuesta = try {
-            llamar(params)
+            llamar(armar(modelo))
         } catch (falla: Exception) {
             val respaldo = modeloDeRespaldo ?: throw falla
-            llamar(params.toBuilder().model(respaldo).build())
+            llamar(armar(respaldo))
         }
         ultima = respuesta
         respuesta.usage().let { uso ->
@@ -189,10 +196,19 @@ internal class ElModeloDeAnthropic(
     internal fun armarLlamada(
         puedeUsarHerramientas: Boolean,
         pensando: Boolean = piensa,
+        modeloDeEstaLlamada: String = modelo,
     ): MessageCreateParams =
         MessageCreateParams.builder()
-            .model(modelo)
+            .model(modeloDeEstaLlamada)
             .maxTokens(techoPara(pensando))
+            .apply {
+                // **La temperatura baja es la perilla de determinismo del camino de datos**: misma
+                // pregunta, misma respuesta. Solo en Haiku, y no por gusto: Sonnet 5 y Opus 4.7
+                // rechazan `temperature` con un 400. En el camino de los consejos la determinación
+                // no puede venir de una perilla del modelo; viene de los datos exactos de la
+                // pregunta y del verificador de cifras (ver `responderSinInventar`).
+                if (!pensando && aceptaTemperatura(modeloDeEstaLlamada)) temperature(TEMPERATURA_DEL_CAMINO_DE_DATOS)
+            }
             .apply {
                 if (pensando) {
                     thinking(ThinkingConfigAdaptive.builder().build())
@@ -232,6 +248,25 @@ internal class ElModeloDeAnthropic(
             .apply { LAS_HERRAMIENTAS.forEach { addTool(it) } }
             .apply { if (!puedeUsarHerramientas) toolChoice(ToolChoiceNone.builder().build()) }
             .build()
+
+    /**
+     * **El único reintento del verificador de cifras.** La respuesta que se va a corregir vuelve
+     * como turno del asistente —con sus bloques originales, pensamiento incluido, igual que en
+     * [anotarResultados]— y la corrección va como turno del usuario. Todo va DESPUÉS del prefijo
+     * cacheado (PERSONA, contexto, herramientas), así que el reintento lee la caché entera y paga
+     * solo la respuesta vieja, la corrección y la nueva.
+     */
+    override fun anotarCorreccion(correccion: String) {
+        val respuesta = ultima ?: return
+        turnos += MessageParam.builder()
+            .role(MessageParam.Role.ASSISTANT)
+            .contentOfBlockParams(respuesta.content().map { it.toParam() })
+            .build()
+        turnos += MessageParam.builder()
+            .role(MessageParam.Role.USER)
+            .content(correccion)
+            .build()
+    }
 
     /** Los turnos acumulados, para que una prueba pueda mirar cómo quedó la conversación. */
     internal val conversacion: List<MessageParam> get() = turnos
@@ -305,6 +340,20 @@ internal const val MAX_TOKENS_DE_RESPUESTA = 700L
  * no lo que se le autorizó a escribir.
  */
 internal const val PRESUPUESTO_DE_PENSAMIENTO = 4_000L
+
+/**
+ * **Qué tan al azar escribe Haiku en el camino de datos.** Baja para que la misma pregunta dé la
+ * misma respuesta, pero no cero: en cero el modelo tiende a repetir frases hechas palabra por
+ * palabra, y lo que se busca fijar son las cifras —que ya no dependen de esto, las ponen los datos
+ * exactos y el verificador—, no la redacción.
+ */
+internal const val TEMPERATURA_DEL_CAMINO_DE_DATOS = 0.2
+
+/**
+ * ¿Este modelo acepta `temperature`? Solo la familia Haiku de las que usa Movi: Sonnet 5 y Opus
+ * 4.7 la rechazan con un 400, y mandársela al respaldo convertiría el reintento en un error seguro.
+ */
+internal fun aceptaTemperatura(modelo: String): Boolean = modelo.startsWith("claude-haiku")
 
 /**
  * **Lo que ve el dueño cuando la respuesta vino sin texto.** El literal viejo —«(sin respuesta)»—

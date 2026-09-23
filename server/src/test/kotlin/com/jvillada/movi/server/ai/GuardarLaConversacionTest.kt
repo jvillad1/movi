@@ -102,6 +102,33 @@ class GuardarLaConversacionTest {
         assertEquals(1, fila[AiTurns.vueltas])
     }
 
+    /**
+     * **Lo que vuelve medible el «sin inventar».** Una respuesta limpia deja las dos columnas en
+     * NULL, así que `count(*) where cifras_sin_respaldo is not null` cuenta exactamente las que
+     * llegaron al dueño con una cifra que Movi no pudo respaldar.
+     */
+    @Test
+    fun `guarda las cifras sin respaldo y las que se corrigieron, y NULL si no hubo`() {
+        guardar(cuando = 1)
+        runBlocking {
+            guardarLaConversacion(
+                uid = dueno, pregunta = "¿por qué el 2334 no baja?", respuesta = "…", consultas = emptyList(),
+                modelo = MODELO_PARA_CONSEJOS, criterio = true,
+                fichasEntrada = 1, fichasCache = 1, fichasSalida = 1, hayImagen = false, ahora = 2,
+                cifrasSinRespaldo = listOf("\$1.234.567"),
+                cifrasCorregidas = listOf("\$185.831", "12 %"),
+            )
+        }
+
+        val (corregida, limpia) = guardadas()
+        assertEquals("\$1.234.567", corregida[AiTurns.cifrasSinRespaldo])
+        assertEquals("\$185.831 · 12 %", corregida[AiTurns.cifrasCorregidas])
+        assertEquals(2, corregida[AiTurns.vueltas], "el reintento del verificador es una vuelta más")
+        assertEquals(null, limpia[AiTurns.cifrasSinRespaldo])
+        assertEquals(null, limpia[AiTurns.cifrasCorregidas])
+        assertEquals(1, limpia[AiTurns.vueltas])
+    }
+
     /** Una foto de un recibo es justo lo que no hay que duplicar: queda que la hubo, no la foto. */
     @Test
     fun `la foto no se guarda, solo que la hubo`() {

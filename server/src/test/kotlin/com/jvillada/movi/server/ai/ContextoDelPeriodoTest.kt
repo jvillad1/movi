@@ -349,7 +349,9 @@ class ContextoDelPeriodoTest {
         assertTrue("Vehículo 8761" in texto)
         assertTrue("18.5 % EA" in texto, "sin la tasa no se puede opinar de una deuda:\n$texto")
         assertTrue("cuota \$4101123" in texto)
-        assertTrue("seguro de vida \$52000" in texto)
+        // «Seguros», no «seguro de vida»: el campo suma todos los seguros de la cuota.
+        assertTrue("incluye seguros por \$52000 al mes" in texto, texto)
+        assertFalse("seguro de vida" in texto, "el rótulo viejo le hizo decir al modelo algo falso:\n$texto")
     }
 
     @Test

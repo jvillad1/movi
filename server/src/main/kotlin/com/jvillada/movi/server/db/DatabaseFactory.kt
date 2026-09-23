@@ -93,7 +93,10 @@ object DatabaseFactory {
             // fallar con «column does not exist» apenas desplegara. No lo atrapa ningún test: los
             // de `:server` corren sobre H2 con `SchemaUtils.create` sobre un schema vacío, donde
             // la columna siempre existe. Se verificó contra la base real antes de agregarla.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions)
+            // AiTurns: `cifras_sin_respaldo` y `cifras_corregidas` (el verificador de cifras de Movi
+            // AI) — las dos NULLABLE, y AiTurns en esta lista por lo mismo que Subscriptions: la
+            // tabla ya existe en producción y el `create` de arriba no le agrega columnas.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }
