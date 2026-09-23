@@ -9,6 +9,10 @@ import com.jvillada.movi.shared.model.ScreenDefinition
  * server returns something invalid, the UI keeps rendering the last good definition
  * instead of falling all the way back to `defaultDashboardDefinition()` (core) — the same list
  * the server seeds.
+ *
+ * Since Ola A the last valid definition is ALSO kept on the device, per user, next to the Inicio's
+ * data snapshot (see `InstantaneaDelInicio`): this in-memory copy dies with the process, and a
+ * cold start without it had to wait for the definition before asking for any figure.
  */
 object ScreenDefCache {
     var dashboard: ScreenDefinition? = null

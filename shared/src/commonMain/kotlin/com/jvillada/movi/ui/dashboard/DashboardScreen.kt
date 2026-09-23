@@ -50,6 +50,9 @@ import kotlinx.coroutines.launch
  * Último [DashboardData] cargado, en memoria y por proceso: al volver al Inicio se pinta
  * al instante con lo que ya había mientras llega lo nuevo, en vez de arrancar en blanco
  * cada vez. Misma idea (y mismas limitaciones) que [ScreenDefCache].
+ *
+ * Esto se pierde al cerrar la app o recargar la web; lo que sobrevive a eso es
+ * [InstantaneaDelInicio], que el Inicio lee solo cuando acá no hay nada.
  */
 object DashboardDataCache {
     var data: DashboardData? = null
@@ -179,14 +182,35 @@ fun DashboardScreen(
     // exista familia esto vuelva a tener un selector con significado real.
     val scope = Scope.SELF
 
-    var data by remember { mutableStateOf(DashboardDataCache.data ?: DashboardData()) }
+    // Lo que se pinta al montar, en este orden: lo que quedó en memoria de este proceso (volver
+    // desde Movimientos), la instantánea que quedó en el aparato de la última carga buena (el
+    // arranque en frío: ver [InstantaneaDelInicio]), o nada. La instantánea NO pasa a
+    // [DashboardDataCache]: así `hayDatos` sigue en false y [debeRecargarElInicio] pide las cifras
+    // nuevas igual — lo que se pinta de la instantánea es lo último que se supo, no lo de ahora.
+    var data by remember {
+        mutableStateOf(
+            DashboardDataCache.data
+                ?: InstantaneaDelInicio.delAparato.datos(SessionManager.userId)
+                ?: DashboardData(),
+        )
+    }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
-    var screenDef by remember { mutableStateOf<ScreenDefinition?>(ScreenDefCache.dashboard) }
+    var screenDef by remember {
+        mutableStateOf<ScreenDefinition?>(
+            ScreenDefCache.dashboard
+                ?: InstantaneaDelInicio.delAparato.definicion(SessionManager.userId)
+                    ?.takeIf { renderableSections(it).isNotEmpty() },
+        )
+    }
     val snackbarHostState = remember { SnackbarHostState() }
+    // Recarga en curso con algo que vale la pena ya en pantalla: la caché de este proceso o la
+    // instantánea del aparato. «Que vale la pena» es la misma vara del resto del Inicio
+    // (`puedeAfirmarVacio`): la cabecera dice «Actualizando…» en vez de la barra de progreso.
+    val actualizandoConDatos = loading && data.puedeAfirmarVacio
     // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
     val notifications = notificationRows(data)
 
@@ -236,35 +260,67 @@ fun DashboardScreen(
         }
         loading = true
         error = null
-        // SDUI: la definición del server se pide PRIMERO, así el Inicio ya está en su lugar
-        // antes de que se pinte el fallback — evita el parpadeo fallback→SDUI en cada arranque
-        // frío. Silencioso si falla: capa 2 (ScreenDefCache) conserva la última válida; capa 3
-        // (defaultDashboardDefinition, idéntica al seed) cubre un arranque sin caché.
-        runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
-            .onSuccess {
-                // Capa 4: una definición que no renderiza nada equivale a no tener definición —
-                // evita un Inicio en blanco por typos en los tipos de sección.
-                it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
-            }
+        // De quién es esta carga. Se vuelve a mirar antes de guardar la instantánea: si en el medio
+        // se cerró la sesión, `clear()` ya borró la de este usuario y escribirla de nuevo dejaría su
+        // plata en el aparato.
+        val usuario = SessionManager.userId
+        // Lo que contestó ESTA carga, aparte de `data`: `data` arranca con lo que ya estaba pintado
+        // (la caché o la instantánea), así que con las diez caídas seguiría pudiendo «afirmar» con
+        // las cifras de ayer. El sello de abajo mira esto, no `data`.
+        var llegado = DashboardData()
+        // SDUI. Silenciosa si falla: capa 2 (ScreenDefCache, y su copia en el aparato) conserva la
+        // última válida; capa 3 (defaultDashboardDefinition, idéntica al seed) cubre un arranque
+        // sin ninguna de las dos.
+        suspend fun pedirDefinicion() {
+            runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
+                .onSuccess {
+                    // Capa 4: una definición que no renderiza nada equivale a no tener definición —
+                    // evita un Inicio en blanco por typos en los tipos de sección.
+                    it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
+                    // `null` es el 304 («la que tienes sigue vigente»): se guarda igual, porque la
+                    // que está en memoria puede no haber llegado nunca al aparato.
+                    val d = screenDef
+                    if (d != null && SessionManager.userId == usuario) {
+                        InstantaneaDelInicio.delAparato.guardarDefinicion(usuario, d)
+                    }
+                }
+        }
+        // Sin definición a mano, se pide PRIMERO, así el Inicio ya está en su lugar antes de que
+        // se pinte el fallback — evita el parpadeo fallback→SDUI. Con una (de la memoria o del
+        // aparato) ya no hay parpadeo que evitar, y esperarla antes de los datos era medio arranque
+        // en frío perdido en serie: va en paralelo con el resto.
+        val definicionEnParalelo = screenDef != null
+        if (!definicionEnParalelo) pedirDefinicion()
         // El resto va en paralelo. Solo resumen y cuentas (el Balance) avisan con snackbar si
         // fallan; lo demás alimenta secciones secundarias (próximos pagos, alertas, cifras de
         // los accesos, guía) y si falla simplemente no se pinta esta vez — un snackbar de
         // reintento por un dato secundario sería más ruido que ayuda.
         coroutineScope {
+            if (definicionEnParalelo) launch { pedirDefinicion() }
+            // Las cinco que sostienen `puedeAfirmarVacio` también se anotan en `llegado`.
             launch {
                 runCatching { Repositories.wallets.getFinanceSummary(scope) }
-                    .onSuccess { s -> data = data.copy(summary = s) }
+                    .onSuccess { s -> data = data.copy(summary = s); llegado = llegado.copy(summary = s) }
                     .onFailure { e -> error = e.toUserMessage() }
             }
             launch {
                 runCatching { Repositories.wallets.getAccounts() }
-                    .onSuccess { a -> data = data.copy(accounts = a) }
+                    .onSuccess { a -> data = data.copy(accounts = a); llegado = llegado.copy(accounts = a) }
                     .onFailure { e -> if (error == null) error = e.toUserMessage() }
             }
-            launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { c -> data = data.copy(credits = c) } }
+            launch {
+                runCatching { Repositories.wallets.getCredits() }
+                    .onSuccess { c -> data = data.copy(credits = c); llegado = llegado.copy(credits = c) }
+            }
             // F20: la cifra del acceso «Créditos» suma préstamos + tarjetas.
-            launch { runCatching { Repositories.wallets.getCards() }.onSuccess { c -> data = data.copy(cards = c) } }
-            launch { runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { u -> data = data.copy(upcoming = u) } }
+            launch {
+                runCatching { Repositories.wallets.getCards() }
+                    .onSuccess { c -> data = data.copy(cards = c); llegado = llegado.copy(cards = c) }
+            }
+            launch {
+                runCatching { Repositories.wallets.getUpcomingPayments() }
+                    .onSuccess { u -> data = data.copy(upcoming = u); llegado = llegado.copy(upcoming = u) }
+            }
             launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
             // Gasto del mes por categoría, candidatos a pago de tarjeta y SMS pendientes vienen ya
             // reducidos del server (GET /api/dashboard/summary) en vez de bajar todos los eventos,
@@ -346,9 +402,14 @@ fun DashboardScreen(
         // Se mira `puedeAfirmarVacio` y no `error == null` porque es la misma condición que ya
         // gobierna si el Inicio puede opinar sobre la plata del dueño (ver DashboardLogic): si no
         // alcanza para afirmar, tampoco alcanza para saltearse la próxima carga.
-        if (data.puedeAfirmarVacio) {
+        //
+        // Y se mira sobre `llegado`, no sobre `data`: con la instantánea del aparato, un arranque
+        // en frío sin señal pinta cifras de ayer que SÍ alcanzan para afirmar, y las diez caídas
+        // sellaban igual. Por lo mismo, la instantánea solo se reescribe con una carga buena.
+        if (llegado.puedeAfirmarVacio) {
             DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
             DashboardDataCache.tickDeLaCarga = refreshTick
+            if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, data)
         }
         loading = false
     }
@@ -373,6 +434,18 @@ fun DashboardScreen(
                 title = "Inicio",
                 leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
                 action = {
+                    // Recargando con cifras ya pintadas (la caché o la instantánea): una línea
+                    // discreta en vez de la barra de ancho completo. Va en la cabecera, cuyo alto
+                    // lo fija el avatar de 32 dp, así que aparecer y desaparecer no mueve nada de
+                    // lo de abajo — que es justo lo que no podía pasar mientras el dueño lee.
+                    if (actualizandoConDatos) {
+                        Text(
+                            "Actualizando…",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoApagado,
+                            maxLines = 1,
+                        )
+                    }
                     // Compartir con un tercero, al lado de la campana: el Inicio es donde uno está
                     // mirando su plata cuando se le ocurre mostrársela a alguien.
                     Icon(
@@ -400,7 +473,8 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            // Sin nada pintado todavía, la barra de siempre (la Task 7 le pone esqueletos).
+            if (loading && !actualizandoConDatos) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
             // Guía "Primeros pasos": chrome nativo, fuera de la definición SDUI a propósito —
             // así existe siempre, sin depender de tocar `screen_definitions` en producción.
