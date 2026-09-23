@@ -217,7 +217,9 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
 
         composeRule.onNodeWithText(TITULO_INTERES_DEL_MES, substring = true).assertExists()
         filaDelResumen(ALCANCE_INTERES_PROPIO, "\$358.488")
-        filaDelResumen(ALCANCE_INTERES_AJENO, "\$2.426.389")
+        // Y nombra a quien paga, no «tu nómina o un tercero»: Skandia es la pensión voluntaria del
+        // dueño, no un tercero. Ver `alcanceDelInteresAjeno`.
+        filaDelResumen("Los paga Skandia", "\$2.426.389")
     }
 
     /**

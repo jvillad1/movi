@@ -271,6 +271,49 @@ const val ALCANCE_FALTA_PROPIO: String = "En tus créditos que se terminan"
 const val ALCANCE_FALTA_AJENO: String = "En los que paga otro y se terminan"
 const val ALCANCE_ULTIMA_CUOTA: String = "Contando todas tus deudas"
 
+/**
+ * **Quiénes pagan las cuotas que no salen de su cuenta**, con el nombre que están cargados: «tu
+ * nómina» por las que descuenta la nómina, y el `paidBy` tal cual («Skandia») por las demás. Sin
+ * repetir y en ese orden (la nómina primero, después los demás por orden de aparición).
+ *
+ * Existe porque el rótulo fijo decía «Los paga tu nómina o un tercero» y, en los datos del dueño,
+ * no hay ningún tercero: son dos libranzas que descuenta la nómina y dos hipotecas que paga su
+ * propia pensión voluntaria de Skandia. Nombrar a quien paga es más corto y además es cierto.
+ * Misma regla que [com.jvillada.movi.shared.model.saleDeTuBolsillo].
+ */
+fun quienesPaganLoQueNoSaleDeTuBolsillo(terminos: List<CreditTerms>): List<String> = buildList {
+    if (terminos.any { it.payrollDeduction }) add("tu nómina")
+    terminos.filterNot { it.payrollDeduction }
+        .mapNotNull { it.paidBy?.trim()?.takeIf { quien -> quien.isNotEmpty() } }
+        .distinct()
+        .forEach { add(it) }
+}
+
+/** «tu nómina», «tu nómina y Skandia», «tu nómina, Skandia y Papá». */
+private fun enumerar(quienes: List<String>): String = when (quienes.size) {
+    1 -> quienes[0]
+    else -> quienes.dropLast(1).joinToString(", ") + " y " + quienes.last()
+}
+
+/**
+ * El rótulo de la fila de los intereses del mes que no salen de su cuenta. Sin nadie conocido cae
+ * en [ALCANCE_INTERES_AJENO] (un server viejo, o datos a medio cargar).
+ */
+fun alcanceDelInteresAjeno(quienes: List<String>): String = when {
+    quienes.isEmpty() -> ALCANCE_INTERES_AJENO
+    quienes == listOf("tu nómina") -> "Los descuenta tu nómina"
+    quienes.size == 1 -> "Los paga ${quienes[0]}"
+    else -> "Los pagan ${enumerar(quienes)}"
+}
+
+/** Lo mismo para la fila de lo que falta por pagar en los que se terminan. */
+fun alcanceDeLaFaltaAjena(quienes: List<String>): String = when {
+    quienes.isEmpty() -> ALCANCE_FALTA_AJENO
+    quienes == listOf("tu nómina") -> "En los que descuenta tu nómina y se terminan"
+    quienes.size == 1 -> "En los que paga ${quienes[0]} y se terminan"
+    else -> "En los que pagan ${enumerar(quienes)}, y se terminan"
+}
+
 /** El título del grupo de filas del interés del mes. */
 const val TITULO_INTERES_DEL_MES: String = "Intereses este mes"
 
