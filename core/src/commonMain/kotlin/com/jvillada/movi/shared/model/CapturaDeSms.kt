@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlinx.serialization.Serializable
 
 /**
  * # Qué se sabe —de verdad— de la captura de SMS del banco
@@ -41,7 +42,11 @@ import kotlinx.datetime.toInstant
  *   confirmados e ignorados — la pregunta es si LLEGARON, no qué se hizo con ellos).
  * @param ultimo el `time` del más reciente, tal como lo guardó el teléfono, o `null` si nunca
  *   llegó ninguno.
+ *
+ * `@Serializable` no porque viaje (el server manda `smsTotal`/`smsLastAt` sueltos en el resumen)
+ * sino porque el cliente la guarda en el aparato dentro de la instantánea del Inicio.
  */
+@Serializable
 data class CapturaDeSms(
     val total: Int = 0,
     val ultimo: String? = null,

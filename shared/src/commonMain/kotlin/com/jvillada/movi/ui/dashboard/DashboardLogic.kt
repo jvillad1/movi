@@ -46,13 +46,22 @@ import kotlinx.datetime.LocalDate
 import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.time.epochMillisToAppDate
+import kotlinx.serialization.Serializable
 
 /**
  * Todo lo que el Inicio carga del server, junto, para que el renderer SDUI reciba un solo
  * valor y no doce parámetros. Cada campo arranca vacío y se va llenando a medida que llega
  * cada respuesta; una sección que no tiene todavía sus datos simplemente no se pinta (ver
  * [visibleSections]) o muestra la cifra en blanco — nunca un número inventado.
+ *
+ * `@Serializable` por la instantánea del Inicio (ver [InstantaneaDelInicio]): la última carga que
+ * salió bien se guarda en el aparato para pintarla al abrir. Anotar la clase entera y no una copia
+ * «instantánea» con sus propios campos es a propósito: un campo nuevo que no sea serializable no
+ * compila, en vez de quedarse afuera de la instantánea sin que nadie lo note. Un campo nuevo
+ * **con valor por defecto**, como todos los de acá: una instantánea escrita por la versión anterior
+ * no lo trae.
  */
+@Serializable
 data class DashboardData(
     val summary: FinanceSummary? = null,
     /**
