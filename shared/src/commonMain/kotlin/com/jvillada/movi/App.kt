@@ -31,6 +31,7 @@ import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.documentos.DocumentosScreen
+import com.jvillada.movi.ui.compartir.CompartirScreen
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.LocalPilaDeHojas
@@ -311,6 +312,7 @@ fun App() {
                 Screen.Categorias        -> CategoriasScreen(navigate)
                 Screen.Destinos          -> DestinosScreen(navigate)
                 Screen.Documentos        -> DocumentosScreen(navigate)
+                Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
                 Screen.OCRCapture        -> OCRCaptureScreen(navigate)
                 Screen.OCRConfirm        -> OCRConfirmScreen(navigate)

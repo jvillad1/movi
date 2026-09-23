@@ -72,6 +72,10 @@ private val items = listOf(
     // Ola 18: los papeles. Va PEGADO a «Extractos» porque el importador archiva ahí lo que pasa
     // por él — quien sube un extracto y después se pregunta «¿dónde quedó el PDF?» busca al lado.
     MasItem("Documentos",   Icons.Rounded.Folder,           Color(0xFFB3C8FF), Color(0x1AB3C8FF), Screen.Documentos),
+    // Compartir con un tercero: el enlace de solo lectura para Caro o un asesor. Va después de
+    // Documentos —lo otro que el dueño «muestra» de sus papeles— y tiene además un ícono en el
+    // encabezado del Inicio. El rótulo es el título de la pantalla, como en toda ficha de Más.
+    MasItem("Compartir",    Icons.Rounded.Share,            Color(0xFF7DDDB0), Color(0x1A7DDDB0), Screen.Compartir),
     // Ola 14: la guía de arranque, que se apaga sola en el Inicio y hasta acá no tenía forma de
     // volver a abrirse. Va en Más y no en el Inicio a propósito: el dueño pidió *poder volver*,
     // no que la guía le reaparezca (ver PrimerosPasosScreen).
