@@ -7,8 +7,11 @@ import com.anthropic.models.messages.ContentBlockParam
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
+import com.anthropic.models.messages.OutputConfig
+import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.ThinkingConfigAdaptive
+import com.anthropic.models.messages.ThinkingConfigDisabled
 import com.anthropic.models.messages.Tool
 import com.anthropic.models.messages.ToolChoiceNone
 import com.anthropic.models.messages.ToolResultBlockParam
@@ -16,6 +19,7 @@ import com.anthropic.models.messages.ToolUseBlock
 import com.fasterxml.jackson.core.type.TypeReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
 
 /**
  * **El traductor entre el bucle y el SDK.** No toma ninguna decisión: quién pregunta, cuántas
@@ -36,6 +40,10 @@ internal class ElModeloDeAnthropic(
      * **Pensar cuesta como salida, que es lo caro.** Para «¿cuánto gasté en Comida?» —donde la
      * cuenta la hace la consulta y no el modelo— no compra nada. Se enciende solo en el camino
      * caro, el de los consejos.
+     *
+     * Ojo con lo que esto arrastra: prendido, el techo de la llamada deja de ser [maxTokens] y
+     * pasa a ser [maxTokens] + [PRESUPUESTO_DE_PENSAMIENTO]. La razón está en el KDoc de esa
+     * constante, y es exactamente el error que tuvo rota esta rama entera durante días.
      */
     private val piensa: Boolean = false,
     /**
@@ -88,11 +96,41 @@ internal class ElModeloDeAnthropic(
         private set
 
     override suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean): RespuestaDelModelo {
+        var respuesta = pedirle(armarLlamada(puedeUsarHerramientas))
+
+        // **El reintento sin pensar.** Si el modelo se quedó sin techo antes de escribir una sola
+        // palabra, lo único que hay para devolverle al dueño es una burbuja vacía. Una respuesta
+        // más simple —sin pensamiento, con los mismos ~700 de texto— es peor que la que iba a
+        // salir, pero es infinitamente mejor que ninguna.
+        //
+        // No duplica el costo del caso normal: para entrar acá tienen que darse las tres cosas a
+        // la vez —que estemos en el camino que piensa, que la API haya cortado por `max_tokens` y
+        // que no haya venido ni un bloque de texto—, y cuando se dan, lo que se «duplica» es una
+        // llamada que ya se pagó entera y no sirvió para nada.
+        var penso = piensa
+        if (piensa && seCortoSinTexto(respuesta)) {
+            avisarQueNoHuboTexto(respuesta, penso, "reintento sin pensar")
+            penso = false
+            respuesta = pedirle(armarLlamada(puedeUsarHerramientas, pensando = false))
+        }
+
+        val pedidos = respuesta.content().mapNotNull { it.toolUse().orElse(null) }
+        return if (pedidos.isEmpty()) {
+            val texto = respuesta.textoJunto()
+            if (texto.isBlank()) avisarQueNoHuboTexto(respuesta, penso, "se le contesta al dueño")
+            RespuestaDelModelo.Texto(texto.ifBlank { NO_ALCANCE_A_TERMINAR })
+        } else {
+            RespuestaDelModelo.PideHerramientas(pedidos.map { it.comoLlamada() })
+        }
+    }
+
+    /** Una llamada, con su reintento al modelo de respaldo y las fichas ya contadas. */
+    private suspend fun pedirle(params: MessageCreateParams): Message {
         val respuesta = try {
-            llamar(armarLlamada(puedeUsarHerramientas))
+            llamar(params)
         } catch (falla: Exception) {
             val respaldo = modeloDeRespaldo ?: throw falla
-            llamar(armarLlamada(puedeUsarHerramientas, conEsteModelo = respaldo))
+            llamar(params.toBuilder().model(respaldo).build())
         }
         ultima = respuesta
         respuesta.usage().let { uso ->
@@ -100,29 +138,77 @@ internal class ElModeloDeAnthropic(
             fichasDeSalida += uso.outputTokens()
             fichasLeidasDeCache += uso.cacheReadInputTokens().orElse(0L)
         }
-
-        val pedidos = respuesta.content().mapNotNull { it.toolUse().orElse(null) }
-        return if (pedidos.isEmpty()) {
-            RespuestaDelModelo.Texto(
-                respuesta.content()
-                    .mapNotNull { bloque -> bloque.text().orElse(null)?.text() }
-                    .joinToString("\n")
-                    .ifBlank { "(sin respuesta)" },
-            )
-        } else {
-            RespuestaDelModelo.PideHerramientas(pedidos.map { it.comoLlamada() })
-        }
+        return respuesta
     }
+
+    /** ¿La API cortó por techo sin dejar ni una palabra escrita? */
+    private fun seCortoSinTexto(respuesta: Message): Boolean =
+        respuesta.stopReason().orElse(null) == StopReason.MAX_TOKENS &&
+            respuesta.content().none { it.toolUse().isPresent } &&
+            respuesta.textoJunto().isBlank()
+
+    /**
+     * **Lo que el bug de septiembre no dejó ver.** Una respuesta sin texto salía como el literal
+     * «(sin respuesta)» en la pantalla y no dejaba una sola línea en el log: del lado del server
+     * parecía una conversación normal, y del lado del dueño una burbuja vacía. El `stop_reason` es
+     * el dato que lo explica en una línea (`max_tokens` era el techo comiéndose el pensamiento;
+     * `refusal` sería otra cosa completamente), así que va con el modelo y las fichas al lado.
+     */
+    private fun avisarQueNoHuboTexto(respuesta: Message, penso: Boolean, queSeHizo: String) {
+        log.warn(
+            "movi-ai: respuesta sin texto — modelo={} piensa={} stop_reason={} salida={} techo={} → {}",
+            respuesta.model(),
+            penso,
+            respuesta.stopReason().map { it.asString() }.orElse("desconocido"),
+            respuesta.usage().outputTokens(),
+            techoPara(penso),
+            queSeHizo,
+        )
+    }
+
+    /**
+     * **La invariante que se rompió: el techo tiene que alcanzar para las dos cosas.**
+     *
+     * `max_tokens` acota el pensamiento **más** el texto, no solo el texto. Con los 700 de siempre
+     * y el pensar encendido, el pensamiento se comía el presupuesto entero, la API cortaba con
+     * `stop_reason: max_tokens` y volvían cero bloques de texto: el camino de los consejos estuvo
+     * roto al 100 % desde que se encendió el pensar.
+     *
+     * Y no hay una tercera perilla: en Sonnet 5 el pensamiento es adaptativo y `budget_tokens`
+     * fue removido (mandarlo da un 400), así que el presupuesto de pensamiento no se declara —
+     * **se reserva**, sumándolo al techo. De ahí que esto sea una suma y no dos parámetros.
+     */
+    private fun techoPara(pensando: Boolean): Long =
+        if (pensando) maxTokens + PRESUPUESTO_DE_PENSAMIENTO else maxTokens
+
+    /** Lo que el modelo escribió para el dueño, sin los bloques de pensamiento ni de herramienta. */
+    private fun Message.textoJunto(): String =
+        content().mapNotNull { bloque -> bloque.text().orElse(null)?.text() }.joinToString("\n")
 
     /** Lo que se le manda a la API en esta vuelta. Aparte para poder mirarlo en una prueba. */
     internal fun armarLlamada(
         puedeUsarHerramientas: Boolean,
-        conEsteModelo: String = modelo,
+        pensando: Boolean = piensa,
     ): MessageCreateParams =
         MessageCreateParams.builder()
-            .model(conEsteModelo)
-            .maxTokens(maxTokens)
-            .apply { if (piensa) thinking(ThinkingConfigAdaptive.builder().build()) }
+            .model(modelo)
+            .maxTokens(techoPara(pensando))
+            .apply {
+                if (pensando) {
+                    thinking(ThinkingConfigAdaptive.builder().build())
+                    // **El esfuerzo es la perilla de costo del camino que piensa**, y la única que
+                    // queda ahora que `budget_tokens` no existe. En «medio» el modelo piensa lo
+                    // suficiente para un consejo de finanzas del hogar sin llenar el techo que le
+                    // acabamos de reservar. Va SOLO acá a propósito: en Haiku —el de todos los
+                    // días, que es casi todo lo que él pregunta— `effort` da error, y de paso así
+                    // el camino de datos no paga un peso por este arreglo.
+                    outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.MEDIUM).build())
+                } else if (piensa) {
+                    // Solo en el reintento: en Sonnet 5 omitir `thinking` NO lo apaga —el modo
+                    // adaptativo es el default—, así que apagarlo hay que pedirlo.
+                    thinking(ThinkingConfigDisabled.builder().build())
+                }
+            }
             .systemOfTextBlockParams(
                 listOf(
                     // **Las dos partes se cachean, y en este orden.** La PERSONA no cambia nunca y
@@ -190,8 +276,46 @@ private fun ToolUseBlock.comoLlamada(): LlamadaDeHerramienta {
  * **Cuánto puede escribir de respuesta.** La PERSONA ya pide cuatro o cinco frases; esto es el
  * techo, y estaba en 1024 sin ninguna razón. Una respuesta de finanzas personales que necesita más
  * de esto es una respuesta que el dueño no va a leer.
+ *
+ * Ojo: esto es el techo del **texto**, no el de la llamada. Cuando el modelo piensa, la llamada
+ * lleva además [PRESUPUESTO_DE_PENSAMIENTO] — ver ahí por qué.
  */
 internal const val MAX_TOKENS_DE_RESPUESTA = 700L
+
+/**
+ * **Lo que se le reserva al pensamiento, ADEMÁS del texto.**
+ *
+ * `max_tokens` no acota la respuesta: acota el pensamiento **más** la respuesta. Esa es la
+ * invariante, y romperla no da una respuesta corta —da una respuesta **vacía**: el modelo gasta el
+ * techo entero pensando, la API corta con `stop_reason: max_tokens` y no manda ni un bloque de
+ * texto. Así estuvo el camino de los consejos desde que se encendió el pensar, con la burbuja en
+ * blanco en la pantalla y `fichas_salida = 700` clavado en `ai_turns`.
+ *
+ * La regla, entonces, es una sola: **`max_tokens` = presupuesto de pensamiento + techo del texto**.
+ * No hay forma de declarar el presupuesto por separado —en Sonnet 5 el pensamiento es adaptativo y
+ * `budget_tokens` fue removido, mandarlo devuelve un 400—, así que se reserva sumándolo. Lo que sí
+ * se puede regular es cuánto piensa, y eso es `output_config.effort` (en «medio», ver `armarLlamada`).
+ *
+ * Cuatro mil alcanza con holgura para lo que se le pide acá —mirar unos saldos y decidir qué
+ * conviene primero— sin volverlo un gasto abierto.
+ *
+ * **Esto NO encarece el camino de datos.** El techo grande viaja solo cuando `piensa` está
+ * prendido, o sea solo en el camino de los consejos; «¿cuánto gasté en Comida?» sigue pagando
+ * exactamente lo mismo que antes. Y un techo no es un cobro: se paga lo que el modelo escribe,
+ * no lo que se le autorizó a escribir.
+ */
+internal const val PRESUPUESTO_DE_PENSAMIENTO = 4_000L
+
+/**
+ * **Lo que ve el dueño cuando la respuesta vino sin texto.** El literal viejo —«(sin respuesta)»—
+ * es lo que tuvo el bug vivo sin que nadie lo notara: no dice qué pasó ni qué hacer, y parece un
+ * error de la pantalla más que del asistente. Este dice las dos cosas, y es cierto: no alcanzó a
+ * terminar.
+ */
+internal const val NO_ALCANCE_A_TERMINAR =
+    "No alcancé a terminar la respuesta. Vuelve a preguntarme, por favor."
+
+private val log = LoggerFactory.getLogger("ElModeloDeAnthropic")
 
 private fun texto(descripcion: String) =
     JsonValue.from(mapOf("type" to "string", "description" to descripcion))
