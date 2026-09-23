@@ -1,9 +1,9 @@
 package com.jvillada.movi.server.compartir
 
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
-import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.enrichWith
+import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
-import com.jvillada.movi.server.balance.netWorth
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
@@ -13,8 +13,9 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.esCuentaDeDeuda
-import com.jvillada.movi.shared.model.esDeTuPlata
-import com.jvillada.movi.shared.model.normalizarCondicion
+import com.jvillada.movi.shared.model.esBien
+import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.valorEnPesosDe
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 
@@ -31,9 +32,11 @@ import org.jetbrains.exposed.sql.selectAll
  * La página de un tercero que diga otra cifra que la app del dueño es peor que no tener página:
  * la conversación termina en «¿y por qué a mí me sale distinto?». Por eso nada se recalcula acá:
  *
- * - **Plata disponible** es [esDeTuPlata] de `:core` —el mismo predicado del hero del Inicio y de la
- *   tarjeta «Disponible»—, sumado con [accountCopValue] (dólares a la TRM, igual que el cliente).
- * - **Patrimonio** es [netWorth], la regla del server que ya usa `finance-summary`.
+ * - **Plata disponible, condicionado, bienes, deudas y patrimonio** salen de [patrimonioDe] de
+ *   `:core` —la MISMA función del hero del Inicio, de la pantalla Cuentas, de `finance-summary` y
+ *   del contexto de Movi AI—, sobre las cuentas con su saldo derivado por [enrichWith] (dólares a
+ *   la TRM, igual que la lista de cuentas). Antes esto sumaba con `esDeTuPlata` y `netWorth` por
+ *   su lado; `netWorth` se fue cuando llegaron los bienes, justamente porque no los conocía.
  * - **El período** sale de [contextoDelPeriodoDe] —lo que ya lee Movi AI—, que a su vez aplica los
  *   mismos filtros que el Inicio: anulados afuera, «Por confirmar» afuera, pago de tarjeta y
  *   movimientos de deuda fuera del flujo, el período del usuario y no el mes de calendario.
@@ -50,16 +53,12 @@ internal data class ResumenCompartido(
     /** Para qué es lo condicionado, si hay una sola condición; `null` con varias o ninguna. */
     val condicionadoA: String?,
     /**
-     * **Punto de extensión: los bienes** (la casa, el vehículo).
+     * **Los bienes** (la casa, el vehículo): `Patrimonio.bienes`, ver `Bien` en `:core`. Ya suman a
+     * [patrimonio] y a [loQueTiene].
      *
-     * Hoy Movi no los modela, y por eso el patrimonio del dueño da −$2.074M: cuenta $2.191M de deudas
-     * —las hipotecas de una casa con avalúo de $1.411M— y cero bienes. Otra rama los está sumando al
-     * modelo. Cuando llegue, lo único que hay que hacer es llenar este campo en
-     * [resumenCompartidoDe] con la MISMA regla que use el Inicio; la página ya lo pinta como un
-     * renglón más de «lo que tiene» y ya lo suma al patrimonio (ver [patrimonio]).
-     *
-     * `null` = el modelo no sabe de bienes, que NO es lo mismo que «tiene cero bienes»: con `null` la
-     * página no dibuja un «Bienes $0» que afirmaría algo falso.
+     * `null` = el dueño no tiene ninguno cargado: la página no dibuja un renglón «Bienes $0», que
+     * para quien no tiene casa ni carro es ruido y para quien sí los tiene pero no los cargó
+     * sonaría a que no tiene nada.
      */
     val bienes: Long?,
     val deudas: Long,
@@ -100,15 +99,13 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
     val tasa = FxRateService.usdToCop()
     val ahora = AppClock.now().toInstant().toEpochMilli()
 
-    data class Cuenta(val id: String, val nombre: String, val tipo: AccountType, val condicionadaA: String?)
     data class TerminosDeCredito(val banco: String, val cuota: Long, val tasa: Double, val sinIntereses: Boolean)
 
     val (quien, cuentas, creditos, tarjetas) = dbQuery {
         val nombre = Users.select(Users.name).where { Users.id eq uid }.firstOrNull()?.get(Users.name).orEmpty()
         val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.mapNotNull { fila ->
             // Un tipo que este server no conoce se salta en vez de tumbar la página entera.
-            val tipo = runCatching { AccountType.valueOf(fila[Accounts.type]) }.getOrNull() ?: return@mapNotNull null
-            Cuenta(fila[Accounts.id], fila[Accounts.name], tipo, normalizarCondicion(fila[Accounts.conditionedTo]))
+            runCatching { fila.toAccount() }.getOrNull()
         }
         val creditos = Credits.selectAll().where { Credits.userId eq uid }.associate { fila ->
             fila[Credits.accountId] to TerminosDeCredito(
@@ -125,29 +122,23 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
     }
 
     val eventosPorCuenta = loadNonVoidedEvents(uid).groupBy { it.accountId }
-    val valor = cuentas.associate { it.id to accountCopValue(it.tipo, eventosPorCuenta[it.id].orEmpty(), tasa) }
-
-    val tuPlata = cuentas.filter { esDeTuPlata(it.tipo, it.condicionadaA) }.sumOf { valor.getValue(it.id) }
-    val condicionadas = cuentas.filter { !esCuentaDeDeuda(it.tipo) && it.condicionadaA != null }
-    val condicionado = condicionadas.sumOf { valor.getValue(it.id) }
-    val deudas = cuentas.filter { esCuentaDeDeuda(it.tipo) }.sumOf { valor.getValue(it.id) }
-    // Ver el KDoc de [ResumenCompartido.bienes]: hoy el modelo no los tiene.
-    val bienes: Long? = null
-    val patrimonio = netWorth(cuentas.map { it.id to it.tipo }, eventosPorCuenta, tasa) + (bienes ?: 0L)
+    val conSaldo = cuentas.map { enrichWith(it, eventosPorCuenta[it.id].orEmpty(), tasa) }
+    // La regla única: ver el KDoc de [ResumenCompartido].
+    val p = patrimonioDe(conSaldo)
 
     val periodo = contextoDelPeriodoDe(uid)
 
-    val deudasConSaldo = cuentas
-        .filter { esCuentaDeDeuda(it.tipo) }
-        .map { it to valor.getValue(it.id) }
+    val deudasConSaldo = conSaldo
+        .filter { esCuentaDeDeuda(it.type) }
+        .map { it to valorEnPesosDe(it) }
         .filter { (_, saldo) -> saldo > 0L }
         .sortedByDescending { (_, saldo) -> saldo }
         .map { (cuenta, saldo) ->
             val credito = creditos[cuenta.id]
             val tarjeta = tarjetas[cuenta.id]
             DeudaCompartida(
-                nombre = sinNumerosCompletos(cuenta.nombre),
-                esTarjeta = cuenta.tipo == AccountType.CREDIT_CARD,
+                nombre = sinNumerosCompletos(cuenta.name),
+                esTarjeta = cuenta.type == AccountType.CREDIT_CARD,
                 banco = (credito?.banco ?: tarjeta?.first)?.takeIf { it.isNotBlank() }?.let(::sinNumerosCompletos),
                 saldo = saldo,
                 cuota = credito?.cuota?.takeIf { it > 0L } ?: tarjeta?.second?.takeIf { it > 0L },
@@ -160,12 +151,12 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
         quien = quien,
         generadoEn = ahora,
         venceEn = venceEn,
-        tuPlata = tuPlata,
-        condicionado = condicionado,
-        condicionadoA = condicionadas.mapNotNull { it.condicionadaA }.distinct().singleOrNull(),
-        bienes = bienes,
-        deudas = deudas,
-        patrimonio = patrimonio,
+        tuPlata = p.tuPlata,
+        condicionado = p.condicionado,
+        condicionadoA = p.condicionadoA,
+        bienes = p.bienes.takeIf { conSaldo.any { it.esBien } },
+        deudas = p.deudas,
+        patrimonio = p.neto,
         rangoDelPeriodo = periodo.rango,
         ingresos = periodo.ingresos,
         gastoPorCategoria = periodo.gastoPorCategoria,

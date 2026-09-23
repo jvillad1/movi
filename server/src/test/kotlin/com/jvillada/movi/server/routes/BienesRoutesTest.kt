@@ -20,6 +20,7 @@ import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.compartir.resumenCompartidoDe
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.Account
@@ -357,6 +358,24 @@ class BienesRoutesTest {
         val casa = cuentas().single { it.id == "acc-casa" }
         assertNull(casa.bien?.deudaId)
         assertEquals(1_411_903_920L, casa.bien?.valor)
+    }
+
+    @Test
+    fun `la pagina para compartir dice el mismo patrimonio, con la casa`() = testApplication {
+        wireApp()
+        cargarAlDueno()
+        val sinCasa = runBlocking { resumenCompartidoDe(userId, venceEn = 0L) }
+        crearCasa()
+
+        val r = runBlocking { resumenCompartidoDe(userId, venceEn = 0L) }
+
+        assertNull(sinCasa.bienes, "sin bienes cargados no se dibuja «Bienes $0»")
+        assertEquals(558_350L, r.tuPlata)
+        assertEquals(116_200_000L, r.condicionado)
+        assertEquals(1_411_903_920L, r.bienes)
+        assertEquals(2_191_000_000L, r.deudas)
+        assertEquals(-662_337_730L, r.patrimonio)
+        assertEquals(assertNotNull(resumen().patrimonio).neto, r.patrimonio, "la misma cifra que el Inicio")
     }
 
     @Test
