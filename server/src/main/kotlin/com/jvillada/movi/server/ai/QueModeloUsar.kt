@@ -50,6 +50,13 @@ private val PIDE_CRITERIO = listOf(
     "opinas", "opinion", "analiza", "analisis", "sugier", "vale la pena", "mejor opcion",
     "me alcanza", "puedo pagar", "priorizar", "prioridad", "estrategia", "plan para", "como puedo",
     "que me falta mejorar", "estoy mal", "estoy bien", "riesgo", "me sirve", "tiene sentido",
+    // **«¿Por qué…?» es una pregunta de razonamiento, no de dato.** El 23-sep, «¿Por qué
+    // Hipotecario 2334 no baja aunque pago la cuota?» —la primera sugerencia del Inicio— la
+    // contestó el modelo chico sin pensar, y la respuesta se contradijo: dijo que la cuota no
+    // cubría los intereses y en el renglón siguiente mostró que era más grande. Explicar un
+    // porqué con plata es cruzar cuota, tasa, seguros y saldo, que es justo lo que el grande hace
+    // bien. Se preguntan poco: el costo no se nota, una explicación falsa sí.
+    "por que",
 )
 
 /**

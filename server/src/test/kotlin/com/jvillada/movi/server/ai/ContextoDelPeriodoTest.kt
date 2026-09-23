@@ -417,6 +417,7 @@ class ContextoDelPeriodoTest {
         pagaNomina: Boolean = false,
         laPaga: String? = null,
         otros: Long? = null,
+        seguro: Long? = null,
     ) = transaction {
         Accounts.insert {
             it[Accounts.id] = id; it[userId] = dueno; it[name] = nombre; it[type] = "LOAN"; it[balance] = 0L
@@ -442,6 +443,7 @@ class ContextoDelPeriodoTest {
             it[payrollDeduction] = pagaNomina
             it[paidBy] = laPaga
             it[otrosCargosMensuales] = otros
+            it[insuranceMonthly] = seguro
         }
     }
 
@@ -515,6 +517,53 @@ class ContextoDelPeriodoTest {
         val texto = contexto()
 
         assertTrue("la deuda CRECE aunque pague" in texto, texto)
+    }
+
+    /**
+     * **El caso real del 23-sep: el Hipotecario 2334.** Saldo $204.183.376 al 15,24 % EA, cuota
+     * $2.613.714 que incluye $209.219 de seguros. La cuota SÍ es mayor que los intereses del mes
+     * (unos $2.427.883); lo que no los alcanza es lo que queda de la cuota DESPUÉS del seguro
+     * ($2.404.495). El contexto decía «la cuota no alcanza a cubrir los intereses», el modelo lo
+     * repitió y en el renglón siguiente mostró que la cuota era más grande: una respuesta que se
+     * contradice sola. El renglón tiene que traer la cuenta hecha, con el seguro adentro.
+     */
+    @Test
+    fun `una deuda que crece por el seguro dice la cuenta con el seguro, no una frase falsa`() {
+        deuda("h2334", "Hipotecario 2334", 204_183_376L, tasa = 15.24, cuota = 2_613_714L, laPaga = "Skandia", seguro = 209_219L)
+
+        val texto = contexto()
+        val renglon = texto.lineSequence().first { it.startsWith("- Hipotecario 2334") }
+
+        assertFalse("la cuota no alcanza a cubrir los intereses" in renglon, renglon)
+        val plan = planDeUnaDeuda(204_183_376L, 15.24, 2_613_714L, 209_219L, null, saleDeTuBolsillo = false)
+        val queda = 2_613_714L - 209_219L
+        val crece = plan.interes - queda
+        assertTrue(crece > 0, "con estos números la deuda crece: interés ${plan.interes}, queda $queda")
+        assertTrue("después de \$209219 de seguros le quedan \$$queda" in renglon, renglon)
+        assertTrue("intereses del mes son unos \$${plan.interes}" in renglon, renglon)
+        assertTrue("la deuda CRECE aunque pague (unos \$$crece al mes)" in renglon, renglon)
+    }
+
+    /**
+     * «Skandia» paga dos hipotecas del dueño, y Skandia es **su** fondo de pensión voluntaria: una
+     * cuenta suya en Movi. Dicho como «la paga Skandia» a secas, el modelo la llamó «tu seguro» y le
+     * dijo que no estaba poniendo plata suya. Cuando quien paga se llama como una cuenta del dueño,
+     * el renglón lo dice.
+     */
+    @Test
+    fun `si quien paga es una cuenta del dueno, se dice que es plata suya`() {
+        transaction {
+            Accounts.insert {
+                it[id] = "skandia"; it[userId] = dueno; it[name] = "Skandia pensión voluntaria"
+                it[type] = "INVESTMENT"; it[balance] = 0L; it[conditionedTo] = "pensión voluntaria"
+            }
+        }
+        deuda("h1254", "Hipoteca 1254", 400_000_000L, tasa = 11.0, cuota = 9_147_408L, laPaga = "Skandia")
+
+        val renglon = contexto().lineSequence().first { it.startsWith("- Hipoteca 1254") }
+
+        assertTrue("con plata de su propia cuenta «Skandia pensión voluntaria»" in renglon, renglon)
+        assertTrue("no es un seguro ni un tercero" in renglon, renglon)
     }
 
     /** Sin saldo derivado (la deuda no tiene movimientos) no se estima interés sobre un cero. */

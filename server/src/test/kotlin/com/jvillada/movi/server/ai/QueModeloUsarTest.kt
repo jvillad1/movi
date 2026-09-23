@@ -86,12 +86,13 @@ class QueModeloUsarTest {
             "Pago \$2,3M de intereses al mes, ¿qué hago para bajarlo?",
             "¿Me alcanza para los \$4,1M que me faltan por pagar este período?",
             "¿Qué me recomiendas revisar primero?",
+            // Los porqués escalan desde el 23-sep: ver el comentario de «por que» en PIDE_CRITERIO.
+            "¿Por qué este período salieron \$11,7M más de los que entraron?",
+            "¿Por qué Hipotecario 2334 no baja aunque pago la cuota?",
         ).forEach { assertTrue(laPreguntaPideCriterio(it), "debería escalar: $it") }
         listOf(
             "¿Cómo voy este período?",
             "¿En qué se me está yendo más la plata?",
-            "¿Por qué este período salieron \$11,7M más de los que entraron?",
-            "¿Por qué Vehículo 8761 no baja aunque pago la cuota?",
             "¿Cómo está mi patrimonio si cuento mis bienes y mis deudas?",
         ).forEach { assertFalse(laPreguntaPideCriterio(it), "no debería escalar: $it") }
     }

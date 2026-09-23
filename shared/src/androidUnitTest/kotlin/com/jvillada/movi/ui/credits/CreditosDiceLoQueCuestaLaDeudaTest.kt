@@ -136,7 +136,7 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
         montar(listOf(libreInversion, hipotecario))
 
         // Arriba, sobre toda la cartera: sale de esta pantalla sabiendo que existe.
-        composeRule.onNodeWithText("En 1 crédito la cuota no cubre los intereses", substring = true).assertExists()
+        composeRule.onNodeWithText("En 1 crédito la cuota, descontados los seguros, no alcanza para los intereses", substring = true).assertExists()
         // Y en la tarjeta del crédito que lo causa, con la cifra en pesos.
         composeRule.onNodeWithText("tu deuda crece $21.894 cada mes", substring = true).assertExists()
     }
@@ -261,7 +261,7 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
 
         composeRule.onNodeWithText("2 créditos no se terminan a este ritmo: \$304.183.376 que no bajan", substring = true)
             .assertExists()
-        composeRule.onNodeWithText("En 1 crédito la cuota no cubre los intereses", substring = true).assertExists()
+        composeRule.onNodeWithText("En 1 crédito la cuota, descontados los seguros, no alcanza para los intereses", substring = true).assertExists()
     }
 
     /**

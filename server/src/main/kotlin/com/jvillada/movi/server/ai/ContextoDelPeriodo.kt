@@ -128,6 +128,14 @@ internal data class CreditoParaContexto(
     val otrosCargosMensuales: Long? = null,
     val sinIntereses: Boolean = false,
     val saldo: Long? = null,
+    /**
+     * **Quién paga, cuando es una cuenta del propio dueño.** `paid_by` es texto libre («Skandia»),
+     * y dicho a secas el modelo lo lee como un tercero: el 23-sep llamó a Skandia «tu seguro» y le
+     * dijo al dueño que no estaba poniendo plata suya, cuando Skandia es SU fondo de pensión
+     * voluntaria —de ahí sale la plata que llega a la AFC y paga las dos hipotecas de Davibank—.
+     * Si el texto coincide con el comienzo del nombre de una cuenta suya, acá va ese nombre.
+     */
+    val loPagaCuentaPropia: String? = null,
 ) {
     /** ¿La cuota sale de su cuenta? La misma regla que la pantalla de Créditos ([saleDeTuBolsillo]). */
     val saleDeSuBolsillo: Boolean get() = !porNomina && loPaga.isNullOrBlank()
@@ -278,6 +286,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 loPaga = fila[Credits.paidBy],
                 otrosCargosMensuales = fila[Credits.otrosCargosMensuales],
                 sinIntereses = fila[Credits.sinIntereses] == true,
+                loPagaCuentaPropia = cuentaPropiaQuePaga(fila[Credits.paidBy], nombreDeCuenta.values),
             )
         }
 
@@ -469,6 +478,9 @@ internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
     append(
         when {
             c.porNomina -> "La cuota la descuenta la nómina antes de que llegue el sueldo: NO sale de su cuenta."
+            c.loPagaCuentaPropia != null ->
+                "La cuota se paga con plata de su propia cuenta «${c.loPagaCuentaPropia}» (no es un seguro ni un tercero): " +
+                    "NO sale de su plata del día a día, pero sí es plata suya."
             !c.loPaga.isNullOrBlank() -> "La cuota la paga ${c.loPaga}: NO sale de su cuenta."
             else -> "La cuota sale de su bolsillo."
         },
@@ -480,12 +492,52 @@ internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
             plan.mesesHastaLaUltimaCuota?.let { append("; a este ritmo le quedan $it cuotas") }
             append(".")
         }
-        ComoVaLaDeuda.SOLO_INTERESES ->
-            append(" La cuota apenas cubre intereses (unos \$${plan.interes} al mes): la deuda casi no baja.")
-        ComoVaLaDeuda.LA_DEUDA_CRECE ->
-            append(" OJO: la cuota no alcanza a cubrir los intereses (unos \$${plan.interes} al mes): la deuda CRECE aunque pague.")
+        // **Con los cargos adentro de la cuenta.** Decía «la cuota no alcanza a cubrir los
+        // intereses», y en el Hipotecario 2334 era falso: la cuota ($2.613.714) SÍ es mayor que los
+        // intereses ($2.427.883); lo que no los alcanza es lo que queda después de $209.219 de
+        // seguros. El modelo repitió la frase y en el renglón siguiente mostró lo contrario. Ahora
+        // el renglón trae la resta hecha, que es lo único que no se puede leer al revés.
+        ComoVaLaDeuda.SOLO_INTERESES -> {
+            val cargos = plan.seguro + plan.otrosCargos
+            if (cargos > 0L) {
+                append(" Después de \$$cargos de ${nombreDeLosCargos(plan)} le quedan \$${c.cuota - cargos} de la cuota,")
+                append(" y eso apenas cubre los intereses del mes (unos \$${plan.interes}): la deuda casi no baja.")
+            } else {
+                append(" La cuota apenas cubre los intereses del mes (unos \$${plan.interes}): la deuda casi no baja.")
+            }
+        }
+        ComoVaLaDeuda.LA_DEUDA_CRECE -> {
+            val cargos = plan.seguro + plan.otrosCargos
+            val queda = c.cuota - cargos
+            val crece = (plan.interes - queda).coerceAtLeast(0L)
+            if (cargos > 0L) {
+                append(" OJO: después de \$$cargos de ${nombreDeLosCargos(plan)} le quedan \$$queda de la cuota,")
+                append(" y los intereses del mes son unos \$${plan.interes}: la deuda CRECE aunque pague (unos \$$crece al mes).")
+            } else {
+                append(" OJO: la cuota (\$${c.cuota}) no alcanza a cubrir los intereses del mes (unos \$${plan.interes}):")
+                append(" la deuda CRECE aunque pague (unos \$$crece al mes).")
+            }
+        }
         else -> Unit
     }
+}
+
+/** «seguros», «otros cargos» o «seguros y otros cargos», según qué haya en la cuota. */
+private fun nombreDeLosCargos(plan: PlanDelCredito): String = when {
+    plan.seguro > 0L && plan.otrosCargos > 0L -> "seguros y otros cargos"
+    plan.otrosCargos > 0L -> "otros cargos"
+    else -> "seguros"
+}
+
+/**
+ * La cuenta del dueño que se llama como [quienPaga] («Skandia» → «Skandia pensión voluntaria»), o
+ * `null` si quien paga no es una cuenta suya (la nómina, el papá, un tercero de verdad). Compara
+ * el comienzo del nombre sin mayúsculas: `paid_by` lo escribe el dueño corto y la cuenta lleva el
+ * nombre largo.
+ */
+internal fun cuentaPropiaQuePaga(quienPaga: String?, nombresDeSusCuentas: Collection<String>): String? {
+    val quien = quienPaga?.trim()?.takeIf { it.length >= 3 } ?: return null
+    return nombresDeSusCuentas.firstOrNull { it.trim().startsWith(quien, ignoreCase = true) }
 }
 
 // ── Ayudas ───────────────────────────────────────────────────────────────────
