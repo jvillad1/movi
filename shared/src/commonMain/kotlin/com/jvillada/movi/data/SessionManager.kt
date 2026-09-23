@@ -2,6 +2,7 @@ package com.jvillada.movi.data
 
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -280,6 +281,11 @@ object SessionManager {
         // a JS —donde `moviPush` puede no existir, o venir cacheado de una versión anterior— y
         // quedarse con la sesión a medio cerrar sería mucho peor que no soltar la suscripción.
         runCatching { PushOptIn.disableForLogout() }
+        // La instantánea del Inicio guardada en el aparato es de este usuario, y su clave lleva
+        // el id: hay que borrarla ANTES de soltar el id de abajo, o ya no se sabe cuál es. Sin
+        // esto, el próximo que entre en este aparato no la vería (es de otra clave), pero la plata
+        // del anterior seguiría escrita acá.
+        InstantaneaDelInicio.delAparato.borrar(userId)
         // «Entrar con huella» se apaga al cerrar sesión. Sin esto, el token vencido dejaba un
         // bucle: `clear()` también corre cuando el servidor contesta 401 tres veces seguidas, y
         // con el interruptor prendido el próximo arranque pediría el dedo para abrir una app que
@@ -310,12 +316,16 @@ object SessionManager {
         // usuario que se va — sugerirle al siguiente las categorías del anterior sería filtrar
         // algo suyo por una lista de autocompletado.
         UsedCategoriesCache.clear()
+        // Task 5: y la memoria de categorías que trajo el server — es la del usuario que se va.
+        MemoriaDeCategoriasCache.clear()
         RecurringOfferGate.clear()
         // Y los canales de aviso: `emailTo` es la dirección del usuario que se va, y decirle al
         // siguiente «te avisamos por correo a juan@…» sería mostrarle un dato ajeno.
         ReminderChannelsCache.clear()
         // Ola 11: y la última cuenta usada, por lo mismo — es una cuenta del usuario que se va.
         LastAccountStore.clear()
+        // Ola A: y la cuenta más usada, por el mismo motivo.
+        CuentaMasUsadaCache.clear()
         // Y los días que plegó en Movimientos: son fechas de SU lista.
         DiasPlegadosStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo

@@ -18,6 +18,7 @@ import com.jvillada.movi.ui.dashboard.ingresosPendientes
 import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
+import com.jvillada.movi.ui.dashboard.tituloDeLosListos
 import com.jvillada.movi.ui.dashboard.yaMarcados
 import com.jvillada.movi.ui.Screen
 import kotlin.test.Test
@@ -295,7 +296,39 @@ class ChecklistDelPeriodoTest {
         )
 
         assertEquals("Te faltan 2 de 3 pagos de este período", lineaDeLoQueFalta(checklist))
-        assertEquals("Ya marcaste 1. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+        assertEquals("Ya salió 1. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+    }
+
+    /** El pie en plural: dos o más pagos ya salieron, sin decir que el dueño los marcó. */
+    @Test
+    fun el_pie_habla_en_plural_con_mas_de_un_pago_ya_salido() {
+        val checklist = listOf(
+            PagoDelPeriodo("r1", "Celular", 53_000, pagado = false, diasParaVencer = -2),
+            PagoDelPeriodo("r2", "Gimnasio", 139_900, pagado = true, diasParaVencer = -8),
+            PagoDelPeriodo("r3", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
+        )
+        assertEquals("Ya salieron 2. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+    }
+
+    /**
+     * Revisión final: el grupo de lo ya tildado lista pagos E ingresos, así que su título no
+     * puede decir «salieron» ni contar solo los pagos. Con dos pagos tildados de tres y el sueldo
+     * ya recibido, el grupo muestra TRES filas: el título tiene que decir 3, sobre las 4 del
+     * checklist — no «Ya salieron · 2 de 3», que era lo que decía.
+     */
+    @Test
+    fun el_grupo_de_lo_ya_tildado_cuenta_lo_que_lista_incluido_el_ingreso() {
+        val checklist = listOf(
+            PagoDelPeriodo("r1", "Celular", 53_000, pagado = false, diasParaVencer = -2),
+            PagoDelPeriodo("r2", "Gimnasio", 139_900, pagado = true, diasParaVencer = -8),
+            PagoDelPeriodo("r3", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
+            PagoDelPeriodo("r4", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1, esIngreso = true),
+        )
+
+        assertEquals(3, yaMarcados(checklist).size, "el grupo lista los dos pagos y el sueldo")
+        assertEquals("Listos · 3 de 4", tituloDeLosListos(checklist))
+        // Las líneas que hablan de pagos siguen contando sin el ingreso: esas sí son de plata que sale.
+        assertEquals("Te falta 1 de 3 pagos de este período", lineaDeLoQueFalta(checklist))
     }
 
     @Test
@@ -313,7 +346,7 @@ class ChecklistDelPeriodoTest {
             PagoDelPeriodo("r1", "Celular", 53_000, pagado = true, diasParaVencer = -2),
             PagoDelPeriodo("r2", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
         )
-        assertEquals("Marcaste los 2 pagos de este período", lineaDeLoQueFalta(checklist))
+        assertEquals("Ya salieron los 2 pagos de este período", lineaDeLoQueFalta(checklist))
         assertNull(pieDeLoYaPagado(checklist), "no hay nada escondido que valga la pena anunciar")
     }
 

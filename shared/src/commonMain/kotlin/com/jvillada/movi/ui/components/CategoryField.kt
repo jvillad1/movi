@@ -111,6 +111,35 @@ fun suggestCategoryMatches(
 }
 
 /**
+ * **¿Esta categoría se ofrece para movimientos de [tipo]?** El único criterio de "sirve", usado
+ * por las sugerencias del campo ([categoriasQueCoinciden]) y por los chips de frecuentes
+ * ([categoriasFrecuentes]) — antes cada una tenía su propia copia y se desincronizaron: los chips
+ * usaban [categoriaSirveParaTipo], que para una categoría **propia sin tipo fijado** siempre
+ * contesta que sí, sin mirar [tiposUsados]. Una categoría propia usada solo en Ingreso («Arriendo
+ * Gardenera») se colaba como chip de Gasto.
+ *
+ * No escondida, y si hay tipos efectivos conocidos (catálogo, tipo fijado o uso observado),
+ * [tipo] tiene que estar entre ellos — vacío ("no se sabe de qué lado") se ofrece igual. Ver el
+ * KDoc de [categoriasQueCoinciden] para el porqué completo de esta regla.
+ *
+ * `internal` (Task 5, fix round 1): `QuickAddScreen` la reutiliza para filtrar la memoria de
+ * nombres antes de sugerir — mismo motivo que la dejó afuera de `categoriaSirveParaTipo`, ahí:
+ * una categoría propia sin tipo fijado no puede colarse del lado equivocado.
+ */
+internal fun seOfreceParaTipo(
+    name: String,
+    tipo: TransactionType?,
+    tiposUsados: Set<TransactionType>,
+    prefs: Map<String, CategoryPref>,
+): Boolean {
+    val pref = prefs.entries.firstOrNull { (key, _) -> normalizarParaBuscar(key.trim()) == normalizarParaBuscar(name.trim()) }?.value
+    if (pref?.hidden == true) return false
+    if (tipo == null) return true
+    val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados)
+    return efectivos.isEmpty() || tipo in efectivos
+}
+
+/**
  * **Qué coincide**, sin decidir todavía en qué orden se muestra: las del catálogo y las propias, por
  * separado y cada una en el orden en el que vino.
  *
@@ -128,18 +157,8 @@ private fun categoriasQueCoinciden(
 ): Pair<List<String>, List<String>> {
     // El caché guarda los nombres tal cual los escribió el dueño; las preferencias vienen del
     // server con el mismo nombre. Se cruzan sin distinguir mayúsculas ni tildes para que una
-    // diferencia de tipeo no haga que una categoría escondida reaparezca.
-    val prefsNormalizadas = prefs.entries.associate { (name, pref) -> normalizarParaBuscar(name.trim()) to pref }
-    fun prefDe(name: String): CategoryPref? = prefsNormalizadas[normalizarParaBuscar(name.trim())]
-
-    fun seOfrece(name: String, tiposUsados: Set<TransactionType>): Boolean {
-        val pref = prefDe(name)
-        if (pref?.hidden == true) return false
-        if (type == null) return true
-        val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados)
-        // Vacío = "no se sabe de qué lado" → se muestra igual. Ver el KDoc de arriba.
-        return efectivos.isEmpty() || type in efectivos
-    }
+    // diferencia de tipeo no haga que una categoría escondida reaparezca — ver [seOfreceParaTipo].
+    fun seOfrece(name: String, tiposUsados: Set<TransactionType>) = seOfreceParaTipo(name, type, tiposUsados, prefs)
 
     // Para deduplicar hace falta el catálogo ENTERO, no solo el visible: una categoría del
     // catálogo escondida no puede volver a colarse por la puerta de las propias.
@@ -254,6 +273,44 @@ fun categoriaSirveParaTipo(
 }
 
 /**
+ * Ola A: **las categorías que el dueño más usa**, para ofrecerlas como chips en «Agregar» sin que
+ * tenga que abrir el campo ni escribir nada.
+ *
+ * [usos] es `UsedCategoriesCache.usosRecientes` — movimientos no anulados de esa categoría en los
+ * últimos 60 días (ver [com.jvillada.movi.shared.model.UsedCategory.usosRecientes]). **Sin ese
+ * dato no hay lista**: un server viejo que todavía no manda `usosRecientes`, o un arranque en frío
+ * antes de que el Inicio cargue, no tienen de dónde sacar «frecuente» — devolver una lista con
+ * ceros sería inventar un orden que no significa nada.
+ *
+ * Nada reservado, nada escondido, nada del otro tipo — [seOfreceParaTipo], el mismo criterio que
+ * usan las sugerencias del campo (no [categoriaSirveParaTipo]: esa función, para una categoría
+ * propia sin tipo fijado, siempre contesta que sirve sin mirar [usadas] — ver su KDoc). El
+ * desempate es alfabético con [CATEGORY_NAME_ORDER] — dos categorías con el mismo número de usos
+ * no pueden depender del orden en que llegó el mapa.
+ */
+fun categoriasFrecuentes(
+    tipo: TransactionType,
+    usadas: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+    usos: Map<String, Int> = emptyMap(),
+    cuantas: Int = 6,
+): List<String> {
+    if (usos.isEmpty()) return emptyList()
+    return usos.entries
+        .filter { (nombre, cantidad) ->
+            cantidad > 0 &&
+                !isReservedCategory(nombre) &&
+                seOfreceParaTipo(nombre, tipo, usadas[nombre].orEmpty(), prefs)
+        }
+        .sortedWith(
+            compareByDescending<Map.Entry<String, Int>> { it.value }
+                .then(compareBy(CATEGORY_NAME_ORDER) { it.key }),
+        )
+        .take(cuantas)
+        .map { it.key }
+}
+
+/**
  * Con qué categoría **arranca** un campo para un tipo dado: la primera que de verdad se le va a
  * ofrecer. Pasa por el mismo filtro que las sugerencias y no por `PREDEFINED_CATEGORIES.first { … }`
  * a secas, para que no pueda volver a pasar lo de antes — el campo prellenado con una categoría
@@ -268,12 +325,22 @@ fun categoriaSirveParaTipo(
  *
  * Si escondió TODAS las del catálogo de ese lado, cae a las propias y por último a la primera del
  * catálogo igual: quedarse sin ningún valor inicial sería peor que uno imperfecto.
+ *
+ * **Ola A — con datos de uso, arranca en la más frecuente, no en la primera del catálogo.** Si
+ * en los últimos 60 días casi todos los gastos del dueño fueron a una categoría propia (p. ej.
+ * «Fútbol») y ninguno a «Comida», seguir arrancando en «Comida» solo porque encabeza el catálogo
+ * ignoraba justo el dato nuevo que esta ola trae. (Los números reales del plan —71 en 60 días—
+ * son de una CUENTA, «Bancolombia Ahorros», y justifican `resolverCuenta` en `ui/quickadd`, no
+ * esto.) Sin [usos] (server viejo, o el Inicio no cargó todavía) cae en el comportamiento de
+ * siempre — ver [categoriasFrecuentes].
  */
 fun categoriaPorDefectoPara(
     type: TransactionType,
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     prefs: Map<String, CategoryPref> = emptyMap(),
+    usos: Map<String, Int> = emptyMap(),
 ): String {
+    categoriasFrecuentes(type, usedCategories, prefs, usos).firstOrNull()?.let { return it }
     val (delCatalogo, propias) = categoriasQueCoinciden("", type, usedCategories, prefs)
     return delCatalogo.firstOrNull()
         ?: propias.firstOrNull()

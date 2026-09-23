@@ -69,6 +69,19 @@ object UsedCategoriesCache {
     val categories: Set<String> get() = used.keys
 
     /**
+     * Ola A: nombre → cuántos movimientos **no anulados** con esa categoría hubo en los últimos
+     * 60 días (ver [UsedCategory.usosRecientes], que es de donde sale). Alimenta
+     * [categoriasFrecuentes] en `CategoryField.kt` — la fila de chips de «Agregar».
+     *
+     * Igual que [prefs] y no como [used]: solo lo llena [recordFromServer], porque es la única
+     * puerta que trae el dato del server. Las otras pantallas que alimentan [used] de paso
+     * (Movimientos, Presupuestos, Recurrentes) no saben cuántas veces se usó cada una, así que no
+     * pueden actualizar esto sin mentir con un número inventado.
+     */
+    var usosRecientes: Map<String, Int> by mutableStateOf(emptyMap())
+        private set
+
+    /**
      * **Ola 10 — lo que el dueño decidió en «Más → Categorías».** Nombre → escondida y/o tipo
      * fijado (ver [CategoryPref]).
      *
@@ -184,6 +197,7 @@ object UsedCategoriesCache {
     fun clear() {
         used = emptyMap()
         prefs = emptyMap()
+        usosRecientes = emptyMap()
     }
 
     /**
@@ -205,6 +219,15 @@ object UsedCategoriesCache {
                 if (nombre.isEmpty()) return@mapNotNull null
                 if (!entry.hidden && entry.pinnedType == null) return@mapNotNull null
                 nombre to CategoryPref(hidden = entry.hidden, pinnedType = entry.pinnedType)
+            }
+            .toMap()
+        // Ola A: reemplazada entera, igual que [prefs] y por el mismo motivo — esta lista es la
+        // verdad completa del server sobre los últimos 60 días, así que fusionarla con lo viejo
+        // dejaría vivo un número que ya no es cierto.
+        usosRecientes = entries
+            .mapNotNull { entry ->
+                val nombre = entry.name.trim()
+                if (nombre.isEmpty()) null else nombre to entry.usosRecientes
             }
             .toMap()
     }

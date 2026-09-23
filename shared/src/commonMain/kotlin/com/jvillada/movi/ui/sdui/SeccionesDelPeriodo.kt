@@ -196,7 +196,7 @@ private const val TITULO_FALTA_POR_PAGAR = "Falta por pagar"
  *
  * La tarjeta lista SOLO lo pendiente —no cambió: lo pagado del período nunca llegaba acá, por el
  * rodado del vencimiento que `checklistDelPeriodo` ahora corrige— y lo que cambió es que lo dice.
- * El rótulo, la línea de avance («te faltan 3 de 7 pagos de este período») y el pie («ya marcaste
+ * El rótulo, la línea de avance («te faltan 3 de 7 pagos de este período») y el pie («ya salieron
  * 4…») son las tres piezas de la misma frase.
  *
  * No pasa a listarlo todo porque el Inicio es un resumen y la lista entera tiene su lugar: «Ver

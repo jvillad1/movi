@@ -1,7 +1,9 @@
 package com.jvillada.movi.aislamiento
 
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.LastAccountStore
+import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
@@ -9,10 +11,12 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.RecuerdoDeCategoria
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.HuellaDelAparato
 import com.jvillada.movi.data.EstadoDeHuella
@@ -20,6 +24,8 @@ import com.jvillada.movi.data.PropositoDeHuella
 import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
+import com.jvillada.movi.ui.dashboard.instantaneaEnMemoria
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -62,6 +68,11 @@ class ElForkLlegaLimpioTest {
     @Test
     fun aEnsuciaTodosLosGlobales() {
         UsedCategoriesCache.record("Mercado", TransactionType.EXPENSE)
+        // `usosRecientes` solo lo llena `recordFromServer` (ver su KDoc): es la fila de chips de
+        // «Agregar», y con resaca una prueba de la hoja arrancaría con chips de otra.
+        UsedCategoriesCache.recordFromServer(
+            listOf(UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 4)),
+        )
         ScreenDefCache.dashboard = DEFINICION_DE_OTRA_PRUEBA
         DashboardDataCache.data = DashboardData()
         DashboardDataCache.cargadoEn = 1_700_000_000_000L
@@ -71,13 +82,18 @@ class ElForkLlegaLimpioTest {
         DashboardDataCache.entradasHechas += "hero.cifra"
         LastAccountStore.recordAccount("acc-de-otra-prueba")
         LastAccountStore.recordTransfer("acc-origen", "acc-destino")
+        CuentaMasUsadaCache.recordFromServer("acc-de-otra-prueba")
         // `canales` solo lo escribe `cargar()`, así que se ensucia por el camino de verdad: con un
-        // repositorio enchufado que conteste, que es exactamente lo que hace una pantalla.
+        // repositorio enchufado que conteste, que es exactamente lo que hace una pantalla. Lo
+        // mismo para la memoria de categorías (Task 5) — comparte el mismo repositorio de prueba.
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getReminderChannels(): ReminderChannels =
                 ReminderChannels(email = true, emailTo = "alguien@ejemplo.com")
+            override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> =
+                listOf(RecuerdoDeCategoria(huella = "nombre:otraprueba", categoria = "Fútbol", nombre = "Otra Prueba", cuantos = 1))
         }
         runBlocking { ReminderChannelsCache.cargar() }
+        runBlocking { MemoriaDeCategoriasCache.cargarSiHaceFalta() }
         DiasPlegadosStore.alternar("2024-03-15")
         RecurringOfferGate.recordarLoQueYaHay(listOf(ARRIENDO), emptyList())
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
@@ -88,31 +104,46 @@ class ElForkLlegaLimpioTest {
             name = "Otra Prueba",
             email = "otra@ejemplo.com",
         )
+        // La instantánea del Inicio NO es un `object` en memoria: vive en el `Settings` del
+        // aparato, que sobrevive a todo menos al logout. Acá, en un almacén de mentira que es
+        // estático de este archivo (sobrevive de un método al siguiente, como el de verdad). La
+        // limpia el logout con el id de la sesión que se va — por eso va después de `save`.
+        InstantaneaDelInicio.sustitutoDePrueba = instantaneaEnMemoria(ALMACEN_DE_LA_INSTANTANEA)
+        InstantaneaDelInicio.delAparato.guardarDatos("u1", DashboardData(pendingSms = 1))
+        InstantaneaDelInicio.delAparato.guardarDefinicion("u1", DEFINICION_DE_OTRA_PRUEBA)
 
         // No se afirma «quedó sucio» por prolijidad: si alguno de estos setters dejara de escribir,
         // el método de abajo pasaría sin ejercitar nada y esta clase sería decorativa.
         assertTrue("«Mercado» no entró al caché", "Mercado" in UsedCategoriesCache.used)
+        assertTrue("Los usos recientes no quedaron cargados", UsedCategoriesCache.usosRecientes.isNotEmpty())
         assertTrue("La sesión no quedó puesta", SessionManager.loggedIn)
         assertTrue("El día no quedó plegado", "2024-03-15" in DiasPlegadosStore.plegados())
         assertNotNull("Los canales de aviso no quedaron cargados", ReminderChannelsCache.canales)
+        assertTrue("La memoria de categorías no quedó cargada", MemoriaDeCategoriasCache.recuerdos.isNotEmpty())
         assertNotNull("La última cuenta no quedó guardada", LastAccountStore.lastAccountId)
+        assertNotNull("La cuenta más usada no quedó guardada", CuentaMasUsadaCache.id)
         assertNotNull("La definición de pantalla no quedó cacheada", ScreenDefCache.dashboard)
         assertNotNull("El repositorio de prueba no quedó enchufado", Repositories.sustitutoDePrueba)
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
         assertTrue("«Entrar con huella» no quedó prendida", SessionManager.huellaActivada)
+        assertNotNull("La instantánea del Inicio no quedó guardada", InstantaneaDelInicio.delAparato.datos("u1"))
+        assertNotNull("La definición del Inicio no quedó guardada", InstantaneaDelInicio.delAparato.definicion("u1"))
     }
 
     @Test
     fun bLosGlobalesLleganEnCero() {
         assertEquals("UsedCategoriesCache trae la resaca del método anterior", emptyMap<String, Any>(), UsedCategoriesCache.used)
         assertEquals("Las preferencias de categoría traen resaca", emptyMap<String, Any>(), UsedCategoriesCache.prefs)
+        assertEquals("Los usos recientes de categoría traen resaca", emptyMap<String, Int>(), UsedCategoriesCache.usosRecientes)
         assertNull("ScreenDefCache trae resaca", ScreenDefCache.dashboard)
         assertNull("DashboardDataCache trae resaca", DashboardDataCache.data)
         assertEquals("DashboardDataCache trae la marca de tiempo anterior", 0L, DashboardDataCache.cargadoEn)
         assertEquals("DashboardDataCache trae el tick anterior", 0, DashboardDataCache.tickDeLaCarga)
         assertEquals("DashboardDataCache trae entradas ya hechas", emptySet<String>(), DashboardDataCache.entradasHechas)
         assertNull("ReminderChannelsCache trae resaca", ReminderChannelsCache.canales)
+        assertEquals("MemoriaDeCategoriasCache trae resaca", emptyList<RecuerdoDeCategoria>(), MemoriaDeCategoriasCache.recuerdos)
         assertNull("LastAccountStore trae la cuenta de otra prueba", LastAccountStore.lastAccountId)
+        assertNull("CuentaMasUsadaCache trae la cuenta de otra prueba", CuentaMasUsadaCache.id)
         assertNull("LastAccountStore trae el origen de otra prueba", LastAccountStore.lastTransferFromId)
         assertNull("LastAccountStore trae el destino de otra prueba", LastAccountStore.lastTransferToId)
         assertEquals("DiasPlegadosStore trae los días de otra prueba", emptySet<String>(), DiasPlegadosStore.plegados())
@@ -121,6 +152,8 @@ class ElForkLlegaLimpioTest {
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
         assertFalse("«Entrar con huella» trae la resaca del método anterior", SessionManager.huellaActivada)
+        assertEquals("La instantánea del Inicio de otra prueba sigue guardada", emptyMap<String, String>(), ALMACEN_DE_LA_INSTANTANEA)
+        assertNull("El almacén de mentira de la instantánea sigue enchufado", InstantaneaDelInicio.sustitutoDePrueba)
 
         // El estado de `RecurringOfferGate` es privado; lo único que lo delata es lo que ofrece.
         // Sin repositorio enchufado, limpio devuelve dos listas vacías; sucio devolvería la regla
@@ -132,6 +165,8 @@ class ElForkLlegaLimpioTest {
 }
 
 private val DEFINICION_DE_OTRA_PRUEBA = defaultDashboardDefinition()
+
+private val ALMACEN_DE_LA_INSTANTANEA = mutableMapOf<String, String>()
 
 private val LECTOR_DE_OTRA_PRUEBA = object : HuellaDelAparato {
     override fun estado() = EstadoDeHuella.LISTA

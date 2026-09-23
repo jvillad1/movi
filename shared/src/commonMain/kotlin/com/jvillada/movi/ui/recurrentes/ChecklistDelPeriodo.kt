@@ -39,12 +39,12 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.dashboard.EstadoDeLaFila
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
-import com.jvillada.movi.ui.dashboard.avanceDelChecklist
 import com.jvillada.movi.ui.dashboard.faltaPorPagar
 import com.jvillada.movi.ui.dashboard.ingresosPendientes
 import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.yaMarcados
+import com.jvillada.movi.ui.dashboard.tituloDeLosListos
 
 /**
  * # El checklist del período: todo lo que se paga este mes, con lo hecho tildado
@@ -145,13 +145,15 @@ fun SeccionChecklistDelPeriodo(
     val pendientes = pagosPendientes(checklist)
     val porCobrar = ingresosPendientes(checklist)
     val marcados = yaMarcados(checklist)
-    val (pagados, total) = avanceDelChecklist(checklist)
     val acciones = AccionesDelChecklist(onConfirmar, onNoFueEste, onAnotarMovimiento, onQuitarLaMarca)
 
     Column(modifier = modifier) {
         MinSectionHeader(
             title = TITULO_CHECKLIST_DEL_PERIODO,
-            count = if (pudoLeer && !cargando && total > 0) total else null,
+            // Todo el checklist, ingresos incluidos: el mismo total que la Y de «Listos · X de Y»
+            // (ver [tituloDeLosListos]). Contaba solo los pagos, y con un sueldo en la lista el
+            // encabezado decía 2 encima de un grupo que decía «2 de 3».
+            count = if (pudoLeer && !cargando && checklist.isNotEmpty()) checklist.size else null,
         )
         when {
             cargando -> Unit
@@ -204,7 +206,11 @@ fun SeccionChecklistDelPeriodo(
                 if (marcados.isNotEmpty()) {
                     Spacer(Modifier.height(Movi.espacios.medio))
                     GrupoDelChecklist(
-                        titulo = "Ya marcados · $pagados de $total",
+                        // No "Ya marcados": la mayoría de estas filas las empareja Movi sola
+                        // (ver `PagoDelPeriodo.automatica`), no el dueño. Y no "Ya salieron":
+                        // el grupo también lista los ingresos recibidos — ver
+                        // [tituloDeLosListos].
+                        titulo = tituloDeLosListos(checklist),
                         total = null,
                         filas = marcados,
                         vacio = null,

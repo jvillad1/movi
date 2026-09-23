@@ -172,6 +172,35 @@ class MemoriaDeCategoriasTest {
         assertNull(MemoriaDeCategorias.de(emptyList()).recuerdoDe("Pago QR Mora Soccer"))
     }
 
+    // ── Ola A: la memoria en forma de lista, para que viaje por la red ──────────
+
+    @Test
+    fun `entradas expone lo mismo que recuerdoDe, huella incluida`() {
+        val memoria = MemoriaDeCategorias.de(
+            listOf(
+                anotacion("Pago QR Mora Soccer", "Fútbol", cuando = 10),
+                anotacion("Pago QR Mora Soccer", "Fútbol", cuando = 20),
+                anotacion("McDonald's", "Comida"),
+            ),
+        )
+
+        val entradas = memoria.entradas().associateBy { it.huella }
+        assertEquals(2, entradas.size)
+        assertEquals(
+            RecuerdoDeCategoria(huella = "nombre:morasoccer", categoria = "Fútbol", nombre = "Pago QR Mora Soccer", cuantos = 2),
+            entradas["nombre:morasoccer"],
+        )
+        assertEquals(
+            RecuerdoDeCategoria(huella = "nombre:mcdonalds", categoria = "Comida", nombre = "McDonald's", cuantos = 1),
+            entradas["nombre:mcdonalds"],
+        )
+    }
+
+    @Test
+    fun `entradas de una memoria vacia es una lista vacia`() {
+        assertEquals(emptyList(), MemoriaDeCategorias.vacia.entradas())
+    }
+
     // ── La red de seguridad ──────────────────────────────────────────────────
 
     /**

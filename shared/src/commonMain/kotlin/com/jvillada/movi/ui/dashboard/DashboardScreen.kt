@@ -9,7 +9,6 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -21,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.Clock
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
@@ -49,6 +49,9 @@ import kotlinx.coroutines.launch
  * Último [DashboardData] cargado, en memoria y por proceso: al volver al Inicio se pinta
  * al instante con lo que ya había mientras llega lo nuevo, en vez de arrancar en blanco
  * cada vez. Misma idea (y mismas limitaciones) que [ScreenDefCache].
+ *
+ * Esto se pierde al cerrar la app o recargar la web; lo que sobrevive a eso es
+ * [InstantaneaDelInicio], que el Inicio lee solo cuando acá no hay nada.
  */
 object DashboardDataCache {
     var data: DashboardData? = null
@@ -178,21 +181,61 @@ fun DashboardScreen(
     // exista familia esto vuelva a tener un selector con significado real.
     val scope = Scope.SELF
 
-    var data by remember { mutableStateOf(DashboardDataCache.data ?: DashboardData()) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var refreshKey by remember { mutableStateOf(0) }
-    var showCreateSheet by remember { mutableStateOf(false) }
-    var showNotifications by remember { mutableStateOf(false) }
-    var screenDef by remember { mutableStateOf<ScreenDefinition?>(ScreenDefCache.dashboard) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
-    val notifications = notificationRows(data)
-
+    // Lo que se pinta al montar, en este orden: lo que quedó en memoria de este proceso (volver
+    // desde Movimientos), la instantánea que quedó en el aparato de la última carga buena (el
+    // arranque en frío: ver [InstantaneaDelInicio]), o nada. La instantánea NO pasa a
+    // [DashboardDataCache]: así `hayDatos` sigue en false y [debeRecargarElInicio] pide las cifras
+    // nuevas igual — lo que se pinta de la instantánea es lo último que se supo, no lo de ahora.
+    var data by remember {
+        mutableStateOf(
+            DashboardDataCache.data
+                ?: InstantaneaDelInicio.delAparato.datos(SessionManager.userId)
+                    ?.conElPeriodoDe(Clock.System.now().toEpochMilliseconds())
+                ?: DashboardData(),
+        )
+    }
     // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
     // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
     // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
     val refreshTick = LocalRefreshTick.current
+    // **Revisión final: `loading` nace con la misma decisión que va a tomar el efecto de abajo.**
+    // Nacía en `false` y el efecto lo prendía recién al correr: el primer cuadro de un arranque
+    // en frío pintaba «Tu plata —» y las tres preguntas genéricas de «Pregúntale a Movi» —
+    // justo lo que los esqueletos (Task 7) vinieron a sacar—, y con la instantánea en pantalla
+    // ese cuadro salía sin «Actualizando…», como si lo de ayer fuera de hoy. Se pregunta a
+    // [debeRecargarElInicio] con los mismos datos que va a usar el efecto (sin reintento: al
+    // montar `refreshKey` es 0), así el primer cuadro ya dice lo que va a pasar.
+    var loading by remember {
+        mutableStateOf(
+            debeRecargarElInicio(
+                hayDatos = DashboardDataCache.data != null,
+                cargadoEn = DashboardDataCache.cargadoEn,
+                tickDeLaCarga = DashboardDataCache.tickDeLaCarga,
+                tickActual = refreshTick,
+                reintento = false,
+                ahora = Clock.System.now().toEpochMilliseconds(),
+            ),
+        )
+    }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var showCreateSheet by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
+    var screenDef by remember {
+        mutableStateOf<ScreenDefinition?>(
+            ScreenDefCache.dashboard
+                ?: InstantaneaDelInicio.delAparato.definicion(SessionManager.userId)
+                    ?.takeIf { renderableSections(it).isNotEmpty() },
+        )
+    }
+    val snackbarHostState = remember { SnackbarHostState() }
+    // Recarga en curso con algo que vale la pena ya en pantalla: la caché de este proceso o la
+    // instantánea del aparato. «Que vale la pena» es la misma vara del resto del Inicio
+    // (`puedeAfirmarVacio`): la cabecera dice «Actualizando…» en vez de la barra de progreso.
+    val actualizandoConDatos = loading && data.puedeAfirmarVacio
+    // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
+    val notifications = notificationRows(data)
+
     // TODO(ola-8, V13): el Inicio repite sus ~10 llamadas CADA VEZ que se entra — se contaron
     //  4 rondas completas en pocos minutos de uso normal. En el teléfono con datos móviles eso
     //  es plata del dueño.
@@ -235,36 +278,78 @@ fun DashboardScreen(
         }
         loading = true
         error = null
-        // SDUI: la definición del server se pide PRIMERO, así el Inicio ya está en su lugar
-        // antes de que se pinte el fallback — evita el parpadeo fallback→SDUI en cada arranque
-        // frío. Silencioso si falla: capa 2 (ScreenDefCache) conserva la última válida; capa 3
-        // (defaultDashboardDefinition, idéntica al seed) cubre un arranque sin caché.
-        runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
-            .onSuccess {
-                // Capa 4: una definición que no renderiza nada equivale a no tener definición —
-                // evita un Inicio en blanco por typos en los tipos de sección.
-                it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
-            }
+        // De quién es esta carga. Se vuelve a mirar antes de guardar la instantánea: si en el medio
+        // se cerró la sesión, `clear()` ya borró la de este usuario y escribirla de nuevo dejaría su
+        // plata en el aparato.
+        val usuario = SessionManager.userId
+        // Lo que contestó ESTA carga, aparte de `data`: `data` arranca con lo que ya estaba pintado
+        // (la caché o la instantánea), así que con las diez caídas seguiría pudiendo «afirmar» con
+        // las cifras de ayer. El sello de abajo mira esto, no `data`.
+        var llegado = DashboardData()
+        // Si contestó `/api/dashboard/summary`. Aparte de `llegado` porque ninguno de sus campos
+        // distingue por sí solo «llegó vacío» de «no llegó» (`pendingSms = 0`, un mapa vacío).
+        // Ver el sello de abajo.
+        var resumenDelInicioLlego = false
+        // Lo mismo para el perfil: sin él, `llegado` tendría el corte por defecto (mes de
+        // calendario) y la instantánea perdería el del dueño — ver la escritura de abajo.
+        var perfilLlego = false
+        // SDUI. Silenciosa si falla: capa 2 (ScreenDefCache, y su copia en el aparato) conserva la
+        // última válida; capa 3 (defaultDashboardDefinition, idéntica al seed) cubre un arranque
+        // sin ninguna de las dos.
+        suspend fun pedirDefinicion() {
+            runCatching { Repositories.wallets.getScreen("dashboard", screenDef?.version) }
+                .onSuccess {
+                    // Capa 4: una definición que no renderiza nada equivale a no tener definición —
+                    // evita un Inicio en blanco por typos en los tipos de sección.
+                    it?.takeIf { d -> renderableSections(d).isNotEmpty() }?.let { d -> screenDef = d; ScreenDefCache.dashboard = d }
+                    // `null` es el 304 («la que tienes sigue vigente»): se guarda igual, porque la
+                    // que está en memoria puede no haber llegado nunca al aparato.
+                    val d = screenDef
+                    if (d != null && SessionManager.userId == usuario) {
+                        InstantaneaDelInicio.delAparato.guardarDefinicion(usuario, d)
+                    }
+                }
+        }
+        // Sin definición a mano, se pide PRIMERO, así el Inicio ya está en su lugar antes de que
+        // se pinte el fallback — evita el parpadeo fallback→SDUI. Con una (de la memoria o del
+        // aparato) ya no hay parpadeo que evitar, y esperarla antes de los datos era medio arranque
+        // en frío perdido en serie: va en paralelo con el resto.
+        val definicionEnParalelo = screenDef != null
+        if (!definicionEnParalelo) pedirDefinicion()
         // El resto va en paralelo. Solo resumen y cuentas (el Balance) avisan con snackbar si
         // fallan; lo demás alimenta secciones secundarias (próximos pagos, alertas, cifras de
         // los accesos, guía) y si falla simplemente no se pinta esta vez — un snackbar de
         // reintento por un dato secundario sería más ruido que ayuda.
         coroutineScope {
+            if (definicionEnParalelo) launch { pedirDefinicion() }
+            // Las cinco que sostienen `puedeAfirmarVacio` también se anotan en `llegado`.
             launch {
                 runCatching { Repositories.wallets.getFinanceSummary(scope) }
-                    .onSuccess { s -> data = data.copy(summary = s) }
+                    .onSuccess { s -> data = data.copy(summary = s); llegado = llegado.copy(summary = s) }
                     .onFailure { e -> error = e.toUserMessage() }
             }
             launch {
                 runCatching { Repositories.wallets.getAccounts() }
-                    .onSuccess { a -> data = data.copy(accounts = a) }
+                    .onSuccess { a -> data = data.copy(accounts = a); llegado = llegado.copy(accounts = a) }
                     .onFailure { e -> if (error == null) error = e.toUserMessage() }
             }
-            launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { c -> data = data.copy(credits = c) } }
+            launch {
+                runCatching { Repositories.wallets.getCredits() }
+                    .onSuccess { c -> data = data.copy(credits = c); llegado = llegado.copy(credits = c) }
+            }
             // F20: la cifra del acceso «Créditos» suma préstamos + tarjetas.
-            launch { runCatching { Repositories.wallets.getCards() }.onSuccess { c -> data = data.copy(cards = c) } }
-            launch { runCatching { Repositories.wallets.getUpcomingPayments() }.onSuccess { u -> data = data.copy(upcoming = u) } }
-            launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
+            launch {
+                runCatching { Repositories.wallets.getCards() }
+                    .onSuccess { c -> data = data.copy(cards = c); llegado = llegado.copy(cards = c) }
+            }
+            launch {
+                runCatching { Repositories.wallets.getUpcomingPayments() }
+                    .onSuccess { u -> data = data.copy(upcoming = u); llegado = llegado.copy(upcoming = u) }
+            }
+            launch {
+                runCatching { Repositories.wallets.getBudgets() }
+                    .onSuccess { b -> data = data.copy(budgets = b); llegado = llegado.copy(budgets = b) }
+            }
             // Gasto del mes por categoría, candidatos a pago de tarjeta y SMS pendientes vienen ya
             // reducidos del server (GET /api/dashboard/summary) en vez de bajar todos los eventos,
             // todos los candidatos y todos los SMS para sacar tres números — con meses de uso
@@ -294,6 +379,17 @@ fun DashboardScreen(
                             // cuentas no llegaron: ver `patrimonioDelInicio`.
                             patrimonio = s.patrimonio,
                         )
+                        llegado = llegado.copy(
+                            spentByCategory = data.spentByCategory,
+                            cardCandidates = data.cardCandidates,
+                            pendingSms = data.pendingSms,
+                            captura = data.captura,
+                            capturaSilenciada = data.capturaSilenciada,
+                            gastoVariablePorDia = data.gastoVariablePorDia,
+                            plataDelDisponible = data.plataDelDisponible,
+                            patrimonio = data.patrimonio,
+                        )
+                        resumenDelInicioLlego = true
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por
                         // Movimientos ni Presupuestos. **No es una llamada nueva**: viene en
@@ -306,13 +402,22 @@ fun DashboardScreen(
                         UsedCategoriesCache.recordAll(
                             s.spentByCategory.keys.map { c -> c to TransactionType.EXPENSE },
                         )
+                        // Ola A: misma respuesta, misma lógica — la cuenta con más gastos de los
+                        // últimos 30 días queda disponible para que «Agregar» arranque ahí.
+                        CuentaMasUsadaCache.recordFromServer(s.cuentaMasUsada)
                     }
             }
-            launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }
+            launch {
+                runCatching { Repositories.wallets.getGoals() }
+                    .onSuccess { g -> data = data.copy(goals = g); llegado = llegado.copy(goals = g) }
+            }
             // Los sellos de «ya ocurrió», para poder tildar el checklist del período. Si falla, el
             // checklist muestra todo como pendiente: recordar algo ya pagado molesta; dar por
             // pagado algo que no, cuesta plata.
-            launch { runCatching { Repositories.wallets.getOccurrenceStates() }.onSuccess { o -> data = data.copy(ocurrencias = o) } }
+            launch {
+                runCatching { Repositories.wallets.getOccurrenceStates() }
+                    .onSuccess { o -> data = data.copy(ocurrencias = o); llegado = llegado.copy(ocurrencias = o) }
+            }
             // El período del dueño (su día de corte y los inicios que movió a mano). Sin esto el
             // Inicio hablaría del mes de calendario, que es justo lo que dejó de hacer el resto de
             // la app.
@@ -323,13 +428,20 @@ fun DashboardScreen(
                         ajustesDePeriodo = ajustes,
                         periodoActual = periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes),
                     )
+                    llegado = llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+                    perfilLlego = true
                 }
             }
             // F50: la cifra de "investments" ahora sale de `data.accounts` (cuentas tipo
             // INVESTMENT) — ya no hace falta este fetch aparte de holdings.
-            launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
+            launch {
+                runCatching { Repositories.wallets.getSubscriptions() }
+                    .onSuccess { s -> data = data.copy(subscriptions = s); llegado = llegado.copy(subscriptions = s) }
+            }
         }
-        DashboardDataCache.data = data
+        // Con la misma guarda que la instantánea (ver `usuario`): una carga que termina después
+        // del logout no puede dejarle al próximo usuario la plata del anterior en memoria.
+        if (SessionManager.userId == usuario) DashboardDataCache.data = data
         // **Solo se sella una carga que SALIÓ BIEN.**
         //
         // La primera versión sellaba siempre, y «las diez terminaron» no es lo mismo que «las
@@ -342,9 +454,31 @@ fun DashboardScreen(
         // Se mira `puedeAfirmarVacio` y no `error == null` porque es la misma condición que ya
         // gobierna si el Inicio puede opinar sobre la plata del dueño (ver DashboardLogic): si no
         // alcanza para afirmar, tampoco alcanza para saltearse la próxima carga.
-        if (data.puedeAfirmarVacio) {
+        //
+        // Y se mira sobre `llegado`, no sobre `data`: con la instantánea del aparato, un arranque
+        // en frío sin señal pinta cifras de ayer que SÍ alcanzan para afirmar, y las diez caídas
+        // sellaban igual. Por lo mismo, la instantánea solo se reescribe con una carga buena.
+        //
+        // **Revisión final — y el resumen del Inicio tiene que haber llegado.** Con solo
+        // `/api/dashboard/summary` caído, `llegado` alcanzaba para afirmar y se sellaba; `data`
+        // traía todavía de la caché o de la instantánea el gasto por categoría, el gasto por día,
+        // «Tu plata» al empezar, la captura de SMS y los pendientes — y se escribían al aparato
+        // como si fueran de esta carga. Sin sello, volver al Inicio reintenta.
+        //
+        // Y lo que se escribe es `llegado`, no `data`: la instantánea guarda SOLO lo que contestó
+        // esta carga. Una lectura secundaria caída (metas, presupuestos, sellos) no se pinta en el
+        // próximo arranque en frío, que es mejor que pintarla vieja como si fuera la última que se
+        // supo. El corte del período es la excepción: sin perfil se conserva el que ya había (ver
+        // `conElPeriodoDe`: el corte se le puede confiar a la instantánea, la fecha no).
+        if (llegado.puedeAfirmarVacio && resumenDelInicioLlego) {
             DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
             DashboardDataCache.tickDeLaCarga = refreshTick
+            val instantanea = if (perfilLlego) {
+                llegado
+            } else {
+                llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+            }
+            if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }
         loading = false
     }
@@ -369,6 +503,18 @@ fun DashboardScreen(
                 title = "Inicio",
                 leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
                 action = {
+                    // Recargando con cifras ya pintadas (la caché o la instantánea): una línea
+                    // discreta en vez de la barra de ancho completo. Va en la cabecera, cuyo alto
+                    // lo fija el avatar de 32 dp, así que aparecer y desaparecer no mueve nada de
+                    // lo de abajo — que es justo lo que no podía pasar mientras el dueño lee.
+                    if (actualizandoConDatos) {
+                        Text(
+                            "Actualizando…",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoApagado,
+                            maxLines = 1,
+                        )
+                    }
                     // Compartir con un tercero, al lado de la campana: el Inicio es donde uno está
                     // mirando su plata cuando se le ocurre mostrársela a alguien.
                     Icon(
@@ -396,7 +542,13 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            // Sin nada pintado todavía (`loading && !actualizandoConDatos`), YA NO va la barra de
+            // siempre: el hero y «Pregúntale a Movi» (Task 7) pintan su propio esqueleto con la
+            // forma de lo que viene, y una barra de ancho completo arriba de un bloque que además
+            // pulsa es la misma señal dicha dos veces. Las secciones SDUI que no tienen esqueleto
+            // propio (patrimonio, categorías) ya se apagaban solas sin datos —con o sin barra no
+            // mostraban nada— así que sacarla no les quita información. Con algo ya pintado
+            // (`actualizandoConDatos`), la cabecera sigue diciendo «Actualizando…»: ver más abajo.
 
             // Guía "Primeros pasos": chrome nativo, fuera de la definición SDUI a propósito —
             // así existe siempre, sin depender de tocar `screen_definitions` en producción.
@@ -410,21 +562,25 @@ fun DashboardScreen(
             val showGuide = data.puedeAfirmarVacio && !(data.hasAccount && data.hasMovement)
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
-            SduiRenderer(
-                definition = screenDef ?: defaultDashboardDefinition(),
-                data = data,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                onNavigate = onNavigate,
-                header = if (showGuide) {
-                    {
-                        PrimerosPasosCard(
-                            data = data,
-                            onNavigate = onNavigate,
-                            onShowCreateSheet = { showCreateSheet = true },
-                        )
-                    }
-                } else null,
-            )
+            // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
+            // `loading` — ver su KDoc para el porqué (Task 7, fix round 1).
+            CompositionLocalProvider(LocalCargandoElInicio provides loading) {
+                SduiRenderer(
+                    definition = screenDef ?: defaultDashboardDefinition(),
+                    data = data,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    onNavigate = onNavigate,
+                    header = if (showGuide) {
+                        {
+                            PrimerosPasosCard(
+                                data = data,
+                                onNavigate = onNavigate,
+                                onShowCreateSheet = { showCreateSheet = true },
+                            )
+                        }
+                    } else null,
+                )
+            }
         }
 
         SnackbarHost(

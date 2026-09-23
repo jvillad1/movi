@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- El fondo oscuro de Movi (Tokens.kt) — evita el destello blanco en el arranque -->
+    <color name="movi_fondo">#07090C</color>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Tema de arranque de Movi.
+
+        Se elige el tema oscuro como predeterminado aunque existe un tema claro, porque:
+        - TemaStore.oscuro arranca en true; el default oscuro evita un destello blanco
+          en el arranque de ~0.6s, que es muy chocante en una app oscura.
+        - La preferencia de tema vive en Settings y no se puede leer antes de que el
+          sistema pinte la ventana. Con el tema claro elegido, se vería un instante de
+          oscuro, que es menos jarring que un destello blanco.
+        - Android pinta la ventana ANTES de que Compose tenga oportunidad de pintar,
+          así que el theme de la aplicación es lo único que se puede controlar.
+    -->
+    <style name="Theme.Movi" parent="android:Theme.Material.NoActionBar">
+        <!-- El fondo debe coincidir con el de la app oscura para evitar flashes -->
+        <item name="android:windowBackground">@color/movi_fondo</item>
+        <!-- Barras de estado y navegación transparentes para que Compose las maneje -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

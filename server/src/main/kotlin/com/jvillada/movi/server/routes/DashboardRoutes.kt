@@ -40,6 +40,7 @@ import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import com.jvillada.movi.server.time.AppClock
@@ -186,7 +187,7 @@ fun Route.dashboardRoutes() {
                 smsAlertMuted = Users.select(Users.smsAlertMuted)
                     .where { Users.id eq uid }
                     .firstOrNull()?.get(Users.smsAlertMuted) ?: false,
-                usedCategories = usedCategories(uid),
+                usedCategories = usedCategories(uid, ahora, voidedIds),
                 // La tarjeta «Disponible»: el gasto variable del período, día por día. Los mismos
                 // movimientos que suman «Gastos» (vivos, flujo de caja, sin «Por confirmar», en
                 // pesos) menos las cuotas de crédito y la parte de cada movimiento que paga un
@@ -212,6 +213,9 @@ fun Route.dashboardRoutes() {
                 // el cliente sobre la lista de cuentas (`patrimonioDe`, en :core), sobre los mismos
                 // saldos que esa lista (ver `cuentasConSaldo`). No hay una segunda cuenta acá.
                 patrimonio = patrimonioDe(cuentasConSaldo(uid, voidedIds, usdToCop)),
+                // La cuenta que «Agregar» debería sugerir primero, en vez de la primera por orden
+                // alfabético. Ver `cuentaMasUsada` acá abajo.
+                cuentaMasUsada = cuentaMasUsada(uid, ahora, voidedIds),
             )
         }
         call.respond(summary)
@@ -320,8 +324,13 @@ private fun Transaction.sumasAntesDe(
  * sirven. Se emite además una fila por cada categoría CON preferencia aunque no tenga ningún
  * movimiento: esconder una del catálogo que nunca usó es el caso normal, y esa fila viaja con
  * `types` vacío.
+ *
+ * **Ola A — [UsedCategory.usosRecientes] es la excepción a "sin filtrar por mes/anulados/
+ * reservadas" de arriba.** Ese campo sí mira una ventana (60 días) y sí excluye los anulados: no
+ * describe "¿la conozco?" sino "¿la sigue usando?", y ahí un movimiento borrado o de hace un año
+ * no cuenta.
  */
-private fun Transaction.usedCategories(uid: String): List<UsedCategory> {
+private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<String>): List<UsedCategory> {
     val prefs = CategoryPrefs.selectAll()
         .where { CategoryPrefs.userId eq uid }
         .associate { it[CategoryPrefs.name].trim() to (it[CategoryPrefs.hidden] to it[CategoryPrefs.pinnedType]) }
@@ -336,6 +345,17 @@ private fun Transaction.usedCategories(uid: String): List<UsedCategory> {
             types.mapNotNull { t -> runCatching { TransactionType.valueOf(t) }.getOrNull() }.distinct()
         }
 
+    // Ola A: cuántos movimientos recientes respaldan cada categoría, para que el cliente pueda
+    // ordenar u ofrecer las que el dueño de verdad usa últimamente y no solo alguna vez en la
+    // historia. Una sola consulta agregada (no una por categoría): se acota por fecha en SQL y
+    // se agrupa en memoria, igual que el resto de esta ruta. Sin anulados, cualquier tipo.
+    val hace60Dias = ahora - 60L * UN_DIA_MS
+    val usosRecientesPorCategoria = Events.select(Events.id, Events.category, Events.timestamp)
+        .where { (Events.userId eq uid) and (Events.timestamp greaterEq hace60Dias) }
+        .filterNot { it[Events.id] in voidedIds }
+        .groupingBy { it[Events.category].trim() }
+        .eachCount()
+
     val nombres = porUso.keys + prefs.keys.filter { it.isNotEmpty() }
     return nombres
         .map { nombre ->
@@ -345,10 +365,42 @@ private fun Transaction.usedCategories(uid: String): List<UsedCategory> {
                 types = porUso[nombre].orEmpty(),
                 hidden = pref?.first ?: false,
                 pinnedType = pref?.second,
+                usosRecientes = usosRecientesPorCategoria[nombre] ?: 0,
             )
         }
         .sortedBy { it.name.lowercase() }
 }
+
+/**
+ * Ola A: **la cuenta con más gastos en los últimos 30 días**, para que «Agregar» arranque ahí en
+ * vez de la primera por orden alfabético (ver el KDoc de [DashboardSummary.cuentaMasUsada]).
+ *
+ * No anulados y fuera las categorías reservadas ([isReservedCategory] ya incluye
+ * `CARD_PAYMENT_CATEGORY`): un pago de tarjeta o un traspaso no dicen en qué cuenta el dueño
+ * ANOTA sus gastos, dicen otra cosa. Empate en cantidad → la cuenta del movimiento más reciente.
+ * Sin gastos en la ventana → `null`, y el cliente cae al orden de siempre.
+ */
+private fun Transaction.cuentaMasUsada(uid: String, ahora: Long, voidedIds: Set<String>): String? {
+    val hace30Dias = ahora - 30L * UN_DIA_MS
+    val gastos = Events.select(Events.id, Events.accountId, Events.category, Events.timestamp)
+        .where {
+            (Events.userId eq uid) and
+                (Events.type eq TransactionType.EXPENSE.name) and
+                (Events.timestamp greaterEq hace30Dias)
+        }
+        .filterNot { it[Events.id] in voidedIds }
+        .filterNot { isReservedCategory(it[Events.category]) }
+
+    return gastos
+        .groupBy { it[Events.accountId] }
+        .mapValues { (_, movs) -> movs.size to movs.maxOf { it[Events.timestamp] } }
+        .entries
+        .maxWithOrNull(compareBy({ it.value.first }, { it.value.second }))
+        ?.key
+}
+
+/** Un día, en milisegundos — la unidad de las ventanas «últimos N días» de esta ruta. */
+private const val UN_DIA_MS = 24L * 60 * 60 * 1000
 
 /**
  * Cuántos devolvería `GET /api/events/card-payment-candidates` — mismo filtro (egreso, cuenta

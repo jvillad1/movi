@@ -103,9 +103,10 @@ class ChecklistEnInicioTest {
 
         composeRule.onNodeWithText("Te faltan 2 de 3 pagos de este período", useUnmergedTree = true)
             .assertIsDisplayed()
-        // Y dice dónde está lo que no muestra.
+        // Y dice dónde está lo que no muestra — sin decir que fue el dueño quien lo marcó: fue
+        // Movi quien emparejó el arriendo solo (el checklist es de solo lectura desde #363).
         composeRule.onNodeWithText(
-            "Ya marcaste 1. El checklist completo está en «Ver todos».",
+            "Ya salió 1. El checklist completo está en «Ver todos».",
             useUnmergedTree = true,
         ).assertIsDisplayed()
     }
@@ -148,8 +149,37 @@ class ChecklistEnInicioTest {
             ),
         )
 
-        composeRule.onNodeWithText("Marcaste el único pago de este período", useUnmergedTree = true)
+        composeRule.onNodeWithText("Ya salió el único pago de este período", useUnmergedTree = true)
             .assertIsDisplayed()
         composeRule.onNodeWithText("Ver todos", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /** El pie en plural: dos o más pagos ya salieron y siguen sin ocupar lugar en el resumen. */
+    @Test
+    fun `el pie dice en plural cuando ya salio mas de un pago`() {
+        montar(
+            DashboardData(
+                upcoming = listOf(
+                    pago(regla("rr_gym", "Gimnasio", 139_900, 20), "2026-09-20", 8),
+                    pago(regla("rr_cel", "Celular", 53_000, 10), "2026-10-10", 23),
+                    pago(regla("rr_arriendo", "Arriendo", 1_850_000, 5), "2026-10-05", 23),
+                ),
+                ocurrencias = listOf(
+                    OccurrenceState(
+                        ruleId = "rr_cel", period = "2026-09", dueDate = "2026-09-10", occurred = true,
+                    ),
+                    OccurrenceState(
+                        ruleId = "rr_arriendo", period = "2026-09", dueDate = "2026-09-05", occurred = true,
+                    ),
+                ),
+                ajustesDePeriodo = mesDeCalendario,
+                periodoActual = septiembre,
+            ),
+        )
+
+        composeRule.onNodeWithText(
+            "Ya salieron 2. El checklist completo está en «Ver todos».",
+            useUnmergedTree = true,
+        ).assertIsDisplayed()
     }
 }

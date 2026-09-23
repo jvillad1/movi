@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
@@ -77,6 +78,19 @@ fun Route.categoryRoutes() {
         // calendario. Con corte 1 —el default— da exactamente lo mismo que antes.
         val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
         call.respond(dbQuery { categoryUsage(uid, monthStart, monthEnd) })
+    }
+
+    /**
+     * Ola A: **la memoria de nombres, para el cliente.** Hasta acá [memoriaDe] solo la usaba
+     * este mismo server, adentro de la misma JVM, al clasificar un SMS entrante
+     * (`server/sms/MemoriaDelDueno.kt`). Esta ruta la expone tal cual —una entrada por huella,
+     * con cuántas veces respalda esa categoría— para que el cliente pueda ofrecer lo mismo
+     * («la anotaste 4 veces como Hija») al escribir un movimiento a mano, sin reimplementar la
+     * lógica de huellas de `:core` del lado de la app.
+     */
+    get("/api/categorias/memoria") {
+        val uid = call.userId()
+        call.respond(dbQuery { memoriaDe(uid).entradas() })
     }
 
     /**

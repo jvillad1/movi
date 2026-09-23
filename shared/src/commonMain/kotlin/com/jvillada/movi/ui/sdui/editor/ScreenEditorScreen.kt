@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.ScreenAction
 import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenSection
@@ -42,6 +43,7 @@ import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.dashboard.HERO_BALANCE_TITLE
+import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -190,6 +192,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                 saved = true
                 // La versión que teníamos cacheada quedó obsoleta -- forzar refetch al volver.
                 ScreenDefCache.dashboard = null
+                InstantaneaDelInicio.delAparato.olvidarDefinicion(SessionManager.userId)
             } catch (e: Throwable) {
                 error = e.toScreenSaveMessage()
             }
@@ -207,6 +210,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                 val def = Repositories.wallets.restoreScreen(SLUG)
                 sections = def.sections
                 ScreenDefCache.dashboard = null
+                InstantaneaDelInicio.delAparato.olvidarDefinicion(SessionManager.userId)
             } catch (e: Throwable) {
                 error = e.toScreenSaveMessage()
             }

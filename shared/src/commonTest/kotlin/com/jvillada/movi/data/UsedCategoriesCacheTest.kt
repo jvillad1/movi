@@ -121,6 +121,37 @@ class UsedCategoriesCacheTest {
         assertFalse(TRANSFER_CATEGORY in UsedCategoriesCache.categories)
     }
 
+    // ── Ola A: cuántas veces se usó cada categoría en los últimos 60 días ─────────────
+
+    @Test
+    fun `recordFromServer guarda los usos recientes por nombre`() {
+        UsedCategoriesCache.recordFromServer(
+            listOf(
+                UsedCategory("Carro", listOf(TransactionType.EXPENSE), usosRecientes = 5),
+                UsedCategory("Nómina", listOf(TransactionType.INCOME), usosRecientes = 2),
+            ),
+        )
+
+        assertEquals(5, UsedCategoriesCache.usosRecientes["Carro"])
+        assertEquals(2, UsedCategoriesCache.usosRecientes["Nómina"])
+    }
+
+    @Test
+    fun `los usos recientes se reemplazan enteros, no se acumulan`() {
+        UsedCategoriesCache.recordFromServer(listOf(UsedCategory("Carro", usosRecientes = 5)))
+        UsedCategoriesCache.recordFromServer(listOf(UsedCategory("Carro", usosRecientes = 1)))
+
+        assertEquals(1, UsedCategoriesCache.usosRecientes["Carro"])
+    }
+
+    @Test
+    fun `clear tambien borra los usos recientes`() {
+        UsedCategoriesCache.recordFromServer(listOf(UsedCategory("Carro", usosRecientes = 5)))
+        UsedCategoriesCache.clear()
+
+        assertTrue(UsedCategoriesCache.usosRecientes.isEmpty())
+    }
+
     // ── Ola 10: el espejo de lo que hace el server al renombrar/unificar ──────
 
     @Test

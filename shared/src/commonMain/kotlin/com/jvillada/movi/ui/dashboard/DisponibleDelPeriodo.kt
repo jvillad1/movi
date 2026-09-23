@@ -9,6 +9,7 @@ import kotlinx.datetime.daysUntil
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.serialization.Serializable
 
 /**
  * # «Disponible»: cuánto queda para gastar en el período, esta semana y hoy
@@ -55,7 +56,10 @@ import kotlinx.datetime.plus
 /**
  * Lo que el server manda de «Tu plata» para el Disponible (ver `DashboardSummary`): lo que había
  * al empezar el período, lo que entró y lo que se guardó afuera. Todo en pesos.
+ *
+ * `@Serializable` porque viaja dentro de la instantánea del Inicio (ver `InstantaneaDelInicio`).
  */
+@Serializable
 data class PlataDelDisponible(
     val saldoAlInicio: Long,
     val entradas: Long,

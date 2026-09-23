@@ -5,6 +5,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.platform.Huella
+import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import java.lang.reflect.Method
 import org.robolectric.TestLifecycleApplication
 
@@ -69,6 +70,10 @@ class AppDePrueba : Application(), TestLifecycleApplication {
     override fun beforeTest(method: Method) {
         SessionManager.clear()
         Repositories.sustitutoDePrueba = null
+        // Andamio también, y DESPUÉS del logout de arriba: ese logout es el que vacía la
+        // instantánea del Inicio que una prueba haya dejado en el almacén de mentira. Soltarlo antes
+        // dejaría esa limpieza hablándole al `Settings` real, que en Robolectric no guarda nada.
+        InstantaneaDelInicio.sustitutoDePrueba = null
         // Mismo caso que el de arriba, para el lector de huellas de mentira: es andamio de la
         // suite, no estado del usuario, y un olvido ajeno no tiene por qué cobrarse en la clase
         // siguiente — ahí la pantalla de entrada creería estar en un teléfono con lector.

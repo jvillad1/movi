@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.RecuerdoDeCategoria
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
@@ -1982,6 +1983,9 @@ class LocalRepository(
 
     /** La lista con uso real la arma el server sobre TODA la historia — acá no hay nada que espejar. */
     override suspend fun getCategories(): List<CategoryUsage> = remote.getCategories()
+
+    /** Ola A: la memoria se arma sobre TODA la historia del dueño — sin espejo local, igual que [getCategories]. */
+    override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> = remote.getMemoriaDeCategorias()
 
     /**
      * Renombrar contra el server y **espejar la reescritura en SQLDelight** — mismo patrón que

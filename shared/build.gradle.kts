@@ -8,6 +8,10 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    // La instantánea del Inicio (`ui/dashboard/InstantaneaDelInicio.kt`) guarda `DashboardData` en
+    // el aparato como JSON, y eso pide `@Serializable` en clases de este módulo. Hasta acá :shared
+    // solo usaba los serializadores que ya venían compilados de :core.
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {

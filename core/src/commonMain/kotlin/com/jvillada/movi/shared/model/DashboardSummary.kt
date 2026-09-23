@@ -115,6 +115,16 @@ data class DashboardSummary(
      * `null` = server anterior a este campo. Un APK viejo lo ignora (`ignoreUnknownKeys`).
      */
     val patrimonio: Patrimonio? = null,
+    /**
+     * Ola A: **la cuenta con más gastos en los últimos 30 días**, para que «Agregar» arranque ahí
+     * en vez de la primera por orden alfabético. El dueño tiene 71 gastos en 60 días en
+     * «Bancolombia Ahorros» y 0 en «AMEX 9208», y hoy el campo arranca en AMEX porque es la
+     * primera de la lista — no la que usa. Ver [cuentaMasUsada] en `DashboardRoutes.kt`.
+     *
+     * `null` = sin gastos en la ventana (cuenta nueva) o server anterior a este campo; un APK
+     * viejo lo ignora (`ignoreUnknownKeys`) y un APK nuevo sin este dato cae al orden de siempre.
+     */
+    val cuentaMasUsada: String? = null,
 )
 
 /**
@@ -141,4 +151,11 @@ data class UsedCategory(
     val hidden: Boolean = false,
     /** Tipo fijado a mano: `"EXPENSE"`, `"INCOME"` o `"BOTH"`. Manda sobre catálogo y uso. */
     val pinnedType: String? = null,
+    /**
+     * Ola A: movimientos **no anulados** con esta categoría en los últimos 60 días, de
+     * cualquier tipo. Una fila que existe solo por una preferencia ([hidden]/[pinnedType], sin
+     * movimientos) queda en 0 — es el caso normal de esconder una categoría del catálogo que
+     * nunca se usó.
+     */
+    val usosRecientes: Int = 0,
 )

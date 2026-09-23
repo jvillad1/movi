@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -39,7 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.LastAccountStore
+import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
@@ -75,8 +78,22 @@ import com.jvillada.movi.ui.fecha.timestampParaFecha
  */
 private const val FRACCION_VALOR_FILA = 0.55f
 
+/**
+ * El alto MÍNIMO de la fila de chips de categorías frecuentes (ver [CategoriaChipsRow]): a letra
+ * normal la fila mide esto y nada más, así que no se mueve bajo el dedo; con la escala de letra de
+ * Movi agrandada crece lo justo para que el chip entre entero (ver el porqué en
+ * [CategoriaChipsRow]). No hay un token de
+ * `Movi.*` para alturas de fila (`Tokens.kt` solo tiene `espacios`, `formas`, `textos` y
+ * `colores`): es un tamaño de componente, no un espacio ni una forma, así que queda como literal
+ * — mismo criterio que `ALTO_BARRA_INFERIOR` en los tests de esta hoja.
+ */
+private val ALTO_FILA_DE_CHIPS = 40.dp
+
 /** La X del encabezado de un sub-picker. Ver el porqué en [PickerHeader]. */
 internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
+
+/** El campo de texto del sub-picker «Nota» — para encontrarlo en una prueba (Task 5). */
+internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
 
 /**
  * **En qué moneda está la plata de esta cuenta** — la del movimiento que se anote contra ella.
@@ -152,6 +169,13 @@ internal fun fechaDelPreset(iso: String?): LocalDate? {
 }
 
 /**
+ * **La sugerencia de categoría por nombre (Task 5) se aplica al confirmar la nota con «Guardar
+ * nota», no con cada tecla.** La nota se edita en su propio sub-picker, que tapa la fila
+ * «Categoría»: una sugerencia por tecla cambiaría la categoría detrás de una pantalla que el dueño
+ * no está viendo, varias veces por palabra, sin que pueda leer ninguna. Al confirmar vuelve al
+ * formulario y ve de una vez la categoría que quedó y la línea «Movi la reconoce: …» que dice
+ * por qué. Ver el `LaunchedEffect(note, …)` de adentro.
+ *
  * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
  * @param onSaved se guardó algo. Distinto de [onDismiss] a propósito: la pantalla de atrás sigue
  *   viva detrás de esta hoja (es una modal, ver `opensAsOverlay`), así que además de cerrar hay
@@ -217,9 +241,51 @@ fun QuickAddScreen(
                     if (presetEsIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
                     UsedCategoriesCache.used,
                     UsedCategoriesCache.prefs,
+                    UsedCategoriesCache.usosRecientes,
                 ),
         )
     }
+
+    /**
+     * Ola A — **el dueño eligió esta categoría con el dedo**, no la puso la app. Lo llenan dos
+     * caminos: tocar un chip de frecuentes (ver [pickCategoriaFrecuente]) y un [presetCategoria]
+     * válido, que viene de un recurrente que el dueño ya categorizó — es tan «a mano» como tocar
+     * un chip, solo que lo hizo en otra pantalla.
+     *
+     * Existe para distinguir «esto lo eligió él» de «esto lo puso la app» antes de pisarlo con
+     * una sugerencia por nombre (Task 5). Se baja solo cuando la reconciliación Gasto↔Ingreso
+     * reemplaza la categoría por su cuenta — ver ese `LaunchedEffect`.
+     */
+    var categoriaElegidaAMano by remember {
+        mutableStateOf(presetCategoria?.trim()?.let { it.isNotEmpty() && !isReservedCategory(it) } == true)
+    }
+
+    /**
+     * Task 5 — **la sugerencia hoy vigente** (para la línea «Movi la reconoce: …» bajo la fila
+     * «Categoría»), **la categoría que había antes de que esa sugerencia la pisara** —para poder
+     * volver a ella si la sugerencia desaparece porque la NOTA cambió— y **con qué tipo (Gasto o
+     * Ingreso) se aplicó esa sugerencia**. `null` en los tres = no hay ninguna sugerencia aplicada
+     * ahora mismo, y los tres se mueven juntos: no hay combinación válida con solo uno o dos en
+     * `null`.
+     *
+     * **Fix round 2 — por qué hace falta el tercero.** «Volver a lo de antes» solo es correcto
+     * cuando lo que hizo desaparecer la sugerencia fue la NOTA (la borró, la cambió) en la MISMA
+     * pestaña — ahí «lo de antes» es la categoría de esta misma pestaña. Si lo que cambió fue la
+     * PESTAÑA (Gasto→Ingreso), «lo de antes» es la categoría de la OTRA pestaña, y ponerla acá
+     * cuela una categoría que puede no servir para el tipo actual — el caso real: «Fútbol»
+     * (propia, usada solo en gastos) sugerida en Gasto, sube a Ingreso, dejó de sugerirse por el
+     * filtro de tipo, y sin este dato se restauraba «Comida» (la que había ANTES en Gasto) sobre
+     * un ingreso. Comparar [tipoDeLaSugerenciaVigente] contra el tipo de la pestaña actual es lo
+     * que distingue los dos casos — ver el `LaunchedEffect` de acá abajo.
+     *
+     * Se limpian los tres juntos, en los tres lugares donde algo que no es "la nota en esta misma
+     * pestaña" decide la categoría: [pickCategoriaFrecuente], el campo de la fila «Categoría» (más
+     * abajo) y la reconciliación de tipo cuando pisa la categoría por su cuenta.
+     */
+    var sugerenciaVigente by remember { mutableStateOf<com.jvillada.movi.shared.model.RecuerdoDeCategoria?>(null) }
+    var categoriaAntesDeLaSugerencia by remember { mutableStateOf<String?>(null) }
+    var tipoDeLaSugerenciaVigente by remember { mutableStateOf<TransactionType?>(null) }
+
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
     // si no existiera (borrada entre medio), el efecto de abajo cae en la última usada y, si esa
@@ -426,6 +492,7 @@ fun QuickAddScreen(
             cuentas = cuentasPara(lista, uso).principales,
             contexto = presetAccountId,
             ultima = LastAccountStore.lastAccountId,
+            masUsada = CuentaMasUsadaCache.id,
         )
         selectedAccountId = elegida.id
         origenCuenta = elegida.origen
@@ -468,6 +535,10 @@ fun QuickAddScreen(
     // que cargaran se quedaría con lo que el dueño ya cambió.
     val categoryPrefs = UsedCategoriesCache.prefs
     val usedCategories = UsedCategoriesCache.used
+    // Ola A: los usos de los últimos 60 días, para las mismas dos cosas que [categoryPrefs] —
+    // llenar los chips de frecuentes y decidir el valor por defecto — y leídos igual, como estado,
+    // por si el Inicio todavía no había cargado cuando se abrió esta hoja.
+    val usosRecientes = UsedCategoriesCache.usosRecientes
 
     LaunchedEffect(pickers.typeIndex, categoryPrefs) {
         // Con categoría libre (F35) ya no hay una lista fija de la que "salirse" al cambiar de
@@ -496,8 +567,125 @@ fun QuickAddScreen(
         if (pickers.typeIndex > 1) return@LaunchedEffect
         val newType = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
         if (!categoriaSirveParaTipo(category, newType, usedCategories, categoryPrefs)) {
-            category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs)
+            category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs, usosRecientes)
+            // Task 5: esto acaba de pisar por su cuenta lo que hubiera puesto una sugerencia —
+            // seguir mostrando «Movi la reconoce: …» sobre una categoría que ya no es la suya
+            // mentiría, y "volver a lo de antes" tampoco tendría sentido (lo de antes era de la
+            // OTRA pestaña). Se limpia el estado en vez de arrastrarlo.
+            sugerenciaVigente = null
+            categoriaAntesDeLaSugerencia = null
+            tipoDeLaSugerenciaVigente = null
+            // Revisión final: y la categoría que quedó ya no es la que eligió el dueño — la puso
+            // la app. Si la marca de «a mano» sobreviviera, la pestaña nueva nunca aceptaría una
+            // sugerencia por nombre: elegir «Transporte» en Gasto, pasar a Ingreso (queda
+            // «Salario») y escribir el nombre de un inquilino no sugería nada. Solo se baja ACÁ,
+            // cuando la reconciliación pisó la categoría: si la elección a mano sirve para el tipo
+            // nuevo y se conservó, sigue siendo de él y sigue sin pisarse.
+            categoriaElegidaAMano = false
         }
+    }
+
+    // Task 5 — la primera vez que se abre «Agregar» en esta sesión: ver el KDoc de
+    // [MemoriaDeCategoriasCache.cargarSiHaceFalta]. `Unit` como key: no se repite mientras la
+    // hoja siga compuesta, y el propio caché es idempotente si dos hojas llegaran a competir.
+    LaunchedEffect(Unit) {
+        MemoriaDeCategoriasCache.cargarSiHaceFalta()
+    }
+
+    /**
+     * Task 5 — **escribir el nombre sugiere la categoría.** Corre en cada cambio de [note] (la
+     * nota solo cambia en este estado cuando el dueño cierra el sub-picker con «Guardar nota» —
+     * ver `NoteEditor` — así que "escribir" acá es "cada nota distinta que el dueño confirmó"),
+     * y también cuando llega la memoria del server o las preferencias de categoría, por si
+     * cualquiera de las dos aparece DESPUÉS de que esta hoja ya se compuso con una nota puesta
+     * (un preset, o el dueño escribió antes de que la memoria terminara de cargar).
+     *
+     * Las escondidas y las del otro tipo se filtran ACÁ, con [seOfreceParaTipo] — el mismo
+     * criterio que ya usan los chips de frecuentes y el panel de sugerencias del campo (ver su
+     * KDoc en `CategoryField.kt`), y NO [categoriaSirveParaTipo]: esa es permisiva con una
+     * categoría propia sin tipo fijado, y una memoria de «Comida» (solo gasto, sin nada fijado)
+     * se seguiría sugiriendo al anotar un ingreso. [sugerenciaPorNombre] es pura y solo sabe
+     * filtrar reservadas (ver su KDoc) — por eso ese filtro no se repite acá.
+     */
+    LaunchedEffect(note, MemoriaDeCategoriasCache.recuerdos, categoryPrefs, pickers.typeIndex) {
+        if (pickers.typeIndex > 1) return@LaunchedEffect // Traspaso y Cuota no tienen categoría.
+        val tipoActual = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+
+        // Fix round 2 — **por qué esto va primero, y separado.** "Volver a lo de antes" cuando
+        // una sugerencia desaparece solo es correcto si lo que la hizo desaparecer fue la NOTA,
+        // en la MISMA pestaña donde se aplicó — ahí [categoriaAntesDeLaSugerencia] es la
+        // categoría de ESTA pestaña. Si en cambio cambió la PESTAÑA desde que se aplicó (Gasto→
+        // Ingreso), [categoriaAntesDeLaSugerencia] es la categoría de la OTRA pestaña, y ponerla
+        // acá cuela una categoría que puede no servir para el tipo actual — el caso real:
+        // «Fútbol» (propia, usada solo en gastos) sugerida en Gasto, sube a Ingreso con la nota
+        // intacta, [seOfreceParaTipo] dice que ya no sirve, y sin este chequeo se restauraba
+        // «Comida» (lo que había ANTES en Gasto) sobre un ingreso. Por eso, apenas la pestaña
+        // cambia respecto de la que tenía la sugerencia vigente, esa sugerencia se da de baja ACÁ
+        // —con el valor por defecto de la pestaña nueva, lo mismo que ya hace la reconciliación de
+        // tipo para el resto de los casos— y el resto de la función corre limpio, como si no
+        // hubiera habido ninguna sugerencia antes: si el mismo recuerdo también sirve para el tipo
+        // nuevo, se vuelve a aplicar más abajo con un «antes» que sí es de esta pestaña.
+        if (sugerenciaVigente != null && tipoDeLaSugerenciaVigente != tipoActual) {
+            category = categoriaPorDefectoPara(tipoActual, usedCategories, categoryPrefs, usosRecientes)
+            sugerenciaVigente = null
+            categoriaAntesDeLaSugerencia = null
+            tipoDeLaSugerenciaVigente = null
+        }
+
+        val recuerdosVisibles = MemoriaDeCategoriasCache.recuerdos.filter { r ->
+            seOfreceParaTipo(r.categoria, tipoActual, usedCategories[r.categoria].orEmpty(), categoryPrefs)
+        }
+        val sugerencia = sugerenciaPorNombre(note, recuerdosVisibles)
+        if (sugerencia == null) {
+            // La sugerencia desapareció porque cambió la NOTA (el caso de la pestaña ya se
+            // resolvió arriba) — pero solo si Movi fue quien la puso. Si el dueño ya la había
+            // elegido a mano, [sugerenciaVigente] ya está en `null` (ver [pickCategoriaFrecuente]
+            // y el `onValueChange` del campo de categoría) y acá no hay nada que deshacer.
+            if (sugerenciaVigente != null) {
+                categoriaAntesDeLaSugerencia?.let { category = it }
+                sugerenciaVigente = null
+                categoriaAntesDeLaSugerencia = null
+                tipoDeLaSugerenciaVigente = null
+            }
+            return@LaunchedEffect
+        }
+        if (categoriaElegidaAMano) return@LaunchedEffect // el dueño ya eligió: no se pisa.
+        if (sugerencia == sugerenciaVigente) return@LaunchedEffect // nada cambió.
+        // Guarda el valor de ANTES la primera vez, no en cada re-sugerencia: si la nota pasa de
+        // «Mora» a «Mora S» y las dos sugieren Fútbol, lo que había antes de la PRIMERA sigue
+        // siendo lo correcto a donde volver si el dueño termina borrando todo. Con el reseteo de
+        // arriba, "antes" nunca puede ser un valor de otra pestaña.
+        if (categoriaAntesDeLaSugerencia == null) categoriaAntesDeLaSugerencia = category
+        category = sugerencia.categoria
+        sugerenciaVigente = sugerencia
+        tipoDeLaSugerenciaVigente = tipoActual
+    }
+
+    /**
+     * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña — ver
+     * [categoriasFrecuentes]. Vacía sin datos de uso, que es cuando la fila de chips no ocupa
+     * lugar (ver [EditorBody]).
+     */
+    val categoriasFrecuentesDelTipo = if (pickers.typeIndex > 1) {
+        emptyList()
+    } else {
+        categoriasFrecuentes(
+            tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+            usadas = usedCategories,
+            prefs = categoryPrefs,
+            usos = usosRecientes,
+        )
+    }
+
+    /** Tocar un chip: pone la categoría Y la marca como elegida a mano (ver [categoriaElegidaAMano]). */
+    fun pickCategoriaFrecuente(nombre: String) {
+        category = nombre
+        categoriaElegidaAMano = true
+        // Task 5: eligió con el dedo — lo que Movi venía sugiriendo (o podía llegar a sugerir)
+        // ya no tiene nada que pisar ni a qué volver.
+        sugerenciaVigente = null
+        categoriaAntesDeLaSugerencia = null
+        tipoDeLaSugerenciaVigente = null
     }
 
     fun onKey(key: String) {
@@ -599,6 +787,14 @@ fun QuickAddScreen(
                 // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
                 // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
                 LastAccountStore.recordAccount(event.accountId)
+                // Task 5 (fix round 1): la memoria de categorías que trajo esta hoja puede quedar
+                // vieja apenas se guarda este movimiento — se invalida, SIN pedir nada, para que
+                // la próxima hoja de «Agregar» de esta sesión vuelva a preguntar. Síncrono y no un
+                // `coroutine.launch { … }`: eso relanzaba la petición en el scope de ESTA hoja, que
+                // `onSaved()` —dos líneas más abajo— cierra en el mismo instante; la petición se
+                // cancelaba a mitad de camino y ninguna sugerencia posterior alcanzaba a llegar en
+                // toda la sesión. Ver el KDoc de `MemoriaDeCategoriasCache` para la historia entera.
+                MemoriaDeCategoriasCache.invalidar()
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
@@ -856,7 +1052,30 @@ fun QuickAddScreen(
                                 // reventaba el insert del server con un 500, y en el teléfono
                                 // quedaba rebotando en el sync cada 30 s sin decir nada. Ver
                                 // [rechazoDeLosTextos], que es la misma regla del otro lado.
-                                onValueChange = { category = it.take(MAX_CATEGORIA_LENGTH) },
+                                onValueChange = {
+                                    val recortado = it.take(MAX_CATEGORIA_LENGTH)
+                                    // Fix round 1: CategoryField llama a esto en cada cambio de
+                                    // `TextFieldValue`, y eso incluye un cambio de SELECCIÓN con
+                                    // el mismo texto — al abrir este sub-picker, `CategoryField`
+                                    // selecciona todo el texto al ganar el foco (Ola 2 #3b), lo
+                                    // que ya disparaba este lambda con `it == category` y marcaba
+                                    // «elegida a mano» solo por haber ABIERTO la fila, sin que el
+                                    // dueño tocara nada. Comparar antes de asignar es lo que
+                                    // distingue «tipeó o tocó una sugerencia» de «se paró acá».
+                                    if (recortado != category) {
+                                        category = recortado
+                                        // Task 5: escribir o tocar una sugerencia EN ESTE CAMPO es
+                                        // tan "a mano" como tocar un chip — ver
+                                        // [categoriaElegidaAMano]. No entra acá lo que la propia
+                                        // sugerencia por nombre o la reconciliación de tipo
+                                        // escriben: esas asignan `category` directo, sin pasar por
+                                        // este lambda.
+                                        categoriaElegidaAMano = true
+                                        sugerenciaVigente = null
+                                        categoriaAntesDeLaSugerencia = null
+                                        tipoDeLaSugerenciaVigente = null
+                                    }
+                                },
                                 type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                                 usedCategories = usedCategories,
                                 prefs = categoryPrefs,
@@ -946,6 +1165,12 @@ fun QuickAddScreen(
                             moneda = monedaDeLaCuenta(accounts, selectedAccountId),
                             onKey = ::onKey,
                             category = category,
+                            // Task 5: solo se muestra la sugerencia que Movi puso, no cualquier
+                            // "Movi la reconoce" persistente — desaparece apenas el dueño elige a
+                            // mano ([pickCategoriaFrecuente] y el campo ya ponen esto en `null`).
+                            categoriaSugeridaHint = sugerenciaVigente?.let { "Movi la reconoce: ${it.nombre}" },
+                            categoriasFrecuentes = categoriasFrecuentesDelTipo,
+                            onPickCategoriaFrecuente = ::pickCategoriaFrecuente,
                             // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
                             // falla y la hoja se abrió con `presetAccountId`, `selectedAccount` es
                             // null —la lista está vacía— así que esto dice «Seleccionar cuenta»,
@@ -1057,6 +1282,22 @@ private fun EditorBody(
     moneda: String,
     onKey: (String) -> Unit,
     category: String,
+    /**
+     * Task 5: `"Movi la reconoce: <nombre>"` cuando la categoría de arriba la puso una sugerencia
+     * automática — `null` el resto del tiempo, incluido mientras el dueño elige a mano. Se pasa
+     * como `sub` de la fila «Categoría» (ver [CardRow]), con el mismo estilo que cualquier otro
+     * texto de apoyo de esta hoja.
+     */
+    categoriaSugeridaHint: String? = null,
+    /**
+     * Ola A: hasta 6 categorías, las que más se usan para este tipo — ver [categoriasFrecuentes].
+     * Vacía = la fila de chips no se dibuja y no ocupa lugar (a diferencia de la fila «Cuenta»,
+     * que sí reserva su alto: acá no hace falta, porque esta fila no aparece y desaparece por su
+     * cuenta en la misma sesión — el tipo elegido no cambia salvo que el dueño toque el segmento
+     * de arriba, y ESE toque ya mueve todo el formulario).
+     */
+    categoriasFrecuentes: List<String> = emptyList(),
+    onPickCategoriaFrecuente: (String) -> Unit = {},
     walletLabel: String,
     walletHint: String? = null,
     /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
@@ -1171,9 +1412,27 @@ private fun EditorBody(
             // Ver el KDoc de [rightMaxFraction] en CardRow: una categoría propia larga
             // («Mantenimiento del carro») se llevaba la fila entera y partía la etiqueta.
             rightMaxFraction = FRACCION_VALOR_FILA,
+            // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
+            // automática. `null` no dibuja nada — el aspecto de siempre para todo lo demás.
+            sub = categoriaSugeridaHint,
+            // Fix round 1: un nombre largo («Panadería y Pastelería de la 33») no puede envolver
+            // y empujar «Cuenta» hacia abajo — un renglón, con «…» si no entra.
+            subMaxLines = 1,
             showChevron = true,
             onClick = onPickCategory,
         )
+        // Ola A: los chips de frecuentes, entre «Categoría» y «Cuenta» — justo debajo de la
+        // categoría que resumen, y antes de la fila que decide dónde sale la plata. Vacía = no
+        // se dibuja nada y `CardRow` de arriba sigue con su hairline pegado al de «Cuenta», que
+        // es exactamente el aspecto de hoy para quien no tiene ningún dato de uso todavía.
+        if (categoriasFrecuentes.isNotEmpty()) {
+            CategoriaChipsRow(
+                categorias = categoriasFrecuentes,
+                categoriaElegida = category,
+                onPick = onPickCategoriaFrecuente,
+            )
+            Hairline()
+        }
         CardRow(
             left = {
                 Text("Cuenta", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
@@ -1377,6 +1636,76 @@ private fun EditorBody(
                     color = Movi.colores.textoMedio,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Ola A: hasta 6 chips con las categorías que más se usan para este tipo — ver
+ * [categoriasFrecuentes], que es la que decide cuáles y en qué orden. Tocar uno la elige sin
+ * abrir el sub-picker de «Categoría»; la elegida se ve activa.
+ *
+ * Mismo lenguaje visual que [SheetChip] de `CreateRecurringRuleSheet.kt` (fondo tenue de
+ * `Movi.colores.marca` cuando está activo, borde cuando no) y no el de los chips de filtro de
+ * Movimientos: esta fila vive DENTRO de una `MinCard`, cuyo fondo ya es `Movi.colores.tarjeta` —
+ * un chip inactivo pintado con ese mismo color sería invisible contra su propio fondo.
+ *
+ * **Alto mínimo, no fijo, y sin relleno vertical en la fila.** La versión anterior era
+ * `.height(40.dp)` con `padding(vertical = 8.dp)` en la fila Y en cada chip: quedaban 24 dp para
+ * el chip, 8 dp para el texto, y una línea de 16 sp de `apoyo` salía **recortada a la mitad a
+ * letra normal** — el nombre de la categoría se leía cortado por arriba y por abajo. Ahora el
+ * único relleno vertical es el del chip (`corto`), el chip mide ~32 dp y entra con aire en los
+ * 40 dp de [ALTO_FILA_DE_CHIPS]; si el dueño agranda la escala de letra de Movi, la fila crece
+ * lo justo para que el texto se lea entero, que es preferible a un chip ilegible. Sigue siendo
+ * una sola fila (`maxLines = 1` en cada chip) con desplazamiento horizontal propio: no empuja el
+ * resto del formulario, la misma disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA
+ * NO ENTRA» más arriba). Lo mide `HojaAgregarChipsSeLeenEnterosTest`.
+ */
+@Composable
+private fun CategoriaChipsRow(
+    categorias: List<String>,
+    categoriaElegida: String,
+    onPick: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = ALTO_FILA_DE_CHIPS)
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        // "Entre elementos hermanos apretados: chips" es literalmente lo que dice el KDoc de
+        // este token en Tokens.kt — este es el caso para el que existe.
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+    ) {
+        categorias.forEach { nombre ->
+            val activa = nombre == categoriaElegida
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(Movi.formas.pleno))
+                    .background(if (activa) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
+                    .then(
+                        if (!activa) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
+                        else Modifier,
+                    )
+                    .clickable { onPick(nombre) }
+                    // Horizontal: el 14dp original quedaba justo entre `medio` (12dp) y `amplio`
+                    // (16dp) — misma distancia a los dos. Se eligió `medio`, "el respiro de
+                    // adentro de una fila", que es justo lo que es esto: el respiro de adentro de
+                    // una píldora angosta (`amplio` es el relleno de una tarjeta entera, de más
+                    // aire del que necesita un chip). Vertical: `corto` (8dp) es el más cercano al
+                    // 7dp original (a 1dp; `minimo`, 4dp, quedaba a 3dp).
+                    .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = nombre,
+                    style = Movi.textos.apoyo,
+                    fontWeight = if (activa) FontWeight.Medium else FontWeight.Normal,
+                    color = if (activa) Movi.colores.marca else Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -1635,6 +1964,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 // `fillMaxWidth`; esta era la única que se lo había saltado.
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag(TAG_CAMPO_DE_NOTA)
                     .focusRequester(noteFocusRequester)
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                     // [esAtajoDeSeleccionarTodo]. Es lo mismo que hace la línea de abajo al ganar

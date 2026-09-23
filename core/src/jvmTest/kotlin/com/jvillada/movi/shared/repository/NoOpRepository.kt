@@ -226,6 +226,7 @@ open class NoOpRepository(
         com.jvillada.movi.shared.model.CategoryRewriteResult(name = into)
     override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?) =
         com.jvillada.movi.shared.model.CategoryUsage(name = name, hidden = hidden, pinnedType = pinnedType)
+    override suspend fun getMemoriaDeCategorias() = emptyList<com.jvillada.movi.shared.model.RecuerdoDeCategoria>()
     override suspend fun getRecurringRules() = emptyList<RecurringRule>()
     override suspend fun createRecurringRule(rule: RecurringRule) = rule
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule

@@ -443,8 +443,8 @@ fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
     val pagos = if (total == 1) "pago" else "pagos"
     return when {
         total == 0 -> "Este período no tiene pagos anotados"
-        faltan == 0 && total == 1 -> "Marcaste el único pago de este período"
-        faltan == 0 -> "Marcaste los $total $pagos de este período"
+        faltan == 0 && total == 1 -> "Ya salió el único pago de este período"
+        faltan == 0 -> "Ya salieron los $total pagos de este período"
         else -> "Te ${if (faltan == 1) "falta" else "faltan"} $faltan de $total $pagos de este período"
     }
 }
@@ -457,8 +457,31 @@ fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
 fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
     val (pagados, total) = avanceDelChecklist(checklist)
     if (pagados == 0 || pagados == total) return null
-    return "Ya marcaste $pagados. El checklist completo está en «Ver todos»."
+    return if (pagados == 1) "Ya salió 1. El checklist completo está en «Ver todos»."
+    else "Ya salieron $pagados. El checklist completo está en «Ver todos»."
 }
+
+/**
+ * El título del grupo de lo ya tildado en el checklist completo: «Listos · X de Y».
+ *
+ * **Por qué no «Ya salieron», y por qué X de Y cuenta TODO el checklist.** El grupo lista
+ * [yaMarcados] — pagos E ingresos —, pero el título decía «Ya salieron» y contaba con
+ * [avanceDelChecklist], que deja los ingresos afuera: con tres pagos (dos tildados) y el sueldo
+ * ya recibido, el grupo mostraba tres filas bajo «Ya salieron · 2 de 3», y una de ellas era plata
+ * que ENTRÓ. «Listos» no tiene dirección, y X de Y cuenta exactamente lo que el grupo lista sobre
+ * el total del checklist —el mismo total que el encabezado de la tarjeta—, así que el número se
+ * puede verificar mirando las filas.
+ *
+ * **Por qué no «Ya ocurrieron».** Ese nombre ya es de la sección de los sellos con «Deshacer»
+ * (`SeccionYaOcurrieron`), que en Movimientos → Recurrentes se pinta en la MISMA pantalla y con
+ * filas que se solapan con estas: dos listas con el mismo título y contenido distinto se leen como
+ * una sola que no cuadra.
+ *
+ * [lineaDeLoQueFalta] y [pieDeLoYaPagado] siguen hablando de «pagos» y contando sin ingresos a
+ * propósito: esas sí hablan solo de plata que sale.
+ */
+fun tituloDeLosListos(checklist: List<PagoDelPeriodo>): String =
+    "Listos · ${yaMarcados(checklist).size} de ${checklist.size}"
 
 // ── Qué debería revisar ──────────────────────────────────────────────────────
 
