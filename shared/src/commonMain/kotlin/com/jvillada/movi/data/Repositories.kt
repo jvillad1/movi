@@ -1,5 +1,6 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.repository.EnlacesCompartidosApi
 import com.jvillada.movi.shared.repository.WalletRepository
 
 object Repositories {
@@ -33,4 +34,11 @@ object Repositories {
 
     /** El repositorio que usa toda la app. Ver [sustitutoDePrueba]. */
     val wallets: WalletRepository get() = sustitutoDePrueba ?: real
+
+    /**
+     * Los enlaces de solo lectura para un tercero (pantalla «Compartir»). Aparte de [wallets] a
+     * propósito: no tienen espejo local ni mueven plata — ver el KDoc de [EnlacesCompartidosApi].
+     * Perezoso, igual que [real]: una prueba que nunca abre esa pantalla no construye el cliente.
+     */
+    val compartir: EnlacesCompartidosApi by lazy { EnlacesCompartidosApi(createHttpClient(), apiBaseUrl) }
 }

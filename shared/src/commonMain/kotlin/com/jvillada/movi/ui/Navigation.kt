@@ -100,6 +100,13 @@ sealed class Screen {
      */
     data object PrimerosPasos : Screen()
     /**
+     * **«Compartir»** — el enlace de solo lectura para un tercero (Caro, un asesor): crearlo,
+     * mandarlo y revocarlo. Se llega desde **Más** (la puerta que no depende de nadie, como
+     * [Destinos]) y desde el ícono de compartir del encabezado del **Inicio**, que es donde uno está
+     * mirando su plata cuando se le ocurre mostrársela a alguien.
+     */
+    data object Compartir : Screen()
+    /**
      * **«Cuadre de saldos»** — comparar de una sentada lo que Movi cree con lo que dice el banco,
      * y anotar la diferencia de cada cuenta como un ajuste.
      *
@@ -166,7 +173,9 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // Ola 14: la guía de arranque se abre desde Más y se vuelve a Más — no es un destino de
     // todos los días, es un sitio al que se va a mirar si quedó algo pendiente.
     // Ola 24: «Cuentas de otros» igual — se abre desde Más y se vuelve a Más.
-    Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Destinos -> NavTab.MORE
+    // «Compartir» también: se abre desde Más o desde el Inicio, y vive con las fichas de Más.
+    Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Destinos,
+    Screen.Compartir -> NavTab.MORE
     else -> null
 }
 

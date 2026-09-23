@@ -71,6 +71,10 @@ fun Application.configureRouting() {
         // descarga aparte —otra audiencia, un solo documento, cinco minutos—. Ver
         // JwtConfig.makeDownloadToken.
         documentContentRoutes()
+        // La página que abre un tercero con un enlace compartido. Pública porque quien la abre no
+        // tiene sesión de Movi; la protege el token, que viaja en el fragmento y en el cuerpo del
+        // POST, nunca en la ruta. Ver EnlaceCompartidoRoutes.kt.
+        paginaCompartidaRoutes()
 
         authenticate("jwt") {
             userRoutes()
@@ -94,6 +98,7 @@ fun Application.configureRouting() {
             aiRoutes()
             statementRoutes()
             documentRoutes()
+            enlaceCompartidoRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.
