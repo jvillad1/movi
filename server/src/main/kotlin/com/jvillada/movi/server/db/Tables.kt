@@ -537,6 +537,21 @@ object AiTurns : Table("ai_turns") {
     val fichasSalida  = long("fichas_salida")
     /** Hubo una foto adjunta. La foto NO se guarda. */
     val imagen    = bool("imagen")
+    /**
+     * **Las cifras que llegaron al dueño sin respaldo en sus datos**, tal como las escribió el
+     * modelo («$185.831 · 12 %»), o NULL si todas estaban respaldadas. Es lo que vuelve medible el
+     * «sin inventar»: `count(*) where cifras_sin_respaldo is not null`. Ver `responderSinInventar`.
+     *
+     * Nullable por la regla de siempre: la tabla ya existe en producción, y
+     * `createMissingTablesAndColumns` solo puede agregar sin riesgo una columna NULL.
+     */
+    val cifrasSinRespaldo = text("cifras_sin_respaldo").nullable()
+    /**
+     * Las cifras sin respaldo de la PRIMERA respuesta, las que dispararon el único reintento; NULL si
+     * no hubo reintento. Separada de la de arriba para poder contar las dos cosas: cuántas veces el
+     * modelo inventó, y cuántas el reintento no alcanzó a arreglarlo.
+     */
+    val cifrasCorregidas = text("cifras_corregidas").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_ai_turns_user", false, userId) }
 }
