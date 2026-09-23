@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
@@ -356,6 +357,14 @@ fun DashboardScreen(
                 title = "Inicio",
                 leading = HeaderLeading.Avatar(onClick = { onNavigate(Screen.Profile) }),
                 action = {
+                    // Compartir con un tercero, al lado de la campana: el Inicio es donde uno está
+                    // mirando su plata cuando se le ocurre mostrársela a alguien.
+                    Icon(
+                        Icons.Rounded.Share,
+                        contentDescription = "Compartir un resumen",
+                        tint = Movi.colores.texto,
+                        modifier = Modifier.size(22.dp).clickable { onNavigate(Screen.Compartir) },
+                    )
                     Box {
                         Icon(
                             Icons.Rounded.Notifications,
