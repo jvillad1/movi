@@ -290,6 +290,36 @@ private fun esSumaORestaDeDos(valor: Double, tolerancia: Double, numeros: Double
 }
 
 /**
+ * **¿Es el total de tres o más cifras que la misma respuesta cita, todas con respaldo?**
+ *
+ * Caso real del 23-sep: «Cuota de crédito $12.920.200, Gardenera $9.964.910, Hija $4.362.300,
+ * Mercado $2.000.000 — esas cuatro suman $29.247.410». La suma era exacta, pero el verificador solo
+ * aceptaba cuentas de DOS números, así que la marcó sin respaldo y pagó un reintento con el modelo
+ * de consejos para borrar una cifra correcta. Un asesor que enumera y después totaliza es lo más
+ * natural del mundo; lo que no puede hacer es totalizar cifras que no dijo.
+ *
+ * Por eso el total tiene que salir de cifras **citadas en la misma respuesta y ya respaldadas**
+ * (no de cualquier combinación de la base, que con cientos de números haría pasar casi cualquier
+ * cosa). Se prueban subconjuntos de 3 a [MAX_SUMANDOS] entre las primeras [MAX_CITADAS_PARA_TOTAL]
+ * citadas: una respuesta de este tamaño nunca cita más, y el tope deja el costo acotado (2^16).
+ */
+private fun esElTotalDeVariasCitadas(valor: Double, tolerancia: Double, citadas: DoubleArray): Boolean {
+    val n = minOf(citadas.size, MAX_CITADAS_PARA_TOTAL)
+    if (n < 3) return false
+    for (mascara in 1 until (1 shl n)) {
+        val cuantos = Integer.bitCount(mascara)
+        if (cuantos < 3 || cuantos > MAX_SUMANDOS) continue
+        var suma = 0.0
+        for (i in 0 until n) if (mascara and (1 shl i) != 0) suma += citadas[i]
+        if (abs(suma - valor) <= tolerancia) return true
+    }
+    return false
+}
+
+private const val MAX_CITADAS_PARA_TOTAL = 16
+private const val MAX_SUMANDOS = 8
+
+/**
  * **Las cifras de [respuesta] que no tienen respaldo en [fuentes]**, tal como las escribió el
  * modelo y sin repetir. Vacío es el caso normal —y en ese caso no se hace nada más, ni una llamada—.
  *
@@ -325,7 +355,8 @@ internal fun cifrasSinRespaldo(
             val caeEnUnaTrampa = trampas.keys.any { abs(it - abs(cifra.valor)) <= cifra.tolerancia }
             if (caeEnUnaTrampa) return@filter true
             !conocidos.esCuentaDeUnBloque(cifra.valor, cifra.tolerancia) &&
-                !esSumaORestaDeDos(abs(cifra.valor), cifra.tolerancia, citadas)
+                !esSumaORestaDeDos(abs(cifra.valor), cifra.tolerancia, citadas) &&
+                !esElTotalDeVariasCitadas(abs(cifra.valor), cifra.tolerancia, citadas)
         }
         .map { it.texto }
         .distinct()

@@ -18,6 +18,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.server.routes.estadosDeLasOcurrenciasReales
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -273,6 +274,16 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
         // `periodOf(ocurrenciaPorPreguntar(hoy, regla, ajustes))`. Una sola forma de nombrar la
         // cuota en juego, para que las dos pantallas no puedan contestar distinto sobre el mismo
         // pago.
+        //
+        // **Y lo que Movi emparejó SOLO también cuenta como ocurrido.** Esto miraba solo los sellos
+        // guardados en `recurring_occurrences`, y lo emparejado automáticamente no se escribe ahí
+        // (se deriva en cada lectura). El 23-sep el asistente le dijo al dueño «todavía te faltan
+        // $291.677 de recurrentes (Tía Caro y Coomeva Familiar)» con su Inicio diciendo «Pagaste los
+        // 12 del período». Ahora pregunta lo mismo que la pantalla, con la misma función.
+        val ocurridasEnElPeriodo: Set<String> = estadosDeLasOcurrenciasReales(uid, hoy, ajustes)
+            .filter { it.occurred }
+            .map { it.ruleId }
+            .toSet()
         val selladasPorRegla: Map<String, Set<String>> = RecurringOccurrences.selectAll()
             .where { RecurringOccurrences.userId eq uid }
             .groupBy({ it[RecurringOccurrences.ruleId] }, { it[RecurringOccurrences.period] })
@@ -296,7 +307,8 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 monto = regla.amount,
                 dia = regla.dayOfMonth,
                 esIngreso = regla.type == TransactionType.INCOME,
-                yaOcurrioEnElPeriodo = sello != null && sello in selladasPorRegla[regla.id].orEmpty(),
+                yaOcurrioEnElPeriodo = regla.id in ocurridasEnElPeriodo ||
+                    (sello != null && sello in selladasPorRegla[regla.id].orEmpty()),
             )
         }
 

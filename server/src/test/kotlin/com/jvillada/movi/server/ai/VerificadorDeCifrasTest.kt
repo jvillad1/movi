@@ -206,4 +206,44 @@ class VerificadorDeCifrasTest {
         assertEquals(2_191.0 to 0, leerNumero("2.191", conMultiplicador = true), "«\$2.191M» son dos mil ciento noventa y un millones")
         assertEquals(2_613_714.0 to 0, leerNumero("2,613,714"))
     }
+
+    // ── El total de varias cifras citadas (caso real del 23-sep) ─────────────────
+
+    private val periodo = listOf(
+        """
+        == En qué se fue la plata del período ==
+        - Cuota de crédito: ${'$'}12920200
+        - Gardenera: ${'$'}9964910
+        - Hija: ${'$'}4362300
+        - Mercado: ${'$'}2000000
+        - Comida: ${'$'}1232430
+        """.trimIndent(),
+    )
+
+    /**
+     * «¿Por qué este período salieron $11,7M más de los que entraron?»: el borrador enumeró cuatro
+     * categorías y las totalizó bien ($29.247.410). Solo se aceptaban cuentas de DOS números, así que
+     * se marcó y se pagó un reintento con el modelo de consejos para borrar una cifra correcta.
+     */
+    @Test
+    fun `el total exacto de cuatro cifras citadas y respaldadas tiene respaldo`() {
+        val respuesta = "Cuota de crédito \$12.920.200, Gardenera \$9.964.910, Hija \$4.362.300 y " +
+            "Mercado \$2.000.000: esas cuatro suman \$29.247.410."
+        assertEquals(emptyList(), cifrasSinRespaldo(respuesta, periodo))
+    }
+
+    /** Lo que NO se acepta: un total de cifras que la respuesta no citó, aunque estén en los datos. */
+    @Test
+    fun `un total de cifras que la respuesta no dijo sigue sin respaldo`() {
+        // 12.920.200 + 9.964.910 + 4.362.300 = 27.247.410, pero la respuesta no nombró ninguna.
+        val respuesta = "Tus tres gastos más grandes suman \$27.247.410."
+        assertEquals(listOf("\$27.247.410"), cifrasSinRespaldo(respuesta, periodo))
+    }
+
+    /** Ni un total que no cuadra con ningún subconjunto de lo citado. */
+    @Test
+    fun `un total que no cuadra con lo citado sigue sin respaldo`() {
+        val respuesta = "Cuota de crédito \$12.920.200, Gardenera \$9.964.910 y Hija \$4.362.300 suman \$30.000.000."
+        assertEquals(listOf("\$30.000.000"), cifrasSinRespaldo(respuesta, periodo))
+    }
 }
