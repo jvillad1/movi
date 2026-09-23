@@ -121,8 +121,12 @@ fun suggestCategoryMatches(
  * No escondida, y si hay tipos efectivos conocidos (catálogo, tipo fijado o uso observado),
  * [tipo] tiene que estar entre ellos — vacío ("no se sabe de qué lado") se ofrece igual. Ver el
  * KDoc de [categoriasQueCoinciden] para el porqué completo de esta regla.
+ *
+ * `internal` (Task 5, fix round 1): `QuickAddScreen` la reutiliza para filtrar la memoria de
+ * nombres antes de sugerir — mismo motivo que la dejó afuera de `categoriaSirveParaTipo`, ahí:
+ * una categoría propia sin tipo fijado no puede colarse del lado equivocado.
  */
-private fun seOfreceParaTipo(
+internal fun seOfreceParaTipo(
     name: String,
     tipo: TransactionType?,
     tiposUsados: Set<TransactionType>,

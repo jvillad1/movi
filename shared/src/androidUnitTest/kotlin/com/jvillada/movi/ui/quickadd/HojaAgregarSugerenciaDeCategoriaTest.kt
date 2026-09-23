@@ -57,6 +57,25 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         cuantos = 3,
     )
 
+    /** «Comida» es del catálogo y SOLO de gasto — a diferencia de «Fútbol», que es propia y sin
+     *  tipo fijado (por eso [seOfreceParaTipo] la deja pasar para cualquier tipo). Sirve para
+     *  probar que la sugerencia SÍ respeta el tipo de la pestaña — ver fix round 1, hallazgo 2. */
+    private val recuerdoCrepes = RecuerdoDeCategoria(
+        huella = "nombre:crepesywaffles",
+        categoria = "Comida",
+        nombre = "Crepes & Waffles",
+        cuantos = 5,
+    )
+
+    /** Misma categoría que [recuerdoMoraSoccer] (mismo grupo que «Fútbol»), escrita distinto —
+     *  sin tilde y en mayúsculas — para probar que esconder compara normalizado. */
+    private val recuerdoPizzaPalace = RecuerdoDeCategoria(
+        huella = "nombre:pizzapalace",
+        categoria = "FUTBOL",
+        nombre = "Pizza Palace",
+        cuantos = 2,
+    )
+
     @After
     fun limpiarLaCostura() {
         Repositories.sustitutoDePrueba = null
@@ -118,13 +137,61 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertDoesNotExist()
     }
 
+    /**
+     * Fix round 1, hallazgo 2: una categoría del catálogo que SOLO sirve para gasto («Comida»)
+     * no se sugiere anotando un ingreso, aunque el nombre matchee. Antes el filtro solo miraba
+     * `categoryPrefs[…]?.hidden` por clave exacta — ni el tipo ni la normalización entraban.
+     */
+    @Test
+    fun en_la_pestana_ingreso_no_sugiere_una_categoria_que_solo_sirve_para_gasto() {
+        montarHoja(recuerdos = listOf(recuerdoCrepes))
+        tocar("Ingreso")
+        val categoriaDeIngresoPorDefecto = "Salario" // primera del catálogo de ingresos.
+
+        escribirLaNota("Crepes") // huella nombre:crepesywaffles, prefijo de sobra (>= 4).
+
+        composeRule.onNodeWithText(categoriaDeIngresoPorDefecto).assertExists()
+        composeRule.onNodeWithText("Comida").assertDoesNotExist()
+        composeRule.onNodeWithText("Movi la reconoce: Crepes & Waffles").assertDoesNotExist()
+    }
+
+    /** La misma categoría escondida, escrita sin tilde y en mayúsculas: esconder compara normalizado. */
+    @Test
+    fun una_categoria_escondida_con_otra_capitalizacion_o_tildes_no_se_sugiere() {
+        UsedCategoriesCache.applyPref("Fútbol", CategoryPref(hidden = true))
+        montarHoja(recuerdos = listOf(recuerdoPizzaPalace)) // categoria = "FUTBOL", sin tilde
+
+        escribirLaNota("Pizza Palace") // huella exacta: nombre:pizzapalace
+
+        composeRule.onNodeWithText("FUTBOL").assertDoesNotExist()
+        composeRule.onNodeWithText("Movi la reconoce: Pizza Palace").assertDoesNotExist()
+    }
+
+    /**
+     * Fix round 1, hallazgo 5 — la otra mitad del commit `e610d394`: cuando la reconciliación de
+     * Gasto↔Ingreso pisa la categoría por su cuenta, la sugerencia vigente se limpia con ella. Si
+     * no se limpiara, la línea de apoyo seguiría hablando de un nombre («Crepes & Waffles») que ya
+     * no tiene nada que ver con la categoría que quedó puesta («Salario»).
+     */
+    @Test
+    fun al_cambiar_de_tipo_la_reconciliacion_limpia_el_estado_de_la_sugerencia() {
+        montarHoja(recuerdos = listOf(recuerdoCrepes))
+        escribirLaNota("Crepes")
+        composeRule.onNodeWithText("Comida").assertExists()
+        composeRule.onNodeWithText("Movi la reconoce: Crepes & Waffles").assertExists()
+
+        tocar("Ingreso") // «Comida» no sirve para ingreso: la reconciliación la reemplaza sola.
+
+        composeRule.onNodeWithText("Salario").assertExists()
+        composeRule.onNodeWithText("Movi la reconoce: Crepes & Waffles").assertDoesNotExist()
+    }
+
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
 
-    private fun montarHoja() {
+    private fun montarHoja(recuerdos: List<RecuerdoDeCategoria> = listOf(recuerdoMoraSoccer)) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(ahorros)
-            override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> =
-                listOf(recuerdoMoraSoccer)
+            override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> = recuerdos
         }
         composeRule.setContent {
             MoviTheme {

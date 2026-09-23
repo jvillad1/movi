@@ -19,11 +19,17 @@ private const val LARGO_MINIMO_DEL_PREFIJO = 4
  * server: acá se decide, para una nota puntual, cuál de los [recuerdos] (si alguno) aplica.
  *
  * Pura y sin acceso a `UsedCategoriesCache`, a propósito — así se puede probar sin Compose ni
- * Robolectric. Lo único que sabe de "escondida" es lo que sabe [isReservedCategory] (una
+ * Robolectric. Lo único que sabe de "no sugerible" es lo que sabe [isReservedCategory] (una
  * categoría reservada nunca sale de acá, esté o no en la lista de [recuerdos]); filtrar las
- * categorías que el dueño escondió en «Más → Categorías» es trabajo de quien arma [recuerdos]
- * antes de llamar a esta función — ver `QuickAddScreen.kt`, que cruza con
- * `UsedCategoriesCache.prefs` antes de pasarlos acá.
+ * categorías que el dueño escondió en «Más → Categorías», o que son del OTRO tipo (Gasto/Ingreso),
+ * es trabajo de quien arma [recuerdos] antes de llamar a esta función — ver `QuickAddScreen.kt`,
+ * que filtra con `seOfreceParaTipo` (de `CategoryField.kt`) antes de pasarlos acá.
+ *
+ * **Ese filtrado previo importa para el paso 2, y por eso se dice acá con todas las letras: un
+ * candidato escondido o del otro tipo NO entra a la lista de [recuerdos] que ve esta función, así
+ * que no puede volver ambiguo un prefijo que, mirando solo lo que SÍ se puede sugerir, era único.**
+ * Si «Mora Soccer» (Fútbol) es la única activa y «Moralito» (Comida) está escondida, quien llama
+ * ya sacó a «Moralito» de la lista — acá adentro «Mora» ve un solo candidato y no dos.
  *
  * Dos pasos, y el primero que encuentra algo gana:
  *
