@@ -28,7 +28,7 @@ const val QUE_ES_COMPARTIR: String =
  * comparte algo que no sabía que compartía.
  */
 val LO_QUE_VA_A_VER: List<String> = listOf(
-    "Tu plata disponible, lo de uso condicionado y tu patrimonio neto.",
+    "Tu plata disponible, lo de uso condicionado, tus bienes (inmuebles o vehículos, con su avalúo) y tu patrimonio neto.",
     "Ingresos, gastos y flujo del período en curso, y en qué categorías se fue la plata.",
     "Tus deudas con su saldo, cuota y tasa. De los números de cuenta, solo los últimos 4 dígitos.",
 )

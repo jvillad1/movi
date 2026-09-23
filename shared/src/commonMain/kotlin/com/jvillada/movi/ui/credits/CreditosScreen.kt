@@ -184,7 +184,11 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                         // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                         // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
                         // [saleDeTuBolsillo].
-                        LoQueCuestaLaDeuda(planes.values.filterNotNull(), periodoActual)
+                        LoQueCuestaLaDeuda(
+                            planes.values.filterNotNull(),
+                            periodoActual,
+                            quienesPaganLoQueNoSaleDeTuBolsillo(credits.mapNotNull { it.terms }),
+                        )
                     }
                 }
 
@@ -316,7 +320,11 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
  * que ahora cada una viaja con el suyo en el rótulo. Ver [ALCANCE_INTERES_PROPIO].
  */
 @Composable
-private fun LoQueCuestaLaDeuda(planes: List<PlanDelCredito>, periodoActual: PeriodoFinanciero) {
+private fun LoQueCuestaLaDeuda(
+    planes: List<PlanDelCredito>,
+    periodoActual: PeriodoFinanciero,
+    quienesPagan: List<String> = emptyList(),
+) {
     if (planes.isEmpty()) return
     val resumen = resumirDeudas(planes)
     Spacer(Modifier.height(16.dp))
@@ -331,7 +339,7 @@ private fun LoQueCuestaLaDeuda(planes: List<PlanDelCredito>, periodoActual: Peri
     FilaDelResumen(ALCANCE_INTERES_PROPIO, formatCOP(resumen.interesMensualPropio))
     if (resumen.interesMensualAjeno > 0L) {
         Spacer(Modifier.height(4.dp))
-        FilaDelResumen(ALCANCE_INTERES_AJENO, formatCOP(resumen.interesMensualAjeno))
+        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), formatCOP(resumen.interesMensualAjeno))
     }
 
     if (resumen.interesPorPagarPropio > 0L || resumen.interesPorPagarAjeno > 0L) {
@@ -342,7 +350,7 @@ private fun LoQueCuestaLaDeuda(planes: List<PlanDelCredito>, periodoActual: Peri
         }
         if (resumen.interesPorPagarAjeno > 0L) {
             Spacer(Modifier.height(4.dp))
-            FilaDelResumen(ALCANCE_FALTA_AJENO, formatCOP(resumen.interesPorPagarAjeno))
+            FilaDelResumen(alcanceDeLaFaltaAjena(quienesPagan), formatCOP(resumen.interesPorPagarAjeno))
         }
     }
 
