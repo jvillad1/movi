@@ -307,11 +307,17 @@ fun textoDeLoQueNoSeTermina(cuantos: Int, deuda: Long): String {
 /**
  * **La alerta de arriba, contada en créditos.** Si hay uno solo en el que la deuda crece sola, el
  * dueño tiene que salir de esta pantalla sabiéndolo.
+ *
+ * **«Descontados los seguros» no es relleno.** Decía «la cuota no cubre los intereses», y en el
+ * caso que la dispara —el Hipotecario 2334— era falso: la cuota ($2.613.714) es MAYOR que los
+ * intereses del mes ($2.427.883); lo que no los alcanza es lo que queda después de $209.219 de
+ * seguros. Movi AI leyó la misma frase en su contexto, la repitió y se contradijo con sus propios
+ * números. Dicha así es cierta en los dos casos: con seguros y sin ellos.
  */
 fun textoDeLaAmortizacionNegativa(cuantos: Int): String = if (cuantos == 1) {
-    "En 1 crédito la cuota no cubre los intereses: esa deuda crece sola"
+    "En 1 crédito la cuota, descontados los seguros, no alcanza para los intereses: esa deuda crece sola"
 } else {
-    "En $cuantos créditos la cuota no cubre los intereses: esas deudas crecen solas"
+    "En $cuantos créditos la cuota, descontados los seguros, no alcanza para los intereses: esas deudas crecen solas"
 }
 
 /**

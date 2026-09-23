@@ -285,11 +285,11 @@ class BarraQueNoMienteTest {
     @Test
     fun `la amortizacion negativa de arriba se cuenta en creditos`() {
         assertEquals(
-            "En 1 crédito la cuota no cubre los intereses: esa deuda crece sola",
+            "En 1 crédito la cuota, descontados los seguros, no alcanza para los intereses: esa deuda crece sola",
             textoDeLaAmortizacionNegativa(1),
         )
         assertEquals(
-            "En 2 créditos la cuota no cubre los intereses: esas deudas crecen solas",
+            "En 2 créditos la cuota, descontados los seguros, no alcanza para los intereses: esas deudas crecen solas",
             textoDeLaAmortizacionNegativa(2),
         )
     }
