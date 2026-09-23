@@ -148,12 +148,16 @@ class ChecklistDiceCuantoDeboPagarTest {
     }
 
     /**
-     * Revisión final: el grupo de lo ya tildado se titula «Ya ocurrieron · X de Y» y cuenta lo
-     * que lista — el sueldo recibido incluido. Antes decía «Ya salieron · 1 de 1» encima de dos
-     * filas, una de ellas un ingreso.
+     * Revisión final: el grupo de lo ya tildado se titula «Listos · X de Y» y cuenta lo que lista —
+     * el sueldo recibido incluido—, y el encabezado de la tarjeta usa el MISMO total. Con este
+     * mismo checklist decía «Ya salieron · 1 de 2» encima de dos filas, una de ellas un ingreso, y
+     * el encabezado contaba 2 (solo los pagos) sobre un checklist de 3.
+     *
+     * No «Ya ocurrieron»: ese título es de la sección de los sellos con «Deshacer», que en
+     * Movimientos se pinta en la misma pantalla.
      */
     @Test
-    fun el_grupo_de_lo_ya_tildado_dice_ya_ocurrieron_y_cuenta_el_ingreso() {
+    fun el_grupo_de_lo_ya_tildado_dice_listos_y_cuenta_el_ingreso() {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -179,8 +183,20 @@ class ChecklistDiceCuantoDeboPagarTest {
             }
         }
 
-        assertTrue(hay("Ya ocurrieron · 2 de 3"), "el título cuenta las dos filas que lista, sobre las tres")
+        assertTrue(hay("Listos · 2 de 3"), "el título cuenta las dos filas que lista, sobre las tres")
         assertTrue(!hay("Ya salieron"), "un sueldo recibido no «salió»")
+        assertTrue(!hay("Ya ocurrieron"), "ese título es de la sección de los sellos, no de este grupo")
+        // El encabezado de la tarjeta («Checklist del período · N») cuenta el mismo total que la Y.
+        assertEquals(
+            1,
+            composeRule.onAllNodesWithText(" · 3", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "el encabezado cuenta las tres filas del checklist, ingreso incluido",
+        )
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText(" · 2", useUnmergedTree = true).fetchSemanticsNodes().size,
+            "y no solo los dos pagos",
+        )
         assertTrue(hay("Sueldo"), "y el ingreso está en el grupo que el título cuenta")
     }
 

@@ -18,7 +18,7 @@ import com.jvillada.movi.ui.dashboard.ingresosPendientes
 import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
-import com.jvillada.movi.ui.dashboard.tituloDeLoYaOcurrido
+import com.jvillada.movi.ui.dashboard.tituloDeLosListos
 import com.jvillada.movi.ui.dashboard.yaMarcados
 import com.jvillada.movi.ui.Screen
 import kotlin.test.Test
@@ -326,7 +326,7 @@ class ChecklistDelPeriodoTest {
         )
 
         assertEquals(3, yaMarcados(checklist).size, "el grupo lista los dos pagos y el sueldo")
-        assertEquals("Ya ocurrieron · 3 de 4", tituloDeLoYaOcurrido(checklist))
+        assertEquals("Listos · 3 de 4", tituloDeLosListos(checklist))
         // Las líneas que hablan de pagos siguen contando sin el ingreso: esas sí son de plata que sale.
         assertEquals("Te falta 1 de 3 pagos de este período", lineaDeLoQueFalta(checklist))
     }

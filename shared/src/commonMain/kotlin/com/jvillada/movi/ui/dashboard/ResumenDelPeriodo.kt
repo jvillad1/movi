@@ -462,20 +462,26 @@ fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
 }
 
 /**
- * El título del grupo de lo ya tildado en el checklist completo: «Ya ocurrieron · X de Y».
+ * El título del grupo de lo ya tildado en el checklist completo: «Listos · X de Y».
  *
  * **Por qué no «Ya salieron», y por qué X de Y cuenta TODO el checklist.** El grupo lista
  * [yaMarcados] — pagos E ingresos —, pero el título decía «Ya salieron» y contaba con
  * [avanceDelChecklist], que deja los ingresos afuera: con tres pagos (dos tildados) y el sueldo
  * ya recibido, el grupo mostraba tres filas bajo «Ya salieron · 2 de 3», y una de ellas era plata
- * que ENTRÓ. «Ocurrieron» no tiene dirección, y X de Y cuenta exactamente lo que el grupo lista
- * sobre el total del checklist, así que el número se puede verificar mirando las filas.
+ * que ENTRÓ. «Listos» no tiene dirección, y X de Y cuenta exactamente lo que el grupo lista sobre
+ * el total del checklist —el mismo total que el encabezado de la tarjeta—, así que el número se
+ * puede verificar mirando las filas.
+ *
+ * **Por qué no «Ya ocurrieron».** Ese nombre ya es de la sección de los sellos con «Deshacer»
+ * (`SeccionYaOcurrieron`), que en Movimientos → Recurrentes se pinta en la MISMA pantalla y con
+ * filas que se solapan con estas: dos listas con el mismo título y contenido distinto se leen como
+ * una sola que no cuadra.
  *
  * [lineaDeLoQueFalta] y [pieDeLoYaPagado] siguen hablando de «pagos» y contando sin ingresos a
  * propósito: esas sí hablan solo de plata que sale.
  */
-fun tituloDeLoYaOcurrido(checklist: List<PagoDelPeriodo>): String =
-    "Ya ocurrieron · ${yaMarcados(checklist).size} de ${checklist.size}"
+fun tituloDeLosListos(checklist: List<PagoDelPeriodo>): String =
+    "Listos · ${yaMarcados(checklist).size} de ${checklist.size}"
 
 // ── Qué debería revisar ──────────────────────────────────────────────────────
 
