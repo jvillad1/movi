@@ -148,6 +148,43 @@ class ChecklistDiceCuantoDeboPagarTest {
     }
 
     /**
+     * Revisión final: el grupo de lo ya tildado se titula «Ya ocurrieron · X de Y» y cuenta lo
+     * que lista — el sueldo recibido incluido. Antes decía «Ya salieron · 1 de 1» encima de dos
+     * filas, una de ellas un ingreso.
+     */
+    @Test
+    fun el_grupo_de_lo_ya_tildado_dice_ya_ocurrieron_y_cuenta_el_ingreso() {
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    SeccionChecklistDelPeriodo(
+                        checklist = listOf(
+                            filaDe(vehiculo, dias = 3),
+                            PagoDelPeriodo("r_arriendo", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
+                            PagoDelPeriodo(
+                                "r_sueldo", "Sueldo", 9_000_000, pagado = true, diasParaVencer = -1,
+                                esIngreso = true,
+                            ),
+                        ),
+                        cargando = false,
+                        pudoLeer = true,
+                        marcando = emptySet(),
+                        onConfirmar = { _, _ -> },
+                        onNoFueEste = { _, _ -> },
+                        onAnotarMovimiento = {},
+                        onQuitarLaMarca = {},
+                        onReintentar = {},
+                    )
+                }
+            }
+        }
+
+        assertTrue(hay("Ya ocurrieron · 2 de 3"), "el título cuenta las dos filas que lista, sobre las tres")
+        assertTrue(!hay("Ya salieron"), "un sueldo recibido no «salió»")
+        assertTrue(hay("Sueldo"), "y el ingreso está en el grupo que el título cuenta")
+    }
+
+    /**
      * **La fila dejó de ser tocable, y lo que la reemplazó es «Anotar el movimiento».**
      *
      * Tildarla sellaba el período sin ninguna evidencia. El dueño lo cortó: *«no me debería dejar

@@ -45,6 +45,7 @@ import com.jvillada.movi.ui.dashboard.ingresosPendientes
 import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.yaMarcados
+import com.jvillada.movi.ui.dashboard.tituloDeLoYaOcurrido
 
 /**
  * # El checklist del período: todo lo que se paga este mes, con lo hecho tildado
@@ -145,7 +146,7 @@ fun SeccionChecklistDelPeriodo(
     val pendientes = pagosPendientes(checklist)
     val porCobrar = ingresosPendientes(checklist)
     val marcados = yaMarcados(checklist)
-    val (pagados, total) = avanceDelChecklist(checklist)
+    val (_, total) = avanceDelChecklist(checklist)
     val acciones = AccionesDelChecklist(onConfirmar, onNoFueEste, onAnotarMovimiento, onQuitarLaMarca)
 
     Column(modifier = modifier) {
@@ -205,9 +206,10 @@ fun SeccionChecklistDelPeriodo(
                     Spacer(Modifier.height(Movi.espacios.medio))
                     GrupoDelChecklist(
                         // No "Ya marcados": la mayoría de estas filas las empareja Movi sola
-                        // (ver `PagoDelPeriodo.automatica`), no el dueño — mismo criterio que
-                        // `lineaDeLoQueFalta`/`pieDeLoYaPagado` en ResumenDelPeriodo.kt.
-                        titulo = "Ya salieron · $pagados de $total",
+                        // (ver `PagoDelPeriodo.automatica`), no el dueño. Y no "Ya salieron":
+                        // el grupo también lista los ingresos recibidos — ver
+                        // [tituloDeLoYaOcurrido].
+                        titulo = tituloDeLoYaOcurrido(checklist),
                         total = null,
                         filas = marcados,
                         vacio = null,

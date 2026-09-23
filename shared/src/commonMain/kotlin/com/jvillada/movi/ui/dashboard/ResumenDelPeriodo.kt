@@ -461,6 +461,22 @@ fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
     else "Ya salieron $pagados. El checklist completo está en «Ver todos»."
 }
 
+/**
+ * El título del grupo de lo ya tildado en el checklist completo: «Ya ocurrieron · X de Y».
+ *
+ * **Por qué no «Ya salieron», y por qué X de Y cuenta TODO el checklist.** El grupo lista
+ * [yaMarcados] — pagos E ingresos —, pero el título decía «Ya salieron» y contaba con
+ * [avanceDelChecklist], que deja los ingresos afuera: con tres pagos (dos tildados) y el sueldo
+ * ya recibido, el grupo mostraba tres filas bajo «Ya salieron · 2 de 3», y una de ellas era plata
+ * que ENTRÓ. «Ocurrieron» no tiene dirección, y X de Y cuenta exactamente lo que el grupo lista
+ * sobre el total del checklist, así que el número se puede verificar mirando las filas.
+ *
+ * [lineaDeLoQueFalta] y [pieDeLoYaPagado] siguen hablando de «pagos» y contando sin ingresos a
+ * propósito: esas sí hablan solo de plata que sale.
+ */
+fun tituloDeLoYaOcurrido(checklist: List<PagoDelPeriodo>): String =
+    "Ya ocurrieron · ${yaMarcados(checklist).size} de ${checklist.size}"
+
 // ── Qué debería revisar ──────────────────────────────────────────────────────
 
 /** Algo que el Inicio sugiere mirar, con la pantalla donde se resuelve. */
