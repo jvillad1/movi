@@ -569,13 +569,18 @@ fun QuickAddScreen(
      * cualquiera de las dos aparece DESPUÉS de que esta hoja ya se compuso con una nota puesta
      * (un preset, o el dueño escribió antes de que la memoria terminara de cargar).
      *
-     * Las escondidas se filtran ACÁ, con [categoryPrefs] — [sugerenciaPorNombre] es pura y solo
-     * sabe filtrar reservadas (ver su KDoc).
+     * Las escondidas y las del otro tipo se filtran ACÁ, con [seOfreceParaTipo] — el mismo
+     * criterio que ya usan los chips de frecuentes y el panel de sugerencias del campo (ver su
+     * KDoc en `CategoryField.kt`), y NO [categoriaSirveParaTipo]: esa es permisiva con una
+     * categoría propia sin tipo fijado, y una memoria de «Comida» (solo gasto, sin nada fijado)
+     * se seguiría sugiriendo al anotar un ingreso. [sugerenciaPorNombre] es pura y solo sabe
+     * filtrar reservadas (ver su KDoc) — por eso ese filtro no se repite acá.
      */
-    LaunchedEffect(note, MemoriaDeCategoriasCache.recuerdos, categoryPrefs) {
+    LaunchedEffect(note, MemoriaDeCategoriasCache.recuerdos, categoryPrefs, pickers.typeIndex) {
         if (pickers.typeIndex > 1) return@LaunchedEffect // Traspaso y Cuota no tienen categoría.
-        val recuerdosVisibles = MemoriaDeCategoriasCache.recuerdos.filter {
-            categoryPrefs[it.categoria]?.hidden != true
+        val tipoActual = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+        val recuerdosVisibles = MemoriaDeCategoriasCache.recuerdos.filter { r ->
+            seOfreceParaTipo(r.categoria, tipoActual, usedCategories[r.categoria].orEmpty(), categoryPrefs)
         }
         val sugerencia = sugerenciaPorNombre(note, recuerdosVisibles)
         if (sugerencia == null) {
@@ -725,11 +730,14 @@ fun QuickAddScreen(
                 // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
                 // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
                 LastAccountStore.recordAccount(event.accountId)
-                // Task 5: la memoria de categorías que trajo esta hoja puede quedar vieja apenas
-                // se guarda este movimiento — se recarga para que la próxima hoja de «Agregar» de
-                // esta sesión ya vea la anotación recién hecha. `launch` y no `await`: es una
-                // ayuda para escribir, y esta hoja ya se está cerrando.
-                coroutine.launch { MemoriaDeCategoriasCache.recargar() }
+                // Task 5 (fix round 1): la memoria de categorías que trajo esta hoja puede quedar
+                // vieja apenas se guarda este movimiento — se invalida, SIN pedir nada, para que
+                // la próxima hoja de «Agregar» de esta sesión vuelva a preguntar. Síncrono y no un
+                // `coroutine.launch { … }`: eso relanzaba la petición en el scope de ESTA hoja, que
+                // `onSaved()` —dos líneas más abajo— cierra en el mismo instante; la petición se
+                // cancelaba a mitad de camino y ninguna sugerencia posterior alcanzaba a llegar en
+                // toda la sesión. Ver el KDoc de `MemoriaDeCategoriasCache` para la historia entera.
+                MemoriaDeCategoriasCache.invalidar()
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
@@ -988,15 +996,27 @@ fun QuickAddScreen(
                                 // quedaba rebotando en el sync cada 30 s sin decir nada. Ver
                                 // [rechazoDeLosTextos], que es la misma regla del otro lado.
                                 onValueChange = {
-                                    category = it.take(MAX_CATEGORIA_LENGTH)
-                                    // Task 5: escribir o tocar una sugerencia EN ESTE CAMPO es
-                                    // tan "a mano" como tocar un chip — ver [categoriaElegidaAMano].
-                                    // No entra acá lo que la propia sugerencia por nombre o la
-                                    // reconciliación de tipo escriben: esas asignan `category`
-                                    // directo, sin pasar por este lambda.
-                                    categoriaElegidaAMano = true
-                                    sugerenciaVigente = null
-                                    categoriaAntesDeLaSugerencia = null
+                                    val recortado = it.take(MAX_CATEGORIA_LENGTH)
+                                    // Fix round 1: CategoryField llama a esto en cada cambio de
+                                    // `TextFieldValue`, y eso incluye un cambio de SELECCIÓN con
+                                    // el mismo texto — al abrir este sub-picker, `CategoryField`
+                                    // selecciona todo el texto al ganar el foco (Ola 2 #3b), lo
+                                    // que ya disparaba este lambda con `it == category` y marcaba
+                                    // «elegida a mano» solo por haber ABIERTO la fila, sin que el
+                                    // dueño tocara nada. Comparar antes de asignar es lo que
+                                    // distingue «tipeó o tocó una sugerencia» de «se paró acá».
+                                    if (recortado != category) {
+                                        category = recortado
+                                        // Task 5: escribir o tocar una sugerencia EN ESTE CAMPO es
+                                        // tan "a mano" como tocar un chip — ver
+                                        // [categoriaElegidaAMano]. No entra acá lo que la propia
+                                        // sugerencia por nombre o la reconciliación de tipo
+                                        // escriben: esas asignan `category` directo, sin pasar por
+                                        // este lambda.
+                                        categoriaElegidaAMano = true
+                                        sugerenciaVigente = null
+                                        categoriaAntesDeLaSugerencia = null
+                                    }
                                 },
                                 type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                                 usedCategories = usedCategories,
@@ -1337,6 +1357,9 @@ private fun EditorBody(
             // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
             // automática. `null` no dibuja nada — el aspecto de siempre para todo lo demás.
             sub = categoriaSugeridaHint,
+            // Fix round 1: un nombre largo («Panadería y Pastelería de la 33») no puede envolver
+            // y empujar «Cuenta» hacia abajo — un renglón, con «…» si no entra.
+            subMaxLines = 1,
             showChevron = true,
             onClick = onPickCategory,
         )
