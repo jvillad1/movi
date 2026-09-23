@@ -148,7 +148,7 @@ private fun screenForTarget(target: String): Screen? = when (target) {
     "recurrentes" -> Screen.Transactions(CHIP_RECURRENTES)
     "categorias" -> Screen.Categorias
     "extractos" -> Screen.Extractos
-    "aichat" -> Screen.AIChat
+    "aichat" -> Screen.AIChat()
     "profile" -> Screen.Profile
     else -> null
 }

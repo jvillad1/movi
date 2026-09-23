@@ -16,6 +16,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.routes.buildUserContext
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.planDeUnaDeuda
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -402,5 +403,154 @@ class ContextoDelPeriodoTest {
         assertTrue("(todavía sin gastos registrados en este período)" in texto)
         assertTrue("(sin recurrentes cargados)" in texto)
         assertFalse("Créditos, con sus condiciones" in texto, "sin créditos, la sección no va")
+    }
+
+    // ── Movi como asesor (entrega C de «Movi de un vistazo») ─────────────────────────────────
+
+    /** Una deuda de verdad: la cuenta LOAN con su saldo DERIVADO de un movimiento, y sus condiciones. */
+    private fun deuda(
+        id: String,
+        nombre: String,
+        saldo: Long,
+        tasa: Double,
+        cuota: Long,
+        pagaNomina: Boolean = false,
+        laPaga: String? = null,
+        otros: Long? = null,
+    ) = transaction {
+        Accounts.insert {
+            it[Accounts.id] = id; it[userId] = dueno; it[name] = nombre; it[type] = "LOAN"; it[balance] = 0L
+        }
+        // El saldo sale de los movimientos, como en la lista de Cuentas: un desembolso viejo, fuera
+        // del período (y una cuenta LOAN nunca cuenta como gasto del mes de todos modos).
+        Events.insert {
+            it[Events.id] = "desembolso-$id"
+            it[userId] = dueno
+            it[accountId] = id
+            it[type] = TransactionType.EXPENSE.name
+            it[amount] = saldo
+            it[currency] = "COP"
+            it[category] = "Desembolso"
+            it[description] = "Desembolso"
+            it[timestamp] = ahora - 400L * 24 * 60 * 60 * 1000
+            it[reconciliationStatus] = "RECONCILED"
+        }
+        Credits.insert {
+            it[accountId] = id; it[userId] = dueno; it[bank] = "Banco"
+            it[principal] = saldo; it[rateEa] = tasa; it[termMonths] = 120
+            it[installment] = cuota; it[dayOfMonth] = 5; it[startDate] = "2024-01-05"
+            it[payrollDeduction] = pagaNomina
+            it[paidBy] = laPaga
+            it[otrosCargosMensuales] = otros
+        }
+    }
+
+    /**
+     * **Con datos parecidos a los del dueño, el contexto tiene lo que hace falta para aconsejar.**
+     *
+     * Es la prueba de la entrega C: una hipoteca que gira Skandia, una libranza que descuenta la
+     * nómina, un vehículo que paga él, la casa como bien y un presupuesto de Fútbol pasado. Un
+     * asesor sin cualquiera de esas piezas aconseja mal: sin quién paga, le pide recortar gastos
+     * para una cuota que no sale de su cuenta; sin la casa, le dice que su patrimonio es −$2.074M;
+     * sin lo gastado del presupuesto, tiene que restar él (y resta mal).
+     */
+    @Test
+    fun `con datos como los del dueno, el contexto lleva tasas, quien paga, bienes, patrimonio y presupuestos`() {
+        deuda("h1254", "Hipoteca 1254", 400_000_000L, tasa = 12.0, cuota = 4_500_000L, laPaga = "Skandia")
+        deuda("lib", "Libranza 5521", 30_000_000L, tasa = 16.0, cuota = 1_000_000L, pagaNomina = true)
+        deuda("v8761", "Vehículo 8761", 40_000_000L, tasa = 18.5, cuota = 1_500_000L, otros = 25_000L)
+        transaction {
+            Accounts.insert {
+                it[id] = "casa"; it[userId] = dueno; it[name] = "Casa Almendros"; it[type] = "INVESTMENT"
+                it[balance] = 0L
+                it[assetKind] = "INMUEBLE"; it[assetValue] = 1_411_903_920L
+                it[assetValuedOn] = "2026-08-28"; it[assetDebtId] = "h1254"
+            }
+            Budgets.insert { it[userId] = dueno; it[category] = "Fútbol"; it[monthlyLimit] = 400_000L }
+            Budgets.insert { it[userId] = dueno; it[category] = "Mercado"; it[monthlyLimit] = 1_000_000L }
+        }
+        gasto("Fútbol", 963_456)
+        gasto("Mercado", 600_000)
+
+        val texto = contexto()
+
+        // Las tasas, y en orden de la más alta a la más baja: el orden ya es media respuesta a
+        // «¿qué deuda abono primero?».
+        assertTrue("tasa 18.5 % EA" in texto && "tasa 16.0 % EA" in texto && "tasa 12.0 % EA" in texto, texto)
+        assertTrue(
+            texto.indexOf("Vehículo 8761") < texto.indexOf("Libranza 5521") &&
+                texto.indexOf("Libranza 5521") < texto.indexOf("- Hipoteca 1254"),
+            "los créditos van de la tasa más alta a la más baja:\n$texto",
+        )
+        // Quién paga cada cuota, en palabras, también cuando es él.
+        assertTrue("La cuota la paga Skandia: NO sale de su cuenta." in texto, texto)
+        assertTrue("La cuota la descuenta la nómina antes de que llegue el sueldo: NO sale de su cuenta." in texto)
+        assertTrue("La cuota sale de su bolsillo." in texto)
+        assertTrue("incluye otros cargos \$25000 al mes" in texto)
+        // El saldo y lo que hace la cuota con él, con la MISMA cuenta que la pantalla de Créditos.
+        assertTrue("Vehículo 8761 (Banco): debe \$40000000;" in texto, texto)
+        val interesDelVehiculo = planDeUnaDeuda(40_000_000L, 18.5, 1_500_000L, null, 25_000L, saleDeTuBolsillo = true).interes
+        assertTrue("unos \$$interesDelVehiculo son interés este mes" in texto, "falta el interés del mes:\n$texto")
+        // Los totales partidos por quién paga: uno solo le cobraría a su bolsillo las cuotas de Skandia.
+        assertTrue("Cuotas al mes: \$1500000 salen de su bolsillo; \$5500000 las paga la nómina o un tercero" in texto, texto)
+        assertTrue("Intereses estimados de un mes: \$$interesDelVehiculo en los créditos que salen de su bolsillo" in texto, texto)
+        // Bienes y patrimonio.
+        assertTrue("Casa Almendros (BIEN" in texto && "vale \$1411903920" in texto, texto)
+        assertTrue("lo financia «Hipoteca 1254»" in texto)
+        assertTrue("- Bienes (inmuebles, vehículos; no es plata): \$1411903920" in texto, texto)
+        assertTrue("Patrimonio neto" in texto)
+        // Presupuestos con lo gastado y la resta hecha.
+        assertTrue("- Fútbol: límite \$400000, gastado \$963456 — SE PASÓ por \$563456" in texto, texto)
+        assertTrue("- Mercado: límite \$1000000, gastado \$600000 — le quedan \$400000" in texto, texto)
+    }
+
+    /**
+     * Un crédito cuya cuota no cubre los intereses se dice con todas las letras: es lo más urgente
+     * que un asesor puede ver, y la pantalla de Créditos ya lo dice.
+     */
+    @Test
+    fun `una deuda que crece se nombra como tal`() {
+        deuda("mama", "Crédito Mamá", 50_000_000L, tasa = 30.0, cuota = 100_000L)
+
+        val texto = contexto()
+
+        assertTrue("la deuda CRECE aunque pague" in texto, texto)
+    }
+
+    /** Sin saldo derivado (la deuda no tiene movimientos) no se estima interés sobre un cero. */
+    @Test
+    fun `sin saldo no se inventa el interes del mes`() {
+        transaction {
+            Accounts.insert { it[id] = "sin"; it[userId] = dueno; it[name] = "Crédito nuevo"; it[type] = "LOAN"; it[balance] = 0L }
+            Credits.insert {
+                it[accountId] = "sin"; it[userId] = dueno; it[bank] = "Banco"
+                it[principal] = 10_000_000L; it[rateEa] = 20.0; it[termMonths] = 12
+                it[installment] = 900_000L; it[dayOfMonth] = 5; it[startDate] = "2026-09-01"
+            }
+        }
+
+        val texto = contexto()
+
+        assertTrue("Crédito nuevo (Banco): cuota" in texto, "sin desembolso no se afirma «debe \$0»:\n$texto")
+        assertFalse("son interés este mes" in texto, "sin deuda no hay interés que estimar:\n$texto")
+    }
+
+    /** Lo que falta de los recurrentes va sumado: «¿me alcanza?» se contesta con ese número. */
+    @Test
+    fun `el total de recurrentes pendientes viaja sumado`() {
+        transaction {
+            RecurringRules.insert {
+                it[id] = "r1"; it[userId] = dueno; it[name] = "Arriendo"; it[category] = "Vivienda"
+                it[amount] = 1_850_000L; it[dayOfMonth] = 5; it[type] = TransactionType.EXPENSE.name
+            }
+            RecurringRules.insert {
+                it[id] = "r2"; it[userId] = dueno; it[name] = "Internet"; it[category] = "Servicios"
+                it[amount] = 120_000L; it[dayOfMonth] = 10; it[type] = TransactionType.EXPENSE.name
+            }
+        }
+
+        val texto = contexto()
+
+        assertTrue("Total de gastos recurrentes que TODAVÍA no ocurrieron en este período: \$1970000" in texto, texto)
     }
 }

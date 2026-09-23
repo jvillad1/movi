@@ -116,3 +116,31 @@ escritorio, dos columnas.
 - **Para B**: `DashboardSummary.patrimonio` trae las cifras ya partidas (`loQueTienes`, `neto`)
   para la barra de dos colores sin pedir la lista de cuentas.
 
+
+## Entrega C — cómo quedó (Movi como asesor)
+
+- **Preguntas sugeridas, sin LLM**: `preguntasSugeridas(data: DashboardData): List<String>` en
+  `:shared` (`ui/ai/PreguntasSugeridas.kt`). Devuelve **siempre tres**, sin repetidas, de la más
+  relevante a la menos: deuda que no baja → lo que falta por pagar no cabe en Tu plata → presupuesto
+  pasado → salió más de lo que entró (con la diferencia) → intereses propios altos (con la cifra) →
+  deudas con tasas distintas → patrimonio con bienes; lo que falte lo llenan `PREGUNTAS_DE_RESPALDO`.
+  Una lectura en `null` apaga su regla, no inventa. Las reglas sueltas se prueban sobre
+  `SenalesParaPreguntar`. Las de criterio están redactadas para escalar al modelo de consejos y las
+  de dato no (lo fija `QueModeloUsarTest`).
+- **El chat abre con una pregunta lista**: `Screen.AIChat(preguntaInicial: String? = null)`. La
+  pantalla la manda **sola, una vez** (un `rememberSaveable` evita pagarla dos veces al volver).
+- **Arranque del chat**: saludo con el primer nombre de la sesión (ya no «Camilo» escrito a mano),
+  qué mira Movi, las tres sugerencias como filas tocables (tocar = enviar) y la nota de que no
+  reemplaza a un asesor certificado. Las sugerencias salen de `DashboardDataCache`; sin caché, las
+  de respaldo.
+- **Contexto**: cada crédito dice **quién paga la cuota** en palabras (su bolsillo / la nómina / un
+  tercero), el saldo, y —con `planDeUnaDeuda`, la misma cuenta de Créditos— el interés del mes, lo
+  que baja la deuda, las cuotas que faltan o que la deuda crece; van de la tasa más alta a la más
+  baja, con los totales de intereses y cuotas partidos por quién paga. Los presupuestos llevan lo
+  gastado y cuánto se pasó (regla `estadoDePresupuesto`). Los recurrentes, el total que falta.
+- **PERSONA**: una pregunta de criterio se contesta con diagnóstico en una frase → dos o tres
+  acciones con sus números → el riesgo o lo que hay que confirmar; y antes de opinar de una deuda,
+  mirar quién paga la cuota.
+- **No se agregó «Disponible del período» al contexto**: se calcula en `:shared`
+  (`disponibleDelPeriodo`, con el checklist) y el server no tiene esa cuenta; replicarla daría dos
+  cifras distintas para lo mismo. El modelo tiene Tu plata y el total de recurrentes pendientes.

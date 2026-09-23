@@ -70,4 +70,27 @@ class LasInstruccionesNombranSusHerramientasTest {
         assertTrue("OJO CON LOS MESES" in PERSONA, "sin esto contesta agosto con la cifra del período")
         assertTrue("fechas de calendario" in PERSONA)
     }
+
+    /**
+     * **Un consejo con forma.** El dueño pidió «asesoría valiosa»; una respuesta de criterio sin
+     * estructura se lee como un párrafo de revista. La forma es: diagnóstico en una frase → dos o
+     * tres acciones con SUS números → el riesgo o lo que hay que confirmar.
+     */
+    @Test
+    fun `las instrucciones le dan forma a un consejo`() {
+        assertTrue("Diagnóstico en UNA frase" in PERSONA)
+        assertTrue("Dos o tres acciones concretas" in PERSONA)
+        assertTrue("el riesgo o lo que habría que confirmar" in PERSONA)
+    }
+
+    /**
+     * **Quién paga la cuota cambia el consejo.** Dos hipotecas del dueño las gira Skandia y dos
+     * libranzas las descuenta la nómina: recomendarle «recortar gastos para cubrir la cuota» de
+     * esas es aconsejar sobre plata que nunca pasa por su cuenta.
+     */
+    @Test
+    fun `las instrucciones mandan a mirar quien paga antes de recomendar sobre una deuda`() {
+        assertTrue("QUIÉN PAGA LA CUOTA" in PERSONA)
+        assertTrue("NO sale de su cuenta" in PERSONA)
+    }
 }

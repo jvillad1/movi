@@ -70,4 +70,29 @@ class QueModeloUsarTest {
     fun `una pregunta vacia no escala`() {
         assertFalse(laPreguntaPideCriterio(""))
     }
+
+    /**
+     * **Las preguntas sugeridas caen del lado que se pensó.** Las arma `preguntasSugeridas` en
+     * `:shared` (que el server no ve, por eso el texto va copiado): las de criterio tienen que ir al
+     * modelo de consejos y las de dato al de todos los días. Si alguien cambia una redacción allá o
+     * una señal acá, esto avisa antes de que una pregunta de datos se pague como consejo — o de que
+     * «¿qué deuda me conviene abonar?» la conteste el modelo chico.
+     */
+    @Test
+    fun `las preguntas sugeridas de criterio escalan y las de dato no`() {
+        listOf(
+            "¿Qué deuda me conviene abonar primero?",
+            "¿Qué hago para no pasarme en Fútbol el próximo período?",
+            "Pago \$2,3M de intereses al mes, ¿qué hago para bajarlo?",
+            "¿Me alcanza para los \$4,1M que me faltan por pagar este período?",
+            "¿Qué me recomiendas revisar primero?",
+        ).forEach { assertTrue(laPreguntaPideCriterio(it), "debería escalar: $it") }
+        listOf(
+            "¿Cómo voy este período?",
+            "¿En qué se me está yendo más la plata?",
+            "¿Por qué este período salieron \$11,7M más de los que entraron?",
+            "¿Por qué Vehículo 8761 no baja aunque pago la cuota?",
+            "¿Cómo está mi patrimonio si cuento mis bienes y mis deudas?",
+        ).forEach { assertFalse(laPreguntaPideCriterio(it), "no debería escalar: $it") }
+    }
 }

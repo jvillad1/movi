@@ -9,6 +9,7 @@ import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.TextBlockParam
 import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
+import com.jvillada.movi.server.ai.conSaldos
 import com.jvillada.movi.server.ai.render
 import com.jvillada.movi.server.ai.BUSCAR_DOCUMENTOS
 import com.jvillada.movi.server.balance.cuentasConSaldo
@@ -27,6 +28,7 @@ import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.claseDeBien
 import com.jvillada.movi.shared.model.deudaDelBien
 import com.jvillada.movi.shared.model.esCuentaDeDeuda
+import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.valorEnPesosDe
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -101,10 +103,19 @@ Si necesitas dos consultas, pídelas EN EL MISMO TURNO: dos juntas cuestan lo mi
 Si una consulta vuelve vacía, dilo: "no encuentro nada" es una respuesta correcta y "creo que gastaste como" no lo es.
 Si la pregunta no se puede contestar ni con los datos ni consultando, dilo claramente y sugiere qué información faltaría.
 
-Cuando el bloque ya traiga un total (gastos del período, total de suscripciones, deuda total), usa ESE número tal cual: no vuelvas a sumar los renglones ni corrijas el total con tu propia cuenta. Si te piden algo que no viene sumado, suma solo lo que haga falta y muestra la operación.
+Cuando el bloque ya traiga un total (gastos del período, total de suscripciones, deuda total, intereses del mes, cuotas al mes, lo que se pasó de un presupuesto, gastos recurrentes que faltan), usa ESE número tal cual: no vuelvas a sumar los renglones ni corrijas el total con tu propia cuenta. Si te piden algo que no viene sumado, suma solo lo que haga falta y muestra la operación.
 
 Tono: directo, empático, accionable. No moralices sobre el gasto.
-Estructura: responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
+Estructura de una pregunta de DATOS (cuánto, cuándo, qué): responde en máximo 4-5 frases cortas. Si la respuesta tiene un cálculo, muéstralo en una línea separada.
+
+Cuando te pida CRITERIO (qué le conviene, qué hacer, si le alcanza, cómo bajar algo, qué priorizar), responde con esta forma y nada más:
+1. Diagnóstico en UNA frase, con la cifra de sus datos que lo sostiene.
+2. Dos o tres acciones concretas, una por línea, cada una con números de SUS datos (qué deuda, qué categoría, cuánto, cuándo). Nada de consejos que servirían para cualquiera ("haz un presupuesto", "ahorra más").
+3. Una última línea con el riesgo o lo que habría que confirmar antes de actuar.
+Corto: la respuesta entera cabe en unas 8 líneas.
+
+Antes de recomendar algo sobre una deuda, mira en su renglón QUIÉN PAGA LA CUOTA. Si la descuenta la nómina o la paga un tercero (por ejemplo Skandia desde la AFC), esa cuota NO sale de su cuenta: no le propongas recortar gastos para cubrirla ni la restes de su plata disponible. Abonarle a esa deuda sí sale de su plata. Para comparar deudas usa la tasa EA, el interés del mes y lo que baja la deuda que trae cada renglón; no los recalcules.
+Si la decisión depende de algo que no está en sus datos (impuestos, una inversión puntual, un trámite legal), da tu lectura con lo que ves y dile qué conviene confirmar con un asesor certificado, en una frase.
 No uses emojis ni símbolos decorativos: la interfaz no los renderiza.
 
 F32: si el usuario te manda una foto de un recibo, un extracto o una oferta del banco, extrae lo relevante (montos, fechas, comercio o condiciones) y opina usando los datos del usuario en "DATOS DEL USUARIO".
@@ -377,7 +388,9 @@ internal suspend fun buildUserContext(uid: String): String {
     // estado en este período, los créditos con tasa y cuota, las suscripciones y las metas. Ver
     // `ContextoDelPeriodo.kt` — usa las MISMAS reglas que el Inicio, para que los dos digan lo
     // mismo.
-    val delPeriodo = contextoDelPeriodoDe(uid)
+    // Con el saldo de cada crédito puesto: sin él no hay interés del mes ni «cuánto baja», y esas
+    // son las dos cifras con que se contesta «¿qué deuda abono primero?». Ver `conSaldos`.
+    val delPeriodo = contextoDelPeriodoDe(uid).conSaldos(cuentas)
 
     // Budgets
     val budgets = dbQuery {
@@ -420,12 +433,7 @@ internal suspend fun buildUserContext(uid: String): String {
         appendLine()
         append(renderizarPatrimonio(patrimonio))
         appendLine()
-        appendLine("== Presupuestos ==")
-        if (budgets.isEmpty()) {
-            appendLine("- (sin presupuestos)")
-        } else {
-            budgets.forEach { (cat, limit) -> appendLine("- $cat: límite \$$limit") }
-        }
+        append(renderizarPresupuestos(budgets, delPeriodo.gastoPorCategoria))
 
         // **Los documentos ya no viajan acá.** Eran 33 papeles con sus notas —casi seis mil
         // caracteres— en CADA mensaje, para una pregunta cada tantas. Ahora se consultan con
@@ -441,6 +449,35 @@ internal suspend fun buildUserContext(uid: String): String {
         }
     }
 }
+
+/**
+ * **Los presupuestos con lo gastado y lo que se pasó**, no solo el límite.
+ *
+ * Con el límite solo, «¿cómo hago para no pasarme en Fútbol?» obligaba al modelo a cruzar este
+ * bloque con «En qué se fue la plata» y restar — dos cosas que hace mal, y justo sobre la cifra
+ * por la que se pregunta. Acá la resta va hecha, con la MISMA regla de «pasado» que el Inicio y la
+ * pantalla de Presupuestos ([estadoDePresupuesto]): gastar justo el límite no es pasarse.
+ *
+ * Lo gastado sale de `gastoPorCategoria` del período, que ya aplica los filtros del Inicio
+ * (anulados, «Por confirmar» y pagos de tarjeta afuera).
+ */
+internal fun renderizarPresupuestos(budgets: List<Pair<String, Long>>, gastoPorCategoria: Map<String, Long>): String =
+    buildString {
+        appendLine("== Presupuestos de este período ==")
+        if (budgets.isEmpty()) {
+            appendLine("- (sin presupuestos)")
+            return@buildString
+        }
+        budgets.forEach { (cat, limite) ->
+            val gastado = gastoPorCategoria[cat] ?: 0L
+            val como = if (estadoDePresupuesto(gastado, limite).estaSuperado) {
+                "SE PASÓ por \$${gastado - limite}"
+            } else {
+                "le quedan \$${limite - gastado}"
+            }
+            appendLine("- $cat: límite \$$limite, gastado \$$gastado — $como")
+        }
+    }
 
 /**
  * El renglón de un **bien** en el contexto del asistente: qué es, cuánto vale, de cuándo es ese
