@@ -86,6 +86,28 @@ class PaginaCompartidaTest {
         assertEquals("Sin intereses", PaginaCompartida.detalleDeLaDeuda(d.copy(sinIntereses = true, tasaEa = 10.0)))
     }
 
+    /**
+     * El caso del 23-sep: la Master Black en dólares salía «Pago mínimo $71» — setenta y un PESOS
+     * para quien lee. El mínimo de esa cara de la tarjeta es de US$71, y el saldo de al lado sí
+     * venía convertido: dos cifras de la misma fila en monedas distintas, sin decirlo.
+     */
+    @Test
+    fun `el pago minimo de una tarjeta en dolares dice que son dolares`() {
+        val usd = DeudaCompartida(
+            "Master Black 3684 USD", esTarjeta = true, banco = "Bancolombia", saldo = 5_570_234,
+            cuota = 71, tasaEa = null, sinIntereses = false, monedaDeLaCuota = "USD",
+        )
+        assertEquals(
+            "Bancolombia · Tarjeta de crédito · Pago mínimo US\$71",
+            PaginaCompartida.detalleDeLaDeuda(usd),
+        )
+        // Y en pesos no cambia nada.
+        assertEquals(
+            "Bancolombia · Tarjeta de crédito · Pago mínimo \$1.843.014",
+            PaginaCompartida.detalleDeLaDeuda(usd.copy(cuota = 1_843_014, monedaDeLaCuota = "COP")),
+        )
+    }
+
     // ── Los colores son los de Tokens.kt ────────────────────────────────────
 
     /**

@@ -360,7 +360,10 @@ $ESTILOS
     internal fun detalleDeLaDeuda(d: DeudaCompartida): String = listOfNotNull(
         d.banco,
         if (d.esTarjeta) "Tarjeta de crédito" else null,
-        d.cuota?.let { if (d.esTarjeta) "Pago mínimo ${dinero(it)}" else "Cuota ${dinero(it)} al mes" },
+        d.cuota?.let {
+            val monto = if (d.monedaDeLaCuota == "USD") "US$" + miles(it) else dinero(it)
+            if (d.esTarjeta) "Pago mínimo $monto" else "Cuota $monto al mes"
+        },
         when {
             d.sinIntereses -> "Sin intereses"
             // Espacio duro: «12,4 % EA» no se parte en dos renglones.
