@@ -401,8 +401,21 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
     if (gastoPorCategoria.isEmpty()) {
         appendLine("- (todavía sin gastos registrados en este período)")
     } else {
+        // **Con su proporción ya hecha.** Sin esto el modelo estimaba a ojo y exageraba con
+        // palabras: el 23-sep escribió que la cuota de crédito «ya casi iguala todo lo que entró»
+        // cuando era el 58 % de los ingresos. La cifra estaba bien y el verificador no tenía qué
+        // marcar; lo que mentía era el «casi». Con el porcentaje en el renglón lo dice tal cual, y
+        // el verificador puede comprobarlo.
+        val totalDeGastos = gastoPorCategoria.values.sum()
         gastoPorCategoria.entries.sortedByDescending { it.value }
-            .forEach { (categoria, monto) -> appendLine("- $categoria: \$$monto") }
+            .forEach { (categoria, monto) ->
+                val proporciones = listOfNotNull(
+                    porcentajeEntero(monto, totalDeGastos)?.let { "$it % de los gastos" },
+                    porcentajeEntero(monto, ingresos)?.let { "$it % de los ingresos" },
+                )
+                val cola = if (proporciones.isEmpty()) "" else " (${proporciones.joinToString("; ")})"
+                appendLine("- $categoria: \$$monto$cola")
+            }
     }
     appendLine()
 
@@ -566,6 +579,10 @@ internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
         else -> Unit
     }
 }
+
+/** [parte] sobre [total] en porcentaje entero (redondeo común), o `null` si no hay total. */
+internal fun porcentajeEntero(parte: Long, total: Long): Long? =
+    if (total <= 0L) null else Math.round(parte * 100.0 / total)
 
 /** «seguros», «otros cargos» o «seguros y otros cargos», según qué haya en la cuota. */
 private fun nombreDeLosCargos(plan: PlanDelCredito): String = when {

@@ -112,6 +112,33 @@ class ContextoDelPeriodoTest {
         assertTrue("Mercado: \$612300" in texto)
     }
 
+    /**
+     * **Cada categoría viaja con su proporción ya calculada.** El 23-sep el asistente escribió
+     * «Cuota de crédito $12.920.200 (ya casi iguala todo lo que entró)» con ingresos de $22.217.770:
+     * es el 58 %, no «casi». La cifra estaba bien y el verificador no tenía qué marcar — lo que
+     * exageró fue la palabra. Con el porcentaje en el bloque, el modelo lo dice en vez de estimarlo
+     * a ojo (y el verificador puede comprobar ese porcentaje).
+     */
+    @Test
+    fun `cada categoria dice cuanto pesa sobre los gastos y sobre los ingresos`() {
+        gasto("Cuota de crédito", 12_920_200)
+        gasto("Hija", 7_079_800)
+        transaction {
+            Events.insert {
+                it[Events.id] = "ingreso-1"; it[userId] = dueno; it[accountId] = "a1"
+                it[type] = TransactionType.INCOME.name; it[amount] = 22_217_770L; it[currency] = "COP"
+                it[category] = "Salario"; it[description] = "Salario"; it[timestamp] = ahora
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+
+        val texto = contexto()
+
+        // 12.920.200 / 20.000.000 = 64,6 % de los gastos; 12.920.200 / 22.217.770 = 58,2 % de los ingresos.
+        assertTrue("Cuota de crédito: \$12920200 (65 % de los gastos; 58 % de los ingresos)" in texto, texto)
+        assertTrue("Hija: \$7079800 (35 % de los gastos; 32 % de los ingresos)" in texto, texto)
+    }
+
     /** Un movimiento anulado no cuenta en el Inicio; tampoco puede contar acá. */
     @Test
     fun `lo anulado no entra en el contexto`() {
