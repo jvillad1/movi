@@ -1,8 +1,9 @@
 package com.jvillada.movi.ui.sdui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -21,10 +22,11 @@ import com.jvillada.movi.shared.model.ScreenAction
 import com.jvillada.movi.shared.model.ScreenCard
 import com.jvillada.movi.shared.model.ScreenDefinition
 import com.jvillada.movi.shared.model.ScreenSection
+import com.jvillada.movi.shared.model.renderableSections
+import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
+import com.jvillada.movi.ui.dashboard.ANCHO_DE_UNA_COLUMNA
+import com.jvillada.movi.ui.dashboard.columnasDelInicio
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.shared.model.rangoLegibleDe
-import com.jvillada.movi.shared.model.ventanaDe
-import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 import com.jvillada.movi.ui.components.CardRow
@@ -34,17 +36,11 @@ import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
 import com.jvillada.movi.ui.components.Cifra
-import com.jvillada.movi.ui.components.CifraProtagonista
-import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LinkFigure
-import com.jvillada.movi.ui.dashboard.cuentasDelHero
 import com.jvillada.movi.ui.dashboard.dashboardAlerts
 import com.jvillada.movi.ui.dashboard.dueLabel
-import com.jvillada.movi.ui.dashboard.heroBalance
-import com.jvillada.movi.ui.dashboard.heroBalanceTitle
-import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
 import com.jvillada.movi.ui.dashboard.overBudgetCategories
 import com.jvillada.movi.ui.dashboard.quickLinkFigure
 import com.jvillada.movi.ui.recurrentes.textoDelMonto
@@ -60,6 +56,18 @@ import com.jvillada.movi.ui.dashboard.visibleSections
  * [header] es el chrome nativo que va arriba del todo y scrollea con el resto (la guía de
  * primeros pasos); no viaja en el schema a propósito — así existe siempre, sin depender de
  * `screen_definitions`.
+ *
+ * ### Una columna en el teléfono, dos en escritorio
+ *
+ * Generación 8. El ancho decide ([columnasDelInicio]): por debajo de ~900 dp, una columna en el
+ * orden de la definición —el del teléfono—, con el ancho de siempre (600 dp); desde ahí, dos
+ * columnas repartidas por tipo. En escritorio el Inicio era una tira de 500 px en el medio de un
+ * lienzo de 1.400.
+ *
+ * **Ya no es una `LazyColumn`**: dos columnas que scrollean juntas no caben en una lista perezosa, y
+ * el Inicio son a lo sumo ocho bloques —no una lista de trescientos movimientos—, así que componerlo
+ * entero no cuesta nada. Tiene además una ventaja buscada: un bloque ya no sale y entra de la
+ * composición al hacer scroll, y su entrada animada no tiene cómo repetirse.
  */
 @Composable
 fun SduiRenderer(
@@ -71,22 +79,55 @@ fun SduiRenderer(
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
+    // Si la definición no trae la tarjeta del patrimonio (una fila guardada antes de la generación
+    // 8), el hero lo dice en una línea: el patrimonio no puede desaparecer del Inicio en esa ventana.
+    val conPatrimonioEnElHero = renderableSections(definition).none { it.type == "PATRIMONIO" }
+    val scroll = rememberScrollState()
+    // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
+    ScrollDesdeLosMargenes(scroll)
 
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
-        if (header != null) {
-            item {
-                header()
-                Spacer(Modifier.height(20.dp))
+    BoxWithConstraints(modifier = modifier) {
+        val columnas = columnasDelInicio(sections, maxWidth)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scroll)
+                .padding(bottom = Movi.espacios.seccion),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (header != null) {
+                Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { header() }
+                Spacer(Modifier.height(Movi.espacios.margen))
+            }
+            if (columnas.sonDos) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    ColumnaDeSecciones(columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, uriHandler, Modifier.weight(1f))
+                    ColumnaDeSecciones(columnas.derecha, data, conPatrimonioEnElHero, onNavigate, uriHandler, Modifier.weight(1f))
+                }
+            } else {
+                ColumnaDeSecciones(
+                    columnas.izquierda, data, conPatrimonioEnElHero, onNavigate, uriHandler,
+                    Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
+                )
             }
         }
+    }
+}
+
+/** Una columna de secciones, con aire entre bloques: el Inicio se lee de a una pregunta por vez. */
+@Composable
+private fun ColumnaDeSecciones(
+    sections: List<ScreenSection>,
+    data: DashboardData,
+    conPatrimonioEnElHero: Boolean,
+    onNavigate: (Screen) -> Unit,
+    uriHandler: UriHandler,
+    modifier: Modifier,
+) {
+    Column(modifier = modifier) {
         sections.forEachIndexed { index, section ->
-            item {
-                if (index > 0) Spacer(Modifier.height(20.dp))
-                SduiSection(section, data, onNavigate, uriHandler)
-            }
+            if (index > 0) Spacer(Modifier.height(Movi.espacios.seccion))
+            SduiSection(section, data, conPatrimonioEnElHero, onNavigate, uriHandler)
         }
     }
 }
@@ -95,11 +136,16 @@ fun SduiRenderer(
 private fun SduiSection(
     section: ScreenSection,
     data: DashboardData,
+    conPatrimonioEnElHero: Boolean,
     onNavigate: (Screen) -> Unit,
     uriHandler: UriHandler,
 ) {
     when (section.type) {
-        "HERO_BALANCE" -> HeroBalanceSection(section, data, onNavigate)
+        // Generación 8: el hero contesta «¿cómo estoy?» y nada más (ver `HeroDeUnVistazo`). El tipo
+        // no cambia: es lo único que un APK viejo entiende, y él sigue pintando su hero de siempre.
+        "HERO_BALANCE" -> HeroDeUnVistazo(section, data, conPatrimonioEnElHero, onNavigate)
+        "PREGUNTALE_A_MOVI" -> PreguntaleAMoviSection(section, data, onNavigate)
+        "PATRIMONIO" -> PatrimonioSection(section, data, onNavigate)
         "UPCOMING_PAYMENTS" -> UpcomingPaymentsSection(section, data, onNavigate)
         // El tipo sigue llamándose ALERTS para que un APK viejo pinte algo, pero lo que muestra es
         // «Para revisar»: además de lo que está mal, dice qué hacer y lleva a donde se hace.
@@ -165,198 +211,6 @@ private fun clickHandler(
     onNavigate: (Screen) -> Unit,
     uriHandler: UriHandler,
 ): (() -> Unit)? = action?.let { { performAction(it, onNavigate, uriHandler) } }
-
-// ── HERO_BALANCE — tu plata arriba, el patrimonio debajo, y el flujo del mes ───────
-
-/**
- * El número grande es **lo que tienes** ([HeroBalance.tuPlata]); el **patrimonio neto** queda
- * debajo, secundario pero visible.
- *
- * Antes el número grande era el patrimonio bajo el rótulo «Balance neto». El dueño cargó su
- * primer crédito y reportó «me descontó de la cuenta todo el saldo del crédito»: no había tal
- * descuento —la deuda vive en su propia cuenta y no entra al flujo de caja—, pero la cifra de
- * portada saltó de +$20,3M a −$28,7M sin nada que lo explicara. El dato era correcto y aun así
- * ilegible. Ver [heroBalance] para qué cuenta como «tu plata» y por qué.
- *
- * El patrimonio **no se esconde**: con los cinco créditos del dueño (~$1.505M) es la foto
- * honesta de su situación. Se muestra con tres cuidados para que se entienda en vez de asustar:
- * - solo cuando de verdad difiere de «tu plata» — o sea con deudas **o** con plata condicionada
- *   (ver [HeroBalance.muestraPatrimonio]); si coincide repetiría el número de arriba, y esta
- *   tarjeta ya compite con las filas «Cuentas» y «Créditos» de EXPLORA;
- * - **en gris, no en rojo** — el rojo de esta tarjeta está reservado al «Flujo del mes», que es
- *   el resultado del mes y algo sobre lo que se puede actuar hoy; un patrimonio negativo por
- *   hipotecas es una estructura de largo plazo, no una pérdida de este mes. La pantalla de
- *   Cuentas pinta ESTE MISMO número y sigue la misma regla, porque tocar la línea lleva ahí:
- *   ver gris acá y rojo a 28 sp un toque después se leería como que algo empeoró en el camino;
- * - con la resta escrita debajo («Tu plata menos $1.505,1M en deudas»), que es justamente lo
- *   que faltaba el día del reporte.
- *
- * Tocar esa línea abre Cuentas, cuyo hero es el mismo «PATRIMONIO NETO» desglosado en Activos
- * y Deudas.
- */
-@Composable
-private fun HeroBalanceSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
-    val balance = heroBalance(data.accounts.orEmpty())
-    val ingresos = data.summary?.ingresos ?: 0L
-    val egresos = data.summary?.egresos ?: 0L
-    val flujo = ingresos - egresos
-
-    MinCard(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Movi.espacios.amplio),
-        variant = MinCardVariant.Elevated,
-        padding = PaddingValues(22.dp),
-    ) {
-        // `section.title` NO se lee acá: el rótulo del hero es [HERO_BALANCE_TITLE], que viaja
-        // en el binario. Ver su KDoc — es la única forma de que cada cliente rotule lo que él
-        // mismo calcula, sin ventana de desalineación con la fila del server.
-        Text(
-            text = heroBalanceTitle(section),
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.textoMedio,
-        )
-        // **De qué período habla todo lo de abajo.** Las cifras del Inicio siempre fueron del
-        // período del dueño —del 25 al 25, si así lo configuró— pero la pantalla no lo decía, y un
-        // «Gastos $26,6M» sin ventana es una cifra que no se puede verificar contra nada. Con el
-        // mes de calendario `rangoLegibleDe` devuelve null: ahí no hay nada que aclarar.
-        encabezadoDelPeriodo(data)?.let { rango ->
-            Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-        }
-        Spacer(Modifier.height(10.dp))
-        // Antes de que las cuentas contesten, un «$0» de 44 sp es la afirmación más fuerte que
-        // hace esta pantalla, y es falsa mientras carga: en la web (sin caché que sobreviva a
-        // recargar) el dueño veía «Tu plata $0» durante segundos. Un guion no miente.
-        // **El número más visible de la app.** Un renglón siempre: ver [CifraProtagonista].
-        CifraProtagonista(
-            text = if (data.accounts == null) "—" else formatCOP(balance.tuPlata), // formatCOP ya trae el signo (F36) — no duplicarlo acá
-            // Una cuenta en descubierto SÍ es una alarma del día: eso se queda en rojo.
-            color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-        )
-        // La plata condicionada, dicha con su condición.
-        //
-        // El dueño: «esa plata no la tengo disponible; la de Skandia es dinero que deberías
-        // referenciar en patrimonio pero no mostrarle como disponible en mi balance, sino como un
-        // dinero disponible CONDICIONADO a uso en Vivienda». Tenía razón: «Tu plata» decía
-        // $137.625.167 cuando podía disponer de $31.625.167.
-        //
-        // Va debajo de la cifra grande y antes del patrimonio, porque es lo que explica la resta
-        // entre las dos: sale de «Tu plata» pero sigue contando en lo que vale.
-        if (balance.condicionado > 0L) {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = balance.condicionadoA
-                    ?.let { "Además ${formatMoneyCompact(balance.condicionado)} solo para $it" }
-                    ?: "Además ${formatMoneyCompact(balance.condicionado)} de uso condicionado",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
-        }
-        // El dueño, viendo esta tarjeta: «realmente me gustaría ver no el total sino el
-        // disponible en cada cuenta allí listado» — no el agregado por grupo que había acá
-        // antes («Dinero $X · Inversión $Y»). La cifra grande de arriba no cambia: sigue siendo
-        // la suma; esto es el desglose que explica de qué está hecha.
-        //
-        // `null` = las cuentas todavía no contestaron: no se afirma una lista (mismo criterio
-        // que el «—» de la cifra grande, unas líneas arriba). Vacía tampoco pinta nada — no hay
-        // nada que desglosar.
-        val cuentas = cuentasDelHero(data.accounts)
-        if (!cuentas.isNullOrEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                cuentas.forEach { cuenta ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = cuenta.nombre,
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(Movi.espacios.corto))
-                        Cifra(cuenta.monto, Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    }
-                }
-            }
-        }
-        if (balance.muestraPatrimonio) {
-            Spacer(Modifier.height(16.dp))
-            Hairline()
-            // La explicación va DEBAJO de la fila, a ancho completo, y no como sub-línea de la
-            // etiqueta: en un teléfono de 375 px compartir el renglón con la cifra la partía en
-            // «Tu plata menos $1.505,1M en / deudas», y la resta —que es todo el punto de esta
-            // línea— dejaba de leerse de un vistazo. Verificado a ojo en 375×812.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigate(Screen.Accounts) }
-                    .padding(top = 14.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        "Patrimonio neto",
-                        modifier = Modifier.weight(1f),
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.textoMedio,
-                    )
-                    Cifra(
-                        formatMoneyCompact(balance.patrimonio),
-                        Movi.textos.titulo,
-                        color = Movi.colores.texto,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-                Spacer(Modifier.height(Movi.espacios.minimo))
-                Text(
-                    text = patrimonioExplicacion(balance),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoApagado,
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-        } else {
-            Spacer(Modifier.height(18.dp))
-        }
-        Hairline()
-        Spacer(Modifier.height(16.dp))
-        // Las tres cifras chicas salen del MISMO resumen que el número grande de arriba, así que
-        // siguen su misma regla: sin respuesta, un guion. Antes decían «$0 / $0 / $0» al lado del
-        // «—» recién puesto arriba, que es la peor combinación posible — parece que la app sabe.
-        val sinResumen = data.summary == null
-        fun cifra(v: Long) = if (sinResumen) "—" else formatMoneyCompact(v)
-        Row(modifier = Modifier.fillMaxWidth()) {
-            listOf(
-                // **Ingresos en verde, gastos en coral.** Antes las tres cifras eran del mismo
-                // gris y el color de plata quedaba reservado al caso malo: un mes en rojo. O sea
-                // el color solo aparecía como alarma. Ahora cada cifra dice de qué lado está,
-                // que es lo que los colores del sistema significan.
-                Triple("Ingresos", cifra(ingresos), Movi.colores.entra),
-                Triple("Gastos", cifra(egresos), Movi.colores.sale),
-                // F36: un mes en rojo se ve en rojo. Y uno en verde, en verde.
-                Triple(
-                    "Flujo del mes",
-                    cifra(flujo),
-                    when {
-                        sinResumen -> Movi.colores.texto
-                        flujo < 0 -> Movi.colores.sale
-                        else -> Movi.colores.entra
-                    },
-                ),
-            ).forEach { (label, value, color) ->
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(label, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    Spacer(Modifier.height(Movi.espacios.minimo + 2.dp))
-                    Cifra(value, Movi.textos.titulo, color = color)
-                }
-            }
-        }
-    }
-}
 
 // ── UPCOMING_PAYMENTS — lo que vence en los próximos 7 días (reglas + cuotas) ──────
 
@@ -578,27 +432,5 @@ private fun SduiCardTile(card: ScreenCard, onClick: (() -> Unit)?) {
             Spacer(Modifier.height(6.dp))
             Text(it, style = Movi.textos.rotulo, color = Movi.colores.marca)
         }
-    }
-}
-
-/**
- * «Del 25 de agosto al 24 de septiembre · quedan 9 días», o `null` si el dueño usa el mes de
- * calendario (ahí el nombre del mes ya lo dice todo) o si el perfil todavía no contestó.
- *
- * Los días que quedan importan tanto como el rango: son la diferencia entre «me pasé» y «me estoy
- * por pasar», y es lo que convierte el resumen en algo accionable.
- */
-@Composable
-private fun encabezadoDelPeriodo(data: DashboardData): String? {
-    val periodo = data.periodoActual ?: return null
-    val rango = rangoLegibleDe(periodo, data.ajustesDePeriodo) ?: return null
-    val ahora = Clock.System.now().toEpochMilliseconds()
-    val fin = ventanaDe(periodo, data.ajustesDePeriodo).last
-    val dias = ((fin - ahora) / 86_400_000L).toInt()
-    return when {
-        dias > 1 -> "$rango · quedan $dias días"
-        dias == 1 -> "$rango · queda 1 día"
-        dias == 0 -> "$rango · último día"
-        else -> rango
     }
 }

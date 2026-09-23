@@ -69,17 +69,46 @@ package com.jvillada.movi.shared.model
 // Sube la generación porque es una sección nueva en la lista, y eso solo lo propaga el seed (ver
 // Generación 5). Un APK viejo recibe la fila nueva y no pasa nada: el tipo no está en su
 // `SECTION_TYPES`, `renderableSections` lo descarta y su `when` del renderer ni lo ve.
-const val DASHBOARD_LAYOUT_VERSION = 7
+//
+// Generación 8: el Inicio de un vistazo (entrega B de `2026-09-23-movi-de-un-vistazo-design.md`).
+// El dueño: «cuando yo entre a la app pueda ver toda mi información financiera … de una manera muy
+// simple, minimalista, clara … habilitando luego poder compartir … o hacer preguntas vía chat de
+// IA». Con sus datos reales el Inicio mostraba doce cifras arriba del pliegue y dos veredictos
+// opuestos («Te pasaste» en rojo y «Vas bien» un renglón abajo). Ahora contesta tres preguntas —¿cómo
+// estoy?, ¿qué viene?, ¿en qué se va?— y entran dos tipos nuevos:
+//
+// - PREGUNTALE_A_MOVI, **segundo**, pegado al hero: tres preguntas armadas con los datos (sin
+//   modelo, ver `preguntasSugeridas`) y el campo para escribir. Antes Movi AI era un banner al final.
+// - PATRIMONIO, después de las categorías: lo que tienes contra lo que debes, con sus tramos. El
+//   hero NUEVO deja de pintar el patrimonio; el viejo lo sigue pintando (el renderer viaja en el
+//   binario), así que ningún cliente se queda sin él.
+//
+// **El BANNER de Movi AI se queda al final de la lista, a propósito.** Es lo que ve un APK
+// anterior a esta generación: los dos tipos nuevos no están en su `SECTION_TYPES` y
+// `renderableSections` los descarta, así que su Inicio queda EXACTAMENTE como el de la generación
+// 7 —hero, falta por pagar, disponible, categorías, para revisar y el banner—. Sin el banner, ese
+// teléfono se habría quedado sin ningún acceso a Movi AI desde el Inicio: peor que hoy. El cliente
+// nuevo no lo pinta cuando la misma definición trae PREGUNTALE_A_MOVI (ver `visibleSections`):
+// serían dos puertas al mismo chat, una arriba y otra abajo.
+//
+// El orden de la lista es el del teléfono. En escritorio el cliente la reparte en dos columnas por
+// tipo (ver `columnasDelInicio`), conservando el orden dentro de cada una; eso NO viaja en la fila
+// porque es disposición, no contenido.
+const val DASHBOARD_LAYOUT_VERSION = 8
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
     version = DASHBOARD_LAYOUT_VERSION,
     sections = listOf(
         ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
+        ScreenSection(type = "PREGUNTALE_A_MOVI", title = "Pregúntale a Movi"),
         ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Pagos del período"),
         ScreenSection(type = "DISPONIBLE_DEL_PERIODO", title = "Disponible"),
-        ScreenSection(type = "GASTO_POR_CATEGORIA", title = "En qué se fue"),
+        ScreenSection(type = "GASTO_POR_CATEGORIA", title = "En qué se va"),
+        ScreenSection(type = "PATRIMONIO", title = "Tu patrimonio"),
         ScreenSection(type = "ALERTS", title = "Para revisar"),
+        // Solo para los APK anteriores a la generación 8: el cliente nuevo lo esconde cuando hay
+        // PREGUNTALE_A_MOVI. Ver el comentario de la generación 8, arriba.
         // Sin el "✦" que llevaba antes: en la web salía como ▯ (la fuente no tiene el glifo),
         // mismo problema que la Ola 2 arregló en los íconos de texto.
         ScreenSection(

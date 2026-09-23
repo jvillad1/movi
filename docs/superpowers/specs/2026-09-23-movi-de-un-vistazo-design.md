@@ -144,3 +144,62 @@ escritorio, dos columnas.
 - **No se agregó «Disponible del período» al contexto**: se calcula en `:shared`
   (`disponibleDelPeriodo`, con el checklist) y el server no tiene esa cuenta; replicarla daría dos
   cifras distintas para lo mismo. El modelo tiene Tu plata y el total de recurrentes pendientes.
+
+## Entrega B — cómo quedó (el Inicio de un vistazo)
+
+- **Generación 8 del Inicio** (`DASHBOARD_LAYOUT_VERSION = 8`, `DashboardDefaults.kt`). Orden, que
+  es el del teléfono: `HERO_BALANCE` → `PREGUNTALE_A_MOVI` → `CHECKLIST_DEL_PERIODO` →
+  `DISPONIBLE_DEL_PERIODO` → `GASTO_POR_CATEGORIA` → `PATRIMONIO` → `ALERTS` → `BANNER`. Dos tipos
+  nuevos en `ScreenTaxonomy.SECTION_TYPES`: `PREGUNTALE_A_MOVI` y `PATRIMONIO`. Ningún enum
+  serializado cambió.
+- **Qué ve un APK viejo**: los dos tipos nuevos no están en su taxonomía y `renderableSections` los
+  descarta, así que ve EXACTAMENTE su Inicio de la generación 7 — hero (el suyo, con el patrimonio),
+  falta por pagar, disponible, categorías, para revisar y **el banner de Movi AI**. Por eso el
+  `BANNER` se queda último en la lista: sin él, ese teléfono se quedaba sin Movi AI en el Inicio. El
+  cliente nuevo lo esconde cuando la definición trae `PREGUNTALE_A_MOVI` (`visibleSections`,
+  `esElBannerDeMoviAi`). Lo fija `DashboardDefaultsTest.un_apk_viejo_ve_el_inicio_de_la_generacion_7`.
+- **Y un cliente nuevo con una fila vieja** (generación 7, server sin desplegar): pinta el banner y el
+  hero dice el patrimonio en una línea, porque la definición no trae la tarjeta `PATRIMONIO`.
+- **¿Cómo estoy?** (`HeroDeUnVistazo`, `ui/sdui/SeccionesDeUnVistazo.kt`): Tu plata grande, el rango
+  del período, **un veredicto** y la barra entró/salió con «Entró / Salió». El veredicto es
+  `veredictoDelPeriodo` (`ui/dashboard/InicioDeUnVistazo.kt`): con el flujo en contra nombra las
+  cuotas de crédito si las hay (son deuda que baja, no consumo) o la categoría que más pesó; a favor,
+  la diferencia; y si está a favor pero el disponible se pasó, lo dice en la misma frase. Con los
+  números del dueño: **«Este período salieron $11,7M más de los que entraron — las cuotas de crédito
+  fueron $12,9M»**. Salieron del hero la lista de cuentas, el uso condicionado, el patrimonio y el
+  «Flujo del mes»; tocar la cifra lleva a Cuentas.
+- **Coherencia**: la tarjeta del disponible tiene UNA frase (`fraseDelDisponible`), manda la peor
+  ventana y nunca dice «vas bien»; el hero y la tarjeta comparten `excesoDelDisponible`. La prueba
+  `el veredicto y el disponible nunca se contradicen` recorre una grilla de flujos y gastos. Se
+  borraron `comoVieneElPeriodo/LaSemana/Hoy` y `rotuloDelPeriodo`.
+- **El disponible, compacto**: la cifra, la frase y tres columnas (Período / Semana / Hoy) con lo
+  gastado, «de» la meta y la barra. De dónde sale queda detrás de «¿De dónde sale?».
+- **Pregúntale a Movi** (`PreguntaleAMoviSection`): las tres de `preguntasSugeridas(data)`, tocables
+  (`Screen.AIChat(preguntaInicial = …)`), y un campo «Escribe tu pregunta…» que abre el chat vacío.
+  El campo es un botón con cara de campo: el chat ya tiene el suyo (el que adjunta extractos).
+- **Tu patrimonio** (`PatrimonioSection`, regla `patrimonioDelInicio`): neto en el color del texto
+  (no en rojo), la barra de dos colores Tienes/Debes y los tramos con nombre (Tu plata —con el saldo
+  de cada cuenta debajo, que el dueño había pedido en el hero—, uso condicionado, bienes, a favor en
+  créditos, deudas). Deudas → Créditos; lo demás → Cuentas. Se calcula desde `data.accounts` (la
+  misma lista que suma el hero) y cae al `DashboardSummary.patrimonio` solo si las cuentas no
+  llegaron: así «Tu plata» arriba y el tramo abajo coinciden por construcción.
+- **¿En qué se va?**: las primeras cuatro categorías y el resto agrupado; «Ver todas» las despliega
+  en el lugar.
+- **Escritorio**: `anchoMaximoDeLaPantalla` deja al Inicio llegar a 1.200 dp (el resto de las
+  pantallas sigue en 600). Desde 900 dp, `columnasDelInicio` reparte por tipo — izquierda: hero,
+  categorías, para revisar; derecha: Pregúntale a Movi, falta por pagar, disponible, patrimonio —,
+  conservando el orden de la definición en cada una. El renderer dejó de ser una `LazyColumn`
+  (dos columnas que scrollean juntas no caben en una) y registra su scroll en el relevo de los márgenes.
+- **La entrada**: la cifra cuenta y las barras crecen en 600 ms (`rememberProgresoDeEntrada`), una
+  vez por proceso y por bloque (`DashboardDataCache.entradasHechas`, que `clear()` vacía y vigila
+  `ElForkLlegaLimpioTest`). Volver al Inicio no la repite.
+- **«Para revisar» ya no repite el veredicto**: su aviso «Vas gastando más de lo que entró este
+  período» salía debajo de un hero que dice lo mismo con el número (se vio a ojo en escritorio, con
+  los dos a la vista). El puente `cosasParaRevisarDe` no le pasa el flujo cuando el hero da su
+  veredicto; la regla pura de `cosasParaRevisar` no cambió.
+- **Lo que no se tocó**: la lógica del checklist, las demás reglas de «Para revisar», el ícono de
+  compartir.
+- **Mirado a ojo** (wasm armado en CI, API simulada con datos de ejemplo, Playwright): 390 px y
+  1.400 px, tema oscuro y claro, y 390 px con una fila de la generación 7 (el hero dice el
+  patrimonio y el banner aparece al final). La animación de entrada no se miró en el navegador; la
+  prueban `InicioDeUnVistazoEnPantallaTest` (reloj detenido) y el marcador de `entradasHechas`.

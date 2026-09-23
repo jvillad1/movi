@@ -78,6 +78,7 @@ import com.jvillada.movi.ui.components.LocalRelevoDeScroll
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.MinNavRail
+import com.jvillada.movi.ui.dashboard.anchoMaximoDeLaPantalla
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -283,7 +284,9 @@ fun App() {
                 // Va acá, en la columna raíz, y no en cada pantalla: el agujero era de TODAS las
                 // que tienen un campo abajo, y una sola línea las cubre a todas — incluidas las
                 // hojas, que se dibujan adentro de este mismo hueco.
-                Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxSize().statusBarsPadding().imePadding()) {
+                // El Inicio es la única pantalla más ancha que la columna de 600 dp: en escritorio
+                // se parte en dos columnas (ver `anchoMaximoDeLaPantalla` y `columnasDelInicio`).
+                Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(currentScreen)).fillMaxSize().statusBarsPadding().imePadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 saveableStateHolder.SaveableStateProvider(key = currentScreen.toString()) {
                 CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {

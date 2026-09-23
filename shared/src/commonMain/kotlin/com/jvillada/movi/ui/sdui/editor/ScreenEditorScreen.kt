@@ -65,6 +65,10 @@ private val SECTION_TYPE_LABELS = mapOf(
     "LINK_LIST" to "Lista de enlaces",
     "BANNER" to "Aviso",
     "DISPONIBLE_DEL_PERIODO" to "Disponible",
+    "CHECKLIST_DEL_PERIODO" to "Falta por pagar",
+    "GASTO_POR_CATEGORIA" to "En qué se va",
+    "PREGUNTALE_A_MOVI" to "Pregúntale a Movi",
+    "PATRIMONIO" to "Tu patrimonio",
 )
 
 private val NAVIGATE_TARGET_LABELS = mapOf(
@@ -413,7 +417,8 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             )
         }
 
-        "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "DISPONIBLE_DEL_PERIODO" -> {
+        "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "DISPONIBLE_DEL_PERIODO",
+        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "PREGUNTALE_A_MOVI", "PATRIMONIO" -> {
             // Secciones de datos: el contenido lo pone el cliente con lo que carga del server;
             // solo el título se ajusta desde acá (vacío = el nombre por defecto).
             //
@@ -432,7 +437,11 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
                     "UPCOMING_PAYMENTS" -> "Se muestra solo cuando hay pagos en los próximos 7 días."
                     "ALERTS" -> "Se muestra solo cuando hay algo por resolver."
                     "DISPONIBLE_DEL_PERIODO" -> "Ingresos menos fijos, y lo gastado en el período, la semana y hoy. Se muestra cuando hay ingresos en el período."
-                    else -> "Tu plata, el patrimonio neto, ingresos, gastos y flujo del mes: sin más campos. " +
+                    "CHECKLIST_DEL_PERIODO" -> "Lo que falta por pagar del período. Se muestra cuando hay pagos en el período."
+                    "GASTO_POR_CATEGORIA" -> "Las categorías del período, con su barra. Se muestra cuando hay gastos en el período."
+                    "PREGUNTALE_A_MOVI" -> "Tres preguntas armadas con tus datos y un campo para escribir la tuya."
+                    "PATRIMONIO" -> "Lo que tienes contra lo que debes, con sus tramos. Se muestra cuando hay cuentas."
+                    else -> "Tu plata, el veredicto del período y lo que entró contra lo que salió: sin más campos. " +
                         "El título de esta sección no se cambia aquí: viaja en la app, no en la pantalla."
                 },
                 style = Movi.textos.apoyo, color = Movi.colores.textoMedio,

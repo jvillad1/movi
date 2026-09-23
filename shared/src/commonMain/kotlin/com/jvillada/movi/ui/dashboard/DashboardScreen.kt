@@ -94,11 +94,20 @@ object DashboardDataCache {
         cargadoEn = 0L
     }
 
+    /**
+     * Qué bloques del Inicio ya hicieron su entrada animada (la cifra que cuenta, las barras que
+     * crecen) en este proceso. Ver [rememberProgresoDeEntrada]: la animación es **una vez**, no cada
+     * vez que se vuelve al Inicio ni cada vez que un bloque sale y entra de la pantalla.
+     */
+    val entradasHechas: MutableSet<String> = mutableSetOf()
+
     /** Al cerrar sesión: lo cacheado es del usuario que se va (ver SessionManager.clear). */
     fun clear() {
         data = null
         cargadoEn = 0L
         tickDeLaCarga = 0
+        // El próximo que entre ve su Inicio llegar, como la primera vez.
+        entradasHechas.clear()
     }
 }
 
@@ -281,6 +290,9 @@ fun DashboardScreen(
                             // Lo que tenías al empezar el período y lo que entró. Un server viejo
                             // no lo manda y la tarjeta vuelve a «ingresos menos fijos».
                             plataDelDisponible = plataDelDisponibleDe(s),
+                            // El patrimonio ya partido (entrega A). La tarjeta lo usa solo si las
+                            // cuentas no llegaron: ver `patrimonioDelInicio`.
+                            patrimonio = s.patrimonio,
                         )
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por

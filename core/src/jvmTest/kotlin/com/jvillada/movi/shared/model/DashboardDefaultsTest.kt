@@ -23,14 +23,44 @@ class DashboardDefaultsTest {
         val def = defaultDashboardDefinition()
         assertEquals("dashboard", def.slug)
         assertEquals(DASHBOARD_LAYOUT_VERSION, def.version)
-        // Generación 7 (la 6 más «Disponible»): el Inicio es el resumen del período. El checklist reemplaza a
-        // UPCOMING_PAYMENTS (contestaban preguntas distintas y quedaban diciendo lo mismo) y
-        // ALERTS pasa a pintarse como «Para revisar» sin cambiar de tipo, para que un APK viejo
-        // siga mostrando algo (ver el KDoc de DASHBOARD_LAYOUT_VERSION).
+        // Generación 8, el Inicio de un vistazo: ¿cómo estoy? (hero) → Pregúntale a Movi → ¿qué viene?
+        // (checklist y disponible) → ¿en qué se va? → el patrimonio → para revisar. El BANNER se
+        // queda último, solo para los APK viejos (ver `un_apk_viejo_ve_el_inicio_de_la_generacion_7`).
+        assertEquals(8, DASHBOARD_LAYOUT_VERSION)
         assertEquals(
-            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            listOf(
+                "HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO",
+                "GASTO_POR_CATEGORIA", "PATRIMONIO", "ALERTS", "BANNER",
+            ),
             def.sections.map { it.type },
         )
+    }
+
+    /**
+     * **Qué ve un APK anterior a la generación 8 con la definición nueva.** Su `SECTION_TYPES` es el
+     * de la generación 7 (copiado acá tal como quedó en ese binario), así que `renderableSections`
+     * le descarta PREGUNTALE_A_MOVI y PATRIMONIO. Lo que queda tiene que ser EXACTAMENTE su Inicio de
+     * hoy —mismo orden, y con el banner de Movi AI—: nunca peor que antes del deploy.
+     */
+    @Test
+    fun un_apk_viejo_ve_el_inicio_de_la_generacion_7() {
+        val tiposDeLaGeneracion7 = listOf(
+            "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS",
+            "CARD_ROW", "CARD_LIST", "LINK_LIST", "BANNER",
+            "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO",
+        )
+        val loQueVe = defaultDashboardDefinition().sections.filter { it.type in tiposDeLaGeneracion7 }
+        assertEquals(
+            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "DISPONIBLE_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            loQueVe.map { it.type },
+            "el APK viejo ve su Inicio de la generación 7, en el mismo orden",
+        )
+        val banner = loQueVe.last()
+        assertEquals("aichat", banner.cards.single().action?.target, "y conserva su acceso a Movi AI")
+        // Los tipos nuevos existen para ESTE binario: si salieran de la taxonomía, el cliente nuevo
+        // también los descartaría y el Inicio se quedaría sin Movi AI arriba.
+        assertTrue("PREGUNTALE_A_MOVI" in ScreenTaxonomy.SECTION_TYPES)
+        assertTrue("PATRIMONIO" in ScreenTaxonomy.SECTION_TYPES)
     }
 
     /**
