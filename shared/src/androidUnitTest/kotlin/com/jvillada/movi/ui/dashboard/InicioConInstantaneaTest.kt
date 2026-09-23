@@ -7,8 +7,11 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.CapturaDeSms
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -75,8 +78,12 @@ class InicioConInstantaneaTest {
             override suspend fun getCredits(): List<CreditSummary> { puerta.await(); return emptyList() }
             override suspend fun getCards(): List<CardSummary> { puerta.await(); return emptyList() }
             override suspend fun getUpcomingPayments(): List<UpcomingPayment> { puerta.await(); return emptyList() }
-            // El resto (resumen del Inicio, metas, perfil…) explota en RepositorioDePrueba y el
-            // Inicio lo trata como una lectura secundaria caída: no se pinta, y no importa acá.
+            // Sin el resumen del Inicio la carga no se sella (revisión final): hace falta acá.
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
+                puerta.await(); return DashboardSummary(pendingSms = 1)
+            }
+            // El resto (metas, perfil, presupuestos…) explota en RepositorioDePrueba y el Inicio
+            // lo trata como una lectura secundaria caída: no se pinta, y no importa acá.
         }
     }
 
@@ -112,6 +119,81 @@ class InicioConInstantaneaTest {
         assertTrue(DashboardDataCache.cargadoEn > 0L, "una carga buena sí sella")
         // La carga buena reescribe la instantánea: el próximo arranque en frío pinta esta.
         assertEquals(cuentas(1_234_000), InstantaneaDelInicio.delAparato.datos("u1")?.accounts)
+    }
+
+    /**
+     * Revisión final, punto 4: con la instantánea en pantalla, «Actualizando…» está desde el
+     * PRIMER cuadro — `loading` nacía en `false` y el efecto lo prendía después, así que el primer
+     * cuadro mostraba lo de ayer sin decir que se estaba actualizando.
+     *
+     * `autoAdvance = false` congela el reloj de cuadros: lo que se lee es la primera composición,
+     * antes de que corra ningún `LaunchedEffect`.
+     */
+    @Test
+    fun `con instantanea dice Actualizando desde el primer cuadro`() {
+        InstantaneaDelInicio.delAparato.guardarDatos("u1", deAyer)
+        composeRule.mainClock.autoAdvance = false
+
+        montar()
+
+        assertEquals(1, cuantas("Actualizando…"), "el primer cuadro ya dice que se está actualizando")
+        composeRule.mainClock.autoAdvance = true
+    }
+
+    /**
+     * Revisión final, punto 2b: todo contesta MENOS `/api/dashboard/summary`. `llegado` alcanza
+     * para afirmar (resumen y cuentas llegaron), pero el gasto por categoría, los SMS pendientes y
+     * la captura que hay en pantalla son los de la instantánea. No se sella —volver tiene que
+     * reintentar— y la instantánea no se reescribe con esos campos viejos como si fueran de hoy.
+     */
+    @Test
+    fun `sin el resumen del Inicio no se sella ni se reescribe la instantanea`() {
+        val deAyerConResumen = deAyer.copy(
+            spentByCategory = mapOf("Comida" to 2_000_000L),
+            pendingSms = 3,
+            captura = CapturaDeSms(total = 11, ultimo = "2026-09-22 08:15"),
+        )
+        InstantaneaDelInicio.delAparato.guardarDatos("u1", deAyerConResumen)
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getScreen(slug: String, cachedVersion: Int?): ScreenDefinition? = null
+            override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
+                FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 0, egresos = 0)
+            override suspend fun getAccounts(): List<Account> = cuentas(1_234_000)
+            override suspend fun getCredits(): List<CreditSummary> = emptyList()
+            override suspend fun getCards(): List<CardSummary> = emptyList()
+            override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = error("sin señal")
+        }
+
+        montar()
+        composeRule.waitForIdle()
+
+        assertEquals(0L, DashboardDataCache.cargadoEn, "sin el resumen del Inicio no se sella")
+        assertEquals(
+            deAyerConResumen,
+            InstantaneaDelInicio.delAparato.datos("u1"),
+            "la instantánea no se reescribe con el resumen de ayer como si fuera de hoy",
+        )
+    }
+
+    /**
+     * Y una carga buena guarda SOLO lo que contestó: los presupuestos de ayer (su lectura se cae
+     * en esta carga) no pasan a la instantánea nueva como si fueran de hoy.
+     */
+    @Test
+    fun `una carga buena guarda solo lo que llego en esta carga`() {
+        InstantaneaDelInicio.delAparato.guardarDatos("u1", deAyer.copy(budgets = listOf(Budget("Comida", 1_000_000))))
+
+        montar()
+        puertaDeLaDefinicion.complete(null)
+        puerta.complete(Unit)
+        composeRule.waitForIdle()
+
+        val guardada = InstantaneaDelInicio.delAparato.datos("u1")
+        assertNotNull(guardada)
+        assertTrue(DashboardDataCache.cargadoEn > 0L, "la carga salió bien y selló")
+        assertEquals(1, guardada.pendingSms, "lo que llegó del resumen del Inicio sí se guarda")
+        assertEquals(null, guardada.budgets, "lo que no llegó en esta carga no se guarda")
     }
 
     /**

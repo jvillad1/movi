@@ -194,7 +194,29 @@ fun DashboardScreen(
                 ?: DashboardData(),
         )
     }
-    var loading by remember { mutableStateOf(false) }
+    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
+    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
+    // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
+    val refreshTick = LocalRefreshTick.current
+    // **Revisión final: `loading` nace con la misma decisión que va a tomar el efecto de abajo.**
+    // Nacía en `false` y el efecto lo prendía recién al correr: el primer cuadro de un arranque
+    // en frío pintaba «Tu plata —» y las tres preguntas genéricas de «Pregúntale a Movi» —
+    // justo lo que los esqueletos (Task 7) vinieron a sacar—, y con la instantánea en pantalla
+    // ese cuadro salía sin «Actualizando…», como si lo de ayer fuera de hoy. Se pregunta a
+    // [debeRecargarElInicio] con los mismos datos que va a usar el efecto (sin reintento: al
+    // montar `refreshKey` es 0), así el primer cuadro ya dice lo que va a pasar.
+    var loading by remember {
+        mutableStateOf(
+            debeRecargarElInicio(
+                hayDatos = DashboardDataCache.data != null,
+                cargadoEn = DashboardDataCache.cargadoEn,
+                tickDeLaCarga = DashboardDataCache.tickDeLaCarga,
+                tickActual = refreshTick,
+                reintento = false,
+                ahora = Clock.System.now().toEpochMilliseconds(),
+            ),
+        )
+    }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
@@ -214,10 +236,6 @@ fun DashboardScreen(
     // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
     val notifications = notificationRows(data)
 
-    // Además de `refreshKey` (el reintento propio de esta pantalla), la señal de que se guardó
-    // algo desde la hoja de Agregar: es una modal y esta pantalla nunca sale de la composición,
-    // así que sin esto seguiría mostrando la lista de antes. Ver [LocalRefreshTick].
-    val refreshTick = LocalRefreshTick.current
     // TODO(ola-8, V13): el Inicio repite sus ~10 llamadas CADA VEZ que se entra — se contaron
     //  4 rondas completas en pocos minutos de uso normal. En el teléfono con datos móviles eso
     //  es plata del dueño.
@@ -268,6 +286,13 @@ fun DashboardScreen(
         // (la caché o la instantánea), así que con las diez caídas seguiría pudiendo «afirmar» con
         // las cifras de ayer. El sello de abajo mira esto, no `data`.
         var llegado = DashboardData()
+        // Si contestó `/api/dashboard/summary`. Aparte de `llegado` porque ninguno de sus campos
+        // distingue por sí solo «llegó vacío» de «no llegó» (`pendingSms = 0`, un mapa vacío).
+        // Ver el sello de abajo.
+        var resumenDelInicioLlego = false
+        // Lo mismo para el perfil: sin él, `llegado` tendría el corte por defecto (mes de
+        // calendario) y la instantánea perdería el del dueño — ver la escritura de abajo.
+        var perfilLlego = false
         // SDUI. Silenciosa si falla: capa 2 (ScreenDefCache, y su copia en el aparato) conserva la
         // última válida; capa 3 (defaultDashboardDefinition, idéntica al seed) cubre un arranque
         // sin ninguna de las dos.
@@ -321,7 +346,10 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getUpcomingPayments() }
                     .onSuccess { u -> data = data.copy(upcoming = u); llegado = llegado.copy(upcoming = u) }
             }
-            launch { runCatching { Repositories.wallets.getBudgets() }.onSuccess { b -> data = data.copy(budgets = b) } }
+            launch {
+                runCatching { Repositories.wallets.getBudgets() }
+                    .onSuccess { b -> data = data.copy(budgets = b); llegado = llegado.copy(budgets = b) }
+            }
             // Gasto del mes por categoría, candidatos a pago de tarjeta y SMS pendientes vienen ya
             // reducidos del server (GET /api/dashboard/summary) en vez de bajar todos los eventos,
             // todos los candidatos y todos los SMS para sacar tres números — con meses de uso
@@ -351,6 +379,17 @@ fun DashboardScreen(
                             // cuentas no llegaron: ver `patrimonioDelInicio`.
                             patrimonio = s.patrimonio,
                         )
+                        llegado = llegado.copy(
+                            spentByCategory = data.spentByCategory,
+                            cardCandidates = data.cardCandidates,
+                            pendingSms = data.pendingSms,
+                            captura = data.captura,
+                            capturaSilenciada = data.capturaSilenciada,
+                            gastoVariablePorDia = data.gastoVariablePorDia,
+                            plataDelDisponible = data.plataDelDisponible,
+                            patrimonio = data.patrimonio,
+                        )
+                        resumenDelInicioLlego = true
                         // Ola 9 · A2: las categorías propias del dueño quedan disponibles en
                         // «Agregar» aunque entre directo desde acá, sin haber pasado por
                         // Movimientos ni Presupuestos. **No es una llamada nueva**: viene en
@@ -368,11 +407,17 @@ fun DashboardScreen(
                         CuentaMasUsadaCache.recordFromServer(s.cuentaMasUsada)
                     }
             }
-            launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }
+            launch {
+                runCatching { Repositories.wallets.getGoals() }
+                    .onSuccess { g -> data = data.copy(goals = g); llegado = llegado.copy(goals = g) }
+            }
             // Los sellos de «ya ocurrió», para poder tildar el checklist del período. Si falla, el
             // checklist muestra todo como pendiente: recordar algo ya pagado molesta; dar por
             // pagado algo que no, cuesta plata.
-            launch { runCatching { Repositories.wallets.getOccurrenceStates() }.onSuccess { o -> data = data.copy(ocurrencias = o) } }
+            launch {
+                runCatching { Repositories.wallets.getOccurrenceStates() }
+                    .onSuccess { o -> data = data.copy(ocurrencias = o); llegado = llegado.copy(ocurrencias = o) }
+            }
             // El período del dueño (su día de corte y los inicios que movió a mano). Sin esto el
             // Inicio hablaría del mes de calendario, que es justo lo que dejó de hacer el resto de
             // la app.
@@ -383,11 +428,16 @@ fun DashboardScreen(
                         ajustesDePeriodo = ajustes,
                         periodoActual = periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes),
                     )
+                    llegado = llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+                    perfilLlego = true
                 }
             }
             // F50: la cifra de "investments" ahora sale de `data.accounts` (cuentas tipo
             // INVESTMENT) — ya no hace falta este fetch aparte de holdings.
-            launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
+            launch {
+                runCatching { Repositories.wallets.getSubscriptions() }
+                    .onSuccess { s -> data = data.copy(subscriptions = s); llegado = llegado.copy(subscriptions = s) }
+            }
         }
         // Con la misma guarda que la instantánea (ver `usuario`): una carga que termina después
         // del logout no puede dejarle al próximo usuario la plata del anterior en memoria.
@@ -408,10 +458,27 @@ fun DashboardScreen(
         // Y se mira sobre `llegado`, no sobre `data`: con la instantánea del aparato, un arranque
         // en frío sin señal pinta cifras de ayer que SÍ alcanzan para afirmar, y las diez caídas
         // sellaban igual. Por lo mismo, la instantánea solo se reescribe con una carga buena.
-        if (llegado.puedeAfirmarVacio) {
+        //
+        // **Revisión final — y el resumen del Inicio tiene que haber llegado.** Con solo
+        // `/api/dashboard/summary` caído, `llegado` alcanzaba para afirmar y se sellaba; `data`
+        // traía todavía de la caché o de la instantánea el gasto por categoría, el gasto por día,
+        // «Tu plata» al empezar, la captura de SMS y los pendientes — y se escribían al aparato
+        // como si fueran de esta carga. Sin sello, volver al Inicio reintenta.
+        //
+        // Y lo que se escribe es `llegado`, no `data`: la instantánea guarda SOLO lo que contestó
+        // esta carga. Una lectura secundaria caída (metas, presupuestos, sellos) no se pinta en el
+        // próximo arranque en frío, que es mejor que pintarla vieja como si fuera la última que se
+        // supo. El corte del período es la excepción: sin perfil se conserva el que ya había (ver
+        // `conElPeriodoDe`: el corte se le puede confiar a la instantánea, la fecha no).
+        if (llegado.puedeAfirmarVacio && resumenDelInicioLlego) {
             DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
             DashboardDataCache.tickDeLaCarga = refreshTick
-            if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, data)
+            val instantanea = if (perfilLlego) {
+                llegado
+            } else {
+                llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+            }
+            if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }
         loading = false
     }
