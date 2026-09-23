@@ -71,6 +71,65 @@ class CuentaPorDefectoTest {
         assertEquals(OrigenCuenta.PRIMERA, elegida.origen)
     }
 
+    // ── Ola A: la cuenta con más gastos de los últimos 30 días ────────────────────────
+
+    @Test
+    fun `sin contexto ni ultima, la mas usada le gana a la primera de la lista`() {
+        val elegida = resolverCuenta(tres, masUsada = "acc_n")
+        assertEquals("acc_n", elegida.id)
+        assertEquals(OrigenCuenta.MAS_USADA, elegida.origen)
+    }
+
+    @Test
+    fun `la ultima usada le gana a la mas usada`() {
+        // Un movimiento reciente pesa más que un promedio de 30 días.
+        val elegida = resolverCuenta(tres, ultima = "acc_e", masUsada = "acc_n")
+        assertEquals("acc_e", elegida.id)
+        assertEquals(OrigenCuenta.ULTIMA, elegida.origen)
+    }
+
+    @Test
+    fun `el contexto le gana a la mas usada`() {
+        val elegida = resolverCuenta(tres, contexto = "acc_e", masUsada = "acc_n")
+        assertEquals("acc_e", elegida.id)
+        assertEquals(OrigenCuenta.CONTEXTO, elegida.origen)
+    }
+
+    @Test
+    fun `una mas usada que ya no esta entre las elegibles cae a la primera`() {
+        // Misma regla que las otras dos: borrada, de otro tipo o de otro usuario, da igual — si
+        // no está en la lista que el llamador ya filtró, no participa.
+        val elegida = resolverCuenta(tres, masUsada = "acc_borrada")
+        assertEquals("acc_b", elegida.id)
+        assertEquals(OrigenCuenta.PRIMERA, elegida.origen)
+    }
+
+    @Test
+    fun `una mas usada de otro tipo no llega a elegirse`() {
+        val conTarjeta = tres + cuenta("acc_visa", "Visa", AccountType.CREDIT_CARD)
+        val elegibles = transferableAccounts(conTarjeta)
+        val elegida = resolverCuenta(elegibles, masUsada = "acc_visa")
+        assertEquals("acc_b", elegida.id)
+        assertEquals(OrigenCuenta.PRIMERA, elegida.origen)
+    }
+
+    @Test
+    fun `la mas usada tambien puede ser el destino excluido de un traspaso`() {
+        val destino = resolverCuenta(tres, masUsada = "acc_n", excluir = "acc_n")
+        assertEquals("acc_b", destino.id)
+        assertEquals(OrigenCuenta.PRIMERA, destino.origen)
+    }
+
+    @Test
+    fun `con una sola cuenta el aviso de mas usada tampoco dice nada`() {
+        assertNull(avisoDeCuenta(OrigenCuenta.MAS_USADA, cuentasDisponibles = 1))
+    }
+
+    @Test
+    fun `el aviso de mas usada aparece con varias cuentas`() {
+        assertEquals("Más usada", avisoDeCuenta(OrigenCuenta.MAS_USADA, 3))
+    }
+
     @Test
     fun `sin cuentas no hay nada que elegir`() {
         val elegida = resolverCuenta(emptyList(), contexto = "acc_b", ultima = "acc_n")

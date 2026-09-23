@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.Clock
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
@@ -306,6 +307,9 @@ fun DashboardScreen(
                         UsedCategoriesCache.recordAll(
                             s.spentByCategory.keys.map { c -> c to TransactionType.EXPENSE },
                         )
+                        // Ola A: misma respuesta, misma lógica — la cuenta con más gastos de los
+                        // últimos 30 días queda disponible para que «Agregar» arranque ahí.
+                        CuentaMasUsadaCache.recordFromServer(s.cuentaMasUsada)
                     }
             }
             launch { runCatching { Repositories.wallets.getGoals() }.onSuccess { g -> data = data.copy(goals = g) } }

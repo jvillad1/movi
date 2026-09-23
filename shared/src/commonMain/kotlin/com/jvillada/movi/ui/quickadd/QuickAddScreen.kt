@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
@@ -217,8 +219,22 @@ fun QuickAddScreen(
                     if (presetEsIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
                     UsedCategoriesCache.used,
                     UsedCategoriesCache.prefs,
+                    UsedCategoriesCache.usosRecientes,
                 ),
         )
+    }
+
+    /**
+     * Ola A — **el dueño eligió esta categoría con el dedo**, no la puso la app. Lo llenan dos
+     * caminos: tocar un chip de frecuentes (ver [pickCategoriaFrecuente]) y un [presetCategoria]
+     * válido, que viene de un recurrente que el dueño ya categorizó — es tan «a mano» como tocar
+     * un chip, solo que lo hizo en otra pantalla.
+     *
+     * Estado nuevo, sin ningún lector todavía: existe para que Task 5 pueda distinguir «esto lo
+     * eligió él» de «esto lo puso la app» antes de pisarlo con una sugerencia automática.
+     */
+    var categoriaElegidaAMano by remember {
+        mutableStateOf(presetCategoria?.trim()?.let { it.isNotEmpty() && !isReservedCategory(it) } == true)
     }
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
@@ -426,6 +442,7 @@ fun QuickAddScreen(
             cuentas = cuentasPara(lista, uso).principales,
             contexto = presetAccountId,
             ultima = LastAccountStore.lastAccountId,
+            masUsada = CuentaMasUsadaCache.id,
         )
         selectedAccountId = elegida.id
         origenCuenta = elegida.origen
@@ -468,6 +485,10 @@ fun QuickAddScreen(
     // que cargaran se quedaría con lo que el dueño ya cambió.
     val categoryPrefs = UsedCategoriesCache.prefs
     val usedCategories = UsedCategoriesCache.used
+    // Ola A: los usos de los últimos 60 días, para las mismas dos cosas que [categoryPrefs] —
+    // llenar los chips de frecuentes y decidir el valor por defecto — y leídos igual, como estado,
+    // por si el Inicio todavía no había cargado cuando se abrió esta hoja.
+    val usosRecientes = UsedCategoriesCache.usosRecientes
 
     LaunchedEffect(pickers.typeIndex, categoryPrefs) {
         // Con categoría libre (F35) ya no hay una lista fija de la que "salirse" al cambiar de
@@ -496,8 +517,30 @@ fun QuickAddScreen(
         if (pickers.typeIndex > 1) return@LaunchedEffect
         val newType = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
         if (!categoriaSirveParaTipo(category, newType, usedCategories, categoryPrefs)) {
-            category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs)
+            category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs, usosRecientes)
         }
+    }
+
+    /**
+     * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña — ver
+     * [categoriasFrecuentes]. Vacía sin datos de uso, que es cuando la fila de chips no ocupa
+     * lugar (ver [EditorBody]).
+     */
+    val categoriasFrecuentesDelTipo = if (pickers.typeIndex > 1) {
+        emptyList()
+    } else {
+        categoriasFrecuentes(
+            tipo = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
+            usadas = usedCategories,
+            prefs = categoryPrefs,
+            usos = usosRecientes,
+        )
+    }
+
+    /** Tocar un chip: pone la categoría Y la marca como elegida a mano (ver [categoriaElegidaAMano]). */
+    fun pickCategoriaFrecuente(nombre: String) {
+        category = nombre
+        categoriaElegidaAMano = true
     }
 
     fun onKey(key: String) {
@@ -946,6 +989,8 @@ fun QuickAddScreen(
                             moneda = monedaDeLaCuenta(accounts, selectedAccountId),
                             onKey = ::onKey,
                             category = category,
+                            categoriasFrecuentes = categoriasFrecuentesDelTipo,
+                            onPickCategoriaFrecuente = ::pickCategoriaFrecuente,
                             // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
                             // falla y la hoja se abrió con `presetAccountId`, `selectedAccount` es
                             // null —la lista está vacía— así que esto dice «Seleccionar cuenta»,
@@ -1057,6 +1102,15 @@ private fun EditorBody(
     moneda: String,
     onKey: (String) -> Unit,
     category: String,
+    /**
+     * Ola A: hasta 6 categorías, las que más se usan para este tipo — ver [categoriasFrecuentes].
+     * Vacía = la fila de chips no se dibuja y no ocupa lugar (a diferencia de la fila «Cuenta»,
+     * que sí reserva su alto: acá no hace falta, porque esta fila no aparece y desaparece por su
+     * cuenta en la misma sesión — el tipo elegido no cambia salvo que el dueño toque el segmento
+     * de arriba, y ESE toque ya mueve todo el formulario).
+     */
+    categoriasFrecuentes: List<String> = emptyList(),
+    onPickCategoriaFrecuente: (String) -> Unit = {},
     walletLabel: String,
     walletHint: String? = null,
     /** Si el renglón del aviso ocupa su lugar aunque hoy no diga nada — ver la fila «Cuenta». */
@@ -1174,6 +1228,18 @@ private fun EditorBody(
             showChevron = true,
             onClick = onPickCategory,
         )
+        // Ola A: los chips de frecuentes, entre «Categoría» y «Cuenta» — justo debajo de la
+        // categoría que resumen, y antes de la fila que decide dónde sale la plata. Vacía = no
+        // se dibuja nada y `CardRow` de arriba sigue con su hairline pegado al de «Cuenta», que
+        // es exactamente el aspecto de hoy para quien no tiene ningún dato de uso todavía.
+        if (categoriasFrecuentes.isNotEmpty()) {
+            CategoriaChipsRow(
+                categorias = categoriasFrecuentes,
+                categoriaElegida = category,
+                onPick = onPickCategoriaFrecuente,
+            )
+            Hairline()
+        }
         CardRow(
             left = {
                 Text("Cuenta", style = Movi.textos.titulo, color = Movi.colores.textoMedio)
@@ -1377,6 +1443,62 @@ private fun EditorBody(
                     color = Movi.colores.textoMedio,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Ola A: hasta 6 chips con las categorías que más se usan para este tipo — ver
+ * [categoriasFrecuentes], que es la que decide cuáles y en qué orden. Tocar uno la elige sin
+ * abrir el sub-picker de «Categoría»; la elegida se ve activa.
+ *
+ * Mismo lenguaje visual que [SheetChip] de `CreateRecurringRuleSheet.kt` (fondo tenue de
+ * `Movi.colores.marca` cuando está activo, borde cuando no) y no el de los chips de filtro de
+ * Movimientos: esta fila vive DENTRO de una `MinCard`, cuyo fondo ya es `Movi.colores.tarjeta` —
+ * un chip inactivo pintado con ese mismo color sería invisible contra su propio fondo.
+ *
+ * Alto fijo (`heightIn` en el `Row` de abajo lo garantiza aunque cambie el texto) y
+ * desplazamiento horizontal propio: no ocupa más de una fila ni empuja el resto del formulario,
+ * la misma disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA NO ENTRA» más arriba).
+ */
+@Composable
+private fun CategoriaChipsRow(
+    categorias: List<String>,
+    categoriaElegida: String,
+    onPick: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        categorias.forEach { nombre ->
+            val activa = nombre == categoriaElegida
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (activa) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
+                    .then(
+                        if (!activa) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
+                        else Modifier,
+                    )
+                    .clickable { onPick(nombre) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = nombre,
+                    style = Movi.textos.apoyo,
+                    fontWeight = if (activa) FontWeight.Medium else FontWeight.Normal,
+                    color = if (activa) Movi.colores.marca else Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

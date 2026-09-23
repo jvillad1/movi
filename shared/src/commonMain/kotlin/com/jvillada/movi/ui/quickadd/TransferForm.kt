@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
@@ -587,6 +588,10 @@ internal fun TransferBody(
                 cuentas = paraDefecto,
                 contexto = presetAccountId,
                 ultima = LastAccountStore.lastTransferFromId,
+                // Ola A: tiene sentido solo del lado «Desde» — es de ahí que sale la plata, que
+                // es justo lo que mide `cuentaMasUsada` (gastos de los últimos 30 días). El
+                // destino («Hacia») no tiene equivalente: no hay «cuenta más recibida».
+                masUsada = CuentaMasUsadaCache.id,
             )
             fromId = elegida.id
             origenFrom = elegida.origen

@@ -316,6 +316,8 @@ object SessionManager {
         ReminderChannelsCache.clear()
         // Ola 11: y la última cuenta usada, por lo mismo — es una cuenta del usuario que se va.
         LastAccountStore.clear()
+        // Ola A: y la cuenta más usada, por el mismo motivo.
+        CuentaMasUsadaCache.clear()
         // Y los días que plegó en Movimientos: son fechas de SU lista.
         DiasPlegadosStore.clear()
         // Ver Platform.kt: en wasmJs esto recarga la página para que el overlay HTML nativo

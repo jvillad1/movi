@@ -18,6 +18,13 @@ enum class OrigenCuenta {
     /** La última en la que se anotó algo (ver `LastAccountStore`). */
     ULTIMA,
 
+    /**
+     * Ola A: la que más gastos tuvo en los últimos 30 días (ver `CuentaMasUsadaCache` y
+     * `DashboardSummary.cuentaMasUsada`). Manda sobre «la primera de la lista» pero no sobre la
+     * última en la que se anotó algo — un movimiento reciente es más fuerte que una costumbre.
+     */
+    MAS_USADA,
+
     /** No había ni contexto ni memoria utilizable: la primera de la lista. */
     PRIMERA,
 
@@ -42,10 +49,14 @@ data class CuentaElegida(val id: String?, val origen: OrigenCuenta)
  *    regla recurrente ya tiene guardada. Es una intención explícita y reciente del dueño sobre
  *    ESTE movimiento; una costumbre vieja no puede ganarle.
  * 2. **[ultima]** — la última cuenta en la que anotó algo.
- * 3. **La primera de [cuentas]** — el comportamiento de siempre, ahora sobre una lista con
+ * 3. **[masUsada]** — Ola A: la que más gastos tuvo en los últimos 30 días
+ *    (`DashboardSummary.cuentaMasUsada`). Pierde contra la última usada a propósito: si el dueño
+ *    anotó algo en otra cuenta hace un minuto, esa intención reciente pesa más que un promedio de
+ *    30 días.
+ * 4. **La primera de [cuentas]** — el comportamiento de siempre, ahora sobre una lista con
  *    orden definido (`GET /api/accounts` y el `selectAll` de SQLDelight ordenan por nombre).
  *
- * Los dos primeros valen **solo si esa cuenta sigue estando en [cuentas]**, y ahí se cubren
+ * Los tres primeros valen **solo si esa cuenta sigue estando en [cuentas]**, y ahí se cubren
  * solos los casos feos: la cuenta se borró, o es de un tipo que no sirve para este formulario
  * (el llamador filtra la lista antes — un traspaso pasa solo las cuentas traspasables, así que
  * una tarjeta recordada no llega hasta acá), o es de otro usuario que usó este dispositivo.
@@ -57,6 +68,7 @@ fun resolverCuenta(
     cuentas: List<Account>,
     contexto: String? = null,
     ultima: String? = null,
+    masUsada: String? = null,
     excluir: String? = null,
 ): CuentaElegida {
     val elegibles = if (excluir == null) cuentas else cuentas.filter { it.id != excluir }
@@ -64,6 +76,7 @@ fun resolverCuenta(
     return when {
         existe(contexto) -> CuentaElegida(contexto, OrigenCuenta.CONTEXTO)
         existe(ultima) -> CuentaElegida(ultima, OrigenCuenta.ULTIMA)
+        existe(masUsada) -> CuentaElegida(masUsada, OrigenCuenta.MAS_USADA)
         else -> elegibles.firstOrNull()
             ?.let { CuentaElegida(it.id, OrigenCuenta.PRIMERA) }
             ?: CuentaElegida(null, OrigenCuenta.NINGUNA)
@@ -90,6 +103,9 @@ fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int): String? {
         // última que …» y se comía la única palabra que decía algo. Con doce caracteres entra
         // entera y le sobra lugar a un nombre más largo todavía.
         OrigenCuenta.ULTIMA -> "Última usada"
+        // Corto por la misma regla que las otras dos, no porque haya menos que decir: ver el
+        // comentario de arriba.
+        OrigenCuenta.MAS_USADA -> "Más usada"
         OrigenCuenta.PRIMERA -> "Por defecto"
         OrigenCuenta.CONTEXTO, OrigenCuenta.ELEGIDA, OrigenCuenta.NINGUNA -> null
     }

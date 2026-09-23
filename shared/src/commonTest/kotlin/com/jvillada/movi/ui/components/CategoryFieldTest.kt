@@ -443,6 +443,82 @@ class CategoryFieldTest {
         assertNull(nombreCanonicoConocido("carro", emptyMap()))
     }
 
+    // ── Ola A: las categorías que el dueño más usa (chips de «Agregar») ────────────────
+
+    @Test
+    fun `sin usos no hay lista de frecuentes`() {
+        assertEquals(emptyList<String>(), categoriasFrecuentes(TransactionType.EXPENSE))
+    }
+
+    @Test
+    fun `las mas usadas primero, mas usada primero`() {
+        val usos = mapOf("Mercado" to 10, "Transporte" to 3, "Cine" to 7)
+        val usadas = usos.keys.associateWith { setOf(TransactionType.EXPENSE) }
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usadas, usos = usos)
+        assertEquals(listOf("Mercado", "Cine", "Transporte"), result)
+    }
+
+    @Test
+    fun `solo sirven las del tipo pedido`() {
+        val usos = mapOf("Salario" to 10, "Mercado" to 3)
+        val usadas = mapOf("Salario" to setOf(TransactionType.INCOME), "Mercado" to setOf(TransactionType.EXPENSE))
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usadas, usos = usos)
+        assertEquals(listOf("Mercado"), result)
+    }
+
+    @Test
+    fun `una escondida no aparece aunque tenga muchos usos`() {
+        val usos = mapOf("Mercado" to 10, "Cine" to 3)
+        val usadas = usos.keys.associateWith { setOf(TransactionType.EXPENSE) }
+        val prefs = mapOf("Mercado" to CategoryPref(hidden = true))
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usadas, prefs, usos)
+        assertEquals(listOf("Cine"), result)
+    }
+
+    @Test
+    fun `una reservada no aparece aunque venga en los usos`() {
+        val usos = mapOf(TRANSFER_CATEGORY to 20, "Mercado" to 3)
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usos = usos)
+        assertEquals(listOf("Mercado"), result)
+    }
+
+    @Test
+    fun `empate se desempata alfabeticamente`() {
+        val usos = mapOf("Zapatos" to 5, "Ángel" to 5, "Nueces" to 5)
+        val usadas = usos.keys.associateWith { setOf(TransactionType.EXPENSE) }
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usadas, usos = usos)
+        assertEquals(listOf("Ángel", "Nueces", "Zapatos"), result)
+    }
+
+    @Test
+    fun `se recorta a cuantas se pidan`() {
+        val usos = (1..8).associate { "Cat$it" to it }
+        val usadas = usos.keys.associateWith { setOf(TransactionType.EXPENSE) }
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usadas, usos = usos, cuantas = 6)
+        assertEquals(6, result.size)
+        assertEquals(listOf("Cat8", "Cat7", "Cat6", "Cat5", "Cat4", "Cat3"), result)
+    }
+
+    @Test
+    fun `una categoria con cero usos recientes no se ofrece como frecuente`() {
+        val usos = mapOf("Mercado" to 0, "Cine" to 2)
+        val usadas = usos.keys.associateWith { setOf(TransactionType.EXPENSE) }
+        val result = categoriasFrecuentes(TransactionType.EXPENSE, usadas, usos = usos)
+        assertEquals(listOf("Cine"), result)
+    }
+
+    @Test
+    fun `con datos de uso, el valor inicial es la mas frecuente del tipo`() {
+        val usos = mapOf("Mercado" to 10)
+        val usadas = mapOf("Mercado" to setOf(TransactionType.EXPENSE))
+        assertEquals("Mercado", categoriaPorDefectoPara(TransactionType.EXPENSE, usadas, usos = usos))
+    }
+
+    @Test
+    fun `sin datos de uso, categoriaPorDefectoPara sigue como antes`() {
+        assertEquals("Comida", categoriaPorDefectoPara(TransactionType.EXPENSE))
+    }
+
     @Test
     fun `con Ambos fijado desaparece el cartel de que la tienes del otro lado`() {
         // Sin fijar nada, anotando un ingreso «Otros» no se sugiere (el catálogo la tiene en

@@ -254,6 +254,38 @@ fun categoriaSirveParaTipo(
 }
 
 /**
+ * Ola A: **las categorías que el dueño más usa**, para ofrecerlas como chips en «Agregar» sin que
+ * tenga que abrir el campo ni escribir nada.
+ *
+ * [usos] es `UsedCategoriesCache.usosRecientes` — movimientos no anulados de esa categoría en los
+ * últimos 60 días (ver [com.jvillada.movi.shared.model.UsedCategory.usosRecientes]). **Sin ese
+ * dato no hay lista**: un server viejo que todavía no manda `usosRecientes`, o un arranque en frío
+ * antes de que el Inicio cargue, no tienen de dónde sacar «frecuente» — devolver una lista con
+ * ceros sería inventar un orden que no significa nada.
+ *
+ * Reusa [categoriaSirveParaTipo] para el mismo filtro de siempre: nada reservado, nada escondido,
+ * nada del otro tipo. El desempate es alfabético con [CATEGORY_NAME_ORDER] — dos categorías con
+ * el mismo número de usos no pueden depender del orden en que llegó el mapa.
+ */
+fun categoriasFrecuentes(
+    tipo: TransactionType,
+    usadas: Map<String, Set<TransactionType>> = emptyMap(),
+    prefs: Map<String, CategoryPref> = emptyMap(),
+    usos: Map<String, Int> = emptyMap(),
+    cuantas: Int = 6,
+): List<String> {
+    if (usos.isEmpty()) return emptyList()
+    return usos.entries
+        .filter { (nombre, cantidad) -> cantidad > 0 && categoriaSirveParaTipo(nombre, tipo, usadas, prefs) }
+        .sortedWith(
+            compareByDescending<Map.Entry<String, Int>> { it.value }
+                .then(compareBy(CATEGORY_NAME_ORDER) { it.key }),
+        )
+        .take(cuantas)
+        .map { it.key }
+}
+
+/**
  * Con qué categoría **arranca** un campo para un tipo dado: la primera que de verdad se le va a
  * ofrecer. Pasa por el mismo filtro que las sugerencias y no por `PREDEFINED_CATEGORIES.first { … }`
  * a secas, para que no pueda volver a pasar lo de antes — el campo prellenado con una categoría
@@ -268,12 +300,20 @@ fun categoriaSirveParaTipo(
  *
  * Si escondió TODAS las del catálogo de ese lado, cae a las propias y por último a la primera del
  * catálogo igual: quedarse sin ningún valor inicial sería peor que uno imperfecto.
+ *
+ * **Ola A — con datos de uso, arranca en la más frecuente, no en la primera del catálogo.** Con
+ * 71 gastos en «Bancolombia Ahorros» y ninguno en «Comida» en los últimos 60 días, seguir
+ * arrancando en «Comida» porque es la primera del catálogo ignoraba justo el dato nuevo que esta
+ * ola trae. Sin [usos] (server viejo, o el Inicio no cargó todavía) cae en el comportamiento de
+ * siempre — ver [categoriasFrecuentes].
  */
 fun categoriaPorDefectoPara(
     type: TransactionType,
     usedCategories: Map<String, Set<TransactionType>> = emptyMap(),
     prefs: Map<String, CategoryPref> = emptyMap(),
+    usos: Map<String, Int> = emptyMap(),
 ): String {
+    categoriasFrecuentes(type, usedCategories, prefs, usos).firstOrNull()?.let { return it }
     val (delCatalogo, propias) = categoriasQueCoinciden("", type, usedCategories, prefs)
     return delCatalogo.firstOrNull()
         ?: propias.firstOrNull()

@@ -1,5 +1,6 @@
 package com.jvillada.movi.aislamiento
 
+import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.LastAccountStore
 import com.jvillada.movi.data.RecurringOfferGate
@@ -71,6 +72,7 @@ class ElForkLlegaLimpioTest {
         DashboardDataCache.entradasHechas += "hero.cifra"
         LastAccountStore.recordAccount("acc-de-otra-prueba")
         LastAccountStore.recordTransfer("acc-origen", "acc-destino")
+        CuentaMasUsadaCache.recordFromServer("acc-de-otra-prueba")
         // `canales` solo lo escribe `cargar()`, así que se ensucia por el camino de verdad: con un
         // repositorio enchufado que conteste, que es exactamente lo que hace una pantalla.
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
@@ -96,6 +98,7 @@ class ElForkLlegaLimpioTest {
         assertTrue("El día no quedó plegado", "2024-03-15" in DiasPlegadosStore.plegados())
         assertNotNull("Los canales de aviso no quedaron cargados", ReminderChannelsCache.canales)
         assertNotNull("La última cuenta no quedó guardada", LastAccountStore.lastAccountId)
+        assertNotNull("La cuenta más usada no quedó guardada", CuentaMasUsadaCache.id)
         assertNotNull("La definición de pantalla no quedó cacheada", ScreenDefCache.dashboard)
         assertNotNull("El repositorio de prueba no quedó enchufado", Repositories.sustitutoDePrueba)
         assertNotNull("El lector de huellas de prueba no quedó enchufado", Huella.sustitutoDePrueba)
@@ -113,6 +116,7 @@ class ElForkLlegaLimpioTest {
         assertEquals("DashboardDataCache trae entradas ya hechas", emptySet<String>(), DashboardDataCache.entradasHechas)
         assertNull("ReminderChannelsCache trae resaca", ReminderChannelsCache.canales)
         assertNull("LastAccountStore trae la cuenta de otra prueba", LastAccountStore.lastAccountId)
+        assertNull("CuentaMasUsadaCache trae la cuenta de otra prueba", CuentaMasUsadaCache.id)
         assertNull("LastAccountStore trae el origen de otra prueba", LastAccountStore.lastTransferFromId)
         assertNull("LastAccountStore trae el destino de otra prueba", LastAccountStore.lastTransferToId)
         assertEquals("DiasPlegadosStore trae los días de otra prueba", emptySet<String>(), DiasPlegadosStore.plegados())
