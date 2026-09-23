@@ -79,8 +79,10 @@ import com.jvillada.movi.ui.fecha.timestampParaFecha
 private const val FRACCION_VALOR_FILA = 0.55f
 
 /**
- * El alto de la fila de chips de categorías frecuentes (ver [CategoriaChipsRow]) — fijo, para que
- * la fila no pueda crecer ni empujar el resto del formulario bajo el dedo. No hay un token de
+ * El alto MÍNIMO de la fila de chips de categorías frecuentes (ver [CategoriaChipsRow]): a letra
+ * normal la fila mide esto y nada más, así que no se mueve bajo el dedo; con la escala de letra de
+ * Movi agrandada crece lo justo para que el chip entre entero (ver el porqué en
+ * [CategoriaChipsRow]). No hay un token de
  * `Movi.*` para alturas de fila (`Tokens.kt` solo tiene `espacios`, `formas`, `textos` y
  * `colores`): es un tamaño de componente, no un espacio ni una forma, así que queda como literal
  * — mismo criterio que `ALTO_BARRA_INFERIOR` en los tests de esta hoja.
@@ -1635,10 +1637,16 @@ private fun EditorBody(
  * Movimientos: esta fila vive DENTRO de una `MinCard`, cuyo fondo ya es `Movi.colores.tarjeta` —
  * un chip inactivo pintado con ese mismo color sería invisible contra su propio fondo.
  *
- * **Alto fijo** (`.height` en el `Row` de abajo, no `heightIn(min = …)`: esta fila no puede
- * crecer ni un píxel, ni siquiera si algún día un chip mide más de una línea) y desplazamiento
- * horizontal propio: no ocupa más de una fila ni empuja el resto del formulario, la misma
- * disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA NO ENTRA» más arriba).
+ * **Alto mínimo, no fijo, y sin relleno vertical en la fila.** La versión anterior era
+ * `.height(40.dp)` con `padding(vertical = 8.dp)` en la fila Y en cada chip: quedaban 24 dp para
+ * el chip, 8 dp para el texto, y una línea de 16 sp de `apoyo` salía **recortada a la mitad a
+ * letra normal** — el nombre de la categoría se leía cortado por arriba y por abajo. Ahora el
+ * único relleno vertical es el del chip (`corto`), el chip mide ~32 dp y entra con aire en los
+ * 40 dp de [ALTO_FILA_DE_CHIPS]; si el dueño agranda la escala de letra de Movi, la fila crece
+ * lo justo para que el texto se lea entero, que es preferible a un chip ilegible. Sigue siendo
+ * una sola fila (`maxLines = 1` en cada chip) con desplazamiento horizontal propio: no empuja el
+ * resto del formulario, la misma disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA
+ * NO ENTRA» más arriba). Lo mide `HojaAgregarCategoriasFrecuentesTest`.
  */
 @Composable
 private fun CategoriaChipsRow(
@@ -1649,9 +1657,8 @@ private fun CategoriaChipsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(ALTO_FILA_DE_CHIPS)
-            .horizontalScroll(rememberScrollState())
-            .padding(vertical = Movi.espacios.corto),
+            .heightIn(min = ALTO_FILA_DE_CHIPS)
+            .horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
         // "Entre elementos hermanos apretados: chips" es literalmente lo que dice el KDoc de
         // este token en Tokens.kt — este es el caso para el que existe.
