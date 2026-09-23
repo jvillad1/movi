@@ -443,6 +443,25 @@ fun saldoDeLaFila(account: Account): SaldoDeLaFila {
     return SaldoDeLaFila(texto = signedMoney(monto, moneda), enContra = monto < 0)
 }
 
+/**
+ * **¿Esta cuenta es plata con destino?** La AFC (vivienda), el ahorro de Nu, la pensión voluntaria:
+ * son suyas y cuentan en el patrimonio, pero no son «Tu plata». En Cuentas se veían igual que una
+ * cuenta de ahorros cualquiera —mismo verde, mismo «Dinero»—, y el encabezado «DINERO · 5 ·
+ * $20.556.753» contradecía al «Tu plata $558.350» de arriba sin decir por qué. Misma regla que
+ * `patrimonioDe`: condición no vacía, y un bien nunca (tiene su propia sección).
+ */
+fun esDeUsoCondicionado(account: Account): Boolean =
+    !account.esBien && !account.condicionadaA.isNullOrBlank()
+
+/**
+ * El renglón de abajo de cada cuenta: su grupo («Dinero», «Inversión»), o —si es plata con
+ * destino— para qué es, con las palabras que puso el dueño («Uso condicionado · vivienda»). Mismo
+ * rótulo que el tramo de la tarjeta de patrimonio del Inicio.
+ */
+fun subtituloDeLaCuenta(account: Account): String =
+    if (esDeUsoCondicionado(account)) "Uso condicionado · ${account.condicionadaA!!.trim()}"
+    else account.type.groupLabel
+
 /** Qué bien tiene abierta la hoja: uno que existe, o uno nuevo con el nombre ya escrito. */
 private data class BienAbierto(val existente: Account?, val nombre: String = "")
 
@@ -569,6 +588,7 @@ private fun AccountsGroup(
                 // nombre que puso el dueño es lo que de verdad distingue una cuenta de otra.
                 val typeLabel = account.type.groupLabel
                 val saldo = saldoDeLaFila(account)
+                val condicionada = esDeUsoCondicionado(account)
                 CardRow(
                     left = {
                         Row(
@@ -584,7 +604,7 @@ private fun AccountsGroup(
                             )
                         }
                     },
-                    sub = typeLabel,
+                    sub = subtituloDeLaCuenta(account),
                     right = {
                         Text(
                             text = saldo.texto,
@@ -593,7 +613,14 @@ private fun AccountsGroup(
                             // Verde es «tengo»: un saldo en contra —una cuenta en descubierto—
                             // pintado de verde dice lo contrario de lo que pasó. Mismo criterio
                             // que el hero del detalle de la cuenta.
-                            color = if (saldo.enContra) Movi.colores.sale else Movi.colores.entra,
+                            // Y verde es plata DISPONIBLE: una cuenta de uso condicionado (la AFC, el
+                            // ahorro de Nu, la pensión voluntaria) es suya pero no la puede gastar en
+                            // cualquier cosa, así que va en el tono neutro — ver [esDeUsoCondicionado].
+                            color = when {
+                                saldo.enContra -> Movi.colores.sale
+                                condicionada -> Movi.colores.textoMedio
+                                else -> Movi.colores.entra
+                            },
                         )
                     },
                     isLast = index == accounts.size - 1,
