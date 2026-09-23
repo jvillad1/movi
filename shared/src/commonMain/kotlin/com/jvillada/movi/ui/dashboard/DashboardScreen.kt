@@ -495,21 +495,25 @@ fun DashboardScreen(
             val showGuide = data.puedeAfirmarVacio && !(data.hasAccount && data.hasMovement)
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
-            SduiRenderer(
-                definition = screenDef ?: defaultDashboardDefinition(),
-                data = data,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                onNavigate = onNavigate,
-                header = if (showGuide) {
-                    {
-                        PrimerosPasosCard(
-                            data = data,
-                            onNavigate = onNavigate,
-                            onShowCreateSheet = { showCreateSheet = true },
-                        )
-                    }
-                } else null,
-            )
+            // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
+            // `loading` — ver su KDoc para el porqué (Task 7, fix round 1).
+            CompositionLocalProvider(LocalCargandoElInicio provides loading) {
+                SduiRenderer(
+                    definition = screenDef ?: defaultDashboardDefinition(),
+                    data = data,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    onNavigate = onNavigate,
+                    header = if (showGuide) {
+                        {
+                            PrimerosPasosCard(
+                                data = data,
+                                onNavigate = onNavigate,
+                                onShowCreateSheet = { showCreateSheet = true },
+                            )
+                        }
+                    } else null,
+                )
+            }
         }
 
         SnackbarHost(

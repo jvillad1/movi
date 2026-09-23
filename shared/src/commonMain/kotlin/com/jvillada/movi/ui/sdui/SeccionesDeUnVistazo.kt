@@ -61,6 +61,7 @@ import com.jvillada.movi.ui.dashboard.heroBalance
 import com.jvillada.movi.ui.dashboard.heroBalanceTitle
 import com.jvillada.movi.ui.dashboard.patrimonioDelInicio
 import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
+import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_BARRA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_CIFRA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_FILA_DEL_HERO
@@ -117,10 +118,23 @@ internal fun HeroDeUnVistazo(
     val veredicto = veredictoDelInicio(data, hoy)
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
-    // Primera carga de la vida: sin instantánea del aparato ni caché de este proceso, no hay UNA
-    // sola cifra que mostrar. Ver Task 7 — el esqueleto ocupa el mismo alto que el hero cargado
-    // (cifra + veredicto + barra + fila), así que nada salta cuando la respuesta llega.
-    val cargando = data.accounts == null && data.summary == null
+    // Fix round 1 (Task 7): el brief original pedía UNA condición para todo el hero
+    // (`accounts == null && summary == null`), pero eso lo hacía ACHICARSE Y VOLVER A CRECER
+    // cuando una de las dos llegaba antes que la otra —las cuentas contestan y el veredicto/la
+    // barra seguían de esqueleto, o al revés—: el mismo salto de alto que esta tarea vino a
+    // evitar, solo que corrido de momento. La meta del brief («el hero no cambia de alto
+    // mientras carga») manda sobre la letra de esa condición: cada pieza se gatilla con SU
+    // propio dato.
+    //
+    // Y las dos dependen además de que haya una carga EN VUELO ([LocalCargandoElInicio]): con
+    // solo mirar el dato, una carga en frío sin red que YA SE RINDIÓ (sin datos, y sin nada en
+    // camino) se veía IGUAL que la primera carga normal, y el esqueleto pulsaba para siempre.
+    // «Cargando» y «error» no pueden verse a la vez: el error ya tiene su snackbar
+    // «Reintentar», y con la señal, una carga que terminó (con o sin éxito) cae al estado de
+    // siempre para ese dato — el guion en la cifra, o nada en el veredicto/la barra/la fila.
+    val hayCargaEnVuelo = LocalCargandoElInicio.current
+    val cifraCargando = data.accounts == null && hayCargaEnVuelo
+    val resumenCargando = data.summary == null && hayCargaEnVuelo
 
     MinCard(
         modifier = Modifier
@@ -132,11 +146,20 @@ internal fun HeroDeUnVistazo(
     ) {
         // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
         Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-        encabezadoDelPeriodo(data)?.let { rango ->
-            Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        val rangoDelPeriodo = encabezadoDelPeriodo(data)
+        if (rangoDelPeriodo != null) {
+            Text(text = rangoDelPeriodo, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        } else if (data.periodoActual == null && hayCargaEnVuelo) {
+            // Reservado SOLO mientras se sabe que el perfil (de donde sale el período) todavía
+            // viene en camino: si no, esta línea aparecía de golpe cuando el perfil contestaba y
+            // empujaba la cifra un renglón hacia abajo — el mismo salto que el resto del hero ya
+            // no tiene. Alguien con el mes de calendario nunca tiene `rangoDelPeriodo` (es null a
+            // propósito, ver [encabezadoDelPeriodo]) y con `hayCargaEnVuelo` en falso esta línea
+            // tampoco se reserva para siempre.
+            LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.apoyo)
         }
         Spacer(Modifier.height(Movi.espacios.corto))
-        if (cargando) {
+        if (cifraCargando) {
             // El bloque va del alto de `Movi.textos.cifra` — el mismo estilo que usa
             // CifraProtagonista— y no de ancho completo: una cifra corta no lo es.
             LineaEsqueleto(
@@ -144,6 +167,18 @@ internal fun HeroDeUnVistazo(
                 estilo = Movi.textos.cifra,
                 modifier = Modifier.testTag(TAG_ESQUELETO_CIFRA_DEL_HERO),
             )
+        } else {
+            CifraProtagonista(
+                // Un guion mientras las cuentas no contestan (ni están en camino): un «$0» de
+                // 42 sp es la afirmación más fuerte de la pantalla, y sería falsa.
+                text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
+                color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
+                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus cuentas") {
+                    onNavigate(Screen.Accounts)
+                },
+            )
+        }
+        if (resumenCargando) {
             Spacer(Modifier.height(Movi.espacios.medio))
             // Dos líneas en vez del veredicto: en la práctica casi siempre ocupa dos renglones
             // (es una frase con un número adentro), y apiladas sin espacio entre sí dan el mismo
@@ -161,15 +196,6 @@ internal fun HeroDeUnVistazo(
                 )
             }
         } else {
-            CifraProtagonista(
-                // Un guion mientras las cuentas no contestan: un «$0» de 42 sp es la afirmación más
-                // fuerte de la pantalla, y sería falsa mientras carga.
-                text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
-                color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus cuentas") {
-                    onNavigate(Screen.Accounts)
-                },
-            )
             if (veredicto != null) {
                 Spacer(Modifier.height(Movi.espacios.medio))
                 Text(text = veredicto.frase, style = Movi.textos.cuerpo, color = Movi.colores.texto)
@@ -332,7 +358,13 @@ internal fun PreguntaleAMoviSection(
     // señal propia y cae en `PREGUNTAS_DE_RESPALDO` — tres preguntas genéricas que no son «lo que
     // viene» sino un relleno. Task 7: en la primera carga se ve el esqueleto de esas tres filas, no
     // el relleno genérico haciéndose pasar por dato real.
-    val cargando = data.accounts == null && data.summary == null
+    //
+    // Esta sección SÍ se queda con una sola condición para las dos cosas (a diferencia del hero,
+    // Task 7 fix round 1): no tiene piezas independientes que puedan llegar en momentos distintos,
+    // «accounts» y «summary» entran juntas acá. Pero sí necesita `LocalCargandoElInicio` por el
+    // mismo motivo que el hero: sin eso, una carga en frío sin red que ya se rindió dejaba las tres
+    // filas pulsando para siempre en vez de caer en las preguntas de respaldo de antes.
+    val cargando = data.accounts == null && data.summary == null && LocalCargandoElInicio.current
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(title = section.title ?: "Pregúntale a Movi")

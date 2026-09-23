@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -85,5 +86,24 @@ class EsqueletoDeMovimientosTest {
 
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
         composeRule.onNodeWithText("Almuerzo", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * **Fix round 1, punto 2.** Con «Recurrentes» la lista de días nunca se pinta (ni cargada ni
+     * cargando: [mostrarLaListaDeDias] la apaga para ese chip), así que las filas esqueleto de
+     * arriba tampoco aparecen ahí — y sin este arreglo la primera carga de ese chip se quedaba
+     * SIN NINGUNA señal de que algo estaba en camino. La barra de progreso vuelve a cubrir ese
+     * caso: `loading && (visibleDays.isNotEmpty() || !hayListaDeDias)`.
+     */
+    @Test
+    fun `con Recurrentes, sin dia pintado todavia, la barra de carga esta pero no las filas esqueleto`() {
+        Repositories.sustitutoDePrueba = repositorio()
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}, chipInicial = CHIP_RECURRENTES) } }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS).assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
     }
 }

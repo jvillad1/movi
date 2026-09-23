@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
@@ -308,16 +310,37 @@ const val HERO_BALANCE_TITLE = "Tu plata"
 const val TAG_TARJETA_DEL_HERO: String = "tarjeta-del-hero"
 
 /**
- * Los cuatro tags de las piezas del esqueleto del hero (Task 7): además del alto total —que
- * `ContrasteDeLosTokensTest` no cubre y que Robolectric no mide con fidelidad para texto con
- * estilo propio (ver el KDoc de [Esqueleto][com.jvillada.movi.ui.components.BloqueEsqueleto])—
- * esto prueba lo que el alto solo no alcanza a probar: que las CUATRO piezas están, ni una de
- * menos. Cada una puede probarse por separado sin acoplarse al texto real que reemplazan.
+ * Los cuatro tags de las piezas del esqueleto del hero (Task 7): además del alto total —que con
+ * `@GraphicsMode(NATIVE)` (ver el KDoc de [Esqueleto][com.jvillada.movi.ui.components.BloqueEsqueleto]
+ * sobre el modo `LEGACY` de Robolectric) sí se puede comparar con fidelidad, pero solo prueba la
+ * SUMA— esto prueba lo que la suma sola no alcanza a probar: que las CUATRO piezas están, ni una
+ * de menos. Cada una puede probarse por separado sin acoplarse al texto real que reemplazan, y es
+ * más barato que montar el hero entero dos veces.
  */
 const val TAG_ESQUELETO_CIFRA_DEL_HERO: String = "esqueleto-cifra-del-hero"
 const val TAG_ESQUELETO_VEREDICTO_DEL_HERO: String = "esqueleto-veredicto-del-hero"
 const val TAG_ESQUELETO_BARRA_DEL_HERO: String = "esqueleto-barra-del-hero"
 const val TAG_ESQUELETO_FILA_DEL_HERO: String = "esqueleto-fila-del-hero"
+
+/**
+ * **¿Hay una carga del Inicio EN VUELO ahora mismo?** Lo provee `DashboardScreen`, con su propio
+ * `loading`, alrededor de `SduiRenderer` — Task 7, fix round 1.
+ *
+ * `HeroDeUnVistazo` y `PreguntaleAMoviSection` solo reciben `data`, no `loading` (así las armó el
+ * brief original), y con solo `data` no alcanza para decidir el esqueleto: `data.accounts == null`
+ * es tan cierto en la primera carga (con la respuesta en camino) como después de una carga en frío
+ * SIN RED que ya se rindió. Sin esta señal, esa segunda situación dejaba el esqueleto pulsando
+ * para siempre — «cargando» y «error» no pueden verse a la vez, y el segundo ya tiene su snackbar
+ * «Reintentar». Con la señal, una carga que terminó (falló o no) cae al estado de siempre para ese
+ * dato: el guion en la cifra, o directamente nada.
+ *
+ * `compositionLocalOf`, no `staticCompositionLocalOf`: este valor SÍ cambia dentro de la vida del
+ * Inicio (arranca en `true` o `false` según si hay algo cacheado, y pasa a `false` cuando la carga
+ * termina), así que hace falta que Compose rastree quién lo lee. El default `false` es el lado
+ * seguro para una vista previa o una prueba que monta una sección sola: sin la señal de que algo
+ * viene en camino, no hay esqueleto, se ve el estado de siempre.
+ */
+val LocalCargandoElInicio: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }
 
 /**
  * [HERO_BALANCE_TITLE], ignorando a propósito `section.title`.

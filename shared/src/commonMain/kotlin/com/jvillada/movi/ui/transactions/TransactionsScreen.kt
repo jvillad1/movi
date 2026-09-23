@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -386,6 +387,14 @@ const val CHIP_ENTRE_CUENTAS = 4
  * ese filtro. Ver [matchesChip] y [com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe].
  */
 const val CHIP_RECURRENTES = 5
+
+/**
+ * El tag de la barra de carga de Movimientos (Task 7, fix round 1): con «Recurrentes» la lista de
+ * días nunca se pinta (ni cargada ni cargando, ver [mostrarLaListaDeDias]), así que esta barra es
+ * la ÚNICA señal de carga que le queda a ese chip en su primera vez — sin tag, una prueba no tiene
+ * cómo verificar que sigue ahí.
+ */
+const val TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS: String = "barra-de-carga-de-movimientos"
 
 /** Los rótulos de los chips, en el orden de sus índices. */
 val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes")
@@ -1683,10 +1692,15 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             }
         }
 
-        // Task 7: con algo ya pintado (volver a este chip, un reintento con la lista de antes en
-        // pantalla) la barra de siempre; sin nada pintado todavía, las filas esqueleto de más abajo
-        // ya dicen «cargando» con la forma de lo que viene, y la barra sería la misma señal dos veces.
-        if (loading && visibleDays.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        // Task 7, fix round 1: con algo ya pintado (volver a este chip, un reintento con la lista
+        // de antes en pantalla) la barra de siempre; sin nada pintado todavía, las filas esqueleto
+        // de más abajo ya dicen «cargando» con la forma de lo que viene, y la barra sería la misma
+        // señal dos veces — PERO con «Recurrentes» esas filas nunca se pintan (`!hayListaDeDias`,
+        // ver más abajo), así que sin este `||` la primera carga de ese chip se quedaba SIN
+        // ninguna señal de carga: ni barra ni esqueleto. La barra vuelve a cubrir ese caso.
+        if (loading && (visibleDays.isNotEmpty() || !hayListaDeDias)) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_CARGA_DE_MOVIMIENTOS))
+        }
 
         LazyColumn(
             state = listState,
