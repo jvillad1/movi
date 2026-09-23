@@ -98,8 +98,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 action = { NewItemButton(label = "Nueva cuenta", onClick = { showCreateSheet = true }) },
             )
 
-            // Linear progress indicator below header while loading
-            if (loading) {
+            // Task 7: la primera carga (sin una sola cuenta pintada todavía) ya no dice «cargando»
+            // con una barra — dice CON QUÉ FORMA va a llegar, con las filas esqueleto de más abajo.
+            // Una recarga con cuentas ya en pantalla (tocar «Reintentar», volver de crear una) sigue
+            // con la barra de siempre: ahí no hay esqueleto que la reemplace.
+            if (loading && accounts.isNotEmpty()) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
                     color = Movi.colores.marca.copy(alpha = 0.16f),
@@ -118,7 +121,20 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     bottom = 80.dp,
                 ),
             ) {
-                if (accounts.isEmpty() && !loading && !cuentasLeidas) {
+                if (accounts.isEmpty() && loading) {
+                    // Task 7: 5-6 filas con la forma de una cuenta real, no una rueda. Solo mientras
+                    // no hay NI UNA cuenta pintada todavía — con algo ya pintado, la barra de arriba
+                    // basta y esta lista sigue mostrando lo que ya tenía.
+                    item {
+                        MinCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = MinCardVariant.Elevated,
+                            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                        ) {
+                            repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5) }
+                        }
+                    }
+                } else if (accounts.isEmpty() && !loading && !cuentasLeidas) {
                     // No se pudo leer y no hay nada que mostrar: se dice eso, y nada más. El
                     // botón acá sería «Reintentar», no «Crear primera cuenta» — proponer crear
                     // una cuenta sin saber si ya existe es como se fabrican los duplicados.

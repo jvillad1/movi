@@ -300,6 +300,26 @@ data class HeroBalance(
 const val HERO_BALANCE_TITLE = "Tu plata"
 
 /**
+ * El tag de la tarjeta entera del hero (Task 7): mide su alto cargando (esqueleto) contra su alto
+ * cargado (veredicto + barra), sin depender de qué texto exacto cae al final de cada estado — el
+ * uno tiene bloques que pulsan y ningún texto real, el otro tiene el monto de «Salió» con un
+ * formato que cambia con los datos.
+ */
+const val TAG_TARJETA_DEL_HERO: String = "tarjeta-del-hero"
+
+/**
+ * Los cuatro tags de las piezas del esqueleto del hero (Task 7): además del alto total —que
+ * `ContrasteDeLosTokensTest` no cubre y que Robolectric no mide con fidelidad para texto con
+ * estilo propio (ver el KDoc de [Esqueleto][com.jvillada.movi.ui.components.BloqueEsqueleto])—
+ * esto prueba lo que el alto solo no alcanza a probar: que las CUATRO piezas están, ni una de
+ * menos. Cada una puede probarse por separado sin acoplarse al texto real que reemplazan.
+ */
+const val TAG_ESQUELETO_CIFRA_DEL_HERO: String = "esqueleto-cifra-del-hero"
+const val TAG_ESQUELETO_VEREDICTO_DEL_HERO: String = "esqueleto-veredicto-del-hero"
+const val TAG_ESQUELETO_BARRA_DEL_HERO: String = "esqueleto-barra-del-hero"
+const val TAG_ESQUELETO_FILA_DEL_HERO: String = "esqueleto-fila-del-hero"
+
+/**
  * [HERO_BALANCE_TITLE], ignorando a propósito `section.title`.
  *
  * Existe como función —en vez de usar la constante directo en el renderer— para que el test

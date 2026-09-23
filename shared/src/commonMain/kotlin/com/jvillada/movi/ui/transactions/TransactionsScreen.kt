@@ -1397,6 +1397,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         if (searchQuery.isNotBlank()) filtrados
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
+    // Con «Recurrentes» la lista de días no se pinta (ver [mostrarLaListaDeDias]): ni su vacío real
+    // más abajo ni —Task 7— sus filas esqueleto tienen sentido debajo de un tablero que ya cubre
+    // ese chip por su cuenta.
+    val hayListaDeDias = mostrarLaListaDeDias(activeFilter, searchQuery)
 
     /**
      * **El checklist del período**, la lista que el dueño pidió ver al tocar «Ver todos» en el
@@ -1679,13 +1683,32 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
             }
         }
 
-        if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        // Task 7: con algo ya pintado (volver a este chip, un reintento con la lista de antes en
+        // pantalla) la barra de siempre; sin nada pintado todavía, las filas esqueleto de más abajo
+        // ya dicen «cargando» con la forma de lo que viene, y la barra sería la misma señal dos veces.
+        if (loading && visibleDays.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 60.dp),
         ) {
+            // Task 7: primera carga de este chip, ni una fila pintada todavía — 5-6 filas con la
+            // forma de un día de movimientos. `hayListaDeDias` porque con «Recurrentes» esta lista
+            // no se pinta ni cargada ni cargando (ver arriba); el tablero de esa vista tiene su
+            // propio estado.
+            if (loading && visibleDays.isEmpty() && hayListaDeDias) {
+                item {
+                    MinCard(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        variant = MinCardVariant.Elevated,
+                        padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+                    ) {
+                        repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5) }
+                    }
+                }
+            }
+
             // PR 2 del rediseño de Recurrentes: el resumen del filtro y lo que falta revisar.
             // Solo con el chip activo — ver [mostrarResumenDeRecurrentes] — y ARRIBA de la lista
             // de días (que acá abajo son los movimientos que YA se reconocen como recurrentes;
@@ -1919,10 +1942,8 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                 }
             }
 
-            // Con «Recurrentes» la lista de días no se pinta (ver [mostrarLaListaDeDias]), así que
-            // su vacío tampoco: decir «no hay movimientos recurrentes» debajo de un tablero lleno
-            // de vencimientos sería contradecirse en la misma pantalla.
-            val hayListaDeDias = mostrarLaListaDeDias(activeFilter, searchQuery)
+            // Su vacío real (ver [hayListaDeDias] arriba): decir «no hay movimientos recurrentes»
+            // debajo de un tablero lleno de vencimientos sería contradecirse en la misma pantalla.
             if (!loading && visibleDays.isEmpty() && hayListaDeDias) {
                 item {
                     if (!diasLeidos) {

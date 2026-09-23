@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,11 +37,14 @@ import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.ai.CUANTAS_PREGUNTAS_SUGERIDAS
 import com.jvillada.movi.ui.ai.preguntasSugeridas
+import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.CifraProtagonista
 import com.jvillada.movi.ui.components.Hairline
+import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinCard
 import com.jvillada.movi.ui.components.MinCardVariant
 import com.jvillada.movi.ui.components.MinSectionHeader
@@ -57,6 +61,11 @@ import com.jvillada.movi.ui.dashboard.heroBalance
 import com.jvillada.movi.ui.dashboard.heroBalanceTitle
 import com.jvillada.movi.ui.dashboard.patrimonioDelInicio
 import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
+import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_BARRA_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_CIFRA_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_FILA_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_VEREDICTO_DEL_HERO
+import com.jvillada.movi.ui.dashboard.TAG_TARJETA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.veredictoDelInicio
 import kotlinx.datetime.Clock
@@ -108,9 +117,16 @@ internal fun HeroDeUnVistazo(
     val veredicto = veredictoDelInicio(data, hoy)
     val ingresos = data.summary?.ingresos ?: 0L
     val egresos = data.summary?.egresos ?: 0L
+    // Primera carga de la vida: sin instantánea del aparato ni caché de este proceso, no hay UNA
+    // sola cifra que mostrar. Ver Task 7 — el esqueleto ocupa el mismo alto que el hero cargado
+    // (cifra + veredicto + barra + fila), así que nada salta cuando la respuesta llega.
+    val cargando = data.accounts == null && data.summary == null
 
     MinCard(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Movi.espacios.amplio),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Movi.espacios.amplio)
+            .testTag(TAG_TARJETA_DEL_HERO),
         variant = MinCardVariant.Elevated,
         padding = PaddingValues(Movi.espacios.margen),
     ) {
@@ -120,32 +136,58 @@ internal fun HeroDeUnVistazo(
             Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
         }
         Spacer(Modifier.height(Movi.espacios.corto))
-        CifraProtagonista(
-            // Un guion mientras las cuentas no contestan: un «$0» de 42 sp es la afirmación más fuerte
-            // de la pantalla, y sería falsa mientras carga.
-            text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
-            color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
-            modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus cuentas") {
-                onNavigate(Screen.Accounts)
-            },
-        )
-        if (veredicto != null) {
-            Spacer(Modifier.height(Movi.espacios.medio))
-            Text(text = veredicto.frase, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        }
-        val fraccion = fraccionQueEntro(ingresos, egresos)
-        if (data.summary != null && fraccion != null) {
-            Spacer(Modifier.height(Movi.espacios.amplio))
-            BarraDeDosTramos(
-                fraccionIzquierda = fraccion,
-                colorIzquierda = Movi.colores.entra,
-                colorDerecha = Movi.colores.sale,
-                entrada = entradaDeLaBarra,
+        if (cargando) {
+            // El bloque va del alto de `Movi.textos.cifra` — el mismo estilo que usa
+            // CifraProtagonista— y no de ancho completo: una cifra corta no lo es.
+            LineaEsqueleto(
+                fraccionDelAncho = 0.45f,
+                estilo = Movi.textos.cifra,
+                modifier = Modifier.testTag(TAG_ESQUELETO_CIFRA_DEL_HERO),
             )
+            Spacer(Modifier.height(Movi.espacios.medio))
+            // Dos líneas en vez del veredicto: en la práctica casi siempre ocupa dos renglones
+            // (es una frase con un número adentro), y apiladas sin espacio entre sí dan el mismo
+            // alto que esas dos líneas de `Movi.textos.cuerpo` tendrían de verdad.
+            LineaEsqueleto(fraccionDelAncho = 0.95f, modifier = Modifier.testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
+            LineaEsqueleto(fraccionDelAncho = 0.7f, modifier = Modifier.testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
+            Spacer(Modifier.height(Movi.espacios.amplio))
+            BloqueEsqueleto(alto = Movi.espacios.corto, modifier = Modifier.testTag(TAG_ESQUELETO_BARRA_DEL_HERO))
             Spacer(Modifier.height(Movi.espacios.corto))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                ParDeCifra("Entró", formatMoneyCompact(ingresos), Movi.colores.entra, Modifier.weight(1f))
-                ParDeCifra("Salió", formatMoneyCompact(egresos), Movi.colores.sale, alFinal = true)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                ParDeCifraEsqueleto(modifier = Modifier.weight(1f).testTag(TAG_ESQUELETO_FILA_DEL_HERO))
+                ParDeCifraEsqueleto(
+                    modifier = Modifier.weight(1f).testTag(TAG_ESQUELETO_FILA_DEL_HERO),
+                    alFinal = true,
+                )
+            }
+        } else {
+            CifraProtagonista(
+                // Un guion mientras las cuentas no contestan: un «$0» de 42 sp es la afirmación más
+                // fuerte de la pantalla, y sería falsa mientras carga.
+                text = if (data.accounts == null) "—" else formatCOP(cifraContando(balance.tuPlata, entradaDeLaCifra)),
+                color = if (balance.tuPlata < 0) Movi.colores.sale else Movi.colores.texto,
+                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Ver tus cuentas") {
+                    onNavigate(Screen.Accounts)
+                },
+            )
+            if (veredicto != null) {
+                Spacer(Modifier.height(Movi.espacios.medio))
+                Text(text = veredicto.frase, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            }
+            val fraccion = fraccionQueEntro(ingresos, egresos)
+            if (data.summary != null && fraccion != null) {
+                Spacer(Modifier.height(Movi.espacios.amplio))
+                BarraDeDosTramos(
+                    fraccionIzquierda = fraccion,
+                    colorIzquierda = Movi.colores.entra,
+                    colorDerecha = Movi.colores.sale,
+                    entrada = entradaDeLaBarra,
+                )
+                Spacer(Modifier.height(Movi.espacios.corto))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    ParDeCifra("Entró", formatMoneyCompact(ingresos), Movi.colores.entra, Modifier.weight(1f))
+                    ParDeCifra("Salió", formatMoneyCompact(egresos), Movi.colores.sale, alFinal = true)
+                }
             }
         }
         if (conPatrimonio && data.accounts != null && balance.muestraPatrimonio) {
@@ -191,6 +233,15 @@ private fun ParDeCifra(
     ) {
         Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Cifra(cifra, Movi.textos.titulo, color = color)
+    }
+}
+
+/** El esqueleto de [ParDeCifra]: mismo rótulo chico arriba, cifra abajo, sin espacio entre sí. */
+@Composable
+private fun ParDeCifraEsqueleto(modifier: Modifier = Modifier, alFinal: Boolean = false) {
+    Column(modifier = modifier, horizontalAlignment = if (alFinal) Alignment.End else Alignment.Start) {
+        LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
+        LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.titulo)
     }
 }
 
@@ -277,6 +328,11 @@ internal fun PreguntaleAMoviSection(
     // Las reglas son baratas, pero se recalculan solo cuando cambian los datos, no en cada frame de
     // la entrada animada del hero.
     val preguntas = remember(data) { preguntasSugeridas(data) }
+    // Mismo criterio que el hero: sin cuentas ni resumen, `preguntasSugeridas` no tiene ninguna
+    // señal propia y cae en `PREGUNTAS_DE_RESPALDO` — tres preguntas genéricas que no son «lo que
+    // viene» sino un relleno. Task 7: en la primera carga se ve el esqueleto de esas tres filas, no
+    // el relleno genérico haciéndose pasar por dato real.
+    val cargando = data.accounts == null && data.summary == null
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(title = section.title ?: "Pregúntale a Movi")
@@ -290,13 +346,44 @@ internal fun PreguntaleAMoviSection(
                 bottom = Movi.espacios.amplio,
             ),
         ) {
-            preguntas.forEachIndexed { i, pregunta ->
-                FilaDePregunta(pregunta) { onNavigate(Screen.AIChat(preguntaInicial = pregunta)) }
-                if (i < preguntas.lastIndex) Hairline()
+            if (cargando) {
+                repeat(CUANTAS_PREGUNTAS_SUGERIDAS) { i ->
+                    FilaDePreguntaEsqueleto()
+                    if (i < CUANTAS_PREGUNTAS_SUGERIDAS - 1) Hairline()
+                }
+            } else {
+                preguntas.forEachIndexed { i, pregunta ->
+                    FilaDePregunta(pregunta) { onNavigate(Screen.AIChat(preguntaInicial = pregunta)) }
+                    if (i < preguntas.lastIndex) Hairline()
+                }
             }
             Spacer(Modifier.height(Movi.espacios.corto))
+            // El campo se ve igual cargando o no: se puede preguntar sin datos.
             CampoParaPreguntar { onNavigate(Screen.AIChat()) }
         }
+    }
+}
+
+/**
+ * El tag de cada fila esqueleto de «Pregúntale a Movi» (Task 7): tres preguntas genéricas y tres
+ * filas esqueleto se ven distinto pero las dos son tres `Row`, así que contarlas por texto no
+ * alcanza para probar que lo que se ve es el esqueleto y no el relleno.
+ */
+const val TAG_FILA_ESQUELETO_PREGUNTA: String = "fila-esqueleto-pregunta"
+
+/** El esqueleto de [FilaDePregunta]: el mismo ícono, un renglón en vez del texto de la pregunta. */
+@Composable
+private fun FilaDePreguntaEsqueleto() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Movi.espacios.medio)
+            .testTag(TAG_FILA_ESQUELETO_PREGUNTA),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+    ) {
+        BloqueEsqueleto(alto = 16.dp, ancho = 16.dp)
+        LineaEsqueleto(fraccionDelAncho = 0.75f, modifier = Modifier.weight(1f))
     }
 }
 

@@ -9,7 +9,6 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -476,8 +475,13 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // Sin nada pintado todavía, la barra de siempre (la Task 7 le pone esqueletos).
-            if (loading && !actualizandoConDatos) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            // Sin nada pintado todavía (`loading && !actualizandoConDatos`), YA NO va la barra de
+            // siempre: el hero y «Pregúntale a Movi» (Task 7) pintan su propio esqueleto con la
+            // forma de lo que viene, y una barra de ancho completo arriba de un bloque que además
+            // pulsa es la misma señal dicha dos veces. Las secciones SDUI que no tienen esqueleto
+            // propio (patrimonio, categorías) ya se apagaban solas sin datos —con o sin barra no
+            // mostraban nada— así que sacarla no les quita información. Con algo ya pintado
+            // (`actualizandoConDatos`), la cabecera sigue diciendo «Actualizando…»: ver más abajo.
 
             // Guía "Primeros pasos": chrome nativo, fuera de la definición SDUI a propósito —
             // así existe siempre, sin depender de tocar `screen_definitions` en producción.
