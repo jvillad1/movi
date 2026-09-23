@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Rule
@@ -184,6 +185,31 @@ class HojaAgregarSugerenciaDeCategoriaTest {
 
         composeRule.onNodeWithText("Salario").assertExists()
         composeRule.onNodeWithText("Movi la reconoce: Crepes & Waffles").assertDoesNotExist()
+    }
+
+    /**
+     * Fix round 2 — la regresión que introdujo el round anterior. «Fútbol» es propia, sin tipo
+     * fijado y usada SOLO en gastos: bajo `categoriaSirveParaTipo` (la de la reconciliación,
+     * permisiva con una categoría propia sin nada fijado) «sirve» para cualquier tipo, así que la
+     * reconciliación no la toca al cambiar de pestaña ni limpia la sugerencia vigente. Sin el
+     * arreglo, cuando la sugerencia dejaba de aplicar en Ingreso (por `seOfreceParaTipo`, que sí
+     * mira el uso) el efecto volvía a «lo de antes» — la categoría de GASTO («Comida»)— y la
+     * colaba sobre un ingreso. Ahora, si la pestaña cambió desde que se aplicó la sugerencia, no
+     * hay «antes» que valga: cae al valor por defecto de la pestaña nueva.
+     */
+    @Test
+    fun al_cambiar_a_ingreso_no_restaura_la_categoria_de_gasto_de_antes() {
+        UsedCategoriesCache.record("Fútbol", TransactionType.EXPENSE) // propia, usada SOLO en gastos
+        montarHoja() // recuerdoMoraSoccer: nombre:morasoccer -> Fútbol
+        escribirLaNota("Mora")
+        composeRule.onNodeWithText("Fútbol").assertExists() // sugerencia aplicada, todavía en Gasto
+
+        tocar("Ingreso") // la nota sigue diciendo "Mora": no cambió, cambió la pestaña.
+
+        composeRule.onNodeWithText("Comida").assertDoesNotExist() // NO la categoría de gasto de antes
+        composeRule.onNodeWithText("Fútbol").assertDoesNotExist() // ni la sugerida (no sirve en Ingreso)
+        composeRule.onNodeWithText("Salario").assertExists() // el valor por defecto de Ingreso
+        composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertDoesNotExist()
     }
 
     // ── Andamio ───────────────────────────────────────────────────────────────────────────

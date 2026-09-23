@@ -252,16 +252,29 @@ fun QuickAddScreen(
 
     /**
      * Task 5 — **la sugerencia hoy vigente** (para la línea «Movi la reconoce: …» bajo la fila
-     * «Categoría»), y **la categoría que había antes de que esa sugerencia la pisara** —para
-     * poder volver a ella si la sugerencia desaparece (el dueño borró o cambió lo que la nota
-     * decía). `null` en los dos = no hay ninguna sugerencia aplicada ahora mismo.
+     * «Categoría»), **la categoría que había antes de que esa sugerencia la pisara** —para poder
+     * volver a ella si la sugerencia desaparece porque la NOTA cambió— y **con qué tipo (Gasto o
+     * Ingreso) se aplicó esa sugerencia**. `null` en los tres = no hay ninguna sugerencia aplicada
+     * ahora mismo, y los tres se mueven juntos: no hay combinación válida con solo uno o dos en
+     * `null`.
      *
-     * Se limpian los dos juntos, en los dos únicos lugares donde el dueño elige la categoría a
-     * mano ([pickCategoriaFrecuente] y el campo de la fila «Categoría», más abajo): una vez que
-     * "gana lo suyo", no hay a qué volver ni qué seguir anunciando.
+     * **Fix round 2 — por qué hace falta el tercero.** «Volver a lo de antes» solo es correcto
+     * cuando lo que hizo desaparecer la sugerencia fue la NOTA (la borró, la cambió) en la MISMA
+     * pestaña — ahí «lo de antes» es la categoría de esta misma pestaña. Si lo que cambió fue la
+     * PESTAÑA (Gasto→Ingreso), «lo de antes» es la categoría de la OTRA pestaña, y ponerla acá
+     * cuela una categoría que puede no servir para el tipo actual — el caso real: «Fútbol»
+     * (propia, usada solo en gastos) sugerida en Gasto, sube a Ingreso, dejó de sugerirse por el
+     * filtro de tipo, y sin este dato se restauraba «Comida» (la que había ANTES en Gasto) sobre
+     * un ingreso. Comparar [tipoDeLaSugerenciaVigente] contra el tipo de la pestaña actual es lo
+     * que distingue los dos casos — ver el `LaunchedEffect` de acá abajo.
+     *
+     * Se limpian los tres juntos, en los tres lugares donde algo que no es "la nota en esta misma
+     * pestaña" decide la categoría: [pickCategoriaFrecuente], el campo de la fila «Categoría» (más
+     * abajo) y la reconciliación de tipo cuando pisa la categoría por su cuenta.
      */
     var sugerenciaVigente by remember { mutableStateOf<com.jvillada.movi.shared.model.RecuerdoDeCategoria?>(null) }
     var categoriaAntesDeLaSugerencia by remember { mutableStateOf<String?>(null) }
+    var tipoDeLaSugerenciaVigente by remember { mutableStateOf<TransactionType?>(null) }
 
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
@@ -551,6 +564,7 @@ fun QuickAddScreen(
             // OTRA pestaña). Se limpia el estado en vez de arrastrarlo.
             sugerenciaVigente = null
             categoriaAntesDeLaSugerencia = null
+            tipoDeLaSugerenciaVigente = null
         }
     }
 
@@ -579,19 +593,42 @@ fun QuickAddScreen(
     LaunchedEffect(note, MemoriaDeCategoriasCache.recuerdos, categoryPrefs, pickers.typeIndex) {
         if (pickers.typeIndex > 1) return@LaunchedEffect // Traspaso y Cuota no tienen categoría.
         val tipoActual = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+
+        // Fix round 2 — **por qué esto va primero, y separado.** "Volver a lo de antes" cuando
+        // una sugerencia desaparece solo es correcto si lo que la hizo desaparecer fue la NOTA,
+        // en la MISMA pestaña donde se aplicó — ahí [categoriaAntesDeLaSugerencia] es la
+        // categoría de ESTA pestaña. Si en cambio cambió la PESTAÑA desde que se aplicó (Gasto→
+        // Ingreso), [categoriaAntesDeLaSugerencia] es la categoría de la OTRA pestaña, y ponerla
+        // acá cuela una categoría que puede no servir para el tipo actual — el caso real:
+        // «Fútbol» (propia, usada solo en gastos) sugerida en Gasto, sube a Ingreso con la nota
+        // intacta, [seOfreceParaTipo] dice que ya no sirve, y sin este chequeo se restauraba
+        // «Comida» (lo que había ANTES en Gasto) sobre un ingreso. Por eso, apenas la pestaña
+        // cambia respecto de la que tenía la sugerencia vigente, esa sugerencia se da de baja ACÁ
+        // —con el valor por defecto de la pestaña nueva, lo mismo que ya hace la reconciliación de
+        // tipo para el resto de los casos— y el resto de la función corre limpio, como si no
+        // hubiera habido ninguna sugerencia antes: si el mismo recuerdo también sirve para el tipo
+        // nuevo, se vuelve a aplicar más abajo con un «antes» que sí es de esta pestaña.
+        if (sugerenciaVigente != null && tipoDeLaSugerenciaVigente != tipoActual) {
+            category = categoriaPorDefectoPara(tipoActual, usedCategories, categoryPrefs, usosRecientes)
+            sugerenciaVigente = null
+            categoriaAntesDeLaSugerencia = null
+            tipoDeLaSugerenciaVigente = null
+        }
+
         val recuerdosVisibles = MemoriaDeCategoriasCache.recuerdos.filter { r ->
             seOfreceParaTipo(r.categoria, tipoActual, usedCategories[r.categoria].orEmpty(), categoryPrefs)
         }
         val sugerencia = sugerenciaPorNombre(note, recuerdosVisibles)
         if (sugerencia == null) {
-            // La sugerencia desapareció (borró o cambió la nota): vuelve a lo que había ANTES de
-            // que Movi la pisara — pero solo si Movi fue quien la puso. Si el dueño ya la había
+            // La sugerencia desapareció porque cambió la NOTA (el caso de la pestaña ya se
+            // resolvió arriba) — pero solo si Movi fue quien la puso. Si el dueño ya la había
             // elegido a mano, [sugerenciaVigente] ya está en `null` (ver [pickCategoriaFrecuente]
             // y el `onValueChange` del campo de categoría) y acá no hay nada que deshacer.
             if (sugerenciaVigente != null) {
                 categoriaAntesDeLaSugerencia?.let { category = it }
                 sugerenciaVigente = null
                 categoriaAntesDeLaSugerencia = null
+                tipoDeLaSugerenciaVigente = null
             }
             return@LaunchedEffect
         }
@@ -599,10 +636,12 @@ fun QuickAddScreen(
         if (sugerencia == sugerenciaVigente) return@LaunchedEffect // nada cambió.
         // Guarda el valor de ANTES la primera vez, no en cada re-sugerencia: si la nota pasa de
         // «Mora» a «Mora S» y las dos sugieren Fútbol, lo que había antes de la PRIMERA sigue
-        // siendo lo correcto a donde volver si el dueño termina borrando todo.
+        // siendo lo correcto a donde volver si el dueño termina borrando todo. Con el reseteo de
+        // arriba, "antes" nunca puede ser un valor de otra pestaña.
         if (categoriaAntesDeLaSugerencia == null) categoriaAntesDeLaSugerencia = category
         category = sugerencia.categoria
         sugerenciaVigente = sugerencia
+        tipoDeLaSugerenciaVigente = tipoActual
     }
 
     /**
@@ -629,6 +668,7 @@ fun QuickAddScreen(
         // ya no tiene nada que pisar ni a qué volver.
         sugerenciaVigente = null
         categoriaAntesDeLaSugerencia = null
+        tipoDeLaSugerenciaVigente = null
     }
 
     fun onKey(key: String) {
@@ -1016,6 +1056,7 @@ fun QuickAddScreen(
                                         categoriaElegidaAMano = true
                                         sugerenciaVigente = null
                                         categoriaAntesDeLaSugerencia = null
+                                        tipoDeLaSugerenciaVigente = null
                                     }
                                 },
                                 type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
