@@ -310,6 +310,8 @@ object SessionManager {
         // usuario que se va — sugerirle al siguiente las categorías del anterior sería filtrar
         // algo suyo por una lista de autocompletado.
         UsedCategoriesCache.clear()
+        // Task 5: y la memoria de categorías que trajo el server — es la del usuario que se va.
+        MemoriaDeCategoriasCache.clear()
         RecurringOfferGate.clear()
         // Y los canales de aviso: `emailTo` es la dirección del usuario que se va, y decirle al
         // siguiente «te avisamos por correo a juan@…» sería mostrarle un dato ajeno.

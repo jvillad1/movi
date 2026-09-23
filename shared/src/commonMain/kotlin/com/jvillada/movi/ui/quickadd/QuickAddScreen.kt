@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.LastAccountStore
+import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
@@ -88,6 +89,9 @@ private val ALTO_FILA_DE_CHIPS = 40.dp
 
 /** La X del encabezado de un sub-picker. Ver el porqué en [PickerHeader]. */
 internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
+
+/** El campo de texto del sub-picker «Nota» — para encontrarlo en una prueba (Task 5). */
+internal const val TAG_CAMPO_DE_NOTA = "quickadd:campo-de-nota"
 
 /**
  * **En qué moneda está la plata de esta cuenta** — la del movimiento que se anote contra ella.
@@ -245,6 +249,20 @@ fun QuickAddScreen(
     var categoriaElegidaAMano by remember {
         mutableStateOf(presetCategoria?.trim()?.let { it.isNotEmpty() && !isReservedCategory(it) } == true)
     }
+
+    /**
+     * Task 5 — **la sugerencia hoy vigente** (para la línea «Movi la reconoce: …» bajo la fila
+     * «Categoría»), y **la categoría que había antes de que esa sugerencia la pisara** —para
+     * poder volver a ella si la sugerencia desaparece (el dueño borró o cambió lo que la nota
+     * decía). `null` en los dos = no hay ninguna sugerencia aplicada ahora mismo.
+     *
+     * Se limpian los dos juntos, en los dos únicos lugares donde el dueño elige la categoría a
+     * mano ([pickCategoriaFrecuente] y el campo de la fila «Categoría», más abajo): una vez que
+     * "gana lo suyo", no hay a qué volver ni qué seguir anunciando.
+     */
+    var sugerenciaVigente by remember { mutableStateOf<com.jvillada.movi.shared.model.RecuerdoDeCategoria?>(null) }
+    var categoriaAntesDeLaSugerencia by remember { mutableStateOf<String?>(null) }
+
     var accounts by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Account>>(emptyList()) }
     // F10: "+ Registrar el primero" desde el detalle de una cuenta trae esa cuenta ya elegida —
     // si no existiera (borrada entre medio), el efecto de abajo cae en la última usada y, si esa
@@ -530,6 +548,52 @@ fun QuickAddScreen(
         }
     }
 
+    // Task 5 — la primera vez que se abre «Agregar» en esta sesión: ver el KDoc de
+    // [MemoriaDeCategoriasCache.cargarSiHaceFalta]. `Unit` como key: no se repite mientras la
+    // hoja siga compuesta, y el propio caché es idempotente si dos hojas llegaran a competir.
+    LaunchedEffect(Unit) {
+        MemoriaDeCategoriasCache.cargarSiHaceFalta()
+    }
+
+    /**
+     * Task 5 — **escribir el nombre sugiere la categoría.** Corre en cada cambio de [note] (la
+     * nota solo cambia en este estado cuando el dueño cierra el sub-picker con «Guardar nota» —
+     * ver `NoteEditor` — así que "escribir" acá es "cada nota distinta que el dueño confirmó"),
+     * y también cuando llega la memoria del server o las preferencias de categoría, por si
+     * cualquiera de las dos aparece DESPUÉS de que esta hoja ya se compuso con una nota puesta
+     * (un preset, o el dueño escribió antes de que la memoria terminara de cargar).
+     *
+     * Las escondidas se filtran ACÁ, con [categoryPrefs] — [sugerenciaPorNombre] es pura y solo
+     * sabe filtrar reservadas (ver su KDoc).
+     */
+    LaunchedEffect(note, MemoriaDeCategoriasCache.recuerdos, categoryPrefs) {
+        if (pickers.typeIndex > 1) return@LaunchedEffect // Traspaso y Cuota no tienen categoría.
+        val recuerdosVisibles = MemoriaDeCategoriasCache.recuerdos.filter {
+            categoryPrefs[it.categoria]?.hidden != true
+        }
+        val sugerencia = sugerenciaPorNombre(note, recuerdosVisibles)
+        if (sugerencia == null) {
+            // La sugerencia desapareció (borró o cambió la nota): vuelve a lo que había ANTES de
+            // que Movi la pisara — pero solo si Movi fue quien la puso. Si el dueño ya la había
+            // elegido a mano, [sugerenciaVigente] ya está en `null` (ver [pickCategoriaFrecuente]
+            // y el `onValueChange` del campo de categoría) y acá no hay nada que deshacer.
+            if (sugerenciaVigente != null) {
+                categoriaAntesDeLaSugerencia?.let { category = it }
+                sugerenciaVigente = null
+                categoriaAntesDeLaSugerencia = null
+            }
+            return@LaunchedEffect
+        }
+        if (categoriaElegidaAMano) return@LaunchedEffect // el dueño ya eligió: no se pisa.
+        if (sugerencia == sugerenciaVigente) return@LaunchedEffect // nada cambió.
+        // Guarda el valor de ANTES la primera vez, no en cada re-sugerencia: si la nota pasa de
+        // «Mora» a «Mora S» y las dos sugieren Fútbol, lo que había antes de la PRIMERA sigue
+        // siendo lo correcto a donde volver si el dueño termina borrando todo.
+        if (categoriaAntesDeLaSugerencia == null) categoriaAntesDeLaSugerencia = category
+        category = sugerencia.categoria
+        sugerenciaVigente = sugerencia
+    }
+
     /**
      * Ola A: hasta 6 chips con las categorías más frecuentes de esta pestaña — ver
      * [categoriasFrecuentes]. Vacía sin datos de uso, que es cuando la fila de chips no ocupa
@@ -550,6 +614,10 @@ fun QuickAddScreen(
     fun pickCategoriaFrecuente(nombre: String) {
         category = nombre
         categoriaElegidaAMano = true
+        // Task 5: eligió con el dedo — lo que Movi venía sugiriendo (o podía llegar a sugerir)
+        // ya no tiene nada que pisar ni a qué volver.
+        sugerenciaVigente = null
+        categoriaAntesDeLaSugerencia = null
     }
 
     fun onKey(key: String) {
@@ -651,6 +719,11 @@ fun QuickAddScreen(
                 // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
                 // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
                 LastAccountStore.recordAccount(event.accountId)
+                // Task 5: la memoria de categorías que trajo esta hoja puede quedar vieja apenas
+                // se guarda este movimiento — se recarga para que la próxima hoja de «Agregar» de
+                // esta sesión ya vea la anotación recién hecha. `launch` y no `await`: es una
+                // ayuda para escribir, y esta hoja ya se está cerrando.
+                coroutine.launch { MemoriaDeCategoriasCache.recargar() }
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella).
@@ -908,7 +981,17 @@ fun QuickAddScreen(
                                 // reventaba el insert del server con un 500, y en el teléfono
                                 // quedaba rebotando en el sync cada 30 s sin decir nada. Ver
                                 // [rechazoDeLosTextos], que es la misma regla del otro lado.
-                                onValueChange = { category = it.take(MAX_CATEGORIA_LENGTH) },
+                                onValueChange = {
+                                    category = it.take(MAX_CATEGORIA_LENGTH)
+                                    // Task 5: escribir o tocar una sugerencia EN ESTE CAMPO es
+                                    // tan "a mano" como tocar un chip — ver [categoriaElegidaAMano].
+                                    // No entra acá lo que la propia sugerencia por nombre o la
+                                    // reconciliación de tipo escriben: esas asignan `category`
+                                    // directo, sin pasar por este lambda.
+                                    categoriaElegidaAMano = true
+                                    sugerenciaVigente = null
+                                    categoriaAntesDeLaSugerencia = null
+                                },
                                 type = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME,
                                 usedCategories = usedCategories,
                                 prefs = categoryPrefs,
@@ -998,6 +1081,10 @@ fun QuickAddScreen(
                             moneda = monedaDeLaCuenta(accounts, selectedAccountId),
                             onKey = ::onKey,
                             category = category,
+                            // Task 5: solo se muestra la sugerencia que Movi puso, no cualquier
+                            // "Movi la reconoce" persistente — desaparece apenas el dueño elige a
+                            // mano ([pickCategoriaFrecuente] y el campo ya ponen esto en `null`).
+                            categoriaSugeridaHint = sugerenciaVigente?.let { "Movi la reconoce: ${it.nombre}" },
                             categoriasFrecuentes = categoriasFrecuentesDelTipo,
                             onPickCategoriaFrecuente = ::pickCategoriaFrecuente,
                             // **Anotado, no arreglado (B3, y es de master):** si `getAccounts()`
@@ -1111,6 +1198,13 @@ private fun EditorBody(
     moneda: String,
     onKey: (String) -> Unit,
     category: String,
+    /**
+     * Task 5: `"Movi la reconoce: <nombre>"` cuando la categoría de arriba la puso una sugerencia
+     * automática — `null` el resto del tiempo, incluido mientras el dueño elige a mano. Se pasa
+     * como `sub` de la fila «Categoría» (ver [CardRow]), con el mismo estilo que cualquier otro
+     * texto de apoyo de esta hoja.
+     */
+    categoriaSugeridaHint: String? = null,
     /**
      * Ola A: hasta 6 categorías, las que más se usan para este tipo — ver [categoriasFrecuentes].
      * Vacía = la fila de chips no se dibuja y no ocupa lugar (a diferencia de la fila «Cuenta»,
@@ -1234,6 +1328,9 @@ private fun EditorBody(
             // Ver el KDoc de [rightMaxFraction] en CardRow: una categoría propia larga
             // («Mantenimiento del carro») se llevaba la fila entera y partía la etiqueta.
             rightMaxFraction = FRACCION_VALOR_FILA,
+            // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
+            // automática. `null` no dibuja nada — el aspecto de siempre para todo lo demás.
+            sub = categoriaSugeridaHint,
             showChevron = true,
             onClick = onPickCategory,
         )
@@ -1775,6 +1872,7 @@ private fun NoteEditor(initial: String, onSave: (String) -> Unit, onClose: () ->
                 // `fillMaxWidth`; esta era la única que se lo había saltado.
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag(TAG_CAMPO_DE_NOTA)
                     .focusRequester(noteFocusRequester)
                     // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                     // [esAtajoDeSeleccionarTodo]. Es lo mismo que hace la línea de abajo al ganar

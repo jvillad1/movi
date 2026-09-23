@@ -3,6 +3,7 @@ package com.jvillada.movi.aislamiento
 import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.DiasPlegadosStore
 import com.jvillada.movi.data.LastAccountStore
+import com.jvillada.movi.data.MemoriaDeCategoriasCache
 import com.jvillada.movi.data.RecurringOfferGate
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
@@ -10,6 +11,7 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.RecuerdoDeCategoria
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.ReminderChannels
@@ -74,12 +76,16 @@ class ElForkLlegaLimpioTest {
         LastAccountStore.recordTransfer("acc-origen", "acc-destino")
         CuentaMasUsadaCache.recordFromServer("acc-de-otra-prueba")
         // `canales` solo lo escribe `cargar()`, así que se ensucia por el camino de verdad: con un
-        // repositorio enchufado que conteste, que es exactamente lo que hace una pantalla.
+        // repositorio enchufado que conteste, que es exactamente lo que hace una pantalla. Lo
+        // mismo para la memoria de categorías (Task 5) — comparte el mismo repositorio de prueba.
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getReminderChannels(): ReminderChannels =
                 ReminderChannels(email = true, emailTo = "alguien@ejemplo.com")
+            override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> =
+                listOf(RecuerdoDeCategoria(huella = "nombre:otraprueba", categoria = "Fútbol", nombre = "Otra Prueba", cuantos = 1))
         }
         runBlocking { ReminderChannelsCache.cargar() }
+        runBlocking { MemoriaDeCategoriasCache.cargarSiHaceFalta() }
         DiasPlegadosStore.alternar("2024-03-15")
         RecurringOfferGate.recordarLoQueYaHay(listOf(ARRIENDO), emptyList())
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
@@ -97,6 +103,7 @@ class ElForkLlegaLimpioTest {
         assertTrue("La sesión no quedó puesta", SessionManager.loggedIn)
         assertTrue("El día no quedó plegado", "2024-03-15" in DiasPlegadosStore.plegados())
         assertNotNull("Los canales de aviso no quedaron cargados", ReminderChannelsCache.canales)
+        assertTrue("La memoria de categorías no quedó cargada", MemoriaDeCategoriasCache.recuerdos.isNotEmpty())
         assertNotNull("La última cuenta no quedó guardada", LastAccountStore.lastAccountId)
         assertNotNull("La cuenta más usada no quedó guardada", CuentaMasUsadaCache.id)
         assertNotNull("La definición de pantalla no quedó cacheada", ScreenDefCache.dashboard)
@@ -115,6 +122,7 @@ class ElForkLlegaLimpioTest {
         assertEquals("DashboardDataCache trae el tick anterior", 0, DashboardDataCache.tickDeLaCarga)
         assertEquals("DashboardDataCache trae entradas ya hechas", emptySet<String>(), DashboardDataCache.entradasHechas)
         assertNull("ReminderChannelsCache trae resaca", ReminderChannelsCache.canales)
+        assertEquals("MemoriaDeCategoriasCache trae resaca", emptyList<RecuerdoDeCategoria>(), MemoriaDeCategoriasCache.recuerdos)
         assertNull("LastAccountStore trae la cuenta de otra prueba", LastAccountStore.lastAccountId)
         assertNull("CuentaMasUsadaCache trae la cuenta de otra prueba", CuentaMasUsadaCache.id)
         assertNull("LastAccountStore trae el origen de otra prueba", LastAccountStore.lastTransferFromId)
