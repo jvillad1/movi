@@ -92,6 +92,13 @@ internal data class DeudaCompartida(
     /** % efectivo anual. `null` en las tarjetas: Movi no guarda su tasa. */
     val tasaEa: Double?,
     val sinIntereses: Boolean,
+    /**
+     * En qué moneda está [cuota]. El [saldo] viaja siempre convertido a pesos, pero la cuota no se
+     * convierte: el pago mínimo de una tarjeta en dólares es un monto en DÓLARES que dice el
+     * extracto, y convertirlo con la TRM del día sería inventar una cifra que el banco no cobra.
+     * Sin este dato, la cara en dólares de la Master Black salía «Pago mínimo $71».
+     */
+    val monedaDeLaCuota: String = "COP",
 )
 
 /** Arma el resumen del usuario [uid] **ahora**. Una pasada por la base, más la TRM (cacheada por día). */
@@ -144,6 +151,7 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
                 cuota = credito?.cuota?.takeIf { it > 0L } ?: tarjeta?.second?.takeIf { it > 0L },
                 tasaEa = credito?.tasa?.takeIf { it > 0.0 },
                 sinIntereses = credito?.sinIntereses ?: false,
+                monedaDeLaCuota = cuenta.currency,
             )
         }
 
