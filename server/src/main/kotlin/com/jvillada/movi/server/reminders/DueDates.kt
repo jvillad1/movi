@@ -213,9 +213,10 @@ fun dueDateFor(
         // Un período sin ocurrencia (acortado a mano) arranca por la primera que venga después.
         primeraOcurrenciaDesde(diasDelPeriodo(today, settings).start, rule.dayOfMonth)
     }
-    // **El piso de la regla, con granularidad de PERÍODO** (ver [arranqueDeLaRegla]): el primer
-    // día del período del dueño en que cae `activeFrom`. Lo anterior a eso no existe; ese período
-    // sí.
+    // **El piso de la regla** (ver [arranqueDeLaRegla]): la primera fecha en la que puede haber
+    // un vencimiento. Dónde queda depende de si `activeFrom` es un desembolso —el día siguiente,
+    // porque un desembolso no es una ocurrencia— o el movimiento que originó la regla —el arranque
+    // de su período, porque ese movimiento sí lo es—. Acá da igual cuál de las dos: es un piso.
     val piso = arranqueDeLaRegla(rule, settings)
     // **Antes de rodar hacia adelante, la ocurrencia anterior que sigue en gracia.**
     //
@@ -237,19 +238,19 @@ fun dueDateFor(
     } else {
         natural
     }
-    // **Una regla no vence en los períodos ANTERIORES al de su arranque.**
+    // **Una regla no vence antes de su piso.**
     //
-    // El piso es el arranque del período, no la fecha exacta (ver [arranqueDeLaRegla]): el período
-    // en el que cae `activeFrom` **sí** existe. Lo que esto sigue evitando —y es para lo que
-    // `activeFrom` nació— es que una regla nacida hoy se invente historia hacia atrás: un crédito
-    // desembolsado el 1 de septiembre no debe cuotas de agosto ni de julio.
+    // Es para lo que `activeFrom` nació y lo único que las dos semánticas comparten entero: una
+    // regla no se inventa historia hacia atrás. Un crédito desembolsado el 1 de septiembre no debe
+    // cuotas de agosto ni de julio, y un recurrente creado hoy desde un movimiento tampoco.
     //
-    // Lo que **dejó** de evitar es que el período del propio movimiento/desembolso se saltee. Eso
-    // era un remedio de más: se lo comía entero, y las reglas creadas desde un pago del período en
-    // curso desaparecían del checklist de ese período aunque el pago que las prueba estuviera ahí.
-    // Hoy ese período se cierra marcándolo (el emparejamiento automático de `OccurrenceMatching`,
-    // o el sello que escribe `POST /api/recurring-rules`), que es mejor que esconderlo: el pago se
-    // ve, con su evidencia al lado.
+    // Lo que cada semántica decide por su lado es **el propio arranque**, y eso no se puede
+    // resolver acá porque las dos fechas se ven iguales: la cuota del crédito desembolsado el 1 de
+    // septiembre con pago el día 1 es la del 1 de OCTUBRE (el desembolso no es una cuota), y en
+    // cambio el vencimiento del 1 de septiembre de «Tía Caro» —creada desde un pago de ese mismo
+    // día— SÍ existe y se cierra marcándolo, no escondiéndolo: el emparejamiento automático de
+    // `OccurrenceMatching`, o el sello que escribe `POST /api/recurring-rules`. Así el pago se ve,
+    // con su evidencia al lado. Ver [RecurringRule.arranqueEsDesembolso].
     //
     // Esto vive acá y no en un filtro suelto por una razón que ya costó una vez: `ruleIsActiveOn`
     // vivía solo en `/api/payments/occurrences`, así que «Próximos pagos» del Inicio y el barrido
@@ -344,19 +345,32 @@ fun selectDueForReminder(
         .map { it.first }
 
 /**
- * **El piso de esta regla: el primer día del PERÍODO del dueño en que cae
- * [RecurringRule.activeFrom]**, o `null` si la regla corre desde siempre.
+ * **El piso de esta regla**: la primera fecha en la que puede haber un vencimiento, o `null` si la
+ * regla corre desde siempre. Una ocurrencia anterior al piso no existe.
  *
- * La granularidad es el período y no el día, y esa es toda la diferencia con la versión anterior
- * (ver el KDoc de [RecurringRule.activeFrom] en `:core` para la historia completa). Antes el piso
- * era la fecha exacta y `dueDateFor` rodaba mientras `due <= activeFrom`, así que una regla nacida
- * de un movimiento se saltaba **el período entero de ese movimiento**: «Coomeva Familiar» (día 30,
- * creada desde un pago del 5 de septiembre, corte 25) no aparecía en el checklist del período en
- * curso aunque el pago que la prueba estuviera ahí.
+ * Dónde queda el piso depende de **qué significa** [RecurringRule.activeFrom], y eso lo dice
+ * [RecurringRule.arranqueEsDesembolso]. Son dos cosas distintas metidas en un mismo ISO, y por eso
+ * hay dos cuentas:
  *
- * Con el piso en el arranque del período, el vencimiento del 30 de agosto —que cae en el período
- * del dueño que contiene al 5 de septiembre— **existe**, y la protección original se mantiene
- * entera: no se inventan ocurrencias de julio ni de junio.
+ *  - **Arranque = DESEMBOLSO** (la regla sintética de un crédito, `virtualRuleFor`): el desembolso
+ *    **no es** una ocurrencia de la regla — ese día entró la plata, la cuota es lo que se devuelve
+ *    después. El piso es el **día siguiente**, o sea la vieja semántica estricta `due > activeFrom`
+ *    escrita de la forma que se puede comparar con la otra. El «Crédito Techo Gardenera»
+ *    (desembolso 1-sep, pago día 1) tiene su primera cuota el **1 de octubre**, que es justamente
+ *    lo que el dueño reclamó — y con él el Cotrafa 5413, las dos del papá y el 9695, los cinco
+ *    créditos de producción cuyo día de pago coincide con el del desembolso.
+ *
+ *  - **Arranque = EL MOVIMIENTO que originó la regla** (todo lo demás): ese movimiento **sí** es
+ *    una ocurrencia, así que su período tiene que existir. El piso es el **primer día del período
+ *    del dueño** que contiene la fecha — con el corte configurable ([PeriodSettings]) y no con el
+ *    mes de calendario, que con corte 25 son cosas distintas. Así «Coomeva Familiar» (día 30,
+ *    creada desde un pago del 5 de septiembre) conserva su vencimiento del 30 de agosto, que cae
+ *    en el mismo período, y «Tía Caro» (día 1, desde un pago del 1 de septiembre) el suyo del 1 de
+ *    septiembre. Con el piso por día se saltaban el período entero del pago que las prueba y había
+ *    que destrabarlas a mano en la base.
+ *
+ * **Las dos protegen lo mismo**, que es para lo que el campo nació: los períodos **anteriores** al
+ * arranque no existen. Ni agosto ni julio le deben cuotas a un crédito de septiembre.
  *
  * Una fecha ilegible devuelve `null` (la regla corre): ante la duda, mejor avisar de más.
  */
@@ -367,14 +381,20 @@ fun arranqueDeLaRegla(
 ): LocalDate? {
     val desde = rule.activeFrom ?: return null
     val inicio = runCatching { LocalDate.parse(desde) }.getOrNull() ?: return null
+    // Un desembolso no es una ocurrencia: la primera cuota es la primera que cae ESTRICTAMENTE
+    // después. `plusDays(1)` dice eso con la misma forma —un piso inclusivo— que la otra rama, así
+    // que `ruleIsActiveOn` y el bucle de `dueDateFor` no tienen que saber cuál de las dos es.
+    if (rule.arranqueEsDesembolso) return inicio.plusDays(1)
     return diasDelPeriodo(inicio, settings, zone).start
 }
 
 /**
  * ¿Esta regla ya está corriendo en [date]?
  *
- * Una regla con [RecurringRule.activeFrom] no existe en los períodos **anteriores** al que
- * contiene esa fecha. El período de la fecha sí: ver [arranqueDeLaRegla].
+ * Es exactamente «[date] llegó al piso» — y dónde queda el piso lo decide [arranqueDeLaRegla]
+ * según lo que signifique [RecurringRule.activeFrom]: el día siguiente al desembolso de un
+ * crédito, o el arranque del período del movimiento que originó la regla. Ver
+ * [RecurringRule.arranqueEsDesembolso].
  *
  * **Se pasa [settings] siempre que se tenga.** Con corte 25 el período del dueño y el mes de
  * calendario son cosas distintas, y este repo ya se comió ese error una vez: usar el default acá

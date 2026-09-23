@@ -446,9 +446,11 @@ fun Route.reminderRoutes() {
                 // del 24 sin marcar se sigue ofreciendo («Ya lo pagué») del 25 al 29, en vez de
                 // desaparecer al día siguiente de vencer. Ver `ocurrenciaPorPreguntar`.
                 val due = ocurrenciaPorPreguntar(today, rule, periodo) ?: return@mapNotNull null
-                // Una regla no tiene ocurrencia en los períodos ANTERIORES al de su arranque:
-                // un crédito desembolsado este mes no debe cuotas de los meses de antes. El
-                // período del arranque sí la tiene — ver `arranqueDeLaRegla`.
+                // Una regla no tiene ocurrencia antes de su arranque: un crédito desembolsado
+                // este mes no debe cuotas de los meses de antes, y su primera cuota cae DESPUÉS
+                // del desembolso, no el mismo día. En cambio el período del movimiento que originó
+                // un recurrente sí tiene ocurrencia — son dos semánticas distintas y las dos viven
+                // en `arranqueDeLaRegla`; ver `RecurringRule.arranqueEsDesembolso`.
                 if (!ruleIsActiveOn(rule, due, periodo)) return@mapNotNull null
                 rule to due
             }
