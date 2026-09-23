@@ -684,10 +684,24 @@ class CategoryRoutesTest {
     @Test
     fun `la memoria de un usuario no ve la de otro`() = testApplication {
         wireApp()
+        // Nombre y categoría DISTINTOS entre los dos usuarios a propósito: si el filtro por uid
+        // se rompiera y las dos historias se mezclaran, con el mismo nombre las dos anotaciones
+        // caerían en la MISMA huella y el resultado seguiría siendo una lista de tamaño 1 con
+        // `cuantos = 2` — exactamente lo que este test tiene que poder detectar.
         seedMovimientoConNombre("mem-mio", "Panadería La 33", "Comida")
-        seedMovimientoConNombre("mem-ajeno", "Panadería La 33", "Comida", owner = otherUserId)
+        seedMovimientoConNombre("mem-ajeno", "Ferretería El Tornillo", "Ferretería", owner = otherUserId)
 
-        assertEquals(1, memoria().size, "la propia sí aparece")
-        assertEquals(1, memoria(asToken = tokenFor(otherUserId, otherEmail)).size, "y la del otro, la suya — no la suma de las dos")
+        val mia = memoria()
+        assertEquals(1, mia.size, "la propia sí aparece")
+        val entradaPropia = mia.first()
+        assertEquals("Panadería La 33", entradaPropia["nombre"]!!.jsonPrimitive.content)
+        assertEquals(1, entradaPropia.num("cuantos"))
+        assertTrue(mia.none { it["nombre"]!!.jsonPrimitive.content == "Ferretería El Tornillo" }, "la del otro no aparece acá")
+
+        val delOtro = memoria(asToken = tokenFor(otherUserId, otherEmail))
+        assertEquals(1, delOtro.size, "y la del otro, la suya — no la suma de las dos")
+        val entradaAjena = delOtro.first()
+        assertEquals("Ferretería El Tornillo", entradaAjena["nombre"]!!.jsonPrimitive.content)
+        assertEquals(1, entradaAjena.num("cuantos"))
     }
 }
