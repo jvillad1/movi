@@ -23,6 +23,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.currentMonthWindow
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
@@ -48,6 +49,7 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -306,6 +308,102 @@ class DashboardRoutesTest {
         assertEquals(setOf("EXPENSE", "INCOME"), usadas["Ajustes"])
         assertEquals(setOf("EXPENSE"), usadas["Colegio"], "el mes viejo también cuenta")
         assertFalse("Ajeno" in usadas.keys, "las categorías de otro usuario no se filtran acá")
+    }
+
+    /**
+     * `usosRecientes`: **respalda con datos** qué tan viva está una categoría — a diferencia del
+     * resto de `usedCategories`, que a propósito no filtra ni por fecha ni por anulados (ver el
+     * KDoc de `usedCategories` en DashboardRoutes.kt).
+     */
+    @Test
+    fun `usosRecientes cuenta los movimientos no anulados de los ultimos 60 dias, de cualquier tipo`() = testApplication {
+        wireApp()
+        val ahora = System.currentTimeMillis()
+        val hace10Dias = ahora - 10L * 24 * 60 * 60 * 1000
+        val hace61Dias = ahora - 61L * 24 * 60 * 60 * 1000
+
+        event("r-gasto", savings, "EXPENSE", 10_000L, category = "Carro", timestamp = ahora)
+        event("r-ingreso", savings, "INCOME", 20_000L, category = "Carro", timestamp = hace10Dias)
+        event("r-anulado", savings, "EXPENSE", 30_000L, category = "Carro", timestamp = ahora)
+        voidEvent("r-anulado")
+        event("r-viejo", savings, "EXPENSE", 5_000L, category = "Carro", timestamp = hace61Dias)
+        event("r-otra-categoria", savings, "EXPENSE", 1_000L, category = "Comida", timestamp = ahora)
+
+        val usosPorCategoria = summary()["usedCategories"]!!.jsonArray
+            .associate { entry ->
+                val obj = entry.jsonObject
+                obj["name"]!!.jsonPrimitive.content to (obj["usosRecientes"]?.jsonPrimitive?.int ?: 0)
+            }
+
+        assertEquals(2, usosPorCategoria["Carro"], "el gasto y el ingreso recientes cuentan; ni el anulado ni el de hace 61 días")
+        assertEquals(1, usosPorCategoria["Comida"])
+    }
+
+    // ── Ola A: la cuenta más usada, para que «Agregar» no arranque en la primera alfabética ──────
+
+    @Test
+    fun `la cuenta mas usada es la de mas gastos en los ultimos 30 dias`() = testApplication {
+        wireApp()
+        val ahora = System.currentTimeMillis()
+        event("m-1", savings, "EXPENSE", 10_000L, timestamp = ahora)
+        event("m-2", savings, "EXPENSE", 20_000L, timestamp = ahora)
+        event("m-3", card, "EXPENSE", 5_000L, timestamp = ahora)
+
+        assertEquals(savings, summary()["cuentaMasUsada"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `los anulados no cuentan para la cuenta mas usada, y eso cambia quien gana`() = testApplication {
+        wireApp()
+        val ahora = System.currentTimeMillis()
+        // Sin excluir los anulados, "card" ganaría 3 a 2. Con la exclusión, le quedan 1 y pierde.
+        event("s-1", savings, "EXPENSE", 10_000L, timestamp = ahora)
+        event("s-2", savings, "EXPENSE", 12_000L, timestamp = ahora)
+        event("c-1", card, "EXPENSE", 5_000L, timestamp = ahora)
+        event("c-2", card, "EXPENSE", 5_000L, timestamp = ahora)
+        event("c-3", card, "EXPENSE", 5_000L, timestamp = ahora)
+        voidEvent("c-2")
+        voidEvent("c-3")
+
+        assertEquals(savings, summary()["cuentaMasUsada"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `traspasos, ajustes y pagos de tarjeta no cuentan para la cuenta mas usada`() = testApplication {
+        wireApp()
+        val ahora = System.currentTimeMillis()
+        // El único gasto que SÍ cuenta está en `card`; todo lo de `savings` es una categoría reservada.
+        event("real", card, "EXPENSE", 5_000L, category = "Comida", timestamp = ahora)
+        event("traspaso", savings, "EXPENSE", 100_000L, category = TRANSFER_CATEGORY, timestamp = ahora)
+        event("ajuste", savings, "EXPENSE", 50_000L, category = ADJUSTMENT_CATEGORY, timestamp = ahora)
+        event("pago-tc", savings, "EXPENSE", 30_000L, category = CARD_PAYMENT_CATEGORY, timestamp = ahora)
+
+        assertEquals(card, summary()["cuentaMasUsada"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `un empate en cantidad de gastos lo rompe el movimiento mas reciente`() = testApplication {
+        wireApp()
+        val haceUnaHora = System.currentTimeMillis() - 60 * 60 * 1000
+        val ahora = System.currentTimeMillis()
+        event("e-viejo", savings, "EXPENSE", 10_000L, timestamp = haceUnaHora)
+        event("e-nuevo", card, "EXPENSE", 10_000L, timestamp = ahora)
+
+        assertEquals(
+            card,
+            summary()["cuentaMasUsada"]!!.jsonPrimitive.content,
+            "empatan 1 a 1; gana la cuenta del movimiento más reciente",
+        )
+    }
+
+    @Test
+    fun `sin gastos en los ultimos 30 dias la cuenta mas usada es null`() = testApplication {
+        wireApp()
+        // Uno viejo (fuera de la ventana de 30 días) y un ingreso: ninguno cuenta como gasto reciente.
+        event("viejo", savings, "EXPENSE", 10_000L, timestamp = System.currentTimeMillis() - 40L * 24 * 60 * 60 * 1000)
+        event("ingreso", savings, "INCOME", 3_000_000L, timestamp = System.currentTimeMillis())
+
+        assertNull(summary()["cuentaMasUsada"])
     }
 
     /**
@@ -698,7 +796,7 @@ class DashboardRoutesTest {
         // viejo no lo pide y no le cambia nada de lo que ya leía.
         val nuevas = setOf(
             "saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo", "pagosDeDeudaFueraDelChecklist",
-            "patrimonio",
+            "patrimonio", "cuentaMasUsada",
         )
         assertEquals(emptySet(), body.keys - conocidas - nuevas)
         assertEquals(3_000_000L, body.long("monthIncome"))
