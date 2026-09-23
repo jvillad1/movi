@@ -1661,7 +1661,7 @@ private fun EditorBody(
  * lo justo para que el texto se lea entero, que es preferible a un chip ilegible. Sigue siendo
  * una sola fila (`maxLines = 1` en cada chip) con desplazamiento horizontal propio: no empuja el
  * resto del formulario, la misma disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA
- * NO ENTRA» más arriba). Lo mide `HojaAgregarCategoriasFrecuentesTest`.
+ * NO ENTRA» más arriba). Lo mide `HojaAgregarChipsSeLeenEnterosTest`.
  */
 @Composable
 private fun CategoriaChipsRow(
