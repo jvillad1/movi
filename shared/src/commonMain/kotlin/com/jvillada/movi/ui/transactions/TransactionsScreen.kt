@@ -2450,6 +2450,13 @@ private fun MovementSingleRow(
                     fontWeight = FontWeight.Medium,
                     color = Movi.colores.texto,
                     letterSpacing = (-0.1).sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    // Sin este weight el Row no le acota el ancho al título y una descripción
+                    // larga («Ajuste al saldo de Skandia — quedó en $95.812.553 al 21-sep…»)
+                    // ocupaba cuatro renglones antes de recortarse; con él el punto de «sin
+                    // confirmar» sigue visible al lado incluso cuando el título se corta.
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) {
                     StatusDot(Movi.colores.aviso)
