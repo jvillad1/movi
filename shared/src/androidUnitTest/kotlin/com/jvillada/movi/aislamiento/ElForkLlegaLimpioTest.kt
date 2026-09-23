@@ -66,6 +66,9 @@ class ElForkLlegaLimpioTest {
         DashboardDataCache.data = DashboardData()
         DashboardDataCache.cargadoEn = 1_700_000_000_000L
         DashboardDataCache.tickDeLaCarga = 7
+        // La marca de «ya hizo su entrada»: con resaca, el Inicio de la prueba siguiente arrancaría
+        // con la cifra quieta y una prueba de la animación mediría otra cosa.
+        DashboardDataCache.entradasHechas += "hero.cifra"
         LastAccountStore.recordAccount("acc-de-otra-prueba")
         LastAccountStore.recordTransfer("acc-origen", "acc-destino")
         // `canales` solo lo escribe `cargar()`, así que se ensucia por el camino de verdad: con un
@@ -107,6 +110,7 @@ class ElForkLlegaLimpioTest {
         assertNull("DashboardDataCache trae resaca", DashboardDataCache.data)
         assertEquals("DashboardDataCache trae la marca de tiempo anterior", 0L, DashboardDataCache.cargadoEn)
         assertEquals("DashboardDataCache trae el tick anterior", 0, DashboardDataCache.tickDeLaCarga)
+        assertEquals("DashboardDataCache trae entradas ya hechas", emptySet<String>(), DashboardDataCache.entradasHechas)
         assertNull("ReminderChannelsCache trae resaca", ReminderChannelsCache.canales)
         assertNull("LastAccountStore trae la cuenta de otra prueba", LastAccountStore.lastAccountId)
         assertNull("LastAccountStore trae el origen de otra prueba", LastAccountStore.lastTransferFromId)

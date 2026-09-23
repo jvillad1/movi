@@ -53,6 +53,11 @@ object ScreenTaxonomy {
         "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA",
         // Generación 7: cuánto queda para gastar en el período, la semana y hoy.
         "DISPONIBLE_DEL_PERIODO",
+        // Generación 8, el Inicio de un vistazo: «Pregúntale a Movi» arriba (tres preguntas sacadas
+        // de los datos + el campo para escribir) y la tarjeta del patrimonio honesto (lo que tienes
+        // contra lo que debes). Un APK anterior no los conoce y los descarta en silencio; por eso
+        // la generación 8 conserva el BANNER de Movi AI al final (ver `DASHBOARD_LAYOUT_VERSION`).
+        "PREGUNTALE_A_MOVI", "PATRIMONIO",
     )
     val ACTION_TYPES = listOf("NAVIGATE", "OPEN_URL")
     // "analisis" salió en la Ola 4 (F40): la pantalla Análisis se fundió en el Inicio.

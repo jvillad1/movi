@@ -32,7 +32,9 @@ class ElTecladoNoTapaLoQueEscribisTest {
 
     @Test
     fun `la columna raiz descuenta el alto del teclado`() {
-        val columnaRaiz = app.lineSequence().firstOrNull { "widthIn(max = 600.dp)" in it }
+        // Desde la entrega B el ancho máximo depende de la pantalla (el Inicio se ensancha en
+        // escritorio, ver `anchoMaximoDeLaPantalla`); la columna raíz es la misma.
+        val columnaRaiz = app.lineSequence().firstOrNull { "widthIn(max = anchoMaximoDeLaPantalla(" in it }
         assertTrue(columnaRaiz != null, "cambió la columna raíz de App.kt: revisa que siga descontando el teclado")
         assertTrue(
             "imePadding()" in columnaRaiz,

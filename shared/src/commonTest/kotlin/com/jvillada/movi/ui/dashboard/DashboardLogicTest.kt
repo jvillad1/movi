@@ -807,10 +807,13 @@ class DashboardLogicTest {
     @Test
     fun `con la base vacia solo se pintan balance y Movi AI`() {
         // Generación 5: sin «Explora» (QUICK_LINKS_WITH_TOTALS) — era el único bloque que se
-        // pintaba siempre por tener cards fijas; sin él, una base vacía deja solo el hero y el
-        // banner de IA (Próximos pagos y Alertas ya desaparecían solas cuando no había nada).
+        // pintaba siempre por tener cards fijas; sin él, una base vacía deja solo el hero y Movi AI
+        // (Próximos pagos y Alertas ya desaparecían solas cuando no había nada).
+        //
+        // Generación 8: Movi AI es «Pregúntale a Movi», segundo y no último, y el BANNER —que la
+        // definición conserva para los APK viejos— no se pinta: serían dos puertas al mismo chat.
         val visible = visibleSections(defaultDashboardDefinition(), DashboardData())
-        assertEquals(listOf("HERO_BALANCE", "BANNER"), visible.map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI"), visible.map { it.type })
     }
 
     /**
@@ -829,7 +832,7 @@ class DashboardLogicTest {
         )
         val visible = visibleSections(defaultDashboardDefinition(), conCosas)
         assertEquals(
-            listOf("HERO_BALANCE", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS"),
             visible.map { it.type },
         )
     }

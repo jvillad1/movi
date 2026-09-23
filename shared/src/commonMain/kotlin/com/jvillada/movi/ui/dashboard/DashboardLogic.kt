@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.esDeTuPlata
 import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
@@ -132,6 +133,12 @@ data class DashboardData(
      * fijos».
      */
     val plataDelDisponible: PlataDelDisponible? = null,
+    /**
+     * El patrimonio ya partido que manda `/api/dashboard/summary` (entrega A). `null` = no llegó o
+     * el server es anterior. La tarjeta del patrimonio lo usa solo si las cuentas no llegaron:
+     * ver `patrimonioDelInicio`, que explica por qué prefiere `accounts`.
+     */
+    val patrimonio: Patrimonio? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -699,8 +706,14 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
  * Alertas desaparecen del todo cuando están vacías (así pidió el dueño: nada de cajas vacías
  * ocupando lugar); un bloque de accesos sin tarjetas tampoco se pinta.
  */
-fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSection> =
-    renderableSections(def).filter { section ->
+fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSection> {
+    val renderizables = renderableSections(def)
+    // Generación 8: «Pregúntale a Movi» va arriba y el BANNER de Movi AI se queda al final de la
+    // lista solo para los APK anteriores, que no conocen el tipo nuevo (ver el KDoc de
+    // `DASHBOARD_LAYOUT_VERSION`). Este cliente sí lo conoce: pintar los dos serían dos puertas al
+    // mismo chat, una arriba y otra abajo.
+    val hayPreguntale = renderizables.any { it.type == "PREGUNTALE_A_MOVI" }
+    return renderizables.filter { section ->
         when (section.type) {
             "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
             // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el
@@ -712,10 +725,23 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             // Solo con todo lo que la cuenta necesita ya leído, y con ingresos que medir. Ver
             // `disponibleDelInicio`: sin datos no se afirma un disponible.
             "DISPONIBLE_DEL_PERIODO" -> disponibleDelInicio(data) != null
+            // Siempre: sin datos salen las preguntas de respaldo, y el campo para escribir sirve igual.
+            "PREGUNTALE_A_MOVI" -> true
+            // Sin cuentas leídas no se afirma un patrimonio; sin nada que tener ni deber, no hay barra.
+            "PATRIMONIO" -> patrimonioDelInicio(data) != null
+            "BANNER" -> !(hayPreguntale && esElBannerDeMoviAi(section))
             "QUICK_LINKS_WITH_TOTALS", "LINK_LIST", "CARD_ROW", "CARD_LIST" -> section.cards.isNotEmpty()
             else -> true
         }
     }
+}
+
+/**
+ * ¿Es el aviso que lleva a Movi AI? Un BANNER del Editor que lleve a otro lado (o a ninguno) se
+ * sigue pintando: lo que se esconde es la puerta repetida, no cualquier aviso.
+ */
+internal fun esElBannerDeMoviAi(section: ScreenSection): Boolean =
+    section.cards.firstOrNull()?.action?.let { it.type == "NAVIGATE" && it.target == "aichat" } == true
 
 
 /**
@@ -758,7 +784,12 @@ internal fun cosasParaRevisarDe(
 ): List<CosaParaRevisar> = cosasParaRevisar(
     checklist = checklistDelPeriodoDe(data),
     categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
-    flujoDelPeriodo = (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
+    // Generación 8: si el hero ya da su veredicto, «Vas gastando más de lo que entró» sería la misma
+    // noticia dicha dos veces en la pantalla —arriba con el número, abajo sin él—. Se vio a ojo en la
+    // web con los dos a la vista en escritorio. Sin veredicto (sin resumen) la regla ya no se
+    // dispararía de todos modos: el flujo sería cero.
+    flujoDelPeriodo = if (veredictoDelInicio(data) != null) 0L
+    else (data.summary?.ingresos ?: 0L) - (data.summary?.egresos ?: 0L),
     smsPorConfirmar = data.pendingSms,
     candidatosAPagoDeTarjeta = data.cardCandidates,
     gastoSinCategoria = gastoSinCategoriaDe(data.spentByCategory.orEmpty()),

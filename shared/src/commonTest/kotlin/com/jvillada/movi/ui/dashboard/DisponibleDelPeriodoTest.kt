@@ -92,7 +92,7 @@ class DisponibleDelPeriodoTest {
         assertFalse(sinGasto.semanaCorta)
         assertEquals(1_919_351, sinGasto.semana.meta)
         assertEquals(274_193, sinGasto.hoy.meta)
-        assertEquals("Esta semana", rotuloDeLaSemana(sinGasto))
+        assertEquals("Semana", rotuloDeLaSemana(sinGasto))
 
         val conGasto = assertNotNull(
             calcular(
@@ -129,7 +129,7 @@ class DisponibleDelPeriodoTest {
         // 3.100.000 ÷ 31 = 100.000 por día.
         assertEquals(600_000, d.semana.meta)
         assertEquals(200_000, d.semana.esperadoAHoy)
-        assertEquals("Esta semana · semana corta: 6 días", rotuloDeLaSemana(d))
+        assertEquals("Semana · 6 días", rotuloDeLaSemana(d))
         assertEquals(100_000, d.periodo.gastado)
         assertEquals(30, d.diasQueQuedan)
     }
@@ -141,7 +141,7 @@ class DisponibleDelPeriodoTest {
         assertEquals(4, d.diasDeLaSemana)
         assertEquals(2, d.diasCorridosDeLaSemana)
         assertEquals(400_000, d.semana.meta)
-        assertEquals("Esta semana · semana corta: 4 días", rotuloDeLaSemana(d))
+        assertEquals("Semana · 4 días", rotuloDeLaSemana(d))
         // La meta de una semana entera se sigue diciendo por 7.
         assertEquals(700_000, d.metaPorSemana)
     }
@@ -163,14 +163,12 @@ class DisponibleDelPeriodoTest {
         // Previsto a hoy: 8.500.000 × 29 ÷ 31 = 7.951.612. Va 2.951.612 por debajo.
         assertEquals(7_951_612, d.periodo.esperadoAHoy)
         assertEquals(NivelDelGasto.BIEN, d.periodo.nivel)
-        assertEquals("Este período · quedan 2 días", rotuloDelPeriodo(d))
-        // Quedan $3,5M para 3 días (hoy incluido): $1.166.666.
+        // Quedan $3,5M para 3 días (hoy incluido): $1.166.666. Una sola frase para la tarjeta, y
+        // sin «vas bien»: dice lo que queda, no opina.
         assertEquals(
-            "Vas \$3M por debajo de lo previsto a hoy · te quedan \$3,5M, unos \$1,2M por día",
-            comoVieneElPeriodo(d),
+            FraseDelDisponible("Te quedan \$3,5M, unos \$1,2M por día", NivelDelGasto.BIEN),
+            fraseDelDisponible(d),
         )
-        assertEquals("Vas bien: te quedan \$1,1M para esta semana", comoVieneLaSemana(d))
-        assertEquals("Te quedan \$274.193 para hoy", comoVieneHoy(d))
     }
 
     @Test
@@ -186,8 +184,11 @@ class DisponibleDelPeriodoTest {
         assertEquals(NivelDelGasto.CERCA, d.periodo.nivel)
         // Quedan $1,1M para 17 días: $64.705.
         assertEquals(
-            "Vas \$500.000 por encima de lo previsto a hoy · te quedan \$1,1M, unos \$64.705 por día",
-            comoVieneElPeriodo(d),
+            FraseDelDisponible(
+                "Vas \$500.000 por encima de lo previsto a hoy · te quedan \$1,1M, unos \$64.705 por día",
+                NivelDelGasto.CERCA,
+            ),
+            fraseDelDisponible(d),
         )
     }
 
@@ -202,15 +203,23 @@ class DisponibleDelPeriodoTest {
         )
         val bien = semanaCon(250_000)
         assertEquals(NivelDelGasto.BIEN, bien.semana.nivel)
-        assertEquals("Vas bien: te quedan \$450.000 para esta semana", comoVieneLaSemana(bien))
+        assertEquals(NivelDelGasto.BIEN, fraseDelDisponible(bien).nivel)
 
         val porEncima = semanaCon(420_000)
         assertEquals(NivelDelGasto.CERCA, porEncima.semana.nivel)
-        assertEquals("Vas \$120.000 por encima del ritmo de la semana", comoVieneLaSemana(porEncima))
+        // La semana va por encima de su ritmo y el período no: la barra de la semana se pone ámbar,
+        // y la frase —que habla del período— no se contradice con ella porque no opina de la semana.
+        assertEquals(NivelDelGasto.BIEN, fraseDelDisponible(porEncima).nivel)
 
         val pasada = semanaCon(800_000)
         assertEquals(NivelDelGasto.PASADO, pasada.semana.nivel)
-        assertEquals("Te pasaste de la meta de la semana por \$100.000", comoVieneLaSemana(pasada))
+        assertEquals(
+            FraseDelDisponible(
+                "Esta semana te pasaste de la meta por \$100.000 · al período le quedan \$2,3M",
+                NivelDelGasto.PASADO,
+            ),
+            fraseDelDisponible(pasada),
+        )
     }
 
     @Test
@@ -219,13 +228,23 @@ class DisponibleDelPeriodoTest {
             calcular(recibidos = 3_100_000, checklist = emptyList(), gasto = mapOf("2026-09-21" to 130_000L)),
         )
         assertEquals(NivelDelGasto.PASADO, d.hoy.nivel)
-        assertEquals("Te pasaste de la meta de hoy por \$30.000", comoVieneHoy(d))
+        assertEquals(
+            FraseDelDisponible(
+                "Hoy te pasaste de la meta por \$30.000 · a la semana le quedan \$270.000",
+                NivelDelGasto.PASADO,
+            ),
+            fraseDelDisponible(d),
+        )
 
         val cerca = assertNotNull(
             calcular(recibidos = 3_100_000, checklist = emptyList(), gasto = mapOf("2026-09-21" to 90_000L)),
         )
         assertEquals(NivelDelGasto.CERCA, cerca.hoy.nivel)
-        assertEquals("Te quedan \$10.000 para hoy", comoVieneHoy(cerca))
+        // Hoy va cerca de su tope sin pasarlo: la frase sigue hablando del período.
+        assertEquals(
+            FraseDelDisponible("Te quedan \$3M, unos \$752.500 por día", NivelDelGasto.BIEN),
+            fraseDelDisponible(cerca),
+        )
     }
 
     /** Lo que el dueño pidió explícito: con el período pasado, la semana y hoy siguen con su meta. */
@@ -238,14 +257,20 @@ class DisponibleDelPeriodoTest {
             ),
         )
         assertEquals(NivelDelGasto.PASADO, d.periodo.nivel)
-        assertEquals("Te pasaste por \$920.000", comoVieneElPeriodo(d))
+        assertEquals(
+            FraseDelDisponible("Te pasaste del disponible del período por \$920.000", NivelDelGasto.PASADO),
+            fraseDelDisponible(d),
+        )
+        assertEquals(920_000, excesoDelDisponible(d))
         assertNull(d.porDiaParaLoQueQueda)
 
         assertEquals(400_000, d.semana.meta)
         assertEquals(100_000, d.hoy.meta)
         assertEquals(NivelDelGasto.BIEN, d.semana.nivel)
-        assertEquals("Vas bien: te quedan \$380.000 para esta semana", comoVieneLaSemana(d))
-        assertEquals("Te quedan \$80.000 para hoy", comoVieneHoy(d))
+        // Lo que la tarjeta vieja decía acá era «Vas bien: te quedan $380.000 para esta semana», un
+        // renglón debajo del «Te pasaste» rojo. Las metas de la semana y de hoy se siguen viendo en
+        // sus columnas; la frase es una y manda la peor ventana.
+        assertFalse("bien" in fraseDelDisponible(d).texto.lowercase())
     }
 
     /**
@@ -293,13 +318,14 @@ class DisponibleDelPeriodoTest {
         assertEquals(2_050_000, d.porDiaParaLoQueQueda)
         // Lo previsto a hoy es la meta entera.
         assertEquals(3_100_000, d.periodo.esperadoAHoy)
-        assertEquals("Este período · último día", rotuloDelPeriodo(d))
-        assertEquals("Te quedan \$2,1M para cerrar el período", comoVieneElPeriodo(d))
+        assertEquals(
+            FraseDelDisponible("Te quedan \$2,1M para cerrar el período", NivelDelGasto.BIEN),
+            fraseDelDisponible(d),
+        )
         // Lunes 21 al jueves 24, los cuatro corridos.
         assertEquals(4, d.diasDeLaSemana)
         assertEquals(4, d.diasCorridosDeLaSemana)
         assertEquals(50_000, d.hoy.gastado)
-        assertEquals("Te quedan \$50.000 para hoy", comoVieneHoy(d))
     }
 
     /**

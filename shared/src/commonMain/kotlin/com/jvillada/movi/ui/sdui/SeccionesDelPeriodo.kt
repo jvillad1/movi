@@ -16,6 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +48,7 @@ import com.jvillada.movi.ui.dashboard.faltaPorPagar
 import com.jvillada.movi.ui.dashboard.lineaDeLoQueFalta
 import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pieDeLoYaPagado
+import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.recurrentes.CasillaDeChecklist
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 
@@ -58,11 +63,22 @@ import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
 // ── En qué se fue la plata ───────────────────────────────────────────────────
 
 /**
- * Las categorías del período, con una barra que dice cuánto pesa cada una.
+ * Cuántas categorías sueltas muestra el Inicio antes de agrupar el resto: cuatro. Con más, la tarjeta
+ * empuja todo lo demás fuera de la pantalla; «Ver todas» las despliega ahí mismo.
+ */
+internal const val CATEGORIAS_EN_EL_INICIO = 4
+
+/**
+ * **¿En qué se va?** Las categorías del período, con una barra que dice cuánto pesa cada una.
  *
  * **La barra es sobre el gasto total del período, no sobre la categoría mayor.** Es la diferencia
  * entre «Vivienda es el 70 % de lo que gastaste» y «Vivienda es la más grande de la lista», y solo
  * la primera sirve para decidir algo.
+ *
+ * Generación 8: las primeras [CATEGORIAS_EN_EL_INICIO] y el resto agrupado; «Ver todas» las
+ * despliega en el lugar (sin salir del Inicio) y «Ver menos» las vuelve a juntar. Con pocas
+ * categorías no hay nada que desplegar y la acción lleva a Movimientos, como antes. Las barras crecen
+ * al cargar, una sola vez (ver `rememberProgresoDeEntrada`).
  */
 @Composable
 internal fun GastoPorCategoriaSection(
@@ -70,27 +86,37 @@ internal fun GastoPorCategoriaSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
 ) {
+    var todas by rememberSaveable { mutableStateOf(false) }
+    val gasto = data.spentByCategory.orEmpty()
+    val presupuestos = data.budgets.orEmpty()
     val categorias = categoriasDelPeriodo(
-        gastoPorCategoria = data.spentByCategory.orEmpty(),
-        presupuestos = data.budgets.orEmpty(),
+        gastoPorCategoria = gasto,
+        presupuestos = presupuestos,
+        cuantas = if (todas) Int.MAX_VALUE else CATEGORIAS_EN_EL_INICIO,
     )
     // Sin gasto no se pinta nada: una sección vacía que dice «$0» ocupa el mismo lugar que una con
     // información y no dice nada. Mismo criterio que ALERTS.
     if (categorias.isEmpty()) return
+    val hayMas = gasto.count { it.value > 0 } > CATEGORIAS_EN_EL_INICIO + 1
+    val entrada = rememberProgresoDeEntrada("categorias")
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         MinSectionHeader(
-            title = section.title ?: "En qué se fue",
-            action = "Ver movimientos",
-            onAction = { onNavigate(Screen.Transactions()) },
+            title = section.title ?: "En qué se va",
+            action = when {
+                !hayMas -> "Ver movimientos"
+                todas -> "Ver menos"
+                else -> "Ver todas"
+            },
+            onAction = { if (hayMas) todas = !todas else onNavigate(Screen.Transactions()) },
         )
         MinCard(
             modifier = Modifier.fillMaxWidth(),
             variant = MinCardVariant.Elevated,
-            padding = PaddingValues(18.dp),
+            padding = PaddingValues(Movi.espacios.margen),
         ) {
             categorias.forEachIndexed { i, categoria ->
-                FilaDeCategoria(categoria)
+                FilaDeCategoria(categoria, entrada)
                 if (i < categorias.lastIndex) Spacer(Modifier.height(Movi.espacios.medio))
             }
         }
@@ -98,7 +124,7 @@ internal fun GastoPorCategoriaSection(
 }
 
 @Composable
-private fun FilaDeCategoria(categoria: CategoriaDelPeriodo) {
+private fun FilaDeCategoria(categoria: CategoriaDelPeriodo, entrada: Float) {
     // El color se decide una vez acá y no dentro del Canvas de la barra: una lambda de dibujo no
     // puede leer un CompositionLocal.
     val colorDeLaBarra = if (categoria.superada) Movi.colores.sale else Movi.colores.marca
@@ -125,16 +151,16 @@ private fun FilaDeCategoria(categoria: CategoriaDelPeriodo) {
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(RoundedCornerShape(Movi.formas.pleno))
                     .background(Movi.colores.hilo),
             ) {
                 Box(
                     modifier = Modifier
                         // Un mínimo del 2 % para que una categoría chica se vea: una barra de cero
                         // píxeles dice «no gastaste acá», y el renglón está justamente porque sí.
-                        .fillMaxWidth(categoria.fraccion.coerceIn(0.02f, 1f))
+                        .fillMaxWidth(categoria.fraccion.coerceIn(0.02f, 1f) * entrada.coerceIn(0f, 1f))
                         .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(RoundedCornerShape(Movi.formas.pleno))
                         .background(colorDeLaBarra),
                 )
             }
