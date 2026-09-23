@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.model.ReminderChannels
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.platform.HuellaDelAparato
 import com.jvillada.movi.data.EstadoDeHuella
@@ -67,6 +68,11 @@ class ElForkLlegaLimpioTest {
     @Test
     fun aEnsuciaTodosLosGlobales() {
         UsedCategoriesCache.record("Mercado", TransactionType.EXPENSE)
+        // `usosRecientes` solo lo llena `recordFromServer` (ver su KDoc): es la fila de chips de
+        // «Agregar», y con resaca una prueba de la hoja arrancaría con chips de otra.
+        UsedCategoriesCache.recordFromServer(
+            listOf(UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 4)),
+        )
         ScreenDefCache.dashboard = DEFINICION_DE_OTRA_PRUEBA
         DashboardDataCache.data = DashboardData()
         DashboardDataCache.cargadoEn = 1_700_000_000_000L
@@ -109,6 +115,7 @@ class ElForkLlegaLimpioTest {
         // No se afirma «quedó sucio» por prolijidad: si alguno de estos setters dejara de escribir,
         // el método de abajo pasaría sin ejercitar nada y esta clase sería decorativa.
         assertTrue("«Mercado» no entró al caché", "Mercado" in UsedCategoriesCache.used)
+        assertTrue("Los usos recientes no quedaron cargados", UsedCategoriesCache.usosRecientes.isNotEmpty())
         assertTrue("La sesión no quedó puesta", SessionManager.loggedIn)
         assertTrue("El día no quedó plegado", "2024-03-15" in DiasPlegadosStore.plegados())
         assertNotNull("Los canales de aviso no quedaron cargados", ReminderChannelsCache.canales)
@@ -127,6 +134,7 @@ class ElForkLlegaLimpioTest {
     fun bLosGlobalesLleganEnCero() {
         assertEquals("UsedCategoriesCache trae la resaca del método anterior", emptyMap<String, Any>(), UsedCategoriesCache.used)
         assertEquals("Las preferencias de categoría traen resaca", emptyMap<String, Any>(), UsedCategoriesCache.prefs)
+        assertEquals("Los usos recientes de categoría traen resaca", emptyMap<String, Int>(), UsedCategoriesCache.usosRecientes)
         assertNull("ScreenDefCache trae resaca", ScreenDefCache.dashboard)
         assertNull("DashboardDataCache trae resaca", DashboardDataCache.data)
         assertEquals("DashboardDataCache trae la marca de tiempo anterior", 0L, DashboardDataCache.cargadoEn)
