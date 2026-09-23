@@ -115,6 +115,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun login(request: LoginRequest): AuthResponse = noUsado("login")
     override suspend fun renameAccount(id: String, name: String): Account = noUsado("renameAccount")
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = noUsado("updateAccountCondition")
+    override suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account = noUsado("updateBien")
     override suspend fun getUserProfile(): UserProfile = noUsado("getUserProfile")
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = noUsado("updateUserProfile")
     override suspend fun changePassword(request: ChangePasswordRequest) = noUsado("changePassword")

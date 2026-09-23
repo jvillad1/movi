@@ -40,6 +40,14 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
 import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
 import com.jvillada.movi.ui.dashboard.heroBalance
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.shared.model.ClaseDeBien
+import com.jvillada.movi.shared.model.claseDeBien
+import com.jvillada.movi.shared.model.deudaDelBien
+import com.jvillada.movi.shared.model.esBien
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
 import kotlinx.datetime.Clock
 
 @Composable
@@ -49,6 +57,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
+    // La hoja de un bien abierta: `existente = null` es uno nuevo (desde «Nueva cuenta» → «Bien»).
+    var bienAbierto by remember { mutableStateOf<BienAbierto?>(null) }
     // «Sin cuentas aún» es una afirmación sobre la plata del dueño, así que solo se hace cuando
     // una lectura DE VERDAD contestó y contestó vacío. Antes bastaba una lectura fallida: el
     // snackbar de error se autodescartaba y abajo quedaba el estado vacío invitando a «crear tu
@@ -218,6 +228,19 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     Cifra(formatCOP(balance.condicionado), Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
                             }
+                            // **Los bienes**: la casa y el carro. Sin este renglón la resta de la
+                            // tarjeta no cerraba en cuanto el dueño cargaba uno — la cifra de arriba
+                            // subía $1.411,9M y ninguna línea de abajo decía por qué.
+                            if (balance.bienes > 0L) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Bienes", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                                    Cifra(formatCOP(balance.bienes), Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                                }
+                            }
                             if (balance.deudas > 0) {
                                 Spacer(Modifier.height(4.dp))
                                 Row(
@@ -237,12 +260,29 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     // Créditos, así que acá no se listan (aunque sigan sumando en el
                     // patrimonio neto de arriba).
                     val dinero = accounts.filter { it.type.group == AccountGroup.DINERO }
-                    val inversion = accounts.filter { it.type.group == AccountGroup.INVERSION }
+                    // Un bien viaja como INVESTMENT (ver `Bien` en :core) pero no es una inversión:
+                    // tiene su propia sección, abajo, con su valor y la fecha del avalúo.
+                    val inversion = accounts.filter { it.type.group == AccountGroup.INVERSION && !it.esBien }
+                    val bienes = bienesDe(accounts)
 
                     item { AccountsGroup(title = "Dinero", accounts = dinero, onNavigate = onNavigate) }
                     item {
                         Spacer(Modifier.height(20.dp))
                         AccountsGroup(title = "Inversión", accounts = inversion, onNavigate = onNavigate)
+                    }
+                    // **Bienes**: lo que el dueño tiene y no es plata. Solo aparece cuando hay alguno
+                    // —a diferencia de Dinero e Inversión, que dicen «Sin cuentas… aún»—: la puerta
+                    // para crear uno es «Nueva cuenta» → «Bien», y una sección vacía más en la
+                    // pantalla que más se mira sería ruido para quien no tiene casa ni carro.
+                    if (bienes.isNotEmpty()) {
+                        item {
+                            Spacer(Modifier.height(20.dp))
+                            SeccionDeBienes(
+                                bienes = bienes,
+                                cuentas = accounts,
+                                onAbrir = { bienAbierto = BienAbierto(existente = it) },
+                            )
+                        }
                     }
                     // **La puerta al cuadre de saldos**, justo debajo de las cuentas cuyo saldo
                     // se acaba de leer: si alguno de esos números está corrido, esta es la fila
@@ -346,6 +386,23 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                     showCreateSheet = false
                     refreshKey++
                 },
+                onElegirBien = { nombre ->
+                    showCreateSheet = false
+                    bienAbierto = BienAbierto(existente = null, nombre = nombre)
+                },
+            )
+        }
+
+        bienAbierto?.let { abierto ->
+            BienSheet(
+                existente = abierto.existente,
+                nombreInicial = abierto.nombre,
+                cuentas = accounts,
+                onDismiss = { bienAbierto = null },
+                onGuardado = {
+                    bienAbierto = null
+                    refreshKey++
+                },
             )
         }
     }
@@ -384,6 +441,87 @@ data class SaldoDeLaFila(val texto: String, val enContra: Boolean)
 fun saldoDeLaFila(account: Account): SaldoDeLaFila {
     val (monto, moneda) = saldoEnSuMoneda(account)
     return SaldoDeLaFila(texto = signedMoney(monto, moneda), enContra = monto < 0)
+}
+
+/** Qué bien tiene abierta la hoja: uno que existe, o uno nuevo con el nombre ya escrito. */
+private data class BienAbierto(val existente: Account?, val nombre: String = "")
+
+/**
+ * **La sección «Bienes»**: cada bien con su valor, de cuándo es ese valor y —si hay una deuda que
+ * lo financia— cuánto de él es tuyo de verdad. Tocar un renglón abre la hoja para actualizar el
+ * avalúo; un bien no tiene detalle de movimientos porque no tiene movimientos.
+ *
+ * El subtotal del encabezado es el mismo número que el renglón «Bienes» de la tarjeta de
+ * patrimonio de arriba, por construcción: los dos suman [valorEnPesos], que para un bien es su
+ * valor.
+ */
+@Composable
+private fun SeccionDeBienes(bienes: List<Account>, cuentas: List<Account>, onAbrir: (Account) -> Unit) {
+    val hoy = remember { hoyEnAppZone() }
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row {
+                Text("BIENES", style = Movi.textos.apoyo, fontWeight = FontWeight.Medium, color = Movi.colores.textoMedio, letterSpacing = 0.5.sp)
+                Text(" · ${bienes.size}", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            }
+            Cifra(formatCOP(bienes.sumOf { valorEnPesos(it) }), Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        }
+        MinCard(
+            modifier = Modifier.fillMaxWidth(),
+            variant = MinCardVariant.Elevated,
+            padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
+        ) {
+            bienes.forEachIndexed { index, bien ->
+                val deuda = deudaDelBien(bien, cuentas)
+                CardRow(
+                    left = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = iconoDelBien(bien),
+                                contentDescription = null,
+                                tint = Movi.colores.textoMedio,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = bien.name,
+                                style = Movi.textos.titulo,
+                                fontWeight = FontWeight.Medium,
+                                color = Movi.colores.texto,
+                            )
+                        }
+                    },
+                    sub = listOfNotNull(
+                        subtituloDelBien(bien, hoy),
+                        deuda?.let { lineaDeLoQueEsTuyo(it) },
+                    ).joinToString("\n"),
+                    right = {
+                        Text(
+                            text = formatCOP(valorEnPesos(bien)),
+                            style = Movi.textos.monto,
+                            fontWeight = FontWeight.Medium,
+                            color = Movi.colores.texto,
+                        )
+                    },
+                    isLast = index == bienes.size - 1,
+                    showChevron = true,
+                    onClick = { onAbrir(bien) },
+                )
+            }
+        }
+    }
+}
+
+private fun iconoDelBien(cuenta: Account): ImageVector = when (claseDeBien(cuenta.bien?.clase)) {
+    ClaseDeBien.INMUEBLE -> Icons.Filled.Home
+    ClaseDeBien.VEHICULO -> Icons.Filled.DirectionsCar
+    ClaseDeBien.OTRO -> Icons.Filled.Inventory2
 }
 
 /**

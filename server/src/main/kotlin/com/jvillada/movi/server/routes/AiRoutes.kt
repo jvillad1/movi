@@ -11,9 +11,8 @@ import com.jvillada.movi.server.ai.cargarDocumentosParaContexto
 import com.jvillada.movi.server.ai.contextoDelPeriodoDe
 import com.jvillada.movi.server.ai.render
 import com.jvillada.movi.server.ai.BUSCAR_DOCUMENTOS
-import com.jvillada.movi.server.balance.accountCopValue
+import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.server.balance.accountTypesFor
-import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
@@ -22,7 +21,14 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.plugins.userId
-import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.Bien
+import com.jvillada.movi.shared.model.Patrimonio
+import com.jvillada.movi.shared.model.claseDeBien
+import com.jvillada.movi.shared.model.deudaDelBien
+import com.jvillada.movi.shared.model.esCuentaDeDeuda
+import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.valorEnPesosDe
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatMessage
@@ -30,7 +36,6 @@ import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
-import com.jvillada.movi.shared.model.normalizarCondicion
 import com.jvillada.movi.server.ai.ElModeloDeAnthropic
 import com.jvillada.movi.server.ai.conversarConHerramientas
 import com.jvillada.movi.server.ai.ejecutarHerramienta
@@ -306,17 +311,6 @@ internal fun toMessageParam(m: ChatMessage): MessageParam {
 }
 
 /**
- * Lo que el asistente necesita saber de una cuenta. Era un `Triple`, y no cabía un cuarto dato
- * sin volverlo ilegible — que es justo lo que hizo falta cuando apareció [condicionadaA].
- */
-private data class AccountForContext(
-    val id: String,
-    val name: String,
-    val type: AccountType,
-    val condicionadaA: String?,
-)
-
-/**
  * `internal` y no `private`: hay un test que fija que una cuenta condicionada llegue MARCADA al
  * asistente. Sin la marca, «Skandia (INVESTMENT): saldo 106.000.000» es plata que el modelo suma
  * al contestar «¿cuánta plata disponible tengo?» — el mismo error que el Inicio dejó de cometer,
@@ -325,19 +319,18 @@ private data class AccountForContext(
 internal suspend fun buildUserContext(uid: String): String {
     val rate = FxRateService.usdToCop()
 
-    // Accounts with their computed COP value
-    val accountRows = dbQuery {
-        Accounts.selectAll().where { Accounts.userId eq uid }
-            .map {
-                AccountForContext(
-                    id = it[Accounts.id],
-                    name = it[Accounts.name],
-                    type = AccountType.valueOf(it[Accounts.type]),
-                    condicionadaA = normalizarCondicion(it[Accounts.conditionedTo]),
-                )
-            }
+    // Las cuentas con su saldo derivado —sumado en SQL, los mismos saldos que la lista de
+    // Cuentas— y el patrimonio partido con `patrimonioDe`, la regla única de :core. Antes el
+    // asistente recibía los saldos sueltos y sumaba él: sin bienes y sin la regla, contestaba
+    // «¿cuánto tengo?» con la media foto (−$2.074M) que el Inicio tenía hasta esta entrega.
+    val cuentas = dbQuery {
+        val anulados = VoidEvents.selectAll()
+            .where { VoidEvents.userId eq uid }
+            .map { it[VoidEvents.originalEventId] }
+            .toSet()
+        cuentasConSaldo(uid, anulados, rate)
     }
-    val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+    val patrimonio = patrimonioDe(cuentas)
 
     // Ventana del PERÍODO del usuario (ver PeriodSettings en :core), la misma que usa
     // finance-summary. Con corte 1 —el default— es el mes de calendario de siempre.
@@ -402,12 +395,17 @@ internal suspend fun buildUserContext(uid: String): String {
         appendLine()
         append(delPeriodo.render())
         appendLine("== Cuentas ==")
-        if (accountRows.isEmpty()) {
+        if (cuentas.isEmpty()) {
             appendLine("- (sin cuentas registradas)")
         } else {
-            accountRows.forEach { cuenta ->
-                val value = accountCopValue(cuenta.type, eventsByAccount[cuenta.id] ?: emptyList(), rate)
-                val kind = if (cuenta.type == AccountType.CREDIT_CARD || cuenta.type == AccountType.LOAN) "deuda" else "saldo"
+            cuentas.forEach { cuenta ->
+                val value = valorEnPesosDe(cuenta)
+                val bien = cuenta.bien
+                if (bien != null) {
+                    appendLine(lineaDelBien(cuenta, bien, cuentas))
+                    return@forEach
+                }
+                val kind = if (esCuentaDeDeuda(cuenta.type)) "deuda" else "saldo"
                 // **La condición viaja en el contexto o el asistente contesta mal.** «Skandia
                 // (INVESTMENT): saldo $106.000.000» sin marca es plata que el modelo suma al
                 // contestar «¿cuánta plata disponible tengo?» — el mismo error que el Inicio
@@ -419,6 +417,8 @@ internal suspend fun buildUserContext(uid: String): String {
                 appendLine("- ${cuenta.name} (${cuenta.type}): $kind \$$value$condicion")
             }
         }
+        appendLine()
+        append(renderizarPatrimonio(patrimonio))
         appendLine()
         appendLine("== Presupuestos ==")
         if (budgets.isEmpty()) {
@@ -440,4 +440,37 @@ internal suspend fun buildUserContext(uid: String): String {
             )
         }
     }
+}
+
+/**
+ * El renglón de un **bien** en el contexto del asistente: qué es, cuánto vale, de cuándo es ese
+ * valor, y —si hay una deuda que lo financia— cuánto se debe y cuánto es suyo de verdad.
+ *
+ * Dice en palabras que NO es plata, por lo mismo que la condición de Skandia: un modelo que lee
+ * «Casa (INVESTMENT): saldo $1.411.903.920» la suma a «¿cuánta plata tengo?». Ver `Account.bien`.
+ */
+internal fun lineaDelBien(cuenta: Account, bien: Bien, cuentas: List<Account>): String = buildString {
+    append("- ${cuenta.name} (BIEN · ${claseDeBien(bien.clase).nombre}): vale \$${bien.valor}")
+    bien.valorAl?.let { append(" según el avalúo del $it") }
+    append(" — es un bien, NO plata disponible ni de uso condicionado (suma al patrimonio)")
+    deudaDelBien(cuenta, cuentas)?.let { d ->
+        append("; lo financia «${d.deuda.name}», que debe \$${d.debes}: lo suyo de verdad son \$${d.tuyo}")
+    }
+}
+
+/**
+ * **El patrimonio honesto, ya partido**, para que el asistente no tenga que sumar (y no sume
+ * distinto que el Inicio): la plata que se puede usar, la condicionada, los bienes y las deudas,
+ * con la resta escrita. Mismas cifras que [patrimonioDe] le da a la pantalla.
+ */
+internal fun renderizarPatrimonio(p: Patrimonio): String = buildString {
+    appendLine("== Patrimonio ==")
+    appendLine("- Tu plata (disponible para usar): \$${p.tuPlata}")
+    if (p.condicionado != 0L) {
+        val para = p.condicionadoA?.let { "solo para $it" } ?: "de uso condicionado"
+        appendLine("- Plata con destino ($para; suya, pero NO disponible): \$${p.condicionado}")
+    }
+    if (p.bienes != 0L) appendLine("- Bienes (inmuebles, vehículos; no es plata): \$${p.bienes}")
+    appendLine("- Deudas: \$${p.deudas}")
+    appendLine("- Patrimonio neto (tu plata + plata con destino + bienes − deudas): \$${p.neto}")
 }

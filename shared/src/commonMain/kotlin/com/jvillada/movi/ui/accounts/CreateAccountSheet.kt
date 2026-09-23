@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -42,6 +43,17 @@ private data class TypeOption(val type: AccountType, val label: String, val desc
 private val TYPE_OPTIONS = listOf(
     TypeOption(AccountType.SAVINGS, "Dinero", "La plata disponible: ahorros, corriente, efectivo", Icons.Filled.AccountBalanceWallet),
     TypeOption(AccountType.INVESTMENT, "Inversión", "Plata guardada: CDT, fondos", Icons.AutoMirrored.Filled.TrendingUp),
+)
+
+/**
+ * El tercer tipo, que no es un [AccountType] nuevo (ver `Bien` en `:core`): la tarjeta reusa
+ * INVESTMENT solo para tener la forma de [TypeOption]; tocarla abre la hoja del bien.
+ */
+private val OPCION_BIEN = TypeOption(
+    AccountType.INVESTMENT,
+    "Bien",
+    "Lo que tienes y no es plata: una casa, un carro",
+    Icons.Filled.Home,
 )
 
 /**
@@ -83,6 +95,17 @@ private val TYPE_OPTIONS = listOf(
 fun CreateAccountSheet(
     onDismiss: () -> Unit,
     onAccountCreated: () -> Unit,
+    /**
+     * **Registrar un bien** (la casa, el carro) en vez de una cuenta de plata. Con esto la hoja
+     * ofrece un tercer tipo, «Bien», que no crea nada acá: le pasa el nombre ya escrito a quien
+     * llama, que abre [BienSheet]. Un bien no tiene saldo inicial ni movimientos —tiene un valor y
+     * la fecha de ese valor—, así que meterlo en este formulario habría sido un campo de «saldo»
+     * que miente sobre lo que guarda.
+     *
+     * `null` = no se ofrece: la hoja también se abre desde «Agregar» cuando todavía no hay
+     * cuentas, y ahí lo que hace falta es de dónde sale la plata, no una casa.
+     */
+    onElegirBien: ((nombre: String) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
@@ -227,6 +250,10 @@ fun CreateAccountSheet(
                             // (Dinero) queda fijo en COP.
                         },
                     )
+                }
+                if (onElegirBien != null) {
+                    // Nunca «elegido»: tocarlo cambia de hoja, no de tipo. Ver [onElegirBien].
+                    TypeCard(option = OPCION_BIEN, selected = false, onClick = { onElegirBien(name.trim()) })
                 }
             }
             Spacer(Modifier.height(8.dp))

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.cuadre
 
+import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.group
@@ -52,7 +53,9 @@ const val DIAS_PARA_VOLVER_A_CUADRAR = 45
  * la captura de mensajes. Un préstamo se cuadra en Créditos, donde al lado se ven la cuota, la
  * tasa y los intereses que explican la diferencia.
  */
-fun sePuedeCuadrar(cuenta: Account): Boolean = cuenta.type.group != AccountGroup.DEUDA
+fun sePuedeCuadrar(cuenta: Account): Boolean = cuenta.type.group != AccountGroup.DEUDA && !cuenta.esBien
+// ↑ Un bien tampoco: no tiene saldo que comparar contra un banco, tiene un avalúo, y se actualiza
+// en su propia hoja. El server lo rechaza igual (422), así que ofrecerlo acá sería un control muerto.
 
 /** Las cuentas que la pantalla «Cuadre de saldos» lista, en el orden en que vienen. */
 fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter { sePuedeCuadrar(it) }

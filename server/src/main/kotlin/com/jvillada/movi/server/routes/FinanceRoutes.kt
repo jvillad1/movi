@@ -3,7 +3,9 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
-import com.jvillada.movi.server.balance.netWorth
+import com.jvillada.movi.server.balance.enrichWith
+import com.jvillada.movi.server.balance.toAccount
+import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Events
@@ -151,19 +153,21 @@ fun Route.financeRoutes() {
         val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
 
         val rate = FxRateService.usdToCop()
-        val accountRows = dbQuery {
+        val cuentas = dbQuery {
             Accounts.selectAll().where { Accounts.userId eq uid }
-                .map { it[Accounts.id] to AccountType.valueOf(it[Accounts.type]) }
+                .mapNotNull { runCatching { it.toAccount() }.getOrNull() }
         }
         val nonVoidedEvents = loadNonVoidedEvents(uid)
         val eventsByAccount = nonVoidedEvents.groupBy { it.accountId }
-        // netWorth, no accountCopValue sumado de frente (Hallazgo menor 4 de la revisión de esta
-        // rama) — ver su KDoc. Nadie renderiza este campo hoy (Dashboard y el SDUI usan
-        // assetsDebtsNet(accounts) del lado del cliente), pero dejarlo mal calculado a la espera
-        // de que alguien lo cablee es peor que arreglarlo ahora: quien lo use primero se
-        // encontraría con el mismo "patrimonio" hinchado por la deuda que esta rama vino a matar
-        // en otras pantallas.
-        val derivedBalance = netWorth(accountRows, eventsByAccount, rate)
+        // **`patrimonioDe`, la regla única del patrimonio** (en :core), no una suma propia. Acá
+        // vivía `netWorth`, una segunda copia que ya había tenido que arreglarse una vez (sumaba
+        // las deudas en vez de restarlas) y que no sabía de bienes: con la casa cargada, este
+        // campo habría seguido diciendo −$2.074M mientras el Inicio decía la verdad. Nadie lo
+        // renderiza hoy, pero quien lo use primero tiene que encontrarse la misma cifra que el
+        // Inicio, no una parecida.
+        val derivedBalance = patrimonioDe(
+            cuentas.map { enrichWith(it, eventsByAccount[it.id].orEmpty(), rate) },
+        ).neto
 
         val summary = dbQuery {
             val voidedIds = VoidEvents.selectAll()
@@ -205,7 +209,7 @@ fun Route.financeRoutes() {
                 egresos = egresos,
                 // Del usuario completo, no del mes ni del `scope` — ver KDoc del campo en
                 // FinanceSummary. `scope` hoy no filtra nada en este endpoint (ver arriba:
-                // ni accountRows ni nonVoidedEvents lo usan).
+                // ni las cuentas ni nonVoidedEvents lo usan).
                 //
                 // El criterio de qué es "un movimiento" vive en :core (ver [movementCount]) y no
                 // acá: además de la apertura de cuenta (F54), un traspaso son DOS eventos y una

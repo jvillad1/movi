@@ -450,6 +450,14 @@ interface WalletRepository {
      */
     suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account
 
+    /**
+     * Actualiza el valor (y la clase, la fecha del valor o la deuda asociada) de un **bien** que
+     * ya existe — `PUT /api/accounts/{id}/bien`. Ver [com.jvillada.movi.shared.model.Bien].
+     *
+     * Se crea por [createAccount] con el bien adentro; esto es para cuando llega el avalúo nuevo.
+     */
+    suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account
+
     suspend fun getUserProfile(): UserProfile
 
     /** `PUT /api/users/me`. Campos opcionales — solo se toca lo que viene en [request]. */

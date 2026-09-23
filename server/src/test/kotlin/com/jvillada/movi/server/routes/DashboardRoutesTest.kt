@@ -694,7 +694,12 @@ class DashboardRoutesTest {
         )
         // El Disponible que cuenta lo que tenías (APK 1.40+) solo AGREGA campos: un APK ≤ 1.39
         // los ignora y sigue leyendo los de siempre, con el mismo tipo y el mismo valor.
-        val nuevas = setOf("saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo", "pagosDeDeudaFueraDelChecklist")
+        // Y el patrimonio honesto (con los bienes) es un objeto nuevo, también agregado: el APK
+        // viejo no lo pide y no le cambia nada de lo que ya leía.
+        val nuevas = setOf(
+            "saldoTuPlataAlInicio", "entradasDelPeriodo", "guardadoDelPeriodo", "pagosDeDeudaFueraDelChecklist",
+            "patrimonio",
+        )
         assertEquals(emptySet(), body.keys - conocidas - nuevas)
         assertEquals(3_000_000L, body.long("monthIncome"))
         assertEquals(30_000L, body.long("monthSpent"))

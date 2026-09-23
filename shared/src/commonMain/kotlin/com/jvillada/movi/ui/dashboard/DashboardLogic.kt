@@ -4,6 +4,8 @@ import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.esDeTuPlata
+import com.jvillada.movi.shared.model.esBien
+import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.Budget
@@ -30,13 +32,11 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
-import com.jvillada.movi.ui.components.assetsDebtsNet
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.components.isDebtAccount
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
-import com.jvillada.movi.ui.components.valorEnPesos
 import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
 import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
@@ -220,8 +220,16 @@ data class HeroBalance(
      */
     val condicionadoA: String?,
     /**
-     * Activos **completos** (incluida la plata condicionada) − [deudas]. Puede ser negativo, y con
-     * cinco créditos hipotecarios lo será.
+     * Lo que valen los **bienes**: la casa, el carro (ver `Bien` en `:core`). Fuera de [tuPlata] y
+     * fuera de [condicionado] —no es plata, con o sin destino—; dentro de [patrimonio].
+     *
+     * Default en 0 para que un `HeroBalance` armado a mano en una prueba vieja siga diciendo lo
+     * mismo que antes de que existieran.
+     */
+    val bienes: Long = 0L,
+    /**
+     * Activos **completos** (la plata condicionada y los bienes incluidos) − [deudas]. Puede ser
+     * negativo, y con cinco créditos hipotecarios lo será.
      *
      * La plata condicionada cuenta acá y no en [tuPlata] a propósito: es suya —por eso suma al
      * patrimonio— pero no la puede gastar, así que anunciarla como disponible sería el error más
@@ -245,7 +253,7 @@ data class HeroBalance(
      * escondía justo cuando la línea dejaba de ser redundante. (Ver [patrimonioExplicacion],
      * que cambia «menos … en deudas» por «más … a favor en créditos» en ese caso.)
      */
-    val muestraPatrimonio: Boolean get() = deudas != 0L || condicionado > 0L
+    val muestraPatrimonio: Boolean get() = deudas != 0L || condicionado > 0L || bienes > 0L
     /** Sin nada invertido no hay nada que desglosar: el hero no pinta la línea del desglose. */
     val hasInvestments: Boolean get() = invertido != 0L
 }
@@ -306,9 +314,16 @@ fun patrimonioExplicacion(balance: HeroBalance): String {
             " más ${formatMoneyCompact(balance.condicionado)} solo para ${balance.condicionadoA}"
         else -> " más ${formatMoneyCompact(balance.condicionado)} de uso condicionado"
     }
-    // Con una parte condicionada ya dicha, la coma separa los dos sumandos: sin ella
+    // **Los bienes, con nombre.** Sin esta parte, con la casa cargada la línea decía «Tu plata
+    // más $116,2M…, menos $2.191,0M en deudas» debajo de un patrimonio de −$662M: faltaban
+    // $1.411,9M para que la resta cerrara, que es el único trabajo de esta línea.
+    val bienes = if (balance.bienes > 0L) {
+        (if (condicionado.isEmpty()) " " else ", ") + "más ${formatMoneyCompact(balance.bienes)} en bienes"
+    } else ""
+    val sumandos = condicionado + bienes
+    // Con una parte condicionada (o bienes) ya dicha, la coma separa los sumandos: sin ella
     // («…solo para Vivienda menos $1.505,1M en deudas») las dos frases se leen como una sola.
-    val separador = if (condicionado.isEmpty()) " " else ", "
+    val separador = if (sumandos.isEmpty()) " " else ", "
     val deudas = when {
         balance.deudas > 0L -> "${separador}menos ${formatMoneyCompact(balance.deudas)} en deudas"
         balance.deudas < 0L -> "${separador}más ${formatMoneyCompact(-balance.deudas)} a favor en créditos"
@@ -317,7 +332,7 @@ fun patrimonioExplicacion(balance: HeroBalance): String {
         // [HeroBalance.muestraPatrimonio]).
         else -> ""
     }
-    return "Tu plata$condicionado$deudas"
+    return "Tu plata$sumandos$deudas"
 }
 
 /**
@@ -335,33 +350,23 @@ private fun cuentasLibres(accounts: List<Account>): List<Account> =
     accounts.filter { it.esDeTuPlata() }
 
 /**
- * Deriva [HeroBalance] de las cuentas. Se apoya en [assetsDebtsNet] a propósito —no
- * reimplementa la suma— para que el hero, la fila «Cuentas» del Inicio y el «Patrimonio neto»
- * de la pantalla de Cuentas no puedan dar tres números distintos.
+ * Deriva [HeroBalance] de las cuentas. **Es [patrimonioDe] (`:core`) con la forma que pinta el
+ * Inicio**, no una suma propia: la regla de qué cuenta cae en qué balde —plata, condicionada,
+ * bien, deuda— vive en un solo lugar y la usan también el server (`/api/dashboard/summary`) y el
+ * contexto de Movi AI. Así el hero, la fila «Cuentas» del Inicio, el «Patrimonio neto» de la
+ * pantalla de Cuentas y lo que contesta el asistente no pueden dar cuatro números distintos.
  */
 fun heroBalance(accounts: List<Account>): HeroBalance {
-    // `assetsDebtsNet` sigue sumando TODO: el patrimonio no cambia porque una cuenta esté
-    // condicionada. Lo que cambia es qué parte de eso el dueño puede usar.
-    val (activos, deudas, neto) = assetsDebtsNet(accounts)
-
-    val libres = cuentasLibres(accounts)
-    val condicionadas = accounts.filter { !isDebtAccount(it.type) && !it.condicionadaA.isNullOrBlank() }
-    // En pesos con los dólares estimados, igual que [assetsDebtsNet]: ver [valorEnPesos].
-    val condicionado = condicionadas.sumOf { valorEnPesos(it) }
-    val invertido = libres.filter { it.type.group == AccountGroup.INVERSION }.sumOf { valorEnPesos(it) }
-    val disponible = libres.filter { it.type.group != AccountGroup.INVERSION }.sumOf { valorEnPesos(it) }
-
+    val p = patrimonioDe(accounts)
     return HeroBalance(
-        tuPlata = disponible + invertido,
-        disponible = disponible,
-        invertido = invertido,
-        condicionado = condicionado,
-        // Una sola condición se nombra; varias distintas no se resumen en una inventada.
-        condicionadoA = condicionadas.mapNotNull { it.condicionadaA?.trim()?.takeIf { c -> c.isNotEmpty() } }
-            .distinct()
-            .singleOrNull(),
-        deudas = deudas,
-        patrimonio = neto,
+        tuPlata = p.tuPlata,
+        disponible = p.disponible,
+        invertido = p.invertido,
+        condicionado = p.condicionado,
+        condicionadoA = p.condicionadoA,
+        bienes = p.bienes,
+        deudas = p.deudas,
+        patrimonio = p.neto,
     )
 }
 
@@ -502,7 +507,8 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // el filtro: las dos consumen la MISMA función.
         val cuentas = data.accounts
         val hero = heroBalance(cuentas.orEmpty())
-        val propias = cuentas.orEmpty().count { !isDebtAccount(it.type) }
+        // Sin los bienes: la casa no es una cuenta que «Tu plata» sume, y Cuentas la lista aparte.
+        val propias = cuentas.orEmpty().count { !isDebtAccount(it.type) && !it.esBien }
         // Solo deudas cargadas (el estado de quien arranca por sus créditos) es «sin cuentas»,
         // no «0 cuentas» al lado de un $0: es lo que dicen los dos grupos vacíos de la pantalla
         // de destino, y un cero grande en el Inicio se lee como que algo se perdió. Sigue la
@@ -576,7 +582,8 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         // «Sin inversiones». Se veía menos porque este acceso no está en el layout por defecto
         // —hay que agregarlo desde el Editor de pantallas— pero la afirmación era igual de falsa.
         val cuentasInv = data.accounts
-        val investmentAccounts = cuentasInv.orEmpty().filter { it.type == AccountType.INVESTMENT }
+        // Un bien viaja como INVESTMENT (ver `Bien` en :core) y no es una inversión.
+        val investmentAccounts = cuentasInv.orEmpty().filter { it.type == AccountType.INVESTMENT && !it.esBien }
         if (cuentasInv == null) LinkFigure()
         else if (investmentAccounts.isEmpty()) LinkFigure(sub = "Sin inversiones")
         else LinkFigure(formatCOP(investmentAccounts.sumOf { it.balance }), plural(investmentAccounts.size, "cuenta", "cuentas"))

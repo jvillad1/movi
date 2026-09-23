@@ -276,6 +276,14 @@ open class NoOpRepository(
         return marcada
     }
 
+    override suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account {
+        val i = cuentasDelServer.indexOfFirst { it.id == id }
+        val actualizada = (if (i >= 0) cuentasDelServer[i] else Account(id, "Bien", AccountType.INVESTMENT, 0L))
+            .copy(bien = com.jvillada.movi.shared.model.normalizarBien(bien))
+        if (i >= 0) cuentasDelServer[i] = actualizada else cuentasDelServer += actualizada
+        return actualizada
+    }
+
     override suspend fun deleteAccount(id: String) {
         val huerfanas = eventosDelServer
             .filter { it.accountId == id && it.transferId != null }

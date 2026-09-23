@@ -116,6 +116,23 @@ object Accounts : Table("accounts") {
      * transacción de arranque y no puede fallar sobre una tabla con datos.
      */
     val lastEditedAt = long("last_edited_at").nullable()
+    /**
+     * **Esta cuenta es un bien** (la casa, el carro), y de qué clase: `INMUEBLE`, `VEHICULO`,
+     * `OTRO`. NULL = no es un bien, que es la verdad de toda cuenta que ya existe. Ver `Bien` y
+     * `Account.bien` en :core, donde está escrito por qué es una columna y no un valor nuevo de
+     * `type`, y qué ve un APK viejo.
+     *
+     * Las cuatro son NULLABLE y sin backfill por el motivo de siempre: el ALTER que emite
+     * `createMissingTablesAndColumns` corre DENTRO de la transacción de arranque y no puede fallar
+     * sobre una tabla con datos (`accounts` ya está en esa lista).
+     */
+    val assetKind = varchar("asset_kind", 20).nullable()
+    /** Lo que vale el bien, en pesos. El saldo de la cuenta no se usa para nada en un bien. */
+    val assetValue = long("asset_value").nullable()
+    /** De cuándo es ese valor (la fecha del avalúo), ISO `yyyy-MM-dd`. */
+    val assetValuedOn = varchar("asset_valued_on", 10).nullable()
+    /** La cuenta de deuda que lo financia, si hay una. Solo explica; no mueve ningún total. */
+    val assetDebtId = varchar("asset_debt_id", 50).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

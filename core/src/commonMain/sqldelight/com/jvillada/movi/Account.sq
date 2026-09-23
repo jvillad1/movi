@@ -45,7 +45,18 @@ CREATE TABLE account (
     -- respuesta— y mientras tanto el dueño renombró la cuenta en la web, el reenvío le pisaba el
     -- nombre. Con esta columna el reenvío viaja con la edad de su versión y el server lo deja
     -- perder contra una edición más nueva (`pisaElReenvio`, en EventRoutes.kt).
-    lastEditedAt INTEGER
+    lastEditedAt INTEGER,
+    -- **Esta cuenta es un bien** (la casa, el carro). NULL en `bienClase` = no lo es, que es la
+    -- verdad de todo lo que ya está en el teléfono. Espejo de las columnas `asset_*` del server; el
+    -- porqué completo está en `Bien` y en `Account.bien` (:core).
+    --
+    -- Van en la fila por lo mismo que `conditionedTo`: si el respaldo sin red no supiera que la
+    -- casa es un bien, `getAccounts` la devolvería como una inversión en $0 cada vez que la red
+    -- tarde, y el patrimonio del Inicio saltaría $1.412M para abajo y para arriba según la señal.
+    bienClase    TEXT,
+    bienValor    INTEGER,
+    bienValorAl  TEXT,
+    bienDeudaId  TEXT
 );
 
 -- Mismo criterio que `GET /api/accounts` (ver AccountRoutes.kt, donde está escrito por qué se
@@ -92,8 +103,8 @@ SELECT * FROM account WHERE syncedAt IS NULL AND userId = :userId;
 -- una cuenta que el server acaba de devolver la vuelve a dejar visible sola. Igual que `mostrar`,
 -- que es la forma explícita de lo mismo para cuando no se reescribe la fila entera.
 insert:
-INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt, conditionedTo, lastEditedAt)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO account(id, name, type, balance, currency, userId, syncedAt, conditionedTo, lastEditedAt, bienClase, bienValor, bienValorAl, bienDeudaId)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateBalance:
 UPDATE account SET balance = :balance WHERE id = :id;
@@ -115,6 +126,12 @@ UPDATE account SET name = :name WHERE id = :id AND userId = :userId;
 -- Marcar (o quitar) la condición de uso sin señal, mismo caso que `actualizarNombre`.
 actualizarCondicion:
 UPDATE account SET conditionedTo = :conditionedTo WHERE id = :id AND userId = :userId;
+
+-- Actualizar el valor de un bien sin señal, sobre una cuenta que todavía no subió. Mismo caso que
+-- `actualizarNombre`: ver `LocalRepository.updateBien`.
+actualizarBien:
+UPDATE account SET bienClase = :bienClase, bienValor = :bienValor, bienValorAl = :bienValorAl, bienDeudaId = :bienDeudaId
+WHERE id = :id AND userId = :userId;
 
 -- El server no la devolvió: se deja de listar, sin borrarle nada. Ver `hiddenAt`.
 ocultar:

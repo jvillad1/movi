@@ -33,19 +33,31 @@ fun esCuentaDeDeuda(tipo: AccountType): Boolean =
     tipo == AccountType.CREDIT_CARD || tipo == AccountType.LOAN
 
 /**
- * ¿Esta cuenta es parte de «Tu plata»? **Ni deuda ni condicionada.** Es la regla del hero del
- * Inicio, de la fila «Cuentas» y del renglón «Tu plata» de Cuentas, y ahora también de la tarjeta
- * «Disponible» y del server que la alimenta.
+ * ¿Esta cuenta es parte de «Tu plata»? **Ni deuda, ni condicionada, ni un bien.** Es la regla del
+ * hero del Inicio, de la fila «Cuentas» y del renglón «Tu plata» de Cuentas, y ahora también de la
+ * tarjeta «Disponible» y del server que la alimenta.
+ *
+ * [esBien] tiene default `false` a propósito: todas las llamadas que existían antes de los bienes
+ * hablan de cuentas que no lo son, y el día que alguien arme una [CuentaDelDisponible] sin decir
+ * nada, lo que pasa es lo de siempre. Un bien es suyo —cuenta en el patrimonio— pero no es plata:
+ * la casa no paga el mercado. Ver [Account.bien] y `patrimonioDe`.
  */
-fun esDeTuPlata(tipo: AccountType, condicionadaA: String?): Boolean =
-    !esCuentaDeDeuda(tipo) && condicionadaA.isNullOrBlank()
+fun esDeTuPlata(tipo: AccountType, condicionadaA: String?, esBien: Boolean = false): Boolean =
+    !esBien && !esCuentaDeDeuda(tipo) && condicionadaA.isNullOrBlank()
 
 /** Lo mismo que la otra, para una cuenta ya armada. */
-fun Account.esDeTuPlata(): Boolean = esDeTuPlata(type, condicionadaA)
+fun Account.esDeTuPlata(): Boolean = esDeTuPlata(type, condicionadaA, esBien = bien != null)
 
-/** Lo que el Disponible necesita saber de una cuenta: su tipo y si está condicionada. */
-data class CuentaDelDisponible(val tipo: AccountType, val condicionadaA: String?) {
-    val esTuPlata: Boolean get() = esDeTuPlata(tipo, condicionadaA)
+/**
+ * Lo que el Disponible necesita saber de una cuenta: su tipo, si está condicionada y si es un bien.
+ *
+ * [esBien] entra por el mismo motivo que [condicionadaA]: el server arma este mapa leyendo la
+ * tabla de cuentas por su lado (ver `cuentasDelDisponible` en `DashboardRoutes.kt`), y si no
+ * supiera que la casa es un bien, «lo que tenías al empezar el período» la contaría como plata en
+ * cuanto alguien le anotara un solo movimiento.
+ */
+data class CuentaDelDisponible(val tipo: AccountType, val condicionadaA: String?, val esBien: Boolean = false) {
+    val esTuPlata: Boolean get() = esDeTuPlata(tipo, condicionadaA, esBien)
     val esDeuda: Boolean get() = esCuentaDeDeuda(tipo)
 }
 

@@ -1,6 +1,8 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.MovimientoRechazado
+import com.jvillada.movi.shared.model.Bien
+import com.jvillada.movi.shared.model.normalizarBien
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.MovimientosDelDestino
 import kotlinx.datetime.toLocalDateTime
@@ -126,6 +128,11 @@ private fun com.jvillada.movi.Account.toAccountModel() = Account(
     // La edad de esta versión, tal como la dejó la última corrección (de este teléfono o del
     // server). Viaja en el reenvío y es lo que decide quién gana: ver [Account.lastEditedAt].
     lastEditedAt = lastEditedAt,
+    // Un bien que vive en el teléfono vuelve como bien también sin red: ver `bienClase` en
+    // Account.sq. `bienClase` NULL es «no es un bien», y es lo único que se mira para decidirlo.
+    bien = bienClase?.let { clase ->
+        Bien(clase = clase, valor = bienValor ?: 0L, valorAl = bienValorAl, deudaId = bienDeudaId)
+    },
 )
 
 /**
@@ -411,6 +418,7 @@ class LocalRepository(
                 Clock.System.now().toEpochMilliseconds(),
                 created.condicionadaA,
                 created.lastEditedAt,
+                created.bien?.clase, created.bien?.valor, created.bien?.valorAl, created.bien?.deudaId,
             )
             created
         } catch (e: Exception) {
@@ -422,6 +430,7 @@ class LocalRepository(
                 // Null en un alta: una cuenta que nace no tiene ninguna versión anterior a la que
                 // ganarle (ver [Account.lastEditedAt]). Lo escriben las correcciones.
                 resolved.lastEditedAt,
+                resolved.bien?.clase, resolved.bien?.valor, resolved.bien?.valorAl, resolved.bien?.deudaId,
             )
             resolved
         }
@@ -706,6 +715,35 @@ class LocalRepository(
         if (resueltaLocal != null) return@enDisco resueltaLocal
 
         val actualizada = remote.updateAccountCondition(id, condicionadaA)
+        db.transaction { mirrorAccountLocally(actualizada) }
+        return@enDisco actualizada
+    }
+
+    /**
+     * Igual que [updateAccountCondition], con sus dos ramas y el mismo motivo para cada una: la
+     * cuenta ya sincronizada la resuelve el server y se espeja lo que contesta; la que todavía no
+     * subió se resuelve acá, sellando la edad, y la empuja `syncAccounts` con el bien adentro.
+     *
+     * Sin red y con la cuenta ya en el server, la excepción sube tal cual: un avalúo nuevo escrito
+     * solo en el teléfono sería un dato que el `SyncEngine` nunca empujaría (no es una creación) y
+     * que la próxima lectura con red pisaría en silencio. Mejor que la hoja diga que no se pudo.
+     */
+    override suspend fun updateBien(id: String, bien: Bien): Account = enDisco {
+        val uid = userId()
+        val limpio = normalizarBien(bien)
+        val resueltaLocal = db.transactionWithResult {
+            val local = db.accountQueries.selectById(id).executeAsOneOrNull()
+            if (local != null && local.userId == uid && local.syncedAt == null && local.bienClase != null) {
+                db.accountQueries.actualizarBien(limpio.clase, limpio.valor, limpio.valorAl, limpio.deudaId, id, uid)
+                marcarEditadaLaCuenta(id, uid)
+                db.accountQueries.selectById(id).executeAsOne().toAccountModel()
+            } else {
+                null
+            }
+        }
+        if (resueltaLocal != null) return@enDisco resueltaLocal
+
+        val actualizada = remote.updateBien(id, limpio)
         db.transaction { mirrorAccountLocally(actualizada) }
         return@enDisco actualizada
     }
@@ -1745,6 +1783,7 @@ class LocalRepository(
             // La edad que diga el server: esta fila es su copia, y sobrescribir con `null` acá
             // haría que un reenvío posterior arrancara la comparación de cero.
             account.lastEditedAt,
+            account.bien?.clase, account.bien?.valor, account.bien?.valorAl, account.bien?.deudaId,
         )
     }
 
@@ -1841,6 +1880,8 @@ class LocalRepository(
                 Clock.System.now().toEpochMilliseconds(),
                 summary.account.condicionadaA,
                 summary.account.lastEditedAt,
+                summary.account.bien?.clase, summary.account.bien?.valor,
+                summary.account.bien?.valorAl, summary.account.bien?.deudaId,
             )
         }
         return@enDisco summary

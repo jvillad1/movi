@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.valorEnPesosDe
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,16 +42,20 @@ fun isDebtAccount(type: AccountType): Boolean = esCuentaDeDeuda(type)
  * cuenta de ahorros o de inversión — mientras las deudas sí se estimaban y el server
  * (`/api/finance-summary`, Movi AI) sí los convertía. Una sola regla para activos y deudas.
  */
-fun valorEnPesos(account: Account): Long = account.estimatedTotalCop ?: account.balance
+fun valorEnPesos(account: Account): Long = valorEnPesosDe(account)
+// ↑ La regla vive en :core ([valorEnPesosDe]) desde que el server también suma el patrimonio, y
+// desde los bienes sabe una cosa más: la casa vale su avalúo, no su `balance` (que es 0).
 
 /**
- * (activos, deudas, neto) across accounts, todo con [valorEnPesos]. Net = assets − deudas.
+ * (activos, deudas, neto) across accounts. **Es [patrimonioDe] dicho en tres números**, no una
+ * suma propia: «activos» es todo lo que tienes —tu plata, la condicionada y los bienes— y el neto
+ * es el MISMO que el del hero y el de la pantalla Cuentas. Se queda como función porque hay
+ * llamadores que solo quieren el trío; si alguna vez vuelve a sumar por su cuenta, la casa deja
+ * de contar en un lado y no en el otro.
  */
 fun assetsDebtsNet(accounts: List<Account>): Triple<Long, Long, Long> {
-    val activos = accounts.filter { !isDebtAccount(it.type) }.sumOf { valorEnPesos(it) }
-    val deudas = accounts.filter { isDebtAccount(it.type) }
-        .sumOf { valorEnPesos(it) }
-    return Triple(activos, deudas, activos - deudas)
+    val p = patrimonioDe(accounts)
+    return Triple(p.loQueTienes, p.deudas, p.neto)
 }
 
 /**

@@ -57,6 +57,12 @@ import com.jvillada.movi.shared.model.MAX_ACCOUNT_NAME_LENGTH
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_CONDITION_LENGTH
 import com.jvillada.movi.shared.model.UpdateAccountConditionRequest
 import com.jvillada.movi.shared.model.normalizarCondicion
+import com.jvillada.movi.shared.model.ActualizarBienRequest
+import com.jvillada.movi.shared.model.Bien
+import com.jvillada.movi.shared.model.normalizarBien
+import com.jvillada.movi.shared.model.problemaDelBien
+import com.jvillada.movi.shared.model.esCuentaDeDeuda
+import org.jetbrains.exposed.sql.statements.UpdateBuilder
 
 private val accountsLog = LoggerFactory.getLogger("AccountRoutes")
 
@@ -228,6 +234,52 @@ fun Route.accountRoutes() {
         }
 
         /**
+         * **Actualizar un bien**: el avalúo nuevo, la clase, la fecha del valor o la deuda que lo
+         * financia. Ver `Bien` en :core.
+         *
+         * Solo sobre cuentas que YA son bienes (409 si no): convertir una inversión con plata en
+         * un bien le escondería el saldo al patrimonio sin decir nada —un bien vale su valor, no
+         * sus movimientos—, y eso no puede pasar por una ruta que se llama «actualizar».
+         *
+         * Valida con las MISMAS funciones que la creación ([normalizarBien], [problemaDelBien]) y
+         * la deuda con [esDeudaDe]. Sella la edad (`lastEditedAt`) como toda ruta que cambia una
+         * cuenta, y contesta la cuenta enriquecida para que el teléfono la espeje tal cual.
+         */
+        put("/{id}/bien") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val bien = normalizarBien(call.receive<ActualizarBienRequest>().bien)
+            problemaDelBien(bien)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            if (bien.deudaId == id) {
+                return@put call.respond(HttpStatusCode.BadRequest, "La deuda asociada no es una de tus deudas")
+            }
+            val resultado = dbQuery {
+                val fila = Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.firstOrNull()
+                    ?: return@dbQuery HttpStatusCode.NotFound
+                if (fila[Accounts.assetKind] == null) return@dbQuery HttpStatusCode.Conflict
+                if (bien.deudaId != null && !esDeudaDe(uid, bien.deudaId!!)) return@dbQuery HttpStatusCode.BadRequest
+                Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) {
+                    escribirBien(it, bien)
+                    it[Accounts.lastEditedAt] = System.currentTimeMillis()
+                }
+                HttpStatusCode.OK
+            }
+            when (resultado) {
+                HttpStatusCode.NotFound -> return@put call.respond(HttpStatusCode.NotFound)
+                HttpStatusCode.Conflict -> return@put call.respond(HttpStatusCode.Conflict, "Esta cuenta no es un bien")
+                HttpStatusCode.BadRequest -> return@put call.respond(
+                    HttpStatusCode.BadRequest,
+                    "La deuda asociada no es una de tus deudas",
+                )
+                else -> Unit
+            }
+            val base = dbQuery {
+                Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.first().toAccount()
+            }
+            call.respond(enrichWith(base, loadNonVoidedEvents(uid, base.id), FxRateService.usdToCop()))
+        }
+
+        /**
          * **Cuadrar una cuenta contra lo que dice el banco.**
          *
          * El problema que resuelve, medido el 21-sep sobre los datos reales del dueño: Movi deriva
@@ -283,6 +335,12 @@ fun Route.accountRoutes() {
                     .firstOrNull()?.toAccount()
                     ?: return@dbQuery CuadreOutcome.NotFound
                 if (account.type.group == AccountGroup.DEUDA) return@dbQuery CuadreOutcome.EsDeuda
+                // Un bien no se cuadra con un movimiento: no tiene saldo, tiene un valor, y ese se
+                // escribe en `PUT /{id}/bien`. Sin esto, un APK viejo —que ve la casa como una
+                // inversión en $0 y le ofrece el cuadre— anotaría un ajuste de $1.412M que no
+                // cambiaría nada a la vista (el saldo de un bien sale siempre en 0, ver
+                // `conSaldos`) y dejaría un movimiento falso en la historia.
+                if (account.bien != null) return@dbQuery CuadreOutcome.EsBien
 
                 val eventos = loadNonVoidedEventsIn(uid, id)
                 // Contra el saldo EN LA MONEDA DE LA CUENTA, que es el que la pantalla muestra y
@@ -308,6 +366,10 @@ fun Route.accountRoutes() {
                 CuadreOutcome.EsDeuda  -> call.respond(
                     HttpStatusCode.UnprocessableEntity,
                     "El saldo de una tarjeta o un préstamo se cuadra en Créditos",
+                )
+                CuadreOutcome.EsBien   -> call.respond(
+                    HttpStatusCode.UnprocessableEntity,
+                    "El valor de un bien se actualiza en el bien, no con un cuadre",
                 )
                 is CuadreOutcome.Ok    -> call.respond(outcome.response)
             }
@@ -373,14 +435,37 @@ fun Route.accountRoutes() {
             // sí lo conoce y dice «esta copia no la editó nadie». Ver el bloque de abajo.
             val mandoLaEdicion = "lastEditedAt" in crudo
             val uid = call.userId()
+            // **Un bien** (la casa, el carro): ver `Account.bien` en :core. Se normaliza y se
+            // valida ANTES de tocar la base, con las mismas funciones que usa la hoja del cliente.
+            val bien = body.bien?.let(::normalizarBien)
+            if (bien != null) {
+                problemaDelBien(bien)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
+                if (bien.deudaId != null && !dbQuery { esDeudaDe(uid, bien.deudaId!!) }) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "La deuda asociada no es una de tus deudas")
+                }
+            }
             val account = body.copy(
                 id = body.id.ifBlank { "acc_${System.currentTimeMillis()}" }
-            )
+            ).let { cuenta ->
+                // **El server fuerza la forma del bien**, no el cliente: `INVESTMENT`, pesos, saldo
+                // crudo en 0 y sin condición. Es lo que sostiene lo que ve un APK viejo (ver
+                // `Account.bien`): si alguien mandara la casa como `SAVINGS`, ese APK la ofrecería
+                // como origen de un gasto; como `INVESTMENT` no la propone para gastar.
+                if (bien == null) cuenta
+                else cuenta.copy(type = AccountType.INVESTMENT, currency = "COP", balance = 0L, condicionadaA = null, bien = bien)
+            }
 
             val reenvio = dbQuery {
                 val existente = Accounts.selectAll().where { Accounts.id eq account.id }.firstOrNull()
                     ?: return@dbQuery null
                 if (existente[Accounts.userId] != uid) return@dbQuery HttpStatusCode.Conflict to null
+                // Un reenvío no convierte una cuenta de plata en un bien: por la misma razón que
+                // `PUT /{id}/bien` contesta 409, el saldo de esa cuenta desaparecería del
+                // patrimonio sin que nadie lo decidiera. El reenvío legítimo de un bien (creado sin
+                // señal) encuentra la fila ya marcada, porque el INSERT la escribió con el bien.
+                if (bien != null && existente[Accounts.assetKind] == null) {
+                    return@dbQuery HttpStatusCode.Conflict to null
+                }
                 // **Y el reenvío pierde contra un renombre más nuevo.** Es la misma función que
                 // decide la carrera de los movimientos ([pisaElReenvio], en `EventRoutes.kt`), a
                 // propósito: la carrera es la misma. El POST pudo haber LLEGADO sin que el teléfono
@@ -402,6 +487,11 @@ fun Route.accountRoutes() {
                         it[Accounts.balance]  = account.balance
                         it[Accounts.currency] = account.currency
                         if (mandoLaCondicion) it[Accounts.conditionedTo] = normalizarCondicion(account.condicionadaA)
+                        // El bien, igual que la condición: solo si vino. Un APK viejo reenvía sus
+                        // cuentas sin esta clave y no puede, sin querer, deshacer un bien; y una
+                        // clave en `null` tampoco lo deshace — convertir un bien en cuenta de plata
+                        // no es algo que pueda pasar por un reenvío.
+                        if (bien != null) escribirBien(it, bien)
                         // La edad de la versión que acaba de ganar, para que la próxima se compare
                         // contra ella. Solo si vino: un APK viejo no tiene ninguna que ofrecer y la
                         // guardada se deja como está.
@@ -430,6 +520,7 @@ fun Route.accountRoutes() {
                     it[balance]  = account.balance
                     it[currency] = account.currency
                     it[conditionedTo] = normalizarCondicion(account.condicionadaA)
+                    account.bien?.let { b -> escribirBien(it, b) }
                     // Casi siempre null: crear una cuenta no es editarla. No lo es cuando la
                     // cuenta se creó Y se renombró sin señal, y ahí importa que la edición viaje
                     // con ella — si no, el server la guardaría como «nunca editada» y la
@@ -510,6 +601,11 @@ fun Route.accountRoutes() {
                     accountsLog.info(
                         "DELETE /api/accounts/$id: $reglasSueltas regla(s) recurrente(s) quedaron sin cuenta",
                     )
+                }
+                // Los bienes que esta deuda financiaba siguen valiendo lo mismo: se sueltan, no se
+                // tocan. Es el caso normal de terminar de pagar el carro y borrar el crédito.
+                Accounts.update({ (Accounts.userId eq uid) and (Accounts.assetDebtId eq id) }) {
+                    it[Accounts.assetDebtId] = null
                 }
                 Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
                 true
@@ -600,5 +696,30 @@ private fun Transaction.desenlazarPatasHermanas(uid: String, accountId: String):
 private sealed interface CuadreOutcome {
     data object NotFound : CuadreOutcome
     data object EsDeuda : CuadreOutcome
+    data object EsBien : CuadreOutcome
     data class Ok(val response: AdjustAccountBalanceResponse) : CuadreOutcome
 }
+
+/**
+ * Las cuatro columnas de un bien, escritas juntas: el `INSERT` de la creación, el `UPDATE` del
+ * reenvío y el de `PUT /{id}/bien` pasan por acá, para que ninguno se olvide de una.
+ */
+private fun Accounts.escribirBien(it: UpdateBuilder<*>, bien: Bien) {
+    it[assetKind] = bien.clase
+    it[assetValue] = bien.valor
+    it[assetValuedOn] = bien.valorAl
+    it[assetDebtId] = bien.deudaId
+}
+
+/**
+ * ¿[deudaId] es una deuda (tarjeta o préstamo) de [uid]? Lo que se le puede asociar a un bien.
+ * Una cuenta de otro usuario da `false`, igual que una que no existe: no se le dice a nadie qué
+ * ids existen afuera de lo suyo.
+ */
+private fun Transaction.esDeudaDe(uid: String, deudaId: String): Boolean =
+    Accounts.selectAll()
+        .where { (Accounts.id eq deudaId) and (Accounts.userId eq uid) }
+        .firstOrNull()
+        ?.let { fila -> runCatching { AccountType.valueOf(fila[Accounts.type]) }.getOrNull() }
+        ?.let(::esCuentaDeDeuda)
+        ?: false
