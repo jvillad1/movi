@@ -507,6 +507,29 @@ class CategoryFieldTest {
         assertEquals(listOf("Cine"), result)
     }
 
+    /**
+     * Fix round 1: una categoría **propia** (no del catálogo) usada solo de un lado se colaba
+     * como chip — y como valor inicial — del OTRO lado, porque el filtro usaba
+     * [categoriaSirveParaTipo], que para una propia sin tipo fijado siempre contesta que sirve
+     * sin mirar [usadas]. Con «Arriendo Gardenera» (un nombre que nadie del catálogo tiene) usada
+     * únicamente en Ingreso, no puede aparecer como chip — ni como valor por defecto— de Gasto.
+     */
+    @Test
+    fun `una categoria propia usada solo de un lado no se ofrece ni como chip ni como default del otro`() {
+        val usos = mapOf("Arriendo Gardenera" to 8)
+        val usadas = mapOf("Arriendo Gardenera" to setOf(TransactionType.INCOME))
+
+        val chipsDeGasto = categoriasFrecuentes(TransactionType.EXPENSE, usadas, usos = usos)
+        val chipsDeIngreso = categoriasFrecuentes(TransactionType.INCOME, usadas, usos = usos)
+        assertEquals(emptyList<String>(), chipsDeGasto)
+        assertEquals(listOf("Arriendo Gardenera"), chipsDeIngreso)
+
+        val defaultDeGasto = categoriaPorDefectoPara(TransactionType.EXPENSE, usadas, usos = usos)
+        val defaultDeIngreso = categoriaPorDefectoPara(TransactionType.INCOME, usadas, usos = usos)
+        assertFalse(defaultDeGasto == "Arriendo Gardenera")
+        assertEquals("Arriendo Gardenera", defaultDeIngreso)
+    }
+
     @Test
     fun `con datos de uso, el valor inicial es la mas frecuente del tipo`() {
         val usos = mapOf("Mercado" to 10)

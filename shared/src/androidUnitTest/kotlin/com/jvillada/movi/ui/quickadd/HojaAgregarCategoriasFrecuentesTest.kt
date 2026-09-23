@@ -23,6 +23,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -156,9 +157,7 @@ class HojaAgregarCategoriasFrecuentesTest {
 
     private fun assertApariciones(texto: String, cuantas: Int) {
         val encontradas = composeRule.onAllNodesWithText(texto).fetchSemanticsNodes().size
-        assert(encontradas == cuantas) {
-            "«$texto» apareció $encontradas ${if (encontradas == 1) "vez" else "veces"}, se esperaban $cuantas"
-        }
+        assertEquals("«$texto» no apareció las veces esperadas", cuantas, encontradas)
     }
 
     private fun tocar(texto: String) {

@@ -77,6 +77,15 @@ import com.jvillada.movi.ui.fecha.timestampParaFecha
  */
 private const val FRACCION_VALOR_FILA = 0.55f
 
+/**
+ * El alto de la fila de chips de categorías frecuentes (ver [CategoriaChipsRow]) — fijo, para que
+ * la fila no pueda crecer ni empujar el resto del formulario bajo el dedo. No hay un token de
+ * `Movi.*` para alturas de fila (`Tokens.kt` solo tiene `espacios`, `formas`, `textos` y
+ * `colores`): es un tamaño de componente, no un espacio ni una forma, así que queda como literal
+ * — mismo criterio que `ALTO_BARRA_INFERIOR` en los tests de esta hoja.
+ */
+private val ALTO_FILA_DE_CHIPS = 40.dp
+
 /** La X del encabezado de un sub-picker. Ver el porqué en [PickerHeader]. */
 internal const val TAG_CERRAR_SUB_PICKER = "quickadd:cerrar-sub-picker"
 
@@ -1459,9 +1468,10 @@ private fun EditorBody(
  * Movimientos: esta fila vive DENTRO de una `MinCard`, cuyo fondo ya es `Movi.colores.tarjeta` —
  * un chip inactivo pintado con ese mismo color sería invisible contra su propio fondo.
  *
- * Alto fijo (`heightIn` en el `Row` de abajo lo garantiza aunque cambie el texto) y
- * desplazamiento horizontal propio: no ocupa más de una fila ni empuja el resto del formulario,
- * la misma disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA NO ENTRA» más arriba).
+ * **Alto fijo** (`.height` en el `Row` de abajo, no `heightIn(min = …)`: esta fila no puede
+ * crecer ni un píxel, ni siquiera si algún día un chip mide más de una línea) y desplazamiento
+ * horizontal propio: no ocupa más de una fila ni empuja el resto del formulario, la misma
+ * disciplina que ya rige toda esta hoja (ver el bloque «SI LA HOJA NO ENTRA» más arriba).
  */
 @Composable
 private fun CategoriaChipsRow(
@@ -1472,24 +1482,32 @@ private fun CategoriaChipsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp)
+            .height(ALTO_FILA_DE_CHIPS)
             .horizontalScroll(rememberScrollState())
-            .padding(vertical = 8.dp),
+            .padding(vertical = Movi.espacios.corto),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // "Entre elementos hermanos apretados: chips" es literalmente lo que dice el KDoc de
+        // este token en Tokens.kt — este es el caso para el que existe.
+        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
     ) {
         categorias.forEach { nombre ->
             val activa = nombre == categoriaElegida
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(RoundedCornerShape(Movi.formas.pleno))
                     .background(if (activa) Movi.colores.marca.copy(alpha = 0.16f) else Color.Transparent)
                     .then(
-                        if (!activa) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(999.dp))
+                        if (!activa) Modifier.border(1.dp, Movi.colores.borde, RoundedCornerShape(Movi.formas.pleno))
                         else Modifier,
                     )
                     .clickable { onPick(nombre) }
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
+                    // Horizontal: el 14dp original quedaba justo entre `medio` (12dp) y `amplio`
+                    // (16dp) — misma distancia a los dos. Se eligió `medio`, "el respiro de
+                    // adentro de una fila", que es justo lo que es esto: el respiro de adentro de
+                    // una píldora angosta (`amplio` es el relleno de una tarjeta entera, de más
+                    // aire del que necesita un chip). Vertical: `corto` (8dp) es el más cercano al
+                    // 7dp original (a 1dp; `minimo`, 4dp, quedaba a 3dp).
+                    .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.corto),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
