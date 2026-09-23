@@ -204,7 +204,10 @@ fun SeccionChecklistDelPeriodo(
                 if (marcados.isNotEmpty()) {
                     Spacer(Modifier.height(Movi.espacios.medio))
                     GrupoDelChecklist(
-                        titulo = "Ya marcados · $pagados de $total",
+                        // No "Ya marcados": la mayoría de estas filas las empareja Movi sola
+                        // (ver `PagoDelPeriodo.automatica`), no el dueño — mismo criterio que
+                        // `lineaDeLoQueFalta`/`pieDeLoYaPagado` en ResumenDelPeriodo.kt.
+                        titulo = "Ya salieron · $pagados de $total",
                         total = null,
                         filas = marcados,
                         vacio = null,

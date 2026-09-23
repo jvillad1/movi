@@ -443,8 +443,8 @@ fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
     val pagos = if (total == 1) "pago" else "pagos"
     return when {
         total == 0 -> "Este período no tiene pagos anotados"
-        faltan == 0 && total == 1 -> "Marcaste el único pago de este período"
-        faltan == 0 -> "Marcaste los $total $pagos de este período"
+        faltan == 0 && total == 1 -> "Ya salió el único pago de este período"
+        faltan == 0 -> "Ya salieron los $total pagos de este período"
         else -> "Te ${if (faltan == 1) "falta" else "faltan"} $faltan de $total $pagos de este período"
     }
 }
@@ -457,7 +457,8 @@ fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
 fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
     val (pagados, total) = avanceDelChecklist(checklist)
     if (pagados == 0 || pagados == total) return null
-    return "Ya marcaste $pagados. El checklist completo está en «Ver todos»."
+    return if (pagados == 1) "Ya salió 1. El checklist completo está en «Ver todos»."
+    else "Ya salieron $pagados. El checklist completo está en «Ver todos»."
 }
 
 // ── Qué debería revisar ──────────────────────────────────────────────────────

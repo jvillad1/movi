@@ -295,7 +295,18 @@ class ChecklistDelPeriodoTest {
         )
 
         assertEquals("Te faltan 2 de 3 pagos de este período", lineaDeLoQueFalta(checklist))
-        assertEquals("Ya marcaste 1. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+        assertEquals("Ya salió 1. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+    }
+
+    /** El pie en plural: dos o más pagos ya salieron, sin decir que el dueño los marcó. */
+    @Test
+    fun el_pie_habla_en_plural_con_mas_de_un_pago_ya_salido() {
+        val checklist = listOf(
+            PagoDelPeriodo("r1", "Celular", 53_000, pagado = false, diasParaVencer = -2),
+            PagoDelPeriodo("r2", "Gimnasio", 139_900, pagado = true, diasParaVencer = -8),
+            PagoDelPeriodo("r3", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
+        )
+        assertEquals("Ya salieron 2. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
     }
 
     @Test
@@ -313,7 +324,7 @@ class ChecklistDelPeriodoTest {
             PagoDelPeriodo("r1", "Celular", 53_000, pagado = true, diasParaVencer = -2),
             PagoDelPeriodo("r2", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
         )
-        assertEquals("Marcaste los 2 pagos de este período", lineaDeLoQueFalta(checklist))
+        assertEquals("Ya salieron los 2 pagos de este período", lineaDeLoQueFalta(checklist))
         assertNull(pieDeLoYaPagado(checklist), "no hay nada escondido que valga la pena anunciar")
     }
 
