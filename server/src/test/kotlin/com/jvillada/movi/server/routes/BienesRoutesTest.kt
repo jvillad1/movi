@@ -318,6 +318,22 @@ class BienesRoutesTest {
     }
 
     @Test
+    fun `un reenvio con bien no convierte una cuenta de plata en bien`() = testApplication {
+        wireApp()
+        cargarAlDueno()
+
+        val r = postJson(
+            "/api/accounts",
+            """{"id":"acc-nu","name":"Nu","type":"SAVINGS","balance":0,"bien":{"clase":"OTRO","valor":10}}""",
+        )
+
+        assertEquals(HttpStatusCode.Conflict, r.status)
+        val nu = cuentas().single { it.id == "acc-nu" }
+        assertNull(nu.bien)
+        assertEquals(558_350L, nu.balance)
+    }
+
+    @Test
     fun `un bien no se cuadra con un movimiento`() = testApplication {
         wireApp()
         cargarAlDueno()

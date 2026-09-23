@@ -459,6 +459,13 @@ fun Route.accountRoutes() {
                 val existente = Accounts.selectAll().where { Accounts.id eq account.id }.firstOrNull()
                     ?: return@dbQuery null
                 if (existente[Accounts.userId] != uid) return@dbQuery HttpStatusCode.Conflict to null
+                // Un reenvío no convierte una cuenta de plata en un bien: por la misma razón que
+                // `PUT /{id}/bien` contesta 409, el saldo de esa cuenta desaparecería del
+                // patrimonio sin que nadie lo decidiera. El reenvío legítimo de un bien (creado sin
+                // señal) encuentra la fila ya marcada, porque el INSERT la escribió con el bien.
+                if (bien != null && existente[Accounts.assetKind] == null) {
+                    return@dbQuery HttpStatusCode.Conflict to null
+                }
                 // **Y el reenvío pierde contra un renombre más nuevo.** Es la misma función que
                 // decide la carrera de los movimientos ([pisaElReenvio], en `EventRoutes.kt`), a
                 // propósito: la carrera es la misma. El POST pudo haber LLEGADO sin que el teléfono
