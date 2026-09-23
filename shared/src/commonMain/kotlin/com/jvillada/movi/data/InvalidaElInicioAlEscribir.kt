@@ -103,6 +103,7 @@ internal class InvalidaElInicioAlEscribir(
     // Marcar la condición de una cuenta cambia «Tu plata» del Inicio: sin invalidar el caché, el
     // dueño marcaba Skandia y volvía al Inicio con la cifra vieja.
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = trasEscribir { delegado.updateAccountCondition(id, condicionadaA) }
+    override suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account = trasEscribir { delegado.updateBien(id, bien) }
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = trasEscribir { delegado.updateUserProfile(request) }
     override suspend fun changePassword(request: ChangePasswordRequest): Unit = trasEscribir { delegado.changePassword(request) }
     override suspend fun requestPasswordReset(request: PasswordResetRequest): Int = trasEscribir { delegado.requestPasswordReset(request) }

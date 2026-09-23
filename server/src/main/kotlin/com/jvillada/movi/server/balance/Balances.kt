@@ -38,18 +38,5 @@ fun accountCopValue(accountType: AccountType, events: List<FinancialEvent>, usdT
     return estimatedTotalCop(balances, usdToCop) ?: (balances["COP"] ?: 0L)
 }
 
-/**
- * Patrimonio: activos + deudas, no "suma de todos los saldos" (Hallazgo menor 4 de la revisión
- * de `feat/ajustar-saldo`). [accountCopValue] de una cuenta LOAN/CREDIT_CARD es deuda positiva
- * (ver [signedDelta]), así que sumarla de frente da "activos + deudas" en vez del neto. Mismo
- * criterio que `assetsDebtsNet` del lado del cliente (`MoneyDisplay.kt`), reimplementado acá
- * porque ese vive en `:shared` (Compose) y este código es server-only.
- */
-fun netWorth(
-    accountRows: List<Pair<String, AccountType>>,
-    eventsByAccount: Map<String, List<FinancialEvent>>,
-    usdToCop: Double,
-): Long = accountRows.sumOf { (accId, accType) ->
-    val value = accountCopValue(accType, eventsByAccount[accId] ?: emptyList(), usdToCop)
-    if (accType == AccountType.LOAN || accType == AccountType.CREDIT_CARD) -value else value
-}
+// `netWorth` vivía acá: una segunda regla del patrimonio, server-only. Se fue cuando llegaron los
+// bienes —no los conocía— y el server pasó a usar `patrimonioDe`, la de :core. Ver `Patrimonio.kt`.

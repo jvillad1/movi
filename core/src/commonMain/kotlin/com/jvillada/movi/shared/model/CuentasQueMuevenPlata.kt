@@ -145,7 +145,14 @@ private fun estaCondicionada(account: Account): Boolean = !account.condicionadaA
  * voluntaria le **entran** rendimientos ([UsoDeCuenta.DESTINO_DE_INGRESO]) y le entran aportes
  * ([UsoDeCuenta.PUNTA_DE_TRASPASO]). La condición es sobre el retiro, no sobre la cuenta.
  */
-fun sirvePara(account: Account, uso: UsoDeCuenta): Boolean = when (uso) {
+fun sirvePara(account: Account, uso: UsoDeCuenta): Boolean =
+    // **Un bien no sirve para mover plata, en ningún sentido.** De la casa no sale un gasto, no le
+    // entra un ingreso, no es punta de un traspaso y no paga una cuota: viaja como `INVESTMENT`
+    // (ver [Bien]) y sin esta línea heredaría todo lo que la inversión sí puede. Lo único que sí
+    // le corresponde es colgarle papeles: el avalúo, la escritura, el SOAT del carro.
+    if (account.esBien) uso == UsoDeCuenta.PAPEL_GUARDADO else sirveComoCuentaDePlata(account, uso)
+
+private fun sirveComoCuentaDePlata(account: Account, uso: UsoDeCuenta): Boolean = when (uso) {
     UsoDeCuenta.ORIGEN_DE_GASTO -> !estaCondicionada(account) && when (account.type) {
         AccountType.CASH, AccountType.CHECKING, AccountType.SAVINGS, AccountType.CREDIT_CARD -> true
         AccountType.LOAN, AccountType.INVESTMENT -> false

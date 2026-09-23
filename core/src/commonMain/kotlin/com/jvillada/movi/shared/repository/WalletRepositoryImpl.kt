@@ -510,6 +510,17 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    override suspend fun updateBien(id: String, bien: com.jvillada.movi.shared.model.Bien): Account {
+        val response = client.put("$baseUrl/api/accounts/$id/bien") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.ActualizarBienRequest(bien))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     // Sin `expectSuccess`, un 404/422 se intentaba deserializar como evento y reventaba con un error
     // de JSON sin el código ni el motivo: el SyncEngine no podía distinguir «el server lo rechaza»
     // de «no hubo red». Ahora el rechazo viaja como [ApiException] con el texto del server.

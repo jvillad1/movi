@@ -1,6 +1,10 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.balance.cuentasConSaldo
+import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
+import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
 import com.jvillada.movi.server.balance.looksLikeCardPayment
 import com.jvillada.movi.server.db.CategoryPrefs
@@ -111,6 +115,13 @@ fun Route.dashboardRoutes() {
         // los fijos del checklist. Una consulta (créditos con su cuenta), fuera del `dbQuery` de
         // abajo porque abre el suyo.
         val reglasDeCredito = loadCreditRulePairs(uid).map { it.first }
+        // Para estimar en pesos lo que haya en dólares al armar el patrimonio. Fuera del `dbQuery`
+        // porque puede pegarle a la red y no debe alargar la transacción. **Y solo si hace falta**:
+        // esta es la pantalla más abierta de la app, `FxRateService` no guarda los fallos (con
+        // datos.gov.co caído, cada llamada espera su timeout de 5 s) y hasta hoy el resumen no
+        // dependía de ningún servicio de afuera. Sin un solo movimiento en otra moneda la tasa no
+        // se usa (ver `estimatedTotalCop`), así que no se pide.
+        val usdToCop = if (dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0
 
         val summary = dbQuery {
             val accountTypeById = accountTypesFor(uid)
@@ -197,6 +208,10 @@ fun Route.dashboardRoutes() {
                     cuentas = cuentas,
                     enLosFijos = parteFija + cuotasDelChecklistPagadas(reglasDeCredito, eventosDelPeriodo, hoy, periodo),
                 ),
+                // **El patrimonio honesto**, con la casa y el carro adentro: la MISMA regla que usa
+                // el cliente sobre la lista de cuentas (`patrimonioDe`, en :core), sobre los mismos
+                // saldos que esa lista (ver `cuentasConSaldo`). No hay una segunda cuenta acá.
+                patrimonio = patrimonioDe(cuentasConSaldo(uid, voidedIds, usdToCop)),
             )
         }
         call.respond(summary)
@@ -241,13 +256,18 @@ private fun Transaction.monthCashFlow(
 
 /** Todas las cuentas del usuario con lo que el Disponible necesita saber de cada una. Una consulta. */
 private fun Transaction.cuentasDelDisponible(uid: String): Map<String, CuentaDelDisponible> =
-    Accounts.select(Accounts.id, Accounts.type, Accounts.conditionedTo)
+    Accounts.select(Accounts.id, Accounts.type, Accounts.conditionedTo, Accounts.assetKind)
         .where { Accounts.userId eq uid }
         .mapNotNull { row ->
             val tipo = runCatching { AccountType.valueOf(row[Accounts.type]) }.getOrNull() ?: return@mapNotNull null
             // `normalizarCondicion`: el mismo helper con el que la cuenta sale a la app, para que
             // una condición en blanco no deje la cuenta fuera de Tu plata solo de este lado.
-            row[Accounts.id] to CuentaDelDisponible(tipo, normalizarCondicion(row[Accounts.conditionedTo]))
+            // `esBien`: la casa no es plata que tenías al empezar el período (ver `Account.bien`).
+            row[Accounts.id] to CuentaDelDisponible(
+                tipo,
+                normalizarCondicion(row[Accounts.conditionedTo]),
+                esBien = row[Accounts.assetKind] != null,
+            )
         }
         .toMap()
 

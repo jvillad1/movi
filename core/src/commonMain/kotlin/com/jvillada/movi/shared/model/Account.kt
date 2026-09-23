@@ -107,6 +107,45 @@ data class Account(
      * acaba de crear.
      */
     val firstEventAt: Long? = null,
+
+    /**
+     * **Esta cuenta es un bien** —la casa, el carro— y esto es lo que vale. `null` = una cuenta de
+     * plata o de deuda, como todas las que existían antes de este campo.
+     *
+     * Ver [Bien] para qué es y por qué no es un valor nuevo de [AccountType]. Acá va el contrato
+     * del cable, que es lo que tiene que sostenerse con el APK viejo del dueño instalado.
+     *
+     * ### Lo que el server manda por un bien
+     *
+     * `type = INVESTMENT`, `balance = 0`, `balancesByCurrency` vacío, sin `estimatedTotalCop`, y el
+     * valor **solo** adentro de este objeto. Lo fuerza el server (ver `AccountRoutes.kt` al crear
+     * y `enrichWith` al leer), no el cliente: la garantía de abajo no puede depender de que quien
+     * crea el bien se porte bien.
+     *
+     * ### Lo que ve un APK viejo (el que el dueño ya tiene instalado), con la casa cargada
+     *
+     * Ignora este campo (`ignoreUnknownKeys`) y ve **una inversión llamada «Casa Almendros» con
+     * $0**. Concretamente:
+     *
+     * - **«Tu plata» no cambia.** Suma el `balance` de sus cuentas libres, y el de la casa es 0. Es
+     *   la degradación que importa: la alternativa —mandar el valor en `balance`— le habría dicho
+     *   «Tu plata $1.412 millones», que es exactamente el error más caro que puede cometer esta app.
+     * - **El patrimonio neto tampoco cambia**: sigue diciendo lo que decía (−$2.074M), sin la casa.
+     *   Es la media foto de antes, no una foto falsa. La actualización la corrige.
+     * - La casa aparece listada en Inversión con $0, y en el desglose de «Tu plata» del Inicio como
+     *   un renglón en $0. Raro, pero cierto en lo que dice (no suma nada) y sin plata inventada.
+     * - Si alguien intentara cuadrarla desde ese APK, el server contesta 422: un bien no se ajusta
+     *   con un movimiento (ver `POST /{id}/balance-adjustment`). Si le anotara un movimiento, el
+     *   server lo guarda pero lo deja fuera de todo saldo del bien (el `balance` sigue en 0).
+     *
+     * ### Por qué nunca se manda en `null` a propósito
+     *
+     * Con `encodeDefaults = false` un `null` no viaja, y el `POST` de reenvío del teléfono
+     * ([com.jvillada.movi.shared.SyncEngine.syncAccounts]) sale sin la clave. El server solo toca
+     * las columnas del bien **si la clave vino y no es `null`**: un APK viejo que reenvía una
+     * cuenta suya no puede, sin querer, deshacer un bien.
+     */
+    val bien: Bien? = null,
 )
 
 /**

@@ -104,6 +104,17 @@ data class DashboardSummary(
      * lo resta. `null` = server anterior al campo: se toma como cero. Solo se AGREGA.
      */
     val pagosDeDeudaFueraDelChecklist: Long? = null,
+    /**
+     * **El patrimonio honesto**: tu plata, lo condicionado, los bienes y las deudas, ya partidos
+     * con [patrimonioDe] — la MISMA función que usa el cliente sobre la lista de cuentas.
+     *
+     * Viaja acá para quien no tiene la lista de cuentas a mano y necesita las cifras de un
+     * vistazo: la página para compartir (entrega D, HTML servido por el server) y el Inicio nuevo
+     * (entrega B). El Inicio de hoy sigue calculándolo de `GET /api/accounts`, que ya pide.
+     *
+     * `null` = server anterior a este campo. Un APK viejo lo ignora (`ignoreUnknownKeys`).
+     */
+    val patrimonio: Patrimonio? = null,
 )
 
 /**

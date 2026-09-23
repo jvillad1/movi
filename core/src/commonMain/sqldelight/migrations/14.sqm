@@ -1,0 +1,15 @@
+-- Migración 14 → 15: agrega los cuatro campos de un **bien** a `account` (la casa, el carro).
+--
+-- El patrimonio del dueño decía −$2.074M porque Movi contaba sus deudas —dos hipotecas, las
+-- libranzas, el crédito del vehículo— y ningún bien: la casa de Almendros de Zúñiga (avalúo de
+-- $1.411.903.920) no existía en la app. Un bien viaja como una cuenta `INVESTMENT` con un objeto
+-- `bien` adentro (ver `Bien` y `Account.bien` en :core, donde está por qué NO es un valor nuevo de
+-- `AccountType`), y esta fila tiene que poder guardarlo: el respaldo sin red de `getAccounts` sale
+-- de acá, y sin estas columnas la casa volvería como una inversión en $0 cada vez que la red tarde.
+--
+-- Nullable y sin backfill: NULL en `bienClase` es «no es un bien», que es la verdad de todo lo que
+-- ya está en el teléfono — y lo que hace que esas filas se sigan comportando exactamente como hoy.
+ALTER TABLE account ADD COLUMN bienClase TEXT;
+ALTER TABLE account ADD COLUMN bienValor INTEGER;
+ALTER TABLE account ADD COLUMN bienValorAl TEXT;
+ALTER TABLE account ADD COLUMN bienDeudaId TEXT;

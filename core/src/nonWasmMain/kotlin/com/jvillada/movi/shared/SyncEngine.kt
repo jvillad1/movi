@@ -83,6 +83,18 @@ class SyncEngine(
                         // dice «la corregí sin señal» (y gana). Ver `Account.lastEditedAt` y
                         // `pisaElReenvio` en EventRoutes.kt.
                         lastEditedAt = row.lastEditedAt,
+                        // **Y si es un bien, el bien.** Una casa cargada sin señal que llegara al
+                        // server sin esto quedaría como una inversión en $0: el patrimonio la
+                        // perdería entera. `null` no viaja (encodeDefaults apagado), así que una
+                        // cuenta que no es bien sale igual que siempre.
+                        bien = row.bienClase?.let { clase ->
+                            com.jvillada.movi.shared.model.Bien(
+                                clase = clase,
+                                valor = row.bienValor ?: 0L,
+                                valorAl = row.bienValorAl,
+                                deudaId = row.bienDeudaId,
+                            )
+                        },
                     )
                 )
                 db.accountQueries.markSynced(Clock.System.now().toEpochMilliseconds(), created.id)
