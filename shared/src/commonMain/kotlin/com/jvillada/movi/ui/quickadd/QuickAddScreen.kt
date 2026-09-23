@@ -169,6 +169,13 @@ internal fun fechaDelPreset(iso: String?): LocalDate? {
 }
 
 /**
+ * **La sugerencia de categoría por nombre (Task 5) se aplica al confirmar la nota con «Guardar
+ * nota», no con cada tecla.** La nota se edita en su propio sub-picker, que tapa la fila
+ * «Categoría»: una sugerencia por tecla cambiaría la categoría detrás de una pantalla que el dueño
+ * no está viendo, varias veces por palabra, sin que pueda leer ninguna. Al confirmar vuelve al
+ * formulario y ve de una vez la categoría que quedó y la línea «Movi la reconoce: …» que dice
+ * por qué. Ver el `LaunchedEffect(note, …)` de adentro.
+ *
  * @param onDismiss cerrar sin guardar (la X, el fondo, el botón atrás).
  * @param onSaved se guardó algo. Distinto de [onDismiss] a propósito: la pantalla de atrás sigue
  *   viva detrás de esta hoja (es una modal, ver `opensAsOverlay`), así que además de cerrar hay
@@ -245,8 +252,9 @@ fun QuickAddScreen(
      * válido, que viene de un recurrente que el dueño ya categorizó — es tan «a mano» como tocar
      * un chip, solo que lo hizo en otra pantalla.
      *
-     * Estado nuevo, sin ningún lector todavía: existe para que Task 5 pueda distinguir «esto lo
-     * eligió él» de «esto lo puso la app» antes de pisarlo con una sugerencia automática.
+     * Existe para distinguir «esto lo eligió él» de «esto lo puso la app» antes de pisarlo con
+     * una sugerencia por nombre (Task 5). Se baja solo cuando la reconciliación Gasto↔Ingreso
+     * reemplaza la categoría por su cuenta — ver ese `LaunchedEffect`.
      */
     var categoriaElegidaAMano by remember {
         mutableStateOf(presetCategoria?.trim()?.let { it.isNotEmpty() && !isReservedCategory(it) } == true)
@@ -567,6 +575,13 @@ fun QuickAddScreen(
             sugerenciaVigente = null
             categoriaAntesDeLaSugerencia = null
             tipoDeLaSugerenciaVigente = null
+            // Revisión final: y la categoría que quedó ya no es la que eligió el dueño — la puso
+            // la app. Si la marca de «a mano» sobreviviera, la pestaña nueva nunca aceptaría una
+            // sugerencia por nombre: elegir «Transporte» en Gasto, pasar a Ingreso (queda
+            // «Salario») y escribir el nombre de un inquilino no sugería nada. Solo se baja ACÁ,
+            // cuando la reconciliación pisó la categoría: si la elección a mano sirve para el tipo
+            // nuevo y se conservó, sigue siendo de él y sigue sin pisarse.
+            categoriaElegidaAMano = false
         }
     }
 

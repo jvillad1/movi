@@ -77,6 +77,14 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         cuantos = 2,
     )
 
+    /** «Arriendo recibido» es del catálogo y de ingreso: se ofrece en la pestaña Ingreso. */
+    private val recuerdoInquilino = RecuerdoDeCategoria(
+        huella = "nombre:inquilinoperez",
+        categoria = "Arriendo recibido",
+        nombre = "Inquilino Pérez",
+        cuantos = 4,
+    )
+
     @After
     fun limpiarLaCostura() {
         Repositories.sustitutoDePrueba = null
@@ -210,6 +218,45 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         composeRule.onNodeWithText("Fútbol").assertDoesNotExist() // ni la sugerida (no sirve en Ingreso)
         composeRule.onNodeWithText("Salario").assertExists() // el valor por defecto de Ingreso
         composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertDoesNotExist()
+    }
+
+    /**
+     * Revisión final: cuando la reconciliación Gasto↔Ingreso reemplaza por su cuenta una
+     * categoría que el dueño había elegido a mano, la que queda ya no es «de él» — la puso la app
+     * — y la pestaña nueva tiene que poder recibir una sugerencia por nombre. Antes la marca de
+     * «a mano» sobrevivía al cambio de pestaña y la sugerencia no llegaba nunca.
+     */
+    @Test
+    fun si_la_reconciliacion_reemplaza_la_eleccion_a_mano_la_pestana_nueva_acepta_sugerencias() {
+        montarHoja(recuerdos = listOf(recuerdoInquilino))
+        elegirCategoriaAMano("Transporte") // del catálogo, SOLO de gasto.
+
+        tocar("Ingreso") // «Transporte» no sirve para ingreso: la reconciliación pone «Salario».
+        composeRule.onNodeWithText("Salario").assertExists()
+
+        escribirLaNota("Inquilino")
+
+        composeRule.onNodeWithText("Arriendo recibido").assertExists()
+        composeRule.onNodeWithText("Movi la reconoce: Inquilino Pérez").assertExists()
+    }
+
+    /**
+     * La otra mitad: si la reconciliación CONSERVA la elección a mano (una categoría propia sin
+     * tipo fijado sirve para los dos lados), sigue siendo del dueño y la sugerencia no la pisa.
+     */
+    @Test
+    fun si_la_reconciliacion_conserva_la_eleccion_a_mano_la_sugerencia_no_la_pisa() {
+        montarHoja(recuerdos = listOf(recuerdoInquilino))
+        elegirCategoriaAMano("Plata de la tía") // propia, nueva, sin tipo fijado.
+
+        tocar("Ingreso")
+        composeRule.onNodeWithText("Plata de la tía").assertExists()
+
+        escribirLaNota("Inquilino")
+
+        composeRule.onNodeWithText("Plata de la tía").assertExists()
+        composeRule.onNodeWithText("Arriendo recibido").assertDoesNotExist()
+        composeRule.onNodeWithText("Movi la reconoce: Inquilino Pérez").assertDoesNotExist()
     }
 
     // ── Andamio ───────────────────────────────────────────────────────────────────────────
