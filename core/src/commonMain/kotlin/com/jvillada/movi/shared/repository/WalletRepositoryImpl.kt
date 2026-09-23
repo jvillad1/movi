@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.RecuerdoDeCategoria
 import com.jvillada.movi.shared.model.MergeCategoryRequest
 import com.jvillada.movi.shared.model.RenameCategoryRequest
 import com.jvillada.movi.shared.model.CardSummary
@@ -394,6 +395,9 @@ class WalletRepositoryImpl(
         }
         return response.body()
     }
+
+    override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> =
+        client.get("$baseUrl/api/categorias/memoria").body()
 
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()

@@ -633,4 +633,61 @@ class CategoryRoutesTest {
         assertEquals("BOTH", usadas.porNombre("Otros").texto("pinnedType"))
         assertTrue(usadas.porNombre("Ropa").flag("hidden"))
     }
+
+    // ── Ola A: la memoria de nombres, para el cliente ────────────────────────────
+
+    /**
+     * Mismos cuatro campos que [com.jvillada.movi.shared.model.RecuerdoDeCategoria]: hasta acá
+     * solo el server la usaba, adentro de la misma JVM, para clasificar un SMS entrante
+     * ([com.jvillada.movi.server.sms.memoriaDe]). Acá se prueba que viaja igual por la red.
+     */
+    private fun seedMovimientoConNombre(
+        id: String,
+        description: String,
+        category: String,
+        owner: String = userId,
+        timestamp: Long = System.currentTimeMillis(),
+    ) = transaction {
+        Events.insert {
+            it[Events.id]        = id
+            it[Events.userId]    = owner
+            it[Events.accountId] = this@CategoryRoutesTest.accountId
+            it[Events.type]      = "EXPENSE"
+            it[Events.amount]    = 10_000
+            it[Events.currency]  = "COP"
+            it[Events.category]  = category
+            it[Events.description] = description
+            it[Events.timestamp] = timestamp
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.memoria(asToken: String = token) =
+        Json.parseToJsonElement(
+            client.get("/api/categorias/memoria") { header(HttpHeaders.Authorization, "Bearer $asToken") }.bodyAsText(),
+        ).jsonArray.map { it.jsonObject }
+
+    @Test
+    fun `dos anotaciones del mismo nombre llegan como una sola entrada con cuantos 2`() = testApplication {
+        wireApp()
+        seedMovimientoConNombre("mem-1", "Mora Soccer", "Fútbol", timestamp = System.currentTimeMillis() - 2_000)
+        seedMovimientoConNombre("mem-2", "Mora Soccer", "Fútbol", timestamp = System.currentTimeMillis() - 1_000)
+
+        val entradas = memoria()
+        assertEquals(1, entradas.size)
+        val entrada = entradas.first()
+        assertEquals("Fútbol", entrada["categoria"]!!.jsonPrimitive.content)
+        assertEquals("Mora Soccer", entrada["nombre"]!!.jsonPrimitive.content)
+        assertEquals(2, entrada.num("cuantos"))
+        assertTrue((entrada["huella"]!!.jsonPrimitive.content).isNotBlank())
+    }
+
+    @Test
+    fun `la memoria de un usuario no ve la de otro`() = testApplication {
+        wireApp()
+        seedMovimientoConNombre("mem-mio", "Panadería La 33", "Comida")
+        seedMovimientoConNombre("mem-ajeno", "Panadería La 33", "Comida", owner = otherUserId)
+
+        assertEquals(1, memoria().size, "la propia sí aparece")
+        assertEquals(1, memoria(asToken = tokenFor(otherUserId, otherEmail)).size, "y la del otro, la suya — no la suma de las dos")
+    }
 }

@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.AuthResponse
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
+import com.jvillada.movi.shared.model.RecuerdoDeCategoria
 import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.CreateCreditRequest
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
@@ -191,6 +192,13 @@ interface WalletRepository {
      * donde contaban; lo único que cambia es que deja de ofrecerse al escribir.
      */
     suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?): CategoryUsage
+
+    /**
+     * Ola A: la memoria de nombres del dueño (ver [RecuerdoDeCategoria] y
+     * `GET /api/categorias/memoria`), para que el cliente pueda ofrecer «la anotaste 4 veces como
+     * Hija» al escribir un movimiento a mano — antes solo el server la usaba, al clasificar un SMS.
+     */
+    suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria>
     suspend fun getRecurringRules(): List<RecurringRule>
     suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule

@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.serialization.Serializable
+
 /*
  * **Movi se acuerda de cómo categorizaste antes.**
  *
@@ -133,6 +135,23 @@ data class LoQueMoviRecuerda(
 )
 
 /**
+ * **La misma memoria, en forma de lista y serializable.** Hasta acá [MemoriaDeCategorias] solo la
+ * usaba el server, adentro de la misma JVM, al clasificar un SMS entrante ([memoriaDe] en
+ * `server/sms/MemoriaDelDueno.kt`). Ola A: el cliente también quiere ofrecerle una categoría al
+ * dueño («la anotaste 4 veces como Hija») al escribir un movimiento a mano, así que la memoria
+ * tiene que poder viajar por `GET /api/categorias/memoria`. [huella] es lo que [recuerdoDe] busca
+ * — sin ella, la respuesta sería una lista de categorías sin decir a qué destinatario pertenece
+ * cada una.
+ */
+@Serializable
+data class RecuerdoDeCategoria(
+    val huella: String,
+    val categoria: String,
+    val nombre: String,
+    val cuantos: Int,
+)
+
+/**
  * La memoria armada: huella → [LoQueMoviRecuerda]. Se construye con [de] a partir de lo que el
  * dueño ya anotó.
  */
@@ -144,6 +163,21 @@ class MemoriaDeCategorias private constructor(
     /** Lo que Movi recuerda de este texto, o `null` si nunca vio nada parecido. */
     fun recuerdoDe(texto: String): LoQueMoviRecuerda? =
         huellaDeUnMovimiento(texto)?.let { porHuella[it] }
+
+    /**
+     * Las entradas de la memoria, listas para viajar por la red — ver [RecuerdoDeCategoria]. El
+     * mapa [porHuella] sigue privado y esto es una copia de solo lectura: cómo se arma no cambia,
+     * solo se expone lo que ya había.
+     */
+    fun entradas(): List<RecuerdoDeCategoria> =
+        porHuella.map { (huella, recuerdo) ->
+            RecuerdoDeCategoria(
+                huella = huella,
+                categoria = recuerdo.categoria,
+                nombre = recuerdo.nombre,
+                cuantos = recuerdo.cuantos,
+            )
+        }
 
     companion object {
         /**
