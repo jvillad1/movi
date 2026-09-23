@@ -127,9 +127,28 @@ class InstantaneaDelInicio(
  * perfil (que es lo que lo recalcula) el Inicio seguiría hablando del período anterior. El corte sí
  * se puede confiar a la instantánea —cambia casi nunca—; la fecha de hoy no. Si la instantánea no
  * sabía el período (el perfil nunca contestó), se deja en `null`: no se inventa uno.
+ *
+ * **Revisión final — y si el período cambió, las cifras DEL período se tiran.** Recalcular solo el
+ * encabezado dejaba el gasto, los ingresos, el gasto por día, «Tu plata» al empezar y los sellos
+ * de «ya ocurrió» del período que terminó debajo del encabezado del que empieza: el 25 por la
+ * mañana, el hero decía «Te quedan $X de septiembre» con la plata de agosto. Esos campos quedan en
+ * `null` —«no llegó»—, que es lo que hace que el hero muestre su esqueleto hasta que la carga de
+ * hoy los traiga. Lo que no depende del período (cuentas, créditos, tarjetas, próximos pagos) se
+ * queda: sigue siendo lo último que se supo, con «Actualizando…» encima.
  */
-fun DashboardData.conElPeriodoDe(ahora: Long): DashboardData =
-    if (periodoActual == null) this else copy(periodoActual = periodoDe(ahora, ajustesDePeriodo))
+fun DashboardData.conElPeriodoDe(ahora: Long): DashboardData {
+    val guardado = periodoActual ?: return this
+    val deHoy = periodoDe(ahora, ajustesDePeriodo)
+    if (deHoy == guardado) return this
+    return copy(
+        periodoActual = deHoy,
+        summary = null,
+        spentByCategory = null,
+        gastoVariablePorDia = null,
+        plataDelDisponible = null,
+        ocurrencias = null,
+    )
+}
 
 /**
  * `ignoreUnknownKeys`: una instantánea escrita por una versión POSTERIOR (volver a un APK anterior)

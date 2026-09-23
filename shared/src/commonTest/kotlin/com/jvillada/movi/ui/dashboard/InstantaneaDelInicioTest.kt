@@ -138,7 +138,47 @@ class InstantaneaDelInicioTest {
 
         assertEquals(periodoDe(el25, PeriodSettings(cutoffDay = 25)), leida.periodoActual)
         assertTrue(leida.periodoActual != del24.periodoActual, "el período cambió con el corte")
-        assertEquals(del24.copy(periodoActual = leida.periodoActual), leida, "y nada más cambió")
+    }
+
+    /**
+     * Revisión final: con el período nuevo, las cifras DEL período viejo no se muestran como las
+     * de este — quedan en `null` para que el hero pinte su esqueleto. Lo que no es del período
+     * (cuentas, créditos, SMS pendientes) sigue siendo lo último que se supo.
+     */
+    @Test
+    fun `si el periodo cambio las cifras del periodo anterior se tiran`() {
+        // `datos` ya trae resumen, gasto por categoría, gasto por día y «Tu plata» al empezar.
+        val del24 = datos.copy(periodoActual = PeriodoFinanciero(2026, 9), ocurrencias = emptyList())
+        val el25 = LocalDateTime(2026, 9, 25, 10, 0).toInstant(AppTimeZone.zone).toEpochMilliseconds()
+
+        val leida = del24.conElPeriodoDe(el25)
+
+        assertNull(leida.summary, "el resumen era del período que terminó")
+        assertNull(leida.spentByCategory, "el gasto por categoría era del período que terminó")
+        assertNull(leida.gastoVariablePorDia, "el gasto por día era del período que terminó")
+        assertNull(leida.plataDelDisponible, "«Tu plata» al empezar era del período que terminó")
+        assertNull(leida.ocurrencias, "los sellos eran del período que terminó")
+        assertEquals(
+            del24.copy(
+                periodoActual = leida.periodoActual,
+                summary = null,
+                spentByCategory = null,
+                gastoVariablePorDia = null,
+                plataDelDisponible = null,
+                ocurrencias = null,
+            ),
+            leida,
+            "lo que no es del período se queda como estaba",
+        )
+    }
+
+    /** Leída el mismo período en que se guardó: no se toca nada. */
+    @Test
+    fun `si el periodo es el mismo no se tira nada`() {
+        val el20 = LocalDateTime(2026, 9, 20, 10, 0).toInstant(AppTimeZone.zone).toEpochMilliseconds()
+        val guardada = datos.copy(periodoActual = periodoDe(el20, datos.ajustesDePeriodo))
+
+        assertEquals(guardada, guardada.conElPeriodoDe(el20 + 3_600_000L))
     }
 
     @Test
