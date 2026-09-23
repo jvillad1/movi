@@ -189,7 +189,9 @@ internal fun hechosDelCredito(c: CreditoParaContexto): String = buildString {
     appendLine("- Cuota: ${pesos(c.cuota)} el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
     val seguro = c.seguroMensual?.takeIf { it > 0L } ?: 0L
     val otros = c.otrosCargosMensuales?.takeIf { it > 0L } ?: 0L
-    if (seguro > 0L) appendLine("- Seguros dentro de la cuota: ${pesos(seguro)} al mes (no bajan la deuda)")
+    // «Seguros» en plural y sin apellido: el campo suma todos (vida, incendio, terremoto). Ver
+    // `renglonDelCredito`, donde «seguro de vida» ya le hizo decir al modelo algo falso.
+    if (seguro > 0L) appendLine("- Seguros dentro de la cuota (todos los que cobra el crédito): ${pesos(seguro)} al mes (no bajan la deuda)")
     if (otros > 0L) appendLine("- Otros cargos dentro de la cuota: ${pesos(otros)} al mes (no bajan la deuda)")
     if (seguro + otros > 0L) {
         appendLine("- De la cuota, después de ${pesos(seguro + otros)} de cargos, le quedan ${pesos(c.cuota - seguro - otros)} para interés y capital")

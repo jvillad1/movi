@@ -21,7 +21,7 @@ class VerificadorDeCifrasTest {
     private val datos = listOf(
         """
         == Créditos ==
-        - Hipotecario 2334 (Davibank): debe ${'$'}204183376; cuota ${'$'}2613714 el día 5, tasa 15.24 % EA, plazo 180 meses, incluye seguro de vida ${'$'}209219 al mes.
+        - Hipotecario 2334 (Davibank): debe ${'$'}204183376; cuota ${'$'}2613714 el día 5, tasa 15.24 % EA, plazo 180 meses, incluye seguros por ${'$'}209219 al mes.
 
         == Presupuestos de este período ==
         - Fútbol: límite ${'$'}400000, gastado ${'$'}963456 — SE PASÓ por ${'$'}563456

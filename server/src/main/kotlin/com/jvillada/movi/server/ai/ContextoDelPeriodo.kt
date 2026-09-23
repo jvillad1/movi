@@ -501,7 +501,11 @@ internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
     append("cuota \$${c.cuota} el día ${c.dia}, ")
     if (c.sinIntereses) append("NO cobra intereses") else append("tasa ${c.tasaEa} % EA")
     append(", plazo ${c.plazoMeses} meses")
-    c.seguroMensual?.takeIf { it > 0L }?.let { append(", incluye seguro de vida \$$it al mes") }
+    // **«Seguros», no «seguro de vida».** `insurance_monthly` guarda TODOS los seguros de la cuota:
+    // en el Hipotecario 2334, los $209.219 son vida ($69.600) más incendio y terremoto ($139.619).
+    // Rotulado «seguro de vida», el modelo contestó «el seguro de vida de $209.219» — el único error
+    // que quedó en una respuesta por lo demás correcta, y venía de este rótulo.
+    c.seguroMensual?.takeIf { it > 0L }?.let { append(", incluye seguros por \$$it al mes") }
     c.otrosCargosMensuales?.takeIf { it > 0L }?.let { append(", incluye otros cargos \$$it al mes") }
     append(". ")
     append(

@@ -107,6 +107,7 @@ misma respuesta. En Sonnet 5 no existe el parámetro: ahí mandan 1-3.
 | Reintento | `server/.../ai/ResponderSinInventar.kt` | Caso normal: nada más. Con cifras sin respaldo: UN reintento al mismo modelo, sin herramientas (`tool_choice: none`, no toca el prefijo cacheado). Si persiste, línea final «No pude verificar estas cifras con tus datos: …». Con foto adjunta no se verifica (los montos salen de la imagen). |
 | Registro | `ai_turns.cifras_sin_respaldo`, `ai_turns.cifras_corregidas` | Texto nullable (`«$185.831 · 12 %»`). NULL = limpia. `AiTurns` entró a `createMissingTablesAndColumns`. |
 | Temperatura | `ElModeloDeAnthropic.armarLlamada` | `0.2` solo cuando el modelo es Haiku y no piensa. El respaldo (Opus 4.7) se arma de nuevo para su modelo y no hereda la temperatura (antes se copiaban los params: habría sido un 400 seguro). |
+| Rótulo de seguros | `renglonDelCredito`, bloque de hechos | «incluye seguros por $X» en vez de «seguro de vida $X»: `insurance_monthly` suma todos los seguros (en el 2334, $209.219 = vida $69.600 + incendio y terremoto $139.619). Con el rótulo viejo, la respuesta buena de la tarde del 23-sep (con #375) dijo «el seguro de vida de $209.219», su único error. |
 
 ### El bloque de hechos del 2334 (lo que ve el modelo)
 
@@ -116,8 +117,8 @@ DATOS EXACTOS PARA ESTA PREGUNTA (calculados por Movi con las mismas cuentas que
 Crédito «Hipotecario 2334» (Davibank):
 - Debe hoy: $204.183.376
 - Tasa: 15,24 % EA (1,19 % mensual)
-- Cuota: $2.613.714 el día 5; plazo pactado 180 meses
-- Seguros dentro de la cuota: $209.219 al mes (no bajan la deuda)
+- Cuota: $2.613.714 el día 5; plazo pactado 240 meses
+- Seguros dentro de la cuota (todos los que cobra el crédito): $209.219 al mes (no bajan la deuda)
 - De la cuota, después de $209.219 de cargos, le quedan $2.404.495 para interés y capital
 - Quién paga la cuota: se paga con plata de su propia cuenta «Skandia pensión voluntaria» (no es un seguro ni un tercero); no sale de su plata del día a día, pero es plata suya
 - Interés de este mes: $2.427.883 (el 92,9 % de la cuota)

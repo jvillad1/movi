@@ -34,7 +34,7 @@ class HechosDeLaPreguntaTest {
 
     private val h2334 = CreditoParaContexto(
         accountId = "h2334", cuenta = "Hipotecario 2334", banco = "Davibank", tasaEa = 15.24,
-        cuota = 2_613_714L, plazoMeses = 180, dia = 5, seguroMensual = 209_219L, porNomina = false,
+        cuota = 2_613_714L, plazoMeses = 240, dia = 5, seguroMensual = 209_219L, porNomina = false,
         loPaga = "Skandia", loPagaCuentaPropia = "Skandia pensión voluntaria", saldo = 204_183_376L,
     )
     private val h1254 = CreditoParaContexto(
@@ -292,6 +292,32 @@ class HechosDeLaPreguntaTest {
 
         // El límite conocido: sin la trampa, la resta válida-pero-mal-leída pasa.
         assertEquals(emptyList(), cifrasSinRespaldo(respuestaDel23, fuentes), "límite conocido: ver el KDoc")
+
+        // Los seguros van rotulados en plural: el campo suma vida + incendio y terremoto.
+        assertTrue("Seguros dentro de la cuota (todos los que cobra el crédito): \$209.219" in hechos, hechos)
+        assertFalse("seguro de vida" in hechos || "seguro de vida" in contexto, "el rótulo viejo le hizo decir «el seguro de vida de \$209.219»")
+    }
+
+    /**
+     * **La respuesta buena del 23-sep por la tarde**, ya con #375 desplegado (Sonnet con criterio):
+     * todas las cifras correctas. Es el caso normal que el verificador tiene que dejar pasar SIN
+     * reintento —cada reintento de una respuesta buena es plata tirada—. Los «240 meses» del plazo no
+     * son plata y no se miran.
+     */
+    @Test
+    fun `la respuesta buena del 23-sep pasa sin reintento`() {
+        val pregunta = "¿Por qué Hipotecario 2334 no baja aunque pago la cuota?"
+        val fuentes = listOfNotNull(datos.comoContexto(), hechos(pregunta), pregunta)
+        val buena = """
+            Tu Hipotecario 2334 no baja porque, aunque pagas la cuota de ${'$'}2.613.714, ${'$'}209.219 se van en seguros y te quedan ${'$'}2.404.495 para intereses y capital.
+            Los intereses de este mes son unos ${'$'}2.427.883, más de lo que queda: la deuda crece unos ${'$'}23.388 al mes aunque pagues.
+            Con el plazo pactado de 240 meses, a este ritmo no se termina de pagar.
+            1. Pregunta en Davibank cuánto tendrías que abonar para que la cuota vuelva a bajar la deuda.
+            2. Revisa si los seguros se pueden cotizar con otra aseguradora.
+            Confirma con el banco el saldo exacto antes de abonar.
+        """.trimIndent()
+
+        assertEquals(emptyList(), cifrasSinRespaldo(buena, fuentes, cifrasTrampa(periodo.creditos)))
     }
 
     @Test
