@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -11,7 +12,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * **El piso de `activeFrom` es el PERÍODO, no el día.**
+ * **El piso de `activeFrom` depende de qué significa la fecha, y son dos cosas.**
  *
  * Nació de la primera cuota de un crédito: el dueño registró un préstamo desembolsado el 1 de
  * septiembre con pago el día 1, y Movi le anunció la primera cuota para ese mismo 1 de septiembre
@@ -21,16 +22,19 @@ import kotlin.test.assertTrue
  * Ese remedio se pasaba de largo: se comía el período ENTERO del movimiento que originó la regla,
  * y con eso las reglas del dueño creadas desde un pago del período en curso («Coomeva Familiar»,
  * «Tía Caro») desaparecían del checklist de ese período aunque el pago que las prueba estuviera
- * ahí. Hoy el piso es el arranque del período: **los períodos anteriores no existen, el del
- * arranque sí**.
+ * ahí. Aflojarlo a «el período del arranque sí existe» destrabó esas dos y **rompió la de arriba**:
+ * el Techo Gardenera volvía a deber su primera cuota el día del desembolso.
  *
- * **Lo que eso le cuesta al caso original**, dicho de frente: un crédito desembolsado el 1 con
- * cuota el día 1 vuelve a tener su primera cuota ese mismo 1, porque el desembolso y la cuota caen
- * en el mismo período y son —vistos como fechas— indistinguibles del caso de «Tía Caro», que el
- * dueño sí quiere ver. Lo que cambió alrededor es que esa cuota ya no se da por ocurrida sola: sin
- * un movimiento que la pruebe queda abierta, y si el dueño la paga aparece emparejada. Lo que
- * sigue firme, y es para lo que `activeFrom` existe, está en la segunda clase de acá abajo: no se
- * inventan cuotas de agosto ni de julio.
+ * Ir y venir entre los dos criterios era inevitable mientras hubiera uno solo, porque los dos
+ * casos son legítimos y opuestos: un **desembolso** no es una ocurrencia de la regla —la cuota es
+ * lo que se devuelve después—, y el **movimiento que originó un recurrente** sí lo es. Esa es toda
+ * la razón de [RecurringRule.arranqueEsDesembolso], y lo que fijan estas dos clases:
+ *
+ *  - con la bandera puesta, el piso es el **día siguiente** al desembolso;
+ *  - sin ella, el piso es el **primer día del período del dueño** que contiene la fecha.
+ *
+ * Y las dos comparten lo único que `activeFrom` garantizó siempre: los períodos **anteriores** al
+ * arranque no existen — ni agosto ni julio le deben cuotas a un crédito de septiembre.
  */
 class PrimeraCuotaTest {
 
@@ -119,12 +123,36 @@ class PrimeraCuotaTest {
 
         val regla = virtualRuleFor(terms, "Crédito Techo Gardenera")
 
-        // El período del desembolso ya tiene cuota (ver el KDoc de la clase: es el precio de que
-        // el piso sea el período), pero los anteriores siguen sin existir, que es lo que el campo
-        // vino a garantizar.
-        assertTrue(ruleIsActiveOn(regla, LocalDate.of(2026, 9, 1)))
+        // La regla sintética de un crédito marca su arranque como DESEMBOLSO, y un desembolso no
+        // es una cuota: el 1 de septiembre entró la plata, no se pagó nada.
+        assertTrue(regla.arranqueEsDesembolso, "la regla de un crédito arranca en su desembolso")
+        assertFalse(
+            ruleIsActiveOn(regla, LocalDate.of(2026, 9, 1)),
+            "el día del desembolso no tiene cuota: es el reclamo que creó este campo",
+        )
         assertFalse(ruleIsActiveOn(regla, LocalDate.of(2026, 8, 1)), "agosto no le debe nada")
-        assertTrue(ruleIsActiveOn(regla, LocalDate.of(2026, 10, 1)))
+        assertTrue(ruleIsActiveOn(regla, LocalDate.of(2026, 10, 1)), "la primera es la de octubre")
+    }
+
+    /**
+     * Los otros cuatro créditos de producción con el día de pago igual al del desembolso: Cotrafa
+     * 5413 (22), las dos del papá (27) y el Libre inversión 9695 (15). Ninguno debe una cuota el
+     * día en que le entró la plata.
+     */
+    @Test
+    fun ningun_credito_debe_cuota_el_dia_del_desembolso() {
+        listOf(22 to "2026-07-22", 27 to "2026-03-27", 27 to "2025-12-27", 15 to "2021-06-15")
+            .forEach { (dia, desembolso) ->
+                val terms = CreditTerms(
+                    accountId = "acc-$dia", bank = "Banco", principal = 1_000_000L, rateEa = 0.1,
+                    termMonths = 12, installment = 100_000L, dayOfMonth = dia, startDate = desembolso,
+                )
+                val regla = virtualRuleFor(terms, "Crédito $dia")
+                assertFalse(
+                    ruleIsActiveOn(regla, LocalDate.parse(desembolso)),
+                    "el desembolso $desembolso no es la cuota del día $dia",
+                )
+            }
     }
 }
 
@@ -142,6 +170,10 @@ class PrimeraCuotaTest {
  */
 class PrimeraCuotaEnTodosLosEndpointsTest {
 
+    /**
+     * La regla del crédito: su `activeFrom` es el **desembolso**, así que la bandera va puesta.
+     * Es lo que `virtualRuleFor` arma en el server a partir de `credit_terms.start_date`.
+     */
     private fun reglaDelTecho(inicio: String) = RecurringRule(
         id = "cred_techo",
         name = "Cuota Crédito Techo Gardenera",
@@ -150,14 +182,31 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
         type = TransactionType.EXPENSE,
         category = "Cuota de crédito",
         activeFrom = inicio,
+        arranqueEsDesembolso = true,
+    )
+
+    /**
+     * La regla nacida de un movimiento: su `activeFrom` es la fecha de ESE movimiento, que sí es
+     * una ocurrencia. Sin bandera — «Coomeva Familiar» y «Tía Caro» son de esta clase.
+     */
+    private fun reglaDesdeUnMovimiento(inicio: String) = RecurringRule(
+        id = "rr_desde_movimiento",
+        name = "Recurrente",
+        amount = 100_000,
+        dayOfMonth = 1,
+        type = TransactionType.EXPENSE,
+        category = "Familia",
+        activeFrom = inicio,
     )
 
     @Test
-    fun `no se inventan cuotas de agosto ni de julio`() {
+    fun `la primera cuota es un mes despues del desembolso`() {
         // El caso del dueño, con sus fechas: desembolso 1-sep, día de pago 1, mirado el 30-ago.
+        // Su reclamo textual: «normalmente un desembolso es 1 mes aproximadamente antes de la
+        // primera cuota». El 1 de septiembre entró la plata; la primera cuota es la de octubre.
         val due = dueDateFor(reglaDelTecho("2026-09-01"), today = LocalDate.of(2026, 8, 30))
 
-        assertEquals(LocalDate.of(2026, 9, 1), due, "la primera cuota es la de su propio período")
+        assertEquals(LocalDate.of(2026, 10, 1), due, "el desembolso no es una cuota")
         assertTrue(due.isAfter(LocalDate.of(2026, 8, 31)), "y nunca una de agosto")
     }
 
@@ -165,7 +214,7 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
     fun `mirado desde el dia del desembolso da lo mismo`() {
         val due = dueDateFor(reglaDelTecho("2026-09-01"), today = LocalDate.of(2026, 9, 1))
 
-        assertEquals(LocalDate.of(2026, 9, 1), due)
+        assertEquals(LocalDate.of(2026, 10, 1), due)
     }
 
     @Test
@@ -174,12 +223,38 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
         // lo que importa es que los tres consumidores digan lo MISMO.
         val pagos = upcomingPayments(
             rules = listOf(reglaDelTecho("2026-09-01")),
+            today = LocalDate.of(2026, 9, 29),
+            leadDays = 3,
+        )
+
+        assertEquals("2026-10-01", pagos.single().dueDate)
+        assertEquals(2, pagos.single().daysUntil)
+    }
+
+    /**
+     * Y el 30 de agosto, con el desembolso del 1 de septiembre todavía por delante, «Próximos
+     * pagos» **no anuncia ese día**: es la otra mitad del mismo reclamo — antes le aparecía una
+     * cuota para el mismísimo día en que le iban a desembolsar, en `DUE_SOON` y a dos días.
+     *
+     * `upcomingPayments` no filtra por [leadDays] —emite una fila por regla y deja el corte en el
+     * `status`—, así que lo que se mira es la fecha y el estado, no que la lista venga vacía.
+     */
+    @Test
+    fun `antes del desembolso no se anuncia ninguna cuota para ese dia`() {
+        val pagos = upcomingPayments(
+            rules = listOf(reglaDelTecho("2026-09-01")),
             today = LocalDate.of(2026, 8, 30),
             leadDays = 3,
         )
 
-        assertEquals("2026-09-01", pagos.single().dueDate)
-        assertEquals(2, pagos.single().daysUntil)
+        val pago = pagos.single()
+        assertEquals("2026-10-01", pago.dueDate, "el 1-sep es el desembolso, no una cuota")
+        assertEquals(32, pago.daysUntil)
+        assertEquals(
+            PaymentStatus.UPCOMING,
+            pago.status,
+            "y no asoma como próximo: faltan 32 días, no 2",
+        )
     }
 
     /**
@@ -197,7 +272,7 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
     @Test
     fun `la ocurrencia de dia 30 de una regla creada el 5-sep con corte 25 es la del 30-ago`() {
         val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
-        val coomeva = reglaDelTecho("2026-09-05").copy(id = "rr_coomeva", dayOfMonth = 30)
+        val coomeva = reglaDesdeUnMovimiento("2026-09-05").copy(id = "rr_coomeva", dayOfMonth = 30)
         val hoy = LocalDate.of(2026, 9, 22)
 
         val vence = ocurrenciaPorPreguntar(hoy, coomeva, corte25)
@@ -209,7 +284,7 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
     @Test
     fun `la ocurrencia de dia 1 de una regla creada el 1-sep con corte 25 es la del 1-sep`() {
         val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
-        val tia = reglaDelTecho("2026-09-01").copy(id = "rr_tia", dayOfMonth = 1)
+        val tia = reglaDesdeUnMovimiento("2026-09-01").copy(id = "rr_tia", dayOfMonth = 1)
         val hoy = LocalDate.of(2026, 9, 22)
 
         val vence = ocurrenciaPorPreguntar(hoy, tia, corte25)
@@ -225,7 +300,7 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
     @Test
     fun `dueDateFor tambien respeta el periodo del movimiento que la origino`() {
         val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
-        val coomeva = reglaDelTecho("2026-09-05").copy(id = "rr_coomeva", dayOfMonth = 30)
+        val coomeva = reglaDesdeUnMovimiento("2026-09-05").copy(id = "rr_coomeva", dayOfMonth = 30)
         val hoy = LocalDate.of(2026, 9, 2)
 
         assertEquals(LocalDate.of(2026, 8, 30), dueDateFor(coomeva, hoy, settings = corte25))
@@ -245,7 +320,7 @@ class PrimeraCuotaEnTodosLosEndpointsTest {
     fun `el periodo usado es el del dueno y no el mes de calendario`() {
         val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
         val calendario = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 1)
-        val coomeva = reglaDelTecho("2026-09-05").copy(dayOfMonth = 30)
+        val coomeva = reglaDesdeUnMovimiento("2026-09-05").copy(dayOfMonth = 30)
         val hoy = LocalDate.of(2026, 9, 22)
 
         assertEquals(LocalDate.of(2026, 8, 30), ocurrenciaPorPreguntar(hoy, coomeva, corte25))

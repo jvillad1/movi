@@ -453,12 +453,12 @@ data class RecurringRule(
     /**
      * **Desde cuándo corre esta regla.** ISO `"2026-09-01"`, o `null` = desde siempre.
      *
-     * **La unidad es el PERÍODO del dueño, no el día**: una ocurrencia que cae en un período
-     * **anterior** al que contiene esta fecha no existe; el período de esta fecha sí existe. Lo
-     * calcula `arranqueDeLaRegla` en el server, con el corte configurable del dueño
-     * ([PeriodSettings]) y no con el mes de calendario — con corte 25 son cosas distintas.
+     * **Esta fecha sola no alcanza para saber qué significa.** Lo que dice es *cuándo empieza*;
+     * lo que hay que saber además es *si ese día ya es una ocurrencia de la regla o todavía no*,
+     * y eso lo dice [arranqueEsDesembolso] — leelo, porque las dos mitades solo tienen sentido
+     * juntas. Quien las combina es `arranqueDeLaRegla` en el server.
      *
-     * ## De dónde viene, y por qué dejó de ser «el día»
+     * ## De dónde viene
      *
      * Nació por la cuota de un crédito. El dueño registró un préstamo desembolsado el 1 de
      * septiembre con pago el día 1, y Movi le anunció la primera cuota **para ese mismo día**:
@@ -466,39 +466,76 @@ data class RecurringRule(
      * un desembolso es un mes aproximadamente antes de la primera cuota»*. La regla sintética se
      * armaba solo con el día del mes e ignoraba la fecha de desembolso.
      *
-     * El remedio fue «una ocurrencia anterior **o igual** a esta fecha no existe», y con eso
-     * también se resolvía el otro caso: convertir un movimiento ya anotado en recurrente sin que
-     * Movi preguntara «¿ya pagaste el arriendo de agosto?» sobre el arriendo que el dueño acababa
-     * de anotar.
+     * El remedio de entonces fue «una ocurrencia anterior **o igual** a esta fecha no existe», y
+     * se lo aplicó también al otro caso que estrenaba el campo: convertir un movimiento ya anotado
+     * en recurrente sin que Movi preguntara «¿ya pagaste el arriendo de agosto?» sobre el arriendo
+     * que el dueño acababa de anotar.
      *
-     * **Pero ese remedio se pasaba de largo: se comía el período ENTERO del movimiento que
-     * originó la regla.** Caso real de producción: «Coomeva Familiar» (día 30, creada desde un
-     * pago del 5 de septiembre) y «Tía Caro» (día 1, desde un pago del 1 de septiembre) no
-     * aparecían en el checklist del período en curso, aunque el pago que las prueba estaba ahí.
-     * Hubo que poner `active_from = NULL` a mano en la base para destrabarlo.
+     * ## Por qué un solo criterio no podía servir a los dos
      *
-     * ## Por qué el remedio ya no hace falta así
+     * Aquel criterio único se pasaba de largo del lado del movimiento: se comía el período ENTERO
+     * del movimiento que originó la regla. Caso real de producción: «Coomeva Familiar» (día 30,
+     * creada desde un pago del 5 de septiembre) y «Tía Caro» (día 1, desde un pago del 1 de
+     * septiembre) no aparecían en el checklist del período en curso, aunque el pago que las prueba
+     * estaba ahí. Hubo que poner `active_from = NULL` a mano en la base para destrabarlo.
      *
-     * Porque ahora hay una forma mejor de decir «ese pago ya ocurrió»: **marcarlo**, en vez de
-     * esconder el período. El server empareja solo el recurrente con su movimiento cuando hay
-     * exactamente un candidato concluyente (`ocurrenciaConcluyente`), y el alta de una regla a
-     * partir de un movimiento sella el período de ese movimiento con ese mismo `eventId` (ver
-     * [eventoDeOrigen]). El período aparece en el checklist, tildado y con su evidencia a la
-     * vista, que es lo que el dueño esperaba ver.
-     *
-     * ## Y no, esto no cuenta el pago dos veces
-     *
-     * El movimiento aporta su plata **una sola vez** a los totales del período: los totales los
-     * suman los movimientos, no las reglas. Una `RecurringOccurrence` es un **sello** —«este
-     * recurrente ya ocurrió en este período»— y no un asiento: no tiene monto y nadie la suma.
-     * El «doble conteo» que el remedio viejo temía nunca fue de plata: era la MOLESTIA de que
-     * Movi volviera a preguntar por un pago ya hecho, y de que el dueño lo anotara otra vez para
-     * contestar. Esa molestia la cierra el sello, sin tener que borrar el período del mapa.
+     * Mover el criterio al período arregló eso y **rompió el caso original**: con el piso en el
+     * arranque del período, el crédito desembolsado el 1 de septiembre volvía a deber su primera
+     * cuota el 1 de septiembre. Ir y venir entre los dos criterios es inevitable mientras haya uno
+     * solo, porque los dos casos son legítimos y opuestos. Por eso hoy son dos, y cuál se usa lo
+     * dice [arranqueEsDesembolso].
      *
      * `null` para las reglas que el dueño escribió a mano (un salario, un gimnasio): esas no
-     * tienen «desembolso» y corren desde siempre, como hasta ahora.
+     * tienen un «antes» que marcar y corren desde siempre.
      */
     val activeFrom: String? = null,
+
+    /**
+     * **¿[activeFrom] es un DESEMBOLSO (que no es una ocurrencia) o el MOVIMIENTO que originó la
+     * regla (que sí lo es)?** `true` = desembolso.
+     *
+     * Este campo existe para que no haya que volver a elegir una sola semántica para
+     * [activeFrom]. Si estás leyendo esto con ganas de unificar los dos casos en uno: ya se
+     * intentó dos veces, en las dos direcciones, y cada intento arregló un caso rompiendo el
+     * otro. La historia completa está en el KDoc de [activeFrom]; el resumen es que las dos
+     * fechas se ven idénticas —un ISO en el mismo campo— pero responden preguntas distintas:
+     *
+     *  - **`true` — la fecha es un desembolso** (`credit_terms.start_date`, puesto por
+     *    `virtualRuleFor`). La plata le **entró** ese día; la cuota es lo que devuelve **después**.
+     *    El desembolso NO es una ocurrencia de la regla, así que la primera cuota es la primera
+     *    vez que cae el día de pago **estrictamente después** de esa fecha. Es la semántica
+     *    estricta, por día, y es la que pide el caso del dueño: «Crédito Techo Gardenera»,
+     *    desembolsado el 1 de septiembre con pago el día 1, tiene su primera cuota el **1 de
+     *    octubre**. Lo mismo el Cotrafa 5413 (día 22, desembolsado un 22), la Libranza y la
+     *    Hipoteca del papá (día 27) y el Libre inversión 9695 (día 15): en producción hay cinco
+     *    créditos con el día de pago igual al día del desembolso, así que esto no es un borde.
+     *
+     *  - **`false` — la fecha es la del movimiento que originó la regla** («Esto se repite», desde
+     *    el detalle de un movimiento o desde la barra de después de guardar). Ese movimiento **sí**
+     *    es una ocurrencia de la regla —de hecho el alta la sella con él, ver [eventoDeOrigen]—,
+     *    así que su período tiene que existir. La unidad acá es el **período del dueño**
+     *    ([PeriodSettings], corte configurable) y no el mes de calendario: con corte 25, un pago
+     *    del 5 de septiembre y un vencimiento del 30 de agosto están en el mismo período, y por
+     *    eso «Coomeva Familiar» aparece en el checklist en curso.
+     *
+     * Lo que **no** cambia entre las dos: los períodos anteriores al arranque no existen. Un
+     * crédito desembolsado en septiembre no debe cuotas de agosto ni de julio, y una regla nacida
+     * hoy no se inventa historia hacia atrás. Eso es para lo que [activeFrom] existe, y las dos
+     * semánticas lo respetan.
+     *
+     * **Default `false`, y sin columna nueva** — igual que [eventoDeOrigen] y por el mismo motivo:
+     * las reglas de `recurring_rules` son todas del segundo caso (las escribe el dueño, con o sin
+     * movimiento de origen), y el primero solo lo produce `virtualRuleFor`, que arma su regla al
+     * vuelo y no la guarda en ninguna tabla. Agregar una columna sería guardar un valor que nunca
+     * va a ser otro que `false`. Un cliente viejo tampoco se entera (`encodeDefaults` apagado +
+     * `ignoreUnknownKeys` en los tres `Platform`).
+     *
+     * Se eligió un campo y no una rama por `CREDIT_RULE_PREFIX` —que también hubiera funcionado,
+     * y es idiomático en este repo— porque lo que decide la cuenta no es «de dónde salió la
+     * regla» sino «qué significa su fecha», y un `startsWith` sobre un id deja esa razón implícita
+     * justo en el lugar donde ya se perdió dos veces.
+     */
+    val arranqueEsDesembolso: Boolean = false,
 
     /**
      * **El movimiento que originó esta regla.** Solo de ida: es un campo del `POST

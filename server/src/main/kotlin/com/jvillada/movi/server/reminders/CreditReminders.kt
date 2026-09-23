@@ -39,6 +39,12 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         // La primera cuota va DESPUÉS del desembolso, no el mismo día. Sin esto, un crédito
         // desembolsado el 1 con pago el día 1 anunciaba su primera cuota para ese mismo día.
         activeFrom = terms.startDate,
+        // **Y esta fecha es un desembolso, no una ocurrencia de la regla.** Va junto con la
+        // línea de arriba y no se separa de ella: sin este `true`, `arranqueDeLaRegla` la lee con
+        // la semántica de período —la que necesitan las reglas nacidas de un movimiento— y el
+        // crédito del dueño vuelve a deber su primera cuota el mismo día del desembolso. Los dos
+        // significados y por qué son dos están en [RecurringRule.arranqueEsDesembolso].
+        arranqueEsDesembolso = true,
     )
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */

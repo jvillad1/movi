@@ -386,15 +386,18 @@ object RecurringRules : Table("recurring_rules") {
     val accountId          = varchar("account_id", 50).nullable()
     /**
      * **Desde cuándo corre la regla** (ISO `"2026-08-15"`), o NULL = desde siempre. Ver
-     * [com.jvillada.movi.shared.model.RecurringRule.activeFrom] y `dueDateFor`, que es quien la
-     * usa: una ocurrencia anterior o igual a esta fecha no existe.
+     * [com.jvillada.movi.shared.model.RecurringRule.activeFrom] y `arranqueDeLaRegla`, que es
+     * quien la interpreta: las ocurrencias anteriores al arranque no existen.
      *
-     * Hasta esta ola el campo existía en el modelo pero **no tenía columna**: solo lo llenaban las
-     * reglas sintéticas de un crédito (`CreditReminders`, con la fecha de desembolso), que se
-     * arman en memoria y nunca se guardan. Lo trajo acá «esto se repite» desde un movimiento: la
-     * regla nace de un gasto que YA ocurrió y ya está contado en el mes, así que su primer
-     * vencimiento tiene que ser el del período siguiente — si no, Movi propondría el mismo pago
-     * otra vez y el dueño lo vería dos veces.
+     * **Lo que guarda esta columna es siempre la fecha del MOVIMIENTO que originó la regla**, y
+     * por eso `arranqueEsDesembolso` no tiene columna ni la necesita: acá es siempre `false`. La
+     * otra mitad del campo —la fecha de DESEMBOLSO de un crédito, que se lee estricta porque un
+     * desembolso no es una cuota— solo vive en las reglas sintéticas de `CreditReminders`, que se
+     * arman en memoria y nunca se guardan.
+     *
+     * Hasta esta ola el campo existía en el modelo pero no tenía columna: solo lo llenaban esas
+     * reglas sintéticas. Lo trajo acá «esto se repite» desde un movimiento, para que una regla
+     * nacida hoy no se inventara vencimientos de los períodos de antes.
      *
      * Nullable, y por eso es DDL seguro: `createMissingTablesAndColumns` emite
      * `ADD COLUMN active_from VARCHAR(10) NULL` sobre la tabla que ya tiene filas, y todas las
