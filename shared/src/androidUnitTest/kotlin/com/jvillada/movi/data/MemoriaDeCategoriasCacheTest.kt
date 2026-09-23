@@ -103,4 +103,36 @@ class MemoriaDeCategoriasCacheTest {
 
         assertEquals("la invalidación en vuelo tenía que forzar una carga más", 2, llamadas)
     }
+
+    /**
+     * Revisión final: una respuesta que llega DESPUÉS de cerrar sesión es la memoria del usuario
+     * que se fue. No puede quedar en [MemoriaDeCategoriasCache.recuerdos] — le sugeriría al que
+     * entra las categorías del anterior — ni dar la memoria por cargada.
+     */
+    @Test
+    fun una_respuesta_que_llega_despues_de_cerrar_sesion_no_llena_la_memoria() = runBlocking {
+        var llamadas = 0
+        val respuestaDelAnterior = CompletableDeferred<List<RecuerdoDeCategoria>>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> {
+                llamadas++
+                return if (llamadas == 1) respuestaDelAnterior.await() else emptyList()
+            }
+        }
+
+        val carga = launch { MemoriaDeCategoriasCache.cargarSiHaceFalta() }
+        yield() // el pedido del usuario anterior queda viajando
+
+        MemoriaDeCategoriasCache.clear() // cierra sesión MIENTRAS viaja
+        respuestaDelAnterior.complete(listOf(unRecuerdo)) // y la respuesta llega tarde
+        carga.join()
+
+        assertEquals(
+            "la memoria del usuario anterior no puede quedar",
+            emptyList<RecuerdoDeCategoria>(),
+            MemoriaDeCategoriasCache.recuerdos,
+        )
+        MemoriaDeCategoriasCache.cargarSiHaceFalta() // el usuario nuevo abre «Agregar»
+        assertEquals("la respuesta tardía no podía dar la memoria por cargada", 2, llamadas)
+    }
 }

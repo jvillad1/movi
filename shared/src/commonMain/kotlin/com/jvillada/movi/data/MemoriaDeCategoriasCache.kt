@@ -53,12 +53,25 @@ object MemoriaDeCategoriasCache {
      */
     private var version = 0
 
+    /**
+     * Cuántas veces se cerró sesión ([clear]). Separado de [version] porque las dos respuestas
+     * tardías no son iguales: después de [invalidar] (el dueño guardó un movimiento) lo que llega
+     * tarde sigue siendo SU memoria, un poco vieja, y mostrarla mientras se pide la fresca no
+     * miente; después de [clear], lo que llega tarde es la memoria de OTRA persona, y asignarla
+     * le sugeriría al usuario que entra las categorías del que se fue.
+     */
+    private var sesion = 0
+
     private suspend fun buscar() {
         if (enVuelo) return
         enVuelo = true
         val versionAlEmpezar = version
+        val sesionAlEmpezar = sesion
         try {
             val traida = Repositories.wallets.getMemoriaDeCategorias()
+            // Revisión final: si se cerró sesión MIENTRAS este pedido viajaba, la respuesta es la
+            // memoria del usuario anterior — no se asigna ni se da por cargada (ver [sesion]).
+            if (sesion != sesionAlEmpezar) return
             recuerdos = traida
             // Si alguien invalidó (guardó un movimiento) MIENTRAS este pedido viajaba, lo que
             // acaba de llegar es la foto de ANTES de esa invalidación: no puede confirmar que la
@@ -114,5 +127,6 @@ object MemoriaDeCategoriasCache {
         recuerdos = emptyList()
         cargada = false
         version++
+        sesion++
     }
 }
