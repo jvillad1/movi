@@ -470,8 +470,9 @@ fun Route.smsRoutes() {
                     it[text]   = msg.text
                     // El server es dueño del estado: /confirm y /ignore lo mueven, el cliente
                     // nunca lo decide. "pending" es el nombre único del recién llegado en todo
-                    // el sistema (ver SmsMessages en Tables.kt).
-                    it[state]  = SMS_STATE_PENDING
+                    // el sistema (ver SmsMessages en Tables.kt) — salvo el aviso de una app que
+                    // no puede ser plata, que entra ya ignorado: ver [estadoAlLlegar].
+                    it[state]  = estadoAlLlegar(msg)
                     it[det]    = msg.det
                 }
                 dedupe.add(key)
@@ -508,6 +509,41 @@ fun Route.smsRoutes() {
         call.respond(mapOf("synced" to insertedCount))
     }
 }
+
+/**
+ * **Con qué estado entra un mensaje a la bandeja.** Casi siempre `pending`: la bandeja es del
+ * dueño y lo que no se sabe leer se le muestra, porque perder un movimiento sin señal es peor que
+ * enseñarle un mensaje de más (ver el dedupe de arriba, que razona igual).
+ *
+ * La excepción es **el aviso de una app que no trae ni un número**. El 22-sep Google Wallet
+ * publicó «Set up a shortcut to pay: Now you can double press the power button…», la captura de
+ * notificaciones lo subió como cualquier otra, y quedó en la bandeja del dueño esperando que lo
+ * confirmara como movimiento. Las apps de pago publican de todo —consejos, promociones, pasos de
+ * configuración— y un movimiento, en cambio, **siempre** trae un monto.
+ *
+ * Por eso el criterio es tan corto, y es a propósito: **ni un dígito**. No se le pide al parser
+ * que decida, porque el parser puede no conocer el formato de un pago nuevo y entonces una compra
+ * de verdad se iría a ignorados sin que nadie la viera. Sin ningún número, en cambio, no hay monto
+ * posible — es el único lado en el que este filtro no puede equivocarse. Una promo que diga «5 %
+ * de descuento» sigue entrando pendiente, y está bien: es el error barato.
+ *
+ * **Solo para notificaciones.** Un SMS del banco sin números —«actualizaste tu clave»— el dueño
+ * lo quiere ver: es su canal con el banco y ahí decide él.
+ *
+ * Y **ignorar no es borrar**: la fila se guarda con `ignored`, igual que cuando el dueño toca
+ * «Ignorar». Si algún día aparece algo que no debió caer acá, está en la base.
+ */
+internal fun estadoAlLlegar(msg: SmsMessage): String =
+    if (esUnaNotificacion(msg.bank) && msg.text.none { it.isDigit() }) SMS_STATE_IGNORED
+    else SMS_STATE_PENDING
+
+/**
+ * ¿La fila la subió la captura de notificaciones? El teléfono las rotula «Notificación · Nombre de
+ * la app» (`FiltroDeNotificaciones.kt`, en `:shared`); los SMS llegan con el código del remitente
+ * («85540») y los correos con «Correo · …».
+ */
+internal fun esUnaNotificacion(origen: String): Boolean =
+    origen.trimStart().startsWith("Notificación", ignoreCase = true)
 
 private fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
     id    = this[SmsMessages.id],

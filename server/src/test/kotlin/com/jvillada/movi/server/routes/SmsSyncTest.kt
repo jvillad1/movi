@@ -134,7 +134,8 @@ class SmsSyncTest {
         id: String,
         text: String = "Compra \$10.000 en Netflix",
         time: String = "2024-01-01T10:00:00",
-    ) = SmsMessage(id = id, time = time, bank = "Bancolombia",
+        bank: String = "Bancolombia",
+    ) = SmsMessage(id = id, time = time, bank = bank,
             text = text, state = "", det = "")
 
     // ── Tests ──────────────────────────────────────────────────────────────────
@@ -497,5 +498,78 @@ class SmsSyncTest {
             System.clearProperty("movi.vapid.public")
             System.clearProperty("movi.vapid.private")
         }
+    }
+
+    // ── Avisos de apps que no son movimientos ───────────────────────────────────
+
+    private suspend fun estadoTrasSincronizar(
+        client: io.ktor.client.HttpClient,
+        token: String,
+        sms: SmsMessage,
+    ): String {
+        client.post("/api/sms/sync") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(listOf(sms))
+        }
+        val resp = client.get("/api/sms/${sms.id}") { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.OK, resp.status, "el mensaje se guarda igual: ignorar no es borrar")
+        return Json.parseToJsonElement(resp.body<String>()).jsonObject["state"]!!.jsonPrimitive.content
+    }
+
+    /**
+     * El caso real del 22-sep: Google Wallet publicó «Set up a shortcut to pay…» y quedó en la
+     * bandeja del dueño como si fuera un movimiento por confirmar. Una notificación sin un solo
+     * número no puede describir plata: entra ignorada.
+     */
+    @Test
+    fun `un aviso de Google Wallet sin numeros entra ignorado`() = testApplication {
+        application { testModule() }
+        val estado = estadoTrasSincronizar(
+            smsClient(this), mintToken(userAId, userAEmail),
+            makeSms(
+                id = "notif_wallet_promo",
+                text = "Set up a shortcut to pay: Now you can double press the power button to get ready to pay",
+                time = "2026-09-22 11:47",
+                bank = "Notificación · Google Wallet",
+            ),
+        )
+        assertEquals("ignored", estado)
+    }
+
+    /** Un pago de verdad por Google Wallet trae monto: sigue esperando confirmación. */
+    @Test
+    fun `un pago por Google Wallet sigue pendiente`() = testApplication {
+        application { testModule() }
+        val estado = estadoTrasSincronizar(
+            smsClient(this), mintToken(userAId, userAEmail),
+            makeSms(
+                id = "notif_wallet_pago",
+                text = "WOMPI SAS: COP14,641 with Debito Mastercard ••4057",
+                time = "2026-09-22 14:14",
+                bank = "Notificación · Google Wallet",
+            ),
+        )
+        assertEquals("pending", estado)
+    }
+
+    /**
+     * La regla es solo para NOTIFICACIONES. Un SMS del banco sin números —un aviso de clave,
+     * de seguridad— lo sigue viendo el dueño: la bandeja de «Mensajes del banco» es suya y ahí
+     * decide él.
+     */
+    @Test
+    fun `un SMS del banco sin numeros sigue pendiente`() = testApplication {
+        application { testModule() }
+        val estado = estadoTrasSincronizar(
+            smsClient(this), mintToken(userAId, userAEmail),
+            makeSms(
+                id = "sms_aviso_clave",
+                text = "Bancolombia: actualizaste tu clave principal. Si no fuiste tu, llamanos.",
+                time = "2026-09-22 12:00",
+                bank = "85540",
+            ),
+        )
+        assertEquals("pending", estado)
     }
 }
