@@ -545,6 +545,12 @@ fun QuickAddScreen(
         val newType = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
         if (!categoriaSirveParaTipo(category, newType, usedCategories, categoryPrefs)) {
             category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs, usosRecientes)
+            // Task 5: esto acaba de pisar por su cuenta lo que hubiera puesto una sugerencia —
+            // seguir mostrando «Movi la reconoce: …» sobre una categoría que ya no es la suya
+            // mentiría, y "volver a lo de antes" tampoco tendría sentido (lo de antes era de la
+            // OTRA pestaña). Se limpia el estado en vez de arrastrarlo.
+            sugerenciaVigente = null
+            categoriaAntesDeLaSugerencia = null
         }
     }
 
