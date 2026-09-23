@@ -17,7 +17,12 @@ import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.currentPeriodWindow
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PlanDelCredito
+import com.jvillada.movi.shared.model.planDeUnaDeuda
+import com.jvillada.movi.shared.model.resumirDeudas
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -95,7 +100,20 @@ internal data class SuscripcionParaContexto(
     val esAnual: Boolean,
 )
 
-/** Un crédito con sus condiciones: sin la tasa y la cuota no se puede opinar de una deuda. */
+/**
+ * Un crédito con sus condiciones: sin la tasa y la cuota no se puede opinar de una deuda.
+ *
+ * **Y sin quién paga la cuota, se opina mal.** Cuatro de los doce créditos del dueño no salen de
+ * su cuenta: dos libranzas las descuenta la nómina y las dos hipotecas las gira Skandia desde la
+ * AFC. Un asesor que no lo sabe le recomienda «recortar gastos para cubrir la cuota de la
+ * hipoteca» — plata que nunca pasa por su bolsillo. Por eso [render] dice para CADA crédito de
+ * dónde sale la cuota, en palabras, y no solo cuando es un tercero.
+ *
+ * [saldo] es la deuda de hoy, derivada de los movimientos igual que la lista de Cuentas. No la lee
+ * [contextoDelPeriodoDe] —la calcula `buildUserContext`, que ya tiene las cuentas con saldo— y
+ * llega con [conSaldos]. `null` = no se sabe (o la deuda está en otra moneda) y no se estima nada
+ * sobre ella: ni interés del mes ni cuánto baja.
+ */
 internal data class CreditoParaContexto(
     val cuenta: String,
     val banco: String,
@@ -106,7 +124,52 @@ internal data class CreditoParaContexto(
     val seguroMensual: Long?,
     val porNomina: Boolean,
     val loPaga: String?,
-)
+    val accountId: String = "",
+    val otrosCargosMensuales: Long? = null,
+    val sinIntereses: Boolean = false,
+    val saldo: Long? = null,
+) {
+    /** ¿La cuota sale de su cuenta? La misma regla que la pantalla de Créditos ([saleDeTuBolsillo]). */
+    val saleDeSuBolsillo: Boolean get() = !porNomina && loPaga.isNullOrBlank()
+
+    /**
+     * El plan del crédito con el saldo de hoy —interés del mes, cuánto baja, si se termina—, o
+     * `null` sin saldo. Es [planDeUnaDeuda], la MISMA cuenta que hace la pantalla de Créditos: si el
+     * asistente dijera otro interés que la pantalla, el dueño no sabría a cuál creerle.
+     */
+    val plan: PlanDelCredito?
+        get() = saldo?.let {
+            planDeUnaDeuda(
+                saldoDeLaDeuda = it,
+                rateEa = tasaEa,
+                cuota = cuota,
+                seguroMensual = seguroMensual,
+                otrosCargosMensuales = otrosCargosMensuales,
+                saleDeTuBolsillo = saleDeSuBolsillo,
+                sinIntereses = sinIntereses,
+            )
+        }
+}
+
+/**
+ * Le pone a cada crédito el saldo de su cuenta. Solo el componente en pesos y solo si la deuda no
+ * tiene saldo en otra moneda: con un préstamo en dólares, `balance` es la parte COP (casi siempre
+ * $0) y el interés estimado sobre eso sería un cero con cara de dato — la misma guarda que
+ * `planDelCredito` en `:core`.
+ */
+internal fun ContextoDelPeriodo.conSaldos(cuentas: List<Account>): ContextoDelPeriodo {
+    val porId = cuentas.associateBy { it.id }
+    return copy(
+        creditos = creditos.map { c ->
+            val cuenta = porId[c.accountId]
+            val enOtraMoneda = cuenta?.balancesByCurrency.orEmpty().any { (moneda, saldo) -> moneda != "COP" && saldo != 0L }
+            // Un saldo en cero se calla en vez de decirse: casi siempre es un crédito al que le
+            // falta registrar el desembolso (la pantalla dice «Falta registrar el desembolso»), y
+            // «debe $0» en boca del asistente sería afirmar que ya lo pagó.
+            c.copy(saldo = cuenta?.takeUnless { enOtraMoneda }?.balance?.takeIf { it > 0L })
+        },
+    )
+}
 
 internal data class ContextoDelPeriodo(
     val rango: String,
@@ -203,6 +266,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             .associate { it[Accounts.id] to it[Accounts.name] }
         val creditos = Credits.selectAll().where { Credits.userId eq uid }.map { fila ->
             CreditoParaContexto(
+                accountId = fila[Credits.accountId],
                 cuenta = nombreDeCuenta[fila[Credits.accountId]] ?: fila[Credits.accountId],
                 banco = fila[Credits.bank],
                 tasaEa = fila[Credits.rateEa],
@@ -212,6 +276,8 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 seguroMensual = fila[Credits.insuranceMonthly],
                 porNomina = fila[Credits.payrollDeduction] == true,
                 loPaga = fila[Credits.paidBy],
+                otrosCargosMensuales = fila[Credits.otrosCargosMensuales],
+                sinIntereses = fila[Credits.sinIntereses] == true,
             )
         }
 
@@ -299,20 +365,38 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
             val estado = if (r.yaOcurrioEnElPeriodo) "YA ocurrió en este período" else "TODAVÍA no ocurrió en este período"
             appendLine("- ${r.nombre} (${r.categoria}): \$${r.monto} $que el día ${r.dia} — $estado")
         }
+        // Sumado acá por lo mismo que el total de suscripciones: «¿me alcanza?» se contesta con este
+        // número, y sumar renglones es justo lo que el modelo hace mal.
+        val pendientes = recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo }
+        if (pendientes.isNotEmpty()) {
+            appendLine("Total de gastos recurrentes que TODAVÍA no ocurrieron en este período: \$${pendientes.sumOf { it.monto }}")
+        }
     }
     appendLine()
 
     if (creditos.isNotEmpty()) {
-        appendLine("== Créditos, con sus condiciones ==")
-        creditos.forEach { c ->
-            val seguro = c.seguroMensual?.let { ", incluye seguro de vida \$$it al mes" }.orEmpty()
-            val nomina = if (c.porNomina) ", se descuenta de la nómina" else ""
-            val paga = c.loPaga?.let { ", lo paga $it" }.orEmpty()
+        appendLine("== Créditos, con sus condiciones (de la tasa más alta a la más baja) ==")
+        // **De la tasa más alta a la más baja**, y no en el orden de la base: «¿qué deuda abono
+        // primero?» es la pregunta de criterio más común, y así el orden ya es la mitad de la
+        // respuesta sin que el modelo tenga que comparar doce números.
+        creditos.sortedByDescending { if (it.sinIntereses) 0.0 else it.tasaEa }.forEach { c ->
+            appendLine(renglonDelCredito(c))
+        }
+        val planes = creditos.mapNotNull { it.plan }
+        if (planes.isNotEmpty()) {
+            // Los totales van partidos por quién paga, igual que en la pantalla de Créditos: un solo
+            // total le cobraría a su bolsillo millones al mes que no salen de ahí. Ver
+            // `ResumenDeDeudas`.
+            val resumen = resumirDeudas(planes)
             appendLine(
-                "- ${c.cuenta} (${c.banco}): cuota \$${c.cuota} el día ${c.dia}, " +
-                    "tasa ${c.tasaEa} % EA, plazo ${c.plazoMeses} meses$seguro$nomina$paga",
+                "Intereses estimados de un mes: \$${resumen.interesMensualPropio} en los créditos que " +
+                    "salen de su bolsillo, y \$${resumen.interesMensualAjeno} en los que paga la nómina o un tercero.",
             )
         }
+        appendLine(
+            "Cuotas al mes: \$${creditos.filter { it.saleDeSuBolsillo }.sumOf { it.cuota }} salen de su bolsillo; " +
+                "\$${creditos.filterNot { it.saleDeSuBolsillo }.sumOf { it.cuota }} las paga la nómina o un tercero (no salen de su cuenta).",
+        )
         appendLine()
     }
 
@@ -361,6 +445,46 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
             appendLine("- $movimientosPorConfirmar movimientos en «Por confirmar» (tampoco cuentan)")
         }
         appendLine()
+    }
+}
+
+/**
+ * El renglón de un crédito: condiciones, **quién paga la cuota** y, si se sabe el saldo, qué hace
+ * la cuota con la deuda este mes.
+ *
+ * Quién paga va SIEMPRE en palabras —también cuando es el dueño—, porque la ausencia de un dato no
+ * es un dato para un modelo: sin «sale de su bolsillo» escrito, «no dice nada» y «lo paga él» se
+ * leen igual. El desglose (interés, seguro, otros, capital) sale de [planDeUnaDeuda], la misma
+ * cuenta que la pantalla de Créditos.
+ */
+internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
+    append("- ${c.cuenta} (${c.banco}): ")
+    c.saldo?.let { append("debe \$$it; ") }
+    append("cuota \$${c.cuota} el día ${c.dia}, ")
+    if (c.sinIntereses) append("NO cobra intereses") else append("tasa ${c.tasaEa} % EA")
+    append(", plazo ${c.plazoMeses} meses")
+    c.seguroMensual?.takeIf { it > 0L }?.let { append(", incluye seguro de vida \$$it al mes") }
+    c.otrosCargosMensuales?.takeIf { it > 0L }?.let { append(", incluye otros cargos \$$it al mes") }
+    append(". ")
+    append(
+        when {
+            c.porNomina -> "La cuota la descuenta la nómina antes de que llegue el sueldo: NO sale de su cuenta."
+            !c.loPaga.isNullOrBlank() -> "La cuota la paga ${c.loPaga}: NO sale de su cuenta."
+            else -> "La cuota sale de su bolsillo."
+        },
+    )
+    val plan = c.plan ?: return@buildString
+    when (plan.comoVa) {
+        ComoVaLaDeuda.AMORTIZA -> {
+            append(" De la cuota, unos \$${plan.interes} son interés este mes y \$${plan.capital} bajan la deuda")
+            plan.mesesHastaLaUltimaCuota?.let { append("; a este ritmo le quedan $it cuotas") }
+            append(".")
+        }
+        ComoVaLaDeuda.SOLO_INTERESES ->
+            append(" La cuota apenas cubre intereses (unos \$${plan.interes} al mes): la deuda casi no baja.")
+        ComoVaLaDeuda.LA_DEUDA_CRECE ->
+            append(" OJO: la cuota no alcanza a cubrir los intereses (unos \$${plan.interes} al mes): la deuda CRECE aunque pague.")
+        else -> Unit
     }
 }
 

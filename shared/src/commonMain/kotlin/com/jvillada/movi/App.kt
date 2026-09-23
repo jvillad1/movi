@@ -305,7 +305,7 @@ fun App() {
                         backStack.add(Screen.Login)
                     },
                 )
-                Screen.AIChat            -> AIChatScreen(navigate)
+                is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = currentScreen.preguntaInicial)
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.Goals             -> MetasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)

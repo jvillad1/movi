@@ -61,7 +61,22 @@ sealed class Screen {
         val presetEsIngreso: Boolean = false,
     ) : Screen()
     data object Profile : Screen()
-    data object AIChat : Screen()
+    /**
+     * Movi AI, opcionalmente **con una pregunta ya lista**.
+     *
+     * [preguntaInicial] existe para la entrega B de «Movi de un vistazo»: el Inicio muestra las tres
+     * preguntas sugeridas (ver `preguntasSugeridas`) y tocar una tiene que llevar al chat con esa
+     * pregunta ya hecha, no a un chat en blanco donde el dueño tenga que volver a escribirla. La
+     * pantalla la **manda sola, una vez**, apenas abre: tocar el chip ya fue la decisión de
+     * preguntar, y pedirle un segundo toque sería hacerle confirmar lo que acaba de hacer.
+     *
+     * `null` —lo normal, entrar por Más— abre el chat vacío con sus sugerencias.
+     *
+     * `data class` y no `data object` por el mismo precedente que [QuickAdd] y [Transactions]: el
+     * valor viaja en la pila, así que dos entradas con preguntas distintas son pantallas distintas
+     * para [NavStack.shouldPush] y para el `SaveableStateProvider` de App.kt.
+     */
+    data class AIChat(val preguntaInicial: String? = null) : Screen()
     data object Credits : Screen()
     data object Goals : Screen()
     data object Budgets : Screen()
@@ -167,7 +182,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Credits -> NavTab.CREDITS
     Screen.Budgets -> NavTab.BUDGETS
     Screen.Mas, Screen.Profile, Screen.Goals,
-    Screen.Extractos, Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile,
+    Screen.Extractos, is Screen.AIChat, Screen.SMSInbox, is Screen.SMSReconcile,
     // Ola 10: Categorías vive en Más y no tiene destino propio — es una pantalla de
     // mantenimiento, no un lugar al que se vuelva todos los días.
     // Ola 14: la guía de arranque se abre desde Más y se vuelve a Más — no es un destino de

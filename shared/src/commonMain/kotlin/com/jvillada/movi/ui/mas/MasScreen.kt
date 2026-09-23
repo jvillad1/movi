@@ -56,7 +56,7 @@ private val items = listOf(
     MasItem("Extractos",    Icons.Rounded.UploadFile,       Color(0xFFC7BCFF), Color(0x24C7BCFF), Screen.Extractos),
     // Ola 7: mismo rótulo que el encabezado de la pantalla (título = rótulo del menú).
     MasItem("Mensajes del banco", Icons.Rounded.Sms,              Color(0xFF81D4FA), Color(0x2481D4FA), Screen.SMSInbox),
-    MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat),
+    MasItem("Movi AI",      Icons.Rounded.AutoAwesome,      Color(0xFFE8BBF8), Color(0x24E8BBF8), Screen.AIChat()),
     // Rediseño de Recurrentes (2026-09): sin entrada propia — «Flujo libre», las candidatas por
     // confirmar y los próximos pagos se mudaron a Movimientos (chip «Recurrentes») y editar un
     // recurrente existente ya se hacía desde el detalle de un movimiento. `Screen.Recurrentes`

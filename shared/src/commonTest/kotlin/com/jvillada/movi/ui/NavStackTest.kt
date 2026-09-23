@@ -196,7 +196,7 @@ class NavStackTest {
         // rediseño de 2026-09 los recurrentes son Movimientos con su chip (ver el test de
         // arriba), así que marcan TRANSACTIONS y no Más.
         listOf(Screen.Mas, Screen.Profile, Screen.Goals,
-            Screen.Extractos, Screen.AIChat, Screen.SMSInbox, Screen.SMSReconcile("s1"))
+            Screen.Extractos, Screen.AIChat(), Screen.SMSInbox, Screen.SMSReconcile("s1"))
             .forEach { assertEquals(NavTab.MORE, navTabFor(it), "$it") }
         listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.OCRCapture, Screen.ScreenEditor,
             Screen.StatementReview("{}"), Screen.ImportDetail("i1"))

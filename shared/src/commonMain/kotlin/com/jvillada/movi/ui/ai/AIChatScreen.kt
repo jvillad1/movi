@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,11 +30,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AiChatRequest
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.dashboard.DashboardData
+import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
@@ -46,21 +50,30 @@ private data class PendingImage(val fileName: String, val bytes: ByteArray, val 
 
 @OptIn(ExperimentalEncodingApi::class)
 @Composable
-fun AIChatScreen(onNavigate: (Screen) -> Unit) {
+fun AIChatScreen(
+    onNavigate: (Screen) -> Unit,
+    /**
+     * Una pregunta que se manda sola apenas abre la pantalla —ver [Screen.AIChat.preguntaInicial]—.
+     * `null` abre el chat vacío, con el arranque de [ArranqueDelChat].
+     */
+    preguntaInicial: String? = null,
+) {
     val coroutine = rememberCoroutineScope()
-    // El saludo es DE PANTALLA: se pinta, no se manda. La API exige que el primer mensaje del
-    // historial sea del usuario, así que mandarlo hacía fallar todos los turnos — ver
-    // [mensajesParaEnviar], que es quien decide qué viaja.
-    val messages = remember {
-        mutableStateListOf<ChatMessage>(
-            ChatMessage(ChatRole.ASSISTANT, "¡Hola Camilo! Pregúntame lo que quieras sobre tu plata."),
-        )
-    }
+    // **Arranca vacía.** El saludo ya no es un mensaje del asistente sembrado en la lista: es el
+    // arranque de [ArranqueDelChat], que se pinta mientras no haya conversación. Así no hay nada
+    // que descartar antes de mandar (la API exige que el primer mensaje sea del usuario; ver
+    // [mensajesParaEnviar], que igual lo sigue garantizando).
+    val messages = remember { mutableStateListOf<ChatMessage>() }
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var pendingImage by remember { mutableStateOf<PendingImage?>(null) }
     var attachError by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    // Las sugerencias salen de lo que el Inicio dejó en su caché: el chat no pide nada nuevo para
+    // armarlas (ver [preguntasSugeridas], que tampoco llama al modelo). Sin caché —se abrió el chat
+    // antes que el Inicio— salen las de respaldo, que valen para cualquiera.
+    val sugeridas = remember { preguntasSugeridas(DashboardDataCache.data ?: DashboardData()) }
+    val nombre = remember { primerNombre(SessionManager.userName) }
 
     // F32: el picker de la Ola 1 (extractos) acepta cualquier archivo — acá se filtra por
     // mime de imagen en el cliente, sin tocar el picker en sí.
@@ -78,8 +91,14 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    fun send() {
-        val text = input.trim()
+    /**
+     * Manda [texto] (y la imagen pendiente, si hay). Es la única puerta de salida: la usan el campo
+     * de escribir, los chips de sugerencias y la pregunta con la que se abrió la pantalla, así que
+     * las tres pasan por el mismo recorte de [mensajesParaEnviar] y la misma guarda de «ya hay
+     * una pregunta en camino».
+     */
+    fun enviar(texto: String) {
+        val text = texto.trim()
         val image = pendingImage
         if ((text.isEmpty() && image == null) || loading) return
         messages.add(
@@ -94,15 +113,28 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
         pendingImage = null
         loading = true
         coroutine.launch {
-            // Lo que viaja NO es la lista de la pantalla: sin el saludo, sin las imágenes de
-            // turnos anteriores (ya se mandaron y se pagaron una vez) y con tope. Ver
-            // [mensajesParaEnviar].
+            // Lo que viaja NO es la lista de la pantalla: sin las imágenes de turnos anteriores
+            // (ya se mandaron y se pagaron una vez) y con tope. Ver [mensajesParaEnviar].
             val history = mensajesParaEnviar(messages)
             val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
             val replyText = reply.getOrNull()?.text
                 ?: "No pude conectarme con el AI. ${reply.exceptionOrNull()?.message ?: ""}"
             messages.add(ChatMessage(ChatRole.ASSISTANT, replyText))
             loading = false
+        }
+    }
+
+    fun send() = enviar(input)
+
+    // **La pregunta con la que se abrió, una sola vez.** `rememberSaveable` y no `remember`: al
+    // volver a esta entrada de la pila (o al girar el teléfono) la conversación se rearma vacía,
+    // pero la pregunta ya se mandó y se pagó — mandarla de nuevo sería cobrarle dos veces el mismo
+    // toque. Queda el arranque con sus sugerencias, y el dueño decide.
+    var yaSeMandoLaInicial by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(preguntaInicial) {
+        if (!yaSeMandoLaInicial && !preguntaInicial.isNullOrBlank()) {
+            yaSeMandoLaInicial = true
+            enviar(preguntaInicial)
         }
     }
 
@@ -139,6 +171,15 @@ fun AIChatScreen(onNavigate: (Screen) -> Unit) {
             state = listState,
             contentPadding = PaddingValues(18.dp),
         ) {
+            if (messages.isEmpty() && !loading) {
+                item {
+                    ArranqueDelChat(
+                        nombre = nombre,
+                        preguntas = sugeridas,
+                        onPregunta = { enviar(it) },
+                    )
+                }
+            }
             items(messages) { msg ->
                 if (msg.role == ChatRole.USER) {
                     AIMsgUser(msg.content, hasImage = msg.imageBase64 != null)
@@ -303,3 +344,108 @@ private fun AIMsgAI(text: String) {
         }
     }
 }
+
+/**
+ * # Lo que se ve antes de la primera pregunta
+ *
+ * Antes era un solo globo: «¡Hola Camilo! Pregúntame lo que quieras sobre tu plata.» —con el
+ * nombre escrito a mano en el código, así que cualquier otro usuario también era Camilo—. El dueño
+ * contestó «Hola, me puedes ayudar?»: un campo en blanco no dice qué sabe hacer el asistente.
+ *
+ * Ahora son cuatro piezas, en este orden y ninguna más:
+ *
+ * 1. **El saludo**, con su nombre de verdad (o sin nombre, si la sesión no lo tiene).
+ * 2. **Qué mira Movi**, en una línea: movimientos, deudas, presupuestos y bienes. Es lo que el
+ *    contexto del server de verdad le pasa al modelo — no prometer lo que no ve.
+ * 3. **Tres preguntas tocables** sacadas de sus datos ([preguntasSugeridas]). Tocar una la manda:
+ *    es la misma puerta que escribirla y darle enviar.
+ * 4. **Una nota honesta**: Movi orienta con sus datos, no reemplaza a un asesor financiero
+ *    certificado. Una línea, apagada y al final — está para que sea verdad, no para asustar.
+ *
+ * `internal` para que la prueba lo pinte suelto, sin la pantalla ni el repositorio.
+ */
+@Composable
+internal fun ArranqueDelChat(
+    nombre: String?,
+    preguntas: List<String>,
+    onPregunta: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = Movi.espacios.amplio),
+        verticalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
+    ) {
+        Text(
+            text = saludoDelChat(nombre),
+            style = Movi.textos.titulo,
+            color = Movi.colores.texto,
+        )
+        Text(
+            text = QUE_MIRA_MOVI,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(Movi.espacios.corto))
+        Text(
+            text = ROTULO_DE_LAS_SUGERENCIAS,
+            style = Movi.textos.rotulo,
+            color = Movi.colores.textoMedio,
+        )
+        preguntas.forEach { pregunta ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Movi.formas.amplia))
+                    .background(Movi.colores.tarjeta)
+                    .clickable { onPregunta(pregunta) }
+                    .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+            ) {
+                Icon(
+                    Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = Movi.colores.marca,
+                    modifier = Modifier.size(Movi.espacios.amplio),
+                )
+                Text(
+                    text = pregunta,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.texto,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(Modifier.height(Movi.espacios.corto))
+        Text(
+            text = NO_REEMPLAZA_A_UN_ASESOR,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+        )
+    }
+}
+
+/** El saludo del arranque. Sin nombre no se inventa uno: «¡Hola!» a secas. */
+internal fun saludoDelChat(nombre: String?): String =
+    if (nombre.isNullOrBlank()) "¡Hola!" else "¡Hola, $nombre!"
+
+/**
+ * El primer nombre de la sesión: «Camilo Andrés Villada» saluda como «Camilo». Un saludo con el
+ * nombre completo suena a formulario, no a alguien que te conoce.
+ */
+internal fun primerNombre(nombreCompleto: String?): String? =
+    nombreCompleto?.trim()?.split(' ')?.firstOrNull()?.takeIf { it.isNotBlank() }
+
+/**
+ * Lo que Movi mira para contestar. Tiene que coincidir con lo que el server de verdad le pasa al
+ * modelo (`buildUserContext` y las herramientas): prometer que «mira tus inversiones» sin que el
+ * contexto las lleve sería la primera mentira de la conversación.
+ */
+internal const val QUE_MIRA_MOVI =
+    "Miro tus movimientos, deudas, presupuestos y bienes para contestarte con tus números."
+
+/** El rótulo arriba de los chips. En la escala `rotulo`, que va en mayúsculas como los demás. */
+internal const val ROTULO_DE_LAS_SUGERENCIAS = "PREGÚNTALE, POR EJEMPLO"
+
+/** La nota honesta del arranque. Una línea, sin sermón. */
+internal const val NO_REEMPLAZA_A_UN_ASESOR =
+    "Movi AI te orienta con tus datos, pero no reemplaza a un asesor financiero certificado."
