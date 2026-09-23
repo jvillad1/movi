@@ -191,6 +191,7 @@ fun DashboardScreen(
         mutableStateOf(
             DashboardDataCache.data
                 ?: InstantaneaDelInicio.delAparato.datos(SessionManager.userId)
+                    ?.conElPeriodoDe(Clock.System.now().toEpochMilliseconds())
                 ?: DashboardData(),
         )
     }
@@ -389,7 +390,9 @@ fun DashboardScreen(
             // INVESTMENT) — ya no hace falta este fetch aparte de holdings.
             launch { runCatching { Repositories.wallets.getSubscriptions() }.onSuccess { s -> data = data.copy(subscriptions = s) } }
         }
-        DashboardDataCache.data = data
+        // Con la misma guarda que la instantánea (ver `usuario`): una carga que termina después
+        // del logout no puede dejarle al próximo usuario la plata del anterior en memoria.
+        if (SessionManager.userId == usuario) DashboardDataCache.data = data
         // **Solo se sella una carga que SALIÓ BIEN.**
         //
         // La primera versión sellaba siempre, y «las diez terminaron» no es lo mismo que «las

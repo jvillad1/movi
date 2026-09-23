@@ -109,8 +109,34 @@ class InicioConInstantaneaTest {
         assertTrue(cuantas("\$1.234.000") > 0, "llegó la cifra nueva")
         assertEquals(0, cuantas("\$558.350"), "y no queda nada de la de ayer")
         assertEquals(0, cuantas("Actualizando…"))
+        assertTrue(DashboardDataCache.cargadoEn > 0L, "una carga buena sí sella")
         // La carga buena reescribe la instantánea: el próximo arranque en frío pinta esta.
         assertEquals(cuentas(1_234_000), InstantaneaDelInicio.delAparato.datos("u1")?.accounts)
+    }
+
+    /**
+     * Arranque en frío sin señal: la instantánea pinta cifras que alcanzan para afirmar, pero ESTA
+     * carga no trajo nada. No se sella (volver dentro de 30 s tiene que reintentar) y la instantánea
+     * no se reescribe con lo mismo de ayer como si fuera de hoy.
+     */
+    @Test
+    fun `una recarga que falla no sella ni reescribe la instantanea`() {
+        InstantaneaDelInicio.delAparato.guardarDatos("u1", deAyer)
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getScreen(slug: String, cachedVersion: Int?): ScreenDefinition? = null
+            override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = error("sin señal")
+            override suspend fun getAccounts(): List<Account> = error("sin señal")
+            override suspend fun getCredits(): List<CreditSummary> = error("sin señal")
+            override suspend fun getCards(): List<CardSummary> = error("sin señal")
+            override suspend fun getUpcomingPayments(): List<UpcomingPayment> = error("sin señal")
+        }
+
+        montar()
+        composeRule.waitForIdle()
+
+        assertEquals(0L, DashboardDataCache.cargadoEn, "una carga que no trajo nada no sella")
+        assertEquals(deAyer, InstantaneaDelInicio.delAparato.datos("u1"))
+        assertTrue(cuantas("\$558.350") > 0, "y lo de ayer sigue a la vista")
     }
 
     @Test

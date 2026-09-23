@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.ScreenDefinition
+import com.jvillada.movi.shared.model.periodoDe
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 import kotlinx.serialization.KSerializer
@@ -118,6 +119,17 @@ class InstantaneaDelInicio(
         private fun claveDeDefinicion(userId: String) = "inicio_definicion_$userId"
     }
 }
+
+/**
+ * La instantánea con el período recalculado para [ahora] según sus propios ajustes de corte.
+ *
+ * Una instantánea del 24 leída el 25 traería el período que ya terminó, y si en esa carga falla el
+ * perfil (que es lo que lo recalcula) el Inicio seguiría hablando del período anterior. El corte sí
+ * se puede confiar a la instantánea —cambia casi nunca—; la fecha de hoy no. Si la instantánea no
+ * sabía el período (el perfil nunca contestó), se deja en `null`: no se inventa uno.
+ */
+fun DashboardData.conElPeriodoDe(ahora: Long): DashboardData =
+    if (periodoActual == null) this else copy(periodoActual = periodoDe(ahora, ajustesDePeriodo))
 
 /**
  * `ignoreUnknownKeys`: una instantánea escrita por una versión POSTERIOR (volver a un APK anterior)

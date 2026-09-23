@@ -8,6 +8,10 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -119,6 +123,28 @@ class InstantaneaDelInicioTest {
 
         assertNull(instantanea.definicion("u1"))
         assertEquals(datos, instantanea.datos("u1"))
+    }
+
+    /**
+     * Guardada el 24 de septiembre (último día del período que empezó el 25 de agosto) y leída el
+     * 25: habla del período nuevo aunque el perfil no conteste.
+     */
+    @Test
+    fun `al leerla el periodo es el de hoy segun su corte`() {
+        val del24 = datos.copy(periodoActual = PeriodoFinanciero(2026, 9))
+        val el25 = LocalDateTime(2026, 9, 25, 10, 0).toInstant(AppTimeZone.zone).toEpochMilliseconds()
+
+        val leida = del24.conElPeriodoDe(el25)
+
+        assertEquals(periodoDe(el25, PeriodSettings(cutoffDay = 25)), leida.periodoActual)
+        assertTrue(leida.periodoActual != del24.periodoActual, "el período cambió con el corte")
+        assertEquals(del24.copy(periodoActual = leida.periodoActual), leida, "y nada más cambió")
+    }
+
+    @Test
+    fun `si no sabia el periodo no se inventa uno`() {
+        val sinPeriodo = datos.copy(periodoActual = null)
+        assertEquals(sinPeriodo, sinPeriodo.conElPeriodoDe(0L))
     }
 
     /** En esta JVM `Settings()` no se puede construir: la del aparato tiene que tragárselo. */
