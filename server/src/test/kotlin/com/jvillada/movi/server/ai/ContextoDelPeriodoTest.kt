@@ -159,6 +159,44 @@ class ContextoDelPeriodoTest {
         assertTrue("Gimnasio" in texto && "TODAVÍA no ocurrió en este período" in texto)
     }
 
+    /**
+     * **Lo que Movi emparejó SOLO también está pagado.** El 23-sep el asistente le dijo al dueño
+     * «todavía te faltan $291.677 de recurrentes (Tía Caro y Coomeva Familiar)» mientras su Inicio
+     * decía «Pagaste los 12 del período»: esos pagos los había emparejado Movi automáticamente, y
+     * eso no se escribe en `recurring_occurrences` — el contexto solo miraba los sellos guardados.
+     *
+     * Acá no hay ningún sello: solo la regla y un movimiento que se llama igual. La pantalla la da
+     * por pagada; el contexto tiene que decir lo mismo.
+     */
+    @Test
+    fun `un recurrente que Movi emparejo solo cuenta como ocurrido, sin sello guardado`() {
+        val primeroDelMes = AppClock.now().toLocalDate().withDayOfMonth(1)
+            .atTime(12, 0).atZone(AppClock.zone).toInstant().toEpochMilli()
+        transaction {
+            RecurringRules.insert {
+                it[id] = "r-tia"; it[userId] = dueno; it[name] = "Tía Caro"; it[category] = "Familia"
+                it[amount] = 100_000L; it[dayOfMonth] = 1; it[type] = TransactionType.EXPENSE.name
+            }
+            Events.insert {
+                it[Events.id] = "ev-tia"
+                it[userId] = dueno
+                it[accountId] = "cta"
+                it[type] = TransactionType.EXPENSE.name
+                it[amount] = 100_000L
+                it[currency] = "COP"
+                it[category] = "Familia"
+                it[description] = "Tía Caro"
+                it[timestamp] = primeroDelMes
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+
+        val texto = contexto()
+        val renglon = texto.lineSequence().first { "Tía Caro" in it && "ocurri" in it }
+
+        assertTrue("YA ocurrió en este período" in renglon, "Movi lo emparejó solo; el contexto no puede decir que falta:\n$renglon")
+    }
+
     // ── El sello del período, con el corte del dueño ─────────────────────────
 
     /** El corte del dueño es 25, no 1. Sin esto, todas estas pruebas corren sobre el mes de calendario. */
