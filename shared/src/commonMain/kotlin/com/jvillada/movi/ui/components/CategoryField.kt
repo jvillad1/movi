@@ -326,10 +326,12 @@ fun categoriasFrecuentes(
  * Si escondió TODAS las del catálogo de ese lado, cae a las propias y por último a la primera del
  * catálogo igual: quedarse sin ningún valor inicial sería peor que uno imperfecto.
  *
- * **Ola A — con datos de uso, arranca en la más frecuente, no en la primera del catálogo.** Con
- * 71 gastos en «Bancolombia Ahorros» y ninguno en «Comida» en los últimos 60 días, seguir
- * arrancando en «Comida» porque es la primera del catálogo ignoraba justo el dato nuevo que esta
- * ola trae. Sin [usos] (server viejo, o el Inicio no cargó todavía) cae en el comportamiento de
+ * **Ola A — con datos de uso, arranca en la más frecuente, no en la primera del catálogo.** Si
+ * en los últimos 60 días casi todos los gastos del dueño fueron a una categoría propia (p. ej.
+ * «Fútbol») y ninguno a «Comida», seguir arrancando en «Comida» solo porque encabeza el catálogo
+ * ignoraba justo el dato nuevo que esta ola trae. (Los números reales del plan —71 en 60 días—
+ * son de una CUENTA, «Bancolombia Ahorros», y justifican `resolverCuenta` en `ui/quickadd`, no
+ * esto.) Sin [usos] (server viejo, o el Inicio no cargó todavía) cae en el comportamiento de
  * siempre — ver [categoriasFrecuentes].
  */
 fun categoriaPorDefectoPara(
