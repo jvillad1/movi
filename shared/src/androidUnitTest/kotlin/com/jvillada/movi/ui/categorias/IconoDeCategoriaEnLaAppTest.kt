@@ -18,7 +18,9 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,19 +32,24 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
+import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.transactions.TAG_FILA_DE_MOVIMIENTO_SUELTO
 import com.jvillada.movi.ui.transactions.TransactionsScreen
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Rule
@@ -193,6 +200,76 @@ class IconoDeCategoriaEnLaAppTest {
             diferencia <= 1f,
             "La fila sin ícono medía ${altoSinIcono.value} dp y con ícono ${altoConIcono.value} dp " +
                 "— diferencia de $diferencia dp, el máximo son 1 dp",
+        )
+    }
+
+    /**
+     * **Fix round 1, finding 2.** `FilaDeListaEsqueleto(diametroIconoAlFrente = 36.dp)` tiene que
+     * dejar el mismo hueco que el ícono real: se mide el mismo movimiento —cargando, con
+     * `getEventsByDay()` colgada, y después cargado— así que no hace falta reconstruir nada a
+     * mano, a diferencia de la prueba de alto de arriba (ahí no había forma de "colgar" el alto de
+     * un renglón que ya está en pantalla).
+     */
+    @Test
+    fun `el titulo esqueleto de Movimientos arranca en el mismo x que el titulo real`() {
+        val puerta = CompletableDeferred<List<EventDay>>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile =
+                UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "morado")
+            override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
+        }
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val xEsqueleto = composeRule.onAllNodesWithTag(TAG_TITULO_DE_FILA_ESQUELETO, useUnmergedTree = true)
+            .onFirst().getUnclippedBoundsInRoot().left
+
+        puerta.complete(listOf(dia))
+        composeRule.waitForIdle()
+
+        val xReal = composeRule.onNodeWithText("Café", useUnmergedTree = true).getUnclippedBoundsInRoot().left
+
+        val diferencia = abs(xReal.value - xEsqueleto.value)
+        assertTrue(
+            diferencia <= 2f,
+            "El título esqueleto arrancaba en ${xEsqueleto.value} dp y el real en ${xReal.value} dp " +
+                "— diferencia de $diferencia dp, el máximo son 2 dp",
+        )
+    }
+
+    /** Mismo caso que arriba, para el círculo de 24 dp que agregó `FilaDePresupuestoEsqueleto`. */
+    @Test
+    fun `el titulo esqueleto de Presupuestos arranca en el mismo x que el titulo real`() {
+        val puertaDelGasto = CompletableDeferred<DashboardSummary>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getBudgets(): List<Budget> = listOf(Budget("Comida", 1_000_000L))
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = puertaDelGasto.await()
+        }
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) { PresupuestosScreen(onNavigate = {}) }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val xEsqueleto = composeRule.onAllNodesWithTag(TAG_TITULO_DE_FILA_ESQUELETO, useUnmergedTree = true)
+            .onFirst().getUnclippedBoundsInRoot().left
+
+        puertaDelGasto.complete(DashboardSummary(scope = Scope.SELF, spentByCategory = mapOf("Comida" to 500_000L)))
+        composeRule.waitForIdle()
+
+        val xReal = composeRule.onNodeWithText("Comida", useUnmergedTree = true).getUnclippedBoundsInRoot().left
+
+        val diferencia = abs(xReal.value - xEsqueleto.value)
+        assertTrue(
+            diferencia <= 2f,
+            "El título esqueleto arrancaba en ${xEsqueleto.value} dp y el real en ${xReal.value} dp " +
+                "— diferencia de $diferencia dp, el máximo son 2 dp",
         )
     }
 }

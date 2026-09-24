@@ -108,7 +108,6 @@ import com.jvillada.movi.ui.recurrentes.hojaParaAnotar
 import com.jvillada.movi.ui.recurrentes.contextoDeCandidata
 import com.jvillada.movi.ui.recurrentes.contextoDeSuscripcionActiva
 import com.jvillada.movi.ui.recurrentes.hayRecordatoriosPedidos
-import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.recurrentes.avisoDeCandidataDuplicada
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
 import com.jvillada.movi.ui.recurrentes.nombresDeSuscripcionesQueYaSuman
@@ -132,6 +131,7 @@ import kotlinx.datetime.minus
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
+import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.normalizarParaBuscar
@@ -1725,7 +1725,10 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                         variant = MinCardVariant.Elevated,
                         padding = PaddingValues(horizontal = 18.dp, vertical = 2.dp),
                     ) {
-                        repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5) }
+                        // Ola B, tarea 3 (fix round 1): el círculo de 36 dp de `IconoDeCategoria`
+                        // —el mismo tamaño que ahora lleva `MovementSingleRow`— para que el
+                        // título no salte al llegar el dato. Ver `FilaDeListaEsqueleto`.
+                        repeat(6) { i -> FilaDeListaEsqueleto(isLast = i == 5, diametroIconoAlFrente = 36.dp) }
                     }
                 }
             }

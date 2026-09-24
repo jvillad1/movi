@@ -1117,7 +1117,7 @@ private fun PresupuestosEsqueleto(modifier: Modifier = Modifier) {
     }
 }
 
-/** Una categoría que todavía no llegó, con la forma de [BudgetCard]: nombre y porcentaje, «$… de $…» y la barra. */
+/** Una categoría que todavía no llegó, con la forma de [BudgetCard]: ícono, nombre y porcentaje, «$… de $…» y la barra. */
 @Composable
 private fun FilaDePresupuestoEsqueleto() {
     MinCard(
@@ -1126,7 +1126,21 @@ private fun FilaDePresupuestoEsqueleto() {
         padding = PaddingValues(18.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.titulo) }
+            // Ola B, tarea 3 (fix round 1): el círculo de 24 dp de `IconoDeCategoria` (tamaño
+            // `Chico`), al mismo `Movi.espacios.corto` (8 dp) del nombre que usa `BudgetCard` —
+            // sin esto el título arrancaba ~32 dp más a la izquierda que en la fila real.
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+            ) {
+                CirculoEsqueleto(24.dp)
+                LineaEsqueleto(
+                    fraccionDelAncho = 0.45f,
+                    estilo = Movi.textos.titulo,
+                    modifier = Modifier.testTag(TAG_TITULO_DE_FILA_ESQUELETO),
+                )
+            }
             BloqueEsqueleto(alto = altoDeUnRenglon(Movi.textos.apoyo), ancho = 32.dp)
             Spacer(Modifier.width(6.dp))
             // El lugar del chevron (18 dp).
