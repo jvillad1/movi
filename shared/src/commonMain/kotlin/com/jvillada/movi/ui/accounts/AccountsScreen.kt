@@ -32,6 +32,7 @@ import com.jvillada.movi.data.FormaDeCuentas
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -94,7 +95,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     LaunchedEffect(refreshKey, refreshTick) {
         loading = true
         error = null
-        runCatching { Repositories.wallets.getAccounts() }
+        intentar { Repositories.wallets.getAccounts() }
             .onSuccess {
                 accounts = it
                 FormaRecordada.delAparato.guardarCuentas(SessionManager.userId, formaDeCuentas(it))
@@ -119,8 +120,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     var cargandoDeudas by remember { mutableStateOf(true) }
     LaunchedEffect(refreshKey, refreshTick) {
         cargandoDeudas = true
-        val prestamos = launch { runCatching { Repositories.wallets.getCredits() }.onSuccess { creditos = it } }
-        val tarjetas = launch { runCatching { Repositories.wallets.getCards() }.onSuccess { tarjetasDeCredito = it } }
+        val prestamos = launch { intentar { Repositories.wallets.getCredits() }.onSuccess { creditos = it } }
+        val tarjetas = launch { intentar { Repositories.wallets.getCards() }.onSuccess { tarjetasDeCredito = it } }
         prestamos.join()
         tarjetas.join()
         cargandoDeudas = false
@@ -132,7 +133,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     var cargandoTeDeben by remember { mutableStateOf(true) }
     LaunchedEffect(refreshKey, refreshTick) {
         cargandoTeDeben = true
-        runCatching { Repositories.wallets.getDestinos() }.onSuccess { destinosGuardados = it }
+        intentar { Repositories.wallets.getDestinos() }.onSuccess { destinosGuardados = it }
         cargandoTeDeben = false
     }
 
@@ -882,11 +883,13 @@ private fun SeccionDeDeudas(
             NoSePudoLeer("No pudimos cargar tus deudas", onReintentar = onReintentar)
         }
     } else {
+        val total = totalDebtCop(creditos, tarjetas)
         FilaDeResumenPatrimonio(
             titulo = "Deudas",
             subtitulo = resumenDeDeudas(creditos, tarjetas),
-            cifra = formatCOP(totalDebtCop(creditos, tarjetas)),
-            colorCifra = Movi.colores.sale,
+            cifra = formatCOP(total),
+            // Sin deudas, un «$0» en rojo parece una alarma: el rojo es para lo que se debe.
+            colorCifra = if (total == 0L) Movi.colores.texto else Movi.colores.sale,
             onClick = onClick,
             testTag = TAG_TARJETA_DE_DEUDAS,
         )

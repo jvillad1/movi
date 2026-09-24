@@ -109,9 +109,9 @@ class TarjetaDeDeudasYTeDebenTest {
         navegoA = null
         composeRule.setContent {
             MoviTheme {
-                // La escala de letra ×1,12 que `App.kt` le pone a toda la app — medir «Cuadrar»
-                // y «Nueva cuenta» a 390 dp sin ella sería medir otra app (mismo criterio que
-                // `LasCuatroPestanasTest`).
+                // La escala de letra ×1,12 que `App.kt` le pone a toda la app — medir el
+                // encabezado con «Nueva cuenta» a 390 dp sin ella sería medir otra app (mismo
+                // criterio que `LasCuatroPestanasTest`).
                 val base = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
                     Box(Modifier.fillMaxSize()) { AccountsScreen(onNavigate = { navegoA = it }) }
