@@ -91,6 +91,17 @@ const val EXTRACTO_SIN_MOVIMIENTOS: String =
         "movimientos y no un resumen o un certificado."
 
 /**
+ * Fix round 3, hallazgo 1: `StatementParser.extractText` y `WorkbookFactory.create` (Famirios)
+ * leen bytes con una librería (PDFBox, POI) que lanza su propia excepción cuando el archivo no
+ * es lo que su extensión dice — un PDF renombrado a `.xls`, un archivo corrupto, cualquier bytes
+ * que no son lo que `nombreParaExtraerTexto` decidió que eran. Sin atajarla, esa excepción salía
+ * de `procesarExtracto` sin pasar por [FallaAlProcesarExtracto] y las dos rutas la devolvían como
+ * un 500 crudo — sin explicación, y peor, un 500 es lo que un cliente reintenta a ciegas.
+ */
+const val LECTURA_FALLO: String =
+    "No pude leer este archivo como extracto. Revisa que sea el PDF o la hoja de cálculo del banco."
+
+/**
  * **Por qué esta lectura no se puede importar**, o `null` si sí se puede.
  *
  * Es el único lugar donde se decide, y por eso es una función y no un `when` adentro de la ruta:
@@ -116,29 +127,35 @@ private val EXTENSIONES_RECONOCIDAS = setOf("pdf", "csv", "xls", "xlsx")
 
 /**
  * El nombre que decide CÓMO leer el archivo — `StatementParser.extractText` despacha por la
- * EXTENSIÓN del nombre. El `mimeType` guardado solo entra a decidir cuando el nombre NO trae
- * ninguna de las cuatro extensiones que esa función distingue; si ya trae una, el nombre manda.
+ * EXTENSIÓN del nombre. Quién gana entre el nombre y el `mimeType` guardado depende de
+ * [mimeEsConfiable].
  *
  * Ola B, tarea 7, fix round 1: un documento archivado como PDF y después renombrado desde
  * «Editar» (`Documento.nombre` es lo único editable — `mimeType` no) perdía la extensión, y
  * `extractText` caía al `else` genérico: `bytes.toString(UTF_8)` sobre bytes de un PDF real,
- * basura que viajaba a Claude como si fuera el texto del extracto. Esta función usaba el
+ * basura que viajaba a Claude como si fuera el texto del extracto. Esa versión usaba el
  * `mimeType` para IMPONER una extensión distinta incluso cuando el nombre ya traía una
  * reconocida.
  *
- * Fix round 2: esa versión rompía el caso contrario. Esta ruta también la usa
- * `POST /api/statements/upload`, donde el `mimeType` lo manda el NAVEGADOR de quien sube —no el
- * server— y un Excel/Windows reporta un `.csv` como `application/vnd.ms-excel`. Con la primera
- * versión, `extracto.csv` con ese mime se convertía en `extracto.csv.xls`, y
- * `WorkbookFactory.create` explotaba contra un archivo que en realidad es texto plano: un 500
- * donde antes (antes de esta tarea) funcionaba. El `mimeType` es la señal más fuerte SOLO
- * cuando el nombre no dice nada (`documento`, sin punto) — cuando el nombre ya trae una
- * extensión que esta función entiende, esa extensión es la que el dueño (o quien subió el
- * archivo) puso a propósito, y gana.
+ * Fix round 2: esa versión rompía el caso contrario en `POST /api/statements/upload`, donde el
+ * `mimeType` lo manda el NAVEGADOR de quien sube —no el server— y un Excel/Windows reporta un
+ * `.csv` como `application/vnd.ms-excel`. Con esa versión, `extracto.csv` con ese mime se
+ * convertía en `extracto.csv.xls`, y `WorkbookFactory.create` explotaba contra un archivo que en
+ * realidad es texto plano. Ahí el nombre tiene que ganar: [mimeEsConfiable] = `false`.
+ *
+ * Fix round 3, hallazgo 2: `/api/documents/{id}/leer-extracto` (la única otra llamadora) lee un
+ * `mimeType` que **el server puso al subir** y nadie edita después; el `nombre`, en cambio, es
+ * texto libre que el dueño sí edita («Extracto agosto» renombrado por accidente a «Extracto
+ * agosto.xls», con bytes que siguen siendo un PDF — el caso que reventaba con la versión
+ * anterior: el nombre ya traía una extensión "reconocida", así que ganaba, y
+ * `WorkbookFactory.create` explotaba contra bytes de PDF). Ahí [mimeEsConfiable] = `true`: el
+ * mime gana SIEMPRE que reconozca un tipo, incluso sobre una extensión del nombre que también
+ * sea reconocida pero errada. (Un `mimeType` desconocido sigue cayendo al nombre tal cual, en
+ * los dos modos — no hay nada más confiable que consultar ahí.)
  */
-internal fun nombreParaExtraerTexto(fileName: String, mimeType: String): String {
+internal fun nombreParaExtraerTexto(fileName: String, mimeType: String, mimeEsConfiable: Boolean = false): String {
     val extensionActual = fileName.substringAfterLast('.', "").lowercase()
-    if (extensionActual in EXTENSIONES_RECONOCIDAS) return fileName
+    if (!mimeEsConfiable && extensionActual in EXTENSIONES_RECONOCIDAS) return fileName
     val mime = mimeType.substringBefore(';').trim().lowercase()
     val extensionDelMime = when (mime) {
         "application/pdf" -> "pdf"
@@ -147,7 +164,7 @@ internal fun nombreParaExtraerTexto(fileName: String, mimeType: String): String 
         "text/csv" -> "csv"
         else -> return fileName
     }
-    return "$fileName.$extensionDelMime"
+    return if (extensionActual == extensionDelMime) fileName else "$fileName.$extensionDelMime"
 }
 
 /**
@@ -179,6 +196,12 @@ internal suspend fun procesarExtracto(
     mimeType: String,
     bytes: ByteArray,
     log: (String, Throwable) -> Unit,
+    /**
+     * Fix round 3, hallazgo 2: `true` solo desde `/api/documents/{id}/leer-extracto`, donde el
+     * `mimeType` es el que el server guardó al subir —no el navegador de ahora— y el `nombre` es
+     * texto libre que el dueño pudo haber editado después. Ver [nombreParaExtraerTexto].
+     */
+    mimeConfiable: Boolean = false,
 ): StatementParseResult {
     if (bytes.isEmpty()) throw FallaAlProcesarExtracto(HttpStatusCode.BadRequest, "No file received")
     // Desde que esta ruta ARCHIVA el archivo (y no solo lo parsea), le aplica el mismo tope
@@ -214,7 +237,13 @@ internal suspend fun procesarExtracto(
         if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
         parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
     } else {
-        val text = StatementParser.extractText(bytes, nombreParaExtraerTexto(fileName, mimeType))
+        val text = try {
+            StatementParser.extractText(bytes, nombreParaExtraerTexto(fileName, mimeType, mimeConfiable))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
+        }
         textoDelExtracto = text
         val docType = StatementParser.detectDocumentType(text)
         if (docType == StatementDocumentType.LOAN_SUMMARY || docType == StatementDocumentType.INVESTMENT_FUND) {
@@ -229,8 +258,14 @@ internal suspend fun procesarExtracto(
         isFamirios = docType == StatementDocumentType.FAMIRIOS
         bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
         parsed = if (isFamirios) {
-            WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
-                FamiriosParser.parse(wb, AppClock.today())
+            try {
+                WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
+                    FamiriosParser.parse(wb, AppClock.today())
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
             }
         } else {
             val lectura = ClaudeStatementParser.leer(text, Stores.merchantRules.getRules(uid))
@@ -406,9 +441,11 @@ fun Route.statementRoutes() {
         }
 
         try {
-            val resultado = procesarExtracto(uid, fileName, mimeType, bytes) { msg, t ->
+            // `mimeConfiable` se queda en su default (`false`): acá el mimeType lo manda el
+            // navegador de quien sube, no el server (ver `nombreParaExtraerTexto`).
+            val resultado = procesarExtracto(uid, fileName, mimeType, bytes, log = { msg, t ->
                 call.application.log.warn(msg, t)
-            }
+            })
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {
             call.respond(e.status, e.mensaje)

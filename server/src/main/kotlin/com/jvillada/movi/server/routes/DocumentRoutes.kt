@@ -314,7 +314,11 @@ fun Route.documentRoutes() {
                 fileName = fila[Documents.name],
                 mimeType = fila[Documents.mimeType],
                 bytes = fila[Documents.content],
-            ) { msg, t -> call.application.log.warn(msg, t) }
+                log = { msg, t -> call.application.log.warn(msg, t) },
+                // Fix round 3, hallazgo 2: acá el mimeType lo puso el server al subir; el
+                // nombre es texto libre que el dueño edita después (ver `nombreParaExtraerTexto`).
+                mimeConfiable = true,
+            )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {
             call.respond(e.status, e.mensaje)

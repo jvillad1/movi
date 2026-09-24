@@ -707,16 +707,95 @@ class DocumentRoutesTest {
         assertTrue("resumen de crédito" in cuerpo, cuerpo)
     }
 
+    @Test
+    fun `un PDF renombrado a una extension reconocida pero equivocada tambien se lee como PDF`() = testApplication {
+        // Fix round 3, hallazgo 2: el caso que reabrió el fix round 2 — «Extracto agosto.xls»
+        // tiene una extensión RECONOCIDA (xls), pero equivocada: son bytes de un PDF real. Por
+        // esta ruta (`mimeConfiable = true`, ver `procesarExtracto`) el mimeType guardado por el
+        // server al subir gana siempre, así que se lee como PDF y NO como un .xls binario
+        // corrupto — que hubiera sido un 500 de `WorkbookFactory.create`, no este 422 limpio.
+        wireApp()
+        val bytes = pdfDeResumenDeCredito()
+        val id = subir(duenoId, nombre = "Extracto agosto.pdf", contenido = bytes, mime = "application/pdf")
+        editar(duenoId, id, """{"nombre":"Extracto agosto.xls"}""")
+
+        val res = leerExtracto(duenoId, id)
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
+        assertTrue("resumen de crédito" in cuerpo, cuerpo)
+    }
+
+    @Test
+    fun `un archivo basura al subir contesta 422 con el motivo, no un 500`() = testApplication {
+        // Fix round 3, hallazgo 1: bytes que no son ni PDF ni el `.xls` que su nombre promete —
+        // antes de este fix, `WorkbookFactory.create` explotaba fuera de FallaAlProcesarExtracto
+        // y la ruta contestaba un 500 crudo sin ningún mensaje que el dueño pudiera leer.
+        wireApp()
+        val res = client.post("/api/statements/upload") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), Headers.build {
+                            append(HttpHeaders.ContentDisposition, "filename=\"basura.xlsx\"")
+                            append(HttpHeaders.ContentType, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        })
+                    },
+                ),
+            )
+        }
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
+        assertTrue(LECTURA_FALLO in cuerpo, cuerpo)
+    }
+
     // ── Una extensión reconocida en el nombre gana (fix round 2, hallazgo B) ────────────
 
     @Test
     fun `un csv que el navegador reporto como Excel se sigue leyendo como texto, no como xls binario`() = testApplication {
-        // El caso real: Excel en Windows sube un .csv con Content-Type
+        // El caso real: Excel en Windows SUBE un .csv con Content-Type
         // application/vnd.ms-excel. La versión anterior de nombreParaExtraerTexto le imponía la
         // extensión del mime (".csv.xls") y WorkbookFactory.create explotaba contra un archivo
         // que en realidad es texto plano — un 500. Acá el nombre YA trae ".csv", una extensión
         // reconocida, así que gana: se lee como texto y llega limpio hasta detectDocumentType
         // (422 LOAN_SUMMARY, no un 500 de POI tratando de abrir un binario que no lo es).
+        //
+        // Fix round 3, hallazgo 2: por `/api/statements/upload`, no por `leer-extracto` — ese
+        // mimeType «reportado raro» es justo lo que un NAVEGADOR manda al subir, así que solo
+        // tiene sentido en la ruta de subida (`mimeConfiable = false`). Por la ruta de
+        // documentos, con `mimeConfiable = true`, este mismo mime SÍ gana — ver el test
+        // `un PDF renombrado a una extension reconocida pero equivocada tambien se lee como PDF`
+        // para el caso simétrico, y el de más abajo para el mismo csv por esta otra ruta.
+        wireApp()
+        val res = client.post("/api/statements/upload") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("file", textoDeResumenDeCredito, Headers.build {
+                            append(HttpHeaders.ContentDisposition, "filename=\"movimientos.csv\"")
+                            append(HttpHeaders.ContentType, "application/vnd.ms-excel")
+                        })
+                    },
+                ),
+            )
+        }
+        val cuerpo = res.bodyAsText()
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
+        assertTrue("resumen de crédito" in cuerpo, cuerpo)
+    }
+
+    @Test
+    fun `el mismo csv archivado, por la ruta de documentos, confia en el mime guardado y no en el nombre`() = testApplication {
+        // El espejo del test de arriba: mismos bytes y mismo nombre, pero por
+        // `/api/documents/{id}/leer-extracto` — ahí el mimeType lo puso el SERVER al subir (acá,
+        // de pruebas, se simula guardándolo tal cual con `subir`), así que es la señal
+        // confiable y gana sobre el nombre. Con esta combinación (mime de Excel, bytes de
+        // texto) `WorkbookFactory.create` explota — y por eso esta ruta contesta LECTURA_FALLO,
+        // no LOAN_SUMMARY: es la prueba de que de verdad intentó leerlo como .xls binario.
         wireApp()
         val id = subir(
             duenoId, nombre = "movimientos.csv", contenido = textoDeResumenDeCredito,
@@ -727,7 +806,7 @@ class DocumentRoutesTest {
         val cuerpo = res.bodyAsText()
 
         assertEquals(HttpStatusCode.UnprocessableEntity, res.status, cuerpo)
-        assertTrue("resumen de crédito" in cuerpo, cuerpo)
+        assertTrue(LECTURA_FALLO in cuerpo, cuerpo)
     }
 
     // ── No duplica el archivo al leerlo (fix round 1, hallazgo 4) ───────────────────────
