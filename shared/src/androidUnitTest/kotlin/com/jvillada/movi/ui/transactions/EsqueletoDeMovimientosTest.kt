@@ -10,16 +10,22 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import com.jvillada.movi.data.FormaDeMovimientos
+import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.data.formaEnMemoria
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -69,6 +75,32 @@ class EsqueletoDeMovimientosTest {
         Repositories.sustitutoDePrueba = null
     }
 
+    /**
+     * **Whole-branch review, final fix wave.** Antes esta clase usaba `timestamp = 1_758_326_400_000L`
+     * fijo (2026-09-20) para el evento de sus pruebas. Con corte 1 (el default de las pruebas
+     * viejas) eso deja de estar en el período de HOY apenas cambia el mes de calendario, y con
+     * corte 26 (la prueba nueva de la línea del período) deja de estarlo apenas se cruza el 26 —
+     * `TransactionsScreen` filtra por el período REAL, calculado con el reloj de la máquina, así
+     * que un evento fuera de ese período desaparece de `visibleDays` y la prueba se pone roja sin
+     * que nadie haya tocado nada. `Clock.System.now()` es siempre HOY, así que el evento cae
+     * siempre en el período que se esté mirando, sea cual sea el corte.
+     */
+    private fun eventoDeHoy(reconciliationStatus: ReconciliationStatus = ReconciliationStatus.UNCONFIRMED): Pair<FinancialEvent, EventDay> {
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        val evento = FinancialEvent(
+            id = "e1",
+            accountId = "a1",
+            type = TransactionType.EXPENSE,
+            amount = 25_000L,
+            category = "Comida",
+            description = "Almuerzo",
+            timestamp = ahora,
+            reconciliationStatus = reconciliationStatus,
+        )
+        val dia = EventDay(date = epochMillisToAppDate(ahora).toString(), total = 25_000L, items = listOf(evento))
+        return evento to dia
+    }
+
     @Test
     fun `sin un dia pintado todavia, se ven 3 grupos y 7 filas esqueleto, y no la rueda`() {
         Repositories.sustitutoDePrueba = repositorio()
@@ -92,16 +124,8 @@ class EsqueletoDeMovimientosTest {
         assertEquals(3, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
         assertEquals(7, composeRule.onAllNodesWithTag(TAG_FILA_DE_LISTA_ESQUELETO).fetchSemanticsNodes().size)
 
-        val evento = FinancialEvent(
-            id = "e1",
-            accountId = "a1",
-            type = TransactionType.EXPENSE,
-            amount = 25_000L,
-            category = "Comida",
-            description = "Almuerzo",
-            timestamp = 1_758_326_400_000L, // 2026-09-20 00:00:00 UTC
-        )
-        puerta.complete(listOf(EventDay(date = "2026-09-20", total = 25_000L, items = listOf(evento))))
+        val (_, dia) = eventoDeHoy()
+        puerta.complete(listOf(dia))
         composeRule.waitForIdle()
 
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO).fetchSemanticsNodes().size)
@@ -130,22 +154,13 @@ class EsqueletoDeMovimientosTest {
         val yEsqueleto = composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA_ESQUELETO, useUnmergedTree = true)
             .onFirst().getUnclippedBoundsInRoot().top
 
-        val evento = FinancialEvent(
-            id = "e1",
-            accountId = "a1",
-            type = TransactionType.EXPENSE,
-            amount = 25_000L,
-            category = "Comida",
-            description = "Almuerzo",
-            timestamp = 1_758_326_400_000L, // 2026-09-20 00:00:00 UTC
-            // RECONCILED y no el default (UNCONFIRMED): un evento sin confirmar dispara el aviso
-            // «N por confirmar» ARRIBA de la lista (ver `avisoDePorConfirmar`), que es una fila
-            // más entre el encabezado y el primer día — real, pero ajena a lo que esta prueba
-            // mide (el padding del primer grupo). Con RECONCILED no hay nada que confirmar y el
-            // único cambio entre las dos capturas es el esqueleto convirtiéndose en la fila real.
-            reconciliationStatus = ReconciliationStatus.RECONCILED,
-        )
-        puerta.complete(listOf(EventDay(date = "2026-09-20", total = 25_000L, items = listOf(evento))))
+        // RECONCILED y no el default (UNCONFIRMED): un evento sin confirmar dispara el aviso
+        // «N por confirmar» ARRIBA de la lista (ver `avisoDePorConfirmar`), que es una fila
+        // más entre el encabezado y el primer día — real, pero ajena a lo que esta prueba
+        // mide (el padding del primer grupo). Con RECONCILED no hay nada que confirmar y el
+        // único cambio entre las dos capturas es el esqueleto convirtiéndose en la fila real.
+        val (_, dia) = eventoDeHoy(reconciliationStatus = ReconciliationStatus.RECONCILED)
+        puerta.complete(listOf(dia))
         composeRule.waitForIdle()
 
         val yReal = composeRule.onNodeWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true)
@@ -188,17 +203,8 @@ class EsqueletoDeMovimientosTest {
         )
         composeRule.waitForIdle()
 
-        val evento = FinancialEvent(
-            id = "e1",
-            accountId = "a1",
-            type = TransactionType.EXPENSE,
-            amount = 25_000L,
-            category = "Comida",
-            description = "Almuerzo",
-            timestamp = 1_758_326_400_000L, // 2026-09-20 00:00:00 UTC
-            reconciliationStatus = ReconciliationStatus.RECONCILED,
-        )
-        puerta.complete(listOf(EventDay(date = "2026-09-20", total = 25_000L, items = listOf(evento))))
+        val (_, dia) = eventoDeHoy(reconciliationStatus = ReconciliationStatus.RECONCILED)
+        puerta.complete(listOf(dia))
         composeRule.waitForIdle()
 
         val yReal = composeRule.onNodeWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true)
@@ -211,6 +217,58 @@ class EsqueletoDeMovimientosTest {
                 "${yEsqueleto.value} dp y el primer día real, con la línea ya puesta, en " +
                 "${yReal.value} dp — diferencia de $diferencia dp, el máximo son 2 dp",
         )
+    }
+
+    /**
+     * **Whole-branch review, final fix wave.** Con corte 1 (nunca hay línea que mostrar) la línea
+     * se reservaba igual para todos mientras el perfil no contestaba, así que un dueño con corte 1
+     * veía el esqueleto SUBIR ~18 dp apenas el perfil confirmaba que no había nada que reservar.
+     * Con `FormaDeMovimientos(lineaDePeriodo = false)` grabada de una carga anterior que salió
+     * bien, el esqueleto ya sabe que no hace falta reservar nada — ni el tag esqueleto de la línea
+     * aparece.
+     */
+    @Test
+    fun `con la ultima carga sin linea recordada, el esqueleto no la reserva`() {
+        SessionManager.save(token = "t", userId = "u-forma", name = "Juan", email = "juan@ejemplo.com")
+        FormaRecordada.sustitutoDePrueba = formaEnMemoria(mutableMapOf())
+        FormaRecordada.delAparato.guardarMovimientos("u-forma", FormaDeMovimientos(lineaDePeriodo = false))
+
+        val puertaPerfil = CompletableDeferred<UserProfile>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile = puertaPerfil.await()
+            override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitForIdle()
+
+        // Todavía sin contestar el perfil (`puertaPerfil` sigue colgada): es acá, antes de saber
+        // el corte de verdad, donde lo recordado tiene que evitar el esqueleto de la línea.
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_LINEA_DE_PERIODO_ESQUELETO, useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    /**
+     * **Whole-branch review, final fix wave.** El otro lado del mismo hallazgo: sin nada
+     * recordado todavía (la primera vez en este aparato) el esqueleto sigue reservando la línea,
+     * el comportamiento de siempre.
+     */
+    @Test
+    fun `sin nada recordado, el esqueleto sigue reservando la linea`() {
+        SessionManager.save(token = "t", userId = "u-forma", name = "Juan", email = "juan@ejemplo.com")
+        FormaRecordada.sustitutoDePrueba = formaEnMemoria(mutableMapOf())
+
+        val puertaPerfil = CompletableDeferred<UserProfile>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUserProfile(): UserProfile = puertaPerfil.await()
+            override suspend fun getEventsByDay(): List<EventDay> = puerta.await()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(1, composeRule.onAllNodesWithTag(TAG_LINEA_DE_PERIODO_ESQUELETO, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     /**

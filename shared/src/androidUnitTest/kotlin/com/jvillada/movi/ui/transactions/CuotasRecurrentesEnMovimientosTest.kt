@@ -29,7 +29,9 @@ import com.jvillada.movi.shared.model.SubscriptionsResult
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -118,8 +120,13 @@ class CuotasRecurrentesEnMovimientosTest {
         "Pago desde Bancolombia", 1_200_000L, "tr-tarjeta",
     )
 
+    // Whole-branch review, final fix wave: HOY, no un "2026-09-01" fijo — con corte 1 (esta
+    // clase no manda perfil, y `getUserProfile()` falla adrede, ver `Repo`), `diasDelPeriodo`
+    // filtra por el mes de CALENDARIO de verdad, así que una fecha fija deja de estar en el
+    // período apenas cambia el mes de la máquina que corre la prueba. Mismo patrón que
+    // `PorConfirmarEnMovimientosTest.HOY_ISO`.
     private val dia = EventDay(
-        date = "2026-09-01",
+        date = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString(),
         total = -4_215_223L,
         items = listOf(cuotaDinero, cuotaDeuda, tarjetaDinero, tarjetaDeuda),
     )

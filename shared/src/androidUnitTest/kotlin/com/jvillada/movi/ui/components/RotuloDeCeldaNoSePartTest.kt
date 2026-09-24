@@ -155,6 +155,44 @@ class RotuloDeCeldaNoSePartTest {
         )
     }
 
+    /**
+     * **Whole-branch review, final fix wave.** [palabrasDe] media una sola palabra —la de MÁS
+     * CARACTERES— y no necesariamente la más ANCHA. «WWWWWWWWWW» (10 letras anchas) mide más
+     * píxeles que «iiiiiiiiiiiiiiiiiiii» (20 letras angostas) — medido con `Movi.textos.apoyo`:
+     * 200 px contra 120 px, contra un ancho de celda de ~157 px a 390 dp. Con el error viejo (la
+     * de más caracteres) se elegía la angosta, que SÍ entra, y la cuadrícula se quedaba en el modo
+     * NORMAL de dos renglones — donde «WWWWWWWWWW», que no entra en ningún renglón, se termina
+     * partiendo a la mitad iguales que «Entretenimiento» al principio de esta clase. Con la
+     * palabra correcta (la más ancha) el rótulo entero pasa a un solo renglón achicado.
+     */
+    @Test
+    fun `la palabra mas ancha manda, no la de mas caracteres`() {
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    CuadriculaDeCategorias(
+                        celdas = listOf(CeldaDeCategoria.Existente("WWWWWWWWWW iiiiiiiiiiiiiiiiiiii")),
+                        elegida = "",
+                        prefs = emptyMap(),
+                        onElegir = {},
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val nodos = composeRule.onAllNodesWithText("WWWWWWWWWW", substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        assertTrue("el rótulo no se encontró en la cuadrícula", nodos.isNotEmpty())
+
+        val layout = layoutDe(nodos.first())
+        assertTrue(
+            "quedó en ${layout.lineCount} renglones — con la palabra más ancha bien detectada " +
+                "tiene que achicarse a uno solo, nunca partir «WWWWWWWWWW» entre dos",
+            layout.lineCount == 1,
+        )
+    }
+
     private fun layoutDe(nodo: SemanticsNode): TextLayoutResult {
         val resultados = mutableListOf<TextLayoutResult>()
         val accion = nodo.config[SemanticsActions.GetTextLayoutResult].action

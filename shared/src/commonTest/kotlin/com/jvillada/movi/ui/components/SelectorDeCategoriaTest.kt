@@ -166,13 +166,13 @@ class SelectorDeCategoriaTest {
     // ── El rótulo que no corta una palabra a la mitad (Ola B, tarea 4) ────────
 
     @Test
-    fun `la palabra mas larga de un rotulo de una sola palabra es el rotulo entero`() {
-        assertEquals("Entretenimiento", palabraMasLargaDe("Entretenimiento"))
+    fun `las palabras de un rotulo de una sola palabra es una lista de una`() {
+        assertEquals(listOf("Entretenimiento"), palabrasDe("Entretenimiento"))
     }
 
     @Test
-    fun `la palabra mas larga de un rotulo con varias palabras es la mas larga de todas`() {
-        assertEquals("Restaurantes", palabraMasLargaDe("Restaurantes y domicilios"))
+    fun `las palabras de un rotulo con varias palabras son todas, en orden`() {
+        assertEquals(listOf("Restaurantes", "y", "domicilios"), palabrasDe("Restaurantes y domicilios"))
     }
 
     @Test

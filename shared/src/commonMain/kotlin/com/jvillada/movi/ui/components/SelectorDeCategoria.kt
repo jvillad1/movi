@@ -35,11 +35,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalFontFamilyResolver
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -203,12 +201,15 @@ internal fun columnasDeLaCuadricula(ancho: Dp, espacio: Dp): Int =
 internal val TAMANO_MINIMO_DEL_ROTULO = 9.sp
 
 /**
- * La palabra más larga de [rotulo] — la que manda si el texto entra en dos renglones sin
- * cortarse a la mitad. Sin espacio (una sola palabra, como «Entretenimiento») devuelve el
- * rótulo entero.
+ * Las palabras de [rotulo], para medir el ANCHO de cada una y decidir con la más ancha —no con la
+ * que tiene más caracteres, que no es lo mismo: «WWWWWWWWWW» pesa menos letras que
+ * «iiiiiiiiiiiiiiiiiiii» pero es bastante más ancha al dibujarse. Sin espacio (una sola palabra,
+ * como «Entretenimiento») devuelve una lista de una. Pura, para probarla sin Compose — la
+ * medición real de anchos (con el estilo y el peso que se van a pintar) vive en
+ * [CeldaDeLaCuadricula], que mide cada una con `TextMeasurer` y se queda con la más ancha.
  */
-internal fun palabraMasLargaDe(rotulo: String): String =
-    rotulo.split(" ").maxByOrNull { it.length } ?: rotulo
+internal fun palabrasDe(rotulo: String): List<String> =
+    rotulo.split(" ").filter { it.isNotEmpty() }
 
 /**
  * Cómo dibujar el rótulo de una celda, según si su palabra más larga entra en el ancho
@@ -466,27 +467,26 @@ private fun CeldaDeLaCuadricula(
         // `autoSize` ni se molesta en achicar la letra. Un solo renglón no le deja esa salida:
         // `autoSize` achica hasta el mínimo legible, y si ni así entra, «…» — nunca la palabra
         // partida a la mitad.
-        val resolvedorDeFuentes = LocalFontFamilyResolver.current
+        val medidor = rememberTextMeasurer()
         val densidad = LocalDensity.current
-        val direccion = LocalLayoutDirection.current
-        val medidor = remember(resolvedorDeFuentes, densidad, direccion) {
-            TextMeasurer(resolvedorDeFuentes, densidad, direccion)
-        }
         val estiloDelRotulo = Movi.textos.apoyo
         val anchoDisponiblePx = with(densidad) { (anchoDeCelda - Movi.espacios.minimo * 2).toPx() }
-        val palabraLarga = remember(rotulo) { palabraMasLargaDe(rotulo) }
+        val palabras = remember(rotulo) { palabrasDe(rotulo) }
         // Fix round 1, hallazgo 1: se medía con el peso NORMAL siempre, pero la celda elegida (y
         // «Crear»/«Usar») se dibuja en Medium — más ancho. La categoría puesta es justo la que el
         // dueño ve cada vez que reabre el selector, así que medir con el peso que de verdad se va
         // a pintar no es un detalle: es el caso que más se ve.
-        val modo = remember(palabraLarga, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
-            val anchoDeLaPalabra = medidor.measure(
-                palabraLarga,
-                estiloDelRotulo.copy(fontWeight = pesoDelRotulo),
-                softWrap = false,
-                maxLines = 1,
-            ).size.width.toFloat()
-            modoDelRotulo(anchoDeLaPalabra, anchoDisponiblePx)
+        //
+        // Whole-branch review, final fix wave: se medía UNA palabra —la de más caracteres— y no
+        // necesariamente la más ANCHA («WWWWWWWWWW» tiene menos letras que
+        // «iiiiiiiiiiiiiiiiiiii» pero es más ancha al dibujarse). Ahora se mide cada palabra y se
+        // usa la que de verdad pesa más en píxeles.
+        val modo = remember(palabras, anchoDisponiblePx, estiloDelRotulo, pesoDelRotulo) {
+            val estiloDeRenderizado = estiloDelRotulo.copy(fontWeight = pesoDelRotulo)
+            val anchoDeLaPalabraMasAncha = palabras.maxOfOrNull { palabra ->
+                medidor.measure(palabra, estiloDeRenderizado, softWrap = false, maxLines = 1).size.width.toFloat()
+            } ?: 0f
+            modoDelRotulo(anchoDeLaPalabraMasAncha, anchoDisponiblePx)
         }
         when (modo) {
             ModoDelRotulo.NORMAL -> Text(

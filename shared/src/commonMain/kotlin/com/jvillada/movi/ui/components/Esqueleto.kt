@@ -264,9 +264,12 @@ fun FilaDeListaEsqueleto(isLast: Boolean = false, conIcono: Boolean = false, dia
                 // `TAG_FILA_DE_CUENTA` en la fila real de `CardRow` (y que `TAG_FILA_DE_DOCUMENTO`
                 // en `FilaDeDocumento`), para que los dos midan el mismo punto (el borde exterior
                 // de la fila, relleno incluido) en vez de que uno mida adentro del relleno y el
-                // otro no. Sin esto la fila esqueleto medía 27 dp menos que la real de Cuentas —
-                // exactamente los 28 dp del relleno vertical (14 arriba + 14 abajo) que el tag se
-                // perdía por quedar adentro del `padding`.
+                // otro no. La fila real y la esqueleto siempre midieron lo mismo visualmente — lo
+                // que estaba mal era el PUNTO de medición: con el tag después del `padding`, una
+                // prueba que comparaba `TAG_FILA_DE_LISTA_ESQUELETO` contra la fila real (que sí
+                // media desde el borde exterior) reportaba 27 dp de diferencia — los 28 dp del
+                // relleno vertical (14 arriba + 14 abajo) que el tag se perdía por quedar adentro
+                // del `padding` —, un artefacto de la medición, no un salto real en la lista.
                 .testTag(TAG_FILA_DE_LISTA_ESQUELETO)
                 .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,

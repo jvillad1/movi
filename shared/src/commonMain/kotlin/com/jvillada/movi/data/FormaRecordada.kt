@@ -19,15 +19,20 @@ import kotlinx.serialization.json.Json
  * empujón), y Cuentas dibujaba un grupo de 4 filas donde hay «DINERO · 5» e «INVERSIÓN · 2».
  *
  * Esto recuerda, por usuario y en el aparato, **los números que deciden la forma** de cada una de
- * esas tres pantallas la última vez que su lectura salió bien. Al montarse, el esqueleto los lee y
+ * esas pantallas la última vez que su lectura salió bien. Al montarse, el esqueleto los lee y
  * reserva exactamente eso. Sin nada recordado (la primera vez en este aparato), el esqueleto de
  * siempre.
  *
- * ## Solo números: nada de plata ni de nombres
+ * Ola B, tarea 2 (whole-branch review): Movimientos se sumó con un caso más chico —no cuántas
+ * filas, sino si la línea del rango del período iba o no— pero la misma idea: sin ese dato, la
+ * pantalla reserva de más para quien nunca la necesitó.
  *
- * Cantidades de filas, de renglones, de tarjetas — nunca un saldo, un monto ni el nombre de una
- * cuenta. Es lo que el esqueleto necesita, y lo que no se necesita no se guarda: esto vive en el
- * almacenamiento del aparato (`localStorage` en la web) sin cifrar, igual que el tema.
+ * ## Solo números (y un sí/no): nada de plata ni de nombres
+ *
+ * Cantidades de filas, de renglones, de tarjetas, o si algo se mostró o no — nunca un saldo, un
+ * monto ni el nombre de una cuenta. Es lo que el esqueleto necesita, y lo que no se necesita no se
+ * guarda: esto vive en el almacenamiento del aparato (`localStorage` en la web) sin cifrar, igual
+ * que el tema.
  *
  * ## Por usuario, y borrada al cerrar sesión
  *
@@ -68,7 +73,20 @@ class FormaRecordada(
     fun guardarCuentas(userId: String?, forma: FormaDeCuentas) =
         guardarForma(userId, PANTALLA_CUENTAS, forma, FormaDeCuentas.serializer())
 
-    /** Al cerrar sesión: las tres formas de [userId]. */
+    /**
+     * Ola B, tarea 2 (whole-branch review, final fix wave): si la última carga que salió bien
+     * mostraba la línea del rango del período debajo del mes, o no —con corte 1 (mes de
+     * calendario) nunca hay línea que mostrar—. `null` (nada recordado, la primera vez en este
+     * aparato) es «reservarla», el comportamiento de siempre; solo con un `false` explícito el
+     * esqueleto deja de reservarla.
+     */
+    fun movimientos(userId: String?): FormaDeMovimientos? =
+        leerForma(userId, PANTALLA_MOVIMIENTOS, FormaDeMovimientos.serializer())
+
+    fun guardarMovimientos(userId: String?, forma: FormaDeMovimientos) =
+        guardarForma(userId, PANTALLA_MOVIMIENTOS, forma, FormaDeMovimientos.serializer())
+
+    /** Al cerrar sesión: todas las formas de [userId]. */
     fun borrar(userId: String?) {
         val id = userId?.takeIf { it.isNotBlank() } ?: return
         PANTALLAS.forEach { escribir(clave(it, id), null) }
@@ -110,7 +128,8 @@ class FormaRecordada(
         private const val PANTALLA_CREDITOS = "creditos"
         private const val PANTALLA_CATEGORIAS = "categorias"
         private const val PANTALLA_CUENTAS = "cuentas"
-        private val PANTALLAS = listOf(PANTALLA_CREDITOS, PANTALLA_CATEGORIAS, PANTALLA_CUENTAS)
+        private const val PANTALLA_MOVIMIENTOS = "movimientos"
+        private val PANTALLAS = listOf(PANTALLA_CREDITOS, PANTALLA_CATEGORIAS, PANTALLA_CUENTAS, PANTALLA_MOVIMIENTOS)
 
         private fun clave(pantalla: String, userId: String) = "forma_${pantalla}_$userId"
     }
@@ -173,6 +192,18 @@ data class FormaDeCuentas(
     internal fun esValida(): Boolean =
         renglonesDelPatrimonio in 1..4 && filasPorGrupo.size <= 4 && filasPorGrupo.all { it in 0..MAX_ELEMENTOS }
 }
+
+/**
+ * Lo único que decide la forma de Movimientos que puede saltar: si debajo del nombre del mes va
+ * la línea del rango («Del 25 de agosto al 24 de septiembre…») o no —con corte 1 (mes de
+ * calendario) nunca hay nada que aclarar—. Ola B, tarea 2 (whole-branch review, final fix wave).
+ *
+ * @property lineaDePeriodo si la última carga que salió bien mostraba esa línea.
+ */
+@Serializable
+data class FormaDeMovimientos(
+    val lineaDePeriodo: Boolean = true,
+)
 
 /** Topes de cordura: un número por encima de esto no lo escribió esta app, y se trata como corrupto. */
 private const val MAX_RENGLONES = 12

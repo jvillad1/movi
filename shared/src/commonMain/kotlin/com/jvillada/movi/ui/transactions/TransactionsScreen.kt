@@ -46,9 +46,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.DiasPlegadosStore
+import com.jvillada.movi.data.FormaDeMovimientos
+import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.ReminderChannelsCache
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RecurringOfferGate
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.MovimientoRechazado
@@ -1023,6 +1026,22 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     // aparecía recién cuando el perfil contestaba y empujaba toda la lista de abajo. Se prende con
     // éxito O con fallo del perfil: los dos son «ya sabemos qué mostrar».
     var perfilLeido by remember { mutableStateOf(false) }
+    /**
+     * Whole-branch review, final fix wave: distinto de [perfilLeido] — este solo se prende con una
+     * lectura que salió BIEN, porque es lo único que vale la pena recordar en `FormaRecordada`
+     * (ver su KDoc: «los números... la última vez que su lectura salió bien»). Grabar también un
+     * fallo dejaría una `FormaDeMovimientos` mintiendo sobre el corte real la próxima vez que se
+     * abra la pantalla.
+     */
+    var perfilOk by remember { mutableStateOf(false) }
+    /**
+     * Si la última carga que salió bien mostraba la línea del rango del período, o nunca la
+     * mostró (corte 1). `null` la primera vez en este aparato: reserva la línea, como siempre.
+     * Whole-branch review, final fix wave — sin esto, un dueño con corte 1 (sin línea nunca) veía
+     * el esqueleto de Movimientos subir ~18 dp apenas el perfil contestaba, porque la línea se
+     * reservaba igual para todos mientras no se sabía el corte.
+     */
+    val formaDeMovimientos = remember { FormaRecordada.delAparato.movimientos(SessionManager.userId) }
     /** Está en vuelo el guardado de un arranque propio. */
     var guardandoInicio by remember { mutableStateOf(false) }
     var errorDelInicio by remember { mutableStateOf<String?>(null) }
@@ -1080,7 +1099,7 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
         loading = true
         error = null
         runCatching { Repositories.wallets.getUserProfile() }
-            .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts }
+            .onSuccess { cutoffDay = it.periodCutoffDay; iniciosPropios = it.periodStarts; perfilOk = true }
             // Sin el perfil la pantalla cae al mes de calendario, y con corte 25 eso es mostrar
             // otro período con otro total. Se dice, con el mismo «Reintentar» de siempre; si
             // además fallan los movimientos, ese error (abajo) es el que manda.
@@ -1490,6 +1509,18 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
     }
+    // Whole-branch review, final fix wave: graba si esta carga (la que salió bien) mostró la
+    // línea del rango — la próxima vez que se abra esta pantalla, el esqueleto reserva o no según
+    // lo que de verdad pasó la última vez, en vez de reservarla siempre para todos. Con
+    // `periodoDeHoy`, no con `periodoVisible`: lo que importa es lo que se ve al ABRIR, no un
+    // período al que el dueño haya navegado.
+    LaunchedEffect(perfilOk, periodoDeHoy, ajustesDelPeriodo) {
+        if (!perfilOk) return@LaunchedEffect
+        FormaRecordada.delAparato.guardarMovimientos(
+            SessionManager.userId,
+            FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustesDelPeriodo) != null),
+        )
+    }
     /**
      * Qué período se está mirando. `remember(periodoDeHoy)` y no `remember { }` a secas: si el
      * dueño cambia su día de corte en Perfil y vuelve, el mes que se ve tiene que rearrancar en el
@@ -1645,14 +1676,20 @@ fun TransactionsScreen(onNavigate: (Screen) -> Unit, chipInicial: Int? = null) {
                     // corte de verdad y empujaba toda la lista de abajo (el esqueleto de
                     // Movimientos incluido). Con corte 1 (mes de calendario, ya confirmado) no
                     // hay nada que aclarar y no se pinta nada, como siempre.
-                    if (!perfilLeido) {
+                    //
+                    // Whole-branch review, final fix wave: reservarla SIEMPRE, para todos, tenía
+                    // su propio costo — un dueño con corte 1 (nunca tuvo línea) veía el esqueleto
+                    // subir ~18 dp apenas el perfil contestaba. `formaDeMovimientos` dice si la
+                    // última carga que salió bien tenía línea; `null` (nada recordado, la primera
+                    // vez) sigue reservando, como siempre.
+                    if (!perfilLeido && formaDeMovimientos?.lineaDePeriodo != false) {
                         Spacer(Modifier.height(2.dp))
                         LineaEsqueleto(
                             fraccionDelAncho = 0.5f,
                             estilo = Movi.textos.apoyo,
                             modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO_ESQUELETO),
                         )
-                    } else {
+                    } else if (perfilLeido) {
                         // Con corte 1 esto es `null` y no se pinta: no hay nada que aclarar sobre
                         // un mes de calendario. Con cualquier otro corte es lo único que explica
                         // por qué «septiembre» empieza en agosto.

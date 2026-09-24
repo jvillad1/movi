@@ -23,16 +23,19 @@ class FormaRecordadaTest {
     )
     private val categorias = FormaDeCategorias(renglonesDeLaTarjetaDeOrden = 2, filas = 23)
     private val cuentas = FormaDeCuentas(renglonesDelPatrimonio = 4, filasPorGrupo = listOf(5, 2))
+    private val movimientos = FormaDeMovimientos(lineaDePeriodo = false)
 
     @Test
     fun `lo que se guarda vuelve igual, pantalla por pantalla`() {
         forma.guardarCreditos("u1", creditos)
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
+        forma.guardarMovimientos("u1", movimientos)
 
         assertEquals(creditos, forma.creditos("u1"))
         assertEquals(categorias, forma.categorias("u1"))
         assertEquals(cuentas, forma.cuentas("u1"))
+        assertEquals(movimientos, forma.movimientos("u1"))
     }
 
     @Test
@@ -48,10 +51,12 @@ class FormaRecordadaTest {
         forma.guardarCreditos("u1", creditos)
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
+        forma.guardarMovimientos("u1", movimientos)
 
         assertNull(forma.creditos("u2"))
         assertNull(forma.categorias("u2"))
         assertNull(forma.cuentas("u2"))
+        assertNull(forma.movimientos("u2"))
     }
 
     @Test
@@ -59,11 +64,13 @@ class FormaRecordadaTest {
         forma.guardarCreditos(null, creditos)
         forma.guardarCategorias("  ", categorias)
         forma.guardarCuentas(null, cuentas)
+        forma.guardarMovimientos(null, movimientos)
 
         assertTrue(guardado.isEmpty(), "sin usuario no hay clave a la que escribir")
         assertNull(forma.creditos(null))
         assertNull(forma.categorias(null))
         assertNull(forma.cuentas(" "))
+        assertNull(forma.movimientos(null))
     }
 
     @Test
@@ -81,10 +88,11 @@ class FormaRecordadaTest {
     }
 
     @Test
-    fun `borrar se lleva las tres formas del usuario y deja las de otro`() {
+    fun `borrar se lleva las formas del usuario y deja las de otro`() {
         forma.guardarCreditos("u1", creditos)
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
+        forma.guardarMovimientos("u1", movimientos)
         forma.guardarCuentas("u2", cuentas)
 
         forma.borrar("u1")
@@ -92,6 +100,7 @@ class FormaRecordadaTest {
         assertNull(forma.creditos("u1"))
         assertNull(forma.categorias("u1"))
         assertNull(forma.cuentas("u1"))
+        assertNull(forma.movimientos("u1"))
         assertEquals(cuentas, forma.cuentas("u2"))
     }
 
@@ -100,11 +109,33 @@ class FormaRecordadaTest {
         forma.guardarCreditos("u1", creditos)
         forma.guardarCategorias("u1", categorias)
         forma.guardarCuentas("u1", cuentas)
+        forma.guardarMovimientos("u1", movimientos)
         guardado.keys.toList().forEach { guardado[it] = "{esto no es json" }
 
         assertNull(forma.creditos("u1"))
         assertNull(forma.categorias("u1"))
         assertNull(forma.cuentas("u1"))
+        assertNull(forma.movimientos("u1"))
+    }
+
+    /**
+     * Ola B, tarea 2 (whole-branch review, final fix wave): sin nada guardado, [FormaRecordada.movimientos]
+     * devuelve `null` — no un `FormaDeMovimientos()` con su default `lineaDePeriodo = true`. La
+     * pantalla lee esa diferencia (`null` = «nada recordado, reservar igual que siempre») distinto
+     * de un `false` explícito («la última vez que salió bien no había línea»).
+     */
+    @Test
+    fun `sin nada recordado, movimientos no dice ni que hay linea ni que no la hay`() {
+        assertNull(forma.movimientos("u1"))
+    }
+
+    @Test
+    fun `movimientos recuerda si la ultima carga tenia linea de periodo o no`() {
+        forma.guardarMovimientos("u1", FormaDeMovimientos(lineaDePeriodo = false))
+        assertEquals(FormaDeMovimientos(lineaDePeriodo = false), forma.movimientos("u1"))
+
+        forma.guardarMovimientos("u1", FormaDeMovimientos(lineaDePeriodo = true))
+        assertEquals(FormaDeMovimientos(lineaDePeriodo = true), forma.movimientos("u1"))
     }
 
     @Test
